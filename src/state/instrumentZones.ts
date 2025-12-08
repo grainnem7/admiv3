@@ -232,3 +232,74 @@ export function countEnabledFingers(fingers: FingerConfig): number {
 export function allFingersEnabled(fingers: FingerConfig): boolean {
   return fingers.thumb && fingers.index && fingers.middle && fingers.ring && fingers.pinky;
 }
+
+// ============================================
+// GESTURE SOUND MAPPINGS
+// ============================================
+
+/** Available gesture types that can trigger sounds */
+export type GestureType =
+  | 'pinch-right'
+  | 'pinch-left'
+  | 'blink'
+  | 'wink-left'
+  | 'wink-right'
+  | 'brow-raise'
+  | 'mouth-open';
+
+/** A mapping from a gesture to an instrument sound */
+export interface GestureSoundMapping {
+  id: string;
+  gestureType: GestureType;
+  instrumentType: InstrumentType;
+  /** Whether this mapping is enabled */
+  enabled: boolean;
+  /** Cooldown to prevent rapid re-triggering (ms) */
+  cooldownMs: number;
+  /** Last trigger timestamp */
+  lastTriggered?: number;
+  /** Custom sound settings */
+  soundSettings: ZoneSoundSettings;
+}
+
+/** Definition of available gestures for the UI */
+export interface GestureTypeDefinition {
+  type: GestureType;
+  name: string;
+  icon: string;
+  description: string;
+}
+
+/** All available gesture types */
+export const GESTURE_TYPES: GestureTypeDefinition[] = [
+  { type: 'pinch-right', name: 'Right Pinch', icon: '👌', description: 'Pinch right thumb & index' },
+  { type: 'pinch-left', name: 'Left Pinch', icon: '👌', description: 'Pinch left thumb & index' },
+  { type: 'blink', name: 'Blink', icon: '😉', description: 'Close both eyes briefly' },
+  { type: 'wink-left', name: 'Left Wink', icon: '😜', description: 'Close left eye only' },
+  { type: 'wink-right', name: 'Right Wink', icon: '😜', description: 'Close right eye only' },
+  { type: 'brow-raise', name: 'Eyebrow Raise', icon: '🤨', description: 'Raise eyebrows' },
+  { type: 'mouth-open', name: 'Mouth Open', icon: '😮', description: 'Open mouth wide' },
+];
+
+/** Get gesture type definition */
+export function getGestureTypeDefinition(type: GestureType): GestureTypeDefinition {
+  return GESTURE_TYPES.find(g => g.type === type) || GESTURE_TYPES[0];
+}
+
+/** Create a new gesture sound mapping */
+export function createGestureSoundMapping(
+  gestureType: GestureType,
+  instrumentType: InstrumentType
+): GestureSoundMapping {
+  return {
+    id: `gesture-${gestureType}-${Date.now()}`,
+    gestureType,
+    instrumentType,
+    enabled: true,
+    cooldownMs: 300,
+    soundSettings: { ...DEFAULT_SOUND_SETTINGS },
+  };
+}
+
+/** Default gesture mappings for quick setup */
+export const DEFAULT_GESTURE_MAPPINGS: GestureSoundMapping[] = [];

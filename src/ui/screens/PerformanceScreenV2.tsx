@@ -12,7 +12,7 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { useAppStore, useIsMuted } from '../../state/store';
 import type { TrackingFrame, InputProfile } from '../../state/types';
-import type { InstrumentZone, InstrumentDefinition } from '../../state/instrumentZones';
+import type { InstrumentZone, InstrumentDefinition, GestureSoundMapping } from '../../state/instrumentZones';
 import { getInstrumentDefinition } from '../../state/instrumentZones';
 import { TrackingManager, getTrackingManager } from '../../tracking/TrackingManager';
 import { MultiModalProcessor, getMultiModalProcessor } from '../../movement/MultiModalProcessor';
@@ -20,12 +20,16 @@ import { MappingEngine, getMappingEngine } from '../../mapping/MappingEngine';
 import { MusicController, getMusicController } from '../../core/MusicController';
 import { DEFAULT_PRESETS } from '../../profiles/presets';
 import { useZoneCollision } from '../../hooks/useZoneCollision';
+import { useGestureSounds } from '../../hooks/useGestureSounds';
 import TrackingOverlay from '../components/TrackingOverlay';
 import InputProfileSelector from '../components/InputProfileSelector';
 import VolumeControl from '../components/VolumeControl';
 import SoundPresetSelector from '../components/SoundPresetSelector';
 import InstrumentPalette from '../components/InstrumentPalette';
 import InstrumentZoneOverlay from '../components/InstrumentZoneOverlay';
+import GestureMappingPanel from '../components/GestureMappingPanel';
+import MIDISettingsPanel from '../components/MIDISettingsPanel';
+import { MusicalModulesPanel } from '../components/MusicalModulesPanel';
 
 function PerformanceScreenV2() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -55,13 +59,26 @@ function PerformanceScreenV2() {
   const [activeZoneIds, setActiveZoneIds] = useState<Set<string>>(new Set());
   const [isPaletteExpanded, setIsPaletteExpanded] = useState(false);
 
-  // Keep ref in sync with state
+  // Gesture sound mappings state
+  const [gestureMappings, setGestureMappings] = useState<GestureSoundMapping[]>([]);
+  const gestureMappingsRef = useRef<GestureSoundMapping[]>([]);
+  const [isGesturePanelExpanded, setIsGesturePanelExpanded] = useState(false);
+
+  // MIDI settings state
+  const [isMidiPanelExpanded, setIsMidiPanelExpanded] = useState(false);
+
+  // Keep refs in sync with state
   useEffect(() => {
     instrumentZonesRef.current = instrumentZones;
   }, [instrumentZones]);
 
+  useEffect(() => {
+    gestureMappingsRef.current = gestureMappings;
+  }, [gestureMappings]);
+
   // Hooks
   const { checkCollisions } = useZoneCollision();
+  const { checkGestures } = useGestureSounds();
   const isMuted = useIsMuted();
   const setCurrentScreen = useAppStore((s) => s.setCurrentScreen);
 
@@ -235,13 +252,19 @@ function PerformanceScreenV2() {
         }
       }
 
+      // Check for gesture triggers - use ref to get current mappings
+      const currentMappings = gestureMappingsRef.current;
+      if (currentMappings.length > 0) {
+        checkGestures(frame, currentMappings, isMuted);
+      }
+
       // Send to music controller (new Tone.js-based system)
       if (!isMuted && musicControllerRef.current) {
         musicControllerRef.current.processFrame(frame);
         musicControllerRef.current.processProcessedFrame(processedFrame);
       }
     },
-    [isMuted, checkCollisions]
+    [isMuted, checkCollisions, checkGestures]
   );
 
   // Sync mute state with music controller
@@ -453,6 +476,29 @@ function PerformanceScreenV2() {
             <h3 className="controls-section-title">Sound</h3>
             <VolumeControl />
             <SoundPresetSelector />
+          </div>
+
+          <div className="controls-section">
+            <h3 className="controls-section-title">Gesture Triggers</h3>
+            <GestureMappingPanel
+              mappings={gestureMappings}
+              onMappingsChange={setGestureMappings}
+              isExpanded={isGesturePanelExpanded}
+              onToggle={() => setIsGesturePanelExpanded(!isGesturePanelExpanded)}
+            />
+          </div>
+
+          <div className="controls-section">
+            <h3 className="controls-section-title">Musical Modules</h3>
+            <MusicalModulesPanel />
+          </div>
+
+          <div className="controls-section">
+            <h3 className="controls-section-title">MIDI Output</h3>
+            <MIDISettingsPanel
+              isExpanded={isMidiPanelExpanded}
+              onToggle={() => setIsMidiPanelExpanded(!isMidiPanelExpanded)}
+            />
           </div>
 
           <div className="controls-section">

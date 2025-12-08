@@ -59,6 +59,7 @@ const initialState: AppState = {
   masterVolume: AUDIO.DEFAULT_VOLUME,
   currentSoundPreset: 'default',
   activeNotes: [],
+  internalSoundsMuted: false, // When true, only MIDI output (no internal sounds)
 
   // UI
   currentScreen: 'welcome',
@@ -206,6 +207,8 @@ export const useAppStore = create<AppState & AppActions>()(
 
       clearActiveNotes: () => set({ activeNotes: [] }),
 
+      setInternalSoundsMuted: (muted: boolean) => set({ internalSoundsMuted: muted }),
+
       // UI actions
       setCurrentScreen: (screen: Screen) => set({ currentScreen: screen }),
 
@@ -252,6 +255,7 @@ export const useIsMuted = () => useAppStore((s) => s.isMuted);
 export const useMasterVolume = () => useAppStore((s) => s.masterVolume);
 export const useCurrentSoundPreset = () => useAppStore((s) => s.currentSoundPreset);
 export const useActiveNotes = () => useAppStore((s) => s.activeNotes);
+export const useInternalSoundsMuted = () => useAppStore((s) => s.internalSoundsMuted);
 
 export const useCurrentScreen = () => useAppStore((s) => s.currentScreen);
 export const useShowDebugPanel = () => useAppStore((s) => s.showDebugPanel);

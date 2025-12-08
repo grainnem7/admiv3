@@ -17,6 +17,8 @@ import {
   TriggerMappingNode,
   FilterMappingNode,
   ChordMappingNode,
+  HandExpressionNode,
+  DEFAULT_HAND_MAPPINGS,
   type ChordOutput,
 } from './nodes';
 
@@ -58,6 +60,7 @@ export class MappingEngine {
   private volumeNode: VolumeMappingNode | null = null;
   private filterNode: FilterMappingNode | null = null;
   private chordNode: ChordMappingNode | null = null;
+  private handExpressionNode: HandExpressionNode | null = null;
   private triggerNodes: Map<string, TriggerMappingNode> = new Map();
 
   /**
@@ -220,13 +223,29 @@ export class MappingEngine {
     });
     this.nodes.set('chord-main', this.chordNode);
 
+    // Create HandExpressionNode for MusiKraken-style continuous control
+    // This maps hand positions and gestures to pitch, volume, filter, etc.
+    this.handExpressionNode = new HandExpressionNode({
+      id: 'hand-expression',
+      name: 'Hand Expression',
+      inputs: [],
+      mappings: DEFAULT_HAND_MAPPINGS,
+      sensitivity: 1.0,
+      deadZone: 0.05,
+      eventThreshold: 0.02, // Low threshold for responsive MIDI CC output
+    });
+    this.nodes.set('hand-expression', this.handExpressionNode);
+
     // Create trigger nodes for gestures
+    // Note: emitEvents is disabled because gesture sounds are handled by useGestureSounds.ts
+    // This prevents duplicate noteOn events being sent through the MusicalEvents system
     for (const gesture of profile.gestures) {
       const triggerNode = new TriggerMappingNode({
         id: `trigger-${gesture.id}`,
         name: `Trigger: ${gesture.id}`,
         triggerGestureId: gesture.id,
         mode: 'oneshot',
+        emitEvents: false, // Gesture sounds handled separately by useGestureSounds
       });
       this.triggerNodes.set(gesture.id, triggerNode);
       this.nodes.set(`trigger-${gesture.id}`, triggerNode);
@@ -239,6 +258,7 @@ export class MappingEngine {
         name: `Trigger: ${feature.name}`,
         triggerGestureId: feature.id,
         mode: 'oneshot',
+        emitEvents: false, // Gesture sounds handled separately by useGestureSounds
       });
       this.triggerNodes.set(feature.id, triggerNode);
       this.nodes.set(`trigger-${feature.id}`, triggerNode);
@@ -421,6 +441,13 @@ export class MappingEngine {
    */
   getTriggerNode(gestureId: string): TriggerMappingNode | null {
     return this.triggerNodes.get(gestureId) ?? null;
+  }
+
+  /**
+   * Get the hand expression node (for MusiKraken-style continuous control)
+   */
+  getHandExpressionNode(): HandExpressionNode | null {
+    return this.handExpressionNode;
   }
 
   /**

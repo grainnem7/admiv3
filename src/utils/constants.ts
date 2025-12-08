@@ -215,8 +215,14 @@ export const FACE_BLENDSHAPES = {
 export const GESTURE_THRESHOLDS = {
   /** Pinch: distance between thumb tip and index tip (normalized) */
   PINCH_DISTANCE: 0.05,
-  /** Blink: eye aspect ratio threshold */
-  BLINK_THRESHOLD: 0.2,
+  /** Blink: eye aspect ratio threshold (both eyes must exceed) */
+  BLINK_THRESHOLD: 0.3,
+  /** Wink: closed eye threshold (higher = more closed) */
+  WINK_CLOSED_THRESHOLD: 0.4,
+  /** Wink: open eye max threshold (the other eye must stay below this) */
+  WINK_OPEN_MAX_THRESHOLD: 0.25,
+  /** Wink: max squint allowed on open eye (to filter out squinting) */
+  WINK_SQUINT_MAX: 0.4,
   /** Eyebrow raise: vertical displacement from neutral */
   BROW_RAISE_THRESHOLD: 0.15,
   /** Mouth open: jaw open blendshape value */

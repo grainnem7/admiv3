@@ -31,3 +31,17 @@ export type {
   ZoneEnterAction,
   ZoneExitAction,
 } from './ZoneMappingNode';
+
+export { FaceExpressionNode, DEFAULT_FACE_MAPPINGS } from './FaceExpressionNode';
+export type { FaceExpressionConfig, FaceExpressionMapping } from './FaceExpressionNode';
+
+export { HandExpressionNode, DEFAULT_HAND_MAPPINGS } from './HandExpressionNode';
+export type {
+  HandExpressionConfig,
+  HandExpressionMapping,
+  HandExpressionSource,
+  ExternalHandFeatures,
+} from './HandExpressionNode';
+
+export { QuantizerNode } from './QuantizerNode';
+export type { QuantizerConfig, QuantizeMode } from './QuantizerNode';

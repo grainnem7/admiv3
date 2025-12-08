@@ -407,6 +407,8 @@ export interface AppState {
   masterVolume: number;
   currentSoundPreset: string;
   activeNotes: Note[];
+  /** When true, internal Tone.js sounds are disabled (MIDI-only mode) */
+  internalSoundsMuted: boolean;
 
   // UI state
   currentScreen: Screen;
@@ -462,6 +464,8 @@ export interface AppActions {
   addActiveNote: (note: Note) => void;
   removeActiveNote: (noteId: string) => void;
   clearActiveNotes: () => void;
+  /** Mute internal sounds (for MIDI-only mode) */
+  setInternalSoundsMuted: (muted: boolean) => void;
 
   // UI actions
   setCurrentScreen: (screen: Screen) => void;

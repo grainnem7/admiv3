@@ -1870,3 +1870,680 @@ button {
     min-height: 44px;
   }
 }
+
+/* ============================================
+   GESTURE MAPPING PANEL
+   ============================================ */
+
+.gesture-mapping-panel {
+  background-color: var(--color-surface);
+  border-radius: var(--border-radius-lg);
+  overflow: hidden;
+  margin-top: var(--space-md);
+}
+
+.gesture-mapping-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.gesture-mapping-toggle:hover {
+  background-color: var(--color-surface-hover);
+}
+
+.gesture-mapping-toggle-icon {
+  font-size: 10px;
+  color: var(--color-text-muted);
+  transition: transform var(--transition-fast);
+}
+
+.gesture-mapping-toggle-label {
+  flex: 1;
+  text-align: left;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.gesture-mapping-count {
+  background-color: var(--color-primary);
+  color: var(--color-text);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.gesture-mapping-content {
+  padding: var(--space-md);
+  border-top: 1px solid var(--color-border);
+}
+
+.gesture-mapping-section-title {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: var(--space-sm);
+}
+
+.gesture-mapping-list {
+  margin-bottom: var(--space-lg);
+}
+
+.gesture-mapping-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  background-color: var(--color-bg-secondary);
+  border-radius: var(--border-radius);
+  margin-bottom: var(--space-xs);
+}
+
+.gesture-mapping-item--disabled {
+  opacity: 0.5;
+}
+
+.gesture-mapping-toggle-btn {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.gesture-mapping-toggle-btn:hover {
+  border-color: var(--color-primary);
+}
+
+.gesture-mapping-gesture {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+}
+
+.gesture-mapping-arrow {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.gesture-mapping-instrument {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: opacity var(--transition-fast);
+}
+
+.gesture-mapping-instrument:hover {
+  opacity: 0.8;
+}
+
+.gesture-mapping-remove {
+  margin-left: auto;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: 16px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all var(--transition-fast);
+}
+
+.gesture-mapping-remove:hover {
+  background-color: var(--color-error);
+  color: white;
+}
+
+.gesture-selector,
+.instrument-selector {
+  margin-bottom: var(--space-md);
+}
+
+.gesture-selector-label,
+.instrument-selector-label {
+  display: block;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-xs);
+}
+
+.gesture-selector-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-xs);
+}
+
+.gesture-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: var(--space-sm);
+  background-color: var(--color-bg-secondary);
+  border: 2px solid var(--color-border);
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.gesture-option:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  background-color: var(--color-surface-hover);
+}
+
+.gesture-option--selected {
+  border-color: var(--color-primary);
+  background-color: var(--color-primary-muted);
+}
+
+.gesture-option--used {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.gesture-option-icon {
+  font-size: 20px;
+}
+
+.gesture-option-name {
+  font-size: 10px;
+  color: var(--color-text);
+  text-align: center;
+}
+
+.instrument-selector-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-xs);
+}
+
+.instrument-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: var(--space-xs);
+  background-color: var(--color-bg-secondary);
+  border: 2px solid var(--color-border);
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.instrument-option:hover {
+  border-color: var(--instrument-color, var(--color-primary));
+  background-color: var(--color-surface-hover);
+}
+
+.instrument-option--selected {
+  border-color: var(--instrument-color, var(--color-primary));
+  background-color: color-mix(in srgb, var(--instrument-color, var(--color-primary)) 20%, transparent);
+}
+
+.instrument-option-icon {
+  font-size: 16px;
+}
+
+.instrument-option-name {
+  font-size: 9px;
+  color: var(--color-text);
+  text-align: center;
+}
+
+.gesture-mapping-add-btn {
+  width: 100%;
+  padding: var(--space-sm) var(--space-md);
+  background-color: var(--color-primary);
+  color: var(--color-text);
+  border: none;
+  border-radius: var(--border-radius);
+  font-weight: 600;
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.gesture-mapping-add-btn:hover {
+  background-color: var(--color-primary-hover);
+}
+
+.gesture-mapping-help {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  text-align: center;
+  margin-top: var(--space-md);
+}
+
+/* ================================
+   MIDI Settings Panel
+   ================================ */
+
+.midi-settings-panel {
+  background-color: var(--color-surface);
+  border-radius: var(--border-radius);
+  margin-bottom: var(--space-md);
+  overflow: hidden;
+}
+
+.midi-settings-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  background-color: transparent;
+  border: none;
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.midi-settings-toggle:hover {
+  background-color: var(--color-surface-hover);
+}
+
+.midi-settings-toggle-icon {
+  font-size: 10px;
+  color: var(--color-text-muted);
+  transition: transform var(--transition-fast);
+}
+
+.midi-settings-toggle-label {
+  flex: 1;
+  text-align: left;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.midi-settings-status {
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+}
+
+.midi-settings-content {
+  padding: var(--space-md);
+  border-top: 1px solid var(--color-border);
+}
+
+.midi-settings-row {
+  margin-bottom: var(--space-md);
+}
+
+.midi-settings-row:last-child {
+  margin-bottom: 0;
+}
+
+.midi-settings-label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  margin-bottom: var(--space-xs);
+}
+
+.midi-settings-checkbox {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--color-primary);
+}
+
+.midi-settings-select {
+  width: 100%;
+  padding: var(--space-sm);
+  background-color: var(--color-bg-secondary);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+
+.midi-settings-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.midi-settings-select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.midi-settings-panic-btn {
+  width: 100%;
+  padding: var(--space-sm) var(--space-md);
+  background-color: var(--color-error);
+  color: white;
+  border: none;
+  border-radius: var(--border-radius);
+  font-weight: 600;
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.midi-settings-panic-btn:hover {
+  background-color: color-mix(in srgb, var(--color-error) 80%, black);
+}
+
+.midi-settings-hint {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  font-style: italic;
+  margin-top: var(--space-sm);
+}
+
+.midi-settings-help {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  text-align: center;
+  margin-top: var(--space-md);
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--color-border);
+}
+
+.midi-settings-unsupported,
+.midi-settings-initializing {
+  text-align: center;
+  padding: var(--space-md);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+/* ================================
+   Musical Modules Panel
+   ================================ */
+
+.musical-modules-panel {
+  background-color: var(--color-surface);
+  border-radius: var(--border-radius);
+  margin-bottom: var(--space-md);
+  overflow: hidden;
+}
+
+.module-section {
+  border-bottom: 1px solid var(--color-border);
+}
+
+.module-section:last-of-type {
+  border-bottom: none;
+}
+
+.module-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.module-header:hover {
+  background-color: var(--color-surface-hover);
+}
+
+.expand-icon {
+  font-size: 10px;
+  color: var(--color-text-muted);
+  transition: transform var(--transition-fast);
+}
+
+.expand-icon.expanded {
+  transform: rotate(90deg);
+}
+
+.module-title {
+  flex: 1;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.module-status {
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  color: var(--color-text-muted);
+  padding: 2px 6px;
+  border-radius: var(--border-radius);
+  background-color: var(--color-bg-secondary);
+}
+
+.module-status.active {
+  color: var(--color-success);
+  background-color: rgba(16, 185, 129, 0.1);
+}
+
+.module-content {
+  padding: var(--space-md);
+  border-top: 1px solid var(--color-border);
+  background-color: var(--color-bg-secondary);
+}
+
+.control-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
+
+.control-row:last-child {
+  margin-bottom: 0;
+}
+
+.control-row label {
+  min-width: 70px;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.control-row select {
+  flex: 1;
+  padding: var(--space-xs) var(--space-sm);
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  font-size: var(--font-size-sm);
+}
+
+.control-row input[type="range"] {
+  flex: 1;
+  accent-color: var(--color-primary);
+}
+
+.control-row input[type="number"] {
+  width: 60px;
+  padding: var(--space-xs) var(--space-sm);
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  font-size: var(--font-size-sm);
+  text-align: center;
+}
+
+.value-display {
+  min-width: 40px;
+  text-align: right;
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  font-weight: 500;
+}
+
+.toggle-btn {
+  padding: var(--space-xs) var(--space-md);
+  background-color: var(--color-surface);
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.toggle-btn.active {
+  background-color: var(--color-primary);
+  color: white;
+  border-color: var(--color-primary);
+}
+
+.toggle-btn:hover:not(.active) {
+  background-color: var(--color-surface-hover);
+}
+
+.scale-preview {
+  margin-top: var(--space-sm);
+  padding: var(--space-sm);
+  background-color: var(--color-surface);
+  border-radius: var(--border-radius);
+  text-align: center;
+  font-size: var(--font-size-sm);
+  color: var(--color-primary);
+  font-weight: 500;
+}
+
+/* Transport controls */
+.transport-controls {
+  display: flex;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+}
+
+.transport-btn {
+  flex: 1;
+  padding: var(--space-sm);
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  font-size: var(--font-size-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.transport-btn:hover {
+  background-color: var(--color-surface-hover);
+}
+
+.transport-btn.active {
+  background-color: var(--color-primary);
+  color: white;
+  border-color: var(--color-primary);
+}
+
+.transport-btn.record.active {
+  background-color: var(--color-error);
+  border-color: var(--color-error);
+  animation: pulse-record 1s ease-in-out infinite;
+}
+
+@keyframes pulse-record {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* Step buttons */
+.step-buttons {
+  display: flex;
+  gap: var(--space-xs);
+}
+
+.step-btn {
+  padding: var(--space-xs) var(--space-sm);
+  background-color: var(--color-surface);
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.step-btn.active {
+  background-color: var(--color-primary);
+  color: white;
+  border-color: var(--color-primary);
+}
+
+/* Step display */
+.step-display {
+  display: flex;
+  gap: 2px;
+  flex-wrap: wrap;
+  margin-top: var(--space-sm);
+}
+
+.step-indicator {
+  width: 12px;
+  height: 12px;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 2px;
+  transition: all var(--transition-fast);
+}
+
+.step-indicator.beat {
+  border-color: var(--color-text-muted);
+}
+
+.step-indicator.current {
+  background-color: var(--color-primary);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 8px rgba(99, 102, 241, 0.5);
+}
+
+/* Tempo control */
+.tempo-control {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  border-top: 1px solid var(--color-border);
+}
+
+.tempo-control label {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  font-weight: 500;
+}
+
+.tempo-control input[type="number"] {
+  width: 60px;
+  padding: var(--space-xs) var(--space-sm);
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  font-size: var(--font-size-sm);
+  text-align: center;
+}
+
+.tempo-control input[type="range"] {
+  flex: 1;
+  accent-color: var(--color-primary);
+}

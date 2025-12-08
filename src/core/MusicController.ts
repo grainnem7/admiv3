@@ -44,6 +44,10 @@ import {
   isSafetyEvent,
   midiToNoteName,
 } from '../mapping/events';
+// MIDI output
+import { MIDIOutput } from '../midi';
+// Sequencer for recording
+import { getSequencer } from '../music/Sequencer';
 
 // ============================================
 // Types
@@ -78,6 +82,12 @@ export interface MusicControllerConfig {
   useMusicalEvents?: boolean;
   /** Enable debug logging (default: false) */
   debug?: boolean;
+  /**
+   * When true, internal Tone.js sounds are muted (MIDI-only mode).
+   * MIDI output still works. Useful when routing to external DAW/synth.
+   * @default false
+   */
+  internalSoundsMuted?: boolean;
 }
 
 interface NoteState {
@@ -93,12 +103,13 @@ const DEFAULT_CONFIG: Required<MusicControllerConfig> = {
   progressionId: 'contemplative',
   melodyCooldownMs: 300,      // Increased to reduce note spam
   chordCooldownMs: 4000,      // Increased for smoother progressions
-  positionNotesEnabled: false, // DISABLED - let zones handle sounds instead
-  positionThreshold: 0.05,    // Higher threshold
+  positionNotesEnabled: true,  // ENABLED - free play position-based notes
+  positionThreshold: 0.08,    // Higher threshold to reduce note spam
   useMovementEvents: false,   // DISABLED - causing too many notes
   useHandArticulation: true,
-  useMusicalEvents: false,    // DISABLED - let zones handle sounds instead
+  useMusicalEvents: true,     // ENABLED - for MusiKraken-style continuous MIDI CC
   debug: false,
+  internalSoundsMuted: false, // When true, only MIDI output (no internal sounds)
 };
 
 // ============================================
@@ -117,8 +128,7 @@ export class MusicController {
   private scale: string[] = [];
   private progressionState: ProgressionState;
   private noteState: NoteState;
-  private lastChordChangeTime: number = 0;
-  private movementAccumulator: number = 0;
+  // lastChordChangeTime and movementAccumulator removed - chord drone feature disabled
 
   // Hand feature state
   private lastHandFeatures: { left: HandFeatures; right: HandFeatures } | null = null;
@@ -222,6 +232,21 @@ export class MusicController {
       right: handFeatures.rightHand,
     };
 
+    // Inject hand features into HandExpressionNode for MusiKraken-style continuous MIDI CC
+    const handExpressionNode = this.mappingEngine.getHandExpressionNode();
+    if (handExpressionNode) {
+      if (handFeatures.leftHand.isTracked) {
+        handExpressionNode.setHandFeatures('left', handFeatures.leftHand);
+      } else {
+        handExpressionNode.setHandFeatures('left', null);
+      }
+      if (handFeatures.rightHand.isTracked) {
+        handExpressionNode.setHandFeatures('right', handFeatures.rightHand);
+      } else {
+        handExpressionNode.setHandFeatures('right', null);
+      }
+    }
+
     // Get primary control position (prefer right hand, fall back to pose)
     const controlPosition = this.getControlPosition(trackingFrame, handFeatures);
     if (!controlPosition) {
@@ -239,7 +264,8 @@ export class MusicController {
     }
 
     // Accumulate movement for chord progression
-    this.accumulateMovementForChords(controlPosition, timestamp);
+    // DISABLED - this was causing unwanted chords/drones
+    // this.accumulateMovementForChords(controlPosition, timestamp);
   }
 
   /**
@@ -322,12 +348,24 @@ export class MusicController {
 
     // Map X position to duration (left = short, right = long)
     const duration = position.x < 0.3 ? '16n' : position.x < 0.7 ? '8n' : '4n';
+    const durationMs = duration === '16n' ? 100 : duration === '8n' ? 200 : 400;
 
     // Calculate velocity based on movement speed
     const velocity = Math.min(0.9, 0.4 + distance * 5);
 
-    // Play the note
-    this.soundEngine.playNote('melody', note, { velocity, duration });
+    // Play the note (internal sound) - skip if internal sounds are muted
+    if (!this.config.internalSoundsMuted) {
+      this.soundEngine.playNote('melody', note, { velocity, duration });
+    }
+
+    // Also send MIDI note
+    const midiNote = this.noteNameToMidi(note);
+    const channel = MIDIOutput.getConfig().channels.melody;
+    MIDIOutput.sendNoteOn(midiNote, velocity * 127, channel);
+    // Schedule note off
+    setTimeout(() => {
+      MIDIOutput.sendNoteOff(midiNote, 0, channel);
+    }, durationMs);
 
     // Update state
     this.noteState.lastNoteTime = timestamp;
@@ -337,6 +375,24 @@ export class MusicController {
     if (this.config.debug) {
       console.log(`[MusicController] Note: ${note} (vel: ${velocity.toFixed(2)}, dur: ${duration})`);
     }
+  }
+
+  /**
+   * Convert note name (e.g., "C4") to MIDI note number
+   */
+  private noteNameToMidi(noteName: string): number {
+    const match = noteName.match(/^([A-G]#?)(\d+)$/);
+    if (!match) return 60; // Default to middle C
+
+    const noteMap: Record<string, number> = {
+      'C': 0, 'C#': 1, 'D': 2, 'D#': 3, 'E': 4, 'F': 5,
+      'F#': 6, 'G': 7, 'G#': 8, 'A': 9, 'A#': 10, 'B': 11
+    };
+
+    const note = match[1];
+    const octave = parseInt(match[2], 10);
+
+    return (octave + 1) * 12 + (noteMap[note] ?? 0);
   }
 
   /**
@@ -360,37 +416,15 @@ export class MusicController {
     }
   }
 
-  /**
-   * Accumulate movement and trigger chord changes.
-   */
-  private accumulateMovementForChords(
-    position: { x: number; y: number },
-    timestamp: number
-  ): void {
-    // Calculate movement distance
-    const dx = position.x - this.noteState.lastPosition.x;
-    const dy = position.y - this.noteState.lastPosition.y;
-    const distance = Math.sqrt(dx * dx + dy * dy);
-
-    this.movementAccumulator += distance;
-
-    // Check if we should change chord
-    const timeSinceLastChord = timestamp - this.lastChordChangeTime;
-    if (
-      timeSinceLastChord > this.config.chordCooldownMs &&
-      this.movementAccumulator > 0.3
-    ) {
-      this.advanceChordProgression(timestamp);
-      this.movementAccumulator = 0;
-    }
-  }
+  // accumulateMovementForChords - DISABLED to prevent unwanted chord drones
+  // Movement-triggered chords were causing continuous sound issues.
+  // If needed in the future, this can be re-enabled with proper edge detection.
 
   /**
    * Advance to the next chord in the progression.
    */
-  private advanceChordProgression(timestamp: number): void {
+  private advanceChordProgression(_timestamp: number): void {
     this.progressionState = nextChord(this.progressionState);
-    this.lastChordChangeTime = timestamp;
 
     const chord = getCurrentChord(this.progressionState);
     if (chord) {
@@ -408,7 +442,10 @@ export class MusicController {
       return `${tone}${octave}`;
     });
 
-    this.soundEngine.playChord('chord', notes, { velocity: 0.4, duration: '2n' });
+    // Play internal sound - skip if internal sounds are muted
+    if (!this.config.internalSoundsMuted) {
+      this.soundEngine.playChord('chord', notes, { velocity: 0.4, duration: '2n' });
+    }
 
     if (this.config.debug) {
       console.log(`[MusicController] Chord: ${chord.name}`);
@@ -446,24 +483,52 @@ export class MusicController {
    *
    * This is the new spec-aligned event handler that routes
    * MusicalEvents to the appropriate SoundEngine methods.
+   * Also sends events to MIDI output if enabled.
    *
    * @see mapping_requirements.md Section 3
    */
   private handleMusicalEvent(event: MusicalEvent): void {
     if (!this.isRunning) return;
 
+    // Send to MIDI output (parallel to internal sound)
+    // Determine voice type for MIDI channel routing
+    const voiceType = this.getVoiceTypeForEvent(event);
+    MIDIOutput.processMusicalEvent(event, voiceType);
+
     // Route event to appropriate handler based on type
     if (isNoteEvent(event)) {
+      console.log('[MusicController] NoteEvent:', event.action, event.midiNote);
       this.handleNoteEvent(event);
     } else if (isChordEvent(event)) {
+      console.log('[MusicController] ChordEvent:', event.action);
       this.handleChordEvent(event);
     } else if (isControlChangeEvent(event)) {
+      // Control events are handled but not logged (too frequent)
       this.handleControlChangeEvent(event);
     } else if (isStructuralEvent(event)) {
+      console.log('[MusicController] StructuralEvent:', event.action);
       this.handleStructuralMusicalEvent(event);
     } else if (isSafetyEvent(event)) {
+      console.log('[MusicController] SafetyEvent:', event.action);
       this.handleSafetyEvent(event);
     }
+  }
+
+  /**
+   * Determine voice type for MIDI channel routing based on event
+   */
+  private getVoiceTypeForEvent(event: MusicalEvent): 'melody' | 'bass' | 'chord' | 'drums' | 'gesture' {
+    if (isChordEvent(event)) {
+      return 'chord';
+    }
+    if (isNoteEvent(event)) {
+      // Could enhance this to detect bass notes by pitch range
+      if (event.midiNote < 48) {
+        return 'bass';
+      }
+      return 'melody';
+    }
+    return 'melody';
   }
 
   /**
@@ -491,19 +556,24 @@ export class MusicController {
     const noteName = midiToNoteName(midiNote);
 
     if (event.action === 'noteOn') {
-      // Use playNote with duration instead of noteOn to avoid polyphony overflow
-      // This automatically handles attack and release
-      this.soundEngine.playNote('melody', noteName, {
-        velocity: event.velocity,
-        duration: '8n', // Short note duration
-      });
+      // Play internal sound - skip if internal sounds are muted
+      if (!this.config.internalSoundsMuted) {
+        // Use playNote with duration instead of noteOn to avoid polyphony overflow
+        // This automatically handles attack and release
+        this.soundEngine.playNote('melody', noteName, {
+          velocity: event.velocity,
+          duration: '8n', // Short note duration
+        });
+      }
 
       if (this.config.debug) {
         console.log(`[MusicController] PlayNote: ${noteName} (vel: ${event.velocity.toFixed(2)})`);
       }
     } else {
       // noteOff - release the note (may not be needed with playNote approach)
-      this.soundEngine.noteOff('melody', noteName);
+      if (!this.config.internalSoundsMuted) {
+        this.soundEngine.noteOff('melody', noteName);
+      }
 
       if (this.config.debug) {
         console.log(`[MusicController] NoteOff: ${noteName}`);
@@ -518,19 +588,24 @@ export class MusicController {
     const noteNames = event.midiNotes.map(midiToNoteName);
 
     if (event.action === 'chordOn') {
-      // Use chord voice for chord events
-      this.soundEngine.playChord('chord', noteNames, {
-        velocity: event.velocity,
-        duration: '2n', // Default duration for chords
-      });
+      // Play internal sound - skip if internal sounds are muted
+      if (!this.config.internalSoundsMuted) {
+        // Use chord voice for chord events
+        this.soundEngine.playChord('chord', noteNames, {
+          velocity: event.velocity,
+          duration: '2n', // Default duration for chords
+        });
+      }
 
       if (this.config.debug) {
         console.log(`[MusicController] ChordOn: [${noteNames.join(', ')}]${event.voicingName ? ` (${event.voicingName})` : ''}`);
       }
     } else {
-      // Release all notes in the chord
-      for (const noteName of noteNames) {
-        this.soundEngine.noteOff('chord', noteName);
+      // Release all notes in the chord - skip if internal sounds are muted
+      if (!this.config.internalSoundsMuted) {
+        for (const noteName of noteNames) {
+          this.soundEngine.noteOff('chord', noteName);
+        }
       }
 
       if (this.config.debug) {
@@ -540,41 +615,59 @@ export class MusicController {
   }
 
   /**
-   * Handle ControlChangeEvent - update continuous parameters.
+   * Handle ControlChangeEvent - send MIDI CC for continuous control.
+   * Internal sound engine effects are NOT modified here to avoid conflicts.
+   * Internal filter/reverb/delay are controlled via applyHandArticulation() instead.
    */
   private handleControlChangeEvent(event: import('../mapping/events').ControlChangeEvent): void {
+    const channel = MIDIOutput.getConfig().channels.melody;
+
+    // Only send MIDI CC - don't modify internal sound engine
+    // This keeps MIDI output clean and avoids potential audio issues
     switch (event.parameter) {
       case 'volume':
-        // Skip volume control - was causing issues
+        MIDIOutput.sendControlChange(7, event.value * 127, channel); // CC#7 = Volume
         break;
 
       case 'filter_cutoff':
-        this.soundEngine.setFilterFrequency(event.value);
+        MIDIOutput.sendControlChange(74, event.value * 127, channel); // CC#74 = Filter Cutoff
         break;
 
       case 'reverb_mix':
-        this.soundEngine.setReverbWet(event.value);
+        MIDIOutput.sendControlChange(91, event.value * 127, channel); // CC#91 = Reverb
         break;
 
       case 'delay_mix':
-        this.soundEngine.setDelayWet(event.value);
+        MIDIOutput.sendControlChange(94, event.value * 127, channel); // CC#94 = Delay
         break;
 
-      // Future: Add more parameter handlers as needed
       case 'pitch':
+        // Send pitch bend (-1 to 1, where event.value is 0-1)
+        MIDIOutput.sendPitchBend((event.value - 0.5) * 2, channel);
+        break;
+
       case 'filter_resonance':
+        MIDIOutput.sendControlChange(71, event.value * 127, channel); // CC#71 = Resonance
+        break;
+
       case 'pan':
+        MIDIOutput.sendControlChange(10, event.value * 127, channel); // CC#10 = Pan
+        break;
+
       case 'attack':
+        MIDIOutput.sendControlChange(73, event.value * 127, channel); // CC#73 = Attack
+        break;
+
       case 'release':
+        MIDIOutput.sendControlChange(72, event.value * 127, channel); // CC#72 = Release
+        break;
+
       case 'vibrato_rate':
       case 'vibrato_depth':
       case 'harmonic_richness':
       case 'formant':
       case 'custom':
-        // These parameters are not yet implemented in SoundEngine
-        if (this.config.debug) {
-          console.log(`[MusicController] Unhandled control parameter: ${event.parameter}`);
-        }
+        // These parameters don't have standard MIDI CCs
         break;
     }
   }
@@ -726,6 +819,24 @@ export class MusicController {
   }
 
   /**
+   * Set whether internal sounds are muted (MIDI-only mode).
+   * When true, only MIDI output is sent - no internal Tone.js sounds.
+   */
+  setInternalSoundsMuted(muted: boolean): void {
+    this.config.internalSoundsMuted = muted;
+    if (this.config.debug) {
+      console.log(`[MusicController] Internal sounds ${muted ? 'muted' : 'unmuted'}`);
+    }
+  }
+
+  /**
+   * Get whether internal sounds are muted.
+   */
+  getInternalSoundsMuted(): boolean {
+    return this.config.internalSoundsMuted;
+  }
+
+  /**
    * Get current hand features (for UI display).
    */
   getHandFeatures(): { left: HandFeatures; right: HandFeatures } | null {
@@ -757,8 +868,71 @@ export class MusicController {
     _definition: { type: string; sound: { frequency?: number; type: 'drum' | 'tonal' | 'percussion' } }
   ): void {
     console.log(`[MusicController] triggerZoneSound: ${zone.type}`);
-    // Use the InstrumentSampler for realistic instrument sounds with custom settings
-    this.instrumentSampler.trigger(zone.type as InstrumentType, 0.8, zone.soundSettings);
+
+    // Use the InstrumentSampler for realistic instrument sounds - skip if internal sounds are muted
+    if (!this.config.internalSoundsMuted) {
+      this.instrumentSampler.trigger(zone.type as InstrumentType, 0.8, zone.soundSettings);
+    }
+
+    // Also send to MIDI output
+    // Convert instrument type to a MIDI note (using pitch offset if available)
+    const baseMidiNote = this.getBaseMidiNoteForInstrument(zone.type);
+    const pitchOffset = zone.soundSettings?.pitchOffset ?? 0;
+    const midiNote = baseMidiNote + pitchOffset;
+    const velocity = zone.soundSettings?.volume ?? 0.8;
+
+    // Determine voice type for channel routing
+    const voiceType = this.getVoiceTypeForInstrument(zone.type);
+    const channel = MIDIOutput.getConfig().channels[voiceType];
+
+    // Send note on via MIDIOutput
+    MIDIOutput.sendNoteOn(midiNote, velocity * 127, channel);
+    // Send note off after a short duration (instrument sampler handles its own envelope)
+    setTimeout(() => {
+      MIDIOutput.sendNoteOff(midiNote, 0, channel);
+    }, 200);
+
+    // Record to sequencer if recording is enabled
+    const sequencer = getSequencer();
+    if (sequencer.isRecording()) {
+      sequencer.recordNote(midiNote, velocity);
+    }
+  }
+
+  /**
+   * Get base MIDI note for an instrument type
+   */
+  private getBaseMidiNoteForInstrument(instrumentType: string): number {
+    // Map instruments to sensible MIDI notes
+    const noteMap: Record<string, number> = {
+      'kick': 36,      // C1 - Standard kick
+      'snare': 38,     // D1 - Standard snare
+      'hihat': 42,     // F#1 - Closed hi-hat
+      'cymbal': 49,    // C#2 - Crash cymbal
+      'tom': 45,       // A1 - Low tom
+      'clap': 39,      // D#1 - Hand clap
+      'piano-low': 36, // C2 - Low piano
+      'piano-mid': 60, // C4 - Middle C
+      'piano-high': 84,// C6 - High piano
+      'synth-pad': 60, // C4
+      'bell': 72,      // C5
+      'woodblock': 76, // E5
+    };
+    return noteMap[instrumentType] ?? 60;
+  }
+
+  /**
+   * Get voice type for MIDI channel routing based on instrument
+   */
+  private getVoiceTypeForInstrument(instrumentType: string): 'melody' | 'bass' | 'chord' | 'drums' | 'gesture' {
+    const drumTypes = ['kick', 'snare', 'hihat', 'cymbal', 'tom', 'clap', 'woodblock'];
+    if (drumTypes.includes(instrumentType)) {
+      return 'drums';
+    }
+    if (instrumentType === 'piano-low') {
+      return 'bass';
+    }
+    return 'melody';
   }
 
   /**
