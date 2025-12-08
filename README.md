@@ -28,41 +28,138 @@ npm run build
 npm test
 ```
 
-## Create a GitHub repository and push
+Midi setup guide · MD
+Copy
 
-Option A — using the GitHub CLI (`gh`) (recommended):
+# MIDI Setup Guide (Windows + Chrome + Ableton Live)
 
-Replace `OWNER/REPO` with your GitHub username and desired repo name, or omit `OWNER/REPO` to create under your account.
+This guide explains how to configure the ADMI web app to send MIDI into Ableton Live on Windows using Chrome and loopMIDI.
 
-```powershell
-git init
-git add .
-git commit -m "Initial commit"
-# create repo and push (interactive or pass --public/--private)
-gh repo create OWNER/REPO --public --source=. --remote=origin --push
+## 1. One-Time Setup
+
+### 1. Install loopMIDI
+
+1. Download loopMIDI: https://www.tobias-erichsen.de/software/loopmidi.html  
+2. Install and open loopMIDI.  
+3. In *New port-name*, type:
+   ADMIOutput
+4. Click **+** to create the virtual MIDI port.
+
+### 2. Configure Chrome to Use the Correct MIDI Backend
+
+Recent Chrome versions use a MIDI system that cannot see virtual MIDI ports on Windows.  
+Disable the WinRT MIDI backend:
+
+1. Open Chrome.
+2. Go to:
+   chrome://flags/#use-winrt-midi-api
+3. Set **Use Windows Runtime MIDI API → Disabled**.
+4. Restart Chrome completely (close all windows).
+
+### 3. Allow MIDI Permissions in Chrome
+
+1. Open the ADMI web app in Chrome.
+2. When Chrome prompts for MIDI access, click **Allow**.
+3. To review or modify permissions later, visit:
+   chrome://settings/content/midiDevices
+
+Ensure your ADMI domain (e.g., http://localhost:3000) is listed under **Allowed**.
+
+### 4. Enable the Virtual Port in Ableton Live
+
+1. Open Ableton → **Preferences → Link, Tempo & MIDI**.
+2. Under **Input Ports**, locate `ADMIOutput`.
+3. Enable:
+   - **Track**
+   - **Remote**
+
+## 2. Steps Required Each Time You Use the App
+
+### A. Start loopMIDI
+
+- Open loopMIDI before opening Chrome.
+- Ensure the `ADMIOutput` port exists and is active.
+
+### B. Create and Configure a MIDI Track in Ableton
+
+Create a new MIDI track, then configure:
+
+- MIDI From: **ADMIOutput**
+- Channel: **All Channels**
+- Monitor: **In**
+- Arm: **On** (red)
+
+Load any instrument (Piano, Simpler, Drum Rack, etc.).
+
+### C. Enable MIDI Output in the ADMI Web App
+
+1. Open **Settings** in the ADMI app.
+2. Enable **MIDI Output**.
+3. Select:
+   Output Device: **ADMIOutput**
+
+## 3. Testing MIDI Connectivity
+
+To verify that Chrome can send MIDI to Ableton, run this in Chrome DevTools (Console):
+
+```js
+navigator.requestMIDIAccess().then(m => {
+  const out = [...m.outputs.values()][0];
+  out.open().then(() => {
+    out.send([0x90, 60, 100]); // Note On (C4)
+    setTimeout(() => out.send([0x80, 60, 0]), 300); // Note Off
+  });
+});
 ```
 
-Option B — create repo on GitHub.com and push manually:
+If everything is working:
 
-1. Create a new repository on https://github.com/new (do not initialize with README).
-2. Then run:
+- Ableton's MIDI indicator flashes.
+- The armed MIDI track meter moves.
+- The instrument plays a note.
+- loopMIDI's data counter increases.
 
-```powershell
-git init
-git add .
-git commit -m "Initial commit"
-git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPO.git
-git branch -M main
-git push -u origin main
+## 4. Troubleshooting
+
+### Issue: No sound in Ableton
+
+- Track is armed.
+- Monitor = In.
+- An instrument is loaded.
+- Audio output device is configured correctly.
+
+### Issue: Ableton's MIDI light does not flash
+
+Check:
+
+- Ableton Preferences → ADMIOutput has Track and Remote enabled.
+- Track routing is:
+  - MIDI From: ADMIOutput
+  - Monitor: In
+
+### Issue: Chrome shows no MIDI outputs
+
+Run:
+
+```js
+navigator.requestMIDIAccess().then(m => console.log([...m.outputs.values()]));
 ```
 
-## CI
+If empty:
 
-This repo contains a GitHub Actions workflow at `.github/workflows/nodejs.yml` that installs dependencies and runs `npm run build` and `npm test` if those scripts are defined in `package.json`.
+- Ensure loopMIDI is open before Chrome.
+- Confirm the Chrome flag is disabled.
+- Restart Chrome.
+- Review MIDI permissions (chrome://settings/content/midiDevices).
 
-## License
+### Issue: loopMIDI shows data but Ableton does not play notes
 
-This project is licensed under the MIT License — see `LICENSE`.
+Re-check Ableton track routing:
 
----
-If you want, I can also create the remote for you (requires `gh` + authentication) and push the repo. Tell me which GitHub owner/repo name to use.
+- MIDI From: ADMIOutput
+- Monitor: In
+- Arm: On
+
+### Issue: ADMI app plays internal sounds but not Ableton
+
+Disable internal audio (if applicable) and ensure MIDI Output is enabled.
