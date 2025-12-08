@@ -1,0 +1,532 @@
+/**
+ * SoundEngine - Tone.js based sound engine for ADMI v3
+ *
+ * Architecture from v2's ToneSoundEngine, enhanced with v1's musical content:
+ * - Three-voice architecture (melody, bass, chord)
+ * - Effects chain: Filter → Delay → Chorus → Reverb
+ * - Chord progressions with emotional arcs
+ * - Melodic patterns for phrase generation
+ *
+ * This replaces the basic Web Audio AudioEngine with a richer implementation.
+ */
+
+import * as Tone from 'tone';
+
+// ============================================
+// Types
+// ============================================
+
+export type VoiceType = 'melody' | 'bass' | 'chord';
+export type OscillatorType = 'sine' | 'triangle' | 'square' | 'sawtooth';
+
+export interface SoundEngineConfig {
+  /** Master volume (0-1, default: 0.7) */
+  masterVolume?: number;
+  /** Enable reverb effect (default: true) */
+  reverb?: boolean;
+  /** Reverb decay time in seconds (default: 4) */
+  reverbDecay?: number;
+  /** Reverb wet/dry mix (0-1, default: 0.35) */
+  reverbWet?: number;
+  /** Enable delay effect (default: true) */
+  delay?: boolean;
+  /** Delay time (default: '8n.') */
+  delayTime?: Tone.Unit.Time;
+  /** Delay feedback (0-1, default: 0.2) */
+  delayFeedback?: number;
+  /** Delay wet/dry mix (0-1, default: 0.15) */
+  delayWet?: number;
+  /** Enable chorus effect (default: true) */
+  chorus?: boolean;
+  /** Enable debug logging (default: false) */
+  debug?: boolean;
+}
+
+export interface VoiceConfig {
+  oscillator: OscillatorType;
+  attack: number;
+  decay: number;
+  sustain: number;
+  release: number;
+  volume: number; // in dB
+}
+
+export interface PlayNoteOptions {
+  velocity?: number;
+  duration?: Tone.Unit.Time;
+}
+
+// ============================================
+// Default Configurations
+// ============================================
+
+const DEFAULT_CONFIG: Required<SoundEngineConfig> = {
+  masterVolume: 0.7,
+  reverb: true,
+  reverbDecay: 4,
+  reverbWet: 0.35,
+  delay: true,
+  delayTime: '8n.',
+  delayFeedback: 0.2,
+  delayWet: 0.15,
+  chorus: true,
+  debug: false,
+};
+
+// Voice configurations inspired by v1's ambient sound design
+const VOICE_CONFIGS: Record<VoiceType, VoiceConfig> = {
+  melody: {
+    oscillator: 'triangle',
+    attack: 0.02,
+    decay: 0.8,
+    sustain: 0.2,
+    release: 2.0,
+    volume: -8,
+  },
+  bass: {
+    oscillator: 'sine',
+    attack: 0.1,
+    decay: 0.3,
+    sustain: 0.7,
+    release: 1.5,
+    volume: -10,
+  },
+  chord: {
+    oscillator: 'sine',
+    attack: 0.3,
+    decay: 0.5,
+    sustain: 0.6,
+    release: 2.5,
+    volume: -12,
+  },
+};
+
+// ============================================
+// SoundEngine Class
+// ============================================
+
+export class SoundEngine {
+  private config: Required<SoundEngineConfig>;
+  private isInitialized = false;
+
+  // Synths (one per voice type)
+  private melodySynth: Tone.PolySynth | null = null;
+  private bassSynth: Tone.PolySynth | null = null;
+  private chordSynth: Tone.PolySynth | null = null;
+
+  // Effects chain
+  private filter: Tone.Filter | null = null;
+  private delay: Tone.FeedbackDelay | null = null;
+  private chorus: Tone.Chorus | null = null;
+  private reverb: Tone.Reverb | null = null;
+  private masterGain: Tone.Gain | null = null;
+
+  // State
+  private isMuted = false;
+
+  constructor(config: SoundEngineConfig = {}) {
+    this.config = { ...DEFAULT_CONFIG, ...config };
+  }
+
+  /**
+   * Initialize the sound engine. Must be called after user interaction.
+   */
+  async initialize(): Promise<void> {
+    if (this.isInitialized) {
+      return;
+    }
+
+    try {
+      // Start Tone.js context
+      await Tone.start();
+
+      // Create master gain
+      this.masterGain = new Tone.Gain(this.config.masterVolume).toDestination();
+
+      // Create effects chain (in reverse order for connection)
+      await this.createEffectsChain();
+
+      // Create synths
+      this.createSynths();
+
+      this.isInitialized = true;
+
+      if (this.config.debug) {
+        console.log('[SoundEngine] Initialized with effects chain:',
+          this.config.delay ? 'Filter → Delay →' : 'Filter →',
+          this.config.chorus ? 'Chorus →' : '',
+          this.config.reverb ? 'Reverb →' : '',
+          'Master'
+        );
+      }
+    } catch (error) {
+      console.error('[SoundEngine] Initialization failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Create the effects chain.
+   */
+  private async createEffectsChain(): Promise<void> {
+    // Create reverb (end of chain, connects to master)
+    if (this.config.reverb) {
+      this.reverb = new Tone.Reverb({
+        decay: this.config.reverbDecay,
+        wet: this.config.reverbWet,
+        preDelay: 0.05,
+      });
+      await this.reverb.generate();
+      this.reverb.connect(this.masterGain!);
+    }
+
+    // Create chorus (connects to reverb or master)
+    if (this.config.chorus) {
+      this.chorus = new Tone.Chorus({
+        frequency: 1.5,
+        delayTime: 3.5,
+        depth: 0.7,
+        wet: 0.3,
+      }).start();
+      this.chorus.connect(this.reverb ?? this.masterGain!);
+    }
+
+    // Create delay (connects to chorus, reverb, or master)
+    if (this.config.delay) {
+      this.delay = new Tone.FeedbackDelay({
+        delayTime: this.config.delayTime,
+        feedback: this.config.delayFeedback,
+        wet: this.config.delayWet,
+      });
+      this.delay.connect(this.chorus ?? this.reverb ?? this.masterGain!);
+    }
+
+    // Create filter (start of chain, synths connect here)
+    this.filter = new Tone.Filter({
+      type: 'lowpass',
+      frequency: 4000,
+      Q: 0.5,
+      rolloff: -12,
+    });
+    this.filter.connect(this.delay ?? this.chorus ?? this.reverb ?? this.masterGain!);
+  }
+
+  /**
+   * Create the three synth voices.
+   */
+  private createSynths(): void {
+    const createPolySynth = (config: VoiceConfig): Tone.PolySynth => {
+      const synth = new Tone.PolySynth(Tone.Synth, {
+        oscillator: { type: config.oscillator },
+        envelope: {
+          attack: config.attack,
+          decay: config.decay,
+          sustain: config.sustain,
+          release: config.release,
+        },
+      });
+      synth.maxPolyphony = 16;
+      synth.volume.value = config.volume;
+      synth.connect(this.filter!);
+      return synth;
+    };
+
+    this.melodySynth = createPolySynth(VOICE_CONFIGS.melody);
+    this.bassSynth = createPolySynth(VOICE_CONFIGS.bass);
+    this.chordSynth = createPolySynth(VOICE_CONFIGS.chord);
+
+    // DEBUG: Confirm synths created
+    console.log('[SoundEngine] Synths created:', {
+      melody: !!this.melodySynth,
+      bass: !!this.bassSynth,
+      chord: !!this.chordSynth,
+      filter: !!this.filter,
+      audioContextState: Tone.context.state,
+    });
+  }
+
+  /**
+   * Get a synth by voice type.
+   */
+  private getSynth(voice: VoiceType): Tone.PolySynth | null {
+    switch (voice) {
+      case 'melody':
+        return this.melodySynth;
+      case 'bass':
+        return this.bassSynth;
+      case 'chord':
+        return this.chordSynth;
+      default:
+        return this.melodySynth;
+    }
+  }
+
+  /**
+   * Play a single note on a voice.
+   */
+  playNote(
+    voice: VoiceType,
+    note: string | number,
+    options: PlayNoteOptions = {}
+  ): void {
+    if (!this.isInitialized || this.isMuted) return;
+
+    const synth = this.getSynth(voice);
+    if (!synth) return;
+
+    const { velocity = 0.7, duration = '8n' } = options;
+
+    try {
+      synth.triggerAttackRelease(note, duration, undefined, velocity);
+
+      if (this.config.debug) {
+        console.log(`[SoundEngine] ${voice}: ${note} (vel: ${velocity.toFixed(2)}, dur: ${duration})`);
+      }
+    } catch (error) {
+      console.error('[SoundEngine] Error playing note:', error);
+    }
+  }
+
+  /**
+   * Play a chord (multiple notes at once).
+   */
+  playChord(
+    voice: VoiceType,
+    notes: (string | number)[],
+    options: PlayNoteOptions = {}
+  ): void {
+    if (!this.isInitialized || this.isMuted) return;
+
+    const synth = this.getSynth(voice);
+    if (!synth) return;
+
+    const { velocity = 0.5, duration = '2n' } = options;
+
+    try {
+      synth.triggerAttackRelease(notes, duration, undefined, velocity);
+
+      if (this.config.debug) {
+        console.log(`[SoundEngine] ${voice} chord: [${notes.join(', ')}]`);
+      }
+    } catch (error) {
+      console.error('[SoundEngine] Error playing chord:', error);
+    }
+  }
+
+  /**
+   * Start a sustained note (noteOn).
+   */
+  noteOn(voice: VoiceType, note: string | number, velocity = 0.7): void {
+    // DEBUG: Log noteOn call details
+    console.log(`[SoundEngine] noteOn called: voice=${voice}, note=${note}, vel=${velocity}, initialized=${this.isInitialized}, muted=${this.isMuted}`);
+
+    if (!this.isInitialized || this.isMuted) {
+      console.log(`[SoundEngine] noteOn BLOCKED: initialized=${this.isInitialized}, muted=${this.isMuted}`);
+      return;
+    }
+
+    const synth = this.getSynth(voice);
+    if (!synth) {
+      console.log(`[SoundEngine] noteOn BLOCKED: no synth for voice=${voice}`);
+      return;
+    }
+
+    try {
+      console.log(`[SoundEngine] Triggering attack: ${note} on ${voice}`);
+      synth.triggerAttack(note, undefined, velocity);
+    } catch (error) {
+      console.error('[SoundEngine] Error in noteOn:', error);
+    }
+  }
+
+  /**
+   * Release a sustained note (noteOff).
+   */
+  noteOff(voice: VoiceType, note: string | number): void {
+    if (!this.isInitialized) return;
+
+    const synth = this.getSynth(voice);
+    if (!synth) return;
+
+    try {
+      synth.triggerRelease(note);
+    } catch (error) {
+      console.error('[SoundEngine] Error in noteOff:', error);
+    }
+  }
+
+  /**
+   * Release all notes on a voice.
+   */
+  releaseAll(voice?: VoiceType): void {
+    if (!this.isInitialized) return;
+
+    if (voice) {
+      this.getSynth(voice)?.releaseAll();
+    } else {
+      this.melodySynth?.releaseAll();
+      this.bassSynth?.releaseAll();
+      this.chordSynth?.releaseAll();
+    }
+  }
+
+  /**
+   * Set filter frequency (0-1 normalized, maps to 200-8000 Hz).
+   */
+  setFilterFrequency(value: number): void {
+    if (!this.filter) return;
+
+    // Clamp and validate input
+    if (!Number.isFinite(value)) {
+      value = 0.5; // Default to mid-range if invalid
+    }
+    value = Math.max(0, Math.min(1, value));
+
+    // Map 0-1 to 200-8000 Hz (logarithmic)
+    const minFreq = 200;
+    const maxFreq = 8000;
+    const freq = minFreq * Math.pow(maxFreq / minFreq, value);
+    this.filter.frequency.rampTo(freq, 0.05);
+  }
+
+  /**
+   * Set reverb wet/dry mix (0-1).
+   */
+  setReverbWet(value: number): void {
+    if (!this.reverb) return;
+    if (!Number.isFinite(value)) value = 0.3;
+    value = Math.max(0, Math.min(1, value));
+    this.reverb.wet.rampTo(value, 0.1);
+  }
+
+  /**
+   * Set delay wet/dry mix (0-1).
+   */
+  setDelayWet(value: number): void {
+    if (!this.delay) return;
+    this.delay.wet.rampTo(value, 0.1);
+  }
+
+  /**
+   * Set master volume (0-1).
+   */
+  setMasterVolume(volume: number): void {
+    this.config.masterVolume = Math.max(0, Math.min(1, volume));
+    if (this.masterGain && !this.isMuted) {
+      this.masterGain.gain.rampTo(this.config.masterVolume, 0.05);
+    }
+  }
+
+  /**
+   * Set muted state.
+   */
+  setMuted(muted: boolean): void {
+    this.isMuted = muted;
+    if (this.masterGain) {
+      this.masterGain.gain.rampTo(muted ? 0 : this.config.masterVolume, 0.05);
+    }
+    if (muted) {
+      this.releaseAll();
+    }
+  }
+
+  /**
+   * Toggle mute.
+   */
+  toggleMute(): boolean {
+    this.setMuted(!this.isMuted);
+    return this.isMuted;
+  }
+
+  /**
+   * Check if engine is ready.
+   */
+  isReady(): boolean {
+    return this.isInitialized && Tone.context.state === 'running';
+  }
+
+  /**
+   * Get current state.
+   */
+  getState(): 'uninitialized' | 'running' | 'suspended' {
+    if (!this.isInitialized) return 'uninitialized';
+    return Tone.context.state === 'running' ? 'running' : 'suspended';
+  }
+
+  /**
+   * Resume audio context (call after user interaction if suspended).
+   */
+  async resume(): Promise<void> {
+    if (Tone.context.state === 'suspended') {
+      await Tone.context.resume();
+    }
+  }
+
+  /**
+   * Play a test sound to verify audio is working.
+   */
+  async testSound(): Promise<void> {
+    if (!this.isInitialized) {
+      await this.initialize();
+    }
+
+    // Resume audio context if suspended (required after user interaction)
+    await this.resume();
+
+    // Play a nice arpeggio
+    const notes = ['C4', 'E4', 'G4', 'C5', 'E5'];
+    notes.forEach((note, i) => {
+      const time = Tone.now() + i * 0.15;
+      this.melodySynth?.triggerAttackRelease(note, '8n', time, 0.5);
+    });
+  }
+
+  /**
+   * Clean up all resources.
+   */
+  dispose(): void {
+    this.releaseAll();
+
+    this.melodySynth?.dispose();
+    this.bassSynth?.dispose();
+    this.chordSynth?.dispose();
+    this.filter?.dispose();
+    this.delay?.dispose();
+    this.chorus?.dispose();
+    this.reverb?.dispose();
+    this.masterGain?.dispose();
+
+    this.melodySynth = null;
+    this.bassSynth = null;
+    this.chordSynth = null;
+    this.filter = null;
+    this.delay = null;
+    this.chorus = null;
+    this.reverb = null;
+    this.masterGain = null;
+
+    this.isInitialized = false;
+
+    if (this.config.debug) {
+      console.log('[SoundEngine] Disposed');
+    }
+  }
+}
+
+// ============================================
+// Singleton Instance
+// ============================================
+
+let soundEngineInstance: SoundEngine | null = null;
+
+export function getSoundEngine(): SoundEngine {
+  if (!soundEngineInstance) {
+    soundEngineInstance = new SoundEngine();
+  }
+  return soundEngineInstance;
+}
+
+export function resetSoundEngine(): void {
+  soundEngineInstance?.dispose();
+  soundEngineInstance = null;
+}
