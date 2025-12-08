@@ -71,7 +71,7 @@ function TrackingOverlay({
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   // Calculate the actual displayed video area within the container
-  // This accounts for object-fit: contain letterboxing
+  // This accounts for object-fit: cover (video fills container, may be cropped)
   const getDisplayBounds = useCallback(() => {
     const cw = containerWidth || width;
     const ch = containerHeight || height;
@@ -85,17 +85,17 @@ function TrackingOverlay({
     let offsetY: number;
 
     if (videoAspect > containerAspect) {
-      // Video is wider than container - letterbox top/bottom
+      // Video is wider than container - video height fills, width is cropped
+      displayHeight = ch;
+      displayWidth = ch * videoAspect;
+      offsetX = (cw - displayWidth) / 2; // Negative offset (cropped sides)
+      offsetY = 0;
+    } else {
+      // Video is taller than container - video width fills, height is cropped
       displayWidth = cw;
       displayHeight = cw / videoAspect;
       offsetX = 0;
-      offsetY = (ch - displayHeight) / 2;
-    } else {
-      // Video is taller than container - letterbox left/right
-      displayHeight = ch;
-      displayWidth = ch * videoAspect;
-      offsetX = (cw - displayWidth) / 2;
-      offsetY = 0;
+      offsetY = (ch - displayHeight) / 2; // Negative offset (cropped top/bottom)
     }
 
     return { displayWidth, displayHeight, offsetX, offsetY };

@@ -62,7 +62,7 @@ function InstrumentZoneOverlay({
   const [resizeState, setResizeState] = useState<ResizeState | null>(null);
   const [isOutsideBounds, setIsOutsideBounds] = useState(false);
 
-  // Calculate display bounds (same logic as TrackingOverlay)
+  // Calculate display bounds (same logic as TrackingOverlay - for object-fit: cover)
   const getDisplayBounds = useCallback(() => {
     const videoAspect = videoWidth / videoHeight;
     const containerAspect = containerWidth / containerHeight;
@@ -73,15 +73,17 @@ function InstrumentZoneOverlay({
     let offsetY: number;
 
     if (videoAspect > containerAspect) {
-      displayWidth = containerWidth;
-      displayHeight = containerWidth / videoAspect;
-      offsetX = 0;
-      offsetY = (containerHeight - displayHeight) / 2;
-    } else {
+      // Video is wider - height fills, width cropped
       displayHeight = containerHeight;
       displayWidth = containerHeight * videoAspect;
       offsetX = (containerWidth - displayWidth) / 2;
       offsetY = 0;
+    } else {
+      // Video is taller - width fills, height cropped
+      displayWidth = containerWidth;
+      displayHeight = containerWidth / videoAspect;
+      offsetX = 0;
+      offsetY = (containerHeight - displayHeight) / 2;
     }
 
     return { displayWidth, displayHeight, offsetX, offsetY };

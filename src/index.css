@@ -404,7 +404,7 @@ button {
 .video-wrapper {
   position: relative;
   width: 100%;
-  aspect-ratio: 16 / 9;
+  aspect-ratio: 4 / 3;
   background-color: var(--color-bg-secondary);
   border-radius: var(--border-radius-xl);
   overflow: hidden;
@@ -414,7 +414,7 @@ button {
 .performance-video {
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
   transform: scaleX(-1);
   background-color: var(--color-bg);
 }
