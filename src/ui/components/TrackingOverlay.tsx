@@ -214,21 +214,17 @@ function TrackingOverlay({
         }
       }
 
-      // Draw landmarks
-      landmarks.landmarks.forEach((landmark, index) => {
-        const x = toCanvasX(landmark.x);
-        const y = toCanvasY(landmark.y);
-        const tracked = isTrackedHand(hand, index);
-
-        if (tracked) {
-          drawTrackedLandmark(ctx, x, y, tracked.role);
-        } else if (showAllLandmarks) {
+      // Draw landmarks (all same size, no large tracked dots)
+      if (showAllLandmarks) {
+        landmarks.landmarks.forEach((landmark) => {
+          const x = toCanvasX(landmark.x);
+          const y = toCanvasY(landmark.y);
           ctx.fillStyle = colors.secondary;
           ctx.beginPath();
           ctx.arc(x, y, 3, 0, Math.PI * 2);
           ctx.fill();
-        }
-      });
+        });
+      }
 
       // Draw pinch indicator if thumb and index are close
       const thumbTip = landmarks.landmarks[HAND_LANDMARKS.THUMB_TIP];
@@ -257,14 +253,11 @@ function TrackingOverlay({
       drawHand(frame.rightHand, 'right');
     }
 
-    // Draw face (simplified - just key points)
+    // Draw face (simplified - just key points, no nose dot)
     if (frame.face && profile?.activeModalities.face !== false) {
       const keyFacePoints = [
-        FACE_LANDMARKS.NOSE_TIP,
         FACE_LANDMARKS.LEFT_EYE_OUTER,
         FACE_LANDMARKS.RIGHT_EYE_OUTER,
-        FACE_LANDMARKS.LIPS_LEFT,
-        FACE_LANDMARKS.LIPS_RIGHT,
         FACE_LANDMARKS.LEFT_EYE_UPPER,
         FACE_LANDMARKS.RIGHT_EYE_UPPER,
       ];

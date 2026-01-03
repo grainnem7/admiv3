@@ -8,16 +8,19 @@
  * - Output device selection
  */
 
-import type { MIDIDeviceInfo } from './types';
+import type { MIDIDeviceInfo, MIDIMessage } from './types';
 
 type MIDIStateCallback = (devices: MIDIDeviceInfo[]) => void;
+type MIDIMessageCallback = (message: MIDIMessage) => void;
 
 class MIDIManagerClass {
   private midiAccess: MIDIAccess | null = null;
   private isInitialized = false;
   private initPromise: Promise<boolean> | null = null;
   private stateCallbacks: Set<MIDIStateCallback> = new Set();
+  private messageCallbacks: Set<MIDIMessageCallback> = new Set();
   private selectedOutputId: string | null = null;
+  private midiEnabled: boolean = false;
 
   /**
    * Initialize Web MIDI API access
@@ -206,6 +209,41 @@ class MIDIManagerClass {
         console.error('Error in MIDI state callback:', error);
       }
     });
+  }
+
+  /**
+   * Subscribe to outgoing MIDI messages (for monitoring)
+   */
+  onMessage(callback: MIDIMessageCallback): () => void {
+    this.messageCallbacks.add(callback);
+    return () => this.messageCallbacks.delete(callback);
+  }
+
+  /**
+   * Notify message subscribers (called by MIDIOutput when sending)
+   */
+  notifyMessage(message: MIDIMessage): void {
+    for (const callback of this.messageCallbacks) {
+      try {
+        callback(message);
+      } catch (error) {
+        console.error('Error in MIDI message callback:', error);
+      }
+    }
+  }
+
+  /**
+   * Set MIDI enabled state
+   */
+  setEnabled(enabled: boolean): void {
+    this.midiEnabled = enabled;
+  }
+
+  /**
+   * Check if MIDI is enabled
+   */
+  isEnabled(): boolean {
+    return this.midiEnabled && this.selectedOutputId !== null;
   }
 
   /**

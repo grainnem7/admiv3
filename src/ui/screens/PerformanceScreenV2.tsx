@@ -29,7 +29,10 @@ import InstrumentPalette from '../components/InstrumentPalette';
 import InstrumentZoneOverlay from '../components/InstrumentZoneOverlay';
 import GestureMappingPanel from '../components/GestureMappingPanel';
 import MIDISettingsPanel from '../components/MIDISettingsPanel';
+import EffectChainSelector from '../components/EffectChainSelector';
 import { MusicalModulesPanel } from '../components/MusicalModulesPanel';
+import InputMethodPanel, { type InputMethod } from '../components/InputMethodPanel';
+import ThereminDisplay from '../components/ThereminDisplay';
 
 function PerformanceScreenV2() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -66,6 +69,13 @@ function PerformanceScreenV2() {
 
   // MIDI settings state
   const [isMidiPanelExpanded, setIsMidiPanelExpanded] = useState(false);
+
+  // Effect chain selector state
+  const [isEffectPanelExpanded, setIsEffectPanelExpanded] = useState(false);
+
+  // Input method state
+  const [isInputMethodPanelExpanded, setIsInputMethodPanelExpanded] = useState(false);
+  const [activeInputMethod, setActiveInputMethod] = useState<InputMethod>('body');
 
   // Keep refs in sync with state
   useEffect(() => {
@@ -223,6 +233,41 @@ function PerformanceScreenV2() {
   const handleTrackingFrame = useCallback(
     (frame: TrackingFrame) => {
       setCurrentFrame(frame);
+
+      // Check if theremin mode is active
+      const isThereminMode = mappingEngineRef.current?.isThereminMode() ?? false;
+
+      if (isThereminMode) {
+        // Process through theremin mode directly (bypasses standard pipeline)
+        const thereminResult = mappingEngineRef.current?.processThereminFrame(frame);
+
+        if (thereminResult && musicControllerRef.current) {
+          // Control theremin sound directly via SoundEngine
+          const soundEngine = musicControllerRef.current.getSoundEngine();
+          if (soundEngine && !isMuted) {
+            if (thereminResult.shouldPlay) {
+              if (!soundEngine.isThereminPlaying()) {
+                // Start theremin sound
+                soundEngine.thereminStart(thereminResult.frequency, thereminResult.volume);
+              } else {
+                // Update frequency and volume continuously
+                soundEngine.thereminSetFrequency(thereminResult.frequency);
+                soundEngine.thereminSetVolume(thereminResult.volume);
+              }
+            } else {
+              // Stop theremin sound when hand not detected or volume too low
+              if (soundEngine.isThereminPlaying()) {
+                soundEngine.thereminStop();
+              }
+            }
+          }
+
+          // Update UI state
+          setCurrentFrequency(thereminResult.frequency);
+          setIsActive(thereminResult.handActive);
+        }
+        return; // Skip standard processing
+      }
 
       // Process through movement processor
       const processedFrame = processorRef.current?.process(frame);
@@ -464,7 +509,19 @@ function PerformanceScreenV2() {
       <aside className={`controls-panel ${showControls ? 'controls-panel--open' : ''}`}>
         <div className="controls-content">
           <div className="controls-section">
-            <h3 className="controls-section-title">Input Mode</h3>
+            <h3 className="controls-section-title">Input Method</h3>
+            <InputMethodPanel
+              isExpanded={isInputMethodPanelExpanded}
+              onToggle={() => setIsInputMethodPanelExpanded(!isInputMethodPanelExpanded)}
+              onInputMethodChange={setActiveInputMethod}
+            />
+            {activeInputMethod === 'theremin' && (
+              <ThereminDisplay isActive={activeInputMethod === 'theremin'} />
+            )}
+          </div>
+
+          <div className="controls-section">
+            <h3 className="controls-section-title">Input Profile</h3>
             <InputProfileSelector
               currentProfile={currentProfile}
               onProfileSelect={handleProfileChange}
@@ -476,6 +533,10 @@ function PerformanceScreenV2() {
             <h3 className="controls-section-title">Sound</h3>
             <VolumeControl />
             <SoundPresetSelector />
+            <EffectChainSelector
+              isExpanded={isEffectPanelExpanded}
+              onToggle={() => setIsEffectPanelExpanded(!isEffectPanelExpanded)}
+            />
           </div>
 
           <div className="controls-section">

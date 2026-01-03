@@ -79,7 +79,9 @@ export interface MIDIMessage {
   channel: number;
   data1?: number;
   data2?: number;
-  timestamp?: number;
+  timestamp: number;
+  /** Raw MIDI bytes for logging/monitoring */
+  data: number[];
 }
 
 /** Common MIDI CC numbers */

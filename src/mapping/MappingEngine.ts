@@ -8,7 +8,7 @@
  * @see mapping_requirements.md Section 4
  */
 
-import type { ProcessedFrame, MappingResult, InputProfile } from '../state/types';
+import type { ProcessedFrame, MappingResult, InputProfile, TrackingFrame } from '../state/types';
 import { MappingNode, type MappingNodeOutput } from './MappingNode';
 import type { MusicalEvent } from './events';
 import {
@@ -20,6 +20,7 @@ import {
   HandExpressionNode,
   DEFAULT_HAND_MAPPINGS,
   type ChordOutput,
+  ThereminNode,
 } from './nodes';
 
 export interface MappingEngineConfig {
@@ -62,6 +63,8 @@ export class MappingEngine {
   private chordNode: ChordMappingNode | null = null;
   private handExpressionNode: HandExpressionNode | null = null;
   private triggerNodes: Map<string, TriggerMappingNode> = new Map();
+  private thereminNode: ThereminNode | null = null;
+  private thereminModeEnabled: boolean = false;
 
   /**
    * Event subscribers for MusicalEvents.
@@ -288,15 +291,17 @@ export class MappingEngine {
     const nodeOutputs = new Map<string, MappingNodeOutput>();
     const allEvents: MusicalEvent[] = [];
 
+    // In theremin mode, skip regular processing (use processThereminFrame instead)
+    if (!this.thereminModeEnabled) {
+      // Process all regular nodes and collect events
+      for (const [id, node] of this.nodes) {
+        const output = node.process(frame);
+        nodeOutputs.set(id, output);
 
-    // Process all nodes and collect events
-    for (const [id, node] of this.nodes) {
-      const output = node.process(frame);
-      nodeOutputs.set(id, output);
-
-      // Collect events from this node
-      if (output.events && output.events.length > 0) {
-        allEvents.push(...output.events);
+        // Collect events from this node
+        if (output.events && output.events.length > 0) {
+          allEvents.push(...output.events);
+        }
       }
     }
 
@@ -441,6 +446,59 @@ export class MappingEngine {
    */
   getTriggerNode(gestureId: string): TriggerMappingNode | null {
     return this.triggerNodes.get(gestureId) ?? null;
+  }
+
+  /**
+   * Enable or disable theremin mode
+   * When enabled, hand tracking is converted to pitch/volume via ThereminNode
+   */
+  setThereminMode(enabled: boolean): void {
+    this.thereminModeEnabled = enabled;
+
+    if (enabled && !this.thereminNode) {
+      this.thereminNode = new ThereminNode({
+        emitCCs: true,
+        volumeThreshold: 0.05,
+      });
+      console.log('[MappingEngine] Theremin mode enabled');
+    } else if (!enabled && this.thereminNode) {
+      this.thereminNode.reset();
+      console.log('[MappingEngine] Theremin mode disabled');
+    }
+  }
+
+  /**
+   * Check if theremin mode is enabled
+   */
+  isThereminMode(): boolean {
+    return this.thereminModeEnabled;
+  }
+
+  /**
+   * Get the theremin node
+   */
+  getThereminNode(): ThereminNode | null {
+    return this.thereminNode;
+  }
+
+  /**
+   * Process a tracking frame through theremin mode.
+   * This bypasses the standard ProcessedFrame pipeline for direct hand-to-sound mapping.
+   * Returns the theremin result for external use (e.g., direct SoundEngine control).
+   */
+  processThereminFrame(frame: TrackingFrame): import('./nodes').ThereminProcessResult | null {
+    if (!this.thereminModeEnabled || !this.thereminNode) {
+      return null;
+    }
+
+    const result = this.thereminNode.process(frame);
+
+    // Emit events to subscribers (for MIDI output)
+    if (result.events.length > 0) {
+      this.emitEvents(result.events);
+    }
+
+    return result;
   }
 
   /**

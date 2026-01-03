@@ -80,13 +80,49 @@ class MIDIOutputClass {
     if (!output) return;
 
     try {
+      const ts = timestamp ?? performance.now();
       if (timestamp !== undefined) {
         output.send(data, timestamp);
       } else {
         output.send(data);
       }
+
+      // Notify manager for monitoring (parse status byte to get type and channel)
+      const status = data[0];
+      const channel = (status & 0x0f) + 1;
+      const type = this.statusToType(status & 0xf0);
+      MIDIManager.notifyMessage({
+        type,
+        channel,
+        data1: data[1],
+        data2: data[2],
+        timestamp: ts,
+        data: [...data],
+      });
     } catch (error) {
       console.error('Failed to send MIDI message:', error);
+    }
+  }
+
+  /**
+   * Convert MIDI status byte to message type
+   */
+  private statusToType(status: number): import('./types').MIDIMessageType {
+    switch (status) {
+      case 0x90:
+        return 'noteOn';
+      case 0x80:
+        return 'noteOff';
+      case 0xb0:
+        return 'controlChange';
+      case 0xc0:
+        return 'programChange';
+      case 0xe0:
+        return 'pitchBend';
+      case 0xa0:
+        return 'aftertouch';
+      default:
+        return 'noteOn';
     }
   }
 
@@ -318,6 +354,7 @@ class MIDIOutputClass {
    */
   enable(): void {
     this.config.enabled = true;
+    MIDIManager.setEnabled(true);
   }
 
   /**
@@ -326,6 +363,7 @@ class MIDIOutputClass {
   disable(): void {
     this.panic(); // Stop all notes first
     this.config.enabled = false;
+    MIDIManager.setEnabled(false);
   }
 
   /**

@@ -217,6 +217,13 @@ export class MusicController {
   }
 
   /**
+   * Get the SoundEngine instance for direct control.
+   */
+  getSoundEngine(): SoundEngine {
+    return this.soundEngine;
+  }
+
+  /**
    * Process a tracking frame and generate music.
    * This is the main entry point called each frame.
    */
@@ -545,12 +552,15 @@ export class MusicController {
   private handleNoteEvent(event: import('../mapping/events').NoteEvent): void {
     // Get the current pitch from the PitchMappingNode
     // This allows finger position to control pitch while gesture triggers the note
-    const pitchNode = this.mappingEngine.getPitchNode();
+    // BUT: In theremin mode, use the note directly from the event (theremin provides its own pitch)
     let midiNote = event.midiNote;
 
-    if (pitchNode) {
-      // Use the current MIDI pitch from the pitch mapping node
-      midiNote = Math.round(pitchNode.getCurrentMidi());
+    if (!this.mappingEngine.isThereminMode()) {
+      const pitchNode = this.mappingEngine.getPitchNode();
+      if (pitchNode) {
+        // Use the current MIDI pitch from the pitch mapping node
+        midiNote = Math.round(pitchNode.getCurrentMidi());
+      }
     }
 
     const noteName = midiToNoteName(midiNote);
@@ -558,19 +568,24 @@ export class MusicController {
     if (event.action === 'noteOn') {
       // Play internal sound - skip if internal sounds are muted
       if (!this.config.internalSoundsMuted) {
-        // Use playNote with duration instead of noteOn to avoid polyphony overflow
-        // This automatically handles attack and release
-        this.soundEngine.playNote('melody', noteName, {
-          velocity: event.velocity,
-          duration: '8n', // Short note duration
-        });
+        if (this.mappingEngine.isThereminMode()) {
+          // Theremin mode: use sustained noteOn/noteOff for continuous sound
+          this.soundEngine.noteOn('melody', noteName, event.velocity);
+        } else {
+          // Normal mode: use playNote with duration for trigger-based notes
+          // This automatically handles attack and release
+          this.soundEngine.playNote('melody', noteName, {
+            velocity: event.velocity,
+            duration: '8n', // Short note duration
+          });
+        }
       }
 
       if (this.config.debug) {
-        console.log(`[MusicController] PlayNote: ${noteName} (vel: ${event.velocity.toFixed(2)})`);
+        console.log(`[MusicController] NoteOn: ${noteName} (vel: ${event.velocity.toFixed(2)}, theremin: ${this.mappingEngine.isThereminMode()})`);
       }
     } else {
-      // noteOff - release the note (may not be needed with playNote approach)
+      // noteOff - release the note
       if (!this.config.internalSoundsMuted) {
         this.soundEngine.noteOff('melody', noteName);
       }

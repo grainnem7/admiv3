@@ -5,6 +5,8 @@
  * and other MIDI messages to external apps and hardware.
  */
 
+import { MIDIManager } from './MIDIManager';
+
 export { MIDIManager } from './MIDIManager';
 export { MIDIOutput } from './MIDIOutput';
 export {
@@ -19,3 +21,10 @@ export {
   MIDI_CC,
   getChannelForVoice,
 } from './types';
+
+/**
+ * Get the singleton MIDI manager instance
+ */
+export function getMIDIManager() {
+  return MIDIManager;
+}

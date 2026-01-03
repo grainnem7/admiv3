@@ -114,6 +114,10 @@ export class SoundEngine {
   private bassSynth: Tone.PolySynth | null = null;
   private chordSynth: Tone.PolySynth | null = null;
 
+  // Theremin synth (MonoSynth with portamento for smooth pitch)
+  private thereminSynth: Tone.MonoSynth | null = null;
+  private thereminPlaying: boolean = false;
+
   // Effects chain
   private filter: Tone.Filter | null = null;
   private delay: Tone.FeedbackDelay | null = null;
@@ -235,11 +239,34 @@ export class SoundEngine {
     this.bassSynth = createPolySynth(VOICE_CONFIGS.bass);
     this.chordSynth = createPolySynth(VOICE_CONFIGS.chord);
 
+    // Create theremin synth (MonoSynth with portamento for smooth glides)
+    this.thereminSynth = new Tone.MonoSynth({
+      oscillator: { type: 'sine' },
+      envelope: {
+        attack: 0.05,
+        decay: 0.1,
+        sustain: 0.9,
+        release: 0.3,
+      },
+      filterEnvelope: {
+        attack: 0.06,
+        decay: 0.2,
+        sustain: 0.5,
+        release: 0.3,
+        baseFrequency: 200,
+        octaves: 4,
+      },
+    });
+    this.thereminSynth.portamento = 0.05; // 50ms glide between notes
+    this.thereminSynth.volume.value = -8;
+    this.thereminSynth.connect(this.filter!);
+
     // DEBUG: Confirm synths created
     console.log('[SoundEngine] Synths created:', {
       melody: !!this.melodySynth,
       bass: !!this.bassSynth,
       chord: !!this.chordSynth,
+      theremin: !!this.thereminSynth,
       filter: !!this.filter,
       audioContextState: Tone.context.state,
     });
@@ -353,6 +380,81 @@ export class SoundEngine {
     } catch (error) {
       console.error('[SoundEngine] Error in noteOff:', error);
     }
+  }
+
+  // ============================================
+  // Theremin Mode Methods
+  // ============================================
+
+  /**
+   * Start theremin sound at a given frequency.
+   * Uses MonoSynth with portamento for smooth pitch changes.
+   */
+  thereminStart(frequency: number, velocity = 0.7): void {
+    if (!this.isInitialized || this.isMuted || !this.thereminSynth) return;
+
+    try {
+      if (!this.thereminPlaying) {
+        this.thereminSynth.triggerAttack(frequency, undefined, velocity);
+        this.thereminPlaying = true;
+        console.log(`[SoundEngine] Theremin start: ${frequency.toFixed(1)} Hz`);
+      }
+    } catch (error) {
+      console.error('[SoundEngine] Error in thereminStart:', error);
+    }
+  }
+
+  /**
+   * Update theremin frequency (glides smoothly due to portamento).
+   */
+  thereminSetFrequency(frequency: number): void {
+    if (!this.isInitialized || !this.thereminSynth || !this.thereminPlaying) return;
+
+    try {
+      // Use setTargetAtTime for smooth frequency transition
+      this.thereminSynth.frequency.rampTo(frequency, 0.05);
+    } catch (error) {
+      console.error('[SoundEngine] Error in thereminSetFrequency:', error);
+    }
+  }
+
+  /**
+   * Update theremin volume (for left hand control).
+   */
+  thereminSetVolume(volume: number): void {
+    if (!this.isInitialized || !this.thereminSynth) return;
+
+    try {
+      // Map 0-1 to dB range (-40 to -8)
+      const dbValue = -40 + volume * 32;
+      this.thereminSynth.volume.rampTo(dbValue, 0.05);
+    } catch (error) {
+      console.error('[SoundEngine] Error in thereminSetVolume:', error);
+    }
+  }
+
+  /**
+   * Stop theremin sound.
+   */
+  thereminStop(): void {
+    if (!this.isInitialized || !this.thereminSynth) return;
+
+    try {
+      if (this.thereminPlaying) {
+        this.thereminSynth.triggerRelease();
+        this.thereminPlaying = false;
+        console.log('[SoundEngine] Theremin stop');
+      }
+    } catch (error) {
+      console.error('[SoundEngine] Error in thereminStop:', error);
+    }
+  }
+
+  /**
+   * Check if theremin is currently playing.
+   */
+  isThereminPlaying(): boolean {
+    return this.thereminPlaying;
   }
 
   /**
@@ -479,6 +581,75 @@ export class SoundEngine {
       const time = Tone.now() + i * 0.15;
       this.melodySynth?.triggerAttackRelease(note, '8n', time, 0.5);
     });
+  }
+
+  /**
+   * Apply effect preset configuration.
+   * Updates filter, delay, reverb, and chorus settings.
+   */
+  applyEffectConfig(config: {
+    filterFrequency?: number;
+    filterQ?: number;
+    delayTime?: string;
+    delayFeedback?: number;
+    delayWet?: number;
+    reverbDecay?: number;
+    reverbWet?: number;
+    chorusFrequency?: number;
+    chorusDepth?: number;
+    chorusWet?: number;
+  }): void {
+    if (!this.isInitialized) return;
+
+    // Filter settings
+    if (config.filterFrequency !== undefined && this.filter) {
+      this.filter.frequency.rampTo(config.filterFrequency, 0.2);
+    }
+    if (config.filterQ !== undefined && this.filter) {
+      this.filter.Q.rampTo(config.filterQ, 0.1);
+    }
+
+    // Delay settings
+    if (config.delayFeedback !== undefined && this.delay) {
+      this.delay.feedback.rampTo(config.delayFeedback, 0.1);
+    }
+    if (config.delayWet !== undefined && this.delay) {
+      this.delay.wet.rampTo(config.delayWet, 0.1);
+    }
+
+    // Reverb settings
+    if (config.reverbWet !== undefined && this.reverb) {
+      this.reverb.wet.rampTo(config.reverbWet, 0.2);
+    }
+
+    // Chorus settings
+    if (config.chorusFrequency !== undefined && this.chorus) {
+      this.chorus.frequency.rampTo(config.chorusFrequency, 0.1);
+    }
+    if (config.chorusDepth !== undefined && this.chorus) {
+      this.chorus.depth = config.chorusDepth;
+    }
+    if (config.chorusWet !== undefined && this.chorus) {
+      this.chorus.wet.rampTo(config.chorusWet, 0.1);
+    }
+
+    if (this.config.debug) {
+      console.log('[SoundEngine] Applied effect config:', config);
+    }
+  }
+
+  /**
+   * Get the filter node for external effect chain integration.
+   */
+  getFilterNode(): Tone.Filter | null {
+    return this.filter;
+  }
+
+  /**
+   * Get the reverb node for external effect chain integration.
+   */
+  getReverbNode(): Tone.Reverb | null {
+    return this.reverb;
   }
 
   /**
