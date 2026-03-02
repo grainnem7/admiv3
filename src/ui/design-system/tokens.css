@@ -1,0 +1,302 @@
+/**
+ * ADMIv3 Design System - Tokens
+ *
+ * Pro-audio inspired design system with Ableton-adjacent aesthetics.
+ * German tech company feel: disciplined grid, generous whitespace,
+ * crisp typography, minimal ornamentation.
+ */
+
+:root {
+  /* ============================================
+     COLOR SYSTEM - Studio Grade Dark Theme
+     ============================================ */
+
+  /* Background layers (darkest to lightest) */
+  --color-bg-deep: #0a0a0b;
+  --color-bg: #111113;
+  --color-bg-raised: #18181b;
+  --color-bg-elevated: #1f1f23;
+  --color-bg-overlay: #27272a;
+
+  /* Surface colors for cards/panels */
+  --color-surface: #18181b;
+  --color-surface-hover: #1f1f23;
+  --color-surface-active: #27272a;
+  --color-surface-muted: #09090b;
+
+  /* Border colors */
+  --color-border: #27272a;
+  --color-border-subtle: #1f1f23;
+  --color-border-strong: #3f3f46;
+  --color-border-focus: #f97316;
+
+  /* Primary accent - Warm orange */
+  --color-primary: #f97316;
+  --color-primary-hover: #fb923c;
+  --color-primary-active: #ea580c;
+  --color-primary-muted: rgba(249, 115, 22, 0.12);
+  --color-primary-glow: rgba(249, 115, 22, 0.25);
+
+  /* Secondary accent - Amber */
+  --color-secondary: #fbbf24;
+  --color-secondary-hover: #fcd34d;
+  --color-secondary-muted: rgba(251, 191, 36, 0.12);
+
+  /* Text colors */
+  --color-text: #fafafa;
+  --color-text-secondary: #a1a1aa;
+  --color-text-tertiary: #71717a;
+  --color-text-disabled: #52525b;
+  --color-text-inverse: #09090b;
+
+  /* Semantic colors */
+  --color-success: #22c55e;
+  --color-success-muted: rgba(34, 197, 94, 0.12);
+  --color-warning: #f59e0b;
+  --color-warning-muted: rgba(245, 158, 11, 0.12);
+  --color-error: #ef4444;
+  --color-error-muted: rgba(239, 68, 68, 0.12);
+  --color-info: #3b82f6;
+  --color-info-muted: rgba(59, 130, 246, 0.12);
+
+  /* Meter/status colors (pro-audio) */
+  --color-meter-low: #22c55e;
+  --color-meter-mid: #fbbf24;
+  --color-meter-high: #f97316;
+  --color-meter-peak: #ef4444;
+  --color-meter-bg: #27272a;
+
+  /* ============================================
+     TYPOGRAPHY
+     ============================================ */
+
+  /* Font family - System stack optimized for UI */
+  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-family-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', Consolas, monospace;
+
+  /* Font sizes - Modular scale (1.2 ratio) */
+  --text-xs: 0.6875rem;    /* 11px */
+  --text-sm: 0.75rem;      /* 12px */
+  --text-base: 0.8125rem;  /* 13px - Compact for pro tools */
+  --text-md: 0.875rem;     /* 14px */
+  --text-lg: 1rem;         /* 16px */
+  --text-xl: 1.125rem;     /* 18px */
+  --text-2xl: 1.5rem;      /* 24px */
+  --text-3xl: 1.875rem;    /* 30px */
+  --text-4xl: 2.25rem;     /* 36px */
+
+  /* Line heights */
+  --leading-none: 1;
+  --leading-tight: 1.25;
+  --leading-snug: 1.375;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.625;
+
+  /* Font weights */
+  --font-normal: 400;
+  --font-medium: 500;
+  --font-semibold: 600;
+  --font-bold: 700;
+
+  /* Letter spacing */
+  --tracking-tight: -0.025em;
+  --tracking-normal: 0;
+  --tracking-wide: 0.025em;
+  --tracking-wider: 0.05em;
+  --tracking-widest: 0.1em;
+
+  /* ============================================
+     SPACING SCALE (4px base)
+     ============================================ */
+
+  --space-0: 0;
+  --space-px: 1px;
+  --space-0-5: 0.125rem;   /* 2px */
+  --space-1: 0.25rem;      /* 4px */
+  --space-1-5: 0.375rem;   /* 6px */
+  --space-2: 0.5rem;       /* 8px */
+  --space-2-5: 0.625rem;   /* 10px */
+  --space-3: 0.75rem;      /* 12px */
+  --space-4: 1rem;         /* 16px */
+  --space-5: 1.25rem;      /* 20px */
+  --space-6: 1.5rem;       /* 24px */
+  --space-8: 2rem;         /* 32px */
+  --space-10: 2.5rem;      /* 40px */
+  --space-12: 3rem;        /* 48px */
+  --space-16: 4rem;        /* 64px */
+  --space-20: 5rem;        /* 80px */
+
+  /* ============================================
+     LAYOUT
+     ============================================ */
+
+  /* Sidebar dimensions */
+  --sidebar-width: 220px;
+  --sidebar-width-collapsed: 48px;
+
+  /* Header/toolbar */
+  --header-height: 40px;
+  --toolbar-height: 36px;
+
+  /* Panel dimensions */
+  --panel-min-width: 240px;
+  --panel-max-width: 400px;
+
+  /* Touch targets (accessibility) */
+  --touch-target-min: 44px;
+  --touch-target-compact: 32px;
+
+  /* ============================================
+     BORDERS & RADII (Sharp edges throughout)
+     ============================================ */
+
+  --radius-none: 0;
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+  --radius-2xl: 0;
+  --radius-full: 0;
+
+  /* ============================================
+     SHADOWS & EFFECTS
+     ============================================ */
+
+  /* Subtle shadows for depth */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.3);
+  --shadow-xl: 0 8px 16px rgba(0, 0, 0, 0.4), 0 4px 8px rgba(0, 0, 0, 0.3);
+
+  /* Glow effects for active states */
+  --glow-primary: 0 0 12px var(--color-primary-glow);
+  --glow-success: 0 0 12px rgba(34, 197, 94, 0.25);
+  --glow-error: 0 0 12px rgba(239, 68, 68, 0.25);
+
+  /* Inset shadows for inputs */
+  --shadow-inset: inset 0 1px 2px rgba(0, 0, 0, 0.3);
+
+  /* ============================================
+     TRANSITIONS
+     ============================================ */
+
+  --duration-instant: 50ms;
+  --duration-fast: 100ms;
+  --duration-normal: 150ms;
+  --duration-slow: 250ms;
+  --duration-slower: 400ms;
+
+  --ease-default: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ============================================
+     Z-INDEX SCALE
+     ============================================ */
+
+  --z-base: 0;
+  --z-raised: 10;
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-overlay: 300;
+  --z-modal: 400;
+  --z-popover: 500;
+  --z-toast: 600;
+  --z-tooltip: 700;
+  --z-max: 9999;
+
+  /* ============================================
+     COMPONENT-SPECIFIC TOKENS
+     ============================================ */
+
+  /* Buttons */
+  --btn-height-sm: 28px;
+  --btn-height-md: 32px;
+  --btn-height-lg: 40px;
+
+  /* Inputs */
+  --input-height-sm: 28px;
+  --input-height-md: 32px;
+  --input-height-lg: 40px;
+
+  /* Sliders */
+  --slider-track-height: 4px;
+  --slider-thumb-size: 14px;
+
+  /* Meters */
+  --meter-height: 6px;
+  --meter-height-lg: 10px;
+
+  /* Tabs */
+  --tab-height: 32px;
+}
+
+/* ============================================
+   LARGE UI MODE
+   For distance readability (workshops/performances)
+   ============================================ */
+
+[data-ui-size="large"] {
+  --text-xs: 0.75rem;      /* 12px */
+  --text-sm: 0.875rem;     /* 14px */
+  --text-base: 1rem;       /* 16px */
+  --text-md: 1.125rem;     /* 18px */
+  --text-lg: 1.25rem;      /* 20px */
+
+  --space-1: 0.375rem;     /* 6px */
+  --space-2: 0.75rem;      /* 12px */
+  --space-3: 1rem;         /* 16px */
+  --space-4: 1.5rem;       /* 24px */
+
+  --btn-height-sm: 36px;
+  --btn-height-md: 44px;
+  --btn-height-lg: 52px;
+
+  --touch-target-min: 52px;
+  --touch-target-compact: 40px;
+
+  --sidebar-width: 260px;
+  --header-height: 52px;
+}
+
+/* ============================================
+   HIGH CONTRAST MODE
+   ============================================ */
+
+@media (prefers-contrast: high) {
+  :root {
+    --color-bg: #000000;
+    --color-bg-raised: #0a0a0a;
+    --color-surface: #111111;
+    --color-border: #555555;
+    --color-border-strong: #888888;
+    --color-text: #ffffff;
+    --color-text-secondary: #cccccc;
+    --color-primary: #ff8800;
+    --color-secondary: #ffcc00;
+  }
+}
+
+/* ============================================
+   REDUCED MOTION
+   ============================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-instant: 0ms;
+    --duration-fast: 0ms;
+    --duration-normal: 0ms;
+    --duration-slow: 0ms;
+    --duration-slower: 0ms;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

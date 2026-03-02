@@ -1,0 +1,14 @@
+/**
+ * ADMIv3 Design System
+ *
+ * Pro-audio inspired design system with Ableton-adjacent aesthetics.
+ * Import this file to get the complete design system.
+ */
+
+@import './tokens.css';
+@import './base.css';
+@import './components.css';
+@import './layout.css';
+
+/* Import legacy styles for components not yet migrated to design system */
+@import '../../index.css';
