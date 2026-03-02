@@ -401,7 +401,7 @@ export function LargeIndicator({
         style={{
           width: size,
           height: size,
-          borderRadius: '50%',
+          borderRadius: 0,
           backgroundColor: COLORS.inactive,
           display: 'flex',
           alignItems: 'center',
@@ -436,7 +436,7 @@ export function LargeIndicator({
           position: 'absolute',
           width: glowSize,
           height: glowSize,
-          borderRadius: '50%',
+          borderRadius: 0,
           backgroundColor: color,
           opacity: 0.3,
           filter: 'blur(20px)',
@@ -449,7 +449,7 @@ export function LargeIndicator({
         style={{
           width: size * 0.7,
           height: size * 0.7,
-          borderRadius: '50%',
+          borderRadius: 0,
           backgroundColor: color,
           display: 'flex',
           flexDirection: 'column',
@@ -544,7 +544,7 @@ export function LayerSpectrum({
               height: barHeight,
               backgroundColor: color,
               opacity: layer.isFading ? 0.5 : 1,
-              borderRadius: '4px 4px 0 0',
+              borderRadius: 0,
               transition: 'height 0.1s ease, opacity 0.3s ease',
             }}
             title={`${midiToNoteName(midiNote)} - ${layer.frequency.toFixed(0)} Hz`}

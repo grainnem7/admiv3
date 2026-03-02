@@ -93,7 +93,7 @@ function PresenceOverlay({ presenceState, layers }: PresenceOverlayProps) {
           position: 'absolute',
           inset: 0,
           border: `${2 + activity * 6}px solid ${color}`,
-          borderRadius: 8,
+          borderRadius: 0,
           opacity: isPresent ? 0.3 + activity * 0.4 : 0,
           transition: 'opacity 0.3s ease, border-width 0.15s ease',
           animation: isPresent ? `breathe ${2 / pulseSpeed}s ease-in-out infinite` : 'none',
@@ -148,7 +148,7 @@ function PresenceOverlay({ presenceState, layers }: PresenceOverlayProps) {
                   top: `${baseY}%`,
                   width: size,
                   height: size,
-                  borderRadius: '50%',
+                  borderRadius: 0,
                   backgroundColor: color,
                   opacity: 0.4 + activity * 0.4,
                   boxShadow: `0 0 ${size * 2}px ${color}`,
@@ -203,7 +203,7 @@ function PresenceOverlay({ presenceState, layers }: PresenceOverlayProps) {
                   height: `${ringSize}%`,
                   transform: `translate(-50%, -50%) rotate(${layer.angle + Date.now() / 100}deg)`,
                   border: `2px solid ${layer.color}`,
-                  borderRadius: '50%',
+                  borderRadius: 0,
                   opacity: layer.isFading ? 0.2 : 0.4 + layer.gain * 0.4,
                   borderStyle: layer.isFading ? 'dashed' : 'solid',
                   transition: 'opacity 0.3s ease',
@@ -224,7 +224,7 @@ function PresenceOverlay({ presenceState, layers }: PresenceOverlayProps) {
             width: 8,
             height: `${rightHandIntensity * 30}%`,
             background: `linear-gradient(to top, ${color}, transparent)`,
-            borderRadius: 4,
+            borderRadius: 0,
             opacity: 0.6,
             transition: 'top 0.1s ease, height 0.1s ease',
           }}
@@ -240,7 +240,7 @@ function PresenceOverlay({ presenceState, layers }: PresenceOverlayProps) {
           right: '10%',
           height: 4,
           background: 'rgba(255,255,255,0.1)',
-          borderRadius: 2,
+          borderRadius: 0,
           overflow: 'hidden',
         }}
       >
@@ -265,7 +265,7 @@ function PresenceOverlay({ presenceState, layers }: PresenceOverlayProps) {
           width: 4,
           height: `${musicalVelocity * 40}%`,
           background: `linear-gradient(to top, ${color}44, ${color})`,
-          borderRadius: 2,
+          borderRadius: 0,
           opacity: isPresent ? 0.7 : 0,
           transition: 'height 0.15s ease, opacity 0.3s ease',
         }}

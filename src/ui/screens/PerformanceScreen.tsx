@@ -192,11 +192,11 @@ function PerformanceScreen() {
         }}
       >
         <p>
-          <kbd style={{ padding: '2px 6px', backgroundColor: 'var(--color-surface)', borderRadius: '4px' }}>
+          <kbd style={{ padding: '2px 6px', backgroundColor: 'var(--color-surface)', borderRadius: 0 }}>
             Space
           </kbd>{' '}
           Toggle mute •{' '}
-          <kbd style={{ padding: '2px 6px', backgroundColor: 'var(--color-surface)', borderRadius: '4px' }}>
+          <kbd style={{ padding: '2px 6px', backgroundColor: 'var(--color-surface)', borderRadius: 0 }}>
             D
           </kbd>{' '}
           Debug panel

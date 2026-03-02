@@ -44,7 +44,7 @@ function createPreset(
  */
 export const PRESET_FULL_EXPERIENCE = createPreset(
   'preset-full-experience',
-  'Full Experience',
+  'Default Mode',
   'Body movement for pitch, hand gestures for triggers, facial expressions for effects. Best overall experience.',
   'recommended',
   {

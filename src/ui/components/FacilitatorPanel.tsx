@@ -261,7 +261,7 @@ function FacilitatorPanel({
                     backgroundColor: layer.isFading
                       ? 'rgba(255, 100, 100, 0.1)'
                       : 'rgba(255, 255, 255, 0.05)',
-                    borderRadius: 4,
+                    borderRadius: 0,
                     marginBottom: 4,
                   }}
                 >

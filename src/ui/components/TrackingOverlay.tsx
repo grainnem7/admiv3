@@ -26,6 +26,8 @@ interface TrackingOverlayProps {
   showAllLandmarks?: boolean;
   /** Show connection lines */
   showConnections?: boolean;
+  /** Show text labels for landmarks */
+  showLabels?: boolean;
 }
 
 // Pose connection pairs for skeleton drawing
@@ -58,6 +60,24 @@ const COLORS = {
   active: { primary: '#00ff88', secondary: 'rgba(0, 255, 136, 0.7)', glow: 'rgba(0, 255, 136, 0.3)' },
 };
 
+// Landmark names for labels
+const POSE_LANDMARK_NAMES = [
+  'Nose', 'L Eye In', 'L Eye', 'L Eye Out', 'R Eye In', 'R Eye', 'R Eye Out',
+  'L Ear', 'R Ear', 'Mouth L', 'Mouth R', 'L Shoulder', 'R Shoulder',
+  'L Elbow', 'R Elbow', 'L Wrist', 'R Wrist', 'L Pinky', 'R Pinky',
+  'L Index', 'R Index', 'L Thumb', 'R Thumb', 'L Hip', 'R Hip',
+  'L Knee', 'R Knee', 'L Ankle', 'R Ankle', 'L Heel', 'R Heel',
+  'L Foot', 'R Foot'
+];
+
+const HAND_LANDMARK_NAMES = [
+  'Wrist', 'Th CMC', 'Th MCP', 'Th IP', 'Th Tip',
+  'Ix MCP', 'Ix PIP', 'Ix DIP', 'Ix Tip',
+  'Md MCP', 'Md PIP', 'Md DIP', 'Md Tip',
+  'Rn MCP', 'Rn PIP', 'Rn DIP', 'Rn Tip',
+  'Pk MCP', 'Pk PIP', 'Pk DIP', 'Pk Tip'
+];
+
 function TrackingOverlay({
   frame,
   profile,
@@ -67,6 +87,7 @@ function TrackingOverlay({
   containerHeight,
   showAllLandmarks = true,
   showConnections = true,
+  showLabels = false,
 }: TrackingOverlayProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -189,6 +210,11 @@ function TrackingOverlay({
           ctx.arc(x, y, 4, 0, Math.PI * 2);
           ctx.fill();
         }
+
+        // Draw label if enabled
+        if (showLabels && POSE_LANDMARK_NAMES[index]) {
+          drawLandmarkLabel(ctx, x, y, POSE_LANDMARK_NAMES[index], COLORS.pose.primary);
+        }
       });
     }
 
@@ -216,13 +242,18 @@ function TrackingOverlay({
 
       // Draw landmarks (all same size, no large tracked dots)
       if (showAllLandmarks) {
-        landmarks.landmarks.forEach((landmark) => {
+        landmarks.landmarks.forEach((landmark, index) => {
           const x = toCanvasX(landmark.x);
           const y = toCanvasY(landmark.y);
           ctx.fillStyle = colors.secondary;
           ctx.beginPath();
           ctx.arc(x, y, 3, 0, Math.PI * 2);
           ctx.fill();
+
+          // Draw label if enabled (only for key points to avoid clutter)
+          if (showLabels && [0, 4, 8, 12, 16, 20].includes(index) && HAND_LANDMARK_NAMES[index]) {
+            drawLandmarkLabel(ctx, x, y, HAND_LANDMARK_NAMES[index], colors.primary);
+          }
         });
       }
 
@@ -303,7 +334,7 @@ function TrackingOverlay({
         }
       }
     }
-  }, [frame, profile, width, height, containerWidth, containerHeight, showAllLandmarks, showConnections, isTrackedPose, isTrackedHand, isTrackedFace, getDisplayBounds]);
+  }, [frame, profile, width, height, containerWidth, containerHeight, showAllLandmarks, showConnections, showLabels, isTrackedPose, isTrackedHand, isTrackedFace, getDisplayBounds]);
 
   // Draw a tracked landmark with role-specific styling
   function drawTrackedLandmark(
@@ -363,6 +394,34 @@ function TrackingOverlay({
     ctx.fillStyle = 'white';
     ctx.font = '10px sans-serif';
     ctx.fillText(label, x + 4, y + 10);
+  }
+
+  // Draw landmark label
+  function drawLandmarkLabel(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    label: string,
+    color: string
+  ) {
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+
+    // Background for better readability
+    const textMetrics = ctx.measureText(label);
+    const padding = 2;
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    ctx.fillRect(
+      x + 8 - padding,
+      y - 6 - padding,
+      textMetrics.width + padding * 2,
+      12 + padding * 2
+    );
+
+    // Text
+    ctx.fillStyle = color;
+    ctx.fillText(label, x + 8, y);
   }
 
   // Redraw on frame update - draw synchronously for minimum latency

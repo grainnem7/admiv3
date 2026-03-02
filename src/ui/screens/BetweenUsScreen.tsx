@@ -462,7 +462,7 @@ function BetweenUsScreen() {
             gap: 8,
             padding: '8px 16px',
             backgroundColor: 'rgba(0, 0, 0, 0.6)',
-            borderRadius: 20,
+            borderRadius: 0,
             backdropFilter: 'blur(4px)',
           }}
         >
@@ -470,7 +470,7 @@ function BetweenUsScreen() {
             style={{
               width: 10,
               height: 10,
-              borderRadius: '50%',
+              borderRadius: 0,
               backgroundColor: presenceState?.isPresent ? '#00ff88' : '#666',
               boxShadow: presenceState?.isPresent ? '0 0 8px #00ff88' : 'none',
             }}

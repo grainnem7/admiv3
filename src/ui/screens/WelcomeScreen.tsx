@@ -1,3 +1,9 @@
+/**
+ * Welcome Screen
+ *
+ * Minimal landing page for ADMIv3.
+ */
+
 import { useAppStore } from '../../state/store';
 import { getAudioEngine } from '../../sound/AudioEngine';
 
@@ -12,41 +18,29 @@ function WelcomeScreen() {
     setCurrentScreen('performance');
   };
 
-  const handleBetweenUs = async () => {
-    const audioEngine = getAudioEngine();
-    await audioEngine.resume();
-    setMuted(true); // Start muted, unmute when ready
-    setCurrentScreen('betweenUs');
-  };
-
   return (
     <div className="welcome-screen">
       <div className="welcome-hero">
+        <div className="welcome-logo">A</div>
         <h1 className="welcome-title">ADMIv3</h1>
-        <p className="welcome-tagline">Movement to music</p>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)', alignItems: 'center' }}>
-        <button className="btn btn--large welcome-start-btn" onClick={handleStart}>
-          Start
-        </button>
-
+      <div style={{ display: 'flex', gap: '16px', flexDirection: 'column', alignItems: 'center' }}>
         <button
-          className="btn btn--large"
-          onClick={handleBetweenUs}
-          style={{
-            background: 'linear-gradient(135deg, #f97316 0%, #dc2626 100%)',
-            border: 'none',
-          }}
+          className="btn btn--primary btn--lg"
+          onClick={handleStart}
+          style={{ minWidth: 200 }}
         >
-          Between Us
+          Start Playing
         </button>
-        <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', margin: 0 }}>
-          Participatory performance mode
-        </p>
+        <button
+          className="btn btn--ghost"
+          onClick={() => setCurrentScreen('info')}
+          style={{ minWidth: 200 }}
+        >
+          How It Works
+        </button>
       </div>
-
-      <p className="welcome-note">Webcam required</p>
     </div>
   );
 }

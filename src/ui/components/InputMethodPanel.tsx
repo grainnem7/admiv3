@@ -31,25 +31,25 @@ const INPUT_METHODS: Array<{
     id: 'body',
     name: 'Body',
     description: 'Use pose, hands, and face tracking',
-    icon: '🧍',
+    icon: 'BDY',
   },
   {
     id: 'theremin',
     name: 'Theremin',
     description: 'Two-hand pitch/volume control',
-    icon: '🎵',
+    icon: 'THR',
   },
   {
     id: 'motion',
     name: 'Motion',
     description: 'Tilt and shake your device',
-    icon: '📱',
+    icon: 'MOT',
   },
   {
     id: 'color',
     name: 'Color',
     description: 'Track colored objects',
-    icon: '🎨',
+    icon: 'CLR',
   },
 ];
 

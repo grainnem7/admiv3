@@ -1,17 +1,16 @@
 /**
- * Performance Screen V2 - Redesigned for cleaner UX
+ * Performance Screen V2 - DAW-like Pro Audio Interface
  *
- * Simplified layout with:
- * - Larger video feed as the focus
- * - Collapsible controls panel
- * - Cleaner profile selection grouped by category
- * - Quick-access sound controls
- * - Drag-and-drop instrument zones
+ * Redesigned with:
+ * - Left sidebar navigation
+ * - Main video/camera view
+ * - Right panel for contextual controls
+ * - Status bar with meters and indicators
  */
 
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { useAppStore, useIsMuted } from '../../state/store';
-import type { TrackingFrame, InputProfile } from '../../state/types';
+import type { TrackingFrame, InputProfile, TrackedBodyPoint, TriggerEvent } from '../../state/types';
 import type { InstrumentZone, InstrumentDefinition, GestureSoundMapping } from '../../state/instrumentZones';
 import { getInstrumentDefinition } from '../../state/instrumentZones';
 import { TrackingManager, getTrackingManager } from '../../tracking/TrackingManager';
@@ -21,6 +20,8 @@ import { MusicController, getMusicController } from '../../core/MusicController'
 import { DEFAULT_PRESETS } from '../../profiles/presets';
 import { useZoneCollision } from '../../hooks/useZoneCollision';
 import { useGestureSounds } from '../../hooks/useGestureSounds';
+
+// Components
 import TrackingOverlay from '../components/TrackingOverlay';
 import InputProfileSelector from '../components/InputProfileSelector';
 import VolumeControl from '../components/VolumeControl';
@@ -33,6 +34,32 @@ import EffectChainSelector from '../components/EffectChainSelector';
 import { MusicalModulesPanel } from '../components/MusicalModulesPanel';
 import InputMethodPanel, { type InputMethod } from '../components/InputMethodPanel';
 import ThereminDisplay from '../components/ThereminDisplay';
+import TrackingStatusOverlay from '../components/TrackingStatusOverlay';
+import BodyPointsPanel from '../components/BodyPointsPanel';
+
+// Design system
+import {
+  IconHome,
+  IconSettings,
+  IconBody,
+  IconMusic,
+  IconSliders,
+  IconGesture,
+  IconMidi,
+  IconEffects,
+  IconSequencer,
+  IconChevronRight,
+  IconChevronLeft,
+  IconVolume,
+  IconVolumeMute,
+  IconPlay,
+  IconPause,
+} from '../design-system/Icons';
+import { Panel } from '../design-system/Panel';
+import { StatusDot, Spinner, TrackingStatus } from '../design-system/StatusIndicators';
+
+// Sidebar sections
+type SidebarSection = 'input' | 'sound' | 'zones' | 'gestures' | 'effects' | 'midi' | 'modules' | 'points';
 
 function PerformanceScreenV2() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -51,30 +78,40 @@ function PerformanceScreenV2() {
   const [error, setError] = useState<string | null>(null);
   const [currentFrame, setCurrentFrame] = useState<TrackingFrame | null>(null);
   const [currentProfile, setCurrentProfile] = useState<InputProfile>(DEFAULT_PRESETS[0]);
-  const [currentFrequency, setCurrentFrequency] = useState(0);
+  const [, setCurrentFrequency] = useState(0);
   const [isActive, setIsActive] = useState(false);
-  const [showControls, setShowControls] = useState(false);
   const [audioEnabled, setAudioEnabled] = useState(false);
 
-  // Instrument zones state - start fresh (no localStorage persistence for now)
+  // UI State
+  const [activeSection, setActiveSection] = useState<SidebarSection>('input');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [rightPanelOpen, setRightPanelOpen] = useState(true);
+  const [rightPanelExpanded, setRightPanelExpanded] = useState(false);
+
+  // Instrument zones state
   const [instrumentZones, setInstrumentZones] = useState<InstrumentZone[]>([]);
-  const instrumentZonesRef = useRef<InstrumentZone[]>([]); // Ref for callback access
+  const instrumentZonesRef = useRef<InstrumentZone[]>([]);
   const [activeZoneIds, setActiveZoneIds] = useState<Set<string>>(new Set());
   const [isPaletteExpanded, setIsPaletteExpanded] = useState(false);
 
   // Gesture sound mappings state
   const [gestureMappings, setGestureMappings] = useState<GestureSoundMapping[]>([]);
   const gestureMappingsRef = useRef<GestureSoundMapping[]>([]);
-  const [isGesturePanelExpanded, setIsGesturePanelExpanded] = useState(false);
 
-  // MIDI settings state
+  // Body point tracking state
+  const [trackedPoints, setTrackedPoints] = useState<TrackedBodyPoint[]>([]);
+  const [recentTriggers, setRecentTriggers] = useState<TriggerEvent[]>([]);
+
+  // Landmark labels toggle
+  const [showLandmarkLabels, setShowLandmarkLabels] = useState(false);
+
+  // Panel expansion states
   const [isMidiPanelExpanded, setIsMidiPanelExpanded] = useState(false);
-
-  // Effect chain selector state
   const [isEffectPanelExpanded, setIsEffectPanelExpanded] = useState(false);
+  const [isGesturePanelExpanded, setIsGesturePanelExpanded] = useState(true);
 
   // Input method state
-  const [isInputMethodPanelExpanded, setIsInputMethodPanelExpanded] = useState(false);
+  const [isInputMethodPanelExpanded] = useState(false);
   const [activeInputMethod, setActiveInputMethod] = useState<InputMethod>('body');
 
   // Keep refs in sync with state
@@ -91,11 +128,6 @@ function PerformanceScreenV2() {
   const { checkGestures } = useGestureSounds();
   const isMuted = useIsMuted();
   const setCurrentScreen = useAppStore((s) => s.setCurrentScreen);
-
-  // Log zone changes (localStorage persistence disabled for debugging)
-  useEffect(() => {
-    console.log(`[PerformanceScreen] instrumentZones state updated: ${instrumentZones.length} zones`);
-  }, [instrumentZones]);
 
   // Initialize all systems
   useEffect(() => {
@@ -122,7 +154,7 @@ function PerformanceScreenV2() {
         const mappingEngine = getMappingEngine();
         mappingEngineRef.current = mappingEngine;
 
-        // Initialize music controller (new Tone.js-based sound engine)
+        // Initialize music controller
         const musicController = getMusicController();
         musicControllerRef.current = musicController;
         await musicController.initialize();
@@ -140,7 +172,6 @@ function PerformanceScreenV2() {
           throw new Error('Video element not found');
         }
 
-        // Get camera stream
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: 'user',
@@ -158,13 +189,11 @@ function PerformanceScreenV2() {
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
 
-        // Update video size (native resolution)
         setVideoSize({
           width: videoRef.current.videoWidth || 640,
           height: videoRef.current.videoHeight || 480,
         });
 
-        // Update container size for proper overlay positioning
         const updateContainerSize = () => {
           if (containerRef.current) {
             setContainerSize({
@@ -176,15 +205,12 @@ function PerformanceScreenV2() {
         updateContainerSize();
         window.addEventListener('resize', updateContainerSize);
 
-        // Subscribe to tracking frames
         frameCallback = trackingManager.onFrame((frame) => {
           if (!mounted) return;
           handleTrackingFrame(frame);
         });
 
-        // Start tracking
         trackingManager.start(videoRef.current);
-
         setIsLoading(false);
       } catch (err) {
         if (!mounted) return;
@@ -201,13 +227,11 @@ function PerformanceScreenV2() {
       frameCallback?.();
       trackingManagerRef.current?.stop();
 
-      // Stop camera
       if (videoRef.current?.srcObject) {
         const stream = videoRef.current.srcObject as MediaStream;
         stream.getTracks().forEach((t) => t.stop());
       }
 
-      // Clean up resize listener
       window.removeEventListener('resize', () => {});
     };
   }, []);
@@ -234,76 +258,73 @@ function PerformanceScreenV2() {
     (frame: TrackingFrame) => {
       setCurrentFrame(frame);
 
-      // Check if theremin mode is active
       const isThereminMode = mappingEngineRef.current?.isThereminMode() ?? false;
 
       if (isThereminMode) {
-        // Process through theremin mode directly (bypasses standard pipeline)
         const thereminResult = mappingEngineRef.current?.processThereminFrame(frame);
 
         if (thereminResult && musicControllerRef.current) {
-          // Control theremin sound directly via SoundEngine
           const soundEngine = musicControllerRef.current.getSoundEngine();
           if (soundEngine && !isMuted) {
             if (thereminResult.shouldPlay) {
               if (!soundEngine.isThereminPlaying()) {
-                // Start theremin sound
                 soundEngine.thereminStart(thereminResult.frequency, thereminResult.volume);
               } else {
-                // Update frequency and volume continuously
                 soundEngine.thereminSetFrequency(thereminResult.frequency);
                 soundEngine.thereminSetVolume(thereminResult.volume);
               }
             } else {
-              // Stop theremin sound when hand not detected or volume too low
               if (soundEngine.isThereminPlaying()) {
                 soundEngine.thereminStop();
               }
             }
           }
 
-          // Update UI state
           setCurrentFrequency(thereminResult.frequency);
           setIsActive(thereminResult.handActive);
         }
-        return; // Skip standard processing
+        return;
       }
 
-      // Process through movement processor
       const processedFrame = processorRef.current?.process(frame);
       if (!processedFrame) return;
 
-      // Process through mapping engine
       const mappingOutput = mappingEngineRef.current?.process(processedFrame);
       if (!mappingOutput) return;
 
-      // Update UI state
       setCurrentFrequency(mappingOutput.result.pitch ?? 0);
       setIsActive(mappingOutput.result.volume !== undefined && mappingOutput.result.volume > 0.01);
 
-      // Check for zone collisions - use ref to get current zones
       const currentZones = instrumentZonesRef.current;
       const { activeZoneIds: newActiveIds, triggeredZones } = checkCollisions(frame, currentZones);
       setActiveZoneIds(newActiveIds);
 
-      // Trigger sounds for newly entered zones
       if (triggeredZones.length > 0) {
-        console.log(`[PerformanceScreen] Zone triggered: ${triggeredZones.map(z => z.type).join(', ')}, muted=${isMuted}, controller=${!!musicControllerRef.current}`);
+        console.log(`[PerformanceScreen] Zone triggered! zones=${triggeredZones.length}, isMuted=${isMuted}, hasController=${!!musicControllerRef.current}`);
         if (!isMuted && musicControllerRef.current) {
           for (const zone of triggeredZones) {
             const def = getInstrumentDefinition(zone.type);
+            console.log(`[PerformanceScreen] Playing zone sound: ${zone.type}`);
             musicControllerRef.current.triggerZoneSound(zone, def);
+            // Record trigger event
+            setRecentTriggers(prev => [
+              { id: `${Date.now()}-${zone.id}`, source: 'zone', action: def.name, timestamp: Date.now() },
+              ...prev.slice(0, 9)
+            ]);
           }
         }
       }
 
-      // Check for gesture triggers - use ref to get current mappings
       const currentMappings = gestureMappingsRef.current;
       if (currentMappings.length > 0) {
         checkGestures(frame, currentMappings, isMuted);
+      } else {
+        // Debug: Log occasionally if no gesture mappings
+        if (frame.timestamp % 5000 < 50) {
+          console.log('[PerformanceScreen] No gesture mappings configured - add mappings in Gestures panel');
+        }
       }
 
-      // Send to music controller (new Tone.js-based system)
       if (!isMuted && musicControllerRef.current) {
         musicControllerRef.current.processFrame(frame);
         musicControllerRef.current.processProcessedFrame(processedFrame);
@@ -325,267 +346,482 @@ function PerformanceScreenV2() {
 
   // Resume audio on user interaction
   const handleUserInteraction = useCallback(async () => {
-    if (audioEnabled) return; // Already enabled
+    if (audioEnabled) return;
 
     if (musicControllerRef.current) {
       try {
         await musicControllerRef.current.testSound();
         setAudioEnabled(true);
-        console.log('[PerformanceScreen] Audio enabled by user interaction');
       } catch (err) {
         console.error('[PerformanceScreen] Failed to enable audio:', err);
       }
     }
   }, [audioEnabled]);
 
-  // Get note name from frequency
-  const getNoteName = (freq: number): string => {
-    if (freq === 0) return '--';
-    const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-    const midi = Math.round(12 * Math.log2(freq / 440) + 69);
-    const noteName = noteNames[midi % 12];
-    const octave = Math.floor(midi / 12) - 1;
-    return `${noteName}${octave}`;
-  };
-
-  // Get active modality indicators
+  // Get active modality text
   const getActiveModalityText = () => {
     const parts: string[] = [];
     if (currentProfile.activeModalities.pose) parts.push('Body');
     if (currentProfile.activeModalities.leftHand || currentProfile.activeModalities.rightHand) parts.push('Hands');
     if (currentProfile.activeModalities.face) parts.push('Face');
-    return parts.join(' + ');
+    return parts.join(' + ') || 'None';
   };
+
+  // Get tracking quality
+  const getTrackingQuality = (): 'good' | 'okay' | 'poor' | 'none' => {
+    if (!currentFrame) return 'none';
+    const hasTracking = currentFrame.pose || currentFrame.leftHand || currentFrame.rightHand || currentFrame.face;
+    if (!hasTracking) return 'none';
+    // Simple heuristic - could be enhanced with actual confidence values
+    if (isActive) return 'good';
+    return 'okay';
+  };
+
+  // Handle zones change
+  const handleZonesChange = useCallback((newZones: InstrumentZone[]) => {
+    setInstrumentZones(newZones);
+  }, []);
 
   // Handle instrument drag start
   const handleInstrumentDragStart = useCallback(
     (_instrument: InstrumentDefinition, _e: React.DragEvent) => {
-      // Could show visual feedback here
+      // Visual feedback handled by InstrumentPalette
     },
     []
   );
 
-  // Handle zones change
-  const handleZonesChange = useCallback((newZones: InstrumentZone[]) => {
-    console.log(`[PerformanceScreen] handleZonesChange called with ${newZones.length} zones`);
-    setInstrumentZones(newZones);
-  }, []);
+  // Sidebar nav items
+  const sidebarItems = [
+    { id: 'input' as const, label: 'Input', icon: IconBody },
+    { id: 'points' as const, label: 'Points', icon: IconSliders },
+    { id: 'sound' as const, label: 'Sound', icon: IconMusic },
+    { id: 'zones' as const, label: 'Zones', icon: IconGesture },
+    { id: 'gestures' as const, label: 'Gestures', icon: IconGesture },
+    { id: 'effects' as const, label: 'Effects', icon: IconEffects },
+    { id: 'modules' as const, label: 'Modules', icon: IconSequencer },
+    { id: 'midi' as const, label: 'MIDI', icon: IconMidi },
+  ];
 
-  return (
-    <div className="performance-screen" onClick={handleUserInteraction}>
-      {/* Main video area */}
-      <div className="performance-main">
-        <div className="performance-content">
-        <div className="video-wrapper" ref={containerRef}>
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted
-            className="performance-video"
-            aria-label="Camera feed showing your movements"
-          />
+  // Render right panel content based on active section
+  const renderPanelContent = () => {
+    switch (activeSection) {
+      case 'input':
+        return (
+          <>
+            <Panel title="Input Method" defaultExpanded={isInputMethodPanelExpanded}>
+              <InputMethodPanel
+                isExpanded={true}
+                onToggle={() => {}}
+                onInputMethodChange={setActiveInputMethod}
+              />
+              {activeInputMethod === 'theremin' && (
+                <div style={{ marginTop: 'var(--space-3)' }}>
+                  <ThereminDisplay isActive={activeInputMethod === 'theremin'} />
+                </div>
+              )}
+            </Panel>
+            <Panel title="Input Profile" defaultExpanded={true}>
+              <InputProfileSelector
+                currentProfile={currentProfile}
+                onProfileSelect={handleProfileChange}
+                showDetails={false}
+              />
+            </Panel>
+          </>
+        );
 
-          {/* Tracking overlay */}
-          <TrackingOverlay
-            frame={currentFrame}
-            profile={currentProfile}
-            width={videoSize.width}
-            height={videoSize.height}
-            containerWidth={containerSize.width}
-            containerHeight={containerSize.height}
-            showAllLandmarks={true}
-            showConnections={true}
-          />
+      case 'sound':
+        return (
+          <>
+            <Panel title="Volume" defaultExpanded={true}>
+              <VolumeControl />
+            </Panel>
+            <Panel title="Sound Preset" defaultExpanded={true}>
+              <SoundPresetSelector />
+            </Panel>
+          </>
+        );
 
-          {/* Instrument zone overlay */}
-          <InstrumentZoneOverlay
-            zones={instrumentZones}
-            onZonesChange={handleZonesChange}
-            containerWidth={containerSize.width}
-            containerHeight={containerSize.height}
-            videoWidth={videoSize.width}
-            videoHeight={videoSize.height}
-            activeZoneIds={activeZoneIds}
-          />
-
-          {/* Instrument palette */}
-          <InstrumentPalette
-            onDragStart={handleInstrumentDragStart}
-            isExpanded={isPaletteExpanded}
-            onToggle={() => setIsPaletteExpanded(!isPaletteExpanded)}
-          />
-
-          {/* Loading overlay */}
-          {isLoading && (
-            <div className="video-overlay-message">
-              <div className="loading-spinner" />
-              <p>Initializing camera and tracking...</p>
+      case 'zones':
+        return (
+          <Panel title="Instrument Zones" collapsible={false}>
+            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)', marginBottom: 'var(--space-3)' }}>
+              Drag instruments from the palette onto the video to create trigger zones.
+            </p>
+            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-tertiary)' }}>
+              Active zones: {instrumentZones.length}
             </div>
-          )}
+          </Panel>
+        );
 
-          {/* Error overlay */}
-          {error && (
-            <div className="video-overlay-message video-overlay-message--error">
-              <p>Unable to start camera</p>
-              <p className="error-detail">{error}</p>
-              <button className="btn" onClick={() => window.location.reload()}>
-                Try Again
-              </button>
-            </div>
-          )}
-
-          {/* Current note display - floating */}
-          <div className={`note-display ${isActive && !isMuted ? 'note-display--active' : ''}`}>
-            <span className="note-name">{getNoteName(currentFrequency)}</span>
-            {currentFrequency > 0 && (
-              <span className="note-freq">{Math.round(currentFrequency)} Hz</span>
-            )}
-          </div>
-
-          {/* Audio enable prompt - shows until user clicks */}
-          {!audioEnabled && !isLoading && !error && (
-            <div className="audio-enable-prompt" onClick={handleUserInteraction}>
-              <div className="audio-enable-content">
-                <span className="audio-enable-icon">🔊</span>
-                <span>Click anywhere to enable audio</span>
-              </div>
-            </div>
-          )}
-
-          {/* Mute indicator overlay */}
-          {isMuted && audioEnabled && (
-            <div className="mute-indicator">
-              Sound Muted - Press Space to unmute
-            </div>
-          )}
-        </div>
-
-        {/* Status bar below video */}
-        <div className="status-bar">
-          <div className="status-item">
-            <span className={`status-dot ${isActive ? 'status-dot--active' : ''}`} />
-            <span>{isActive ? 'Playing' : 'Ready'}</span>
-          </div>
-          <div className="status-item">
-            <span className="status-label">Mode:</span>
-            <span className="status-value">{currentProfile.name}</span>
-          </div>
-          <div className="status-item">
-            <span className="status-label">Tracking:</span>
-            <span className="status-value">{getActiveModalityText()}</span>
-          </div>
-        </div>
-        </div>
-      </div>
-
-      {/* Compact top bar */}
-      <header className="performance-header">
-        <button
-          className="btn btn--icon btn--ghost"
-          onClick={() => setCurrentScreen('welcome')}
-          aria-label="Go home"
-        >
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
-            <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"/>
-          </svg>
-        </button>
-
-        <h1 className="performance-title">ADMIv3</h1>
-
-        <button
-          className={`btn btn--icon ${showControls ? 'btn--active' : 'btn--ghost'}`}
-          onClick={() => setShowControls(!showControls)}
-          aria-label={showControls ? 'Hide controls' : 'Show controls'}
-          aria-expanded={showControls}
-        >
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
-            <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd"/>
-          </svg>
-        </button>
-      </header>
-
-      {/* Slide-out controls panel */}
-      <aside className={`controls-panel ${showControls ? 'controls-panel--open' : ''}`}>
-        <div className="controls-content">
-          <div className="controls-section">
-            <h3 className="controls-section-title">Input Method</h3>
-            <InputMethodPanel
-              isExpanded={isInputMethodPanelExpanded}
-              onToggle={() => setIsInputMethodPanelExpanded(!isInputMethodPanelExpanded)}
-              onInputMethodChange={setActiveInputMethod}
-            />
-            {activeInputMethod === 'theremin' && (
-              <ThereminDisplay isActive={activeInputMethod === 'theremin'} />
-            )}
-          </div>
-
-          <div className="controls-section">
-            <h3 className="controls-section-title">Input Profile</h3>
-            <InputProfileSelector
-              currentProfile={currentProfile}
-              onProfileSelect={handleProfileChange}
-              showDetails={false}
-            />
-          </div>
-
-          <div className="controls-section">
-            <h3 className="controls-section-title">Sound</h3>
-            <VolumeControl />
-            <SoundPresetSelector />
-            <EffectChainSelector
-              isExpanded={isEffectPanelExpanded}
-              onToggle={() => setIsEffectPanelExpanded(!isEffectPanelExpanded)}
-            />
-          </div>
-
-          <div className="controls-section">
-            <h3 className="controls-section-title">Gesture Triggers</h3>
+      case 'gestures':
+        return (
+          <Panel title="Gesture Triggers" collapsible={false}>
             <GestureMappingPanel
               mappings={gestureMappings}
               onMappingsChange={setGestureMappings}
               isExpanded={isGesturePanelExpanded}
               onToggle={() => setIsGesturePanelExpanded(!isGesturePanelExpanded)}
+              parentExpanded={rightPanelExpanded}
             />
-          </div>
+          </Panel>
+        );
 
-          <div className="controls-section">
-            <h3 className="controls-section-title">Musical Modules</h3>
+      case 'points':
+        return (
+          <Panel title="Body Points" collapsible={false}>
+            <BodyPointsPanel
+              trackedPoints={trackedPoints}
+              onPointsChange={setTrackedPoints}
+              parentExpanded={rightPanelExpanded}
+            />
+          </Panel>
+        );
+
+      case 'effects':
+        return (
+          <Panel title="Effect Chain" collapsible={false}>
+            <EffectChainSelector
+              isExpanded={isEffectPanelExpanded}
+              onToggle={() => setIsEffectPanelExpanded(!isEffectPanelExpanded)}
+            />
+          </Panel>
+        );
+
+      case 'modules':
+        return (
+          <Panel title="Musical Modules" collapsible={false}>
             <MusicalModulesPanel />
-          </div>
+          </Panel>
+        );
 
-          <div className="controls-section">
-            <h3 className="controls-section-title">MIDI Output</h3>
+      case 'midi':
+        return (
+          <Panel title="MIDI Output" collapsible={false}>
             <MIDISettingsPanel
               isExpanded={isMidiPanelExpanded}
               onToggle={() => setIsMidiPanelExpanded(!isMidiPanelExpanded)}
             />
+          </Panel>
+        );
+
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div className="app-shell app-shell--with-sidebar" onClick={handleUserInteraction}>
+      {/* Left Sidebar */}
+      <aside className={`sidebar ${sidebarCollapsed ? 'sidebar--collapsed' : ''}`}>
+        <div className="sidebar__brand">
+          <div className="sidebar__logo">A</div>
+          <span className="sidebar__title">ADMIv3</span>
+        </div>
+
+        <nav className="sidebar__nav">
+          <div className="sidebar__section">
+            <button
+              className="sidebar__item"
+              onClick={() => setCurrentScreen('welcome')}
+              title={sidebarCollapsed ? 'Home' : undefined}
+            >
+              <IconHome size={18} />
+              <span className="sidebar__item-label">Home</span>
+            </button>
           </div>
 
-          <div className="controls-section">
-            <h3 className="controls-section-title">Keyboard Shortcuts</h3>
-            <div className="shortcuts-list">
-              <div className="shortcut">
-                <kbd>Space</kbd>
-                <span>Toggle mute</span>
-              </div>
-              <div className="shortcut">
-                <kbd>D</kbd>
-                <span>Debug panel</span>
-              </div>
-            </div>
+          <div className="sidebar__section">
+            <div className="sidebar__section-title">Controls</div>
+            {sidebarItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = activeSection === item.id;
+              return (
+                <button
+                  key={item.id}
+                  className={`sidebar__item ${isActive ? 'sidebar__item--active' : ''}`}
+                  onClick={() => {
+                    setActiveSection(item.id);
+                    setRightPanelOpen(true);
+                  }}
+                  title={sidebarCollapsed ? item.label : undefined}
+                >
+                  <Icon size={18} />
+                  <span className="sidebar__item-label">{item.label}</span>
+                </button>
+              );
+            })}
           </div>
+        </nav>
+
+        <div className="sidebar__footer">
+          <button
+            className="sidebar__collapse-btn"
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {sidebarCollapsed ? <IconChevronRight size={16} /> : <IconChevronLeft size={16} />}
+          </button>
         </div>
       </aside>
 
-      {/* Overlay to close controls when clicking outside */}
-      {showControls && (
-        <div
-          className="controls-overlay"
-          onClick={() => setShowControls(false)}
-          aria-hidden="true"
-        />
-      )}
+      {/* Main Content */}
+      <div className="main-content">
+        {/* Toolbar */}
+        <div className="toolbar">
+          <div className="toolbar__section toolbar__section--start">
+            <div className="quick-actions">
+              <button
+                className={`quick-actions__btn ${isActive && !isMuted ? 'quick-actions__btn--active' : ''}`}
+                title={isActive ? 'Playing' : 'Ready'}
+              >
+                {isActive && !isMuted ? <IconPlay size={16} /> : <IconPause size={16} />}
+              </button>
+              <button
+                className={`quick-actions__btn ${isMuted ? '' : 'quick-actions__btn--active'}`}
+                title={isMuted ? 'Unmute' : 'Mute'}
+              >
+                {isMuted ? <IconVolumeMute size={16} /> : <IconVolume size={16} />}
+              </button>
+            </div>
+          </div>
+
+          <div className="toolbar__section toolbar__section--center">
+            <span style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)' }}>
+              {currentProfile.name}
+            </span>
+            <span className="toolbar__divider" />
+            <TrackingStatus quality={getTrackingQuality()} compact />
+          </div>
+
+          <div className="toolbar__section toolbar__section--end">
+            <button
+              className={`btn btn--sm btn--ghost ${rightPanelOpen ? 'btn--active' : ''}`}
+              onClick={() => setRightPanelOpen(!rightPanelOpen)}
+            >
+              <IconSettings size={16} />
+            </button>
+          </div>
+        </div>
+
+        {/* Content Area */}
+        <div className="content-area">
+          {/* Main View (Video) */}
+          <div className="main-view">
+            <div className="main-view__content" ref={containerRef}>
+              <div className="video-container">
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  aria-label="Camera feed showing your movements"
+                />
+
+                {/* Tracking overlay */}
+                <TrackingOverlay
+                  frame={currentFrame}
+                  profile={currentProfile}
+                  width={videoSize.width}
+                  height={videoSize.height}
+                  containerWidth={containerSize.width}
+                  containerHeight={containerSize.height}
+                  showAllLandmarks={true}
+                  showConnections={true}
+                  showLabels={showLandmarkLabels}
+                />
+
+                {/* Instrument zone overlay */}
+                <InstrumentZoneOverlay
+                  zones={instrumentZones}
+                  onZonesChange={handleZonesChange}
+                  containerWidth={containerSize.width}
+                  containerHeight={containerSize.height}
+                  videoWidth={videoSize.width}
+                  videoHeight={videoSize.height}
+                  activeZoneIds={activeZoneIds}
+                />
+
+                {/* Instrument palette */}
+                <InstrumentPalette
+                  onDragStart={handleInstrumentDragStart}
+                  isExpanded={isPaletteExpanded}
+                  onToggle={() => setIsPaletteExpanded(!isPaletteExpanded)}
+                />
+
+                {/* Loading overlay */}
+                {isLoading && (
+                  <div className="video-overlay" style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                    pointerEvents: 'auto',
+                  }}>
+                    <Spinner size="lg" label="Initializing camera..." />
+                  </div>
+                )}
+
+                {/* Error overlay */}
+                {error && (
+                  <div className="video-overlay" style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 'var(--space-4)',
+                    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+                    pointerEvents: 'auto',
+                  }}>
+                    <p style={{ color: 'var(--color-text)' }}>Unable to start camera</p>
+                    <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-tertiary)' }}>{error}</p>
+                    <button className="btn btn--primary" onClick={() => window.location.reload()}>
+                      Try Again
+                    </button>
+                  </div>
+                )}
+
+                {/* Audio enable prompt */}
+                {!audioEnabled && !isLoading && !error && (
+                  <div className="video-overlay" style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+                    cursor: 'pointer',
+                    pointerEvents: 'auto',
+                  }}>
+                    <div style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: 'var(--space-3)',
+                      padding: 'var(--space-6)',
+                      backgroundColor: 'var(--color-primary)',
+                      borderRadius: 'var(--radius-xl)',
+                      color: 'var(--color-text-inverse)',
+                    }}>
+                      <IconVolume size={32} />
+                      <span style={{ fontWeight: 'var(--font-semibold)' }}>Click to enable audio</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Labels toggle button */}
+                <button
+                  className="labels-toggle-btn"
+                  onClick={() => setShowLandmarkLabels(!showLandmarkLabels)}
+                  title={showLandmarkLabels ? 'Hide landmark labels' : 'Show landmark labels'}
+                  style={{
+                    position: 'absolute',
+                    top: '8px',
+                    right: '8px',
+                    padding: '6px 12px',
+                    fontSize: '12px',
+                    backgroundColor: showLandmarkLabels ? '#f97316' : 'rgba(0, 0, 0, 0.7)',
+                    color: '#fff',
+                    border: '1px solid rgba(255,255,255,0.3)',
+                    cursor: 'pointer',
+                    zIndex: 100,
+                    fontWeight: 600,
+                  }}
+                >
+                  {showLandmarkLabels ? 'LABELS ON' : 'LABELS OFF'}
+                </button>
+
+                {/* Mute indicator */}
+                {isMuted && audioEnabled && (
+                  <div style={{
+                    position: 'absolute',
+                    top: 'var(--space-4)',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    padding: 'var(--space-2) var(--space-4)',
+                    backgroundColor: 'var(--color-error)',
+                    borderRadius: 'var(--radius-md)',
+                    fontSize: 'var(--text-sm)',
+                    fontWeight: 'var(--font-medium)',
+                    color: 'var(--color-text)',
+                  }}>
+                    Sound Muted - Press Space to unmute
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Tracking Status - Outside video area */}
+            <div className="tracking-info-bar">
+              <TrackingStatusOverlay
+                frame={currentFrame}
+                trackedPoints={trackedPoints}
+                recentTriggers={recentTriggers}
+                isMuted={isMuted}
+              />
+            </div>
+          </div>
+
+          {/* Right Panel */}
+          {rightPanelOpen && (
+            <div className={`right-panel ${rightPanelExpanded ? 'right-panel--expanded' : ''}`}>
+              <div className="right-panel__header">
+                <span className="right-panel__title">
+                  {sidebarItems.find(i => i.id === activeSection)?.label || 'Controls'}
+                </span>
+                <div style={{ display: 'flex', gap: '4px' }}>
+                  <button
+                    className={`btn btn--sm btn--ghost ${rightPanelExpanded ? 'btn--active' : ''}`}
+                    onClick={() => setRightPanelExpanded(!rightPanelExpanded)}
+                    aria-label={rightPanelExpanded ? 'Collapse panel' : 'Expand panel'}
+                    style={{ padding: '4px 8px', fontSize: '11px' }}
+                  >
+                    {rightPanelExpanded ? 'Collapse' : 'Expand'}
+                  </button>
+                  <button
+                    className="btn btn--sm btn--icon btn--ghost"
+                    onClick={() => setRightPanelOpen(false)}
+                    aria-label="Close panel"
+                  >
+                    <IconChevronRight size={16} />
+                  </button>
+                </div>
+              </div>
+              <div className="right-panel__content">
+                <div className="panel-grid">
+                  {renderPanelContent()}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Status Bar */}
+        <div className="status-bar">
+          <div className="status-bar__item">
+            <StatusDot status={isActive ? 'active' : 'inactive'} />
+            <span className="status-bar__value">{isActive ? 'Playing' : 'Ready'}</span>
+          </div>
+          <span className="status-bar__divider" />
+          <div className="status-bar__item">
+            <span className="status-bar__label">Mode</span>
+            <span className="status-bar__value">{currentProfile.name}</span>
+          </div>
+          <span className="status-bar__divider" />
+          <div className="status-bar__item">
+            <span className="status-bar__label">Tracking</span>
+            <span className="status-bar__value">{getActiveModalityText()}</span>
+          </div>
+          <span className="status-bar__divider" />
+          <div className="status-bar__item">
+            <span className="status-bar__label">Zones</span>
+            <span className="status-bar__value">{instrumentZones.length}</span>
+          </div>
+          <span className="status-bar__divider" />
+          <div className="status-bar__item">
+            <span className="status-bar__label">Points</span>
+            <span className="status-bar__value">{trackedPoints.filter(p => p.enabled).length}</span>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

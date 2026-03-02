@@ -1,14 +1,25 @@
 /**
  * Main Application Component
+ *
+ * ADMIv3 - Accessible Digital Musical Instrument
+ * Pro-audio inspired interface with DAW-like layout.
  */
 
 import { useEffect } from 'react';
 import { useAppStore, useCurrentScreen, useShowDebugPanel, useIsMuted } from '../state/store';
 import { getAudioEngine } from '../sound/AudioEngine';
+
+// Import the design system (includes all CSS)
+import './design-system/index';
+
+// Screens
 import WelcomeScreen from './screens/WelcomeScreen';
 import CalibrationScreen from './screens/CalibrationScreen';
 import PerformanceScreen from './screens/PerformanceScreenV2';
 import BetweenUsScreen from './screens/BetweenUsScreen';
+import InfoScreen from './screens/InfoScreen';
+
+// Components
 import MuteButton from './components/MuteButton';
 import DebugPanel from './facilitator/DebugPanel';
 
@@ -74,6 +85,8 @@ function App() {
         return <PerformanceScreen />;
       case 'betweenUs':
         return <BetweenUsScreen />;
+      case 'info':
+        return <InfoScreen />;
       default:
         return <WelcomeScreen />;
     }

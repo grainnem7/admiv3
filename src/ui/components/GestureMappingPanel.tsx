@@ -25,16 +25,139 @@ interface GestureMappingPanelProps {
   onMappingsChange: (mappings: GestureSoundMapping[]) => void;
   isExpanded: boolean;
   onToggle: () => void;
+  /** When true, parent panel is expanded so use larger layout */
+  parentExpanded?: boolean;
 }
+
+// Inline styles for gesture panel
+const gestureStyles = {
+  grid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(3, 1fr)',
+    gap: '6px',
+  },
+  gridExpanded: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(4, 1fr)',
+    gap: '8px',
+  },
+  option: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    alignItems: 'center',
+    padding: '8px 4px',
+    background: '#252525',
+    border: '1px solid #333',
+    color: '#ccc',
+    fontSize: '10px',
+    cursor: 'pointer',
+    gap: '4px',
+  },
+  optionExpanded: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    alignItems: 'center',
+    padding: '12px 8px',
+    background: '#252525',
+    border: '1px solid #333',
+    color: '#ccc',
+    fontSize: '12px',
+    cursor: 'pointer',
+    gap: '6px',
+  },
+  optionSelected: {
+    background: '#f97316',
+    borderColor: '#f97316',
+    color: '#fff',
+  },
+  optionUsed: {
+    opacity: 0.5,
+    cursor: 'not-allowed',
+  },
+  icon: {
+    fontSize: '20px',
+  },
+  iconExpanded: {
+    fontSize: '24px',
+  },
+  sectionTitle: {
+    fontSize: '11px',
+    fontWeight: 600,
+    color: '#f97316',
+    textTransform: 'uppercase' as const,
+    marginBottom: '8px',
+    marginTop: '12px',
+  },
+  sectionTitleExpanded: {
+    fontSize: '13px',
+    fontWeight: 600,
+    color: '#f97316',
+    textTransform: 'uppercase' as const,
+    marginBottom: '10px',
+    marginTop: '16px',
+  },
+  label: {
+    fontSize: '11px',
+    color: '#888',
+    marginBottom: '6px',
+    display: 'block',
+  },
+  labelExpanded: {
+    fontSize: '12px',
+    color: '#888',
+    marginBottom: '8px',
+    display: 'block',
+  },
+  mappingItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '8px',
+    background: '#202020',
+    border: '1px solid #333',
+    marginBottom: '4px',
+  },
+  mappingItemExpanded: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    padding: '12px',
+    background: '#202020',
+    border: '1px solid #333',
+    marginBottom: '6px',
+    fontSize: '13px',
+  },
+  addBtn: {
+    width: '100%',
+    padding: '10px',
+    background: '#f97316',
+    border: 'none',
+    color: '#fff',
+    fontSize: '13px',
+    fontWeight: 600,
+    cursor: 'pointer',
+    marginTop: '12px',
+  },
+  helpText: {
+    fontSize: '11px',
+    color: '#666',
+    marginTop: '12px',
+    lineHeight: 1.4,
+  },
+};
 
 function GestureMappingPanel({
   mappings,
   onMappingsChange,
   isExpanded,
   onToggle,
+  parentExpanded = false,
 }: GestureMappingPanelProps) {
   const [selectedGesture, setSelectedGesture] = useState<GestureType | null>(null);
   const [selectedInstrument, setSelectedInstrument] = useState<InstrumentType | null>(null);
+
+  // Use expanded layout when parent panel is expanded
+  const useExpandedLayout = parentExpanded;
 
   // Preview a sound
   const handlePreviewSound = useCallback(async (instrumentType: InstrumentType) => {
@@ -108,46 +231,63 @@ function GestureMappingPanel({
       </button>
 
       {isExpanded && (
-        <div className="gesture-mapping-content">
+        <div style={{ padding: useExpandedLayout ? '16px' : '12px' }}>
           {/* Current mappings */}
           {mappings.length > 0 && (
-            <div className="gesture-mapping-list">
-              <h4 className="gesture-mapping-section-title">Active Mappings</h4>
+            <div>
+              <h4 style={useExpandedLayout ? gestureStyles.sectionTitleExpanded : gestureStyles.sectionTitle}>
+                Active Mappings
+              </h4>
               {mappings.map(mapping => {
                 const gesture = getGestureTypeDefinition(mapping.gestureType);
                 const instrument = getInstrumentDefinition(mapping.instrumentType);
                 return (
                   <div
                     key={mapping.id}
-                    className={`gesture-mapping-item ${!mapping.enabled ? 'gesture-mapping-item--disabled' : ''}`}
+                    style={{
+                      ...(useExpandedLayout ? gestureStyles.mappingItemExpanded : gestureStyles.mappingItem),
+                      opacity: mapping.enabled ? 1 : 0.5,
+                    }}
                   >
                     <button
-                      className="gesture-mapping-toggle-btn"
+                      style={{
+                        padding: '4px 8px',
+                        background: mapping.enabled ? '#22c55e' : '#333',
+                        border: 'none',
+                        color: '#fff',
+                        cursor: 'pointer',
+                      }}
                       onClick={() => handleToggleMapping(mapping.id)}
                       title={mapping.enabled ? 'Disable' : 'Enable'}
                     >
-                      {mapping.enabled ? '✓' : '○'}
+                      {mapping.enabled ? 'ON' : 'OFF'}
                     </button>
-                    <span className="gesture-mapping-gesture">
-                      <span className="gesture-icon">{gesture.icon}</span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px', flex: 1, color: '#fff' }}>
+                      <span style={useExpandedLayout ? gestureStyles.iconExpanded : gestureStyles.icon}>{gesture.icon}</span>
                       {gesture.name}
                     </span>
-                    <span className="gesture-mapping-arrow">→</span>
+                    <span style={{ color: '#666' }}>-&gt;</span>
                     <span
-                      className="gesture-mapping-instrument"
-                      style={{ color: instrument.color }}
+                      style={{ display: 'flex', alignItems: 'center', gap: '4px', color: instrument.color, cursor: 'pointer' }}
                       onClick={() => handlePreviewSound(mapping.instrumentType)}
                       title="Click to preview"
                     >
-                      <span className="instrument-icon">{instrument.icon}</span>
+                      <span style={useExpandedLayout ? gestureStyles.iconExpanded : gestureStyles.icon}>{instrument.icon}</span>
                       {instrument.name}
                     </span>
                     <button
-                      className="gesture-mapping-remove"
+                      style={{
+                        padding: '2px 8px',
+                        background: 'transparent',
+                        border: '1px solid #444',
+                        color: '#666',
+                        fontSize: '16px',
+                        cursor: 'pointer',
+                      }}
                       onClick={() => handleRemoveMapping(mapping.id)}
                       title="Remove mapping"
                     >
-                      ×
+                      x
                     </button>
                   </div>
                 );
@@ -156,25 +296,36 @@ function GestureMappingPanel({
           )}
 
           {/* Add new mapping */}
-          <div className="gesture-mapping-add">
-            <h4 className="gesture-mapping-section-title">Add Mapping</h4>
+          <div>
+            <h4 style={useExpandedLayout ? gestureStyles.sectionTitleExpanded : gestureStyles.sectionTitle}>
+              Add Mapping
+            </h4>
 
             {/* Gesture selector */}
-            <div className="gesture-selector">
-              <label className="gesture-selector-label">Gesture:</label>
-              <div className="gesture-selector-grid">
+            <div>
+              <label style={useExpandedLayout ? gestureStyles.labelExpanded : gestureStyles.label}>
+                Gesture:
+              </label>
+              <div style={useExpandedLayout ? gestureStyles.gridExpanded : gestureStyles.grid}>
                 {GESTURE_TYPES.map(gesture => {
                   const isUsed = mappings.some(m => m.gestureType === gesture.type);
+                  const isSelected = selectedGesture === gesture.type;
                   return (
                     <button
                       key={gesture.type}
-                      className={`gesture-option ${selectedGesture === gesture.type ? 'gesture-option--selected' : ''} ${isUsed ? 'gesture-option--used' : ''}`}
-                      onClick={() => setSelectedGesture(gesture.type)}
+                      style={{
+                        ...(useExpandedLayout ? gestureStyles.optionExpanded : gestureStyles.option),
+                        ...(isSelected ? gestureStyles.optionSelected : {}),
+                        ...(isUsed ? gestureStyles.optionUsed : {}),
+                      }}
+                      onClick={() => !isUsed && setSelectedGesture(gesture.type)}
                       disabled={isUsed}
                       title={isUsed ? 'Already mapped' : gesture.description}
                     >
-                      <span className="gesture-option-icon">{gesture.icon}</span>
-                      <span className="gesture-option-name">{gesture.name}</span>
+                      <span style={useExpandedLayout ? gestureStyles.iconExpanded : gestureStyles.icon}>
+                        {gesture.icon}
+                      </span>
+                      <span>{gesture.name}</span>
                     </button>
                   );
                 })}
@@ -183,24 +334,34 @@ function GestureMappingPanel({
 
             {/* Instrument selector */}
             {selectedGesture && (
-              <div className="instrument-selector">
-                <label className="instrument-selector-label">Sound:</label>
-                <div className="instrument-selector-grid">
-                  {INSTRUMENTS.map(instrument => (
-                    <button
-                      key={instrument.type}
-                      className={`instrument-option ${selectedInstrument === instrument.type ? 'instrument-option--selected' : ''}`}
-                      onClick={() => {
-                        setSelectedInstrument(instrument.type);
-                        handlePreviewSound(instrument.type);
-                      }}
-                      style={{ '--instrument-color': instrument.color } as React.CSSProperties}
-                      title={`Select ${instrument.name}`}
-                    >
-                      <span className="instrument-option-icon">{instrument.icon}</span>
-                      <span className="instrument-option-name">{instrument.name}</span>
-                    </button>
-                  ))}
+              <div style={{ marginTop: '12px' }}>
+                <label style={useExpandedLayout ? gestureStyles.labelExpanded : gestureStyles.label}>
+                  Sound:
+                </label>
+                <div style={useExpandedLayout ? gestureStyles.gridExpanded : gestureStyles.grid}>
+                  {INSTRUMENTS.map(instrument => {
+                    const isSelected = selectedInstrument === instrument.type;
+                    return (
+                      <button
+                        key={instrument.type}
+                        style={{
+                          ...(useExpandedLayout ? gestureStyles.optionExpanded : gestureStyles.option),
+                          ...(isSelected ? gestureStyles.optionSelected : {}),
+                          borderColor: isSelected ? instrument.color : '#333',
+                        }}
+                        onClick={() => {
+                          setSelectedInstrument(instrument.type);
+                          handlePreviewSound(instrument.type);
+                        }}
+                        title={`Select ${instrument.name}`}
+                      >
+                        <span style={useExpandedLayout ? gestureStyles.iconExpanded : gestureStyles.icon}>
+                          {instrument.icon}
+                        </span>
+                        <span>{instrument.name}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -208,7 +369,7 @@ function GestureMappingPanel({
             {/* Add button */}
             {selectedGesture && selectedInstrument && (
               <button
-                className="gesture-mapping-add-btn"
+                style={gestureStyles.addBtn}
                 onClick={handleAddMapping}
               >
                 Add Mapping
@@ -217,7 +378,7 @@ function GestureMappingPanel({
           </div>
 
           {/* Help text */}
-          <p className="gesture-mapping-help">
+          <p style={gestureStyles.helpText}>
             Map gestures to instrument sounds. When you perform a gesture, the mapped sound will play.
           </p>
         </div>

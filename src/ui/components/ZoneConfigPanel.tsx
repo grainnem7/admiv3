@@ -40,13 +40,13 @@ const BODY_PART_BUTTONS: { id: TriggerBodyPart; label: string }[] = [
   { id: 'leftFoot', label: 'L Foot' },
 ];
 
-// Finger buttons with emoji icons
-const FINGER_BUTTONS: { id: keyof FingerConfig; emoji: string; label: string }[] = [
-  { id: 'thumb', emoji: '👍', label: 'Thumb' },
-  { id: 'index', emoji: '☝️', label: 'Index' },
-  { id: 'middle', emoji: '🖕', label: 'Middle' },
-  { id: 'ring', emoji: '💍', label: 'Ring' },
-  { id: 'pinky', emoji: '🤙', label: 'Pinky' },
+// Finger buttons
+const FINGER_BUTTONS: { id: keyof FingerConfig; abbr: string; label: string }[] = [
+  { id: 'thumb', abbr: 'TH', label: 'Thumb' },
+  { id: 'index', abbr: 'IX', label: 'Index' },
+  { id: 'middle', abbr: 'MD', label: 'Middle' },
+  { id: 'ring', abbr: 'RN', label: 'Ring' },
+  { id: 'pinky', abbr: 'PK', label: 'Pinky' },
 ];
 
 function ZoneConfigPanel({
@@ -219,7 +219,7 @@ function ZoneConfigPanel({
                   onClick={() => handleFingerToggle(finger.id)}
                   title={finger.label}
                 >
-                  <span className="zone-config-finger-emoji">{finger.emoji}</span>
+                  <span className="zone-config-finger-abbr">{finger.abbr}</span>
                 </button>
               ))}
             </div>
@@ -234,7 +234,7 @@ function ZoneConfigPanel({
           onClick={onDelete}
           aria-label="Delete zone"
         >
-          🗑️ Delete Zone
+          Delete Zone
         </button>
       </div>
     </div>

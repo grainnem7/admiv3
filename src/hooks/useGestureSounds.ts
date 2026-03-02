@@ -78,7 +78,13 @@ export function useGestureSounds(): UseGestureSoundsReturn {
 
   // Detect blink (both eyes)
   const detectBlink = useCallback((frame: TrackingFrame): boolean => {
-    if (!frame.face?.blendshapes) return false;
+    if (!frame.face?.blendshapes) {
+      // Debug: log occasionally when no face data
+      if (Date.now() % 3000 < 50) {
+        console.log('[GestureSounds] No face blendshapes available - ensure face tracking is enabled in Input Profile');
+      }
+      return false;
+    }
 
     const leftBlink = frame.face.blendshapes.find(
       b => b.categoryName === FACE_BLENDSHAPES.EYE_BLINK_LEFT
@@ -90,6 +96,12 @@ export function useGestureSounds(): UseGestureSoundsReturn {
     if (!leftBlink || !rightBlink) return false;
 
     const avgBlink = (leftBlink.score + rightBlink.score) / 2;
+
+    // Debug: log blink values occasionally
+    if (Date.now() % 2000 < 50) {
+      console.log(`[GestureSounds] Blink values: L=${leftBlink.score.toFixed(2)}, R=${rightBlink.score.toFixed(2)}, avg=${avgBlink.toFixed(2)}, threshold=${GESTURE_THRESHOLDS.BLINK_THRESHOLD}`);
+    }
+
     return avgBlink > GESTURE_THRESHOLDS.BLINK_THRESHOLD;
   }, []);
 
@@ -197,6 +209,7 @@ export function useGestureSounds(): UseGestureSoundsReturn {
       const cooldownElapsed = now - state.lastTriggered > mapping.cooldownMs;
 
       if (shouldTrigger && cooldownElapsed) {
+        console.log(`[GestureSounds] TRIGGERED! gesture=${mapping.gestureType} -> ${mapping.instrumentType}`);
         // Trigger the internal sound
         sampler.trigger(mapping.instrumentType, mapping.soundSettings.volume, mapping.soundSettings);
         state.lastTriggered = now;

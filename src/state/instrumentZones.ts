@@ -116,20 +116,20 @@ export interface InstrumentDefinition {
 
 export const INSTRUMENTS: InstrumentDefinition[] = [
   // Drums
-  { type: 'kick', name: 'Kick', icon: '🦶', color: '#ef4444', sound: { type: 'drum', frequency: 60 } },
-  { type: 'snare', name: 'Snare', icon: '🥁', color: '#f97316', sound: { type: 'drum', frequency: 200 } },
-  { type: 'hihat', name: 'Hi-Hat', icon: '🔶', color: '#eab308', sound: { type: 'percussion', frequency: 800 } },
-  { type: 'cymbal', name: 'Cymbal', icon: '💿', color: '#84cc16', sound: { type: 'percussion', frequency: 1200 } },
-  { type: 'tom', name: 'Tom', icon: '🪘', color: '#22c55e', sound: { type: 'drum', frequency: 120 } },
-  { type: 'clap', name: 'Clap', icon: '👏', color: '#14b8a6', sound: { type: 'percussion', frequency: 1500 } },
+  { type: 'kick', name: 'Kick', icon: 'KCK', color: '#ef4444', sound: { type: 'drum', frequency: 60 } },
+  { type: 'snare', name: 'Snare', icon: 'SNR', color: '#f97316', sound: { type: 'drum', frequency: 200 } },
+  { type: 'hihat', name: 'Hi-Hat', icon: 'HH', color: '#eab308', sound: { type: 'percussion', frequency: 800 } },
+  { type: 'cymbal', name: 'Cymbal', icon: 'CYM', color: '#84cc16', sound: { type: 'percussion', frequency: 1200 } },
+  { type: 'tom', name: 'Tom', icon: 'TOM', color: '#22c55e', sound: { type: 'drum', frequency: 120 } },
+  { type: 'clap', name: 'Clap', icon: 'CLP', color: '#14b8a6', sound: { type: 'percussion', frequency: 1500 } },
 
   // Tonal
-  { type: 'piano-low', name: 'Bass', icon: '🎸', color: '#06b6d4', sound: { type: 'tonal', frequency: 130 } },
-  { type: 'piano-mid', name: 'Piano', icon: '🎹', color: '#3b82f6', sound: { type: 'tonal', frequency: 262 } },
-  { type: 'piano-high', name: 'High', icon: '🎶', color: '#8b5cf6', sound: { type: 'tonal', frequency: 523 } },
-  { type: 'synth-pad', name: 'Pad', icon: '🎛️', color: '#a855f7', sound: { type: 'tonal', frequency: 330 } },
-  { type: 'bell', name: 'Bell', icon: '🔔', color: '#ec4899', sound: { type: 'tonal', frequency: 880 } },
-  { type: 'woodblock', name: 'Wood', icon: '🪵', color: '#f43f5e', sound: { type: 'percussion', frequency: 600 } },
+  { type: 'piano-low', name: 'Bass', icon: 'BAS', color: '#06b6d4', sound: { type: 'tonal', frequency: 130 } },
+  { type: 'piano-mid', name: 'Piano', icon: 'PNO', color: '#3b82f6', sound: { type: 'tonal', frequency: 262 } },
+  { type: 'piano-high', name: 'High', icon: 'HI', color: '#8b5cf6', sound: { type: 'tonal', frequency: 523 } },
+  { type: 'synth-pad', name: 'Pad', icon: 'PAD', color: '#a855f7', sound: { type: 'tonal', frequency: 330 } },
+  { type: 'bell', name: 'Bell', icon: 'BEL', color: '#ec4899', sound: { type: 'tonal', frequency: 880 } },
+  { type: 'woodblock', name: 'Wood', icon: 'WD', color: '#f43f5e', sound: { type: 'percussion', frequency: 600 } },
 ];
 
 // Internal IDs now match user's perspective (detection code handles the mirroring)
@@ -272,13 +272,13 @@ export interface GestureTypeDefinition {
 
 /** All available gesture types */
 export const GESTURE_TYPES: GestureTypeDefinition[] = [
-  { type: 'pinch-right', name: 'Right Pinch', icon: '👌', description: 'Pinch right thumb & index' },
-  { type: 'pinch-left', name: 'Left Pinch', icon: '👌', description: 'Pinch left thumb & index' },
-  { type: 'blink', name: 'Blink', icon: '😉', description: 'Close both eyes briefly' },
-  { type: 'wink-left', name: 'Left Wink', icon: '😜', description: 'Close left eye only' },
-  { type: 'wink-right', name: 'Right Wink', icon: '😜', description: 'Close right eye only' },
-  { type: 'brow-raise', name: 'Eyebrow Raise', icon: '🤨', description: 'Raise eyebrows' },
-  { type: 'mouth-open', name: 'Mouth Open', icon: '😮', description: 'Open mouth wide' },
+  { type: 'pinch-right', name: 'Right Pinch', icon: 'PR', description: 'Pinch right thumb & index' },
+  { type: 'pinch-left', name: 'Left Pinch', icon: 'PL', description: 'Pinch left thumb & index' },
+  { type: 'blink', name: 'Blink', icon: 'BL', description: 'Close both eyes briefly' },
+  { type: 'wink-left', name: 'Left Wink', icon: 'WL', description: 'Close left eye only' },
+  { type: 'wink-right', name: 'Right Wink', icon: 'WR', description: 'Close right eye only' },
+  { type: 'brow-raise', name: 'Eyebrow Raise', icon: 'BR', description: 'Raise eyebrows' },
+  { type: 'mouth-open', name: 'Mouth Open', icon: 'MO', description: 'Open mouth wide' },
 ];
 
 /** Get gesture type definition */

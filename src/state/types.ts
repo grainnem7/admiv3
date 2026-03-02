@@ -362,7 +362,7 @@ export interface MappingResult {
 // UI Types
 // ============================================
 
-export type Screen = 'welcome' | 'calibration' | 'performance' | 'betweenUs' | 'settings';
+export type Screen = 'welcome' | 'calibration' | 'performance' | 'betweenUs' | 'settings' | 'info';
 
 // ============================================
 // Application State
@@ -474,4 +474,42 @@ export interface AppActions {
 
   // Global actions
   reset: () => void;
+}
+
+// ============================================
+// Body Point Tracking Types
+// ============================================
+
+/** Mapping target for a tracked body point */
+export type PointMappingTarget = 'pitch' | 'volume' | 'filter' | 'zone-trigger' | 'none';
+
+/** A tracked body point configuration */
+export interface TrackedBodyPoint {
+  id: string;
+  name: string;
+  source: 'pose' | 'leftHand' | 'rightHand' | 'face';
+  landmarkIndex: number;
+  enabled: boolean;
+  mapping: {
+    target: PointMappingTarget;
+    axis?: 'x' | 'y';
+    inverted?: boolean;
+  } | null;
+}
+
+/** A trigger event for the activity feed */
+export interface TriggerEvent {
+  id: string;
+  source: string;
+  action: string;
+  timestamp: number;
+}
+
+/** Real-time tracking status for a point */
+export interface PointTrackingStatus {
+  pointId: string;
+  detected: boolean;
+  position: { x: number; y: number };
+  confidence: number;
+  mappedValue: number | null;
 }

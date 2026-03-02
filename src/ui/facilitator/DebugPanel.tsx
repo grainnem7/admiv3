@@ -177,7 +177,7 @@ function DebugPanel() {
               backgroundColor: 'var(--color-bg)',
               color: 'var(--color-text)',
               border: '1px solid var(--color-text-muted)',
-              borderRadius: '4px',
+              borderRadius: 0,
               fontSize: '12px',
             }}
           >

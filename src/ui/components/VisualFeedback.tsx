@@ -119,7 +119,7 @@ function VisualFeedback({ frequency: propFrequency, isActive: propActive }: Visu
             bottom: `${getPitchPosition()}%`,
             height: '8px',
             backgroundColor: isActive ? 'var(--color-secondary)' : 'var(--color-text-muted)',
-            borderRadius: '4px',
+            borderRadius: 0,
             transform: 'translateY(50%)',
             transition: 'bottom 0.1s ease-out, background-color var(--transition-fast)',
             boxShadow: isActive ? '0 0 12px var(--color-secondary)' : 'none',

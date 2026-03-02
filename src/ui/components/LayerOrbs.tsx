@@ -87,7 +87,7 @@ function LayerOrbs({ layers, width = 300, height = 300 }: LayerOrbsProps) {
             transform: 'translate(-50%, -50%)',
             width: orb.size,
             height: orb.size,
-            borderRadius: '50%',
+            borderRadius: 0,
             background: `radial-gradient(circle at 30% 30%, ${orb.color}, ${orb.color}88 50%, ${orb.color}22 100%)`,
             boxShadow: `0 0 ${orb.size * 0.5}px ${orb.color}66, inset 0 0 ${orb.size * 0.3}px ${orb.color}44`,
             opacity: orb.isFading ? 0.4 : 0.9,
@@ -103,7 +103,7 @@ function LayerOrbs({ layers, width = 300, height = 300 }: LayerOrbsProps) {
               left: '20%',
               width: '30%',
               height: '30%',
-              borderRadius: '50%',
+              borderRadius: 0,
               background: 'rgba(255, 255, 255, 0.4)',
               filter: 'blur(2px)',
             }}
@@ -129,7 +129,7 @@ function LayerOrbs({ layers, width = 300, height = 300 }: LayerOrbsProps) {
               width: 60,
               height: 60,
               margin: '0 auto 12px',
-              borderRadius: '50%',
+              borderRadius: 0,
               border: '2px dashed rgba(255, 255, 255, 0.2)',
               animation: 'emptyPulse 3s ease-in-out infinite',
             }}
