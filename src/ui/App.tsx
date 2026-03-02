@@ -8,6 +8,7 @@ import { getAudioEngine } from '../sound/AudioEngine';
 import WelcomeScreen from './screens/WelcomeScreen';
 import CalibrationScreen from './screens/CalibrationScreen';
 import PerformanceScreen from './screens/PerformanceScreenV2';
+import BetweenUsScreen from './screens/BetweenUsScreen';
 import MuteButton from './components/MuteButton';
 import DebugPanel from './facilitator/DebugPanel';
 
@@ -71,6 +72,8 @@ function App() {
         return <CalibrationScreen />;
       case 'performance':
         return <PerformanceScreen />;
+      case 'betweenUs':
+        return <BetweenUsScreen />;
       default:
         return <WelcomeScreen />;
     }

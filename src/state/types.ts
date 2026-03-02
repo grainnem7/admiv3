@@ -362,7 +362,7 @@ export interface MappingResult {
 // UI Types
 // ============================================
 
-export type Screen = 'welcome' | 'calibration' | 'performance' | 'settings';
+export type Screen = 'welcome' | 'calibration' | 'performance' | 'betweenUs' | 'settings';
 
 // ============================================
 // Application State

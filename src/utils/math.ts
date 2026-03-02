@@ -91,6 +91,37 @@ export function frequencyToMidi(frequency: number): number {
 }
 
 /**
+ * Note names for chromatic scale
+ */
+const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+
+/**
+ * Convert MIDI note number to note name (e.g., 60 -> "C4")
+ */
+export function midiToNoteName(midiNote: number): string {
+  const roundedNote = Math.round(midiNote);
+  const octave = Math.floor(roundedNote / 12) - 1;
+  const noteIndex = roundedNote % 12;
+  return `${NOTE_NAMES[noteIndex]}${octave}`;
+}
+
+/**
+ * Convert note name to MIDI note number (e.g., "C4" -> 60)
+ */
+export function noteNameToMidi(noteName: string): number {
+  const match = noteName.match(/^([A-G]#?)(-?\d+)$/);
+  if (!match) return 60; // Default to middle C
+
+  const [, note, octaveStr] = match;
+  const octave = parseInt(octaveStr, 10);
+  const noteIndex = NOTE_NAMES.indexOf(note);
+
+  if (noteIndex === -1) return 60;
+
+  return (octave + 1) * 12 + noteIndex;
+}
+
+/**
  * Calculate the centroid of multiple points
  */
 export function centroid2D(points: Point2D[]): Point2D {
