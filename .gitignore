@@ -26,3 +26,7 @@ Thumbs.db
 *.ntvs*
 *.njsproj
 *.sln
+
+# Windows reserved device names
+nul
+
