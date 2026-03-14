@@ -72,13 +72,36 @@ const DEFAULT_CONFIG: ThereminConfig = {
   deadZone: 0.03,
 };
 
+interface SmoothState {
+  x: number;
+  y: number;
+  openness: number;
+  size: number;
+  lastOutput: ThereminOutput | null;
+}
+
+function createSmoothState(): SmoothState {
+  return { x: 0.5, y: 0.5, openness: 0, size: 0.5, lastOutput: null };
+}
+
+export interface DualThereminOutput {
+  left: ThereminOutput;
+  right: ThereminOutput;
+}
+
 export class ThereminMode {
   private config: ThereminConfig;
+  // Legacy single-hand state (kept for backward compat with process())
   private smoothedX: number = 0.5;
   private smoothedY: number = 0.5;
   private smoothedOpenness: number = 0;
   private smoothedSize: number = 0.5;
   private lastOutput: ThereminOutput | null = null;
+  // Per-hand smoothing state
+  private handStates: Record<'left' | 'right', SmoothState> = {
+    left: createSmoothState(),
+    right: createSmoothState(),
+  };
 
   constructor(config: Partial<ThereminConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -281,6 +304,82 @@ export class ThereminMode {
   }
 
   /**
+   * Process both hands independently for dual-theremin mode.
+   */
+  processBothHands(frame: TrackingFrame): DualThereminOutput {
+    return {
+      left: this.processOneHand(frame.leftHand ?? null, 'left'),
+      right: this.processOneHand(frame.rightHand ?? null, 'right'),
+    };
+  }
+
+  /**
+   * Process a single hand with per-hand smoothing state.
+   */
+  private processOneHand(
+    hand: HandLandmarks | null | undefined,
+    side: 'left' | 'right'
+  ): ThereminOutput {
+    const state = this.handStates[side];
+    const handedness = side === 'left' ? 'Left' as const : 'Right' as const;
+
+    if (!hand || !hand.landmarks || hand.landmarks.length < 21) {
+      return {
+        x: state.x,
+        y: state.y,
+        openness: 0,
+        angle: 0,
+        size: state.size,
+        pitch: state.lastOutput?.pitch ?? 0.5,
+        volume: 0,
+        handActive: false,
+        handedness: null,
+        trackingPoint: null,
+      };
+    }
+
+    const mcpPoint = hand.landmarks[MIDDLE_FINGER_MCP];
+    const rawX = mcpPoint.x;
+    const rawY = 1 - mcpPoint.y;
+
+    const openness = this.calculateOpenness(hand);
+    const angle = this.calculateAngle(hand);
+    const size = this.calculateSize(hand);
+
+    const alpha = this.config.smoothing;
+    state.x = alpha * state.x + (1 - alpha) * rawX;
+    state.y = alpha * state.y + (1 - alpha) * rawY;
+    state.openness = alpha * state.openness + (1 - alpha) * openness;
+    state.size = alpha * state.size + (1 - alpha) * size;
+
+    const x = this.applyDeadZone(state.x);
+    const y = this.applyDeadZone(state.y);
+
+    const pitchSource = this.config.xIsPitch ? x : y;
+    const pitch = pitchSource;
+
+    let volume: number;
+    if (this.config.volumeSource === 'openness') {
+      volume = state.openness;
+    } else {
+      volume = this.config.xIsPitch ? y : x;
+    }
+
+    const output: ThereminOutput = {
+      x, y,
+      openness: state.openness,
+      angle, size: state.size,
+      pitch, volume,
+      handActive: true,
+      handedness,
+      trackingPoint: { x: mcpPoint.x, y: mcpPoint.y },
+    };
+
+    state.lastOutput = output;
+    return output;
+  }
+
+  /**
    * Reset state
    */
   reset(): void {
@@ -289,6 +388,7 @@ export class ThereminMode {
     this.smoothedOpenness = 0;
     this.smoothedSize = 0.5;
     this.lastOutput = null;
+    this.handStates = { left: createSmoothState(), right: createSmoothState() };
   }
 }
 

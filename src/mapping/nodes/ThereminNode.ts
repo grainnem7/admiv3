@@ -40,6 +40,13 @@ export interface ThereminProcessResult {
   thereminOutput: ThereminOutput;
 }
 
+export interface DualThereminProcessResult {
+  left: ThereminProcessResult;
+  right: ThereminProcessResult;
+  /** Combined events from both hands */
+  events: MusicalEvent[];
+}
+
 const DEFAULT_CONFIG: ThereminNodeConfig = {
   emitCCs: true,
   volumeThreshold: 0.05,
@@ -99,6 +106,47 @@ export class ThereminNode {
       shouldPlay,
       trackingPoint: thereminOutput.trackingPoint,
       thereminOutput,
+    };
+  }
+
+  /**
+   * Process both hands independently for dual-theremin mode.
+   */
+  processDual(frame: TrackingFrame): DualThereminProcessResult {
+    const thereminMode = getThereminMode();
+    const timestamp = frame.timestamp;
+    const dualOutput = thereminMode.processBothHands(frame);
+    const allEvents: MusicalEvent[] = [];
+
+    const buildResult = (output: ThereminOutput): ThereminProcessResult => {
+      const frequency = thereminMode.pitchToFrequency(output.pitch);
+      const shouldPlay = thereminMode.shouldPlay(output);
+      const events: MusicalEvent[] = [];
+
+      if (this.config.emitCCs && output.handActive) {
+        events.push(createControlChangeEvent('pitch', output.pitch, timestamp));
+        events.push(createControlChangeEvent('volume', output.volume, timestamp));
+        events.push(createControlChangeEvent('filter_cutoff', output.openness, timestamp));
+      }
+      allEvents.push(...events);
+
+      return {
+        events,
+        pitch: output.pitch,
+        volume: output.volume,
+        frequency,
+        openness: output.openness,
+        handActive: output.handActive,
+        shouldPlay,
+        trackingPoint: output.trackingPoint,
+        thereminOutput: output,
+      };
+    };
+
+    return {
+      left: buildResult(dualOutput.left),
+      right: buildResult(dualOutput.right),
+      events: allEvents,
     };
   }
 

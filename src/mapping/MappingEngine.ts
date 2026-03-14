@@ -502,6 +502,23 @@ export class MappingEngine {
   }
 
   /**
+   * Process both hands through theremin mode for dual-theremin playback.
+   */
+  processDualThereminFrame(frame: TrackingFrame): import('./nodes').DualThereminProcessResult | null {
+    if (!this.thereminModeEnabled || !this.thereminNode) {
+      return null;
+    }
+
+    const result = this.thereminNode.processDual(frame);
+
+    if (result.events.length > 0) {
+      this.emitEvents(result.events);
+    }
+
+    return result;
+  }
+
+  /**
    * Get the hand expression node (for MusiKraken-style continuous control)
    */
   getHandExpressionNode(): HandExpressionNode | null {

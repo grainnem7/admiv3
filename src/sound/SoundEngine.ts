@@ -115,9 +115,9 @@ export class SoundEngine {
   private bassSynth: Tone.PolySynth | null = null;
   private chordSynth: Tone.PolySynth | null = null;
 
-  // Theremin synth (MonoSynth with portamento for smooth pitch)
-  private thereminSynth: Tone.MonoSynth | null = null;
-  private thereminPlaying: boolean = false;
+  // Theremin synths (MonoSynth with portamento) — one per hand for dual-theremin
+  private thereminSynths: { left: Tone.MonoSynth | null; right: Tone.MonoSynth | null } = { left: null, right: null };
+  private thereminPlayingState: { left: boolean; right: boolean } = { left: false, right: false };
 
   // Effects chain
   private filter: Tone.Filter | null = null;
@@ -258,34 +258,40 @@ export class SoundEngine {
     this.bassSynth = createPolySynth(VOICE_CONFIGS.bass);
     this.chordSynth = createPolySynth(VOICE_CONFIGS.chord);
 
-    // Create theremin synth (MonoSynth with portamento for smooth glides)
-    this.thereminSynth = new Tone.MonoSynth({
-      oscillator: { type: 'sawtooth' },
-      envelope: {
-        attack: 0.02,
-        decay: 0.1,
-        sustain: 1.0,
-        release: 0.2,
-      },
-      filterEnvelope: {
-        attack: 0.02,
-        decay: 0.2,
-        sustain: 0.6,
-        release: 0.2,
-        baseFrequency: 300,
-        octaves: 5,
-      },
-    });
-    this.thereminSynth.portamento = 0.03; // 30ms glide between notes
-    this.thereminSynth.volume.value = 0;
-    this.thereminSynth.connect(this.vibratoEffect ?? this.filter!);
+    // Create theremin synths (one per hand for dual-theremin mode)
+    const createThereminSynth = (): Tone.MonoSynth => {
+      const synth = new Tone.MonoSynth({
+        oscillator: { type: 'sawtooth' },
+        envelope: {
+          attack: 0.02,
+          decay: 0.1,
+          sustain: 1.0,
+          release: 0.2,
+        },
+        filterEnvelope: {
+          attack: 0.02,
+          decay: 0.2,
+          sustain: 0.6,
+          release: 0.2,
+          baseFrequency: 300,
+          octaves: 5,
+        },
+      });
+      synth.portamento = 0.03;
+      synth.volume.value = 0;
+      synth.connect(this.vibratoEffect ?? this.filter!);
+      return synth;
+    };
+    this.thereminSynths.right = createThereminSynth();
+    this.thereminSynths.left = createThereminSynth();
 
     // DEBUG: Confirm synths created
     console.log('[SoundEngine] Synths created:', {
       melody: !!this.melodySynth,
       bass: !!this.bassSynth,
       chord: !!this.chordSynth,
-      theremin: !!this.thereminSynth,
+      thereminL: !!this.thereminSynths.left,
+      thereminR: !!this.thereminSynths.right,
       filter: !!this.filter,
       audioContextState: Tone.context.state,
     });
@@ -412,72 +418,88 @@ export class SoundEngine {
   /**
    * Start theremin sound at a given frequency.
    * Uses MonoSynth with portamento for smooth pitch changes.
+   * @param hand Which hand's theremin synth to use (default: 'right')
    */
-  thereminStart(frequency: number, velocity = 0.7): void {
-    if (!this.isInitialized || this.isMuted || !this.thereminSynth) return;
+  thereminStart(frequency: number, velocity = 0.7, hand: 'left' | 'right' = 'right'): void {
+    const synth = this.thereminSynths[hand];
+    if (!this.isInitialized || this.isMuted || !synth) return;
 
     try {
-      if (!this.thereminPlaying) {
-        this.thereminSynth.triggerAttack(frequency, undefined, velocity);
-        this.thereminPlaying = true;
-        console.log(`[SoundEngine] Theremin start: ${frequency.toFixed(1)} Hz`);
+      if (!this.thereminPlayingState[hand]) {
+        synth.triggerAttack(frequency, undefined, velocity);
+        this.thereminPlayingState[hand] = true;
+        console.log(`[SoundEngine] Theremin ${hand} start: ${frequency.toFixed(1)} Hz`);
       }
     } catch (error) {
-      console.error('[SoundEngine] Error in thereminStart:', error);
+      console.error(`[SoundEngine] Error in thereminStart (${hand}):`, error);
     }
   }
 
   /**
    * Update theremin frequency (glides smoothly due to portamento).
    */
-  thereminSetFrequency(frequency: number): void {
-    if (!this.isInitialized || !this.thereminSynth || !this.thereminPlaying) return;
+  thereminSetFrequency(frequency: number, hand: 'left' | 'right' = 'right'): void {
+    const synth = this.thereminSynths[hand];
+    if (!this.isInitialized || !synth || !this.thereminPlayingState[hand]) return;
 
     try {
-      // Use setTargetAtTime for smooth frequency transition
-      this.thereminSynth.frequency.rampTo(frequency, 0.05);
+      synth.frequency.rampTo(frequency, 0.05);
     } catch (error) {
-      console.error('[SoundEngine] Error in thereminSetFrequency:', error);
+      console.error(`[SoundEngine] Error in thereminSetFrequency (${hand}):`, error);
     }
   }
 
   /**
-   * Update theremin volume (for left hand control).
+   * Update theremin volume.
    */
-  thereminSetVolume(volume: number): void {
-    if (!this.isInitialized || !this.thereminSynth) return;
+  thereminSetVolume(volume: number, hand: 'left' | 'right' = 'right'): void {
+    const synth = this.thereminSynths[hand];
+    if (!this.isInitialized || !synth) return;
 
     try {
-      // Map 0-1 to dB range (-24 to 0)
       const dbValue = -24 + volume * 24;
-      this.thereminSynth.volume.rampTo(dbValue, 0.05);
+      synth.volume.rampTo(dbValue, 0.05);
     } catch (error) {
-      console.error('[SoundEngine] Error in thereminSetVolume:', error);
+      console.error(`[SoundEngine] Error in thereminSetVolume (${hand}):`, error);
     }
   }
 
   /**
    * Stop theremin sound.
    */
-  thereminStop(): void {
-    if (!this.isInitialized || !this.thereminSynth) return;
+  thereminStop(hand?: 'left' | 'right'): void {
+    if (!this.isInitialized) return;
 
-    try {
-      if (this.thereminPlaying) {
-        this.thereminSynth.triggerRelease();
-        this.thereminPlaying = false;
-        console.log('[SoundEngine] Theremin stop');
+    const stopHand = (h: 'left' | 'right') => {
+      const synth = this.thereminSynths[h];
+      if (!synth) return;
+      try {
+        if (this.thereminPlayingState[h]) {
+          synth.triggerRelease();
+          this.thereminPlayingState[h] = false;
+          console.log(`[SoundEngine] Theremin ${h} stop`);
+        }
+      } catch (error) {
+        console.error(`[SoundEngine] Error in thereminStop (${h}):`, error);
       }
-    } catch (error) {
-      console.error('[SoundEngine] Error in thereminStop:', error);
+    };
+
+    if (hand) {
+      stopHand(hand);
+    } else {
+      // Stop both hands
+      stopHand('left');
+      stopHand('right');
     }
   }
 
   /**
    * Check if theremin is currently playing.
+   * Without argument: returns true if either hand is playing.
    */
-  isThereminPlaying(): boolean {
-    return this.thereminPlaying;
+  isThereminPlaying(hand?: 'left' | 'right'): boolean {
+    if (hand) return this.thereminPlayingState[hand];
+    return this.thereminPlayingState.left || this.thereminPlayingState.right;
   }
 
   /**
@@ -552,6 +574,7 @@ export class SoundEngine {
     }
     if (muted) {
       this.releaseAll();
+      this.thereminStop();
     }
   }
 
@@ -736,9 +759,8 @@ export class SoundEngine {
    */
   setPortamento(time: number): void {
     this.portamentoTime = Math.max(0, Math.min(0.5, time));
-    if (this.thereminSynth) {
-      this.thereminSynth.portamento = this.portamentoTime;
-    }
+    if (this.thereminSynths.left) this.thereminSynths.left.portamento = this.portamentoTime;
+    if (this.thereminSynths.right) this.thereminSynths.right.portamento = this.portamentoTime;
   }
 
   /**
@@ -832,10 +854,13 @@ export class SoundEngine {
    */
   dispose(): void {
     this.releaseAll();
+    this.thereminStop();
 
     this.melodySynth?.dispose();
     this.bassSynth?.dispose();
     this.chordSynth?.dispose();
+    this.thereminSynths.left?.dispose();
+    this.thereminSynths.right?.dispose();
     this.vibratoEffect?.dispose();
     this.filter?.dispose();
     this.delay?.dispose();
@@ -846,6 +871,8 @@ export class SoundEngine {
     this.melodySynth = null;
     this.bassSynth = null;
     this.chordSynth = null;
+    this.thereminSynths = { left: null, right: null };
+    this.thereminPlayingState = { left: false, right: false };
     this.vibratoEffect = null;
     this.filter = null;
     this.delay = null;

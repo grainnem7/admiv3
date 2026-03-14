@@ -128,6 +128,7 @@ function PerformanceScreenV2() {
   const { checkCollisions } = useZoneCollision();
   const { checkGestures } = useGestureSounds();
   const isMuted = useIsMuted();
+  const toggleMute = useAppStore((s) => s.toggleMute);
   const setCurrentScreen = useAppStore((s) => s.setCurrentScreen);
   const setTrackingFrame = useAppStore((s) => s.setTrackingFrame);
 
@@ -272,27 +273,33 @@ function PerformanceScreenV2() {
       const isThereminMode = mappingEngineRef.current?.isThereminMode() ?? false;
 
       if (isThereminMode) {
-        const thereminResult = mappingEngineRef.current?.processThereminFrame(frame);
+        const dualResult = mappingEngineRef.current?.processDualThereminFrame(frame);
 
-        if (thereminResult && musicControllerRef.current) {
+        if (dualResult && musicControllerRef.current) {
           const soundEngine = musicControllerRef.current.getSoundEngine();
           if (soundEngine && !isMuted) {
-            if (thereminResult.shouldPlay) {
-              if (!soundEngine.isThereminPlaying()) {
-                soundEngine.thereminStart(thereminResult.frequency, thereminResult.volume);
+            // Process each hand independently
+            for (const hand of ['left', 'right'] as const) {
+              const result = dualResult[hand];
+              if (result.shouldPlay) {
+                if (!soundEngine.isThereminPlaying(hand)) {
+                  soundEngine.thereminStart(result.frequency, result.volume, hand);
+                } else {
+                  soundEngine.thereminSetFrequency(result.frequency, hand);
+                  soundEngine.thereminSetVolume(result.volume, hand);
+                }
               } else {
-                soundEngine.thereminSetFrequency(thereminResult.frequency);
-                soundEngine.thereminSetVolume(thereminResult.volume);
-              }
-            } else {
-              if (soundEngine.isThereminPlaying()) {
-                soundEngine.thereminStop();
+                if (soundEngine.isThereminPlaying(hand)) {
+                  soundEngine.thereminStop(hand);
+                }
               }
             }
           }
 
-          setCurrentFrequency(thereminResult.frequency);
-          setIsActive(thereminResult.handActive);
+          // Use right hand for display (or left if right inactive)
+          const displayResult = dualResult.right.handActive ? dualResult.right : dualResult.left;
+          setCurrentFrequency(displayResult.frequency);
+          setIsActive(dualResult.left.handActive || dualResult.right.handActive);
         }
         return;
       }
@@ -344,11 +351,16 @@ function PerformanceScreenV2() {
     [isMuted, checkCollisions, checkGestures, setTrackingFrame]
   );
 
-  // Sync mute state with music controller
+  // Sync mute state with music controller and theremin
   useEffect(() => {
     if (musicControllerRef.current) {
       if (isMuted) {
         musicControllerRef.current.stop();
+        // Also stop theremin if playing
+        const soundEngine = musicControllerRef.current.getSoundEngine();
+        if (soundEngine?.isThereminPlaying()) {
+          soundEngine.thereminStop();
+        }
       } else {
         musicControllerRef.current.start();
       }
@@ -599,6 +611,7 @@ function PerformanceScreenV2() {
               <button
                 className={`quick-actions__btn ${isMuted ? '' : 'quick-actions__btn--active'}`}
                 title={isMuted ? 'Unmute' : 'Mute'}
+                onClick={toggleMute}
               >
                 {isMuted ? <IconVolumeMute size={16} /> : <IconVolume size={16} />}
               </button>

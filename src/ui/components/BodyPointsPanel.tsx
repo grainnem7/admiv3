@@ -376,6 +376,36 @@ function BodyPointsPanel({ trackedPoints, onPointsChange, parentExpanded = false
   const activePoints = trackedPoints.filter(p => p.enabled);
   const selectedPoint = selectedPointId ? trackedPoints.find(p => p.id === selectedPointId) : null;
 
+  // All landmarks in current tab
+  const allTabLandmarks = groups.flatMap(g => g.landmarks);
+  const allTabSelected = allTabLandmarks.every(l => isPointTracked(activeTab, l.index));
+
+  const selectAllInTab = useCallback(() => {
+    const toAdd: TrackedBodyPoint[] = [];
+    for (const landmark of allTabLandmarks) {
+      const existing = getTrackedPoint(activeTab, landmark.index);
+      if (!existing) {
+        toAdd.push({
+          id: `${activeTab}-${landmark.index}`,
+          name: landmark.name,
+          source: activeTab,
+          landmarkIndex: landmark.index,
+          enabled: true,
+          mapping: null,
+        });
+      }
+    }
+    // Enable any existing-but-disabled points, plus add new ones
+    const updated = trackedPoints.map(p =>
+      p.source === activeTab && !p.enabled ? { ...p, enabled: true } : p
+    );
+    onPointsChange([...updated, ...toAdd]);
+  }, [activeTab, allTabLandmarks, trackedPoints, getTrackedPoint, onPointsChange]);
+
+  const deselectAllInTab = useCallback(() => {
+    onPointsChange(trackedPoints.filter(p => !(p.source === activeTab && p.enabled)));
+  }, [activeTab, trackedPoints, onPointsChange]);
+
   // Render the landmark selector (used in both compact and expanded views)
   const renderLandmarkSelector = (expanded: boolean) => (
     <div style={expanded ? { ...styles.selector, maxHeight: 'none', padding: '16px' } : styles.selector}>
@@ -395,6 +425,40 @@ function BodyPointsPanel({ trackedPoints, onPointsChange, parentExpanded = false
             {tab.label}
           </button>
         ))}
+      </div>
+
+      {/* Select All / Deselect All */}
+      <div style={{ display: 'flex', gap: '4px', marginBottom: '12px' }}>
+        <button
+          style={{
+            flex: 1,
+            padding: expanded ? '8px' : '6px',
+            background: allTabSelected ? '#333' : '#f97316',
+            border: 'none',
+            color: '#fff',
+            fontSize: expanded ? '12px' : '11px',
+            fontWeight: 500,
+            cursor: 'pointer',
+          }}
+          onClick={selectAllInTab}
+        >
+          Select All
+        </button>
+        <button
+          style={{
+            flex: 1,
+            padding: expanded ? '8px' : '6px',
+            background: '#333',
+            border: '1px solid #444',
+            color: '#ccc',
+            fontSize: expanded ? '12px' : '11px',
+            fontWeight: 500,
+            cursor: 'pointer',
+          }}
+          onClick={deselectAllInTab}
+        >
+          Deselect All
+        </button>
       </div>
 
       {groups.map((group, groupIndex) => (

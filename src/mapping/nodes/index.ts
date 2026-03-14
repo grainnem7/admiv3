@@ -47,4 +47,4 @@ export { QuantizerNode } from './QuantizerNode';
 export type { QuantizerConfig, QuantizeMode } from './QuantizerNode';
 
 export { ThereminNode, getThereminNode, resetThereminNode } from './ThereminNode';
-export type { ThereminNodeConfig, ThereminProcessResult } from './ThereminNode';
+export type { ThereminNodeConfig, ThereminProcessResult, DualThereminProcessResult } from './ThereminNode';

@@ -9,7 +9,7 @@
  * 5. Manages chord progressions and melodic patterns
  */
 
-import { SoundEngine, getSoundEngine } from '../sound/SoundEngine';
+import { SoundEngine, getSoundEngine, type VoiceType } from '../sound/SoundEngine';
 import { InstrumentSampler, getInstrumentSampler } from '../sound/InstrumentSampler';
 import type { InstrumentType } from '../state/instrumentZones';
 import {
@@ -126,8 +126,9 @@ export class MusicController {
 
   // Musical state
   private scale: string[] = [];
+  private bassScale: string[] = [];
   private progressionState: ProgressionState;
-  private noteState: NoteState;
+  private noteStates: Record<VoiceType, NoteState>;
   // lastChordChangeTime and movementAccumulator removed - chord drone feature disabled
 
   // Hand feature state
@@ -156,12 +157,18 @@ export class MusicController {
 
     // Initialize musical state
     this.scale = generateScale(this.config.rootNote, this.config.scaleType, 3, 6);
+    this.bassScale = generateScale(this.config.rootNote, this.config.scaleType, 1, 3);
     this.progressionState = createProgressionState(this.config.progressionId);
-    this.noteState = {
+    const defaultNoteState = (): NoteState => ({
       lastNoteTime: 0,
       lastNote: '',
       lastPosition: { x: 0.5, y: 0.5 },
       activeNoteId: null,
+    });
+    this.noteStates = {
+      melody: defaultNoteState(),
+      bass: defaultNoteState(),
+      chord: defaultNoteState(),
     };
   }
 
@@ -257,20 +264,26 @@ export class MusicController {
       }
     }
 
-    // Get primary control position (prefer right hand, fall back to pose)
-    const controlPosition = this.getControlPosition(trackingFrame, handFeatures);
-    if (!controlPosition) {
-      return;
-    }
-
     // Apply hand articulation to filter if enabled
     if (this.config.useHandArticulation) {
       this.applyHandArticulation(handFeatures);
     }
 
-    // Check for position-based note triggering
+    // Position-based note triggering — both hands play simultaneously
     if (this.config.positionNotesEnabled) {
-      this.handlePositionNotes(controlPosition, timestamp);
+      const rightPos = handFeatures.rightHand.isTracked
+        ? handFeatures.rightHand.wristPosition
+        : this.getPoseWristPosition(trackingFrame, 'right');
+      const leftPos = handFeatures.leftHand.isTracked
+        ? handFeatures.leftHand.wristPosition
+        : this.getPoseWristPosition(trackingFrame, 'left');
+
+      if (rightPos) {
+        this.handlePositionNotes(rightPos, timestamp, 'melody');
+      }
+      if (leftPos) {
+        this.handlePositionNotes(leftPos, timestamp, 'bass');
+      }
     }
 
     // Accumulate movement for chord progression
@@ -297,38 +310,19 @@ export class MusicController {
   }
 
   /**
-   * Get primary control position from tracking data.
+   * Get wrist position from pose landmarks as fallback when hand tracking unavailable.
    */
-  private getControlPosition(
+  private getPoseWristPosition(
     frame: TrackingFrame,
-    handFeatures: { leftHand: HandFeatures; rightHand: HandFeatures }
+    side: 'left' | 'right'
   ): { x: number; y: number } | null {
-    // Prefer right hand if tracked
-    if (handFeatures.rightHand.isTracked) {
-      return handFeatures.rightHand.wristPosition;
-    }
-
-    // Fall back to left hand
-    if (handFeatures.leftHand.isTracked) {
-      return handFeatures.leftHand.wristPosition;
-    }
-
-    // Fall back to pose right wrist (landmark 16)
-    if (frame.pose?.landmarks && frame.pose.landmarks.length > 16) {
-      const wrist = frame.pose.landmarks[16];
+    const landmarkIndex = side === 'right' ? 16 : 15;
+    if (frame.pose?.landmarks && frame.pose.landmarks.length > landmarkIndex) {
+      const wrist = frame.pose.landmarks[landmarkIndex];
       if (wrist.visibility && wrist.visibility > 0.5) {
         return { x: wrist.x, y: wrist.y };
       }
     }
-
-    // Fall back to pose left wrist (landmark 15)
-    if (frame.pose?.landmarks && frame.pose.landmarks.length > 15) {
-      const wrist = frame.pose.landmarks[15];
-      if (wrist.visibility && wrist.visibility > 0.5) {
-        return { x: wrist.x, y: wrist.y };
-      }
-    }
-
     return null;
   }
 
@@ -337,16 +331,20 @@ export class MusicController {
    */
   private handlePositionNotes(
     position: { x: number; y: number },
-    timestamp: number
+    timestamp: number,
+    voice: VoiceType = 'melody'
   ): void {
+    const noteState = this.noteStates[voice];
+    const voiceScale = voice === 'bass' ? this.bassScale : this.scale;
+
     // Check cooldown
-    if (timestamp - this.noteState.lastNoteTime < this.config.melodyCooldownMs) {
+    if (timestamp - noteState.lastNoteTime < this.config.melodyCooldownMs) {
       return;
     }
 
     // Check position change threshold
-    const dx = position.x - this.noteState.lastPosition.x;
-    const dy = position.y - this.noteState.lastPosition.y;
+    const dx = position.x - noteState.lastPosition.x;
+    const dy = position.y - noteState.lastPosition.y;
     const distance = Math.sqrt(dx * dx + dy * dy);
 
     if (distance < this.config.positionThreshold) {
@@ -354,7 +352,7 @@ export class MusicController {
     }
 
     // Map Y position to note (inverted: higher position = higher pitch)
-    const note = positionToNote(position.y, this.scale, true);
+    const note = positionToNote(position.y, voiceScale, true);
 
     // Map X position to duration (left = short, right = long)
     const duration = position.x < 0.3 ? '16n' : position.x < 0.7 ? '8n' : '4n';
@@ -365,12 +363,13 @@ export class MusicController {
 
     // Play the note (internal sound) - skip if internal sounds are muted
     if (!this.config.internalSoundsMuted) {
-      this.soundEngine.playNote('melody', note, { velocity, duration });
+      this.soundEngine.playNote(voice, note, { velocity, duration });
     }
 
     // Also send MIDI note
     const midiNote = this.noteNameToMidi(note);
-    const channel = MIDIOutput.getConfig().channels.melody;
+    const midiChannels = MIDIOutput.getConfig().channels;
+    const channel = voice === 'bass' ? midiChannels.bass : midiChannels.melody;
     MIDIOutput.sendNoteOn(midiNote, velocity * 127, channel);
     // Schedule note off
     setTimeout(() => {
@@ -378,12 +377,12 @@ export class MusicController {
     }, durationMs);
 
     // Update state
-    this.noteState.lastNoteTime = timestamp;
-    this.noteState.lastNote = note;
-    this.noteState.lastPosition = { ...position };
+    noteState.lastNoteTime = timestamp;
+    noteState.lastNote = note;
+    noteState.lastPosition = { ...position };
 
     if (this.config.debug) {
-      console.log(`[MusicController] Note: ${note} (vel: ${velocity.toFixed(2)}, dur: ${duration})`);
+      console.log(`[MusicController] ${voice}: ${note} (vel: ${velocity.toFixed(2)}, dur: ${duration})`);
     }
   }
 
@@ -806,9 +805,10 @@ export class MusicController {
   setConfig(config: Partial<MusicControllerConfig>): void {
     this.config = { ...this.config, ...config };
 
-    // Regenerate scale if root/type changed
+    // Regenerate scales if root/type changed
     if (config.rootNote || config.scaleType) {
       this.scale = generateScale(this.config.rootNote, this.config.scaleType, 3, 6);
+      this.bassScale = generateScale(this.config.rootNote, this.config.scaleType, 1, 3);
     }
 
     // Reset progression if changed
@@ -824,6 +824,7 @@ export class MusicController {
     this.config.rootNote = rootNote;
     this.config.scaleType = scaleType;
     this.scale = generateScale(rootNote, scaleType, 3, 6);
+    this.bassScale = generateScale(rootNote, scaleType, 1, 3);
   }
 
   /**

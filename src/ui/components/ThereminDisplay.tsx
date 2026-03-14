@@ -1,12 +1,10 @@
 /**
- * ThereminDisplay - Visual pitch/volume representation for MusiKraken-style theremin
+ * ThereminDisplay - Visual pitch/volume representation for dual-hand theremin
  *
- * Shows real-time visualization of theremin control:
- * - X position (horizontal) for pitch
- * - Y position (hand height) for volume
- * - Hand openness for filter expression
- * - Note name display
- * - Hand tracking point visualization
+ * Shows real-time visualization of both hands:
+ * - Shared pitch bar with two indicators (blue=right, purple=left)
+ * - Per-hand note name, frequency, and volume
+ * - Hand tracking status
  */
 
 import { useEffect, useState, useRef, useCallback } from 'react';
@@ -27,24 +25,26 @@ function midiToNoteName(midi: number): string {
   return `${noteName}${octave}`;
 }
 
+interface DualOutput {
+  left: ThereminOutput;
+  right: ThereminOutput;
+}
+
 function ThereminDisplay({ isActive }: ThereminDisplayProps) {
-  const [output, setOutput] = useState<ThereminOutput | null>(null);
+  const [dualOutput, setDualOutput] = useState<DualOutput | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const trackingFrame = useAppStore((s) => s.trackingFrame);
 
-  // Process tracking frame through theremin mode
   const processFrame = useCallback((frame: TrackingFrame | null) => {
     if (!isActive || !frame) {
-      setOutput(null);
+      setDualOutput(null);
       return;
     }
 
     const thereminMode = getThereminMode();
-    const thereminOutput = thereminMode.process(frame);
-    setOutput(thereminOutput);
+    setDualOutput(thereminMode.processBothHands(frame));
   }, [isActive]);
 
-  // Update when tracking frame changes
   useEffect(() => {
     processFrame(trackingFrame);
   }, [trackingFrame, processFrame]);
@@ -59,119 +59,131 @@ function ThereminDisplay({ isActive }: ThereminDisplayProps) {
 
     const width = canvas.width;
     const height = canvas.height;
+    const thereminMode = getThereminMode();
 
     // Clear
     ctx.fillStyle = '#1a1a2e';
     ctx.fillRect(0, 0, width, height);
 
-    if (!output) {
-      // No output - show waiting message
+    if (!dualOutput) {
       ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
       ctx.font = '14px sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('Show your hand to play', width / 2, height / 2);
+      ctx.fillText('Show your hands to play', width / 2, height / 2);
       return;
     }
 
-    // Draw pitch indicator (horizontal bar - X position)
-    const pitchBarWidth = width - 40;
-    const pitchBarHeight = 24;
+    const { left, right } = dualOutput;
+    const leftColor = '#bb66ff';  // purple
+    const rightColor = '#4488ff'; // blue
+
+    // ── Shared pitch bar at top ──
     const pitchBarX = 20;
-    const pitchBarY = 20;
+    const pitchBarY = 18;
+    const pitchBarWidth = width - 40;
+    const pitchBarHeight = 20;
 
-    // Pitch bar label
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-    ctx.font = '10px sans-serif';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+    ctx.font = '9px sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText('PITCH (X)', pitchBarX, pitchBarY - 4);
+    ctx.fillText('PITCH', pitchBarX, pitchBarY - 4);
 
-    // Pitch bar background
-    ctx.fillStyle = 'rgba(100, 100, 100, 0.3)';
-    ctx.fillRect(pitchBarX, pitchBarY, pitchBarWidth, pitchBarHeight);
-
-    // Pitch bar fill (shows position)
+    // Bar background with gradient
     const gradient = ctx.createLinearGradient(pitchBarX, 0, pitchBarX + pitchBarWidth, 0);
-    gradient.addColorStop(0, '#4488ff');
-    gradient.addColorStop(1, '#ff4488');
+    gradient.addColorStop(0, 'rgba(68, 136, 255, 0.15)');
+    gradient.addColorStop(1, 'rgba(255, 68, 136, 0.15)');
     ctx.fillStyle = gradient;
     ctx.fillRect(pitchBarX, pitchBarY, pitchBarWidth, pitchBarHeight);
+    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+    ctx.strokeRect(pitchBarX, pitchBarY, pitchBarWidth, pitchBarHeight);
 
-    // Pitch indicator (current position)
-    if (output.handActive) {
-      const pitchX = pitchBarX + output.pitch * pitchBarWidth;
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 3;
+    // Draw pitch indicators for each hand
+    const drawPitchIndicator = (output: ThereminOutput, color: string) => {
+      if (!output.handActive) return;
+      const px = pitchBarX + output.pitch * pitchBarWidth;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.moveTo(pitchX, pitchBarY - 5);
-      ctx.lineTo(pitchX, pitchBarY + pitchBarHeight + 5);
+      ctx.moveTo(px, pitchBarY - 3);
+      ctx.lineTo(px, pitchBarY + pitchBarHeight + 3);
       ctx.stroke();
-
-      // White circle at position
-      ctx.fillStyle = '#ffffff';
+      ctx.fillStyle = color;
       ctx.beginPath();
-      ctx.arc(pitchX, pitchBarY + pitchBarHeight / 2, 6, 0, Math.PI * 2);
+      ctx.arc(px, pitchBarY + pitchBarHeight / 2, 5, 0, Math.PI * 2);
       ctx.fill();
-    }
+    };
 
-    // Draw volume indicator (vertical bar - hand height)
-    const volBarWidth = 24;
-    const volBarHeight = 60;
-    const volBarX = width - 40;
-    const volBarY = 55;
+    drawPitchIndicator(left, leftColor);
+    drawPitchIndicator(right, rightColor);
 
-    // Volume bar label
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-    ctx.font = '10px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('VOL', volBarX + volBarWidth / 2, volBarY - 4);
+    // ── Per-hand info: Left side | Right side ──
+    const infoY = pitchBarY + pitchBarHeight + 16;
+    const halfW = width / 2;
 
-    // Volume bar background
-    ctx.fillStyle = 'rgba(100, 100, 100, 0.3)';
-    ctx.fillRect(volBarX, volBarY, volBarWidth, volBarHeight);
+    const drawHandInfo = (
+      output: ThereminOutput,
+      label: string,
+      color: string,
+      centerX: number,
+      baseY: number
+    ) => {
+      // Label
+      ctx.fillStyle = color;
+      ctx.font = 'bold 10px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(label, centerX, baseY);
 
-    // Volume bar fill (from bottom up)
-    const volFillHeight = output.volume * volBarHeight;
-    ctx.fillStyle = '#44ff88';
-    ctx.fillRect(volBarX, volBarY + volBarHeight - volFillHeight, volBarWidth, volFillHeight);
+      // Note name
+      const midi = thereminMode.pitchToMidi(output.pitch);
+      const noteName = midiToNoteName(midi);
+      ctx.fillStyle = output.handActive ? '#ffffff' : 'rgba(255,255,255,0.25)';
+      ctx.font = 'bold 26px monospace';
+      ctx.fillText(noteName, centerX, baseY + 28);
 
-    // Draw note name in center
-    const thereminMode = getThereminMode();
-    const midiNote = thereminMode.pitchToMidi(output.pitch);
-    const noteName = midiToNoteName(midiNote);
+      // Frequency
+      const freq = thereminMode.pitchToFrequency(output.pitch);
+      ctx.fillStyle = output.handActive ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.2)';
+      ctx.font = '10px monospace';
+      ctx.fillText(`${freq.toFixed(0)} Hz`, centerX, baseY + 42);
 
-    ctx.fillStyle = output.handActive ? '#ffffff' : 'rgba(255, 255, 255, 0.3)';
-    ctx.font = 'bold 32px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText(noteName, width / 2 - 20, height / 2 + 35);
+      // Volume bar
+      const volBarW = 50;
+      const volBarH = 8;
+      const volBarX = centerX - volBarW / 2;
+      const volBarY = baseY + 50;
 
-    // Draw frequency
-    const freq = thereminMode.pitchToFrequency(output.pitch);
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-    ctx.font = '12px monospace';
-    ctx.fillText(`${freq.toFixed(1)} Hz`, width / 2 - 20, height / 2 + 55);
+      ctx.fillStyle = 'rgba(100,100,100,0.3)';
+      ctx.fillRect(volBarX, volBarY, volBarW, volBarH);
+      ctx.fillStyle = output.handActive ? '#44ff88' : 'rgba(68,255,136,0.2)';
+      ctx.fillRect(volBarX, volBarY, output.volume * volBarW, volBarH);
 
-    // Draw hand openness indicator (small bar below volume)
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-    ctx.font = '8px sans-serif';
-    ctx.fillText('OPEN', volBarX + volBarWidth / 2, volBarY + volBarHeight + 12);
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      ctx.font = '8px sans-serif';
+      ctx.fillText('vol', centerX, volBarY + volBarH + 10);
 
-    const opennessBarY = volBarY + volBarHeight + 16;
-    ctx.fillStyle = 'rgba(100, 100, 100, 0.3)';
-    ctx.fillRect(volBarX, opennessBarY, volBarWidth, 8);
-    ctx.fillStyle = '#ffaa44';
-    ctx.fillRect(volBarX, opennessBarY, output.openness * volBarWidth, 8);
+      // Status dot
+      const statusY = volBarY + volBarH + 22;
+      if (output.handActive) {
+        ctx.fillStyle = '#44ff88';
+        ctx.fillText('● tracking', centerX, statusY);
+      } else {
+        ctx.fillStyle = '#ff6666';
+        ctx.fillText('○ no hand', centerX, statusY);
+      }
+    };
 
-    // Draw hand status
-    ctx.textAlign = 'left';
-    ctx.font = '11px sans-serif';
-    if (output.handActive) {
-      ctx.fillStyle = '#44ff88';
-      ctx.fillText(`● ${output.handedness || 'Hand'} detected`, 20, height - 10);
-    } else {
-      ctx.fillStyle = '#ff6666';
-      ctx.fillText('○ No hand detected', 20, height - 10);
-    }
-  }, [output]);
+    drawHandInfo(left, 'L HAND', leftColor, halfW / 2, infoY);
+    drawHandInfo(right, 'R HAND', rightColor, halfW + halfW / 2, infoY);
+
+    // Divider
+    ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(halfW, infoY - 6);
+    ctx.lineTo(halfW, height - 5);
+    ctx.stroke();
+
+  }, [dualOutput]);
 
   if (!isActive) {
     return null;
@@ -181,8 +193,8 @@ function ThereminDisplay({ isActive }: ThereminDisplayProps) {
     <div className="theremin-display">
       <canvas
         ref={canvasRef}
-        width={220}
-        height={160}
+        width={260}
+        height={180}
         className="theremin-canvas"
       />
 
