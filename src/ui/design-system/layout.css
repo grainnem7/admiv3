@@ -11,8 +11,9 @@
 
 .app-shell {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
   background-color: var(--color-bg);
+  overflow: hidden;
 }
 
 .app-shell--with-sidebar {
@@ -204,6 +205,8 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 /* Top toolbar */
@@ -303,6 +306,7 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
   background-color: var(--color-bg-deep);
 }
 
@@ -323,23 +327,16 @@
 
 .main-view__content {
   flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-4);
   position: relative;
+  min-height: 0;
 }
 
 /* Video container */
 .video-container {
-  position: relative;
-  width: 100%;
-  max-width: 960px;
-  aspect-ratio: 4 / 3;
+  position: absolute;
+  inset: 0;
   background-color: var(--color-surface-muted);
-  border-radius: var(--radius-lg);
   overflow: hidden;
-  box-shadow: var(--shadow-lg);
 }
 
 .video-container video {
@@ -623,7 +620,7 @@
   }
 
   .video-container {
-    border-radius: var(--radius-md);
+    border-radius: 0;
   }
 
   .welcome-screen {

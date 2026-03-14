@@ -47,6 +47,8 @@ export interface ArpeggiatorConfig {
   enabled: boolean;
   /** BPM */
   bpm: number;
+  /** Swing amount (0-1, offsets every other note timing) */
+  swingAmount: number;
 }
 
 export interface ArpNote {
@@ -71,6 +73,7 @@ const DEFAULT_CONFIG: ArpeggiatorConfig = {
   baseVelocity: 0.7,
   enabled: false,
   bpm: 120,
+  swingAmount: 0,
 };
 
 export class Arpeggiator {
@@ -82,6 +85,7 @@ export class Arpeggiator {
   private isPlaying: boolean = false;
   private noteCallback: ArpNoteCallback | null = null;
   private intervalId: ReturnType<typeof setInterval> | null = null;
+  private stepCount: number = 0; // Tracks even/odd steps for swing
 
   constructor(config: Partial<ArpeggiatorConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -154,22 +158,20 @@ export class Arpeggiator {
     this.isPlaying = true;
     this.currentIndex = 0;
     this.direction = 1;
+    this.stepCount = 0;
 
     // Clear any existing interval
     if (this.intervalId) {
       clearInterval(this.intervalId);
     }
 
-    // Start interval-based playback
-    const intervalMs = this.getRateMs();
-    this.intervalId = setInterval(() => {
-      this.playCurrentNote();
-      this.advanceIndex();
-    }, intervalMs);
+    // Schedule playback with swing support
+    this.scheduleNextStep();
 
     // Play first note immediately
     this.playCurrentNote();
     this.advanceIndex();
+    this.stepCount++;
   }
 
   /**
@@ -248,6 +250,36 @@ export class Arpeggiator {
    */
   setGateLength(length: number): void {
     this.config.gateLength = Math.max(0.1, Math.min(1.0, length));
+  }
+
+  /**
+   * Set swing amount (0 = straight, 1 = heavy swing).
+   * Offsets every other note by swing * halfBeatDuration.
+   */
+  setSwing(amount: number): void {
+    this.config.swingAmount = Math.max(0, Math.min(1, amount));
+  }
+
+  /**
+   * Schedule the next step with swing timing.
+   * Uses setTimeout recursion to allow per-step timing variation.
+   */
+  private scheduleNextStep(): void {
+    if (!this.isPlaying) return;
+
+    const baseMs = this.getRateMs();
+    // Swing offsets even-numbered steps forward, odd steps backward
+    const swingOffset = this.config.swingAmount * baseMs * 0.33; // max 33% swing
+    const isOddStep = this.stepCount % 2 === 1;
+    const delayMs = isOddStep ? baseMs + swingOffset : baseMs - swingOffset * 0.5;
+
+    this.intervalId = setTimeout(() => {
+      if (!this.isPlaying) return;
+      this.playCurrentNote();
+      this.advanceIndex();
+      this.stepCount++;
+      this.scheduleNextStep();
+    }, Math.max(20, delayMs)) as unknown as ReturnType<typeof setInterval>;
   }
 
   /**

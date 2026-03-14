@@ -3,7 +3,8 @@
  *
  * Shows real-time visualization of theremin control:
  * - X position (horizontal) for pitch
- * - Hand openness for volume
+ * - Y position (hand height) for volume
+ * - Hand openness for filter expression
  * - Note name display
  * - Hand tracking point visualization
  */
@@ -112,7 +113,7 @@ function ThereminDisplay({ isActive }: ThereminDisplayProps) {
       ctx.fill();
     }
 
-    // Draw volume indicator (vertical bar - openness)
+    // Draw volume indicator (vertical bar - hand height)
     const volBarWidth = 24;
     const volBarHeight = 60;
     const volBarX = width - 40;

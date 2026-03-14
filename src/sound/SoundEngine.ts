@@ -11,6 +11,7 @@
  */
 
 import * as Tone from 'tone';
+import type { MusicSettings } from '../state/types';
 
 // ============================================
 // Types
@@ -125,6 +126,15 @@ export class SoundEngine {
   private reverb: Tone.Reverb | null = null;
   private masterGain: Tone.Gain | null = null;
 
+  // Vibrato effect (inserted between synths and filter)
+  private vibratoEffect: Tone.Vibrato | null = null;
+
+  // Dynamics velocity clamping
+  private dynamicsRange: [number, number] = [0, 1];
+
+  // Portamento time in seconds
+  private portamentoTime = 0;
+
   // State
   private isMuted = false;
 
@@ -205,7 +215,7 @@ export class SoundEngine {
       this.delay.connect(this.chorus ?? this.reverb ?? this.masterGain!);
     }
 
-    // Create filter (start of chain, synths connect here)
+    // Create filter (synths → vibrato → filter → delay → ...)
     this.filter = new Tone.Filter({
       type: 'lowpass',
       frequency: 4000,
@@ -213,6 +223,14 @@ export class SoundEngine {
       rolloff: -12,
     });
     this.filter.connect(this.delay ?? this.chorus ?? this.reverb ?? this.masterGain!);
+
+    // Create vibrato effect (between synths and filter, starts at 0 depth)
+    this.vibratoEffect = new Tone.Vibrato({
+      frequency: 5,
+      depth: 0,
+      wet: 1,
+    });
+    this.vibratoEffect.connect(this.filter);
   }
 
   /**
@@ -231,7 +249,8 @@ export class SoundEngine {
       });
       synth.maxPolyphony = 16;
       synth.volume.value = config.volume;
-      synth.connect(this.filter!);
+      // Connect to vibrato (if available) or filter directly
+      synth.connect(this.vibratoEffect ?? this.filter!);
       return synth;
     };
 
@@ -241,25 +260,25 @@ export class SoundEngine {
 
     // Create theremin synth (MonoSynth with portamento for smooth glides)
     this.thereminSynth = new Tone.MonoSynth({
-      oscillator: { type: 'sine' },
+      oscillator: { type: 'sawtooth' },
       envelope: {
-        attack: 0.05,
+        attack: 0.02,
         decay: 0.1,
-        sustain: 0.9,
-        release: 0.3,
+        sustain: 1.0,
+        release: 0.2,
       },
       filterEnvelope: {
-        attack: 0.06,
+        attack: 0.02,
         decay: 0.2,
-        sustain: 0.5,
-        release: 0.3,
-        baseFrequency: 200,
-        octaves: 4,
+        sustain: 0.6,
+        release: 0.2,
+        baseFrequency: 300,
+        octaves: 5,
       },
     });
-    this.thereminSynth.portamento = 0.05; // 50ms glide between notes
-    this.thereminSynth.volume.value = -8;
-    this.thereminSynth.connect(this.filter!);
+    this.thereminSynth.portamento = 0.03; // 30ms glide between notes
+    this.thereminSynth.volume.value = 0;
+    this.thereminSynth.connect(this.vibratoEffect ?? this.filter!);
 
     // DEBUG: Confirm synths created
     console.log('[SoundEngine] Synths created:', {
@@ -302,12 +321,13 @@ export class SoundEngine {
     if (!synth) return;
 
     const { velocity = 0.7, duration = '8n' } = options;
+    const clampedVelocity = this.clampVelocity(velocity);
 
     try {
-      synth.triggerAttackRelease(note, duration, undefined, velocity);
+      synth.triggerAttackRelease(note, duration, undefined, clampedVelocity);
 
       if (this.config.debug) {
-        console.log(`[SoundEngine] ${voice}: ${note} (vel: ${velocity.toFixed(2)}, dur: ${duration})`);
+        console.log(`[SoundEngine] ${voice}: ${note} (vel: ${clampedVelocity.toFixed(2)}, dur: ${duration})`);
       }
     } catch (error) {
       console.error('[SoundEngine] Error playing note:', error);
@@ -328,9 +348,10 @@ export class SoundEngine {
     if (!synth) return;
 
     const { velocity = 0.5, duration = '2n' } = options;
+    const clampedVelocity = this.clampVelocity(velocity);
 
     try {
-      synth.triggerAttackRelease(notes, duration, undefined, velocity);
+      synth.triggerAttackRelease(notes, duration, undefined, clampedVelocity);
 
       if (this.config.debug) {
         console.log(`[SoundEngine] ${voice} chord: [${notes.join(', ')}]`);
@@ -358,9 +379,11 @@ export class SoundEngine {
       return;
     }
 
+    const clampedVelocity = this.clampVelocity(velocity);
+
     try {
       console.log(`[SoundEngine] Triggering attack: ${note} on ${voice}`);
-      synth.triggerAttack(note, undefined, velocity);
+      synth.triggerAttack(note, undefined, clampedVelocity);
     } catch (error) {
       console.error('[SoundEngine] Error in noteOn:', error);
     }
@@ -425,8 +448,8 @@ export class SoundEngine {
     if (!this.isInitialized || !this.thereminSynth) return;
 
     try {
-      // Map 0-1 to dB range (-40 to -8)
-      const dbValue = -40 + volume * 32;
+      // Map 0-1 to dB range (-24 to 0)
+      const dbValue = -24 + volume * 24;
       this.thereminSynth.volume.rampTo(dbValue, 0.05);
     } catch (error) {
       console.error('[SoundEngine] Error in thereminSetVolume:', error);
@@ -652,6 +675,158 @@ export class SoundEngine {
     return this.reverb;
   }
 
+  // ============================================
+  // Music Settings Methods
+  // ============================================
+
+  /**
+   * Set the oscillator type for a specific voice at runtime.
+   */
+  setVoiceSynthType(voice: VoiceType, type: OscillatorType): void {
+    if (!this.isInitialized) return;
+    const synth = this.getSynth(voice);
+    if (!synth) return;
+
+    try {
+      synth.set({ oscillator: { type } });
+    } catch (error) {
+      console.error(`[SoundEngine] Error setting ${voice} synth type:`, error);
+    }
+  }
+
+  /**
+   * Set ADSR envelope for a specific voice.
+   */
+  setVoiceEnvelope(voice: VoiceType, envelope: {
+    attack?: number;
+    decay?: number;
+    sustain?: number;
+    release?: number;
+  }): void {
+    if (!this.isInitialized) return;
+    const synth = this.getSynth(voice);
+    if (!synth) return;
+
+    try {
+      synth.set({ envelope });
+    } catch (error) {
+      console.error(`[SoundEngine] Error setting ${voice} envelope:`, error);
+    }
+  }
+
+  /**
+   * Set vibrato depth and rate. Applies to all voices via the shared vibrato effect node.
+   * @param depth 0-1 (0 = off)
+   * @param rateHz 1-10 Hz
+   */
+  setVibrato(depth: number, rateHz: number): void {
+    if (!this.vibratoEffect) return;
+
+    try {
+      this.vibratoEffect.depth.value = Math.max(0, Math.min(1, depth));
+      this.vibratoEffect.frequency.value = Math.max(0.1, Math.min(20, rateHz));
+    } catch (error) {
+      console.error('[SoundEngine] Error setting vibrato:', error);
+    }
+  }
+
+  /**
+   * Set portamento (glide) time in seconds.
+   * Only applies to theremin synth (MonoSynth).
+   */
+  setPortamento(time: number): void {
+    this.portamentoTime = Math.max(0, Math.min(0.5, time));
+    if (this.thereminSynth) {
+      this.thereminSynth.portamento = this.portamentoTime;
+    }
+  }
+
+  /**
+   * Get current portamento time.
+   */
+  getPortamento(): number {
+    return this.portamentoTime;
+  }
+
+  /**
+   * Set filter type (lowpass, highpass, bandpass).
+   */
+  setFilterType(type: 'lowpass' | 'highpass' | 'bandpass'): void {
+    if (!this.filter) return;
+    this.filter.type = type;
+  }
+
+  /**
+   * Set chorus wet/dry mix (harmonic richness control).
+   */
+  setChorusWet(value: number): void {
+    if (!this.chorus) return;
+    if (!Number.isFinite(value)) value = 0.3;
+    value = Math.max(0, Math.min(1, value));
+    this.chorus.wet.rampTo(value, 0.1);
+  }
+
+  /**
+   * Set dynamics (velocity) range.
+   */
+  setDynamicsRange(min: number, max: number): void {
+    this.dynamicsRange = [Math.max(0, min), Math.min(1, max)];
+  }
+
+  /**
+   * Clamp velocity to the configured dynamics range.
+   */
+  private clampVelocity(velocity: number): number {
+    const [min, max] = this.dynamicsRange;
+    return Math.max(min, Math.min(max, velocity));
+  }
+
+  /**
+   * Apply a complete MusicSettings object to the engine.
+   * Called when music settings change in the Zustand store.
+   */
+  applyMusicSettings(settings: MusicSettings): void {
+    if (!this.isInitialized) return;
+
+    // Per-voice synth types
+    this.setVoiceSynthType('melody', settings.melodicSynthType);
+    this.setVoiceSynthType('bass', settings.bassSynthType);
+    this.setVoiceSynthType('chord', settings.chordSynthType);
+
+    // ADSR envelope (denormalize from 0-1 to real values)
+    const attackSeconds = 0.001 + settings.attackTime * 0.499; // 0.001-0.5s
+    const releaseSeconds = 0.1 + settings.releaseTime * 1.9; // 0.1-2s
+    for (const voice of ['melody', 'bass', 'chord'] as VoiceType[]) {
+      this.setVoiceEnvelope(voice, {
+        attack: attackSeconds,
+        release: releaseSeconds,
+      });
+    }
+
+    // Vibrato (denormalize rate from 0-1 to 1-10 Hz)
+    const vibratoRateHz = 1 + settings.vibratoRate * 9;
+    this.setVibrato(settings.vibratoDepth, vibratoRateHz);
+
+    // Portamento (denormalize from 0-1 to 0-0.5s)
+    this.setPortamento(settings.portamento * 0.5);
+
+    // Dynamics range
+    this.setDynamicsRange(settings.dynamicsRange[0], settings.dynamicsRange[1]);
+
+    // Filter
+    this.setFilterType(settings.filterType);
+    this.setFilterFrequency(settings.filterFrequency);
+
+    // Effects
+    this.setReverbWet(settings.reverbAmount);
+    this.setDelayWet(settings.delayAmount);
+    this.setChorusWet(settings.harmonicRichness);
+
+    if (this.config.debug) {
+      console.log('[SoundEngine] Applied music settings');
+    }
+  }
+
   /**
    * Clean up all resources.
    */
@@ -661,6 +836,7 @@ export class SoundEngine {
     this.melodySynth?.dispose();
     this.bassSynth?.dispose();
     this.chordSynth?.dispose();
+    this.vibratoEffect?.dispose();
     this.filter?.dispose();
     this.delay?.dispose();
     this.chorus?.dispose();
@@ -670,11 +846,14 @@ export class SoundEngine {
     this.melodySynth = null;
     this.bassSynth = null;
     this.chordSynth = null;
+    this.vibratoEffect = null;
     this.filter = null;
     this.delay = null;
     this.chorus = null;
     this.reverb = null;
     this.masterGain = null;
+    this.dynamicsRange = [0, 1];
+    this.portamentoTime = 0;
 
     this.isInitialized = false;
 

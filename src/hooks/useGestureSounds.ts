@@ -12,6 +12,7 @@ import { getInstrumentSampler } from '../sound/InstrumentSampler';
 import { GESTURE_THRESHOLDS, FACE_BLENDSHAPES } from '../utils/constants';
 import { MIDIOutput } from '../midi';
 import { getSequencer } from '../music/Sequencer';
+import { useAppStore } from '../state/store';
 
 /**
  * Get base MIDI note for an instrument type
@@ -46,6 +47,7 @@ interface UseGestureSoundsReturn {
 
 export function useGestureSounds(): UseGestureSoundsReturn {
   const gestureStates = useRef<Map<GestureType, GestureState>>(new Map());
+  const confidenceThreshold = useAppStore((s) => s.musicSettings.confidenceThreshold);
 
   // Get or create gesture state
   const getState = useCallback((gestureType: GestureType): GestureState => {
@@ -63,6 +65,9 @@ export function useGestureSounds(): UseGestureSoundsReturn {
     const handData = hand === 'left' ? frame.leftHand : frame.rightHand;
     if (!handData) return false;
 
+    // Check confidence against music settings threshold
+    if (handData.confidence < confidenceThreshold) return false;
+
     const thumbTip = handData.landmarks[4]; // Thumb tip
     const indexTip = handData.landmarks[8]; // Index tip
 
@@ -74,7 +79,7 @@ export function useGestureSounds(): UseGestureSoundsReturn {
     const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
     return distance < GESTURE_THRESHOLDS.PINCH_DISTANCE;
-  }, []);
+  }, [confidenceThreshold]);
 
   // Detect blink (both eyes)
   const detectBlink = useCallback((frame: TrackingFrame): boolean => {

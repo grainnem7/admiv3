@@ -20,11 +20,15 @@ import { SCALES, NOTE_NAMES, type ScaleType, type NoteName, midiToNote } from '.
 import { getSoundEngine } from '../../sound/SoundEngine';
 import { getMusicController } from '../../core/MusicController';
 import { MIDIOutput } from '../../midi';
+import { useAppStore } from '../../state/store';
+import type { MusicScaleType } from '../../state/types';
 
 export const MusicalModulesPanel: React.FC = () => {
-  // Scale/Quantizer state
-  const [rootNote, setRootNote] = useState<NoteName>('C');
-  const [scaleType, setScaleType] = useState<ScaleType>('pentatonic');
+  // Scale/Quantizer state - synced with music settings store
+  const musicSettings = useAppStore((s) => s.musicSettings);
+  const setMusicSettings = useAppStore((s) => s.setMusicSettings);
+  const rootNote = musicSettings.rootNote as NoteName;
+  const scaleType = musicSettings.scale as ScaleType;
   const [quantizeEnabled, setQuantizeEnabled] = useState(true);
 
   // Arpeggiator state
@@ -116,16 +120,21 @@ export const MusicalModulesPanel: React.FC = () => {
     };
   }, []);
 
-  // Handle scale change - update MusicController
+  // Sync swing amount from music settings to arpeggiator
+  useEffect(() => {
+    arpeggiatorRef.current.setSwing(musicSettings.swingAmount);
+  }, [musicSettings.swingAmount]);
+
+  // Handle scale change - update MusicController and store
   const handleRootChange = useCallback((root: NoteName) => {
-    setRootNote(root);
+    setMusicSettings({ rootNote: root });
     musicControllerRef.current.setScale(root, scaleType);
-  }, [scaleType]);
+  }, [scaleType, setMusicSettings]);
 
   const handleScaleTypeChange = useCallback((scale: ScaleType) => {
-    setScaleType(scale);
+    setMusicSettings({ scale: scale as MusicScaleType });
     musicControllerRef.current.setScale(rootNote, scale);
-  }, [rootNote]);
+  }, [rootNote, setMusicSettings]);
 
   // Handle arpeggiator changes
   const handleArpToggle = useCallback(() => {

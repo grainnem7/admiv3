@@ -3,6 +3,12 @@
  *
  * Detects when specific body parts enter an instrument zone based on trigger configuration.
  * Supports body part filtering and finger-specific detection for hands.
+ *
+ * Reliability features:
+ * - Enter/exit state machine: triggers only on ENTRY, not while staying inside
+ * - Exit hysteresis: requires multiple frames outside before counting as "exited"
+ * - Enlarged hitbox: collision radius is 1.3x the visual zone for tracking noise tolerance
+ * - Swept collision: checks along the path between previous and current positions
  */
 
 import { useCallback, useRef } from 'react';
@@ -16,6 +22,23 @@ interface CollisionResult {
   /** Zones that were just triggered this frame */
   triggeredZones: InstrumentZone[];
 }
+
+/** Per-zone collision state for enter/exit tracking */
+interface ZoneState {
+  /** Whether body is currently considered "inside" the zone */
+  inside: boolean;
+  /** Number of consecutive frames the body has been outside while state is "inside" */
+  framesOutside: number;
+}
+
+// How many consecutive "outside" frames before we consider the body truly exited
+const EXIT_HYSTERESIS_FRAMES = 4;
+
+// Hitbox multiplier — collision radius is this * visual radius for tracking noise tolerance
+const HITBOX_MULTIPLIER = 1.4;
+
+// Number of interpolation steps for swept collision detection
+const SWEEP_STEPS = 3;
 
 // Hand landmark indices (MediaPipe hand model)
 const HAND_LANDMARKS = {
@@ -141,7 +164,6 @@ function getHandPositions(
     }
   }
 
-  // Also add pose hand points for more coverage
   return positions;
 }
 
@@ -313,21 +335,60 @@ function getPositionsForTrigger(
   }
 }
 
-// Check if any point is inside a circular zone
+// Check if any point is inside a circular zone (with enlarged hitbox)
 function isAnyPointInZone(
   points: Array<{ x: number; y: number }>,
   zone: InstrumentZone
 ): boolean {
-  const radius = zone.size / 2;
+  const radius = (zone.size / 2) * HITBOX_MULTIPLIER;
+  const radiusSq = radius * radius;
 
   for (const point of points) {
     const dx = point.x - zone.x;
     const dy = point.y - zone.y;
-    const distance = Math.sqrt(dx * dx + dy * dy);
-    if (distance < radius) {
+    // Use squared distance to avoid sqrt (faster)
+    if (dx * dx + dy * dy < radiusSq) {
       return true;
     }
   }
+  return false;
+}
+
+// Check if any point (or interpolated path from previous position) hits a zone
+function isAnyPointOrPathInZone(
+  currentPoints: Array<{ x: number; y: number }>,
+  previousPoints: Array<{ x: number; y: number }> | null,
+  zone: InstrumentZone
+): boolean {
+  // First check current positions
+  if (isAnyPointInZone(currentPoints, zone)) return true;
+
+  // If we have previous positions, check interpolated points along the path
+  // This prevents fast movements from "tunneling" through zones
+  if (previousPoints && previousPoints.length > 0) {
+    const radius = (zone.size / 2) * HITBOX_MULTIPLIER;
+    const radiusSq = radius * radius;
+    const numPrev = Math.min(previousPoints.length, currentPoints.length);
+
+    for (let i = 0; i < numPrev; i++) {
+      const prev = previousPoints[i];
+      const curr = currentPoints[i];
+      if (!prev || !curr) continue;
+
+      // Check intermediate points along the path
+      for (let step = 1; step <= SWEEP_STEPS; step++) {
+        const t = step / (SWEEP_STEPS + 1);
+        const interpX = prev.x + (curr.x - prev.x) * t;
+        const interpY = prev.y + (curr.y - prev.y) * t;
+        const dx = interpX - zone.x;
+        const dy = interpY - zone.y;
+        if (dx * dx + dy * dy < radiusSq) {
+          return true;
+        }
+      }
+    }
+  }
+
   return false;
 }
 
@@ -335,50 +396,82 @@ function isAnyPointInZone(
 let debugCounter = 0;
 
 export function useZoneCollision() {
-  // Track last trigger times for cooldown
-  const lastTriggerTimes = useRef<Map<string, number>>(new Map());
+  // Per-zone enter/exit state for hysteresis
+  const zoneStates = useRef<Map<string, ZoneState>>(new Map());
+  // Previous frame positions per zone (for swept collision)
+  const prevPositions = useRef<Map<string, Array<{ x: number; y: number }>>>(new Map());
 
   const checkCollisions = useCallback(
     (frame: TrackingFrame | null, zones: InstrumentZone[]): CollisionResult => {
       const activeZoneIds = new Set<string>();
       const triggeredZones: InstrumentZone[] = [];
 
-      // Debug: log when no frame or zones
       debugCounter++;
-      if (debugCounter % 120 === 0) {
-        console.log(`[ZoneCollision] frame=${!!frame}, zones=${zones.length}`);
-      }
 
       if (!frame || zones.length === 0) {
         return { activeZoneIds, triggeredZones };
       }
 
-      const now = Date.now();
+      // Clean up states for removed zones
+      const zoneIdSet = new Set(zones.map(z => z.id));
+      for (const id of zoneStates.current.keys()) {
+        if (!zoneIdSet.has(id)) {
+          zoneStates.current.delete(id);
+          prevPositions.current.delete(id);
+        }
+      }
 
-      // Check each zone with its specific trigger config
       for (const zone of zones) {
-        // Get trigger config (use default if not present for backwards compatibility)
         const triggerConfig = zone.triggerConfig || DEFAULT_TRIGGER_CONFIG;
-
-        // Get body positions for this zone's trigger config
         const bodyPositions = getPositionsForTrigger(frame, triggerConfig);
 
-        // Debug logging every 60 frames (~1 per second)
-        if (debugCounter % 60 === 0 && zones.indexOf(zone) === 0) {
-          console.log(`[ZoneCollision] Zone "${zone.type}" (${triggerConfig.bodyPart}): ${bodyPositions.length} positions`);
+        // Debug logging every 120 frames (~2 per second at 60fps)
+        if (debugCounter % 120 === 0 && zones.indexOf(zone) === 0) {
+          const state = zoneStates.current.get(zone.id);
+          console.log(`[ZoneCollision] Zone "${zone.type}" (${triggerConfig.bodyPart}): ${bodyPositions.length} pts, inside=${state?.inside ?? false}`);
         }
 
-        const isInZone = isAnyPointInZone(bodyPositions, zone);
+        // Get previous positions for swept collision
+        const prevPos = prevPositions.current.get(zone.id) || null;
 
-        if (isInZone) {
-          console.log(`[ZoneCollision] HIT! Zone "${zone.type}" at (${zone.x.toFixed(3)}, ${zone.y.toFixed(3)}) by ${triggerConfig.bodyPart}`);
-          activeZoneIds.add(zone.id);
+        // Check collision with enlarged hitbox + swept path
+        const rawHit = isAnyPointOrPathInZone(bodyPositions, prevPos, zone);
 
-          // Check cooldown
-          const lastTrigger = lastTriggerTimes.current.get(zone.id) || 0;
-          if (now - lastTrigger > zone.cooldownMs) {
+        // Store current positions for next frame's sweep check
+        prevPositions.current.set(zone.id, bodyPositions);
+
+        // Get or create zone state
+        let state = zoneStates.current.get(zone.id);
+        if (!state) {
+          state = { inside: false, framesOutside: 0 };
+          zoneStates.current.set(zone.id, state);
+        }
+
+        if (rawHit) {
+          // Body is in (or passing through) the zone
+          state.framesOutside = 0;
+
+          if (!state.inside) {
+            // ENTRY: transition from outside → inside → trigger!
+            state.inside = true;
             triggeredZones.push(zone);
-            lastTriggerTimes.current.set(zone.id, now);
+            console.log(`[ZoneCollision] ENTER! Zone "${zone.type}" triggered by ${triggerConfig.bodyPart}`);
+          }
+
+          activeZoneIds.add(zone.id);
+        } else {
+          // Body is not in the zone this frame
+          if (state.inside) {
+            state.framesOutside++;
+
+            if (state.framesOutside >= EXIT_HYSTERESIS_FRAMES) {
+              // Confirmed exit after sustained absence
+              state.inside = false;
+              state.framesOutside = 0;
+            } else {
+              // Still within grace period — keep zone "active" visually
+              activeZoneIds.add(zone.id);
+            }
           }
         }
       }

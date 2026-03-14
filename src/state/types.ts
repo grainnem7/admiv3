@@ -265,6 +265,97 @@ export interface SoundPreset {
 }
 
 // ============================================
+// Music Settings Types
+// ============================================
+
+/** Synth oscillator type for per-voice selection */
+export type SynthType = 'sine' | 'triangle' | 'square' | 'sawtooth';
+
+/** Filter type selection */
+export type FilterType = 'lowpass' | 'highpass' | 'bandpass';
+
+/** Musical role for a body part */
+export type BodyPartMusicalRole = 'melodic' | 'bass' | 'chord' | 'disabled';
+
+/** Scale type (mirrors MusicTheory.ts to avoid circular imports) */
+export type MusicScaleType =
+  | 'major'
+  | 'minor'
+  | 'pentatonic'
+  | 'pentatonicMinor'
+  | 'blues'
+  | 'dorian'
+  | 'mixolydian'
+  | 'wholeTone';
+
+/** Per-body-part musical configuration */
+export interface BodyPartMusicConfig {
+  role: BodyPartMusicalRole;
+  octaveRange: [number, number]; // e.g. [3, 5]
+  sensitivity: number; // 0-2 multiplier
+}
+
+/** Complete music settings interface */
+export interface MusicSettings {
+  // Sensitivity controls
+  movementThreshold: number; // 0.01 - 0.1
+  confidenceThreshold: number; // 0.1 - 0.6
+  noteInterval: number; // 100 - 500 ms
+
+  // Musical options
+  scale: MusicScaleType;
+  rootNote: string; // e.g. 'C', 'C#', 'D', ...
+  chordProgression: string; // progression ID
+  tempoRange: [number, number]; // [minBPM, maxBPM]
+
+  // Per-voice synth types
+  melodicSynthType: SynthType;
+  bassSynthType: SynthType;
+  chordSynthType: SynthType;
+
+  // Envelope (normalized 0-1)
+  attackTime: number; // 0-1 → maps to 0.001-0.5s
+  releaseTime: number; // 0-1 → maps to 0.1-2s
+
+  // Expression
+  vibratoDepth: number; // 0-1
+  vibratoRate: number; // 0-1 → maps to 1-10 Hz
+  portamento: number; // 0-1 → maps to 0-0.5s
+
+  // Dynamics
+  dynamicsRange: [number, number]; // [minVelocity, maxVelocity]
+
+  // Rhythm / Feel
+  swingAmount: number; // 0-1
+
+  // Harmony
+  harmonicRichness: number; // 0-1 (chorus wet amount)
+
+  // Body part configs
+  bodyPartConfigs: Record<string, BodyPartMusicConfig>;
+
+  // Effects
+  reverbAmount: number; // 0-1
+  delayAmount: number; // 0-1
+  filterFrequency: number; // 0-1 normalized
+  filterType: FilterType;
+
+  // Visual feedback
+  showActiveIndicators: boolean;
+  showMovementIntensity: boolean;
+  showCurrentChord: boolean;
+}
+
+/** Music settings preset */
+export interface MusicSettingsPreset {
+  id: string;
+  name: string;
+  description: string;
+  isBuiltIn: boolean;
+  settings: Partial<MusicSettings>;
+}
+
+// ============================================
 // Mapping Types
 // ============================================
 
@@ -410,6 +501,11 @@ export interface AppState {
   /** When true, internal Tone.js sounds are disabled (MIDI-only mode) */
   internalSoundsMuted: boolean;
 
+  // Music Settings state
+  musicSettings: MusicSettings;
+  activeMusicPresetId: string | null;
+  availableMusicPresets: MusicSettingsPreset[];
+
   // UI state
   currentScreen: Screen;
   showDebugPanel: boolean;
@@ -466,6 +562,13 @@ export interface AppActions {
   clearActiveNotes: () => void;
   /** Mute internal sounds (for MIDI-only mode) */
   setInternalSoundsMuted: (muted: boolean) => void;
+
+  // Music Settings actions
+  setMusicSettings: (settings: Partial<MusicSettings>) => void;
+  resetMusicSettings: () => void;
+  loadMusicPreset: (id: string) => void;
+  saveMusicPreset: (preset: MusicSettingsPreset) => void;
+  deleteMusicPreset: (id: string) => void;
 
   // UI actions
   setCurrentScreen: (screen: Screen) => void;

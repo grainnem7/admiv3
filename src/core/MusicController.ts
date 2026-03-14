@@ -27,7 +27,7 @@ import {
   type ChordInfo,
 } from '../sound/ChordProgressions';
 import { MappingEngine, getMappingEngine } from '../mapping/MappingEngine';
-import type { ProcessedFrame, MappingResult, TrackingFrame } from '../state/types';
+import type { ProcessedFrame, MappingResult, TrackingFrame, BodyPartMusicConfig, MusicSettings } from '../state/types';
 // FeatureExtractor used internally by MappingEngine
 import { HandFeatureExtractor, type HandFeatures } from '../movement/HandFeatureExtractor';
 import {
@@ -132,6 +132,9 @@ export class MusicController {
 
   // Hand feature state
   private lastHandFeatures: { left: HandFeatures; right: HandFeatures } | null = null;
+
+  // Body part musical role assignments
+  private bodyPartConfigs: Record<string, BodyPartMusicConfig> = {};
 
   // Running state
   private isRunning: boolean = false;
@@ -849,6 +852,42 @@ export class MusicController {
    */
   getInternalSoundsMuted(): boolean {
     return this.config.internalSoundsMuted;
+  }
+
+  /**
+   * Set body part musical role configurations.
+   */
+  setBodyPartConfigs(configs: Record<string, BodyPartMusicConfig>): void {
+    this.bodyPartConfigs = configs;
+  }
+
+  /**
+   * Get body part musical role configurations.
+   */
+  getBodyPartConfigs(): Record<string, BodyPartMusicConfig> {
+    return this.bodyPartConfigs;
+  }
+
+  /**
+   * Apply a complete MusicSettings object.
+   * Syncs scale, progression, sensitivity, and forwards to SoundEngine.
+   */
+  applyMusicSettings(settings: MusicSettings): void {
+    // Update scale (cast MusicScaleType to ScaleType)
+    this.setScale(settings.rootNote as NoteName, settings.scale as ScaleType);
+
+    // Update progression
+    this.setProgression(settings.chordProgression);
+
+    // Update controller config
+    this.config.melodyCooldownMs = settings.noteInterval;
+    this.config.positionThreshold = settings.movementThreshold;
+
+    // Update body part configs
+    this.bodyPartConfigs = settings.bodyPartConfigs;
+
+    // Forward to SoundEngine
+    this.soundEngine.applyMusicSettings(settings);
   }
 
   /**

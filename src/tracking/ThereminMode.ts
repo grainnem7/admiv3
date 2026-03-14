@@ -3,8 +3,8 @@
  *
  * Based on MusiKraken's hand tracking approach:
  * - Tracks the MCP joint of middle finger (base of middle finger)
- * - X position (horizontal) → Pitch control
- * - Y position (vertical) → Volume or secondary control
+ * - X position (horizontal) → Pitch control (C2-C7, 5 octaves)
+ * - Y position (vertical) → Volume control (hand height = loudness)
  * - Hand openness (finger spread) → Filter/expression control
  * - Works with just ONE hand - no need for both hands
  *
@@ -63,13 +63,13 @@ export interface ThereminConfig {
 }
 
 const DEFAULT_CONFIG: ThereminConfig = {
-  pitchMin: 48,  // C3
-  pitchMax: 84,  // C6
+  pitchMin: 36,  // C2
+  pitchMax: 96,  // C7 (5 octaves)
   xIsPitch: true,
-  volumeSource: 'openness',
-  volumeThreshold: 0.15,
-  smoothing: 0.3,
-  deadZone: 0.05,
+  volumeSource: 'y',
+  volumeThreshold: 0.05,
+  smoothing: 0.25,
+  deadZone: 0.03,
 };
 
 export class ThereminMode {

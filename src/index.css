@@ -892,7 +892,9 @@ button {
    VIDEO CONTAINER & OVERLAY
    ============================================ */
 
-.video-container {
+/* Legacy video-container styles scoped to non-performance screens */
+.calibration-screen .video-container,
+.welcome-screen .video-container {
   position: relative;
   width: 100%;
   max-width: 640px;
@@ -902,7 +904,8 @@ button {
   overflow: hidden;
 }
 
-.video-container video {
+.calibration-screen .video-container video,
+.welcome-screen .video-container video {
   width: 100%;
   height: 100%;
   object-fit: contain;

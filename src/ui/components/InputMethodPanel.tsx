@@ -336,8 +336,9 @@ function ThereminSettings() {
       <p style={{ fontSize: '0.8em', color: 'var(--color-text-secondary)', marginTop: 8 }}>
         <strong>MusiKraken-style control:</strong><br/>
         • Move hand left/right → Change pitch<br/>
-        • Spread fingers → Increase volume<br/>
-        • Close fist → Mute/decrease volume<br/>
+        • Raise hand up → Increase volume<br/>
+        • Lower hand down → Decrease volume<br/>
+        • Spread/close fingers → Filter expression<br/>
         • Only ONE hand needed!
       </p>
     </div>

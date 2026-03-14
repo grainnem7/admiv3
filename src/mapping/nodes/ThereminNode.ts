@@ -3,7 +3,8 @@
  *
  * Processes hand tracking into theremin control output using MusiKraken's approach:
  * - X position → Pitch
- * - Hand openness (finger spread) → Volume
+ * - Y position (hand height) → Volume
+ * - Hand openness → Filter/expression control
  * - Single hand operation (no need for both hands)
  */
 
@@ -14,7 +15,7 @@ import { createControlChangeEvent, type MusicalEvent } from '../events';
 export interface ThereminNodeConfig {
   /** Whether to emit CC messages for MIDI output (default: true) */
   emitCCs: boolean;
-  /** Minimum volume threshold to produce sound (default: 0.15) */
+  /** Minimum volume threshold to produce sound (default: 0.05) */
   volumeThreshold: number;
 }
 
@@ -41,7 +42,7 @@ export interface ThereminProcessResult {
 
 const DEFAULT_CONFIG: ThereminNodeConfig = {
   emitCCs: true,
-  volumeThreshold: 0.15,
+  volumeThreshold: 0.05,
 };
 
 export class ThereminNode {

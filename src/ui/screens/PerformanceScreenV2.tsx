@@ -36,6 +36,7 @@ import InputMethodPanel, { type InputMethod } from '../components/InputMethodPan
 import ThereminDisplay from '../components/ThereminDisplay';
 import TrackingStatusOverlay from '../components/TrackingStatusOverlay';
 import BodyPointsPanel from '../components/BodyPointsPanel';
+import MusicSettingsPanel from '../components/MusicSettingsPanel';
 
 // Design system
 import {
@@ -59,7 +60,7 @@ import { Panel } from '../design-system/Panel';
 import { StatusDot, Spinner, TrackingStatus } from '../design-system/StatusIndicators';
 
 // Sidebar sections
-type SidebarSection = 'input' | 'sound' | 'zones' | 'gestures' | 'effects' | 'midi' | 'modules' | 'points';
+type SidebarSection = 'input' | 'sound' | 'zones' | 'gestures' | 'effects' | 'midi' | 'modules' | 'points' | 'music';
 
 function PerformanceScreenV2() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -128,6 +129,15 @@ function PerformanceScreenV2() {
   const { checkGestures } = useGestureSounds();
   const isMuted = useIsMuted();
   const setCurrentScreen = useAppStore((s) => s.setCurrentScreen);
+  const setTrackingFrame = useAppStore((s) => s.setTrackingFrame);
+
+  // Sync music settings to SoundEngine and MusicController
+  const musicSettings = useAppStore((s) => s.musicSettings);
+  useEffect(() => {
+    if (musicControllerRef.current) {
+      musicControllerRef.current.applyMusicSettings(musicSettings);
+    }
+  }, [musicSettings]);
 
   // Initialize all systems
   useEffect(() => {
@@ -257,6 +267,7 @@ function PerformanceScreenV2() {
   const handleTrackingFrame = useCallback(
     (frame: TrackingFrame) => {
       setCurrentFrame(frame);
+      setTrackingFrame(frame);
 
       const isThereminMode = mappingEngineRef.current?.isThereminMode() ?? false;
 
@@ -330,7 +341,7 @@ function PerformanceScreenV2() {
         musicControllerRef.current.processProcessedFrame(processedFrame);
       }
     },
-    [isMuted, checkCollisions, checkGestures]
+    [isMuted, checkCollisions, checkGestures, setTrackingFrame]
   );
 
   // Sync mute state with music controller
@@ -399,6 +410,7 @@ function PerformanceScreenV2() {
     { id: 'gestures' as const, label: 'Gestures', icon: IconGesture },
     { id: 'effects' as const, label: 'Effects', icon: IconEffects },
     { id: 'modules' as const, label: 'Modules', icon: IconSequencer },
+    { id: 'music' as const, label: 'Music', icon: IconSettings },
     { id: 'midi' as const, label: 'MIDI', icon: IconMidi },
   ];
 
@@ -492,6 +504,13 @@ function PerformanceScreenV2() {
         return (
           <Panel title="Musical Modules" collapsible={false}>
             <MusicalModulesPanel />
+          </Panel>
+        );
+
+      case 'music':
+        return (
+          <Panel title="Music Settings" collapsible={false}>
+            <MusicSettingsPanel />
           </Panel>
         );
 

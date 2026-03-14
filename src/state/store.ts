@@ -11,6 +11,7 @@ import type {
   ActiveModalities,
   CalibrationPhase,
   InputProfile,
+  MusicSettingsPreset,
   Note,
   PoseLandmarks,
   ProcessedFrame,
@@ -19,7 +20,9 @@ import type {
   TrackingFrame,
   UserProfile,
 } from './types';
+import type { MusicSettings } from './types';
 import { AUDIO } from '../utils/constants';
+import { DEFAULT_MUSIC_SETTINGS } from './musicSettingsDefaults';
 
 const initialState: AppState = {
   // Tracking
@@ -60,6 +63,11 @@ const initialState: AppState = {
   currentSoundPreset: 'default',
   activeNotes: [],
   internalSoundsMuted: false, // When true, only MIDI output (no internal sounds)
+
+  // Music Settings
+  musicSettings: DEFAULT_MUSIC_SETTINGS,
+  activeMusicPresetId: null,
+  availableMusicPresets: [],
 
   // UI
   currentScreen: 'welcome',
@@ -209,6 +217,44 @@ export const useAppStore = create<AppState & AppActions>()(
 
       setInternalSoundsMuted: (muted: boolean) => set({ internalSoundsMuted: muted }),
 
+      // Music Settings actions
+      setMusicSettings: (settings: Partial<MusicSettings>) =>
+        set((state) => ({
+          musicSettings: { ...state.musicSettings, ...settings },
+          activeMusicPresetId: null, // Clear preset since user customized
+        })),
+
+      resetMusicSettings: () =>
+        set({ musicSettings: DEFAULT_MUSIC_SETTINGS, activeMusicPresetId: null }),
+
+      loadMusicPreset: (id: string) => {
+        const state = get();
+        // Check user-saved presets
+        const preset = state.availableMusicPresets.find((p) => p.id === id);
+        if (preset) {
+          set({
+            musicSettings: { ...DEFAULT_MUSIC_SETTINGS, ...preset.settings },
+            activeMusicPresetId: id,
+          });
+        }
+      },
+
+      saveMusicPreset: (preset: MusicSettingsPreset) =>
+        set((state) => {
+          const existing = state.availableMusicPresets.findIndex((p) => p.id === preset.id);
+          const presets =
+            existing >= 0
+              ? state.availableMusicPresets.map((p) => (p.id === preset.id ? preset : p))
+              : [...state.availableMusicPresets, preset];
+          return { availableMusicPresets: presets };
+        }),
+
+      deleteMusicPreset: (id: string) =>
+        set((state) => ({
+          availableMusicPresets: state.availableMusicPresets.filter((p) => p.id !== id),
+          activeMusicPresetId: state.activeMusicPresetId === id ? null : state.activeMusicPresetId,
+        })),
+
       // UI actions
       setCurrentScreen: (screen: Screen) => set({ currentScreen: screen }),
 
@@ -233,9 +279,13 @@ export const useAppStore = create<AppState & AppActions>()(
         sensitivityMultiplier: state.sensitivityMultiplier,
         masterVolume: state.masterVolume,
         currentSoundPreset: state.currentSoundPreset,
-        // New input profile persistence
+        // Input profile persistence
         availableInputProfiles: state.availableInputProfiles,
         activeModalities: state.activeModalities,
+        // Music settings persistence
+        musicSettings: state.musicSettings,
+        activeMusicPresetId: state.activeMusicPresetId,
+        availableMusicPresets: state.availableMusicPresets,
       }),
     }
   )
@@ -275,3 +325,8 @@ export const useProcessedFrame = () => useAppStore((s) => s.processedFrame);
 // Input profile selectors
 export const useActiveInputProfile = () => useAppStore((s) => s.activeInputProfile);
 export const useAvailableInputProfiles = () => useAppStore((s) => s.availableInputProfiles);
+
+// Music settings selectors
+export const useMusicSettings = () => useAppStore((s) => s.musicSettings);
+export const useActiveMusicPresetId = () => useAppStore((s) => s.activeMusicPresetId);
+export const useAvailableMusicPresets = () => useAppStore((s) => s.availableMusicPresets);
