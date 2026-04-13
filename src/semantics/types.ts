@@ -305,6 +305,7 @@ export interface MovementSemanticsFrame {
     leftHand: boolean;
     rightHand: boolean;
     face: boolean;
+    color: boolean;
   };
 
   /** Overall frame confidence */

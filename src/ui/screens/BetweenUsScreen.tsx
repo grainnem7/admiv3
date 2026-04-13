@@ -177,6 +177,7 @@ function BetweenUsScreen() {
         leftHand: null,
         rightHand: null,
         face: null,
+        color: null,
         timestamp: Date.now(),
       };
 

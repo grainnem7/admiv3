@@ -255,6 +255,7 @@ export class InputProfileManager {
         leftHand: false,
         rightHand: false,
         face: false,
+        color: false,
       },
       trackedFeatures: [],
       gestures: [],

@@ -16,7 +16,9 @@
       "Bash(tree:*)",
       "Bash(git rm:*)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(npx vite:*)",
+      "Bash(npm run:*)"
     ],
     "deny": [],
     "ask": []

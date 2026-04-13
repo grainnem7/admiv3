@@ -140,7 +140,12 @@ export type StructuralAction =
   | 'previousChord'    // Reverse chord progression
   | 'startRecording'   // Begin loop recording
   | 'stopRecording'    // End loop recording
-  | 'toggleLoop';      // Enable/disable loop playback
+  | 'toggleLoop'       // Enable/disable loop playback
+  // Accompaniment system actions
+  | 'setPerformanceMode'       // targetId = 'free' | 'constrained' | 'accompaniment'
+  | 'setAccompanimentPattern'  // targetId = pattern name
+  | 'adjustTension'            // value = delta (-1 to 1)
+  | 'adjustDensity';           // value = delta (-1 to 1)
 
 /**
  * Structural/mode-switching events.

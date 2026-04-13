@@ -14,6 +14,7 @@ import type { TrackingFrame, InputProfile, TrackedBodyPoint, TriggerEvent } from
 import type { InstrumentZone, InstrumentDefinition, GestureSoundMapping } from '../../state/instrumentZones';
 import { getInstrumentDefinition } from '../../state/instrumentZones';
 import { TrackingManager, getTrackingManager } from '../../tracking/TrackingManager';
+import { getColorTracker } from '../../tracking/ColorTracker';
 import { MultiModalProcessor, getMultiModalProcessor } from '../../movement/MultiModalProcessor';
 import { MappingEngine, getMappingEngine } from '../../mapping/MappingEngine';
 import { MusicController, getMusicController } from '../../core/MusicController';
@@ -32,11 +33,14 @@ import GestureMappingPanel from '../components/GestureMappingPanel';
 import MIDISettingsPanel from '../components/MIDISettingsPanel';
 import EffectChainSelector from '../components/EffectChainSelector';
 import { MusicalModulesPanel } from '../components/MusicalModulesPanel';
-import InputMethodPanel, { type InputMethod } from '../components/InputMethodPanel';
+import InputMethodPanel, { type InputMethod, getColorConfigs } from '../components/InputMethodPanel';
 import ThereminDisplay from '../components/ThereminDisplay';
 import TrackingStatusOverlay from '../components/TrackingStatusOverlay';
 import BodyPointsPanel from '../components/BodyPointsPanel';
 import MusicSettingsPanel from '../components/MusicSettingsPanel';
+import AccompanimentPanel from '../components/AccompanimentPanel';
+import HarmonyIndicator from '../components/HarmonyIndicator';
+import ColorTrackingOverlay from '../components/ColorTrackingOverlay';
 
 // Design system
 import {
@@ -55,12 +59,13 @@ import {
   IconVolumeMute,
   IconPlay,
   IconPause,
+  IconWaveform,
 } from '../design-system/Icons';
 import { Panel } from '../design-system/Panel';
 import { StatusDot, Spinner, TrackingStatus } from '../design-system/StatusIndicators';
 
 // Sidebar sections
-type SidebarSection = 'input' | 'sound' | 'zones' | 'gestures' | 'effects' | 'midi' | 'modules' | 'points' | 'music';
+type SidebarSection = 'input' | 'sound' | 'zones' | 'gestures' | 'effects' | 'midi' | 'modules' | 'points' | 'music' | 'harmony';
 
 function PerformanceScreenV2() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -73,6 +78,9 @@ function PerformanceScreenV2() {
   const processorRef = useRef<MultiModalProcessor | null>(null);
   const mappingEngineRef = useRef<MappingEngine | null>(null);
   const musicControllerRef = useRef<MusicController | null>(null);
+
+  // Ref to always access the latest handleTrackingFrame (avoids stale closure in onFrame subscription)
+  const handleTrackingFrameRef = useRef<(frame: TrackingFrame) => void>(() => {});
 
   // State
   const [isLoading, setIsLoading] = useState(true);
@@ -105,6 +113,10 @@ function PerformanceScreenV2() {
 
   // Landmark labels toggle
   const [showLandmarkLabels, setShowLandmarkLabels] = useState(false);
+
+  // Color calibration state
+  const [colorCalibrationMode, setColorCalibrationMode] = useState(false);
+  const [calibratingColorId, setCalibratingColorId] = useState<string | null>(null);
 
   // Panel expansion states
   const [isMidiPanelExpanded, setIsMidiPanelExpanded] = useState(false);
@@ -218,7 +230,7 @@ function PerformanceScreenV2() {
 
         frameCallback = trackingManager.onFrame((frame) => {
           if (!mounted) return;
-          handleTrackingFrame(frame);
+          handleTrackingFrameRef.current(frame);
         });
 
         trackingManager.start(videoRef.current);
@@ -304,6 +316,40 @@ function PerformanceScreenV2() {
         return;
       }
 
+      // Color tracking — play notes based on blob positions
+      if (activeInputMethod === 'color' && musicControllerRef.current && frame.color) {
+        const configs = getColorConfigs();
+        const foundBlobs = frame.color.blobs.filter(b => b.found);
+
+        if (foundBlobs.length > 0 && !isMuted) {
+          const soundEngine = musicControllerRef.current.getSoundEngine();
+
+          for (const blob of foundBlobs) {
+            const cfg = configs[blob.colorId] ?? { role: 'pitch+volume', voice: 'melody', range: 'mid' };
+
+            if (cfg.role === 'pitch' || cfg.role === 'pitch+volume') {
+              musicControllerRef.current.processColorPosition(
+                { x: blob.x, y: blob.y },
+                frame.timestamp,
+                cfg.voice,
+                cfg.range
+              );
+            }
+            if (cfg.role === 'volume' || cfg.role === 'pitch+volume') {
+              const vol = Math.max(0.1, 1 - blob.y);
+              soundEngine?.setMasterVolume(vol);
+            }
+            if (cfg.role === 'filter') {
+              const filterVal = 1 - blob.y;
+              soundEngine?.setFilterFrequency(filterVal);
+            }
+          }
+          setIsActive(true);
+        } else {
+          setIsActive(false);
+        }
+      }
+
       const processedFrame = processorRef.current?.process(frame);
       if (!processedFrame) return;
 
@@ -348,8 +394,61 @@ function PerformanceScreenV2() {
         musicControllerRef.current.processProcessedFrame(processedFrame);
       }
     },
-    [isMuted, checkCollisions, checkGestures, setTrackingFrame]
+    [isMuted, checkCollisions, checkGestures, setTrackingFrame, activeInputMethod]
   );
+
+  // Keep ref in sync so the onFrame subscription always calls the latest version
+  handleTrackingFrameRef.current = handleTrackingFrame;
+
+  // Handle click-to-calibrate for color tracking
+  const handleVideoClick = useCallback(async (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!colorCalibrationMode || !calibratingColorId || !videoRef.current) return;
+
+    const video = videoRef.current;
+    const rect = video.getBoundingClientRect();
+
+    // Account for object-fit: cover — the video may be cropped
+    const containerAspect = rect.width / rect.height;
+    const videoAspect = (video.videoWidth || 640) / (video.videoHeight || 480);
+
+    let offsetX = 0, offsetY = 0, visibleW = rect.width, visibleH = rect.height;
+    if (videoAspect > containerAspect) {
+      // Video is wider — cropped on left/right
+      visibleW = rect.height * videoAspect;
+      offsetX = (visibleW - rect.width) / 2;
+    } else {
+      // Video is taller — cropped on top/bottom
+      visibleH = rect.width / videoAspect;
+      offsetY = (visibleH - rect.height) / 2;
+    }
+
+    const clickX = e.clientX - rect.left + offsetX;
+    const clickY = e.clientY - rect.top + offsetY;
+
+    // Normalize to 0-1 in video space, flip X for CSS scaleX(-1) mirror
+    const x = 1 - (clickX / visibleW);
+    const y = clickY / visibleH;
+
+    getColorTracker().calibrateFromPixel(videoRef.current, x, y, calibratingColorId);
+    setColorCalibrationMode(false);
+    setCalibratingColorId(null);
+
+    // Start audio engine on this user gesture (Tone.js requires user interaction).
+    // Must await so synths are ready before the next frame tries to play.
+    const soundEngine = musicControllerRef.current?.getSoundEngine();
+    if (soundEngine) {
+      try {
+        if (!soundEngine.isReady()) {
+          await soundEngine.initialize();
+          console.log('[PerformanceScreen] Audio initialized from color calibration click');
+        }
+        musicControllerRef.current?.start();
+        setAudioEnabled(true);
+      } catch (err) {
+        console.error('[PerformanceScreen] Failed to start audio:', err);
+      }
+    }
+  }, [colorCalibrationMode, calibratingColorId]);
 
   // Sync mute state with music controller and theremin
   useEffect(() => {
@@ -422,6 +521,7 @@ function PerformanceScreenV2() {
     { id: 'gestures' as const, label: 'Gestures', icon: IconGesture },
     { id: 'effects' as const, label: 'Effects', icon: IconEffects },
     { id: 'modules' as const, label: 'Modules', icon: IconSequencer },
+    { id: 'harmony' as const, label: 'Harmony', icon: IconWaveform },
     { id: 'music' as const, label: 'Music', icon: IconSettings },
     { id: 'midi' as const, label: 'MIDI', icon: IconMidi },
   ];
@@ -437,6 +537,10 @@ function PerformanceScreenV2() {
                 isExpanded={true}
                 onToggle={() => {}}
                 onInputMethodChange={setActiveInputMethod}
+                onRequestColorCalibration={(colorId) => {
+                  setCalibratingColorId(colorId);
+                  setColorCalibrationMode(true);
+                }}
               />
               {activeInputMethod === 'theremin' && (
                 <div style={{ marginTop: 'var(--space-3)' }}>
@@ -516,6 +620,13 @@ function PerformanceScreenV2() {
         return (
           <Panel title="Musical Modules" collapsible={false}>
             <MusicalModulesPanel />
+          </Panel>
+        );
+
+      case 'harmony':
+        return (
+          <Panel title="Harmony & Accompaniment" collapsible={false}>
+            <AccompanimentPanel />
           </Panel>
         );
 
@@ -641,7 +752,11 @@ function PerformanceScreenV2() {
           {/* Main View (Video) */}
           <div className="main-view">
             <div className="main-view__content" ref={containerRef}>
-              <div className="video-container">
+              <div
+                className="video-container"
+                onClick={handleVideoClick}
+                style={{ cursor: colorCalibrationMode ? 'crosshair' : undefined }}
+              >
                 <video
                   ref={videoRef}
                   autoPlay
@@ -649,6 +764,11 @@ function PerformanceScreenV2() {
                   muted
                   aria-label="Camera feed showing your movements"
                 />
+
+                {/* Color calibration is handled by ColorTrackingOverlay */}
+
+                {/* Harmony context indicator */}
+                <HarmonyIndicator />
 
                 {/* Tracking overlay */}
                 <TrackingOverlay
@@ -662,6 +782,17 @@ function PerformanceScreenV2() {
                   showConnections={true}
                   showLabels={showLandmarkLabels}
                 />
+
+                {/* Color tracking overlay */}
+                {activeInputMethod === 'color' && (
+                  <ColorTrackingOverlay
+                    colorLandmarks={currentFrame?.color ?? null}
+                    mappings={mappingEngineRef.current?.getColorExpressionNode()?.getMappings() ?? []}
+                    containerWidth={containerSize.width}
+                    containerHeight={containerSize.height}
+                    isCalibrating={colorCalibrationMode}
+                  />
+                )}
 
                 {/* Instrument zone overlay */}
                 <InstrumentZoneOverlay

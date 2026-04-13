@@ -53,6 +53,7 @@ export const PRESET_FULL_EXPERIENCE = createPreset(
       leftHand: true,
       rightHand: true,
       face: true,
+      color: false,
     },
     trackedFeatures: [
       // Body: Arms control pitch (vertical) and stereo panning (horizontal)
@@ -151,6 +152,7 @@ export const PRESET_BODY_HANDS = createPreset(
       leftHand: true,
       rightHand: true,
       face: false,
+      color: false,
     },
     trackedFeatures: [
       {
@@ -225,6 +227,7 @@ export const PRESET_FINGER_VIRTUOSO = createPreset(
       leftHand: true,
       rightHand: true,
       face: true,
+      color: false,
     },
     trackedFeatures: [
       // Right hand finger control
@@ -321,6 +324,7 @@ export const PRESET_EXPRESSIVE_FACE = createPreset(
       leftHand: false,
       rightHand: false,
       face: true,
+      color: false,
     },
     trackedFeatures: [
       {
@@ -401,6 +405,7 @@ export const PRESET_HEAD_BLINK = createPreset(
       leftHand: false,
       rightHand: false,
       face: true,
+      color: false,
     },
     trackedFeatures: [
       {
@@ -453,6 +458,7 @@ export const PRESET_DWELL_MODE = createPreset(
       leftHand: false,
       rightHand: false,
       face: true,
+      color: false,
     },
     trackedFeatures: [
       {
@@ -498,6 +504,7 @@ export const PRESET_SINGLE_HAND = createPreset(
       leftHand: false,
       rightHand: true,
       face: false,
+      color: false,
     },
     trackedFeatures: [
       {

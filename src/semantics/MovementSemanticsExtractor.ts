@@ -269,6 +269,7 @@ export class MovementSemanticsExtractor {
         leftHand: frame.leftHand !== null,
         rightHand: frame.rightHand !== null,
         face: frame.face !== null,
+        color: frame.color !== null,
       },
       confidence: this.computeOverallConfidence(frame),
     };

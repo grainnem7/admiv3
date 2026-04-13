@@ -3,6 +3,8 @@
  */
 
 import type { NormalizedLandmark } from '@mediapipe/tasks-vision';
+import type { PerformanceMode, AccompanimentSettings, HarmonyContext } from '../accompaniment/types';
+import type { NoteName, ScaleType } from '../sound/MusicTheory';
 
 // ============================================
 // Tracking Types
@@ -37,6 +39,19 @@ export interface FaceLandmarks {
   transformMatrix?: number[];
 }
 
+/** Color blob tracking output from ColorTracker */
+export interface ColorLandmarks {
+  blobs: Array<{
+    colorId: string;
+    x: number;
+    y: number;
+    area: number;
+    found: boolean;
+  }>;
+  primaryBlob: { colorId: string; x: number; y: number; area: number } | null;
+  timestamp: number;
+}
+
 /**
  * Unified tracking frame - THE core interface for multi-modal tracking.
  * All downstream processing receives this single unified frame.
@@ -46,6 +61,7 @@ export interface TrackingFrame {
   leftHand: HandLandmarks | null;
   rightHand: HandLandmarks | null;
   face: FaceLandmarks | null;
+  color: ColorLandmarks | null;
   timestamp: number;
 }
 
@@ -55,6 +71,7 @@ export interface ActiveModalities {
   leftHand: boolean;
   rightHand: boolean;
   face: boolean;
+  color: boolean;
 }
 
 // ============================================
@@ -88,7 +105,7 @@ export interface ProcessedMovement {
 // ============================================
 
 /** Modality source for a tracked feature */
-export type FeatureModality = 'pose' | 'leftHand' | 'rightHand' | 'face';
+export type FeatureModality = 'pose' | 'leftHand' | 'rightHand' | 'face' | 'color';
 
 /** Role of a tracked feature in the system */
 export type FeatureRole = 'continuous' | 'trigger' | 'ignored';
@@ -506,6 +523,16 @@ export interface AppState {
   activeMusicPresetId: string | null;
   availableMusicPresets: MusicSettingsPreset[];
 
+  // Accompaniment state
+  /** Current performance mode: free, constrained, or accompaniment */
+  performanceMode: PerformanceMode;
+  /** Accompaniment engine settings */
+  accompanimentSettings: AccompanimentSettings;
+  /** Current harmony context for UI display */
+  currentHarmonyContext: HarmonyContext | null;
+  /** Suggested key from audio analysis (optional) */
+  keySuggestion: { root: NoteName; scale: ScaleType; confidence: number } | null;
+
   // UI state
   currentScreen: Screen;
   showDebugPanel: boolean;
@@ -569,6 +596,12 @@ export interface AppActions {
   loadMusicPreset: (id: string) => void;
   saveMusicPreset: (preset: MusicSettingsPreset) => void;
   deleteMusicPreset: (id: string) => void;
+
+  // Accompaniment actions
+  setPerformanceMode: (mode: PerformanceMode) => void;
+  setAccompanimentSettings: (settings: Partial<AccompanimentSettings>) => void;
+  setCurrentHarmonyContext: (context: HarmonyContext | null) => void;
+  setKeySuggestion: (suggestion: { root: NoteName; scale: ScaleType; confidence: number } | null) => void;
 
   // UI actions
   setCurrentScreen: (screen: Screen) => void;

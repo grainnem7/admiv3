@@ -69,41 +69,11 @@ const DEFAULT_CONFIG: Required<ColorTrackerConfig> = {
   smoothing: 0.3,
 };
 
-// Default colors to track
-const DEFAULT_COLORS: TrackedColor[] = [
-  {
-    id: 'red',
-    hue: 0,
-    hueTolerance: 15,
-    minSaturation: 50,
-    minValue: 50,
-    minArea: 0.002,
-  },
-  {
-    id: 'green',
-    hue: 120,
-    hueTolerance: 20,
-    minSaturation: 40,
-    minValue: 40,
-    minArea: 0.002,
-  },
-  {
-    id: 'blue',
-    hue: 240,
-    hueTolerance: 20,
-    minSaturation: 40,
-    minValue: 40,
-    minArea: 0.002,
-  },
-  {
-    id: 'yellow',
-    hue: 60,
-    hueTolerance: 15,
-    minSaturation: 50,
-    minValue: 50,
-    minArea: 0.002,
-  },
-];
+/**
+ * No default colors — user must click-to-calibrate from the video feed.
+ * Pre-defined colors (red/blue/etc.) cause false positives on skin, hair, and clothing.
+ */
+const DEFAULT_COLORS: TrackedColor[] = [];
 
 // ============================================
 // ColorTracker Class
@@ -210,12 +180,16 @@ export class ColorTracker {
     // Convert to HSV
     const hsv = this.rgbToHsv(avgR, avgG, avgB);
 
+    // Tight tolerances to avoid matching similar colors (e.g. skin vs banana).
+    // Hue tolerance is narrow; saturation/value thresholds are set close to
+    // the sampled values to reject colors that are merely "close".
+    const hueTol = hsv.s > 60 ? 12 : 18;
     const newColor: TrackedColor = {
       id: colorId,
       hue: hsv.h,
-      hueTolerance: 20,
-      minSaturation: Math.max(20, hsv.s - 30),
-      minValue: Math.max(20, hsv.v - 30),
+      hueTolerance: hueTol,
+      minSaturation: Math.max(30, hsv.s * 0.6),
+      minValue: Math.max(30, hsv.v * 0.6),
       minArea: 0.002,
     };
 

@@ -48,3 +48,12 @@ export type { QuantizerConfig, QuantizeMode } from './QuantizerNode';
 
 export { ThereminNode, getThereminNode, resetThereminNode } from './ThereminNode';
 export type { ThereminNodeConfig, ThereminProcessResult, DualThereminProcessResult } from './ThereminNode';
+
+export { ColorExpressionNode, COLOR_AUTO_MODES } from './ColorExpressionNode';
+export type {
+  ColorExpressionConfig,
+  ColorExpressionMapping,
+  ColorExpressionSource,
+  ColorAutoMode,
+  ColorAutoModeDefinition,
+} from './ColorExpressionNode';

@@ -119,6 +119,11 @@ export class SoundEngine {
   private thereminSynths: { left: Tone.MonoSynth | null; right: Tone.MonoSynth | null } = { left: null, right: null };
   private thereminPlayingState: { left: boolean; right: boolean } = { left: false, right: false };
 
+  // Accompaniment synths - richer timbres for musical backing
+  private accompPadSynth: Tone.PolySynth | null = null;
+  private accompBassSynth: Tone.PolySynth | null = null;
+  private accompMelodySynth: Tone.PolySynth | null = null;
+
   // Effects chain
   private filter: Tone.Filter | null = null;
   private delay: Tone.FeedbackDelay | null = null;
@@ -258,6 +263,9 @@ export class SoundEngine {
     this.bassSynth = createPolySynth(VOICE_CONFIGS.bass);
     this.chordSynth = createPolySynth(VOICE_CONFIGS.chord);
 
+    // Create accompaniment synths with richer timbres
+    this.createAccompanimentSynths();
+
     // Create theremin synths (one per hand for dual-theremin mode)
     const createThereminSynth = (): Tone.MonoSynth => {
       const synth = new Tone.MonoSynth({
@@ -295,6 +303,191 @@ export class SoundEngine {
       filter: !!this.filter,
       audioContextState: Tone.context.state,
     });
+  }
+
+  /**
+   * Create dedicated accompaniment synths with richer, more musical timbres.
+   * These are separate from the gesture-triggered synths to allow
+   * independent timbre control.
+   */
+  private createAccompanimentSynths(): void {
+    const connectNode = this.vibratoEffect ?? this.filter!;
+
+    // Pad synth: warm FM synthesis for sustained chords (string-like)
+    this.accompPadSynth = new Tone.PolySynth(Tone.FMSynth, {
+      harmonicity: 2,
+      modulationIndex: 1.5,
+      oscillator: { type: 'sine' },
+      modulation: { type: 'triangle' },
+      envelope: {
+        attack: 0.6,
+        decay: 0.8,
+        sustain: 0.7,
+        release: 3.0,
+      },
+      modulationEnvelope: {
+        attack: 0.5,
+        decay: 0.3,
+        sustain: 0.4,
+        release: 2.0,
+      },
+    });
+    this.accompPadSynth.maxPolyphony = 8;
+    this.accompPadSynth.volume.value = -10;
+    this.accompPadSynth.connect(connectNode);
+
+    // Bass synth: warm AM synthesis for bass notes (organ-like)
+    this.accompBassSynth = new Tone.PolySynth(Tone.AMSynth, {
+      harmonicity: 1.5,
+      oscillator: { type: 'sine' },
+      modulation: { type: 'square' },
+      envelope: {
+        attack: 0.15,
+        decay: 0.4,
+        sustain: 0.65,
+        release: 1.8,
+      },
+      modulationEnvelope: {
+        attack: 0.3,
+        decay: 0.2,
+        sustain: 0.5,
+        release: 1.0,
+      },
+    });
+    this.accompBassSynth.maxPolyphony = 4;
+    this.accompBassSynth.volume.value = -8;
+    this.accompBassSynth.connect(connectNode);
+
+    // Melody synth: FM for arpeggio/melodic accompaniment (bell/guitar-like)
+    this.accompMelodySynth = new Tone.PolySynth(Tone.FMSynth, {
+      harmonicity: 3,
+      modulationIndex: 4,
+      oscillator: { type: 'sine' },
+      modulation: { type: 'sine' },
+      envelope: {
+        attack: 0.01,
+        decay: 1.2,
+        sustain: 0.15,
+        release: 1.5,
+      },
+      modulationEnvelope: {
+        attack: 0.01,
+        decay: 0.8,
+        sustain: 0.1,
+        release: 1.0,
+      },
+    });
+    this.accompMelodySynth.maxPolyphony = 8;
+    this.accompMelodySynth.volume.value = -10;
+    this.accompMelodySynth.connect(connectNode);
+  }
+
+  /**
+   * Get the appropriate accompaniment synth for a voice type.
+   * Returns the richer accompaniment synth if available, falling back to the standard synth.
+   */
+  getAccompanimentSynth(voice: VoiceType): Tone.PolySynth | null {
+    switch (voice) {
+      case 'chord':
+        return this.accompPadSynth ?? this.chordSynth;
+      case 'bass':
+        return this.accompBassSynth ?? this.bassSynth;
+      case 'melody':
+        return this.accompMelodySynth ?? this.melodySynth;
+      default:
+        return this.getSynth(voice);
+    }
+  }
+
+  /**
+   * Play a note on the accompaniment synth (richer timbre).
+   */
+  playAccompanimentNote(
+    voice: VoiceType,
+    note: string | number,
+    options: PlayNoteOptions = {}
+  ): void {
+    if (!this.isInitialized || this.isMuted) return;
+
+    const synth = this.getAccompanimentSynth(voice);
+    if (!synth) return;
+
+    const velocity = this.clampVelocity(options.velocity ?? 0.5);
+    const duration = options.duration ?? '4n';
+
+    try {
+      synth.triggerAttackRelease(note, duration, undefined, velocity);
+    } catch (error) {
+      // Silently handle note playback errors
+    }
+  }
+
+  /**
+   * Play a chord on the accompaniment synth (richer timbre).
+   */
+  playAccompanimentChord(
+    voice: VoiceType,
+    notes: (string | number)[],
+    options: PlayNoteOptions = {}
+  ): void {
+    if (!this.isInitialized || this.isMuted) return;
+
+    const synth = this.getAccompanimentSynth(voice);
+    if (!synth) return;
+
+    const velocity = this.clampVelocity(options.velocity ?? 0.5);
+    const duration = options.duration ?? '2n';
+
+    try {
+      synth.triggerAttackRelease(notes, duration, undefined, velocity);
+    } catch (error) {
+      // Silently handle chord playback errors
+    }
+  }
+
+  /**
+   * Start a sustained accompaniment note.
+   */
+  accompNoteOn(voice: VoiceType, note: string | number, velocity: number = 0.5): void {
+    if (!this.isInitialized || this.isMuted) return;
+
+    const synth = this.getAccompanimentSynth(voice);
+    if (!synth) return;
+
+    try {
+      synth.triggerAttack(note, undefined, this.clampVelocity(velocity));
+    } catch (error) {
+      // Silently handle
+    }
+  }
+
+  /**
+   * Release a sustained accompaniment note.
+   */
+  accompNoteOff(voice: VoiceType, note: string | number): void {
+    if (!this.isInitialized) return;
+
+    const synth = this.getAccompanimentSynth(voice);
+    if (!synth) return;
+
+    try {
+      synth.triggerRelease(note);
+    } catch (error) {
+      // Silently handle
+    }
+  }
+
+  /**
+   * Release all accompaniment notes.
+   */
+  releaseAccompaniment(): void {
+    try {
+      this.accompPadSynth?.releaseAll();
+      this.accompBassSynth?.releaseAll();
+      this.accompMelodySynth?.releaseAll();
+    } catch {
+      // Silently handle
+    }
   }
 
   /**
@@ -514,6 +707,7 @@ export class SoundEngine {
       this.melodySynth?.releaseAll();
       this.bassSynth?.releaseAll();
       this.chordSynth?.releaseAll();
+      this.releaseAccompaniment();
     }
   }
 
@@ -859,6 +1053,9 @@ export class SoundEngine {
     this.melodySynth?.dispose();
     this.bassSynth?.dispose();
     this.chordSynth?.dispose();
+    this.accompPadSynth?.dispose();
+    this.accompBassSynth?.dispose();
+    this.accompMelodySynth?.dispose();
     this.thereminSynths.left?.dispose();
     this.thereminSynths.right?.dispose();
     this.vibratoEffect?.dispose();

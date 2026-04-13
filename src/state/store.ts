@@ -21,6 +21,9 @@ import type {
   UserProfile,
 } from './types';
 import type { MusicSettings } from './types';
+import type { PerformanceMode, AccompanimentSettings, HarmonyContext } from '../accompaniment/types';
+import { DEFAULT_ACCOMPANIMENT_SETTINGS } from '../accompaniment/types';
+import type { NoteName, ScaleType } from '../sound/MusicTheory';
 import { AUDIO } from '../utils/constants';
 import { DEFAULT_MUSIC_SETTINGS } from './musicSettingsDefaults';
 
@@ -36,6 +39,7 @@ const initialState: AppState = {
     leftHand: false,
     rightHand: false,
     face: false,
+    color: false,
   },
 
   // Movement
@@ -68,6 +72,12 @@ const initialState: AppState = {
   musicSettings: DEFAULT_MUSIC_SETTINGS,
   activeMusicPresetId: null,
   availableMusicPresets: [],
+
+  // Accompaniment
+  performanceMode: 'free' as PerformanceMode,
+  accompanimentSettings: DEFAULT_ACCOMPANIMENT_SETTINGS,
+  currentHarmonyContext: null,
+  keySuggestion: null,
 
   // UI
   currentScreen: 'welcome',
@@ -255,6 +265,20 @@ export const useAppStore = create<AppState & AppActions>()(
           activeMusicPresetId: state.activeMusicPresetId === id ? null : state.activeMusicPresetId,
         })),
 
+      // Accompaniment actions
+      setPerformanceMode: (mode: PerformanceMode) => set({ performanceMode: mode }),
+
+      setAccompanimentSettings: (settings: Partial<AccompanimentSettings>) =>
+        set((state) => ({
+          accompanimentSettings: { ...state.accompanimentSettings, ...settings },
+        })),
+
+      setCurrentHarmonyContext: (context: HarmonyContext | null) =>
+        set({ currentHarmonyContext: context }),
+
+      setKeySuggestion: (suggestion: { root: NoteName; scale: ScaleType; confidence: number } | null) =>
+        set({ keySuggestion: suggestion }),
+
       // UI actions
       setCurrentScreen: (screen: Screen) => set({ currentScreen: screen }),
 
@@ -286,6 +310,9 @@ export const useAppStore = create<AppState & AppActions>()(
         musicSettings: state.musicSettings,
         activeMusicPresetId: state.activeMusicPresetId,
         availableMusicPresets: state.availableMusicPresets,
+        // Accompaniment persistence
+        performanceMode: state.performanceMode,
+        accompanimentSettings: state.accompanimentSettings,
       }),
     }
   )
@@ -330,3 +357,9 @@ export const useAvailableInputProfiles = () => useAppStore((s) => s.availableInp
 export const useMusicSettings = () => useAppStore((s) => s.musicSettings);
 export const useActiveMusicPresetId = () => useAppStore((s) => s.activeMusicPresetId);
 export const useAvailableMusicPresets = () => useAppStore((s) => s.availableMusicPresets);
+
+// Accompaniment selectors
+export const usePerformanceMode = () => useAppStore((s) => s.performanceMode);
+export const useAccompanimentSettings = () => useAppStore((s) => s.accompanimentSettings);
+export const useCurrentHarmonyContext = () => useAppStore((s) => s.currentHarmonyContext);
+export const useKeySuggestion = () => useAppStore((s) => s.keySuggestion);

@@ -6,6 +6,7 @@
 import { PoseDetector } from './PoseDetector';
 import { HandDetector } from './HandDetector';
 import { FaceDetector } from './FaceDetector';
+import { ColorTracker, getColorTracker } from './ColorTracker';
 import type { TrackingFrame, ActiveModalities, PoseLandmarks } from '../state/types';
 
 export interface TrackingManagerConfig {
@@ -21,6 +22,7 @@ const DEFAULT_CONFIG: Required<TrackingManagerConfig> = {
     leftHand: false,
     rightHand: false,
     face: false,
+    color: false,
   },
   useGpu: true,
 };
@@ -31,6 +33,7 @@ export class TrackingManager {
   private poseDetector: PoseDetector | null = null;
   private handDetector: HandDetector | null = null;
   private faceDetector: FaceDetector | null = null;
+  private colorTracker: ColorTracker | null = null;
 
   private config: Required<TrackingManagerConfig>;
   private activeModalities: ActiveModalities;
@@ -91,6 +94,11 @@ export class TrackingManager {
       await this.faceDetector.initialize();
     }
 
+    // Initialize color tracker if newly needed
+    if (modalities.color && !this.colorTracker) {
+      this.colorTracker = getColorTracker();
+    }
+
     this.activeModalities = { ...modalities };
   }
 
@@ -148,6 +156,7 @@ export class TrackingManager {
     this.poseDetector = null;
     this.handDetector = null;
     this.faceDetector = null;
+    this.colorTracker = null;
     this.callbacks.clear();
   }
 
@@ -196,6 +205,7 @@ export class TrackingManager {
       leftHand: null,
       rightHand: null,
       face: null,
+      color: null,
       timestamp,
     };
 
@@ -232,6 +242,20 @@ export class TrackingManager {
         frame.face = faceResult.face;
       } catch (error) {
         console.error('Face detection error in TrackingManager:', error);
+      }
+    }
+
+    // Color tracking (synchronous — no separate rAF loop)
+    if (this.activeModalities.color && this.colorTracker) {
+      try {
+        const colorOutput = this.colorTracker.processFrame(videoElement);
+        frame.color = {
+          blobs: colorOutput.blobs,
+          primaryBlob: colorOutput.primaryBlob,
+          timestamp,
+        };
+      } catch (error) {
+        console.error('Color tracking error in TrackingManager:', error);
       }
     }
 

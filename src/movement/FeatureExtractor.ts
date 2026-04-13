@@ -119,6 +119,15 @@ export class FeatureExtractor {
       case 'face':
         return frame.face?.landmarks[landmarkIndex] ?? null;
 
+      case 'color': {
+        if (!frame.color) return null;
+        const blob = frame.color.blobs[landmarkIndex];
+        if (!blob || !blob.found) return null;
+        // Convert color blob to NormalizedLandmark-compatible shape
+        // z = area (depth proxy), visibility = 1 when found
+        return { x: blob.x, y: blob.y, z: blob.area, visibility: 1 } as NormalizedLandmark;
+      }
+
       default:
         return null;
     }

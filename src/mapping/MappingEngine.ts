@@ -21,6 +21,9 @@ import {
   DEFAULT_HAND_MAPPINGS,
   type ChordOutput,
   ThereminNode,
+  ColorExpressionNode,
+  type ColorAutoMode,
+  type ColorExpressionMapping,
 } from './nodes';
 
 export interface MappingEngineConfig {
@@ -62,6 +65,7 @@ export class MappingEngine {
   private filterNode: FilterMappingNode | null = null;
   private chordNode: ChordMappingNode | null = null;
   private handExpressionNode: HandExpressionNode | null = null;
+  private colorExpressionNode: ColorExpressionNode | null = null;
   private triggerNodes: Map<string, TriggerMappingNode> = new Map();
   private thereminNode: ThereminNode | null = null;
   private thereminModeEnabled: boolean = false;
@@ -238,6 +242,15 @@ export class MappingEngine {
       eventThreshold: 0.02, // Low threshold for responsive MIDI CC output
     });
     this.nodes.set('hand-expression', this.handExpressionNode);
+
+    // Create ColorExpressionNode for color tracking
+    // Starts disabled — enabled when color input method is activated
+    this.colorExpressionNode = new ColorExpressionNode({
+      id: 'color-expression',
+      name: 'Color Expression',
+      enabled: false,
+    });
+    this.nodes.set('color-expression', this.colorExpressionNode);
 
     // Create trigger nodes for gestures
     // Note: emitEvents is disabled because gesture sounds are handled by useGestureSounds.ts
@@ -523,6 +536,43 @@ export class MappingEngine {
    */
   getHandExpressionNode(): HandExpressionNode | null {
     return this.handExpressionNode;
+  }
+
+  /**
+   * Get the color expression node
+   */
+  getColorExpressionNode(): ColorExpressionNode | null {
+    return this.colorExpressionNode;
+  }
+
+  /**
+   * Enable or disable color expression processing
+   */
+  enableColorExpression(enabled: boolean): void {
+    if (this.colorExpressionNode) {
+      this.colorExpressionNode.setEnabled(enabled);
+      if (!enabled) {
+        this.colorExpressionNode.reset();
+      }
+    }
+  }
+
+  /**
+   * Set color auto mode (theremin, mixer, xy-pad, single)
+   */
+  setColorAutoMode(mode: ColorAutoMode): void {
+    if (this.colorExpressionNode) {
+      this.colorExpressionNode.setAutoMode(mode);
+    }
+  }
+
+  /**
+   * Set custom color mappings
+   */
+  setColorMappings(mappings: ColorExpressionMapping[]): void {
+    if (this.colorExpressionNode) {
+      this.colorExpressionNode.setMappings(mappings);
+    }
   }
 
   /**

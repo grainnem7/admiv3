@@ -20,12 +20,12 @@ import {
 } from '../sound/MusicTheory';
 import {
   PROGRESSIONS,
-  getCurrentChord,
-  nextChord,
-  createProgressionState,
-  type ProgressionState,
   type ChordInfo,
 } from '../sound/ChordProgressions';
+import { HarmonyManager, getHarmonyManager } from '../accompaniment/HarmonyManager';
+import { AccompanimentEngine, getAccompanimentEngine } from '../accompaniment/AccompanimentEngine';
+import type { PerformanceMode } from '../accompaniment/types';
+import { useAppStore } from '../state/store';
 import { MappingEngine, getMappingEngine } from '../mapping/MappingEngine';
 import type { ProcessedFrame, MappingResult, TrackingFrame, BodyPartMusicConfig, MusicSettings } from '../state/types';
 // FeatureExtractor used internally by MappingEngine
@@ -127,8 +127,13 @@ export class MusicController {
   // Musical state
   private scale: string[] = [];
   private bassScale: string[] = [];
-  private progressionState: ProgressionState;
   private noteStates: Record<VoiceType, NoteState>;
+
+  // Accompaniment state
+  private harmonyManager: HarmonyManager;
+  private accompanimentEngine: AccompanimentEngine;
+  private performanceMode: PerformanceMode = 'free';
+  private harmonyContextUnsubscribe: (() => void) | null = null;
   // lastChordChangeTime and movementAccumulator removed - chord drone feature disabled
 
   // Hand feature state
@@ -158,7 +163,17 @@ export class MusicController {
     // Initialize musical state
     this.scale = generateScale(this.config.rootNote, this.config.scaleType, 3, 6);
     this.bassScale = generateScale(this.config.rootNote, this.config.scaleType, 1, 3);
-    this.progressionState = createProgressionState(this.config.progressionId);
+
+    // Initialize HarmonyManager
+    this.harmonyManager = getHarmonyManager();
+    this.harmonyManager.setKey(this.config.rootNote, this.config.scaleType);
+    this.harmonyManager.setProgression(this.config.progressionId);
+    this.harmonyContextUnsubscribe = this.harmonyManager.onContextChange((context) => {
+      useAppStore.getState().setCurrentHarmonyContext(context);
+    });
+
+    // Initialize AccompanimentEngine
+    this.accompanimentEngine = getAccompanimentEngine(this.harmonyManager);
     const defaultNoteState = (): NoteState => ({
       lastNoteTime: 0,
       lastNote: '',
@@ -286,9 +301,89 @@ export class MusicController {
       }
     }
 
-    // Accumulate movement for chord progression
-    // DISABLED - this was causing unwanted chords/drones
-    // this.accumulateMovementForChords(controlPosition, timestamp);
+    // Color tracking sound is handled in PerformanceScreenV2 via theremin engine
+    // (continuous tone that starts/stops with blob detection)
+
+    // Accompaniment engine tick - generate accompaniment events
+    if (this.performanceMode === 'accompaniment' && this.accompanimentEngine.isEnabled()) {
+      const accompEvents = this.accompanimentEngine.tick(timestamp);
+      for (const event of accompEvents) {
+        this.handleMusicalEvent(event);
+      }
+    }
+  }
+
+  /** Octave ranges for color tracking */
+  private static COLOR_RANGES: Record<string, [number, number]> = {
+    low: [1, 3],
+    mid: [3, 5],
+    high: [5, 7],
+  };
+
+  /**
+   * Process color blob position to generate notes.
+   * Plays a note whenever the position maps to a different pitch than
+   * the currently playing note.
+   */
+  processColorPosition(
+    position: { x: number; y: number },
+    timestamp: number,
+    voice: 'melody' | 'bass' | 'chord' = 'melody',
+    range: 'low' | 'mid' | 'high' = 'mid'
+  ): void {
+    if (!this.isRunning) {
+      this.isRunning = true;
+    }
+
+    // Use the voice's note state so multiple colors don't conflict
+    const noteState = this.noteStates[voice] ?? this.noteStates.melody;
+
+    // Cooldown check
+    if (timestamp - noteState.lastNoteTime < 150) {
+      return;
+    }
+
+    // Generate scale for the requested range
+    const [minOct, maxOct] = MusicController.COLOR_RANGES[range] ?? [3, 5];
+    const rangeScale = generateScale(this.config.rootNote, this.config.scaleType, minOct, maxOct);
+
+    // Map Y position to note (inverted: higher position = higher pitch)
+    const note = positionToNote(position.y, rangeScale, true);
+
+    // Only play if the note changed
+    if (note === noteState.lastNote) {
+      return;
+    }
+
+    // Map X position to duration
+    const duration = position.x < 0.3 ? '16n' : position.x < 0.7 ? '8n' : '4n';
+
+    // Play the note on the appropriate voice
+    if (!this.config.internalSoundsMuted) {
+      if (voice === 'chord') {
+        // Play a chord rooted on this note
+        const midiRoot = this.noteNameToMidi(note);
+        const chordNotes = [midiRoot, midiRoot + 4, midiRoot + 7].map(midiToNoteName);
+        this.soundEngine.playChord('chord', chordNotes, { velocity: 0.5, duration: '2n' });
+      } else {
+        this.soundEngine.playNote(voice, note, { velocity: 0.7, duration });
+      }
+    }
+
+    // Send MIDI
+    const midiNote = this.noteNameToMidi(note);
+    const midiChannels = MIDIOutput.getConfig().channels;
+    const channel = voice === 'bass' ? midiChannels.bass : midiChannels.melody;
+    MIDIOutput.sendNoteOn(midiNote, 89, channel);
+    const durationMs = duration === '16n' ? 100 : duration === '8n' ? 200 : 400;
+    setTimeout(() => {
+      MIDIOutput.sendNoteOff(midiNote, 0, channel);
+    }, durationMs);
+
+    // Update state
+    noteState.lastNoteTime = timestamp;
+    noteState.lastNote = note;
+    noteState.lastPosition = { ...position };
   }
 
   /**
@@ -352,7 +447,7 @@ export class MusicController {
     }
 
     // Map Y position to note (inverted: higher position = higher pitch)
-    const note = positionToNote(position.y, voiceScale, true);
+    let note = positionToNote(position.y, voiceScale, true);
 
     // Map X position to duration (left = short, right = long)
     const duration = position.x < 0.3 ? '16n' : position.x < 0.7 ? '8n' : '4n';
@@ -361,13 +456,19 @@ export class MusicController {
     // Calculate velocity based on movement speed
     const velocity = Math.min(0.9, 0.4 + distance * 5);
 
+    // Quantize to scale in constrained or accompaniment mode
+    let midiNote = this.noteNameToMidi(note);
+    if (this.performanceMode !== 'free') {
+      midiNote = this.harmonyManager.quantizeNote(midiNote);
+      note = midiToNoteName(midiNote);
+    }
+
     // Play the note (internal sound) - skip if internal sounds are muted
     if (!this.config.internalSoundsMuted) {
       this.soundEngine.playNote(voice, note, { velocity, duration });
     }
 
-    // Also send MIDI note
-    const midiNote = this.noteNameToMidi(note);
+    // Also send MIDI note (already computed above)
     const midiChannels = MIDIOutput.getConfig().channels;
     const channel = voice === 'bass' ? midiChannels.bass : midiChannels.melody;
     MIDIOutput.sendNoteOn(midiNote, velocity * 127, channel);
@@ -433,9 +534,9 @@ export class MusicController {
    * Advance to the next chord in the progression.
    */
   private advanceChordProgression(_timestamp: number): void {
-    this.progressionState = nextChord(this.progressionState);
+    this.harmonyManager.advanceChord();
 
-    const chord = getCurrentChord(this.progressionState);
+    const chord = this.harmonyManager.getCurrentChord();
     if (chord) {
       this.playChord(chord);
     }
@@ -552,15 +653,15 @@ export class MusicController {
    * finger position controls pitch while gestures (pinch) trigger notes.
    */
   private handleNoteEvent(event: import('../mapping/events').NoteEvent): void {
-    // Get the current pitch from the PitchMappingNode
-    // This allows finger position to control pitch while gesture triggers the note
-    // BUT: In theremin mode, use the note directly from the event (theremin provides its own pitch)
+    const isAccompaniment = event.voiceId?.startsWith('accomp-');
+
+    // For accompaniment events, use the MIDI note directly from the event
+    // For user events, override with PitchMappingNode
     let midiNote = event.midiNote;
 
-    if (!this.mappingEngine.isThereminMode()) {
+    if (!isAccompaniment && !this.mappingEngine.isThereminMode()) {
       const pitchNode = this.mappingEngine.getPitchNode();
       if (pitchNode) {
-        // Use the current MIDI pitch from the pitch mapping node
         midiNote = Math.round(pitchNode.getCurrentMidi());
       }
     }
@@ -568,28 +669,32 @@ export class MusicController {
     const noteName = midiToNoteName(midiNote);
 
     if (event.action === 'noteOn') {
-      // Play internal sound - skip if internal sounds are muted
       if (!this.config.internalSoundsMuted) {
-        if (this.mappingEngine.isThereminMode()) {
-          // Theremin mode: use sustained noteOn/noteOff for continuous sound
+        if (isAccompaniment) {
+          // Route to richer accompaniment synths
+          const voice = midiNote < 48 ? 'bass' as const : midiNote < 60 ? 'chord' as const : 'melody' as const;
+          this.soundEngine.accompNoteOn(voice, noteName, event.velocity);
+        } else if (this.mappingEngine.isThereminMode()) {
           this.soundEngine.noteOn('melody', noteName, event.velocity);
         } else {
-          // Normal mode: use playNote with duration for trigger-based notes
-          // This automatically handles attack and release
           this.soundEngine.playNote('melody', noteName, {
             velocity: event.velocity,
-            duration: '8n', // Short note duration
+            duration: '8n',
           });
         }
       }
 
       if (this.config.debug) {
-        console.log(`[MusicController] NoteOn: ${noteName} (vel: ${event.velocity.toFixed(2)}, theremin: ${this.mappingEngine.isThereminMode()})`);
+        console.log(`[MusicController] NoteOn: ${noteName} (vel: ${event.velocity.toFixed(2)}, accomp: ${isAccompaniment})`);
       }
     } else {
-      // noteOff - release the note
       if (!this.config.internalSoundsMuted) {
-        this.soundEngine.noteOff('melody', noteName);
+        if (isAccompaniment) {
+          const voice = midiNote < 48 ? 'bass' as const : midiNote < 60 ? 'chord' as const : 'melody' as const;
+          this.soundEngine.accompNoteOff(voice, noteName);
+        } else {
+          this.soundEngine.noteOff('melody', noteName);
+        }
       }
 
       if (this.config.debug) {
@@ -603,25 +708,34 @@ export class MusicController {
    */
   private handleChordEvent(event: import('../mapping/events').ChordEvent): void {
     const noteNames = event.midiNotes.map(midiToNoteName);
+    const isAccompaniment = event.voicingName?.startsWith('accomp-');
 
     if (event.action === 'chordOn') {
-      // Play internal sound - skip if internal sounds are muted
       if (!this.config.internalSoundsMuted) {
-        // Use chord voice for chord events
-        this.soundEngine.playChord('chord', noteNames, {
-          velocity: event.velocity,
-          duration: '2n', // Default duration for chords
-        });
+        if (isAccompaniment) {
+          this.soundEngine.playAccompanimentChord('chord', noteNames, {
+            velocity: event.velocity,
+            duration: '1n',
+          });
+        } else {
+          this.soundEngine.playChord('chord', noteNames, {
+            velocity: event.velocity,
+            duration: '2n',
+          });
+        }
       }
 
       if (this.config.debug) {
         console.log(`[MusicController] ChordOn: [${noteNames.join(', ')}]${event.voicingName ? ` (${event.voicingName})` : ''}`);
       }
     } else {
-      // Release all notes in the chord - skip if internal sounds are muted
       if (!this.config.internalSoundsMuted) {
-        for (const noteName of noteNames) {
-          this.soundEngine.noteOff('chord', noteName);
+        if (isAccompaniment) {
+          this.soundEngine.releaseAccompaniment();
+        } else {
+          for (const noteName of noteNames) {
+            this.soundEngine.noteOff('chord', noteName);
+          }
         }
       }
 
@@ -732,6 +846,37 @@ export class MusicController {
         // Future: Loop recording
         break;
 
+      // Accompaniment system actions
+      case 'setPerformanceMode':
+        if (event.targetId === 'free' || event.targetId === 'constrained' || event.targetId === 'accompaniment') {
+          this.setPerformanceMode(event.targetId);
+        }
+        break;
+
+      case 'setAccompanimentPattern':
+        if (event.targetId) {
+          useAppStore.getState().setAccompanimentSettings({ pattern: event.targetId as 'pad' | 'drone' | 'arpeggio' | 'bassline' });
+        }
+        break;
+
+      case 'adjustTension':
+        if (event.value !== undefined) {
+          const currentSettings = useAppStore.getState().accompanimentSettings;
+          useAppStore.getState().setAccompanimentSettings({
+            tension: Math.max(0, Math.min(1, currentSettings.tension + event.value)),
+          });
+        }
+        break;
+
+      case 'adjustDensity':
+        if (event.value !== undefined) {
+          const currentSettings = useAppStore.getState().accompanimentSettings;
+          useAppStore.getState().setAccompanimentSettings({
+            density: Math.max(0, Math.min(1, currentSettings.density + event.value)),
+          });
+        }
+        break;
+
       default:
         if (this.config.debug) {
           console.log(`[MusicController] Unhandled structural action: ${event.action}`);
@@ -813,8 +958,50 @@ export class MusicController {
 
     // Reset progression if changed
     if (config.progressionId) {
-      this.progressionState = createProgressionState(this.config.progressionId);
+      this.harmonyManager.setProgression(this.config.progressionId);
     }
+  }
+
+  /**
+   * Set the performance mode (free, constrained, accompaniment).
+   */
+  setPerformanceMode(mode: PerformanceMode): void {
+    this.performanceMode = mode;
+    useAppStore.getState().setPerformanceMode(mode);
+
+    // Enable/disable accompaniment engine
+    if (mode === 'accompaniment') {
+      const settings = useAppStore.getState().accompanimentSettings;
+      this.accompanimentEngine.applySettings(settings);
+    } else {
+      this.accompanimentEngine.setEnabled(false);
+    }
+
+    if (this.config.debug) {
+      console.log(`[MusicController] Performance mode: ${mode}`);
+    }
+  }
+
+  /**
+   * Sync accompaniment settings from store to engine.
+   */
+  syncAccompanimentSettings(): void {
+    const settings = useAppStore.getState().accompanimentSettings;
+    this.accompanimentEngine.applySettings(settings);
+  }
+
+  /**
+   * Get the current performance mode.
+   */
+  getPerformanceMode(): PerformanceMode {
+    return this.performanceMode;
+  }
+
+  /**
+   * Get the HarmonyManager instance.
+   */
+  getHarmonyManager(): HarmonyManager {
+    return this.harmonyManager;
   }
 
   /**
@@ -825,6 +1012,8 @@ export class MusicController {
     this.config.scaleType = scaleType;
     this.scale = generateScale(rootNote, scaleType, 3, 6);
     this.bassScale = generateScale(rootNote, scaleType, 1, 3);
+    // Sync with HarmonyManager
+    this.harmonyManager.setKey(rootNote, scaleType);
   }
 
   /**
@@ -833,7 +1022,7 @@ export class MusicController {
   setProgression(progressionId: string): void {
     if (PROGRESSIONS[progressionId]) {
       this.config.progressionId = progressionId;
-      this.progressionState = createProgressionState(progressionId);
+      this.harmonyManager.setProgression(progressionId);
     }
   }
 
@@ -887,6 +1076,10 @@ export class MusicController {
     // Update body part configs
     this.bodyPartConfigs = settings.bodyPartConfigs;
 
+    // Sync accompaniment engine tempo
+    const avgBpm = (settings.tempoRange[0] + settings.tempoRange[1]) / 2;
+    this.accompanimentEngine.setBpm(avgBpm);
+
     // Forward to SoundEngine
     this.soundEngine.applyMusicSettings(settings);
   }
@@ -902,7 +1095,7 @@ export class MusicController {
    * Get current chord info.
    */
   getCurrentChord(): ChordInfo | null {
-    return getCurrentChord(this.progressionState);
+    return this.harmonyManager.getCurrentChord();
   }
 
   /**
@@ -997,6 +1190,8 @@ export class MusicController {
     this.stop();
     this.eventUnsubscribe?.();
     this.musicalEventUnsubscribe?.();
+    this.harmonyContextUnsubscribe?.();
+    this.accompanimentEngine.dispose();
     this.soundEngine.dispose();
   }
 }
