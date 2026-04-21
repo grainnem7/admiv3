@@ -5,6 +5,7 @@
  */
 
 import { useState, useCallback } from 'react';
+import { IconChevronDown, IconChevronRight } from '../design-system/Icons';
 import {
   EFFECT_PRESETS,
   type EffectChainPreset,
@@ -103,7 +104,7 @@ function EffectChainSelector({ isExpanded, onToggle }: EffectChainSelectorProps)
         aria-label={isExpanded ? 'Hide effect presets' : 'Show effect presets'}
       >
         <span className="effect-chain-toggle-icon">
-          {isExpanded ? '▼' : '▶'}
+          {isExpanded ? <IconChevronDown size={12} /> : <IconChevronRight size={12} />}
         </span>
         <span className="effect-chain-toggle-label">Sound Style</span>
         <span

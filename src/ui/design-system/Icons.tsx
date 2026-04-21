@@ -409,3 +409,85 @@ export function IconSequencer({ size = 20, ...props }: IconProps) {
     </svg>
   );
 }
+
+// --- Waveform icons for sound presets ---
+
+export function IconWaveformSine({ size = 20, ...props }: IconProps) {
+  return (
+    <svg {...defaultProps} width={size} height={size} viewBox="0 0 20 20" {...props}>
+      <path d="M2 10c1.5-4 3-6 5-6s3.5 6 5 6 3.5-6 5-6" strokeWidth={2} />
+    </svg>
+  );
+}
+
+export function IconWaveformTriangle({ size = 20, ...props }: IconProps) {
+  return (
+    <svg {...defaultProps} width={size} height={size} viewBox="0 0 20 20" {...props}>
+      <path d="M2 10L6 4l4 12 4-12 4 6" strokeWidth={2} />
+    </svg>
+  );
+}
+
+export function IconWaveformSquare({ size = 20, ...props }: IconProps) {
+  return (
+    <svg {...defaultProps} width={size} height={size} viewBox="0 0 20 20" {...props}>
+      <path d="M2 14V6h4v8h4V6h4v8h4V6" strokeWidth={2} />
+    </svg>
+  );
+}
+
+export function IconWaveformSawtooth({ size = 20, ...props }: IconProps) {
+  return (
+    <svg {...defaultProps} width={size} height={size} viewBox="0 0 20 20" {...props}>
+      <path d="M2 14l4-8v8l4-8v8l4-8v8l4-8" strokeWidth={2} />
+    </svg>
+  );
+}
+
+// --- Additional icons ---
+
+export function IconSmartphone({ size = 20, ...props }: IconProps) {
+  return (
+    <svg {...defaultProps} width={size} height={size} viewBox="0 0 20 20" {...props}>
+      <rect x="5" y="2" width="10" height="16" rx="2" />
+      <line x1="9" y1="15" x2="11" y2="15" />
+    </svg>
+  );
+}
+
+export function IconPalette({ size = 20, ...props }: IconProps) {
+  return (
+    <svg {...defaultProps} width={size} height={size} viewBox="0 0 20 20" {...props}>
+      <path d="M10 2a8 8 0 00-1 15.9c1 .1 1.5-.5 1.5-1.2v-1c0-1 .7-1.4 1.2-1.2a4 4 0 004.3-5A8 8 0 0010 2z" />
+      <circle cx="7" cy="8" r="1" fill="currentColor" stroke="none" />
+      <circle cx="10" cy="6" r="1" fill="currentColor" stroke="none" />
+      <circle cx="13" cy="8" r="1" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+export function IconHelpCircle({ size = 20, ...props }: IconProps) {
+  return (
+    <svg {...defaultProps} width={size} height={size} viewBox="0 0 20 20" {...props}>
+      <circle cx="10" cy="10" r="8" />
+      <path d="M7.5 7.5a2.5 2.5 0 015 0c0 1.5-2.5 2-2.5 3.5" />
+      <circle cx="10" cy="14" r="0.5" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+export function IconArrowRight({ size = 20, ...props }: IconProps) {
+  return (
+    <svg {...defaultProps} width={size} height={size} viewBox="0 0 20 20" {...props}>
+      <path d="M4 10h12M12 6l4 4-4 4" />
+    </svg>
+  );
+}
+
+export function IconSquareStop({ size = 20, ...props }: IconProps) {
+  return (
+    <svg {...defaultProps} width={size} height={size} viewBox="0 0 20 20" {...props}>
+      <rect x="5" y="5" width="10" height="10" rx="1" fill="currentColor" />
+    </svg>
+  );
+}

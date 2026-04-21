@@ -10,14 +10,17 @@ import type {
   AccessibilityMode,
   ActiveModalities,
   CalibrationPhase,
+  ExperienceLevel,
   InputProfile,
   MusicSettingsPreset,
   Note,
+  PerformanceView,
   PoseLandmarks,
   ProcessedFrame,
   ProcessedMovement,
   Screen,
   TrackingFrame,
+  UISize,
   UserProfile,
 } from './types';
 import type { MusicSettings } from './types';
@@ -83,6 +86,20 @@ const initialState: AppState = {
   currentScreen: 'welcome',
   showDebugPanel: false,
   isFullscreen: false,
+
+  // UX
+  experienceLevel: 'beginner',
+  hasCompletedSetup: false,
+  hasCompletedTutorial: false,
+  performanceView: 'standard',
+  uiSize: 'standard',
+  sidebarCollapsed: false,
+  sidebarTier2Open: false,
+  sidebarTier3Open: false,
+  rightPanelOpen: true,
+  showCalibrationOverlay: false,
+  showHelpDescriptions: false,
+  ariaAnnouncement: '',
 };
 
 export const useAppStore = create<AppState & AppActions>()(
@@ -287,6 +304,25 @@ export const useAppStore = create<AppState & AppActions>()(
 
       setFullscreen: (isFullscreen: boolean) => set({ isFullscreen }),
 
+      // UX actions
+      setExperienceLevel: (level: ExperienceLevel) => set({ experienceLevel: level }),
+      setHasCompletedSetup: (completed: boolean) => set({ hasCompletedSetup: completed }),
+      setHasCompletedTutorial: (completed: boolean) => set({ hasCompletedTutorial: completed }),
+      setPerformanceView: (view: PerformanceView) => set({ performanceView: view }),
+      setUISize: (size: UISize) => set({ uiSize: size }),
+      announce: (message: string) => set({ ariaAnnouncement: message }),
+
+      // Sidebar actions
+      setSidebarCollapsed: (collapsed: boolean) => set({ sidebarCollapsed: collapsed }),
+      setSidebarTier2Open: (open: boolean) => set({ sidebarTier2Open: open }),
+      setSidebarTier3Open: (open: boolean) => set({ sidebarTier3Open: open }),
+      setRightPanelOpen: (open: boolean) => set({ rightPanelOpen: open }),
+
+      // Overlay actions
+      openCalibrationOverlay: () => set({ showCalibrationOverlay: true }),
+      closeCalibrationOverlay: () => set({ showCalibrationOverlay: false }),
+      toggleHelpDescriptions: () => set((state) => ({ showHelpDescriptions: !state.showHelpDescriptions })),
+
       // Global actions
       reset: () =>
         set({
@@ -313,6 +349,16 @@ export const useAppStore = create<AppState & AppActions>()(
         // Accompaniment persistence
         performanceMode: state.performanceMode,
         accompanimentSettings: state.accompanimentSettings,
+        // UX preferences persistence
+        experienceLevel: state.experienceLevel,
+        hasCompletedSetup: state.hasCompletedSetup,
+        hasCompletedTutorial: state.hasCompletedTutorial,
+        performanceView: state.performanceView,
+        uiSize: state.uiSize,
+        sidebarCollapsed: state.sidebarCollapsed,
+        sidebarTier2Open: state.sidebarTier2Open,
+        sidebarTier3Open: state.sidebarTier3Open,
+        rightPanelOpen: state.rightPanelOpen,
       }),
     }
   )
@@ -363,3 +409,17 @@ export const usePerformanceMode = () => useAppStore((s) => s.performanceMode);
 export const useAccompanimentSettings = () => useAppStore((s) => s.accompanimentSettings);
 export const useCurrentHarmonyContext = () => useAppStore((s) => s.currentHarmonyContext);
 export const useKeySuggestion = () => useAppStore((s) => s.keySuggestion);
+
+// UX selectors
+export const useExperienceLevel = () => useAppStore((s) => s.experienceLevel);
+export const useHasCompletedSetup = () => useAppStore((s) => s.hasCompletedSetup);
+export const useHasCompletedTutorial = () => useAppStore((s) => s.hasCompletedTutorial);
+export const usePerformanceViewMode = () => useAppStore((s) => s.performanceView);
+export const useUISize = () => useAppStore((s) => s.uiSize);
+export const useAriaAnnouncement = () => useAppStore((s) => s.ariaAnnouncement);
+export const useSidebarCollapsed = () => useAppStore((s) => s.sidebarCollapsed);
+export const useSidebarTier2Open = () => useAppStore((s) => s.sidebarTier2Open);
+export const useSidebarTier3Open = () => useAppStore((s) => s.sidebarTier3Open);
+export const useRightPanelOpen = () => useAppStore((s) => s.rightPanelOpen);
+export const useShowCalibrationOverlay = () => useAppStore((s) => s.showCalibrationOverlay);
+export const useShowHelpDescriptions = () => useAppStore((s) => s.showHelpDescriptions);

@@ -11,23 +11,23 @@
      COLOR SYSTEM - Studio Grade Dark Theme
      ============================================ */
 
-  /* Background layers (darkest to lightest) */
-  --color-bg-deep: #0a0a0b;
-  --color-bg: #111113;
-  --color-bg-raised: #18181b;
-  --color-bg-elevated: #1f1f23;
-  --color-bg-overlay: #27272a;
+  /* Background layers - wider spread for clear visual separation */
+  --color-bg-deep: #08080a;
+  --color-bg: #0e0e12;
+  --color-bg-raised: #1a1a22;
+  --color-bg-elevated: #242430;
+  --color-bg-overlay: #2e2e3a;
 
-  /* Surface colors for cards/panels */
-  --color-surface: #18181b;
-  --color-surface-hover: #1f1f23;
-  --color-surface-active: #27272a;
-  --color-surface-muted: #09090b;
+  /* Surface colors for cards/panels - distinct from backgrounds */
+  --color-surface: #1a1a22;
+  --color-surface-hover: #242430;
+  --color-surface-active: #2e2e3a;
+  --color-surface-muted: #0a0a0e;
 
-  /* Border colors */
-  --color-border: #27272a;
-  --color-border-subtle: #1f1f23;
-  --color-border-strong: #3f3f46;
+  /* Border colors - much more visible */
+  --color-border: #363645;
+  --color-border-subtle: #2a2a38;
+  --color-border-strong: #4a4a5a;
   --color-border-focus: #f97316;
 
   /* Primary accent - Warm orange */
@@ -74,16 +74,16 @@
   --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --font-family-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', Consolas, monospace;
 
-  /* Font sizes - Modular scale (1.2 ratio) */
-  --text-xs: 0.6875rem;    /* 11px */
-  --text-sm: 0.75rem;      /* 12px */
-  --text-base: 0.8125rem;  /* 13px - Compact for pro tools */
-  --text-md: 0.875rem;     /* 14px */
-  --text-lg: 1rem;         /* 16px */
-  --text-xl: 1.125rem;     /* 18px */
-  --text-2xl: 1.5rem;      /* 24px */
-  --text-3xl: 1.875rem;    /* 30px */
-  --text-4xl: 2.25rem;     /* 36px */
+  /* Font sizes - Readable scale, WCAG compliant */
+  --text-xs: 0.75rem;       /* 12px - smallest allowed */
+  --text-sm: 0.8125rem;     /* 13px */
+  --text-base: 0.875rem;    /* 14px - base body */
+  --text-md: 1rem;          /* 16px */
+  --text-lg: 1.125rem;      /* 18px */
+  --text-xl: 1.25rem;       /* 20px */
+  --text-2xl: 1.5rem;       /* 24px */
+  --text-3xl: 2rem;         /* 32px */
+  --text-4xl: 2.5rem;       /* 40px */
 
   /* Line heights */
   --leading-none: 1;
@@ -147,26 +147,26 @@
   --touch-target-compact: 32px;
 
   /* ============================================
-     BORDERS & RADII (Sharp edges throughout)
+     BORDERS & RADII
      ============================================ */
 
   --radius-none: 0;
-  --radius-sm: 0;
-  --radius-md: 0;
-  --radius-lg: 0;
-  --radius-xl: 0;
-  --radius-2xl: 0;
-  --radius-full: 0;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+  --radius-full: 9999px;
 
   /* ============================================
      SHADOWS & EFFECTS
      ============================================ */
 
-  /* Subtle shadows for depth */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.3);
-  --shadow-xl: 0 8px 16px rgba(0, 0, 0, 0.4), 0 4px 8px rgba(0, 0, 0, 0.3);
+  /* Shadows with real depth on dark backgrounds */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.5), 0 2px 4px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.55), 0 4px 8px rgba(0, 0, 0, 0.4);
+  --shadow-xl: 0 16px 32px rgba(0, 0, 0, 0.6), 0 8px 16px rgba(0, 0, 0, 0.4);
 
   /* Glow effects for active states */
   --glow-primary: 0 0 12px var(--color-primary-glow);
@@ -212,25 +212,46 @@
      ============================================ */
 
   /* Buttons */
-  --btn-height-sm: 28px;
-  --btn-height-md: 32px;
-  --btn-height-lg: 40px;
+  --btn-height-sm: 32px;
+  --btn-height-md: 36px;
+  --btn-height-lg: 44px;
 
   /* Inputs */
-  --input-height-sm: 28px;
-  --input-height-md: 32px;
-  --input-height-lg: 40px;
+  --input-height-sm: 32px;
+  --input-height-md: 36px;
+  --input-height-lg: 44px;
 
   /* Sliders */
-  --slider-track-height: 4px;
-  --slider-thumb-size: 14px;
+  --slider-track-height: 6px;
+  --slider-thumb-size: 18px;
 
   /* Meters */
-  --meter-height: 6px;
-  --meter-height-lg: 10px;
+  --meter-height: 8px;
+  --meter-height-lg: 12px;
 
   /* Tabs */
-  --tab-height: 32px;
+  --tab-height: 36px;
+
+  /* Legacy variable aliases (for components not yet migrated) */
+  --color-bg-secondary: var(--color-bg-raised);
+  --color-text-muted: var(--color-text-secondary);
+  --space-xs: var(--space-1);
+  --space-sm: var(--space-2);
+  --space-md: var(--space-4);
+  --space-lg: var(--space-6);
+  --space-xl: var(--space-8);
+  --space-xxl: var(--space-12);
+  --font-size-xs: var(--text-xs);
+  --font-size-sm: var(--text-sm);
+  --font-size-md: var(--text-md);
+  --font-size-lg: var(--text-lg);
+  --font-size-xl: var(--text-2xl);
+  --font-size-xxl: var(--text-3xl);
+  --border-radius: var(--radius-md);
+  --border-radius-lg: var(--radius-lg);
+  --border-radius-xl: var(--radius-xl);
+  --transition-fast: var(--duration-fast);
+  --transition-normal: var(--duration-normal);
 }
 
 /* ============================================
@@ -239,11 +260,11 @@
    ============================================ */
 
 [data-ui-size="large"] {
-  --text-xs: 0.75rem;      /* 12px */
-  --text-sm: 0.875rem;     /* 14px */
-  --text-base: 1rem;       /* 16px */
-  --text-md: 1.125rem;     /* 18px */
-  --text-lg: 1.25rem;      /* 20px */
+  --text-xs: 0.875rem;     /* 14px */
+  --text-sm: 1rem;         /* 16px */
+  --text-base: 1.125rem;   /* 18px */
+  --text-md: 1.25rem;      /* 20px */
+  --text-lg: 1.5rem;       /* 24px */
 
   --space-1: 0.375rem;     /* 6px */
   --space-2: 0.75rem;      /* 12px */

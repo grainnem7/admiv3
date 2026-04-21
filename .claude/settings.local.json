@@ -18,7 +18,15 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(npx vite:*)",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(npx vitest:*)",
+      "Bash(cp '/c/Users/Dell Precision/Downloads/Elvis Presley - Cant Help Falling In Love Official Audio_stems_wav/Elvis Presley - Cant Help Falling In Love Official Audio_stems/Elvis Presley - Cant Help Falling In Love Official Audio_bass.wav' '/c/Users/Dell Precision/Repos/ADMIv3/public/songs/cant-help-falling-in-love/bass.wav')",
+      "Bash(cp '/c/Users/Dell Precision/Downloads/Elvis Presley - Cant Help Falling In Love Official Audio_stems_wav/Elvis Presley - Cant Help Falling In Love Official Audio_stems/Elvis Presley - Cant Help Falling In Love Official Audio_drums.wav' '/c/Users/Dell Precision/Repos/ADMIv3/public/songs/cant-help-falling-in-love/drums.wav')",
+      "Bash(cp '/c/Users/Dell Precision/Downloads/Elvis Presley - Cant Help Falling In Love Official Audio_stems_wav/Elvis Presley - Cant Help Falling In Love Official Audio_stems/Elvis Presley - Cant Help Falling In Love Official Audio_other.wav' '/c/Users/Dell Precision/Repos/ADMIv3/public/songs/cant-help-falling-in-love/other.wav')",
+      "Bash(cp '/c/Users/Dell Precision/Downloads/Elvis Presley - Cant Help Falling In Love Official Audio_stems_wav/Elvis Presley - Cant Help Falling In Love Official Audio_stems/Elvis Presley - Cant Help Falling In Love Official Audio_vocals.wav' '/c/Users/Dell Precision/Repos/ADMIv3/public/songs/cant-help-falling-in-love/vocals.wav')",
+      "Bash(pip --version)",
+      "Bash(git lfs:*)",
+      "Bash(python -m venv \"/c/Users/Dell Precision/tools/audio-analysis-env\")"
     ],
     "deny": [],
     "ask": []

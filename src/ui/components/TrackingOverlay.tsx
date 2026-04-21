@@ -51,14 +51,18 @@ const HAND_CONNECTIONS = [
   [5, 9], [9, 13], [13, 17], // palm
 ];
 
-// Colors for different modalities
+// Colors for different modalities — brighter for visibility
 const COLORS = {
-  pose: { primary: '#00d9ff', secondary: 'rgba(0, 217, 255, 0.5)', connection: 'rgba(0, 217, 255, 0.3)' },
-  leftHand: { primary: '#ff6b6b', secondary: 'rgba(255, 107, 107, 0.5)', connection: 'rgba(255, 107, 107, 0.3)' },
-  rightHand: { primary: '#4ecdc4', secondary: 'rgba(78, 205, 196, 0.5)', connection: 'rgba(78, 205, 196, 0.3)' },
-  face: { primary: '#ffe66d', secondary: 'rgba(255, 230, 109, 0.5)', connection: 'rgba(255, 230, 109, 0.2)' },
-  active: { primary: '#00ff88', secondary: 'rgba(0, 255, 136, 0.7)', glow: 'rgba(0, 255, 136, 0.3)' },
+  pose: { primary: '#00d9ff', secondary: 'rgba(0, 217, 255, 0.6)', connection: 'rgba(0, 217, 255, 0.45)' },
+  leftHand: { primary: '#ff6b6b', secondary: 'rgba(255, 107, 107, 0.6)', connection: 'rgba(255, 107, 107, 0.45)' },
+  rightHand: { primary: '#4ecdc4', secondary: 'rgba(78, 205, 196, 0.6)', connection: 'rgba(78, 205, 196, 0.45)' },
+  face: { primary: '#ffe66d', secondary: 'rgba(255, 230, 109, 0.6)', connection: 'rgba(255, 230, 109, 0.35)' },
+  active: { primary: '#00ff88', secondary: 'rgba(0, 255, 136, 0.8)', glow: 'rgba(0, 255, 136, 0.4)' },
 };
+
+// Dark outline for all drawn elements — ensures visibility on any background
+const OUTLINE_COLOR = 'rgba(0, 0, 0, 0.5)';
+const OUTLINE_WIDTH = 2;
 
 // Landmark names for labels
 const POSE_LANDMARK_NAMES = [
@@ -176,14 +180,22 @@ function TrackingOverlay({
 
     // Draw pose
     if (frame.pose && profile?.activeModalities.pose !== false) {
-      // Draw connections
+      // Draw connections with dark outline for visibility
       if (showConnections) {
-        ctx.strokeStyle = COLORS.pose.connection;
-        ctx.lineWidth = 2;
         for (const [start, end] of POSE_CONNECTIONS) {
           const p1 = frame.pose.landmarks[start];
           const p2 = frame.pose.landmarks[end];
           if (p1 && p2 && (p1.visibility ?? 0) > 0.5 && (p2.visibility ?? 0) > 0.5) {
+            // Dark outline pass
+            ctx.strokeStyle = OUTLINE_COLOR;
+            ctx.lineWidth = 3 + OUTLINE_WIDTH;
+            ctx.beginPath();
+            ctx.moveTo(toCanvasX(p1.x), toCanvasY(p1.y));
+            ctx.lineTo(toCanvasX(p2.x), toCanvasY(p2.y));
+            ctx.stroke();
+            // Color pass
+            ctx.strokeStyle = COLORS.pose.connection;
+            ctx.lineWidth = 3;
             ctx.beginPath();
             ctx.moveTo(toCanvasX(p1.x), toCanvasY(p1.y));
             ctx.lineTo(toCanvasX(p2.x), toCanvasY(p2.y));
@@ -204,10 +216,14 @@ function TrackingOverlay({
           // Highlighted tracked landmark
           drawTrackedLandmark(ctx, x, y, tracked.role);
         } else if (showAllLandmarks) {
-          // Regular landmark
+          // Regular landmark with dark outline
+          ctx.fillStyle = OUTLINE_COLOR;
+          ctx.beginPath();
+          ctx.arc(x, y, 6 + 1, 0, Math.PI * 2);
+          ctx.fill();
           ctx.fillStyle = COLORS.pose.secondary;
           ctx.beginPath();
-          ctx.arc(x, y, 4, 0, Math.PI * 2);
+          ctx.arc(x, y, 6, 0, Math.PI * 2);
           ctx.fill();
         }
 
@@ -224,14 +240,20 @@ function TrackingOverlay({
 
       const colors = hand === 'left' ? COLORS.leftHand : COLORS.rightHand;
 
-      // Draw connections
+      // Draw connections with dark outline
       if (showConnections) {
-        ctx.strokeStyle = colors.connection;
-        ctx.lineWidth = 1.5;
         for (const [start, end] of HAND_CONNECTIONS) {
           const p1 = landmarks.landmarks[start];
           const p2 = landmarks.landmarks[end];
           if (p1 && p2) {
+            ctx.strokeStyle = OUTLINE_COLOR;
+            ctx.lineWidth = 2 + OUTLINE_WIDTH;
+            ctx.beginPath();
+            ctx.moveTo(toCanvasX(p1.x), toCanvasY(p1.y));
+            ctx.lineTo(toCanvasX(p2.x), toCanvasY(p2.y));
+            ctx.stroke();
+            ctx.strokeStyle = colors.connection;
+            ctx.lineWidth = 2;
             ctx.beginPath();
             ctx.moveTo(toCanvasX(p1.x), toCanvasY(p1.y));
             ctx.lineTo(toCanvasX(p2.x), toCanvasY(p2.y));
@@ -240,14 +262,18 @@ function TrackingOverlay({
         }
       }
 
-      // Draw landmarks (all same size, no large tracked dots)
+      // Draw landmarks with dark outline
       if (showAllLandmarks) {
         landmarks.landmarks.forEach((landmark, index) => {
           const x = toCanvasX(landmark.x);
           const y = toCanvasY(landmark.y);
+          ctx.fillStyle = OUTLINE_COLOR;
+          ctx.beginPath();
+          ctx.arc(x, y, 5 + 1, 0, Math.PI * 2);
+          ctx.fill();
           ctx.fillStyle = colors.secondary;
           ctx.beginPath();
-          ctx.arc(x, y, 3, 0, Math.PI * 2);
+          ctx.arc(x, y, 5, 0, Math.PI * 2);
           ctx.fill();
 
           // Draw label if enabled (only for key points to avoid clutter)
@@ -266,13 +292,33 @@ function TrackingOverlay({
         const distance = Math.sqrt(dx * dx + dy * dy);
 
         if (distance < 0.05) {
-          // Pinch detected - draw connecting line
+          // Pinch detected - draw prominent connecting line with glow
+          const tx = toCanvasX(thumbTip.x), ty = toCanvasY(thumbTip.y);
+          const ix = toCanvasX(indexTip.x), iy = toCanvasY(indexTip.y);
+          // Dark outline
+          ctx.strokeStyle = OUTLINE_COLOR;
+          ctx.lineWidth = 5;
+          ctx.beginPath();
+          ctx.moveTo(tx, ty);
+          ctx.lineTo(ix, iy);
+          ctx.stroke();
+          // Bright line
           ctx.strokeStyle = COLORS.active.primary;
           ctx.lineWidth = 3;
           ctx.beginPath();
-          ctx.moveTo(toCanvasX(thumbTip.x), toCanvasY(thumbTip.y));
-          ctx.lineTo(toCanvasX(indexTip.x), toCanvasY(indexTip.y));
+          ctx.moveTo(tx, ty);
+          ctx.lineTo(ix, iy);
           ctx.stroke();
+          // Glow dot at midpoint
+          const mx = (tx + ix) / 2, my = (ty + iy) / 2;
+          ctx.fillStyle = COLORS.active.glow;
+          ctx.beginPath();
+          ctx.arc(mx, my, 10, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = COLORS.active.primary;
+          ctx.beginPath();
+          ctx.arc(mx, my, 5, 0, Math.PI * 2);
+          ctx.fill();
         }
       }
     };
@@ -343,19 +389,25 @@ function TrackingOverlay({
     y: number,
     role: TrackedFeature['role']
   ) {
-    const size = role === 'continuous' ? 12 : role === 'trigger' ? 10 : 8;
+    const size = role === 'continuous' ? 14 : role === 'trigger' ? 12 : 10;
     const color = role === 'continuous' ? COLORS.active : COLORS.pose;
+
+    // Dark outline for visibility
+    ctx.fillStyle = OUTLINE_COLOR;
+    ctx.beginPath();
+    ctx.arc(x, y, size + 8, 0, Math.PI * 2);
+    ctx.fill();
 
     // Outer glow
     ctx.fillStyle = 'glow' in color ? color.glow : color.secondary;
     ctx.beginPath();
-    ctx.arc(x, y, size + 6, 0, Math.PI * 2);
+    ctx.arc(x, y, size + 7, 0, Math.PI * 2);
     ctx.fill();
 
     // Middle ring
     ctx.fillStyle = color.secondary;
     ctx.beginPath();
-    ctx.arc(x, y, size + 2, 0, Math.PI * 2);
+    ctx.arc(x, y, size + 3, 0, Math.PI * 2);
     ctx.fill();
 
     // Inner dot
@@ -365,9 +417,9 @@ function TrackingOverlay({
     ctx.fill();
 
     // Center highlight
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
     ctx.beginPath();
-    ctx.arc(x - size / 3, y - size / 3, size / 3, 0, Math.PI * 2);
+    ctx.arc(x - size / 4, y - size / 4, size / 3, 0, Math.PI * 2);
     ctx.fill();
   }
 

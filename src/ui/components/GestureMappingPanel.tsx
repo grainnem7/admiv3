@@ -8,6 +8,7 @@
  */
 
 import { useState, useCallback } from 'react';
+import { IconChevronDown, IconChevronRight } from '../design-system/Icons';
 import {
   GESTURE_TYPES,
   INSTRUMENTS,
@@ -220,7 +221,7 @@ function GestureMappingPanel({
         aria-label={isExpanded ? 'Hide gesture mappings' : 'Show gesture mappings'}
       >
         <span className="gesture-mapping-toggle-icon">
-          {isExpanded ? '▼' : '▶'}
+          {isExpanded ? <IconChevronDown size={12} /> : <IconChevronRight size={12} />}
         </span>
         <span className="gesture-mapping-toggle-label">
           Gesture Sounds

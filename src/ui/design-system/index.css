@@ -10,5 +10,6 @@
 @import './components.css';
 @import './layout.css';
 
-/* Import legacy styles for components not yet migrated to design system */
-@import '../../index.css';
+/* Legacy index.css removed — was overriding design system tokens with
+   conflicting color values (warm brown vs cool dark palette) and
+   redefining .btn, .welcome-screen, and other classes. */

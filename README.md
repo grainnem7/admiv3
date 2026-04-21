@@ -2,6 +2,39 @@
 
 This repository contains ADMIv3 — a browser-based interactive mapping/music project built with TypeScript and Vite.
 
+## ADMI Technical Spec
+
+ADMI is a browser-based, gesture-controlled digital musical instrument developed as part of PhD research into accessible music-making. It uses webcam input and runs entirely in the browser with no specialist hardware required.
+
+Core technologies:
+
+- Pose estimation via MediaPipe for real-time skeletal tracking from webcam input
+- Gesture and movement pattern recognition that maps detected motion to musical parameters
+- Tone.js / Web Audio API for sound synthesis, audio processing, and low-latency playback
+- Browser-based architecture chosen for accessibility: no installation, standard hardware support, and cross-platform compatibility
+
+Input and interaction:
+
+- Single webcam captures upper-body movement
+- Pose estimation extracts joint and hand positions across shoulders, elbows, wrists, head, and hands
+- Gesture recognition distinguishes intentional musical gestures from ambient movement
+- Calibration allows each musician to define a personal movement range and interaction preferences
+- Multiple recognition and mapping modes can be configured per musician
+
+Sound mapping:
+
+- Gesture parameters such as position, velocity, trajectory, and sustained pose map to musical parameters including pitch, timbre, volume, and effects
+- Mappings are configurable and adjustable for each user
+- Sound design is developed to support expressive, accessible musical interaction
+
+Current limitations:
+
+- Accuracy can decrease with significant involuntary movement
+- Calibration still requires refinement to become more intuitive and faster
+- Gesture-to-sound latency requires ongoing optimization
+- Training and mapping currently perform best with familiar users and need better generalization for unfamiliar performers
+- Browser performance varies across devices and browsers
+
 ## Quick start
 
 - Install dependencies:

@@ -6,7 +6,7 @@
  */
 
 import { useEffect } from 'react';
-import { useAppStore, useCurrentScreen, useShowDebugPanel, useIsMuted } from '../state/store';
+import { useAppStore, useCurrentScreen, useShowDebugPanel, useIsMuted, useUISize } from '../state/store';
 import { getAudioEngine } from '../sound/AudioEngine';
 
 // Import the design system (includes all CSS)
@@ -14,21 +14,34 @@ import './design-system/index';
 
 // Screens
 import WelcomeScreen from './screens/WelcomeScreen';
+import SetupWizard from './screens/SetupWizard';
 import CalibrationScreen from './screens/CalibrationScreen';
 import PerformanceScreen from './screens/PerformanceScreenV2';
 import BetweenUsScreen from './screens/BetweenUsScreen';
+import HarmonicBlendingScreen from './screens/HarmonicBlendingScreen';
+import SongPresetScreen from './screens/SongPresetScreen';
 import InfoScreen from './screens/InfoScreen';
 
 // Components
 import MuteButton from './components/MuteButton';
 import DebugPanel from './facilitator/DebugPanel';
+import GuidedOverlay from './components/performance/GuidedOverlay';
+import CalibrationModal from './components/performance/CalibrationModal';
+import AriaLiveAnnouncer from './components/AriaLiveAnnouncer';
+import ScreenTransition from './components/ScreenTransition';
 
 function App() {
   const screen = useCurrentScreen();
   const showDebug = useShowDebugPanel();
   const isMuted = useIsMuted();
+  const uiSize = useUISize();
   const toggleMute = useAppStore((s) => s.toggleMute);
   const toggleDebugPanel = useAppStore((s) => s.toggleDebugPanel);
+
+  // Apply UI size to document
+  useEffect(() => {
+    document.documentElement.dataset.uiSize = uiSize;
+  }, [uiSize]);
 
   // Initialize audio engine on mount
   useEffect(() => {
@@ -79,12 +92,18 @@ function App() {
     switch (screen) {
       case 'welcome':
         return <WelcomeScreen />;
+      case 'setup':
+        return <SetupWizard />;
       case 'calibration':
         return <CalibrationScreen />;
       case 'performance':
         return <PerformanceScreen />;
       case 'betweenUs':
         return <BetweenUsScreen />;
+      case 'harmonicBlending':
+        return <HarmonicBlendingScreen />;
+      case 'songPreset':
+        return <SongPresetScreen />;
       case 'info':
         return <InfoScreen />;
       default:
@@ -100,14 +119,25 @@ function App() {
       </a>
 
       <main id="main-content">
-        {renderScreen()}
+        <ScreenTransition screenKey={screen}>
+          {renderScreen()}
+        </ScreenTransition>
       </main>
+
+      {/* Guided tutorial overlay (performance screen only, first visit) */}
+      {screen === 'performance' && <GuidedOverlay />}
+
+      {/* Calibration overlay (can be triggered from performance) */}
+      <CalibrationModal />
 
       {/* Always visible mute button */}
       <MuteButton />
 
       {/* Debug panel for facilitators */}
       {showDebug && <DebugPanel />}
+
+      {/* Screen reader announcements */}
+      <AriaLiveAnnouncer />
     </>
   );
 }

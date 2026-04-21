@@ -8,6 +8,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { IconChevronRight, IconPlay, IconSquareStop } from '../design-system/Icons';
 import {
   getArpeggiator,
   type ArpPattern,
@@ -280,7 +281,7 @@ export const MusicalModulesPanel: React.FC = () => {
           onClick={() => toggleSection('scale')}
         >
           <span className={`expand-icon ${expandedSection === 'scale' ? 'expanded' : ''}`}>
-            ▶
+            <IconChevronRight size={12} />
           </span>
           <span className="module-title">Scale / Quantizer</span>
           <span className={`module-status ${quantizeEnabled ? 'active' : ''}`}>
@@ -338,7 +339,7 @@ export const MusicalModulesPanel: React.FC = () => {
           onClick={() => toggleSection('arp')}
         >
           <span className={`expand-icon ${expandedSection === 'arp' ? 'expanded' : ''}`}>
-            ▶
+            <IconChevronRight size={12} />
           </span>
           <span className="module-title">Arpeggiator</span>
           <span className={`module-status ${arpEnabled ? 'active' : ''}`}>
@@ -428,7 +429,7 @@ export const MusicalModulesPanel: React.FC = () => {
           onClick={() => toggleSection('seq')}
         >
           <span className={`expand-icon ${expandedSection === 'seq' ? 'expanded' : ''}`}>
-            ▶
+            <IconChevronRight size={12} />
           </span>
           <span className="module-title">Sequencer</span>
           <span className={`module-status ${seqPlaying ? 'active' : ''}`}>
@@ -443,7 +444,7 @@ export const MusicalModulesPanel: React.FC = () => {
                 className={`transport-btn ${seqPlaying ? 'active' : ''}`}
                 onClick={handleSeqPlayToggle}
               >
-                {seqPlaying ? '⏹' : '▶'}
+                {seqPlaying ? <IconSquareStop size={14} /> : <IconPlay size={14} />}
               </button>
               <button
                 className={`transport-btn record ${seqRecording ? 'active' : ''}`}

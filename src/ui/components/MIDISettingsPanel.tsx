@@ -9,6 +9,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { IconChevronDown, IconChevronRight } from '../design-system/Icons';
 import { MIDIManager, MIDIOutput, type MIDIDeviceInfo } from '../../midi';
 import { useAppStore, useInternalSoundsMuted } from '../../state/store';
 import { getMusicController } from '../../core/MusicController';
@@ -130,7 +131,7 @@ function MIDISettingsPanel({ isExpanded, onToggle }: MIDISettingsPanelProps) {
         aria-label={isExpanded ? 'Hide MIDI settings' : 'Show MIDI settings'}
       >
         <span className="midi-settings-toggle-icon">
-          {isExpanded ? '▼' : '▶'}
+          {isExpanded ? <IconChevronDown size={12} /> : <IconChevronRight size={12} />}
         </span>
         <span className="midi-settings-toggle-label">MIDI Output</span>
         <span

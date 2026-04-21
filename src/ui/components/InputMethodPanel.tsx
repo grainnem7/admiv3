@@ -8,11 +8,15 @@
  * - Color tracking (colored object tracking)
  */
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, type ReactNode } from 'react';
 import { useAppStore } from '../../state/store';
 import { getDeviceMotionTracker, getThereminMode, getTrackingManager, getColorTracker } from '../../tracking';
 import { getMappingEngine } from '../../mapping/MappingEngine';
 import type { ColorBlob } from '../../tracking/ColorTracker';
+import {
+  IconBody, IconHand, IconSmartphone, IconPalette,
+  IconChevronDown, IconChevronRight,
+} from '../design-system/Icons';
 
 export type InputMethod = 'body' | 'theremin' | 'motion' | 'color';
 
@@ -28,31 +32,31 @@ const INPUT_METHODS: Array<{
   id: InputMethod;
   name: string;
   description: string;
-  icon: string;
+  icon: ReactNode;
 }> = [
   {
     id: 'body',
     name: 'Body',
-    description: 'Use pose, hands, and face tracking',
-    icon: 'BDY',
+    description: 'Track your arms, head, and torso with the camera',
+    icon: <IconBody size={20} />,
   },
   {
     id: 'theremin',
     name: 'Theremin',
-    description: 'Two-hand pitch/volume control',
-    icon: 'THR',
+    description: 'Use one hand for pitch, one for volume',
+    icon: <IconHand size={20} />,
   },
   {
     id: 'motion',
     name: 'Motion',
-    description: 'Tilt and shake your device',
-    icon: 'MOT',
+    description: 'Tilt and shake your phone or tablet',
+    icon: <IconSmartphone size={20} />,
   },
   {
     id: 'color',
     name: 'Color',
-    description: 'Track colored objects',
-    icon: 'CLR',
+    description: 'Move a colored object to control sound',
+    icon: <IconPalette size={20} />,
   },
 ];
 
@@ -170,7 +174,7 @@ function InputMethodPanel({
         aria-expanded={isExpanded}
         aria-label={isExpanded ? 'Hide input methods' : 'Show input methods'}
       >
-        <span className="input-method-toggle-icon">{isExpanded ? '▼' : '▶'}</span>
+        <span className="input-method-toggle-icon">{isExpanded ? <IconChevronDown size={12} /> : <IconChevronRight size={12} />}</span>
         <span className="input-method-toggle-label">Input Method</span>
         <span className="input-method-current">
           {currentMethod?.icon} {currentMethod?.name}
@@ -399,10 +403,10 @@ function MotionStatus({
         }`}
       >
         {!isAvailable
-          ? '⚠️ Device motion not supported'
+          ? 'Device motion not supported'
           : hasPermission
-          ? '✓ Motion tracking active'
-          : '⚠️ Permission required - tap to allow'}
+          ? 'Motion tracking active'
+          : 'Permission required - tap to allow'}
       </div>
       <p style={{ fontSize: '0.8em', color: 'var(--color-text-secondary)', marginTop: 8 }}>
         Tilt your device to control pitch and filter. Shake for triggers.
@@ -424,8 +428,6 @@ function MotionStatus({
 type ColorRole = 'pitch' | 'volume' | 'filter' | 'pitch+volume';
 /** Which voice/sound to use */
 type ColorVoice = 'melody' | 'bass' | 'chord';
-/** Pitch range */
-type ColorRange = 'low' | 'mid' | 'high';
 
 const ROLE_LABELS: Record<ColorRole, string> = {
   'pitch+volume': 'Pitch + Volume',
@@ -440,16 +442,9 @@ const VOICE_LABELS: Record<ColorVoice, string> = {
   chord: 'Chords',
 };
 
-const RANGE_LABELS: Record<ColorRange, string> = {
-  low: 'Low',
-  mid: 'Mid',
-  high: 'High',
-};
-
 export interface ColorConfig {
   role: ColorRole;
   voice: ColorVoice;
-  range: ColorRange;
 }
 
 function ColorTrackingSettings({
@@ -480,7 +475,6 @@ function ColorTrackingSettings({
   }, []);
 
   const hasTrackedColors = trackedColorsList.length > 0;
-  const detectedCount = detectedBlobs.filter(b => b.found).length;
 
   const handleAddColor = useCallback(() => {
     const nextId = `color-${trackedColorsList.length + 1}`;
@@ -501,204 +495,168 @@ function ColorTrackingSettings({
   return (
     <div className="input-method-settings">
       {!hasTrackedColors ? (
-        /* ====== STEP 1: No colors yet — show clear call-to-action ====== */
-        <div style={{ textAlign: 'center', padding: '8px 0' }}>
-          <div style={{
-            fontSize: '1.1em', fontWeight: 600, marginBottom: 8,
-            color: 'var(--color-text)',
-          }}>
-            Get Started
-          </div>
+        /* ====== No colors yet — clear call-to-action ====== */
+        <div style={{ textAlign: 'center', padding: '4px 0' }}>
           <p style={{
-            fontSize: '0.85em', color: 'var(--color-text-secondary)',
-            marginBottom: 16, lineHeight: 1.5,
+            fontSize: '0.8em', color: 'var(--color-text-secondary)',
+            marginBottom: 10, lineHeight: 1.4,
           }}>
-            Hold a brightly colored object in front of the camera, then click on it in the video to start tracking.
+            Hold a coloured object in front of the camera, then click it in the video.
           </p>
           <button
             onClick={handleAddColor}
             style={{
               width: '100%',
-              padding: '14px 16px',
-              fontSize: '1em',
+              padding: '10px 12px',
+              fontSize: '0.9em',
               fontWeight: 600,
               background: 'var(--color-primary)',
               color: '#fff',
               border: 'none',
-              borderRadius: 8,
+              borderRadius: 6,
               cursor: 'pointer',
             }}
           >
             Click to choose a color
           </button>
-          <p style={{
-            fontSize: '0.75em', color: 'var(--color-text-tertiary)',
-            marginTop: 8,
-          }}>
-            Tip: use a bright, solid-colored object for best results
-          </p>
         </div>
       ) : (
-        /* ====== STEP 2: Colors are tracked — show status + controls ====== */
+        /* ====== Colors tracked — compact list ====== */
         <>
-          {/* Status */}
+          {/* Action bar: add + reset, always visible at top */}
           <div style={{
-            padding: '10px 12px', marginBottom: 12, borderRadius: 6,
-            background: detectedCount > 0
-              ? 'rgba(34, 197, 94, 0.15)'
-              : 'rgba(234, 179, 8, 0.15)',
-            border: `1px solid ${detectedCount > 0 ? 'rgba(34, 197, 94, 0.3)' : 'rgba(234, 179, 8, 0.3)'}`,
+            display: 'flex', gap: 6, marginBottom: 8,
           }}>
-            <div style={{ fontSize: '0.9em', fontWeight: 600 }}>
-              {detectedCount > 0
-                ? `Tracking ${detectedCount} object${detectedCount > 1 ? 's' : ''}`
-                : 'Looking for your object...'}
-            </div>
-            <div style={{ fontSize: '0.75em', color: 'var(--color-text-secondary)', marginTop: 2 }}>
-              {detectedCount > 0
-                ? 'Move the object to control pitch and volume'
-                : 'Hold the object in front of the camera'}
-            </div>
+            <button
+              onClick={handleAddColor}
+              style={{
+                flex: 1, padding: '8px 6px',
+                fontSize: '0.8em', fontWeight: 600,
+                background: 'var(--color-primary)',
+                border: 'none', borderRadius: 5,
+                cursor: 'pointer', color: '#fff',
+              }}
+            >
+              + Add color
+            </button>
+            <button
+              onClick={() => {
+                getColorTracker().resetColors();
+                setTrackedColorsList([]);
+              }}
+              style={{
+                padding: '8px 10px',
+                fontSize: '0.8em', fontWeight: 500,
+                background: 'var(--color-background)',
+                border: '1px solid var(--color-border)',
+                borderRadius: 5, cursor: 'pointer',
+                color: 'var(--color-text-secondary)',
+              }}
+            >
+              Reset
+            </button>
           </div>
 
-          {/* Tracked colors */}
+          {/* Tracked colors — compact cards */}
           {trackedColorsList.map((color) => {
             const blob = detectedBlobs.find(b => b.colorId === color.id);
             const isDetected = blob?.found ?? false;
             const swatchColor = `hsl(${color.hue}, 70%, 50%)`;
-            const config = colorConfigs[color.id] ?? { role: 'pitch+volume', voice: 'melody', range: 'mid' };
+            const config = colorConfigs[color.id] ?? { role: 'pitch+volume', voice: 'melody' };
 
             return (
               <div
                 key={color.id}
                 style={{
-                  padding: '8px 10px', marginBottom: 4, borderRadius: 6,
+                  padding: '6px 8px', marginBottom: 4, borderRadius: 5,
                   background: isDetected
                     ? 'rgba(34, 197, 94, 0.08)'
                     : 'var(--color-background)',
                   border: `1px solid ${isDetected ? 'rgba(34, 197, 94, 0.2)' : 'var(--color-border)'}`,
                 }}
               >
-                {/* Top row: swatch, name, status, remove */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {/* Row 1: swatch, name, status, remove */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span style={{
-                    width: 20, height: 20, borderRadius: '50%',
+                    width: 14, height: 14, borderRadius: '50%',
                     background: swatchColor, flexShrink: 0,
                     boxShadow: isDetected
-                      ? `0 0 8px ${swatchColor}, 0 0 16px ${swatchColor}40`
+                      ? `0 0 6px ${swatchColor}`
                       : 'none',
                   }} />
-                  <span style={{ flex: 1, fontSize: '0.85em', fontWeight: 600 }}>
+                  <span style={{ flex: 1, fontSize: '0.8em', fontWeight: 600 }}>
                     {color.id}
                   </span>
                   <span style={{
-                    fontSize: '0.75em', fontWeight: 700,
-                    padding: '2px 8px', borderRadius: 4,
+                    fontSize: '0.65em', fontWeight: 700,
+                    padding: '1px 6px', borderRadius: 3,
                     background: isDetected ? 'rgba(34, 197, 94, 0.2)' : 'transparent',
                     color: isDetected ? '#22c55e' : 'var(--color-text-tertiary)',
                   }}>
-                    {isDetected ? 'LIVE' : 'NOT FOUND'}
+                    {isDetected ? 'LIVE' : '---'}
                   </span>
                   <button
                     onClick={() => handleRemoveColor(color.id)}
                     title="Remove this color"
                     style={{
                       background: 'none', border: 'none', cursor: 'pointer',
-                      color: 'var(--color-text-tertiary)', fontSize: '1em',
-                      padding: '0 4px',
+                      color: 'var(--color-text-tertiary)', fontSize: '0.85em',
+                      padding: '0 2px', lineHeight: 1,
                     }}
                   >
                     x
                   </button>
                 </div>
 
-                {/* Controls: what this color does */}
-                <div style={{ marginTop: 6, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                  <ColorSelect
-                    label="Controls"
+                {/* Row 2: controls as a single compact row */}
+                <div style={{
+                  marginTop: 4, display: 'flex', gap: 3,
+                  fontSize: '0.7em',
+                }}>
+                  <CompactSelect
                     value={config.role}
                     options={ROLE_LABELS}
                     onChange={(v) => updateColorConfig(color.id, { ...config, role: v as ColorRole })}
                   />
-                  <ColorSelect
-                    label="Sound"
+                  <CompactSelect
                     value={config.voice}
                     options={VOICE_LABELS}
                     onChange={(v) => updateColorConfig(color.id, { ...config, voice: v as ColorVoice })}
-                  />
-                  <ColorSelect
-                    label="Range"
-                    value={config.range}
-                    options={RANGE_LABELS}
-                    onChange={(v) => updateColorConfig(color.id, { ...config, range: v as ColorRange })}
                   />
                 </div>
               </div>
             );
           })}
-
-          {/* Add another color */}
-          <button
-            onClick={handleAddColor}
-            style={{
-              width: '100%', padding: '8px',
-              marginTop: 8, fontSize: '0.85em',
-              background: 'var(--color-background)',
-              border: '1px dashed var(--color-border)',
-              borderRadius: 6, cursor: 'pointer',
-              color: 'var(--color-text-secondary)',
-            }}
-          >
-            + Track another color
-          </button>
-
-          {/* Reset */}
-          <button
-            onClick={() => {
-              getColorTracker().resetColors();
-              setTrackedColorsList([]);
-            }}
-            style={{
-              width: '100%', padding: '6px',
-              marginTop: 4, fontSize: '0.75em',
-              background: 'none', border: 'none',
-              cursor: 'pointer', color: 'var(--color-text-tertiary)',
-            }}
-          >
-            Start over
-          </button>
         </>
       )}
     </div>
   );
 }
 
-/** Small labeled select for color config */
-function ColorSelect({ label, value, options, onChange }: {
-  label: string;
+/** Compact select that fits in a narrow panel */
+function CompactSelect({ value, options, onChange }: {
   value: string;
   options: Record<string, string>;
   onChange: (value: string) => void;
 }) {
   return (
-    <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.75em' }}>
-      <span style={{ color: 'var(--color-text-tertiary)' }}>{label}:</span>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        style={{
-          padding: '2px 4px', fontSize: '1em',
-          background: 'var(--color-background)',
-          color: 'var(--color-text)',
-          border: '1px solid var(--color-border)',
-          borderRadius: 3,
-        }}
-      >
-        {Object.entries(options).map(([k, v]) => (
-          <option key={k} value={k}>{v}</option>
-        ))}
-      </select>
-    </label>
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      style={{
+        padding: '2px 4px', fontSize: '1em',
+        background: 'var(--color-background)',
+        color: 'var(--color-text)',
+        border: '1px solid var(--color-border)',
+        borderRadius: 3,
+        flex: 1,
+        minWidth: 0,
+      }}
+    >
+      {Object.entries(options).map(([k, v]) => (
+        <option key={k} value={k}>{v}</option>
+      ))}
+    </select>
   );
 }
 

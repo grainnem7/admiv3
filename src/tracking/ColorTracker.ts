@@ -180,15 +180,19 @@ export class ColorTracker {
     // Convert to HSV
     const hsv = this.rgbToHsv(avgR, avgG, avgB);
 
-    // Tight tolerances to avoid matching similar colors (e.g. skin vs banana).
-    // Hue tolerance is narrow; saturation/value thresholds are set close to
-    // the sampled values to reject colors that are merely "close".
-    const hueTol = hsv.s > 60 ? 12 : 18;
+    // Orange and red hues (0-40°, 340-360°) overlap heavily with skin tone.
+    // Under bright lighting skin saturation can reach 50-55%, so we push the
+    // floor much higher and tighten hue tolerance for these ranges.
+    const isOrangeAdjacent = hsv.h <= 40 || hsv.h >= 340;
+    const hueTol = hsv.s > 60 ? (isOrangeAdjacent ? 9 : 12) : 16;
+    const minSatFloor = isOrangeAdjacent ? 62 : 30;
+    const minSatScale = isOrangeAdjacent ? 0.78 : 0.6;
+
     const newColor: TrackedColor = {
       id: colorId,
       hue: hsv.h,
       hueTolerance: hueTol,
-      minSaturation: Math.max(30, hsv.s * 0.6),
+      minSaturation: Math.max(minSatFloor, hsv.s * minSatScale),
       minValue: Math.max(30, hsv.v * 0.6),
       minArea: 0.002,
     };
@@ -380,6 +384,16 @@ export class ColorTracker {
     // Check saturation and value thresholds
     if (hsv.s < color.minSaturation || hsv.v < color.minValue) {
       return false;
+    }
+
+    // Skin tone exclusion for orange/red-adjacent tracked colors.
+    // When the target hue is in the orange range, additionally reject any
+    // pixel whose hue lands in the skin-tone band AND whose saturation is
+    // below 60 — vivid orange objects stay well above this even under
+    // bright overhead lighting; skin does not.
+    if (color.hue <= 40 || color.hue >= 340) {
+      const ph = hsv.h;
+      if ((ph <= 32 || ph >= 345) && hsv.s < 60) return false;
     }
 
     // Check hue with wrap-around handling

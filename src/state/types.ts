@@ -470,7 +470,11 @@ export interface MappingResult {
 // UI Types
 // ============================================
 
-export type Screen = 'welcome' | 'calibration' | 'performance' | 'betweenUs' | 'settings' | 'info';
+export type Screen = 'welcome' | 'setup' | 'calibration' | 'performance' | 'betweenUs' | 'harmonicBlending' | 'songPreset' | 'settings' | 'info';
+
+export type ExperienceLevel = 'beginner' | 'intermediate' | 'advanced';
+export type PerformanceView = 'standard' | 'betweenUs' | 'harmonicBlending' | 'songPreset' | 'minimal';
+export type UISize = 'standard' | 'large';
 
 // ============================================
 // Application State
@@ -537,6 +541,26 @@ export interface AppState {
   currentScreen: Screen;
   showDebugPanel: boolean;
   isFullscreen: boolean;
+
+  // UX state (persisted)
+  experienceLevel: ExperienceLevel;
+  hasCompletedSetup: boolean;
+  hasCompletedTutorial: boolean;
+  performanceView: PerformanceView;
+  uiSize: UISize;
+
+  // Sidebar persistence
+  sidebarCollapsed: boolean;
+  sidebarTier2Open: boolean;
+  sidebarTier3Open: boolean;
+  rightPanelOpen: boolean;
+
+  // Overlay state
+  showCalibrationOverlay: boolean;
+  showHelpDescriptions: boolean;
+
+  // Accessibility announcements (transient)
+  ariaAnnouncement: string;
 }
 
 // ============================================
@@ -607,6 +631,25 @@ export interface AppActions {
   setCurrentScreen: (screen: Screen) => void;
   toggleDebugPanel: () => void;
   setFullscreen: (isFullscreen: boolean) => void;
+
+  // UX actions
+  setExperienceLevel: (level: ExperienceLevel) => void;
+  setHasCompletedSetup: (completed: boolean) => void;
+  setHasCompletedTutorial: (completed: boolean) => void;
+  setPerformanceView: (view: PerformanceView) => void;
+  setUISize: (size: UISize) => void;
+  announce: (message: string) => void;
+
+  // Sidebar actions
+  setSidebarCollapsed: (collapsed: boolean) => void;
+  setSidebarTier2Open: (open: boolean) => void;
+  setSidebarTier3Open: (open: boolean) => void;
+  setRightPanelOpen: (open: boolean) => void;
+
+  // Overlay actions
+  openCalibrationOverlay: () => void;
+  closeCalibrationOverlay: () => void;
+  toggleHelpDescriptions: () => void;
 
   // Global actions
   reset: () => void;

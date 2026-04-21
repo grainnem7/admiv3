@@ -3,6 +3,7 @@
  */
 
 import { useCallback } from 'react';
+import { IconChevronLeft, IconChevronRight } from '../design-system/Icons';
 import { INSTRUMENTS, type InstrumentDefinition } from '../../state/instrumentZones';
 
 interface InstrumentPaletteProps {
@@ -30,7 +31,7 @@ function InstrumentPalette({ onDragStart, isExpanded, onToggle }: InstrumentPale
         aria-label={isExpanded ? 'Hide instruments' : 'Show instruments'}
       >
         <span className="instrument-palette-toggle-icon">
-          {isExpanded ? '◀' : '▶'}
+          {isExpanded ? <IconChevronLeft size={14} /> : <IconChevronRight size={14} />}
         </span>
         <span className="instrument-palette-toggle-label">
           {isExpanded ? 'Instruments' : ''}

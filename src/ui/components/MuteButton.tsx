@@ -1,8 +1,7 @@
 /**
- * Mute Button - Always visible safety control
+ * MuteButton — Redesigned
  *
- * Fixed position button for quick audio mute/unmute.
- * Designed with high visibility for workshop/performance use.
+ * Always-visible floating safety control with clear state indication.
  */
 
 import { useAppStore, useIsMuted } from '../../state/store';
@@ -14,10 +13,7 @@ function MuteButton() {
   const toggleMute = useAppStore((s) => s.toggleMute);
 
   const handleClick = async () => {
-    // Resume audio context on user interaction
-    const audioEngine = getAudioEngine();
-    await audioEngine.resume();
-
+    await getAudioEngine().resume();
     toggleMute();
   };
 
@@ -29,24 +25,24 @@ function MuteButton() {
       title={isMuted ? 'Click to unmute (Space)' : 'Click to mute (Space)'}
       style={{
         position: 'fixed',
-        bottom: 'var(--space-6)',
-        right: 'var(--space-6)',
-        width: 56,
-        height: 56,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderRadius: 'var(--radius-full)',
-        border: 'none',
-        cursor: 'pointer',
-        zIndex: 'var(--z-sticky)',
-        transition: 'all var(--duration-fast) var(--ease-default)',
-        backgroundColor: isMuted ? 'var(--color-error)' : 'var(--color-success)',
-        color: 'var(--color-text)',
+        bottom: 24, right: 24,
+        width: 56, height: 56,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        borderRadius: '50%',
+        border: 'none', cursor: 'pointer',
+        zIndex: 200,
+        transition: 'all 150ms ease',
+        background: isMuted
+          ? 'linear-gradient(135deg, #ef4444, #dc2626)'
+          : 'linear-gradient(135deg, #22c55e, #16a34a)',
+        color: '#fff',
+        fontSize: 22,
         boxShadow: isMuted
-          ? '0 4px 12px rgba(239, 68, 68, 0.4)'
-          : '0 4px 12px rgba(34, 197, 94, 0.4)',
+          ? '0 4px 16px rgba(239,68,68,0.4), 0 2px 4px rgba(0,0,0,0.3)'
+          : '0 4px 16px rgba(34,197,94,0.4), 0 2px 4px rgba(0,0,0,0.3)',
       }}
+      onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.08)'; }}
+      onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
     >
       {isMuted ? <IconVolumeMute size={24} /> : <IconVolume size={24} />}
     </button>

@@ -165,10 +165,10 @@ function ThereminDisplay({ isActive }: ThereminDisplayProps) {
       const statusY = volBarY + volBarH + 22;
       if (output.handActive) {
         ctx.fillStyle = '#44ff88';
-        ctx.fillText('● tracking', centerX, statusY);
+        ctx.fillText('TRACKING', centerX, statusY);
       } else {
         ctx.fillStyle = '#ff6666';
-        ctx.fillText('○ no hand', centerX, statusY);
+        ctx.fillText('NO HAND', centerX, statusY);
       }
     };
 
