@@ -8,6 +8,7 @@
  */
 
 import * as Tone from 'tone';
+import type { Player } from './SynthPlayer';
 
 // ============================================
 // Types
@@ -26,7 +27,7 @@ export interface SamplerPlayerOptions {
 // SamplerPlayer
 // ============================================
 
-export class SamplerPlayer {
+export class SamplerPlayer implements Player {
   private sampler: Tone.Sampler;
   private ready = false;
 
@@ -81,44 +82,49 @@ export class SamplerPlayer {
 // ============================================
 
 export const SALAMANDER_BASE = 'https://tonejs.github.io/audio/salamander/';
-export const fluidR3Base = (instrument: string): string =>
-  `https://gleitz.github.io/midi-js-soundfonts/FluidR3_GM/${instrument}-mp3/`;
+
+const nbrosowskyBase = (instrument: string): string =>
+  `https://nbrosowsky.github.io/tonejs-instruments/samples/${instrument}/`;
 
 // ============================================
 // Shared note URL maps (relative to base URL)
 // ============================================
 
 const A_NOTES_3_4_5: Record<string, string> = { A3: 'A3.mp3', A4: 'A4.mp3', A5: 'A5.mp3' };
-const A_NOTES_4_5:   Record<string, string> = { A4: 'A4.mp3', A5: 'A5.mp3' };
 const A_NOTES_2_3_4: Record<string, string> = { A2: 'A2.mp3', A3: 'A3.mp3', A4: 'A4.mp3' };
+const A_NOTES_3_4:   Record<string, string> = { A3: 'A3.mp3', A4: 'A4.mp3' };
 const A_NOTES_1_2:   Record<string, string> = { A1: 'A1.mp3', A2: 'A2.mp3' };
 
 // ============================================
 // Per-instrument sample configs
+//
+// Every entry here is used by exactly one preset in a presets/*Presets.ts file.
+// Adding a new entry: just append below.  Removing: delete here AND from any
+// catalog that references it (the catalog is discriminated-union typed so the
+// compiler will flag unreferenced keys).
 // ============================================
 
 export const SAMPLE_CONFIGS = {
-  // Melody presets
-  bell:    { urls: A_NOTES_3_4_5, baseUrl: SALAMANDER_BASE,                       attack: 0.005, release: 2.0 },
-  violin:  { urls: A_NOTES_3_4_5, baseUrl: fluidR3Base('violin'),                 attack: 0.1,   release: 0.4 },
-  pizz:    { urls: A_NOTES_3_4_5, baseUrl: fluidR3Base('pizzicato-strings'),       attack: 0.005, release: 0.3 },
-  flute:   { urls: A_NOTES_4_5,   baseUrl: fluidR3Base('flute'),                  attack: 0.08,  release: 0.4 },
+  // Piano (Salamander — kept, best-in-class)
+  piano:       { urls: A_NOTES_3_4_5, baseUrl: SALAMANDER_BASE,               attack: 0.005, release: 1.5 },
 
-  // Chord pad presets
-  warmPad: { urls: A_NOTES_2_3_4, baseUrl: SALAMANDER_BASE,                       attack: 0.5,   release: 1.0 },
-  ePiano:  { urls: A_NOTES_2_3_4, baseUrl: fluidR3Base('electric-piano-1'),       attack: 0.01,  release: 0.5 },
-  stabPad: { urls: A_NOTES_2_3_4, baseUrl: SALAMANDER_BASE,                       attack: 0.01,  release: 0.15 },
-  strings: { urls: A_NOTES_2_3_4, baseUrl: fluidR3Base('string-ensemble-1'),      attack: 0.8,   release: 1.2 },
+  // Strings section (nbrosowsky)
+  violin:      { urls: A_NOTES_3_4_5, baseUrl: nbrosowskyBase('violin'),      attack: 0.1,   release: 0.4 },
+  cello:       { urls: A_NOTES_2_3_4, baseUrl: nbrosowskyBase('cello'),       attack: 0.15,  release: 0.5 },
+  contrabass:  { urls: A_NOTES_1_2,   baseUrl: nbrosowskyBase('contrabass'),  attack: 0.05,  release: 0.4 },
 
-  // Arpeggio presets
-  piano:   { urls: A_NOTES_3_4_5, baseUrl: SALAMANDER_BASE,                       attack: 0.005, release: 1.5 },
-  harp:    { urls: A_NOTES_3_4_5, baseUrl: fluidR3Base('orchestral-harp'),        attack: 0.005, release: 0.8 },
-  guitar:  { urls: A_NOTES_3_4_5, baseUrl: fluidR3Base('acoustic-guitar-nylon'),  attack: 0.005, release: 0.3 },
-  vibes:   { urls: A_NOTES_3_4_5, baseUrl: fluidR3Base('vibraphone'),             attack: 0.005, release: 1.2 },
+  // Winds (nbrosowsky)
+  clarinet:    { urls: A_NOTES_3_4,   baseUrl: nbrosowskyBase('clarinet'),    attack: 0.08,  release: 0.3 },
+  frenchHorn:  { urls: A_NOTES_3_4,   baseUrl: nbrosowskyBase('french-horn'), attack: 0.1,   release: 0.4 },
+  tuba:        { urls: A_NOTES_1_2,   baseUrl: nbrosowskyBase('tuba'),        attack: 0.08,  release: 0.4 },
 
-  // Bass presets
-  aBass:   { urls: A_NOTES_1_2,   baseUrl: fluidR3Base('acoustic-bass'),          attack: 0.02,  release: 0.4 },
-  eBass:   { urls: A_NOTES_1_2,   baseUrl: fluidR3Base('electric-bass-finger'),   attack: 0.01,  release: 0.3 },
-  slapBass:{ urls: A_NOTES_1_2,   baseUrl: fluidR3Base('slap-bass-1'),            attack: 0.005, release: 0.2 },
-  pickBass:{ urls: A_NOTES_1_2,   baseUrl: fluidR3Base('electric-bass-pick'),     attack: 0.005, release: 0.2 },
+  // Plucked (nbrosowsky)
+  harp:        { urls: A_NOTES_3_4_5, baseUrl: nbrosowskyBase('harp'),        attack: 0.005, release: 0.8 },
+  guitarNylon: { urls: A_NOTES_3_4_5, baseUrl: nbrosowskyBase('guitar-nylon'),attack: 0.005, release: 0.3 },
+
+  // Keys (nbrosowsky)
+  organ:       { urls: A_NOTES_2_3_4, baseUrl: nbrosowskyBase('organ'),       attack: 0.01,  release: 0.3 },
 } as const satisfies Record<string, SamplerPlayerOptions>;
+
+// Convenience: legal sample config keys.
+export type SampleConfigKey = keyof typeof SAMPLE_CONFIGS;
