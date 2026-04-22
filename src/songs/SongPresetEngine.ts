@@ -190,10 +190,10 @@ export class SongPresetEngine {
 
   // Voice instrument presets (persist across song loads)
   private voicePresets: Map<ColorRole, string> = new Map([
-    ['red', 'warmPad'],
-    ['green', 'bell'],
-    ['yellow', 'sparkle'],
-    ['orange', 'sub'],
+    ['red',    'rhodesEP'],     // was 'warmPad'
+    ['green',  'clarinet'],     // was 'bell'
+    ['yellow', 'nylonGuitar'],  // was 'sparkle'
+    ['orange', 'upright'],      // was 'sub'
   ]);
 
   // Velocity tracking
@@ -667,14 +667,14 @@ export class SongPresetEngine {
 
       // Red: Chord Pad
       const padVoice = new ChordPadVoice(this.ctx!);
-      padVoice.setPreset(this.voicePresets.get('red') ?? 'warmPad');
+      padVoice.setPreset(this.voicePresets.get('red') ?? 'rhodesEP');
       padVoice.onNoteTrigger = sidechainTrigger;
       padVoice.connect(this.generatedBus!);
       this.voices.set('red', padVoice);
 
       // Green: Melodic Notes
       const melodyVoice = new MelodicVoice(this.ctx!, this.song.bpm);
-      melodyVoice.setPreset(this.voicePresets.get('green') ?? 'bell');
+      melodyVoice.setPreset(this.voicePresets.get('green') ?? 'clarinet');
       melodyVoice.onNoteTrigger = sidechainTrigger;
       if (this.song.beats && this.song.beats.length > 0) {
         melodyVoice.setBeatTimestamps(this.song.beats);
@@ -685,13 +685,13 @@ export class SongPresetEngine {
 
       // Yellow: Arpeggio
       const arpVoice = new ArpeggioVoice(this.ctx!, this.song.bpm);
-      arpVoice.setPreset(this.voicePresets.get('yellow') ?? 'sparkle');
+      arpVoice.setPreset(this.voicePresets.get('yellow') ?? 'nylonGuitar');
       arpVoice.connect(this.generatedBus!);
       this.voices.set('yellow', arpVoice);
 
       // Orange: Bass Synth
       const bassVoice = new BassSynthVoice(this.ctx!, this.song.bpm);
-      bassVoice.setPreset(this.voicePresets.get('orange') ?? 'sub');
+      bassVoice.setPreset(this.voicePresets.get('orange') ?? 'upright');
       bassVoice.connect(this.generatedBus!);
       bassVoice.setStemBassGainCallback(() => this.stemMixerVoice?.getStemGain('bass') ?? 0);
       this.voices.set('orange', bassVoice);
