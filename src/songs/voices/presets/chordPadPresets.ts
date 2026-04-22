@@ -40,7 +40,7 @@ export const PAD_PRESETS: Record<string, PadPreset> = {
       kind: 'poly', polyphony: 8, polyVoice: 'synth',
       options: {
         oscillator: { type: 'sawtooth', spread: 20, count: 3 },
-        envelope: { attack: 0.6, decay: 0.2, sustain: 0.9, release: 2 },
+        envelope: { attack: 0.6, decay: 0.2, sustain: 0.9, release: 3 },
       },
       chorusDepth: 0.4,
     },
@@ -51,12 +51,15 @@ export const PAD_PRESETS: Record<string, PadPreset> = {
     sustained: true,
     synthConfig: {
       kind: 'poly', polyphony: 8, polyVoice: 'fm',
+      // sustain is raised from the default Rhodes 0.3 — for pad use in slow
+      // ballads a 30% sustain level audibly decays away over held chords.
+      // 0.7 keeps the Rhodes attack character but preserves pad presence.
       options: {
         harmonicity: 3,
         modulationIndex: 10,
-        envelope: { attack: 0.005, decay: 2.0, sustain: 0.3, release: 1.5 },
+        envelope: { attack: 0.005, decay: 2.0, sustain: 0.7, release: 2.5 },
         modulation: { type: 'sine' },
-        modulationEnvelope: { attack: 0.005, decay: 0.5, sustain: 0.2, release: 0.5 },
+        modulationEnvelope: { attack: 0.005, decay: 0.5, sustain: 0.5, release: 0.8 },
       },
       chorusDepth: 0.5,
     },
