@@ -5,9 +5,9 @@
  *   - 'sampled': plays via SamplerPlayer using a SAMPLE_CONFIGS entry
  *   - 'synth':   plays via SynthPlayer using a SynthConfig
  *
- * Voice-specific playback params (sustained, decayTC, gainPerNote) are on
- * BOTH variants — they control how the voice triggers and releases notes
- * and are independent of whether the sound comes from a sample or a synth.
+ * Voice-specific playback params (`name`, `sustained`) are on BOTH variants —
+ * they control how the voice triggers and releases notes and are independent
+ * of whether the sound comes from a sample or a synth.
  */
 
 import type { SampleConfigKey } from '../SamplerPlayer';
@@ -21,10 +21,6 @@ interface PadPresetCommon {
   name: string;
   /** If true, voice holds notes until release; if false, notes decay. */
   sustained: boolean;
-  /** setTargetAtTime time constant for the decay envelope when !sustained. */
-  decayTC: number;
-  /** Base gain applied per-note before velocity scaling. */
-  gainPerNote: number;
 }
 
 export type PadPreset =
@@ -39,7 +35,7 @@ export const PAD_PRESETS: Record<string, PadPreset> = {
   warmPad: {
     kind: 'synth',
     name: 'Warm Pad',
-    sustained: true, decayTC: 0, gainPerNote: 0.12,
+    sustained: true,
     synthConfig: {
       kind: 'poly', polyphony: 8, polyVoice: 'synth',
       options: {
@@ -52,7 +48,7 @@ export const PAD_PRESETS: Record<string, PadPreset> = {
   rhodesEP: {
     kind: 'synth',
     name: 'Rhodes EP',
-    sustained: true, decayTC: 0, gainPerNote: 0.16,
+    sustained: true,
     synthConfig: {
       kind: 'poly', polyphony: 8, polyVoice: 'fm',
       options: {
@@ -68,7 +64,7 @@ export const PAD_PRESETS: Record<string, PadPreset> = {
   strings: {
     kind: 'synth',
     name: 'Strings',
-    sustained: true, decayTC: 0, gainPerNote: 0.10,
+    sustained: true,
     synthConfig: {
       kind: 'poly', polyphony: 8, polyVoice: 'synth',
       options: {
@@ -81,7 +77,7 @@ export const PAD_PRESETS: Record<string, PadPreset> = {
   choir: {
     kind: 'synth',
     name: 'Choir',
-    sustained: true, decayTC: 0, gainPerNote: 0.13,
+    sustained: true,
     synthConfig: {
       kind: 'poly', polyphony: 8, polyVoice: 'am',
       options: {
@@ -96,7 +92,7 @@ export const PAD_PRESETS: Record<string, PadPreset> = {
   glassPad: {
     kind: 'synth',
     name: 'Glass Pad',
-    sustained: true, decayTC: 0, gainPerNote: 0.11,
+    sustained: true,
     synthConfig: {
       kind: 'poly', polyphony: 8, polyVoice: 'fm',
       options: {
@@ -112,13 +108,13 @@ export const PAD_PRESETS: Record<string, PadPreset> = {
   organ: {
     kind: 'sampled',
     name: 'Organ',
-    sustained: true, decayTC: 0, gainPerNote: 0.14,
+    sustained: true,
     sampleKey: 'organ',
   },
   stab: {
     kind: 'synth',
     name: 'Stab',
-    sustained: false, decayTC: 0.15, gainPerNote: 0.18,
+    sustained: false,
     synthConfig: {
       kind: 'poly', polyphony: 8, polyVoice: 'synth',
       options: {

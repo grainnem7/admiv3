@@ -2,8 +2,8 @@
  * ChordPadVoice.ts — Red object: chord pad with event-based triggering.
  *
  * Retriggers on velocity threshold crossing, chord change, or object re-entry.
- * Instrument preset (sampled or synthesised) controls tone colour; voice-level
- * params (sustained, decayTC, gainPerNote) control how notes are triggered.
+ * Instrument preset (sampled or synthesised) controls tone colour; the voice-level
+ * `sustained` param controls whether notes are held or decay immediately.
  *
  * Controls:
  *   Horizontal (X): Voicing spread (close → standard → wide)
@@ -118,14 +118,14 @@ export class ChordPadVoice extends ToneVoiceBase {
   }
 
   onTransportStop(): void {
-    this.releaseAll();
+    this.player.releaseAll();
     this.currentChordName = null;
     this.lastRetriggerTime = 0;
   }
 
   dispose(): void {
+    this.player.releaseAll();
     this.player.dispose();
-    this.releaseAll();
     this.swellGain.disconnect();
     this.disposeBase();
   }
@@ -133,7 +133,6 @@ export class ChordPadVoice extends ToneVoiceBase {
   // ---- Internal ----
 
   private retriggerChord(chord: ChordEntry, velocity: number): void {
-    const p = this.currentPreset;
     const noteVelocity = clamp(0.3 + velocity * 0.7, 0.3, 1.0);
     const voicedNotes = this.applyVoicing(chord.notes);
 
@@ -141,17 +140,13 @@ export class ChordPadVoice extends ToneVoiceBase {
 
     this.player.releaseAll();
     for (const midi of voicedNotes) {
-      if (p.sustained) {
+      if (this.currentPreset.sustained) {
         this.player.triggerAttack(midi, noteVelocity);
       } else {
         this.player.triggerAttackRelease(midi, 0.4, undefined, noteVelocity);
       }
     }
     this.onNoteTrigger?.();
-  }
-
-  private releaseAll(): void {
-    this.player.releaseAll();
   }
 
   private applyVoicing(notes: number[]): number[] {
