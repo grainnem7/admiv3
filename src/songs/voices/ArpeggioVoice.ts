@@ -92,6 +92,7 @@ export class ArpeggioVoice extends ToneVoiceBase {
   }
 
   onTransportStop(): void {
+    this.player.releaseAll();
     this.running = false;
     this.stepIndex = 0;
     this.nextStepTime = 0;
