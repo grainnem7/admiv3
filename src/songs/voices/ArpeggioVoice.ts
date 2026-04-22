@@ -43,6 +43,7 @@ export class ArpeggioVoice extends ToneVoiceBase {
   private nextStepTime = 0;
   private currentChordName: string | null = null;
   private running = false;
+  private lastZone: 'left' | 'center' | 'right' = 'center';
 
   constructor(ctx: AudioContext, bpm: number) {
     super(ctx);
@@ -149,14 +150,20 @@ export class ArpeggioVoice extends ToneVoiceBase {
     }
   }
 
-  private getStepDuration(): number {
+  private getXZone(): 'left' | 'center' | 'right' {
+    if (this.posX < LEFT_THRESHOLD) return 'left';
+    if (this.posX > RIGHT_THRESHOLD) return 'right';
+    return 'center';
+  }
+
+  private getStepDuration(zone: 'left' | 'center' | 'right'): number {
     const dottedQuarter = 60 / this.bpm;
     const quarter = dottedQuarter * 2 / 3;
     const eighth = dottedQuarter / 3;
     const sixteenth = eighth / 2;
 
-    if (this.posX < LEFT_THRESHOLD) return quarter;
-    if (this.posX > RIGHT_THRESHOLD) return sixteenth;
+    if (zone === 'left') return quarter;
+    if (zone === 'right') return sixteenth;
     return eighth;
   }
 
@@ -165,16 +172,30 @@ export class ArpeggioVoice extends ToneVoiceBase {
     if (!this.player.isReady()) return;
 
     const now = this.ctx.currentTime;
-    const stepDuration = this.getStepDuration();
+    const zone = this.getXZone();
+    const stepDuration = this.getStepDuration(zone);
     const noteVelocity = clamp(0.3 + velocity * 0.5, 0.3, 0.8);
 
+    // Re-align schedule when the user crosses a density threshold so the next
+    // step fires promptly at the new rate rather than waiting out a stale
+    // delay computed under the old stepDuration.
+    if (zone !== this.lastZone) {
+      this.lastZone = zone;
+      this.nextStepTime = Math.min(this.nextStepTime, now + stepDuration);
+    }
+
     if (this.nextStepTime < now - 1) this.nextStepTime = now;
+
+    // Cap note duration so overlap stays bounded at fast densities; without
+    // this, a 1.2s Vibes note at 16th-note spacing (~0.08s) would overlap
+    // ~15× and exhaust PolySynth polyphony, causing audible drop-outs.
+    const noteDuration = Math.min(this.currentPreset.duration, stepDuration * 1.5);
 
     while (this.nextStepTime < now + LOOKAHEAD) {
       const midi = this.patternNotes[this.stepIndex % this.patternNotes.length];
       const t = this.nextStepTime;
 
-      this.player.triggerAttackRelease(midi, this.currentPreset.duration, t, noteVelocity);
+      this.player.triggerAttackRelease(midi, noteDuration, t, noteVelocity);
 
       this.stepIndex = (this.stepIndex + 1) % this.patternNotes.length;
       this.nextStepTime += stepDuration;
