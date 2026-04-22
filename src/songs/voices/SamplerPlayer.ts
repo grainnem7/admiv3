@@ -92,13 +92,18 @@ const nbrosowskyBase = (instrument: string): string =>
 
 const A_NOTES_3_4_5: Record<string, string> = { A3: 'A3.mp3', A4: 'A4.mp3', A5: 'A5.mp3' };
 const A_NOTES_2_3_4: Record<string, string> = { A2: 'A2.mp3', A3: 'A3.mp3', A4: 'A4.mp3' };
-const A_NOTES_3_4:   Record<string, string> = { A3: 'A3.mp3', A4: 'A4.mp3' };
-const A_NOTES_1_2:   Record<string, string> = { A1: 'A1.mp3', A2: 'A2.mp3' };
 
 // Clarinet: no A-notes on CDN; use D-notes (D3, D4, D5 available)
 const CLARINET_NOTES: Record<string, string> = { D3: 'D3.mp3', D4: 'D4.mp3', D5: 'D5.mp3' };
 // Tuba: no A-notes on CDN; use As1, As2, D3 (lowest available spread)
 const TUBA_NOTES: Record<string, string> = { 'Bb1': 'As1.mp3', 'Bb2': 'As2.mp3', D3: 'D3.mp3' };
+
+// Contrabass: A1.mp3 returns 404; only A2 is reachable on the CDN.
+const CONTRABASS_NOTES: Record<string, string> = { A2: 'A2.mp3' };
+// French horn: A4.mp3 returns 404; only A3 is reachable on the CDN.
+const FRENCH_HORN_NOTES: Record<string, string> = { A3: 'A3.mp3' };
+// Harp: A3.mp3 and A5.mp3 return 404; only A4 is reachable on the CDN.
+const HARP_NOTES: Record<string, string> = { A4: 'A4.mp3' };
 
 // ============================================
 // Per-instrument sample configs
@@ -116,15 +121,15 @@ export const SAMPLE_CONFIGS = {
   // Strings section (nbrosowsky)
   violin:      { urls: A_NOTES_3_4_5, baseUrl: nbrosowskyBase('violin'),      attack: 0.1,   release: 0.4 },
   cello:       { urls: A_NOTES_2_3_4, baseUrl: nbrosowskyBase('cello'),       attack: 0.15,  release: 0.5 },
-  contrabass:  { urls: A_NOTES_1_2,   baseUrl: nbrosowskyBase('contrabass'),  attack: 0.05,  release: 0.4 },
+  contrabass:  { urls: CONTRABASS_NOTES,   baseUrl: nbrosowskyBase('contrabass'),  attack: 0.05,  release: 0.4 },
 
   // Winds (nbrosowsky)
   clarinet:    { urls: CLARINET_NOTES, baseUrl: nbrosowskyBase('clarinet'),    attack: 0.08,  release: 0.3 },
-  frenchHorn:  { urls: A_NOTES_3_4,   baseUrl: nbrosowskyBase('french-horn'), attack: 0.1,   release: 0.4 },
+  frenchHorn:  { urls: FRENCH_HORN_NOTES,   baseUrl: nbrosowskyBase('french-horn'), attack: 0.1,   release: 0.4 },
   tuba:        { urls: TUBA_NOTES,    baseUrl: nbrosowskyBase('tuba'),        attack: 0.08,  release: 0.4 },
 
   // Plucked (nbrosowsky)
-  harp:        { urls: A_NOTES_3_4_5, baseUrl: nbrosowskyBase('harp'),        attack: 0.005, release: 0.8 },
+  harp:        { urls: HARP_NOTES,    baseUrl: nbrosowskyBase('harp'),        attack: 0.005, release: 0.8 },
   guitarNylon: { urls: A_NOTES_3_4_5, baseUrl: nbrosowskyBase('guitar-nylon'),attack: 0.005, release: 0.3 },
 
   // Keys (nbrosowsky)
