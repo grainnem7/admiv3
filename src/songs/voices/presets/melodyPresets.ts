@@ -1,9 +1,10 @@
 /**
  * Melody presets (🟢 Green voice).
  *
- * Triggered on pentatonic band-crossing. Single-voice line, so most presets
- * use a monophonic synth shape; the poly case (celesta) is harmless and
- * keeps overlap sound correct.
+ * Triggered on pentatonic band-crossing. Single-voice line, so synth presets
+ * use monophonic FM (celesta, musicBox) — the voice triggers notes with a
+ * fixed duration via triggerAttackRelease, so overlapping tails between
+ * crossings are handled by each player's release envelope, not polyphony.
  */
 
 import type { SampleConfigKey } from '../SamplerPlayer';
