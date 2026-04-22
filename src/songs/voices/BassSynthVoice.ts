@@ -5,18 +5,14 @@
  *
  * Controls:
  *   Horizontal (X): Rhythm pattern
- *     Left  → root on beat 1 only (minimal)
+ *     Left   → root on beat 1 only (minimal)
  *     Center → root on beats 1 and 3 (driving)
- *     Right → walking pattern root-fifth-octave (groovy)
- *
- *   Vertical (Y): Tone via filter cutoff
- *   Velocity: Hit loudness
- *
- * Presets: Sub, Moog, Punchy, Growl
+ *     Right  → walking pattern root-fifth-octave (groovy)
+ *   Vertical (Y):   Tone via filter cutoff
+ *   Velocity:       Hit loudness
  */
 
 import type { ChordEntry } from './chordLookup';
-import { noteToFrequency } from './chordLookup';
 import {
   ToneVoiceBase,
   lerp,
@@ -27,30 +23,10 @@ import {
   RIGHT_THRESHOLD,
 } from './ToneVoiceBase';
 import { SamplerPlayer, SAMPLE_CONFIGS } from './SamplerPlayer';
+import { SynthPlayer, type Player } from './SynthPlayer';
+import { BASS_PRESETS, BASS_PRESET_LIST, type BassPreset } from './presets/bassPresets';
 
-// ============================================
-// Presets
-// ============================================
-
-interface BassPreset {
-  name: string;
-  oscType: OscillatorType;
-  /** Attack ramp in seconds (0 = instant). */
-  attack: number;
-  /** Decay time constant as a fraction of note duration. */
-  decayFactor: number;
-  /** Sample config key from SAMPLE_CONFIGS. */
-  sampleKey: keyof typeof SAMPLE_CONFIGS;
-}
-
-const PRESETS: Record<string, BassPreset> = {
-  sub:    { name: 'Sub',    oscType: 'sine',     attack: 0,     decayFactor: 0.2,  sampleKey: 'aBass'    },
-  moog:   { name: 'Moog',   oscType: 'sawtooth', attack: 0.01,  decayFactor: 0.3,  sampleKey: 'eBass'    },
-  punchy: { name: 'Punchy', oscType: 'triangle', attack: 0,     decayFactor: 0.1,  sampleKey: 'slapBass' },
-  growl:  { name: 'Growl',  oscType: 'square',   attack: 0.005, decayFactor: 0.25, sampleKey: 'pickBass' },
-};
-
-export const BASS_PRESET_LIST = Object.entries(PRESETS).map(([key, p]) => ({ key, name: p.name }));
+export { BASS_PRESET_LIST };
 
 // ============================================
 // Constants
@@ -67,8 +43,8 @@ const FILTER_LERP = 0.06;
 export class BassSynthVoice extends ToneVoiceBase {
   private bpm: number;
   private filterCutoff = FILTER_MAX_HZ;
-  private currentPreset: BassPreset = PRESETS['sub'];
-  private samplerPlayer: SamplerPlayer | null = null;
+  private currentPreset: BassPreset = BASS_PRESETS['upright'];
+  private player: Player;
 
   private currentRoot = 0;
   private currentChordName: string | null = null;
@@ -81,7 +57,7 @@ export class BassSynthVoice extends ToneVoiceBase {
   constructor(ctx: AudioContext, bpm: number) {
     super(ctx);
     this.bpm = bpm;
-    this.samplerPlayer = new SamplerPlayer(SAMPLE_CONFIGS['aBass'], this.filterNode);
+    this.player = this.createPlayer(this.currentPreset);
   }
 
   setBpm(bpm: number): void {
@@ -93,10 +69,17 @@ export class BassSynthVoice extends ToneVoiceBase {
   }
 
   override setPreset(key: string): void {
-    if (!PRESETS[key]) return;
-    this.currentPreset = PRESETS[key];
-    this.samplerPlayer?.dispose();
-    this.samplerPlayer = new SamplerPlayer(SAMPLE_CONFIGS[this.currentPreset.sampleKey], this.filterNode);
+    const preset = BASS_PRESETS[key];
+    if (!preset) return;
+    this.currentPreset = preset;
+    this.player.dispose();
+    this.player = this.createPlayer(preset);
+  }
+
+  private createPlayer(preset: BassPreset): Player {
+    return preset.kind === 'sampled'
+      ? new SamplerPlayer(SAMPLE_CONFIGS[preset.sampleKey], this.filterNode)
+      : new SynthPlayer(preset.synthConfig, this.filterNode);
   }
 
   update(playbackTime: number, chord: ChordEntry | null, velocity: number): void {
@@ -117,6 +100,7 @@ export class BassSynthVoice extends ToneVoiceBase {
   }
 
   onTransportStop(): void {
+    this.player.releaseAll();
     this.currentChordName = null;
     this.walkingStep = 0;
     this.lastStepTime = 0;
@@ -124,7 +108,8 @@ export class BassSynthVoice extends ToneVoiceBase {
   }
 
   dispose(): void {
-    this.samplerPlayer?.dispose();
+    this.player.releaseAll();
+    this.player.dispose();
     this.disposeBase();
   }
 
@@ -171,31 +156,8 @@ export class BassSynthVoice extends ToneVoiceBase {
   }
 
   private triggerBassHit(midi: number, duration: number, velocity: number): void {
-    if (this.samplerPlayer?.isReady()) {
-      this.samplerPlayer.triggerAttackRelease(midi, duration, undefined, velocity * 0.9);
-      return;
-    }
-
-    // Oscillator fallback
-    const now = this.ctx.currentTime;
-    const p = this.currentPreset;
-    const osc = this.ctx.createOscillator();
-    osc.type = p.oscType;
-    osc.frequency.value = noteToFrequency(midi);
-    const gain = this.ctx.createGain();
-    const peakGain = velocity * 0.7;
-    if (p.attack > 0) {
-      gain.gain.setValueAtTime(0, now);
-      gain.gain.linearRampToValueAtTime(peakGain, now + p.attack);
-      gain.gain.setTargetAtTime(0, now + p.attack, duration * p.decayFactor);
-    } else {
-      gain.gain.setValueAtTime(peakGain, now);
-      gain.gain.setTargetAtTime(0, now + 0.01, duration * p.decayFactor);
-    }
-    osc.connect(gain);
-    gain.connect(this.filterNode);
-    osc.start(now);
-    osc.stop(now + duration + 0.3);
+    if (!this.player.isReady()) return;
+    this.player.triggerAttackRelease(midi, duration, undefined, velocity * 0.9);
   }
 
   private getWalkingPattern(): number[] {
