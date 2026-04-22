@@ -5,14 +5,11 @@
  *
  * Controls:
  *   Horizontal (X): Density (left=quarter, center=8th, right=16th notes)
- *   Vertical (Y): Range (low=1 octave, high=2 octaves)
- *   Velocity: High velocity adds chromatic passing notes for elaboration
- *
- * Presets: Sparkle, Harp, Pluck, Vibes
+ *   Vertical (Y):   Range (low=1 octave, high=2 octaves)
+ *   Velocity:       High velocity adds chromatic passing notes for elaboration
  */
 
 import type { ChordEntry } from './chordLookup';
-import { noteToFrequency } from './chordLookup';
 import {
   ToneVoiceBase,
   clamp,
@@ -20,32 +17,10 @@ import {
   RIGHT_THRESHOLD,
 } from './ToneVoiceBase';
 import { SamplerPlayer, SAMPLE_CONFIGS } from './SamplerPlayer';
+import { SynthPlayer, type Player } from './SynthPlayer';
+import { ARP_PRESETS, ARP_PRESET_LIST, type ArpPreset } from './presets/arpeggioPresets';
 
-// ============================================
-// Presets
-// ============================================
-
-interface ArpPreset {
-  name: string;
-  oscType: OscillatorType;
-  /** 'proportional': decayTC = factor × stepDuration; 'fixed': decayTC = fixedTC */
-  decayMode: 'proportional' | 'fixed';
-  decayFactor: number;  // used when proportional
-  fixedTC: number;      // used when fixed
-  /** Initial attack in seconds (0 = instant). */
-  attack: number;
-  /** Sample config key from SAMPLE_CONFIGS. */
-  sampleKey: keyof typeof SAMPLE_CONFIGS;
-}
-
-const PRESETS: Record<string, ArpPreset> = {
-  sparkle: { name: 'Sparkle', oscType: 'triangle', decayMode: 'proportional', decayFactor: 0.25, fixedTC: 0,    attack: 0,     sampleKey: 'piano'  },
-  harp:    { name: 'Harp',    oscType: 'sine',     decayMode: 'proportional', decayFactor: 0.35, fixedTC: 0,    attack: 0.005, sampleKey: 'harp'   },
-  pluck:   { name: 'Pluck',   oscType: 'sawtooth', decayMode: 'fixed',        decayFactor: 0,    fixedTC: 0.06, attack: 0,     sampleKey: 'guitar' },
-  vibes:   { name: 'Vibes',   oscType: 'sine',     decayMode: 'proportional', decayFactor: 0.5,  fixedTC: 0,    attack: 0.003, sampleKey: 'vibes'  },
-};
-
-export const ARP_PRESET_LIST = Object.entries(PRESETS).map(([key, p]) => ({ key, name: p.name }));
+export { ARP_PRESET_LIST };
 
 // ============================================
 // Constants
@@ -60,8 +35,8 @@ const VELOCITY_ELABORATE_THRESHOLD = 0.4;
 
 export class ArpeggioVoice extends ToneVoiceBase {
   private bpm: number;
-  private currentPreset: ArpPreset = PRESETS['sparkle'];
-  private samplerPlayer: SamplerPlayer | null = null;
+  private currentPreset: ArpPreset = ARP_PRESETS['piano'];
+  private player: Player;
 
   private patternNotes: number[] = [];
   private stepIndex = 0;
@@ -69,12 +44,10 @@ export class ArpeggioVoice extends ToneVoiceBase {
   private currentChordName: string | null = null;
   private running = false;
 
-  private scheduledStops: Array<{ osc: OscillatorNode; stopAt: number }> = [];
-
   constructor(ctx: AudioContext, bpm: number) {
     super(ctx);
     this.bpm = bpm;
-    this.samplerPlayer = new SamplerPlayer(SAMPLE_CONFIGS['piano'], this.filterNode);
+    this.player = this.createPlayer(this.currentPreset);
   }
 
   setBpm(bpm: number): void {
@@ -82,10 +55,17 @@ export class ArpeggioVoice extends ToneVoiceBase {
   }
 
   override setPreset(key: string): void {
-    if (!PRESETS[key]) return;
-    this.currentPreset = PRESETS[key];
-    this.samplerPlayer?.dispose();
-    this.samplerPlayer = new SamplerPlayer(SAMPLE_CONFIGS[this.currentPreset.sampleKey], this.filterNode);
+    const preset = ARP_PRESETS[key];
+    if (!preset) return;
+    this.currentPreset = preset;
+    this.player.dispose();
+    this.player = this.createPlayer(preset);
+  }
+
+  private createPlayer(preset: ArpPreset): Player {
+    return preset.kind === 'sampled'
+      ? new SamplerPlayer(SAMPLE_CONFIGS[preset.sampleKey], this.filterNode)
+      : new SynthPlayer(preset.synthConfig, this.filterNode);
   }
 
   update(_playbackTime: number, chord: ChordEntry | null, velocity: number): void {
@@ -99,7 +79,6 @@ export class ArpeggioVoice extends ToneVoiceBase {
 
     this.buildPattern(chord, velocity);
     this.scheduleNotes(velocity);
-    this.cleanupOldNodes();
   }
 
   onTransportStart(): void {
@@ -117,13 +96,13 @@ export class ArpeggioVoice extends ToneVoiceBase {
     this.stepIndex = 0;
     this.nextStepTime = 0;
     this.currentChordName = null;
-    this.stopAllScheduled();
+    this.patternNotes = [];
   }
 
   dispose(): void {
     this.running = false;
-    this.samplerPlayer?.dispose();
-    this.stopAllScheduled();
+    this.player.releaseAll();
+    this.player.dispose();
     this.disposeBase();
   }
 
@@ -182,10 +161,10 @@ export class ArpeggioVoice extends ToneVoiceBase {
 
   private scheduleNotes(velocity: number): void {
     if (this.patternNotes.length === 0 || !this.running) return;
+    if (!this.player.isReady()) return;
 
     const now = this.ctx.currentTime;
     const stepDuration = this.getStepDuration();
-    const p = this.currentPreset;
     const noteVelocity = clamp(0.3 + velocity * 0.5, 0.3, 0.8);
 
     if (this.nextStepTime < now - 1) this.nextStepTime = now;
@@ -194,48 +173,10 @@ export class ArpeggioVoice extends ToneVoiceBase {
       const midi = this.patternNotes[this.stepIndex % this.patternNotes.length];
       const t = this.nextStepTime;
 
-      if (this.samplerPlayer?.isReady()) {
-        // Pass pre-scheduled AudioContext time for glitch-free lookahead playback
-        this.samplerPlayer.triggerAttackRelease(midi, stepDuration, t, noteVelocity);
-      } else {
-        // Oscillator fallback
-        const decayTC = p.decayMode === 'proportional' ? p.decayFactor * stepDuration : p.fixedTC;
-        const osc = this.ctx.createOscillator();
-        osc.type = p.oscType;
-        osc.frequency.value = noteToFrequency(midi);
-        const gain = this.ctx.createGain();
-        if (p.attack > 0) {
-          gain.gain.setValueAtTime(0, t);
-          gain.gain.linearRampToValueAtTime(noteVelocity, t + p.attack);
-          gain.gain.setTargetAtTime(0, t + p.attack + 0.005, decayTC);
-        } else {
-          gain.gain.setValueAtTime(noteVelocity, t);
-          gain.gain.setTargetAtTime(0, t + 0.005, decayTC);
-        }
-        osc.connect(gain);
-        gain.connect(this.filterNode);
-        osc.start(t);
-        const stopAt = t + stepDuration + 0.1;
-        osc.stop(stopAt);
-        this.scheduledStops.push({ osc, stopAt });
-      }
+      this.player.triggerAttackRelease(midi, this.currentPreset.duration, t, noteVelocity);
 
       this.stepIndex = (this.stepIndex + 1) % this.patternNotes.length;
       this.nextStepTime += stepDuration;
     }
-  }
-
-  private cleanupOldNodes(): void {
-    const now = this.ctx.currentTime;
-    this.scheduledStops = this.scheduledStops.filter(({ stopAt }) => stopAt > now - 0.2);
-  }
-
-  private stopAllScheduled(): void {
-    const now = this.ctx.currentTime;
-    for (const { osc } of this.scheduledStops) {
-      try { osc.stop(now); } catch { /* already stopped */ }
-    }
-    this.scheduledStops = [];
-    this.patternNotes = [];
   }
 }
