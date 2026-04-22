@@ -2,8 +2,9 @@
  * Arpeggio presets (🟡 Yellow voice).
  *
  * Triggered step-by-step on the 8th-note grid (density adjusted by X position).
- * Short notes — decay, not sustain. Sampled presets cover plucked/keyed timbres;
- * synth presets (FM, AM) cover mallet and modern-pluck sounds.
+ * At 16th-note density notes overlap (1.2s Vibes decay vs ~0.08s step) so the
+ * synth presets MUST be polyphonic — a bare FMSynth/AMSynth would cut off each
+ * previous note on the next trigger, causing audible drop-outs.
  */
 
 import type { SampleConfigKey } from '../SamplerPlayer';
@@ -28,7 +29,7 @@ export const ARP_PRESETS: Record<string, ArpPreset> = {
     name: 'Vibes',
     duration: 1.2,
     synthConfig: {
-      kind: 'fm',
+      kind: 'poly', polyVoice: 'fm', polyphony: 16,
       options: {
         harmonicity: 4,
         modulationIndex: 2,
@@ -44,7 +45,7 @@ export const ARP_PRESETS: Record<string, ArpPreset> = {
     name: 'Marimba',
     duration: 0.4,
     synthConfig: {
-      kind: 'fm',
+      kind: 'poly', polyVoice: 'fm', polyphony: 12,
       options: {
         harmonicity: 3,
         modulationIndex: 8,
@@ -59,7 +60,7 @@ export const ARP_PRESETS: Record<string, ArpPreset> = {
     name: 'Music Box',
     duration: 1.0,
     synthConfig: {
-      kind: 'fm',
+      kind: 'poly', polyVoice: 'fm', polyphony: 16,
       options: {
         harmonicity: 7,
         modulationIndex: 3,
@@ -75,7 +76,7 @@ export const ARP_PRESETS: Record<string, ArpPreset> = {
     name: 'Plucked Synth',
     duration: 0.5,
     synthConfig: {
-      kind: 'am',
+      kind: 'poly', polyVoice: 'am', polyphony: 12,
       options: {
         harmonicity: 2,
         oscillator: { type: 'sawtooth' },

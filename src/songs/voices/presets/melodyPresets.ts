@@ -26,7 +26,7 @@ export const MELODY_PRESETS: Record<string, MelodyPreset> = {
     name: 'Celesta',
     duration: 1.8,
     synthConfig: {
-      kind: 'fm',
+      kind: 'poly', polyVoice: 'fm', polyphony: 8,
       options: {
         harmonicity: 5,
         modulationIndex: 6,
@@ -47,7 +47,7 @@ export const MELODY_PRESETS: Record<string, MelodyPreset> = {
     name: 'Music Box',
     duration: 1.6,
     synthConfig: {
-      kind: 'fm',
+      kind: 'poly', polyVoice: 'fm', polyphony: 8,
       options: {
         harmonicity: 7,
         modulationIndex: 3,

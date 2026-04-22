@@ -21,16 +21,20 @@ import { SongPresetEngine } from '../../songs/SongPresetEngine';
 import type { VoicePosition, SongPresetStatus, SongCalibration } from '../../songs/SongPresetEngine';
 import { SONG_LIBRARY, COLOR_ROLES } from '../../songs/songLibrary';
 import type { SongConfig, ColorRole } from '../../songs/songLibrary';
+import { PAD_PRESET_LIST } from '../../songs/voices/ChordPadVoice';
+import { MELODY_PRESET_LIST } from '../../songs/voices/MelodicVoice';
+import { ARP_PRESET_LIST } from '../../songs/voices/ArpeggioVoice';
+import { BASS_PRESET_LIST } from '../../songs/voices/BassSynthVoice';
 
 // ============================================
 // Constants
 // ============================================
 
 const VOICE_PRESET_OPTIONS: Record<string, Array<{ key: string; name: string }>> = {
-  red:    [{ key: 'warmPad', name: 'Warm Pad' }, { key: 'brightPad', name: 'Bright Pad' }, { key: 'stab', name: 'Stab' }, { key: 'strings', name: 'Strings' }],
-  green:  [{ key: 'bell', name: 'Bell' }, { key: 'violin', name: 'Violin' }, { key: 'pluck', name: 'Pluck' }, { key: 'flute', name: 'Flute' }],
-  yellow: [{ key: 'sparkle', name: 'Sparkle' }, { key: 'harp', name: 'Harp' }, { key: 'pluck', name: 'Pluck' }, { key: 'vibes', name: 'Vibes' }],
-  orange: [{ key: 'sub', name: 'Sub' }, { key: 'moog', name: 'Moog' }, { key: 'punchy', name: 'Punchy' }, { key: 'growl', name: 'Growl' }],
+  red:    PAD_PRESET_LIST,
+  green:  MELODY_PRESET_LIST,
+  yellow: ARP_PRESET_LIST,
+  orange: BASS_PRESET_LIST,
 };
 
 const CALIBRATION_DURATION_MS = 10_000;
