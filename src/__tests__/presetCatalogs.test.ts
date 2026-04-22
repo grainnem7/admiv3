@@ -67,4 +67,11 @@ describe('preset catalog integrity', () => {
     expect(Object.keys(ARP_PRESETS).length).toBe(7);
     expect(Object.keys(BASS_PRESETS).length).toBe(6);
   });
+
+  it('engine default voice preset keys exist in their catalogs', () => {
+    expect(PAD_PRESETS).toHaveProperty('rhodesEP');
+    expect(MELODY_PRESETS).toHaveProperty('clarinet');
+    expect(ARP_PRESETS).toHaveProperty('nylonGuitar');
+    expect(BASS_PRESETS).toHaveProperty('upright');
+  });
 });
