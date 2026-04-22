@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "lint": "tsc --noEmit",
     "test": "vitest",
-    "test:run": "vitest run"
+    "test:run": "vitest run",
+    "verify:samples": "node scripts/verify-sample-cdn.mjs"
   },
   "keywords": [
     "accessibility",
