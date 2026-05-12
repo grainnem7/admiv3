@@ -1,0 +1,7 @@
+# Runtime deps for analyse_song.py
+librosa==0.10.2.post1
+numpy>=1.24,<2.0
+soundfile>=0.12.1
+
+# Dev deps (testing only)
+pytest>=7.4
