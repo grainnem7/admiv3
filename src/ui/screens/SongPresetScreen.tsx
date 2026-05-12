@@ -37,6 +37,8 @@ import {
 } from '../../songs/voices/presets/instrumentPalette';
 import { getInputProfileManager } from '../../profiles/InputProfileManager';
 import { StemMixerStrip } from './songPreset/StemMixerStrip';
+import { StemMixerTouchPad } from './songPreset/StemMixerTouchPad';
+import type { PadState } from './songPreset/usePadState';
 
 // ============================================
 // Constants
@@ -162,6 +164,11 @@ function SongPresetScreen() {
   const keyboardActiveRef = useRef<ColorRole[]>([]);
   const mousePosRef = useRef({ x: 0.5, y: 0.5 });
 
+  // Input mode (webcam | touch). Session-only — not persisted.
+  const [inputMode, setInputMode] = useState<'webcam' | 'touch'>('webcam');
+  // Touch pad state pushed up from StemMixerTouchPad.
+  const padStateRef = useRef<PadState>({ x: 0.5, y: 0.0, held: false });
+
   // Store
   const isMuted = useIsMuted();
   const setCurrentScreen = useAppStore((s) => s.setCurrentScreen);
@@ -173,6 +180,12 @@ function SongPresetScreen() {
 
   // ---- Initialize camera + color tracker ----
   useEffect(() => {
+    if (inputMode !== 'webcam') {
+      // Touch mode: skip camera/tracker, mark "initialised" so the draw loop can run.
+      setIsInitialized(true);
+      return;
+    }
+
     let cancelled = false;
     let unsubTracking: (() => void) | null = null;
 
@@ -208,8 +221,14 @@ function SongPresetScreen() {
       colorTrackerRef.current?.dispose();
       cameraRef.current?.stop();
       unsubTracking?.();
-      engineRef.current.dispose();
     };
+  }, [inputMode]);
+
+  // Dispose engine once on unmount (separated from camera init effect because
+  // the engine should survive input-mode switches but the camera should not).
+  useEffect(() => {
+    const engine = engineRef.current;
+    return () => { engine.dispose(); };
   }, []);
 
   // ---- Sync mute ----
@@ -265,77 +284,87 @@ function SongPresetScreen() {
     if (!isInitialized) return;
     let running = true;
 
+    const buildPositions = (): Map<ColorRole, VoicePosition> => {
+      const positions = new Map<ColorRole, VoicePosition>();
+      if (inputMode === 'touch') {
+        const pad = padStateRef.current;
+        for (const role of COLOR_ROLES) {
+          if (role.id === 'blue') {
+            positions.set(role.id, { x: pad.x, y: pad.y, found: pad.held });
+          } else {
+            positions.set(role.id, { x: 0, y: 0, found: false });
+          }
+        }
+      } else if (keyboardMode) {
+        const active = keyboardActiveRef.current;
+        const mouse = mousePosRef.current;
+        for (const role of COLOR_ROLES) {
+          const isActive = active.includes(role.id);
+          positions.set(role.id, {
+            x: isActive ? mouse.x : 0.5,
+            y: isActive ? mouse.y : 0.5,
+            found: isActive,
+          });
+        }
+      } else {
+        const blobs = blobsRef.current;
+        for (const role of COLOR_ROLES) {
+          const blob = blobs.find((b) => b.colorId === role.id);
+          positions.set(role.id, blob?.found
+            ? { x: 1 - blob.x, y: blob.y, found: true }
+            : { x: 0, y: 0, found: false });
+        }
+      }
+      return positions;
+    };
+
     const loop = () => {
       if (!running) return;
 
-      const canvas = canvasRef.current;
-      const video = videoRef.current;
-      if (canvas && video) {
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          const vw = video.videoWidth || 640;
-          const vh = video.videoHeight || 480;
-          if (canvas.width !== vw) canvas.width = vw;
-          if (canvas.height !== vh) canvas.height = vh;
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const positions = buildPositions();
 
-          // Build positions for all 5 colors
-          const positions = new Map<ColorRole, VoicePosition>();
+      // Feed to engine
+      engineRef.current.setAllPositions(positions);
 
-          if (keyboardMode) {
-            // Keyboard test: use synthetic positions
-            const active = keyboardActiveRef.current;
-            const mouse = mousePosRef.current;
-            for (const role of COLOR_ROLES) {
-              const isActive = active.includes(role.id);
-              positions.set(role.id, {
-                x: isActive ? mouse.x : 0.5,
-                y: isActive ? mouse.y : 0.5,
-                found: isActive,
-              });
+      // Accumulate calibration data (only meaningful with a positional input + ongoing calibration)
+      if (calibrationDataRef.current && calibrationStepRef.current) {
+        const role = calibrationStepRef.current;
+        const pos = positions.get(role);
+        if (pos?.found && calibrationDataRef.current[role]) {
+          const d = calibrationDataRef.current[role];
+          d.minX = Math.min(d.minX, pos.x);
+          d.maxX = Math.max(d.maxX, pos.x);
+          d.minY = Math.min(d.minY, pos.y);
+          d.maxY = Math.max(d.maxY, pos.y);
+        }
+      }
+
+      // Get status
+      const status = engineRef.current.getStatus();
+
+      // Update React state periodically
+      statusFrameCount.current++;
+      if (statusFrameCount.current % 10 === 0) {
+        setLiveStatus(status);
+        setIsPlaying(status.isPlaying);
+        setIsPaused(status.isPaused);
+      }
+
+      // Draw overlay onto the canvas (webcam mode only — canvas/video don't exist in touch mode).
+      if (inputMode === 'webcam') {
+        const canvas = canvasRef.current;
+        const video = videoRef.current;
+        if (canvas && video) {
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            const vw = video.videoWidth || 640;
+            const vh = video.videoHeight || 480;
+            if (canvas.width !== vw) canvas.width = vw;
+            if (canvas.height !== vh) canvas.height = vh;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            if (showOverlay && selectedSong) {
+              drawOverlay(ctx, canvas.width, canvas.height, positions, status, selectedSong, showNoteNames);
             }
-          } else {
-            // Real camera tracking
-            // Mirror X so "left in the mirror" = low X for musical zones
-            const blobs = blobsRef.current;
-            for (const role of COLOR_ROLES) {
-              const blob = blobs.find((b) => b.colorId === role.id);
-              positions.set(role.id, blob?.found
-                ? { x: 1 - blob.x, y: blob.y, found: true }
-                : { x: 0, y: 0, found: false });
-            }
-          }
-
-          // Feed to engine
-          engineRef.current.setAllPositions(positions);
-
-          // Accumulate calibration data
-          if (calibrationDataRef.current && calibrationStepRef.current) {
-            const role = calibrationStepRef.current;
-            const pos = positions.get(role);
-            if (pos?.found && calibrationDataRef.current[role]) {
-              const d = calibrationDataRef.current[role];
-              d.minX = Math.min(d.minX, pos.x);
-              d.maxX = Math.max(d.maxX, pos.x);
-              d.minY = Math.min(d.minY, pos.y);
-              d.maxY = Math.max(d.maxY, pos.y);
-            }
-          }
-
-          // Get status
-          const status = engineRef.current.getStatus();
-
-          // Update React state periodically
-          statusFrameCount.current++;
-          if (statusFrameCount.current % 10 === 0) {
-            setLiveStatus(status);
-            setIsPlaying(status.isPlaying);
-            setIsPaused(status.isPaused);
-          }
-
-          // Draw overlay
-          if (showOverlay && selectedSong) {
-            drawOverlay(ctx, canvas.width, canvas.height, positions, status, selectedSong, showNoteNames);
           }
         }
       }
@@ -345,7 +374,7 @@ function SongPresetScreen() {
     requestAnimationFrame(loop);
 
     return () => { running = false; };
-  }, [isInitialized, showOverlay, showNoteNames, selectedSong, keyboardMode]);
+  }, [isInitialized, showOverlay, showNoteNames, selectedSong, keyboardMode, inputMode]);
 
   // ---- Per-baton mode + instrument ----
   //
@@ -642,8 +671,14 @@ function SongPresetScreen() {
   return (
     <div style={styles.container}>
       <div style={styles.stage}>
-        <StemMixerStrip song={selectedSong} status={liveStatus} active={blueActive} />
-      {/* Video + overlay */}
+        <StemMixerStrip song={selectedSong} status={liveStatus} active={inputMode === 'touch' ? padStateRef.current.held : blueActive} />
+      {inputMode === 'touch' ? (
+        <StemMixerTouchPad
+          song={selectedSong}
+          status={liveStatus}
+          onChange={(s) => { padStateRef.current = s; }}
+        />
+      ) : (
       <div
         style={{
           ...styles.videoContainer,
@@ -710,6 +745,7 @@ function SongPresetScreen() {
           </div>
         )}
       </div>
+      )}
       </div>
 
       {/* Controls panel */}
@@ -720,9 +756,26 @@ function SongPresetScreen() {
             &larr; Back
           </button>
           <h2 style={{ margin: 0, fontSize: 16, color: '#e2e2e8' }}>Song Preset</h2>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
+            <button
+              onClick={() => setInputMode('webcam')}
+              style={inputMode === 'webcam' ? styles.btnActive : styles.btnSmall}
+              aria-pressed={inputMode === 'webcam'}
+            >
+              Webcam
+            </button>
+            <button
+              onClick={() => setInputMode('touch')}
+              style={inputMode === 'touch' ? styles.btnActive : styles.btnSmall}
+              aria-pressed={inputMode === 'touch'}
+            >
+              Touch
+            </button>
+          </div>
         </div>
 
         {/* Color Legend */}
+        {inputMode === 'webcam' && (
         <div style={styles.section}>
           <h3 style={styles.sectionTitle}>Instruments</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
@@ -852,6 +905,7 @@ function SongPresetScreen() {
             })}
           </div>
         </div>
+        )}
 
         {/* Song Selector */}
         <div style={styles.section}>
@@ -1084,6 +1138,7 @@ function SongPresetScreen() {
           </div>
         )}
 
+        {inputMode === 'webcam' && (<>
         {/* Color Calibration */}
         <div style={styles.section}>
           <h3 style={styles.sectionTitle}>Color Calibration</h3>
@@ -1213,6 +1268,7 @@ function SongPresetScreen() {
             </div>
           )}
         </div>
+        </>)}
 
         {/* Overlay toggle */}
         <div style={styles.section}>
