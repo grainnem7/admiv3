@@ -206,3 +206,31 @@ def test_extract_beat_chroma_shape():
     # 12 chroma bins, at least one column per beat boundary
     assert beat_chroma.shape[0] == 12
     assert beat_chroma.shape[1] >= len(beat_frames) - 1
+
+
+# ============================================================================
+# Template matching
+# ============================================================================
+
+def test_label_beats_picks_perfect_match():
+    templates = analyse_song.build_chord_templates()
+    cols = np.stack(
+        [templates["C"], templates["F"], templates["G7"]], axis=1
+    )
+    labels = analyse_song.label_beats(cols, templates, verbose=False)
+    assert labels == ["C", "F", "G7"]
+
+
+def test_label_beats_returns_N_on_silent_column():
+    templates = analyse_song.build_chord_templates()
+    cols = np.stack([templates["A"], np.zeros(12)], axis=1)
+    labels = analyse_song.label_beats(cols, templates, verbose=False)
+    assert labels[0] == "A"
+    assert labels[1] == "N"
+
+
+def test_label_beats_triad_bias_keeps_simple_triads():
+    templates = analyse_song.build_chord_templates()
+    cols = templates["C"].reshape(12, 1)
+    labels = analyse_song.label_beats(cols, templates, verbose=False)
+    assert labels == ["C"]

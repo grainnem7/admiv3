@@ -245,3 +245,71 @@ def extract_beat_chroma(
     # N beat frames (pre-roll + N-1 inter-beat + post-roll). Drop pre-roll.
     synced = librosa.util.sync(chroma, beat_frames, aggregate=np.median)
     return synced[:, 1:]
+
+
+# ============================================================================
+# Template matching
+# ============================================================================
+
+# Major and minor triads get the triad bias multiplier; 7-chords/dim/aug do not.
+_TRIAD_QUALITIES = {"", "m"}
+
+
+def label_beats(
+    beat_chroma: np.ndarray,
+    templates: dict[str, np.ndarray],
+    verbose: bool = False,
+) -> list[str]:
+    """Match each column of `beat_chroma` against `templates`. Returns one
+    label per beat. Beats below the silence threshold or below MIN_CONFIDENCE
+    get labelled 'N'."""
+    n_beats = beat_chroma.shape[1]
+    if n_beats == 0:
+        return []
+
+    magnitudes = np.linalg.norm(beat_chroma, axis=0)
+    mean_magnitude = float(magnitudes.mean()) if magnitudes.size > 0 else 0.0
+    silence_floor = SILENCE_THRESHOLD * mean_magnitude
+
+    template_labels = list(templates.keys())
+    template_matrix = np.stack([templates[l] for l in template_labels], axis=0)
+    bias = np.array(
+        [
+            TRIAD_BIAS if _label_quality(l) in _TRIAD_QUALITIES else 1.0
+            for l in template_labels
+        ]
+    )
+
+    out: list[str] = []
+    for i in range(n_beats):
+        col = beat_chroma[:, i]
+        col_norm = np.linalg.norm(col)
+        if col_norm < silence_floor or col_norm == 0:
+            out.append("N")
+            continue
+        normalised = col / col_norm
+        sims = template_matrix @ normalised
+        biased = sims * bias
+        best_idx = int(np.argmax(biased))
+        if biased[best_idx] < MIN_CONFIDENCE:
+            out.append("N")
+            continue
+        if verbose:
+            top3 = np.argsort(biased)[-3:][::-1]
+            print(
+                f"[label_beats] beat {i}: "
+                + ", ".join(
+                    f"{template_labels[k]}={biased[k]:.3f}" for k in top3
+                ),
+                file=sys.stderr,
+            )
+        out.append(template_labels[best_idx])
+    return out
+
+
+def _label_quality(label: str) -> str:
+    """Return the quality suffix of a chord label, e.g. 'C#m7' -> 'm7'."""
+    m = LABEL_REGEX.fullmatch(label)
+    if not m:
+        return ""
+    return m.group(2) or ""
