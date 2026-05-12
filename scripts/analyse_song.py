@@ -223,3 +223,25 @@ def detect_key(chroma: np.ndarray) -> str:
                 best_score = score
                 best_label = f"{_TONIC_NAMES[tonic]} {mode}"
     return best_label
+
+
+# ============================================================================
+# Beat-synchronous chroma
+# ============================================================================
+
+def extract_beat_chroma(
+    y: np.ndarray, sr: int, beat_frames: np.ndarray
+) -> np.ndarray:
+    """Compute CQT chroma frame-by-frame, then aggregate to one vector per
+    beat using the median over each beat segment.
+
+    Returns: array of shape (12, n_beats). beat i covers
+    [beat_frames[i], beat_frames[i+1]); the final beat covers
+    [beat_frames[-1], end). Pre-roll (before beat_frames[0]) is dropped.
+    """
+    librosa = _load_librosa()
+    chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
+    # librosa.util.sync with `aggregate=np.median` produces N+1 segments for
+    # N beat frames (pre-roll + N-1 inter-beat + post-roll). Drop pre-roll.
+    synced = librosa.util.sync(chroma, beat_frames, aggregate=np.median)
+    return synced[:, 1:]

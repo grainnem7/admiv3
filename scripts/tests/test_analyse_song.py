@@ -187,3 +187,22 @@ def test_detect_key_recognises_a_minor_chord_chroma():
     key = analyse_song.detect_key(chroma)
     # A minor and C major share notes — Krumhansl correlation will pick one
     assert key in ("A Minor", "C Major")
+
+
+# ============================================================================
+# Beat-synchronous chroma
+# ============================================================================
+
+def test_extract_beat_chroma_shape():
+    import librosa as librosa_mod
+    sr = 22050
+    # 4 seconds of low-amplitude noise (just need non-silent input)
+    y = np.random.RandomState(0).randn(4 * sr).astype(np.float32) * 0.1
+    # Five beat times spread across the audio
+    beat_frames = librosa_mod.time_to_frames(
+        np.array([0.5, 1.5, 2.0, 2.5, 3.5]), sr=sr
+    )
+    beat_chroma = analyse_song.extract_beat_chroma(y, sr, beat_frames)
+    # 12 chroma bins, at least one column per beat boundary
+    assert beat_chroma.shape[0] == 12
+    assert beat_chroma.shape[1] >= len(beat_frames) - 1
