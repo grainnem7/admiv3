@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, type RefObject } from 'react';
+import { useCallback, useRef, useState, type Ref } from 'react';
 
 export interface PadState {
   x: number;
@@ -35,7 +35,7 @@ export function padReducer(state: PadState, event: PadEvent): PadState {
 interface UsePadStateResult {
   state: PadState;
   bind: {
-    ref: RefObject<HTMLDivElement | null>;
+    ref: Ref<HTMLDivElement>;
     onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => void;
     onPointerMove: (e: React.PointerEvent<HTMLDivElement>) => void;
     onPointerUp: (e: React.PointerEvent<HTMLDivElement>) => void;
