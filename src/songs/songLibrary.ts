@@ -25,6 +25,12 @@ export interface StemMixerMapping {
   leftZone: ZoneStemLevels;
   centerZone: ZoneStemLevels;
   rightZone: ZoneStemLevels;
+  /** Optional human-readable zone names. Defaults are derived per song-type when absent. */
+  zoneLabels?: {
+    left: string;
+    center: string;
+    right: string;
+  };
 }
 
 /** Full song configuration */
@@ -90,6 +96,7 @@ const mixOnlyMixer: StemMixerMapping = {
   leftZone:   { vocals: 0.0, drums: 0.0, bass: 0.0, other: 0.0 },
   centerZone: { vocals: 0.5, drums: 0.5, bass: 0.5, other: 0.5 },
   rightZone:  { vocals: 1.0, drums: 1.0, bass: 1.0, other: 1.0 },
+  zoneLabels: { left: 'Silent', center: 'Half volume', right: 'Full volume' },
 };
 
 export const SONG_LIBRARY: SongConfig[] = [
@@ -111,6 +118,7 @@ export const SONG_LIBRARY: SongConfig[] = [
       leftZone:   { vocals: 1.0, drums: 0.0, bass: 0.0, other: 0.0 },
       centerZone: { vocals: 1.0, drums: 0.3, bass: 0.3, other: 0.6 },
       rightZone:  { vocals: 1.0, drums: 1.0, bass: 1.0, other: 1.0 },
+      zoneLabels: { left: 'Vocals only', center: 'Vocals + light band', right: 'Full mix' },
     },
     chordProgression: CANT_HELP_CHORDS,
     analysisUrl: 'songs/cant-help-falling-in-love/analysis.json',
