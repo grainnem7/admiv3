@@ -234,3 +234,43 @@ def test_label_beats_triad_bias_keeps_simple_triads():
     cols = templates["C"].reshape(12, 1)
     labels = analyse_song.label_beats(cols, templates, verbose=False)
     assert labels == ["C"]
+
+
+# ============================================================================
+# Smoothing
+# ============================================================================
+
+def test_smooth_labels_min_1_is_noop():
+    labels = ["C", "G", "C", "F", "C"]
+    assert analyse_song.smooth_labels(labels, min_chord_beats=1) == labels
+
+
+def test_smooth_labels_min_2_absorbs_1beat_run_into_left_neighbour():
+    labels = ["C", "C", "G", "C", "C"]
+    expected = ["C", "C", "C", "C", "C"]
+    assert analyse_song.smooth_labels(labels, min_chord_beats=2) == expected
+
+
+def test_smooth_labels_min_2_absorbs_into_longer_neighbour():
+    # G is 1-beat; left neighbour C is 1 beat, right neighbour F is 3 beats
+    labels = ["C", "G", "F", "F", "F"]
+    expected = ["F", "F", "F", "F", "F"]
+    assert analyse_song.smooth_labels(labels, min_chord_beats=2) == expected
+
+
+def test_smooth_labels_handles_leading_short_run():
+    labels = ["G", "C", "C", "C"]
+    expected = ["C", "C", "C", "C"]
+    assert analyse_song.smooth_labels(labels, min_chord_beats=2) == expected
+
+
+def test_smooth_labels_handles_trailing_short_run():
+    labels = ["C", "C", "C", "G"]
+    expected = ["C", "C", "C", "C"]
+    assert analyse_song.smooth_labels(labels, min_chord_beats=2) == expected
+
+
+def test_smooth_labels_repeated_passes():
+    labels = ["C", "C", "F", "G", "G", "G", "G"]
+    expected = ["G", "G", "G", "G", "G", "G", "G"]
+    assert analyse_song.smooth_labels(labels, min_chord_beats=3) == expected

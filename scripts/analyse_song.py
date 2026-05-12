@@ -313,3 +313,79 @@ def _label_quality(label: str) -> str:
     if not m:
         return ""
     return m.group(2) or ""
+
+
+# ============================================================================
+# Smoothing
+# ============================================================================
+
+def smooth_labels(labels: list[str], min_chord_beats: int) -> list[str]:
+    """Replace runs shorter than `min_chord_beats` with the label of their
+    longest neighbour. On each pass, the short run with the LONGEST dominant
+    neighbour is processed first — this lets obvious merges happen before
+    ambiguous ones. Repeats until stable. min_chord_beats=1 is a no-op."""
+    if min_chord_beats <= 1 or len(labels) == 0:
+        return list(labels)
+    current = list(labels)
+    while True:
+        runs = _runs_of(current)
+        # Find all short runs with their best (longest) neighbour
+        short_runs = []
+        for run in runs:
+            if run["length"] >= min_chord_beats:
+                continue
+            left = _neighbour(runs, run, direction=-1)
+            right = _neighbour(runs, run, direction=+1)
+            if left is None and right is None:
+                continue  # single run, nowhere to absorb
+            best_neighbour_len = max(
+                (left["length"] if left else -1),
+                (right["length"] if right else -1),
+            )
+            short_runs.append((run, left, right, best_neighbour_len))
+        if not short_runs:
+            return current
+        # Pick the short run with the longest dominant neighbour. Tie-break
+        # by smallest run length, then by leftmost position.
+        short_runs.sort(
+            key=lambda t: (-t[3], t[0]["length"], t[0]["start"])
+        )
+        run, left, right, _ = short_runs[0]
+        if left is None:
+            chosen_label = right["label"]
+        elif right is None:
+            chosen_label = left["label"]
+        else:
+            chosen_label = (
+                left["label"]
+                if left["length"] >= right["length"]
+                else right["label"]
+            )
+        for i in range(run["start"], run["start"] + run["length"]):
+            current[i] = chosen_label
+
+
+def _runs_of(labels: list[str]) -> list[dict]:
+    """Compute run-length encoding: [{label, start, length}, ...]."""
+    runs: list[dict] = []
+    if not labels:
+        return runs
+    start = 0
+    for i in range(1, len(labels)):
+        if labels[i] != labels[start]:
+            runs.append({"label": labels[start], "start": start, "length": i - start})
+            start = i
+    runs.append(
+        {"label": labels[start], "start": start, "length": len(labels) - start}
+    )
+    return runs
+
+
+def _neighbour(runs: list[dict], run: dict, direction: int) -> dict | None:
+    """Return the adjacent run in the given direction (-1=left, +1=right),
+    or None at the boundary."""
+    idx = runs.index(run)
+    target = idx + direction
+    if target < 0 or target >= len(runs):
+        return None
+    return runs[target]
