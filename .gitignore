@@ -30,3 +30,12 @@ Thumbs.db
 # Windows reserved device names
 nul
 
+# Python (analysis pipeline in scripts/)
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Superpowers internal state
+.superpowers/
+
