@@ -474,3 +474,294 @@ def build_analysis_json(
             for s in segments
         ],
     }
+
+
+# ============================================================================
+# Audit summary
+# ============================================================================
+
+def print_summary(
+    *,
+    song_id: str,
+    beat_stem: str,
+    chord_stem: str,
+    audio_duration: float,
+    detected_bpm: float,
+    bpm_used: float,
+    time_signature: str,
+    beats_per_bar: int,
+    key: str,
+    beats: np.ndarray,
+    downbeats: np.ndarray,
+    raw_labels: list[str],
+    smoothed_labels: list[str],
+    segments: list[dict],
+    existing_analysis: dict | None,
+    min_chord_beats: int,
+) -> None:
+    """Print the human-readable audit summary to stdout."""
+    label_counts: dict[str, int] = {}
+    for s in segments:
+        label_counts[s["label"]] = label_counts.get(s["label"], 0) + 1
+    top_labels = sorted(label_counts.items(), key=lambda kv: -kv[1])
+
+    n_count = sum(1 for l in smoothed_labels if l == "N")
+
+    print(f"=== Analysis summary for {song_id} ===")
+    print(
+        f"Audio:       {beat_stem} (beats), {chord_stem} (chords); "
+        f"duration {audio_duration:.1f}s"
+    )
+    print(
+        f"Beat track:  detected {detected_bpm:.1f} BPM; "
+        f"using {bpm_used:.1f} BPM"
+    )
+    print(f"Meter:       {time_signature} (--beats-per-bar {beats_per_bar})")
+    print(f"Key:         {key}")
+    print(f"Beats:       {len(beats)}")
+    print(f"Downbeats:   {len(downbeats)} (every {beats_per_bar}th beat)")
+    print()
+    print("Chord pipeline:")
+    print(f"  raw per-beat labels:           {len(raw_labels)}")
+    print(
+        f"  after min-duration filter ({min_chord_beats}): "
+        f"{len(_runs_of(smoothed_labels))} distinct runs"
+    )
+    print(f"  merged chord segments:         {len(segments)}")
+    print()
+    print("Top labels (count, fraction):")
+    for label, count in top_labels[:10]:
+        frac = count / max(1, len(segments))
+        print(f"  {label:6} {count:3} ({frac:.0%})")
+    print()
+    print(f"N (no-chord) beats: {n_count}")
+    print()
+
+    if existing_analysis is not None:
+        existing_chords = existing_analysis.get("chords", [])
+        beats_set = set(float(b) for b in beats)
+        existing_off_grid = sum(
+            1 for c in existing_chords if c["time"] not in beats_set
+        )
+        print("Diff vs existing analysis.json:")
+        print(
+            f"  Existing:    {len(existing_chords)} chord changes, "
+            f"{existing_analysis.get('timeSignature')} @ "
+            f"{existing_analysis.get('bpm')} BPM, "
+            f"{existing_off_grid} chord times not on new beat grid"
+        )
+        print(
+            f"  New:         {len(segments)} chord changes, "
+            f"{time_signature} @ {bpm_used:.1f} BPM, "
+            "all on beat grid"
+        )
+
+    if song_id == "cant-help-falling-in-love":
+        _print_hand_authored_diff(segments, beats)
+
+
+def _print_hand_authored_diff(segments: list[dict], beats: np.ndarray) -> None:
+    """Compare segments against CANT_HELP_CHORDS from chordLookup.ts.
+
+    Hand-authored progression starts at audio time 0; actual stems have
+    ~beats[0] of pre-roll. Subtract that to align."""
+    if len(beats) == 0:
+        return
+    offset = float(beats[0])
+    hand_chords = _CANT_HELP_HAND_AUTHORED
+    matches_on_root = 0
+    matches_on_label = 0
+    mismatches: list[str] = []
+    for hc in hand_chords:
+        target_time = hc["time"] + offset
+        active = None
+        for seg in segments:
+            if seg["time"] <= target_time < seg["time"] + seg["duration"]:
+                active = seg
+                break
+        if active is None:
+            continue
+        if _root_of(active["label"]) == _root_of(hc["name"]):
+            matches_on_root += 1
+        if active["label"] == hc["name"]:
+            matches_on_label += 1
+        else:
+            mismatches.append(
+                f"  @ {hc['time']:6.2f}s (hand: {hc['name']:5}) -> script: {active['label']}"
+            )
+    print()
+    print(
+        f"Diff vs CANT_HELP_CHORDS (hand-authored, {len(hand_chords)} entries):"
+    )
+    print(
+        f"  Root-match:  {matches_on_root}/{len(hand_chords)} "
+        f"({matches_on_root / len(hand_chords):.0%})"
+    )
+    print(
+        f"  Label-match: {matches_on_label}/{len(hand_chords)} "
+        f"({matches_on_label / len(hand_chords):.0%})"
+    )
+    if mismatches:
+        print(f"  Mismatches ({len(mismatches)}):")
+        for m in mismatches[:20]:
+            print(m)
+        if len(mismatches) > 20:
+            print(f"  ... and {len(mismatches) - 20} more")
+
+
+def _root_of(label: str) -> str:
+    m = LABEL_REGEX.fullmatch(label)
+    return m.group(1) if m else ""
+
+
+# Hand-authored chord names + start times (seconds) from
+# src/songs/voices/chordLookup.ts CANT_HELP_CHORDS. Used only for the
+# diff summary on the Elvis song. Keep in sync by hand if that file
+# changes; this is an audit aid, not a runtime contract.
+_CANT_HELP_HAND_AUTHORED = [
+    {"time": 0.0, "name": "D"}, {"time": 3.58, "name": "A"},
+    {"time": 7.16, "name": "D"}, {"time": 10.74, "name": "F#m"},
+    {"time": 14.33, "name": "Bm"}, {"time": 17.91, "name": "G"},
+    {"time": 21.49, "name": "D"}, {"time": 25.07, "name": "A"},
+    {"time": 28.66, "name": "G"}, {"time": 32.24, "name": "A"},
+    {"time": 35.82, "name": "Bm"}, {"time": 39.40, "name": "Em"},
+    {"time": 42.99, "name": "D"}, {"time": 45.28, "name": "A"},
+    {"time": 46.57, "name": "D"}, {"time": 50.15, "name": "D"},
+    {"time": 53.73, "name": "F#m"}, {"time": 57.31, "name": "Bm"},
+    {"time": 60.90, "name": "G"}, {"time": 64.48, "name": "D"},
+    {"time": 68.06, "name": "A"}, {"time": 71.64, "name": "G"},
+    {"time": 75.22, "name": "A"}, {"time": 78.81, "name": "Bm"},
+    {"time": 82.39, "name": "Em"}, {"time": 85.97, "name": "D"},
+    {"time": 88.26, "name": "A"}, {"time": 89.55, "name": "D"},
+    {"time": 93.13, "name": "F#m"}, {"time": 96.72, "name": "C#7"},
+    {"time": 100.30, "name": "F#m"}, {"time": 103.88, "name": "C#7"},
+    {"time": 107.46, "name": "F#m"}, {"time": 111.04, "name": "C#7"},
+    {"time": 114.63, "name": "F#m"}, {"time": 118.21, "name": "B7"},
+    {"time": 121.79, "name": "Em"}, {"time": 125.37, "name": "A7"},
+    {"time": 128.96, "name": "D"}, {"time": 132.54, "name": "F#m"},
+    {"time": 136.12, "name": "Bm"}, {"time": 139.70, "name": "G"},
+    {"time": 143.28, "name": "D"}, {"time": 146.87, "name": "A"},
+    {"time": 150.45, "name": "G"}, {"time": 154.03, "name": "A"},
+    {"time": 157.61, "name": "Bm"}, {"time": 161.19, "name": "Em"},
+    {"time": 164.78, "name": "D"}, {"time": 167.07, "name": "A"},
+    {"time": 168.36, "name": "D"},
+]
+
+
+# ============================================================================
+# Main / CLI
+# ============================================================================
+
+def _id_to_title(song_id: str) -> str:
+    return " ".join(w.capitalize() for w in song_id.replace("-", " ").split())
+
+
+def _quick_detect_bpm(y: np.ndarray, sr: int) -> float:
+    librosa = _load_librosa()
+    bpm_arr, _ = librosa.beat.beat_track(y=y, sr=sr, units="frames")
+    return float(np.atleast_1d(bpm_arr)[0])
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Reproducible beat + chord analysis for the ADMI song library."
+    )
+    parser.add_argument("song_id", help="Directory name under public/songs/")
+    parser.add_argument("--title", default=None)
+    parser.add_argument("--artist", default=None)
+    parser.add_argument("--key", default=None)
+    parser.add_argument("--time-signature", default=None)
+    parser.add_argument("--bpm", type=float, default=None)
+    parser.add_argument("--beats-per-bar", type=int, default=4)
+    parser.add_argument("--min-chord-beats", type=int, default=1)
+    parser.add_argument("--chord-stem", default="other.wav")
+    parser.add_argument("--beat-stem", default="drums.wav")
+    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--no-backup", action="store_true")
+    parser.add_argument("--verbose", action="store_true")
+    args = parser.parse_args(argv)
+
+    repo_root = Path(__file__).resolve().parent.parent
+    song_dir = repo_root / "public" / "songs" / args.song_id
+    if not song_dir.exists():
+        print(f"error: song dir does not exist: {song_dir}", file=sys.stderr)
+        return 2
+
+    existing_path = song_dir / "analysis.json"
+    existing: dict | None = None
+    if existing_path.exists():
+        try:
+            existing = json.loads(existing_path.read_text(encoding="utf-8"))
+        except Exception:
+            existing = None
+
+    title = args.title or (existing or {}).get("title") or _id_to_title(args.song_id)
+    artist = args.artist or (existing or {}).get("artist") or "Unknown Artist"
+    if (not args.title) and (not existing):
+        print(f"[warn] No --title given; defaulting to '{title}'", file=sys.stderr)
+    if (not args.artist) and (not existing):
+        print(f"[warn] No --artist given; defaulting to '{artist}'", file=sys.stderr)
+    time_signature = args.time_signature or (existing or {}).get("timeSignature") or "4/4"
+
+    beat_y, chord_y, sr, audio_duration = load_audio(
+        song_dir, beat_stem=args.beat_stem, chord_stem=args.chord_stem
+    )
+    beats, bpm_used = track_beats(beat_y, sr, bpm_hint=args.bpm)
+    detected_bpm = bpm_used if args.bpm is None else _quick_detect_bpm(beat_y, sr)
+    downbeats = derive_downbeats(beats, args.beats_per_bar)
+
+    librosa = _load_librosa()
+    chroma_for_key = librosa.feature.chroma_cqt(y=chord_y, sr=sr)
+    key = args.key or (existing or {}).get("key") or detect_key(chroma_for_key)
+
+    beat_frames = librosa.time_to_frames(beats, sr=sr)
+    beat_chroma = extract_beat_chroma(chord_y, sr, beat_frames)
+    templates = build_chord_templates()
+    raw_labels = label_beats(beat_chroma, templates, verbose=args.verbose)
+    smoothed = smooth_labels(raw_labels, args.min_chord_beats)
+    segments = build_segments(smoothed, beats, audio_duration)
+
+    analysis = build_analysis_json(
+        title=title,
+        artist=artist,
+        bpm=bpm_used,
+        time_signature=time_signature,
+        key=key,
+        beats=beats,
+        downbeats=downbeats,
+        segments=segments,
+    )
+
+    print_summary(
+        song_id=args.song_id,
+        beat_stem=args.beat_stem, chord_stem=args.chord_stem,
+        audio_duration=audio_duration,
+        detected_bpm=detected_bpm, bpm_used=bpm_used,
+        time_signature=time_signature, beats_per_bar=args.beats_per_bar,
+        key=key, beats=beats, downbeats=downbeats,
+        raw_labels=raw_labels, smoothed_labels=smoothed,
+        segments=segments, existing_analysis=existing,
+        min_chord_beats=args.min_chord_beats,
+    )
+
+    if args.dry_run:
+        print()
+        print(json.dumps(analysis, indent=2))
+        return 0
+
+    if existing_path.exists() and not args.no_backup:
+        backup_path = song_dir / "analysis.legacy.json"
+        backup_path.write_text(
+            existing_path.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        print(f"Backup: {backup_path}")
+
+    existing_path.write_text(
+        json.dumps(analysis, indent=2) + "\n", encoding="utf-8"
+    )
+    print(f"Wrote: {existing_path}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
