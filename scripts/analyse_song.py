@@ -142,3 +142,34 @@ def load_audio(
     chord_y = _resolve_signal(song_dir, chord_stem, sr)
     duration = len(chord_y) / sr
     return beat_y, chord_y, sr, duration
+
+
+# ============================================================================
+# Beat tracking
+# ============================================================================
+
+def track_beats(
+    y: np.ndarray, sr: int, bpm_hint: float | None = None
+) -> tuple[np.ndarray, float]:
+    """Detect beats in `y`. If `bpm_hint` is given, use it as start_bpm
+    and return it verbatim as the bpm. Otherwise call librosa with no hint.
+
+    For non-4/4 meters (notably 12/8 ballads), librosa's auto-detection is
+    unreliable — it tends to lock onto eighth-note or quarter-note
+    subdivisions instead of the felt pulse. The documented remedy is the
+    --bpm CLI override; we don't try to second-guess librosa here.
+
+    Returns: (beats_in_seconds, bpm_used).
+    """
+    librosa = _load_librosa()
+    if bpm_hint is not None:
+        bpm_arr, beat_frames = librosa.beat.beat_track(
+            y=y, sr=sr, start_bpm=bpm_hint, tightness=100, units="frames"
+        )
+        beats = librosa.frames_to_time(beat_frames, sr=sr)
+        return beats, float(bpm_hint)
+
+    bpm_arr, beat_frames = librosa.beat.beat_track(y=y, sr=sr, units="frames")
+    bpm_detected = float(np.atleast_1d(bpm_arr)[0])
+    beats = librosa.frames_to_time(beat_frames, sr=sr)
+    return beats, bpm_detected

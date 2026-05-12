@@ -107,3 +107,41 @@ def test_load_audio_raises_when_no_audio_at_all(tmp_path):
         analyse_song.load_audio(
             tmp_path, beat_stem="drums.wav", chord_stem="other.wav"
         )
+
+
+# ============================================================================
+# Beat tracking
+# ============================================================================
+
+def _generate_click_track(bpm: float, duration: float = 8.0, sr: int = 22050) -> np.ndarray:
+    """Generate a metronome click track at the given BPM."""
+    samples = int(duration * sr)
+    y = np.zeros(samples, dtype=np.float32)
+    interval_s = 60.0 / bpm
+    click_samples = int(0.02 * sr)
+    t = 0.0
+    while t * sr + click_samples < samples:
+        start = int(t * sr)
+        y[start:start + click_samples] += np.random.RandomState(0).randn(click_samples) * 0.5
+        t += interval_s
+    return y
+
+
+def test_track_beats_finds_clicks_at_120_bpm():
+    sr = 22050
+    y = _generate_click_track(bpm=120.0, duration=8.0, sr=sr)
+    beats, bpm = analyse_song.track_beats(y, sr, bpm_hint=None)
+    assert 110 < bpm < 130, f"detected bpm {bpm} outside expected range"
+    assert len(beats) >= 12  # 8 seconds at 120 bpm = 16 beats, librosa may drop a few
+    # Inter-beat interval should be ~0.5s
+    median_ibi = np.median(np.diff(beats))
+    assert 0.45 < median_ibi < 0.55
+
+
+def test_track_beats_respects_bpm_hint():
+    sr = 22050
+    y = _generate_click_track(bpm=120.0, duration=8.0, sr=sr)
+    # Override to a wrong bpm and ensure the hint sticks
+    beats, bpm = analyse_song.track_beats(y, sr, bpm_hint=67.0)
+    # When given a hint, return that as the bpm field
+    assert bpm == 67.0
