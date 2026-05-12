@@ -313,3 +313,49 @@ def test_build_segments_time_always_in_beats():
         assert seg["time"] in beats.tolist(), (
             f"chord time {seg['time']} not in beats grid"
         )
+
+
+# ============================================================================
+# JSON construction
+# ============================================================================
+
+def test_build_analysis_json_shape():
+    obj = analyse_song.build_analysis_json(
+        title="Test", artist="Artist", bpm=120.0,
+        time_signature="4/4", key="C Major",
+        beats=np.array([0.0, 0.5, 1.0]),
+        downbeats=np.array([0.0]),
+        segments=[{"time": 0.0, "duration": 1.5, "label": "C"}],
+    )
+    assert obj["title"] == "Test"
+    assert obj["artist"] == "Artist"
+    assert obj["bpm"] == 120.0
+    assert obj["timeSignature"] == "4/4"
+    assert obj["key"] == "C Major"
+    assert obj["beats"] == [0.0, 0.5, 1.0]
+    assert obj["downbeats"] == [0.0]
+    assert obj["chords"] == [{"time": 0.0, "duration": 1.5, "label": "C"}]
+
+
+def test_build_analysis_json_rejects_bad_label():
+    import pytest
+    with pytest.raises(ValueError, match="invalid chord label"):
+        analyse_song.build_analysis_json(
+            title="T", artist="A", bpm=120.0, time_signature="4/4",
+            key="C Major",
+            beats=np.array([0.0]),
+            downbeats=np.array([0.0]),
+            segments=[{"time": 0.0, "duration": 1.0, "label": "Csus4"}],
+        )
+
+
+def test_build_analysis_json_rejects_off_grid_chord_time():
+    import pytest
+    with pytest.raises(ValueError, match="not in beats grid"):
+        analyse_song.build_analysis_json(
+            title="T", artist="A", bpm=120.0, time_signature="4/4",
+            key="C Major",
+            beats=np.array([0.0, 0.5]),
+            downbeats=np.array([0.0]),
+            segments=[{"time": 0.3, "duration": 0.2, "label": "C"}],
+        )

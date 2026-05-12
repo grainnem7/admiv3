@@ -422,3 +422,55 @@ def build_segments(
             }
         )
     return segments
+
+
+# ============================================================================
+# JSON construction + validation
+# ============================================================================
+
+def build_analysis_json(
+    *,
+    title: str,
+    artist: str,
+    bpm: float,
+    time_signature: str,
+    key: str,
+    beats: np.ndarray,
+    downbeats: np.ndarray,
+    segments: list[dict],
+) -> dict:
+    """Construct the final JSON-serialisable analysis dict.
+
+    Pre-write validation:
+      - every chord label must match LABEL_REGEX
+      - every chord time must be a value in `beats`
+    Raises ValueError on either failure.
+    """
+    beats_list = [float(b) for b in beats]
+    beats_set = set(beats_list)
+    for seg in segments:
+        if not validate_label(seg["label"]):
+            raise ValueError(
+                f"invalid chord label '{seg['label']}': fails runtime regex"
+            )
+        if float(seg["time"]) not in beats_set:
+            raise ValueError(
+                f"chord time {seg['time']} not in beats grid"
+            )
+    return {
+        "title": title,
+        "artist": artist,
+        "bpm": float(bpm),
+        "timeSignature": time_signature,
+        "key": key,
+        "beats": beats_list,
+        "downbeats": [float(b) for b in downbeats],
+        "chords": [
+            {
+                "time": float(s["time"]),
+                "duration": float(s["duration"]),
+                "label": s["label"],
+            }
+            for s in segments
+        ],
+    }
