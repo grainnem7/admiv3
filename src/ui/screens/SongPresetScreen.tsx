@@ -18,13 +18,25 @@ import { CameraManager } from '../../tracking/CameraManager';
 import { ColorTracker } from '../../tracking/ColorTracker';
 import type { ColorBlob } from '../../tracking/ColorTracker';
 import { SongPresetEngine } from '../../songs/SongPresetEngine';
-import type { VoicePosition, SongPresetStatus, SongCalibration } from '../../songs/SongPresetEngine';
+import type {
+  VoicePosition,
+  SongPresetStatus,
+  SongCalibration,
+  BatonMode,
+} from '../../songs/SongPresetEngine';
 import { SONG_LIBRARY, COLOR_ROLES } from '../../songs/songLibrary';
 import type { SongConfig, ColorRole } from '../../songs/songLibrary';
 import { PAD_PRESET_LIST } from '../../songs/voices/ChordPadVoice';
 import { MELODY_PRESET_LIST } from '../../songs/voices/MelodicVoice';
 import { ARP_PRESET_LIST } from '../../songs/voices/ArpeggioVoice';
 import { BASS_PRESET_LIST } from '../../songs/voices/BassSynthVoice';
+import {
+  INSTRUMENT_PALETTE_LIST,
+  INSTRUMENT_PALETTE_BY_KEY,
+  DEFAULT_INSTRUMENT_KEY,
+} from '../../songs/voices/presets/instrumentPalette';
+import { getInputProfileManager } from '../../profiles/InputProfileManager';
+import { StemMixerStrip } from './songPreset/StemMixerStrip';
 
 // ============================================
 // Constants
@@ -117,6 +129,24 @@ function SongPresetScreen() {
     red: 'warmPad', green: 'bell', yellow: 'sparkle', orange: 'sub',
   });
 
+  // Per-baton mode and instrument selection (instrument mode only).
+  // Initialised from the persisted profile in the effect below so the
+  // user's previous choices survive a page refresh.
+  const [batonModes, setBatonModes] = useState<Record<ColorRole, BatonMode>>({
+    blue: 'parameter',
+    red: 'parameter',
+    green: 'parameter',
+    yellow: 'parameter',
+    orange: 'parameter',
+  });
+  const [batonInstruments, setBatonInstruments] = useState<Record<ColorRole, string>>({
+    blue: DEFAULT_INSTRUMENT_KEY,
+    red: DEFAULT_INSTRUMENT_KEY,
+    green: DEFAULT_INSTRUMENT_KEY,
+    yellow: DEFAULT_INSTRUMENT_KEY,
+    orange: DEFAULT_INSTRUMENT_KEY,
+  });
+
   // Continuous backing
   const [continuousBackingEnabled, setContinuousBackingEnabled] = useState(true);
   const [continuousBackingLevel, setContinuousBackingLevel] = useState(0.4);
@@ -186,6 +216,8 @@ function SongPresetScreen() {
   useEffect(() => {
     engineRef.current.setMuted(isMuted || isMutedLocal);
   }, [isMuted, isMutedLocal]);
+  // (Baton-assignment restore effect is declared further down, alongside
+  // the restoreBatonAssignments callback it depends on.)
 
   // ---- Keyboard test mode listeners ----
   useEffect(() => {
@@ -315,6 +347,83 @@ function SongPresetScreen() {
     return () => { running = false; };
   }, [isInitialized, showOverlay, showNoteNames, selectedSong, keyboardMode]);
 
+  // ---- Per-baton mode + instrument ----
+  //
+  // Declared here (above handleSelectSong) because loadSong rebuilds
+  // every voice, so handleSelectSong needs to call restoreBatonAssignments
+  // after the load completes.
+
+  const persistBatonAssignments = useCallback(
+    (modes: Record<ColorRole, BatonMode>, instruments: Record<ColorRole, string>) => {
+      const assignments: Partial<Record<ColorRole, { mode: BatonMode; instrumentKey: string }>> = {};
+      for (const role of ['red', 'green', 'yellow', 'orange'] as ColorRole[]) {
+        assignments[role] = {
+          mode: modes[role],
+          instrumentKey: instruments[role],
+        };
+      }
+      getInputProfileManager().saveBatonAssignments(assignments);
+    },
+    [],
+  );
+
+  const handleBatonModeChange = useCallback((role: ColorRole, mode: BatonMode) => {
+    if (role === 'blue') return;
+    setBatonModes((prev) => {
+      if (prev[role] === mode) return prev;
+      const next = { ...prev, [role]: mode };
+      engineRef.current.setBatonMode(role, mode);
+      persistBatonAssignments(next, batonInstruments);
+      return next;
+    });
+  }, [batonInstruments, persistBatonAssignments]);
+
+  const handleBatonInstrumentChange = useCallback((role: ColorRole, instrumentKey: string) => {
+    if (role === 'blue') return;
+    if (!INSTRUMENT_PALETTE_BY_KEY[instrumentKey]) return;
+    setBatonInstruments((prev) => {
+      const next = { ...prev, [role]: instrumentKey };
+      engineRef.current.setBatonInstrument(role, instrumentKey);
+      persistBatonAssignments(batonModes, next);
+      return next;
+    });
+  }, [batonModes, persistBatonAssignments]);
+
+  /**
+   * Pull baton assignments back from the persisted profile and apply
+   * them to the engine and React state.  Called on mount AND after
+   * every loadSong (because loadSong rebuilds voices from scratch).
+   */
+  const restoreBatonAssignments = useCallback(() => {
+    const stored = getInputProfileManager().getBatonAssignments();
+    if (Object.keys(stored).length === 0) return;
+
+    // Apply to engine first so the audible state matches the UI state
+    // by the time the React commit runs.
+    engineRef.current.applyBatonAssignments(stored);
+
+    setBatonModes((prev) => {
+      const next = { ...prev };
+      for (const [role, assignment] of Object.entries(stored)) {
+        if (assignment) next[role as ColorRole] = assignment.mode;
+      }
+      return next;
+    });
+    setBatonInstruments((prev) => {
+      const next = { ...prev };
+      for (const [role, assignment] of Object.entries(stored)) {
+        if (assignment) next[role as ColorRole] = assignment.instrumentKey;
+      }
+      return next;
+    });
+  }, []);
+
+  // Restore on mount so the UI reflects the user's saved choices on
+  // first render — even before they pick a song.
+  useEffect(() => {
+    restoreBatonAssignments();
+  }, [restoreBatonAssignments]);
+
   // ---- Song loading ----
   const handleSelectSong = useCallback(async (song: SongConfig) => {
     setSelectedSong(song);
@@ -331,11 +440,16 @@ function SongPresetScreen() {
       setIsLoaded(true);
       setLoadingStatus(null);
       setLoopEnd(engine.getStatus().duration);
+      // loadSong rebuilds every voice from scratch, so any previously
+      // applied baton modes must be re-applied to the newly-built
+      // voices.  Without this, the user's saved preferences would only
+      // take effect after a manual UI toggle.
+      restoreBatonAssignments();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load song');
       setLoadingStatus(null);
     }
-  }, []);
+  }, [restoreBatonAssignments]);
 
   // ---- Transport handlers ----
   const handlePlayPause = useCallback(async () => {
@@ -523,9 +637,12 @@ function SongPresetScreen() {
   const duration = liveStatus?.duration ?? 0;
   const progressPct = duration > 0 ? (currentTime / duration) * 100 : 0;
   const activeColors = liveStatus?.activeColors ?? [];
+  const blueActive = activeColors.includes('blue');
 
   return (
     <div style={styles.container}>
+      <div style={styles.stage}>
+        <StemMixerStrip song={selectedSong} status={liveStatus} active={blueActive} />
       {/* Video + overlay */}
       <div
         style={{
@@ -593,6 +710,7 @@ function SongPresetScreen() {
           </div>
         )}
       </div>
+      </div>
 
       {/* Controls panel */}
       <div style={styles.controlsPanel}>
@@ -647,19 +765,87 @@ function SongPresetScreen() {
                       {isCalibrated ? 'cal' : ''}
                       {keyboardMode && ` [${role.keyNumber}]`}
                     </div>
-                    {role.id !== 'blue' && (
-                      <select
-                        className="form-field__select"
-                        value={voicePresets[role.id] ?? ''}
-                        onChange={(e) => handleVoicePresetChange(role.id as ColorRole, e.target.value)}
-                        style={{ height: 26, fontSize: 10, width: 86, flexShrink: 0 }}
-                        disabled={!isLoaded}
-                      >
-                        {(VOICE_PRESET_OPTIONS[role.id] ?? []).map((opt) => (
-                          <option key={opt.key} value={opt.key}>{opt.name}</option>
-                        ))}
-                      </select>
-                    )}
+                    {role.id !== 'blue' && (() => {
+                      const r = role.id as ColorRole;
+                      const mode = batonModes[r];
+                      const isInstrument = mode === 'instrument';
+                      return (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          {/* Mode toggle: parameter ↔ instrument */}
+                          <div
+                            role="group"
+                            aria-label={`${role.label} mode`}
+                            style={{ display: 'flex', gap: 1, height: 18 }}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => handleBatonModeChange(r, 'parameter')}
+                              aria-pressed={!isInstrument}
+                              title="Parameter mode (default behaviour)"
+                              style={{
+                                flex: 1,
+                                padding: '0 4px',
+                                fontSize: 9,
+                                background: !isInstrument ? role.cssColor : '#1c1c2a',
+                                color: !isInstrument ? '#000' : '#a1a1b8',
+                                border: `1px solid ${!isInstrument ? role.cssColor : '#2a2a3a'}`,
+                                cursor: 'pointer',
+                                fontWeight: !isInstrument ? 700 : 400,
+                              }}
+                            >
+                              Param
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleBatonModeChange(r, 'instrument')}
+                              aria-pressed={isInstrument}
+                              title="Instrument mode (plays chord-tone notes on a chosen instrument)"
+                              style={{
+                                flex: 1,
+                                padding: '0 4px',
+                                fontSize: 9,
+                                background: isInstrument ? role.cssColor : '#1c1c2a',
+                                color: isInstrument ? '#000' : '#a1a1b8',
+                                border: `1px solid ${isInstrument ? role.cssColor : '#2a2a3a'}`,
+                                cursor: 'pointer',
+                                fontWeight: isInstrument ? 700 : 400,
+                              }}
+                            >
+                              Instr
+                            </button>
+                          </div>
+                          {/* Preset selector — list depends on mode */}
+                          {isInstrument ? (
+                            <select
+                              className="form-field__select"
+                              value={batonInstruments[r] ?? DEFAULT_INSTRUMENT_KEY}
+                              onChange={(e) =>
+                                handleBatonInstrumentChange(r, e.target.value)
+                              }
+                              aria-label={`${role.label} instrument`}
+                              style={{ height: 26, fontSize: 10, width: 86, flexShrink: 0 }}
+                            >
+                              {INSTRUMENT_PALETTE_LIST.map((opt) => (
+                                <option key={opt.key} value={opt.key}>{opt.name}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            <select
+                              className="form-field__select"
+                              value={voicePresets[role.id] ?? ''}
+                              onChange={(e) => handleVoicePresetChange(r, e.target.value)}
+                              aria-label={`${role.label} preset`}
+                              style={{ height: 26, fontSize: 10, width: 86, flexShrink: 0 }}
+                              disabled={!isLoaded}
+                            >
+                              {(VOICE_PRESET_OPTIONS[role.id] ?? []).map((opt) => (
+                                <option key={opt.key} value={opt.key}>{opt.name}</option>
+                              ))}
+                            </select>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               );
@@ -1055,11 +1241,6 @@ function SongPresetScreen() {
             <h3 style={styles.sectionTitle}>Status</h3>
             <div style={{ fontSize: 12, color: '#a1a1b8', lineHeight: 1.6, fontFamily: 'monospace' }}>
               <div>Active: {liveStatus.activeColors.join(', ') || 'none'}</div>
-              <div>Mixer zone: {liveStatus.stemMixerZone ?? 'none'}</div>
-              {Object.entries(liveStatus.stemVolumes).map(([id, vol]) => (
-                <div key={id}>{id}: {Math.round(vol * 100)}%</div>
-              ))}
-              <div>Filter: {Math.round(liveStatus.filterHz)} Hz</div>
               <div>Reverb: {Math.round(liveStatus.reverbWet * 100)}%</div>
               <div>Distance: {liveStatus.distance.toFixed(2)}</div>
               <div>Chord: {liveStatus.currentChordName ?? '---'}</div>
@@ -1204,8 +1385,11 @@ function drawMarker(
   ctx.globalAlpha = 1;
 
   if (isActive && role.id !== 'blue') {
-    const preset = status.voicePresets[role.id] ?? '';
-    const lines = getRoleStateLines(role.id, pos, preset);
+    const mode = status.batonModes?.[role.id] ?? 'parameter';
+    const lines =
+      mode === 'instrument'
+        ? getInstrumentModeLines(role.id, pos, status)
+        : getRoleStateLines(role.id, pos, status.voicePresets[role.id] ?? '');
     drawCallout(ctx, x, y, canvasW, color, lines);
   } else {
     // Inactive or blue: just the label
@@ -1215,6 +1399,26 @@ function drawMarker(
     ctx.fillText(role.label, x + radius + 4, y + 4);
     ctx.globalAlpha = 1;
   }
+}
+
+/**
+ * Callout lines for a baton in instrument mode.  Shows the assigned
+ * instrument name and the current pitch zone — same minimal idiom as
+ * the parameter-mode callouts so Tim and Chris can read both at a
+ * glance during a session.
+ */
+function getInstrumentModeLines(
+  roleId: ColorRole,
+  pos: VoicePosition,
+  status: SongPresetStatus,
+): string[] {
+  const instrumentKey = status.batonInstruments?.[roleId] ?? DEFAULT_INSTRUMENT_KEY;
+  const entry = INSTRUMENT_PALETTE_BY_KEY[instrumentKey];
+  const instrumentLabel = entry?.name ?? instrumentKey;
+  // Pitch zones map: top of frame = high pitch.  Show octave-ish hint
+  // so the user can predict pitch from gesture.
+  const zone = pos.y < 0.33 ? 'high' : pos.y > 0.66 ? 'low' : 'mid';
+  return [`♩ ${instrumentLabel}`, `${zone} range`];
 }
 
 function getRoleStateLines(roleId: ColorRole, pos: VoicePosition, preset: string): string[] {
@@ -1313,6 +1517,13 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: 'system-ui, sans-serif',
     overflow: 'hidden',
   },
+  stage: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column' as const,
+    background: '#000',
+    minWidth: 0,
+  },
   videoContainer: {
     flex: 1,
     position: 'relative',
@@ -1320,6 +1531,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    minHeight: 0,
   },
   video: {
     width: '100%',
