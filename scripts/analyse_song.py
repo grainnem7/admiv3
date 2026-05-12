@@ -173,3 +173,53 @@ def track_beats(
     bpm_detected = float(np.atleast_1d(bpm_arr)[0])
     beats = librosa.frames_to_time(beat_frames, sr=sr)
     return beats, bpm_detected
+
+
+# ============================================================================
+# Downbeats
+# ============================================================================
+
+def derive_downbeats(beats: np.ndarray, beats_per_bar: int) -> np.ndarray:
+    """Take every Nth beat starting from beats[0] as the downbeat.
+
+    Predictable and matches the user's --beats-per-bar override exactly.
+    """
+    if len(beats) == 0:
+        return np.array([], dtype=beats.dtype)
+    return beats[::beats_per_bar]
+
+
+# ============================================================================
+# Key detection (Krumhansl-Schmuckler)
+# ============================================================================
+
+_KS_MAJOR = np.array(
+    [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88]
+)
+_KS_MINOR = np.array(
+    [6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17]
+)
+_TONIC_NAMES = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"]
+
+
+def detect_key(chroma: np.ndarray) -> str:
+    """Correlate the mean chroma against Krumhansl major/minor profiles
+    rotated to all 12 tonics. Return '<tonic> Major' or '<tonic> Minor'."""
+    if chroma.size == 0:
+        return "C Major"
+    mean = chroma.mean(axis=1)
+    if mean.sum() == 0:
+        return "C Major"
+    mean = mean / mean.sum()
+
+    best_score = -np.inf
+    best_label = "C Major"
+    for tonic in range(12):
+        major = np.roll(_KS_MAJOR, tonic)
+        minor = np.roll(_KS_MINOR, tonic)
+        for profile, mode in ((major, "Major"), (minor, "Minor")):
+            score = float(np.corrcoef(mean, profile)[0, 1])
+            if score > best_score:
+                best_score = score
+                best_label = f"{_TONIC_NAMES[tonic]} {mode}"
+    return best_label

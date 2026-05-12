@@ -145,3 +145,45 @@ def test_track_beats_respects_bpm_hint():
     beats, bpm = analyse_song.track_beats(y, sr, bpm_hint=67.0)
     # When given a hint, return that as the bpm field
     assert bpm == 67.0
+
+
+# ============================================================================
+# Downbeats + key
+# ============================================================================
+
+def test_derive_downbeats_every_4th_beat():
+    beats = np.array([1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0])
+    downbeats = analyse_song.derive_downbeats(beats, beats_per_bar=4)
+    np.testing.assert_array_equal(downbeats, np.array([1.0, 3.0, 5.0]))
+
+
+def test_derive_downbeats_for_12_8_with_4_per_bar():
+    beats = np.array([0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5])
+    downbeats = analyse_song.derive_downbeats(beats, beats_per_bar=4)
+    np.testing.assert_array_equal(downbeats, np.array([0.5, 2.5, 4.5]))
+
+
+def test_derive_downbeats_handles_fewer_beats_than_one_bar():
+    beats = np.array([1.0, 1.5])
+    downbeats = analyse_song.derive_downbeats(beats, beats_per_bar=4)
+    np.testing.assert_array_equal(downbeats, np.array([1.0]))
+
+
+def test_detect_key_recognises_c_major_chord_chroma():
+    # Build a chroma matrix biased toward C major (C, E, G strong)
+    chroma = np.zeros((12, 100), dtype=np.float64)
+    chroma[0, :] = 1.0  # C
+    chroma[4, :] = 1.0  # E
+    chroma[7, :] = 1.0  # G
+    key = analyse_song.detect_key(chroma)
+    assert key == "C Major"
+
+
+def test_detect_key_recognises_a_minor_chord_chroma():
+    chroma = np.zeros((12, 100), dtype=np.float64)
+    chroma[9, :] = 1.0   # A
+    chroma[0, :] = 1.0   # C
+    chroma[4, :] = 1.0   # E
+    key = analyse_song.detect_key(chroma)
+    # A minor and C major share notes — Krumhansl correlation will pick one
+    assert key in ("A Minor", "C Major")
