@@ -8,7 +8,7 @@
  * @see mapping_requirements.md Section 4
  */
 
-import type { ProcessedFrame, MappingResult, InputProfile, TrackingFrame } from '../state/types';
+import type { ProcessedFrame, MappingResult, InputProfile, TrackingFrame, UserProfile } from '../state/types';
 import { MappingNode, type MappingNodeOutput } from './MappingNode';
 import type { MusicalEvent } from './events';
 import {
@@ -34,6 +34,50 @@ export interface MappingEngineConfig {
 const DEFAULT_CONFIG: MappingEngineConfig = {
   autoCreateNodes: true,
 };
+
+/** Minimum span per axis after floor expansion (prevents instability from very narrow calibrations) */
+const MOVEMENT_RANGE_MIN_SPAN = 0.1;
+
+type MovementRange = UserProfile['movementRange'];
+type AxisRange = { min: number; max: number };
+
+/**
+ * Resolve calibrated movement range into per-axis input ranges with a safety floor.
+ * - If range is absent/null, returns full 0-1 for both axes.
+ * - If an axis span is below MOVEMENT_RANGE_MIN_SPAN, the range is expanded
+ *   symmetrically around its midpoint until the span reaches MIN_SPAN.
+ *   A console.warn is logged when this happens.
+ */
+function resolveAxisRanges(
+  movementRange: MovementRange | null | undefined,
+): { x: AxisRange; y: AxisRange } {
+  if (!movementRange) {
+    return {
+      x: { min: 0, max: 1 },
+      y: { min: 0, max: 1 },
+    };
+  }
+
+  return {
+    x: applyMinSpan(movementRange.minX, movementRange.maxX, 'X'),
+    y: applyMinSpan(movementRange.minY, movementRange.maxY, 'Y'),
+  };
+}
+
+function applyMinSpan(min: number, max: number, axisLabel: string): AxisRange {
+  const span = max - min;
+  if (span >= MOVEMENT_RANGE_MIN_SPAN) {
+    return { min, max };
+  }
+  const mid = (min + max) / 2;
+  const half = MOVEMENT_RANGE_MIN_SPAN / 2;
+  console.warn(
+    `[MappingEngine] Movement range on ${axisLabel} axis (${min.toFixed(4)}–${max.toFixed(4)}, ` +
+      `span ${span.toFixed(4)}) below floor of ${MOVEMENT_RANGE_MIN_SPAN}; ` +
+      `expanded to ${(mid - half).toFixed(4)}–${(mid + half).toFixed(4)}.`,
+  );
+  return { min: mid - half, max: mid + half };
+}
 
 /**
  * Callback type for MusicalEvent subscriptions.
@@ -109,13 +153,22 @@ export class MappingEngine {
   }
 
   /**
-   * Configure engine from an InputProfile
+   * Configure engine from an InputProfile.
+   *
+   * Optionally accepts the calibrated movement range from the user's
+   * UserProfile so that position-driven mapping nodes use the user's
+   * actual reachable range, not the full screen. The range is passed
+   * as a plain value (not the full UserProfile) to keep the mapping
+   * engine decoupled from the profile shape.
    */
-  configureFromProfile(profile: InputProfile): void {
+  configureFromProfile(
+    profile: InputProfile,
+    movementRange?: MovementRange | null,
+  ): void {
     this.currentProfile = profile;
 
     if (this.config.autoCreateNodes) {
-      this.createDefaultNodes(profile);
+      this.createDefaultNodes(profile, movementRange ?? null);
     }
   }
 
@@ -127,8 +180,18 @@ export class MappingEngine {
    * - Features with 'middle' in ID → filter control
    * - Features with 'thumb' in ID → reverb/effects control
    * - Other features fallback to position-based assignment
+   *
+   * Position-driven nodes (pitch, chord) honour the calibrated
+   * `movementRange` when supplied. `MappingNode.getInputValue`
+   * extracts `position.y` for `sourceType: 'position'`, so the Y bounds
+   * of the calibrated range apply. Filter, expression, and trigger
+   * nodes intentionally keep the default 0–1 input range.
    */
-  private createDefaultNodes(profile: InputProfile): void {
+  private createDefaultNodes(
+    profile: InputProfile,
+    movementRange?: MovementRange | null,
+  ): void {
+    const { y: yRange } = resolveAxisRanges(movementRange);
     // Clear existing nodes
     this.nodes.clear();
     this.triggerNodes.clear();
@@ -156,7 +219,7 @@ export class MappingEngine {
           {
             sourceFeatureId: pitchFeature.id,
             sourceType: 'position',
-            inputRange: { min: 0, max: 1 },
+            inputRange: { min: yRange.min, max: yRange.max },
             outputRange: { min: 0, max: 1 },
             curve: 'linear',
             inverted: false,
@@ -220,7 +283,7 @@ export class MappingEngine {
             {
               sourceFeatureId: pitchFeature.id,
               sourceType: 'position',
-              inputRange: { min: 0, max: 1 },
+              inputRange: { min: yRange.min, max: yRange.max },
               outputRange: { min: 0, max: 1 },
               curve: 'linear',
               inverted: false,

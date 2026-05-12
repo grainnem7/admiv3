@@ -94,6 +94,13 @@ function SongPresetScreen() {
   const [colorCalMode, setColorCalMode] = useState<ColorRole | null>(null);
   const colorCalModeRef = useRef<ColorRole | null>(null);
 
+  // Per-colour detection sensitivity (minArea threshold on the ColorTracker).
+  // Lower values = more sensitive to small blobs; default matches
+  // ColorTracker.calibrateFromPixel()'s default of 0.0005.
+  const [colorSensitivity, setColorSensitivity] = useState<Record<ColorRole, number>>({
+    blue: 0.0005, red: 0.0005, green: 0.0005, yellow: 0.0005, orange: 0.0005,
+  });
+
   // Range calibration
   const [isCalibrating, setIsCalibrating] = useState(false);
   const [calibrationStep, setCalibrationStep] = useState<ColorRole | null>(null);
@@ -432,7 +439,23 @@ function SongPresetScreen() {
     colorTrackerRef.current.calibrateFromPixel(videoEl, rawX, y, mode);
 
     setColorCalState((prev) => ({ ...prev, [mode]: true }));
+    // Reset slider to match the default minArea written by calibrateFromPixel.
+    setColorSensitivity((prev) => ({ ...prev, [mode]: 0.0005 }));
     setColorCalMode(null);
+  }, []);
+
+  // Slider handler: update only the minArea field of a tracked colour.
+  // Read-before-write via getColor() preserves hue, hueTolerance, minSaturation,
+  // and minValue. addColor() has upsert semantics (replaces by id), so this
+  // cannot create duplicate tracked-colour entries.
+  const handleColorSensitivityChange = useCallback((role: ColorRole, minArea: number) => {
+    setColorSensitivity((prev) => ({ ...prev, [role]: minArea }));
+    const tracker = colorTrackerRef.current;
+    if (!tracker) return;
+    const existing = tracker.getColor(role);
+    if (!existing) return;
+    // addColor() replaces by id — safe to call for updates.
+    tracker.addColor({ ...existing, minArea });
   }, []);
 
   // ---- Range calibration (per color) ----
@@ -896,6 +919,52 @@ function SongPresetScreen() {
               </button>
             ))}
           </div>
+
+          {/* Per-colour detection sensitivity sliders (calibrated colours only) */}
+          {COLOR_ROLES.filter((r) => colorCalState[r.id]).length > 0 && (
+            <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {COLOR_ROLES.filter((r) => colorCalState[r.id]).map((role) => {
+                const sliderId = `sensitivity-${role.id}`;
+                const value = colorSensitivity[role.id];
+                return (
+                  <div key={role.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <label
+                      htmlFor={sliderId}
+                      style={{ fontSize: 11, color: role.cssColor, width: 90, flexShrink: 0 }}
+                    >
+                      {role.label} sensitivity
+                    </label>
+                    <input
+                      id={sliderId}
+                      type="range"
+                      min={0.0001}
+                      max={0.005}
+                      step={0.0001}
+                      value={value}
+                      onChange={(e) => handleColorSensitivityChange(role.id, Number(e.target.value))}
+                      style={{ flex: 1 }}
+                      aria-label={`${role.label} detection sensitivity (minimum blob area)`}
+                    />
+                    <span
+                      style={{
+                        fontSize: 10,
+                        color: '#71718a',
+                        width: 56,
+                        textAlign: 'right',
+                        fontFamily: 'monospace',
+                      }}
+                    >
+                      {value.toFixed(4)}
+                    </span>
+                  </div>
+                );
+              })}
+              <p style={{ ...styles.hint, marginTop: 2 }}>
+                Increase sensitivity (lower number) if small movements are not detected.
+                Decrease (higher number) if wrong objects trigger sounds.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Range Calibration */}

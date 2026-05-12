@@ -93,6 +93,12 @@ const BEAT_PULSE_MS = 50;     // ms duration of beat pulse
 const SIDECHAIN_DEPTH = 0.7;  // gain during duck (≈-3dB)
 const SIDECHAIN_RECOVERY = 0.06; // time constant for recovery
 
+/** Smoothed velocity below which a baton is considered still */
+const STILLNESS_THRESHOLD = 0.04;
+
+/** How long (ms) a baton must be below STILLNESS_THRESHOLD before its voice is muted */
+const STILLNESS_HYSTERESIS_MS = 300;
+
 // The 5 color roles in priority order (for selecting which 2 are active)
 const ROLE_PRIORITY: ColorRole[] = ['blue', 'red', 'green', 'yellow', 'orange'];
 
@@ -117,6 +123,10 @@ interface VelocityState {
   prevX: number;
   prevY: number;
   smoothVel: number;
+  /** Wall-clock timestamp (ms, Date.now()) when smoothVel first dropped below STILLNESS_THRESHOLD; null while moving */
+  stillSince: number | null;
+  /** True when the stillness gate is currently silencing this role */
+  isMuted: boolean;
 }
 
 // ============================================
@@ -175,6 +185,14 @@ export class SongPresetEngine {
   private chordOffset = 0;
   private bpmAdjust = 0;
   private tappedChordTimes: number[] = [];
+
+  // Beat-quantised chord application: a chord detected mid-beat waits in
+  // `pendingChord` until `currentTime` passes `pendingChordBeat`. Time
+  // references are aligned — currentTime, beats[], and ChordEntry.time
+  // are all seconds from playback start.
+  private pendingChord: ChordEntry | null = null;
+  private pendingChordBeat: number = 0;
+  private lastAppliedChordName: string = '';
 
   // Reverb state
   private currentReverbWet = 0;
@@ -347,6 +365,7 @@ export class SongPresetEngine {
 
   restart(): void {
     this.playbackOffset = this.loopStart;
+    this.resetPendingChord();
     for (const voice of this.voices.values()) {
       voice.onTransportStop();
     }
@@ -367,6 +386,7 @@ export class SongPresetEngine {
     this.isPlayingState = false;
     this.isPausedState = false;
     this.playbackOffset = 0;
+    this.resetPendingChord();
 
     Tone.getTransport().stop();
     Tone.getTransport().cancel();
@@ -376,6 +396,12 @@ export class SongPresetEngine {
     }
 
     console.log('[SongPresetEngine] Stopped');
+  }
+
+  private resetPendingChord(): void {
+    this.pendingChord = null;
+    this.pendingChordBeat = 0;
+    this.lastAppliedChordName = '';
   }
 
   setLoopEnabled(enabled: boolean): void {
@@ -768,6 +794,7 @@ export class SongPresetEngine {
           this.melodicVoice.setReferenceTime(this.loopStart);
         }
         this.lastDownbeatIndex = -1;
+        this.resetPendingChord();
         for (const voice of this.voices.values()) {
           voice.onTransportStop();
           voice.onTransportStart();
@@ -778,17 +805,46 @@ export class SongPresetEngine {
       }
     }
 
-    // Determine active colors (first 2 found, in priority order)
+    // Compute velocity and update stillness gates for each color role
+    // (must run BEFORE updateActiveRoles so the gate's isMuted flag is current)
+    this.updateVelocities(Date.now());
+
+    // Determine active colors (first 2 found and not gated, in priority order)
     this.updateActiveRoles();
 
-    // Look up current chord
+    // Look up current chord — quantise to nearest beat for rhythmic coherence.
+    // chordOffset trim is applied BEFORE getChordAtTime; beat quantisation
+    // is layered on top so both controls still work together.
     if (this.song.chordProgression && this.song.chordProgression.length > 0) {
       const chordTime = currentTime - this.chordOffset;
-      this.currentChord = getChordAtTime(this.song.chordProgression, chordTime);
-    }
+      const candidateChord = getChordAtTime(this.song.chordProgression, chordTime);
 
-    // Compute velocity for each color role
-    this.updateVelocities();
+      if (candidateChord && candidateChord.name !== this.lastAppliedChordName) {
+        const nextBeat = this.getNextBeatTime(currentTime);
+        const bpm = this.song.bpm > 0 ? this.song.bpm : 0;
+        const beatDurationMs = bpm > 0 ? (60 / bpm) * 1000 : 500;
+        const beatDurationSec = beatDurationMs / 1000;
+
+        if (nextBeat !== null && nextBeat - currentTime <= beatDurationSec) {
+          // Defer until the upcoming beat
+          this.pendingChord = candidateChord;
+          this.pendingChordBeat = nextBeat;
+        } else {
+          // No beat data, or next beat too far away — apply immediately
+          // to prevent perceptible drift / silent fallback.
+          this.currentChord = candidateChord;
+          this.lastAppliedChordName = candidateChord.name;
+          this.pendingChord = null;
+        }
+      }
+
+      // Apply a pending chord once playback crosses its target beat
+      if (this.pendingChord !== null && currentTime >= this.pendingChordBeat) {
+        this.currentChord = this.pendingChord;
+        this.lastAppliedChordName = this.pendingChord.name;
+        this.pendingChord = null;
+      }
+    }
 
     // Update all voices
     for (const [role, voice] of this.voices) {
@@ -824,7 +880,8 @@ export class SongPresetEngine {
     const found: ColorRole[] = [];
     for (const role of ROLE_PRIORITY) {
       const pos = this.positions.get(role);
-      if (pos?.found) {
+      const roleState = this.velocityState.get(role);
+      if (pos?.found && !roleState?.isMuted) {
         found.push(role);
         if (found.length >= 2) break;
       }
@@ -832,13 +889,19 @@ export class SongPresetEngine {
     this.activeRoles = found;
   }
 
-  private updateVelocities(): void {
+  private updateVelocities(nowMs: number): void {
     for (const role of ROLE_PRIORITY) {
       const pos = this.positions.get(role);
       let state = this.velocityState.get(role);
 
       if (!state) {
-        state = { prevX: pos?.x ?? 0.5, prevY: pos?.y ?? 0.5, smoothVel: 0 };
+        state = {
+          prevX: pos?.x ?? 0.5,
+          prevY: pos?.y ?? 0.5,
+          smoothVel: 0,
+          stillSince: null,
+          isMuted: false,
+        };
         this.velocityState.set(role, state);
       }
 
@@ -855,7 +918,39 @@ export class SongPresetEngine {
         // Decay velocity when object not found
         state.smoothVel = lerp(state.smoothVel, 0, 0.3);
       }
+
+      // Stillness gate: mute roles whose smoothed velocity has been below
+      // threshold for the full hysteresis window. Re-activate immediately on
+      // motion onset (no hysteresis on the un-mute side) so slow expressive
+      // gestures resume sound on the first frame of motion.
+      if (state.smoothVel < STILLNESS_THRESHOLD) {
+        if (state.stillSince === null) {
+          state.stillSince = nowMs;
+        } else if (nowMs - state.stillSince >= STILLNESS_HYSTERESIS_MS) {
+          state.isMuted = true;
+        }
+      } else {
+        state.stillSince = null;
+        state.isMuted = false;
+      }
     }
+  }
+
+  /**
+   * Binary-search the beats array for the first beat at or after `currentTime`.
+   * Returns null if there is no beat data or all beats are in the past.
+   */
+  private getNextBeatTime(currentTime: number): number | null {
+    const beats = this.song?.beats;
+    if (!beats || beats.length === 0) return null;
+
+    let lo = 0, hi = beats.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (beats[mid] < currentTime) lo = mid + 1;
+      else hi = mid;
+    }
+    return beats[lo] >= currentTime ? beats[lo] : null;
   }
 
   private updateReverb(): void {
@@ -965,6 +1060,7 @@ export class SongPresetEngine {
     this.duration = 0;
     this.playbackOffset = 0;
     this.currentChord = null;
+    this.resetPendingChord();
     this.activeRoles = [];
     this.velocityState.clear();
     this.lastDownbeatIndex = -1;

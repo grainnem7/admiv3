@@ -110,7 +110,8 @@ export class ColorTracker {
   }
 
   /**
-   * Add a color to track
+   * Add a color to track. Replaces any existing entry with the same id
+   * (upsert semantics) — safe to call from per-field update handlers.
    */
   addColor(color: TrackedColor): void {
     // Remove existing color with same ID
@@ -131,6 +132,11 @@ export class ColorTracker {
    */
   getTrackedColors(): TrackedColor[] {
     return [...this.trackedColors];
+  }
+
+  /** Returns the TrackedColor for the given id, or null if not found */
+  getColor(id: string): TrackedColor | null {
+    return this.trackedColors.find((c) => c.id === id) ?? null;
   }
 
   /**
@@ -194,7 +200,10 @@ export class ColorTracker {
       hueTolerance: hueTol,
       minSaturation: Math.max(minSatFloor, hsv.s * minSatScale),
       minValue: Math.max(30, hsv.v * 0.6),
-      minArea: 0.002,
+      // Default minArea lowered from 0.002 to 0.0005 (≈64 px on a 1080p frame
+      // downscaled by 4×) so small batons at the edge of a limited movement
+      // range still register. Adjustable per colour via the UI sensitivity slider.
+      minArea: 0.0005,
     };
 
     this.addColor(newColor);
