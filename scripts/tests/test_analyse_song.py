@@ -274,3 +274,42 @@ def test_smooth_labels_repeated_passes():
     labels = ["C", "C", "F", "G", "G", "G", "G"]
     expected = ["G", "G", "G", "G", "G", "G", "G"]
     assert analyse_song.smooth_labels(labels, min_chord_beats=3) == expected
+
+
+# ============================================================================
+# Segments
+# ============================================================================
+
+def test_build_segments_merges_runs_and_drops_N():
+    labels = ["C", "C", "G", "G", "G", "N", "F"]
+    beats = np.array([0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0])
+    audio_duration = 3.5
+    segments = analyse_song.build_segments(labels, beats, audio_duration)
+    assert segments == [
+        {"time": 0.0, "duration": 1.0, "label": "C"},
+        {"time": 1.0, "duration": 1.5, "label": "G"},
+        {"time": 3.0, "duration": 0.5, "label": "F"},
+    ]
+
+
+def test_build_segments_handles_all_N():
+    labels = ["N", "N", "N"]
+    beats = np.array([0.0, 1.0, 2.0])
+    assert analyse_song.build_segments(labels, beats, 3.0) == []
+
+
+def test_build_segments_final_run_extends_to_audio_duration():
+    labels = ["C", "C"]
+    beats = np.array([1.0, 2.0])
+    segments = analyse_song.build_segments(labels, beats, audio_duration=5.0)
+    assert segments == [{"time": 1.0, "duration": 4.0, "label": "C"}]
+
+
+def test_build_segments_time_always_in_beats():
+    labels = ["D", "D", "Bm", "G"]
+    beats = np.array([1.649, 2.508, 3.297, 4.087])
+    segments = analyse_song.build_segments(labels, beats, audio_duration=5.0)
+    for seg in segments:
+        assert seg["time"] in beats.tolist(), (
+            f"chord time {seg['time']} not in beats grid"
+        )

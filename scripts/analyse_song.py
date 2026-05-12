@@ -389,3 +389,36 @@ def _neighbour(runs: list[dict], run: dict, direction: int) -> dict | None:
     if target < 0 or target >= len(runs):
         return None
     return runs[target]
+
+
+# ============================================================================
+# Segment building
+# ============================================================================
+
+def build_segments(
+    labels: list[str], beats: np.ndarray, audio_duration: float
+) -> list[dict]:
+    """Merge adjacent identical labels into chord segments with time +
+    duration. Drop 'N' runs entirely. Final non-N run's duration extends
+    to `audio_duration`."""
+    if len(labels) == 0:
+        return []
+    runs = _runs_of(labels)
+    segments: list[dict] = []
+    for r in runs:
+        if r["label"] == "N":
+            continue
+        start_time = float(beats[r["start"]])
+        end_idx = r["start"] + r["length"]
+        if end_idx < len(beats):
+            end_time = float(beats[end_idx])
+        else:
+            end_time = float(audio_duration)
+        segments.append(
+            {
+                "time": start_time,
+                "duration": end_time - start_time,
+                "label": r["label"],
+            }
+        )
+    return segments
