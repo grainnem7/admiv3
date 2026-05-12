@@ -81,3 +81,64 @@ def build_chord_templates() -> dict[str, np.ndarray]:
 def validate_label(label: str) -> bool:
     """Return True iff `label` matches the runtime parser's accepted vocabulary."""
     return bool(LABEL_REGEX.fullmatch(label))
+
+
+# ============================================================================
+# Audio loading
+# ============================================================================
+
+# Names of stems that might exist in a song directory, in priority order
+# when no specific stem is requested and we need to build a sum-mix.
+KNOWN_STEMS = ("drums.wav", "bass.wav", "other.wav", "vocals.wav")
+FALLBACK_MIX_NAMES = ("mix.wav", "full.wav")
+
+
+def _load_librosa():
+    """Lazy librosa import so `--help` stays fast (librosa import is ~1s)."""
+    import librosa
+    return librosa
+
+
+def _resolve_signal(song_dir: Path, preferred_stem: str, sr: int) -> np.ndarray:
+    """Return mono audio at `sr`. Prefer `preferred_stem`; else sum-mix; else
+    a fallback mix.wav/full.wav. Raises FileNotFoundError if nothing usable."""
+    librosa = _load_librosa()
+    preferred = song_dir / preferred_stem
+    if preferred.exists():
+        y, _ = librosa.load(str(preferred), sr=sr, mono=True)
+        return y
+    # Sum-mix from available KNOWN_STEMS
+    available = [song_dir / s for s in KNOWN_STEMS if (song_dir / s).exists()]
+    if available:
+        sigs = [librosa.load(str(p), sr=sr, mono=True)[0] for p in available]
+        max_len = max(len(s) for s in sigs)
+        stacked = np.zeros(max_len, dtype=np.float32)
+        for s in sigs:
+            stacked[: len(s)] += s
+        return stacked / len(sigs)
+    # Final fallback: a single mixed file
+    for name in FALLBACK_MIX_NAMES:
+        candidate = song_dir / name
+        if candidate.exists():
+            y, _ = librosa.load(str(candidate), sr=sr, mono=True)
+            return y
+    raise FileNotFoundError(
+        f"No usable audio in {song_dir}. Looked for: {preferred_stem}, "
+        f"{', '.join(KNOWN_STEMS)}, {', '.join(FALLBACK_MIX_NAMES)}"
+    )
+
+
+def load_audio(
+    song_dir: Path,
+    beat_stem: str = "drums.wav",
+    chord_stem: str = "other.wav",
+    sr: int = 22050,
+) -> tuple[np.ndarray, np.ndarray, int, float]:
+    """Load beat-tracking and chord-recognition signals from a song directory.
+
+    Returns: (beat_signal, chord_signal, sample_rate, chord_duration_seconds).
+    """
+    beat_y = _resolve_signal(song_dir, beat_stem, sr)
+    chord_y = _resolve_signal(song_dir, chord_stem, sr)
+    duration = len(chord_y) / sr
+    return beat_y, chord_y, sr, duration

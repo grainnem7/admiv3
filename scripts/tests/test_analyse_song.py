@@ -64,3 +64,46 @@ def test_validate_label_accepts_supported():
 def test_validate_label_rejects_unsupported():
     for label in ["C#sus4", "D/F#", "G9", "Bm6", "N", "", "Csus2", "Asus4", "x"]:
         assert not analyse_song.validate_label(label), f"{label} should not validate"
+
+
+# ============================================================================
+# Audio loading
+# ============================================================================
+
+import soundfile as sf
+
+
+def _write_silent_wav(path: Path, duration: float = 1.0, sr: int = 22050):
+    """Write a silent WAV at the given path."""
+    sf.write(str(path), np.zeros(int(duration * sr)), sr)
+
+
+def test_load_audio_prefers_named_stems(tmp_path):
+    _write_silent_wav(tmp_path / "drums.wav", duration=0.5)
+    _write_silent_wav(tmp_path / "other.wav", duration=0.5)
+    beat_y, chord_y, sr, dur = analyse_song.load_audio(
+        tmp_path, beat_stem="drums.wav", chord_stem="other.wav"
+    )
+    assert sr == 22050
+    assert beat_y.ndim == 1
+    assert chord_y.ndim == 1
+    assert 0.4 < dur < 0.6
+
+
+def test_load_audio_falls_back_to_sum_when_beat_stem_missing(tmp_path):
+    # Only chord stem exists; beat stem must fall back to a sum of available stems
+    _write_silent_wav(tmp_path / "other.wav", duration=0.5)
+    _write_silent_wav(tmp_path / "bass.wav", duration=0.5)
+    beat_y, chord_y, sr, dur = analyse_song.load_audio(
+        tmp_path, beat_stem="drums.wav", chord_stem="other.wav"
+    )
+    # Should not raise; should return non-empty arrays of equal length
+    assert beat_y.shape == chord_y.shape
+
+
+def test_load_audio_raises_when_no_audio_at_all(tmp_path):
+    import pytest
+    with pytest.raises(FileNotFoundError):
+        analyse_song.load_audio(
+            tmp_path, beat_stem="drums.wav", chord_stem="other.wav"
+        )
