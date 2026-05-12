@@ -75,6 +75,23 @@ export const COLOR_ROLES: ColorRoleConfig[] = [
 
 import { CANT_HELP_CHORDS } from './voices/chordLookup';
 
+// For mix-only songs (no stem separation), all four stem slots point at the
+// same mix file. The stem mixer becomes a global volume control instead of
+// a per-stem blender.
+const mixOnlyStems = (id: string, ext: string = 'mp3'): Record<string, string> => ({
+  vocals: `songs/${id}/mix.${ext}`,
+  drums:  `songs/${id}/mix.${ext}`,
+  bass:   `songs/${id}/mix.${ext}`,
+  other:  `songs/${id}/mix.${ext}`,
+});
+
+const mixOnlyMixer: StemMixerMapping = {
+  label: 'Volume',
+  leftZone:   { vocals: 0.0, drums: 0.0, bass: 0.0, other: 0.0 },
+  centerZone: { vocals: 0.5, drums: 0.5, bass: 0.5, other: 0.5 },
+  rightZone:  { vocals: 1.0, drums: 1.0, bass: 1.0, other: 1.0 },
+};
+
 export const SONG_LIBRARY: SongConfig[] = [
   {
     id: 'cant-help-falling-in-love',
@@ -97,5 +114,38 @@ export const SONG_LIBRARY: SongConfig[] = [
     },
     chordProgression: CANT_HELP_CHORDS,
     analysisUrl: 'songs/cant-help-falling-in-love/analysis.json',
+  },
+  {
+    id: 'everybody-needs-somebody-to-love',
+    title: 'Everybody Needs Somebody to Love',
+    artist: 'The Blues Brothers',
+    key: 'F Major',
+    bpm: 96,
+    timeSignature: '4/4',
+    stems: mixOnlyStems('everybody-needs-somebody-to-love'),
+    stemMixer: mixOnlyMixer,
+    analysisUrl: 'songs/everybody-needs-somebody-to-love/analysis.json',
+  },
+  {
+    id: 'shake-a-tail-feather',
+    title: 'Shake a Tail Feather',
+    artist: 'The Blues Brothers & Ray Charles',
+    key: 'D Major',
+    bpm: 81,
+    timeSignature: '4/4',
+    stems: mixOnlyStems('shake-a-tail-feather'),
+    stemMixer: mixOnlyMixer,
+    analysisUrl: 'songs/shake-a-tail-feather/analysis.json',
+  },
+  {
+    id: 'she-caught-the-katy',
+    title: 'She Caught the Katy',
+    artist: 'The Blues Brothers',
+    key: 'Bb Major',
+    bpm: 96,
+    timeSignature: '4/4',
+    stems: mixOnlyStems('she-caught-the-katy'),
+    stemMixer: mixOnlyMixer,
+    analysisUrl: 'songs/she-caught-the-katy/analysis.json',
   },
 ];

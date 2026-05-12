@@ -90,7 +90,10 @@ def validate_label(label: str) -> bool:
 # Names of stems that might exist in a song directory, in priority order
 # when no specific stem is requested and we need to build a sum-mix.
 KNOWN_STEMS = ("drums.wav", "bass.wav", "other.wav", "vocals.wav")
-FALLBACK_MIX_NAMES = ("mix.wav", "full.wav")
+FALLBACK_MIX_NAMES = (
+    "mix.wav", "mix.mp3", "mix.m4a", "mix.flac",
+    "full.wav", "full.mp3", "full.m4a", "full.flac",
+)
 
 
 def _load_librosa():
