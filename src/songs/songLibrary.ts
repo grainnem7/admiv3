@@ -131,7 +131,7 @@ export const SONG_LIBRARY: SongConfig[] = [
     title: 'Shake a Tail Feather',
     artist: 'The Blues Brothers & Ray Charles',
     key: 'D Major',
-    bpm: 81,
+    bpm: 158,
     timeSignature: '4/4',
     stems: mixOnlyStems('shake-a-tail-feather'),
     stemMixer: mixOnlyMixer,

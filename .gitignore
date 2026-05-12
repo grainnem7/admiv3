@@ -39,3 +39,6 @@ __pycache__/
 # Superpowers internal state
 .superpowers/
 
+# Transient backups from apply_chord_chart.py
+public/songs/*/analysis.*.bak.json
+
