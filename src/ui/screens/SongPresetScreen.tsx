@@ -1384,21 +1384,43 @@ function drawMarker(
   ctx.fill();
   ctx.globalAlpha = 1;
 
-  if (isActive && role.id !== 'blue') {
-    const mode = status.batonModes?.[role.id] ?? 'parameter';
-    const lines =
-      mode === 'instrument'
-        ? getInstrumentModeLines(role.id, pos, status)
-        : getRoleStateLines(role.id, pos, status.voicePresets[role.id] ?? '');
+  if (isActive) {
+    let lines: string[];
+    if (role.id === 'blue') {
+      lines = getBlueMixerLines(status);
+    } else {
+      const mode = status.batonModes?.[role.id] ?? 'parameter';
+      lines =
+        mode === 'instrument'
+          ? getInstrumentModeLines(role.id, pos, status)
+          : getRoleStateLines(role.id, pos, status.voicePresets[role.id] ?? '');
+    }
     drawCallout(ctx, x, y, canvasW, color, lines);
   } else {
-    // Inactive or blue: just the label
-    ctx.globalAlpha = isActive ? 0.9 : 0.45;
-    ctx.font = `${isActive ? 'bold ' : ''}10px sans-serif`;
+    // Inactive: just the label
+    ctx.globalAlpha = 0.45;
+    ctx.font = '10px sans-serif';
     ctx.fillStyle = color;
     ctx.fillText(role.label, x + radius + 4, y + 4);
     ctx.globalAlpha = 1;
   }
+}
+
+/** Callout for the blue (stem mixer) baton: current zone + filter %. */
+function getBlueMixerLines(status: SongPresetStatus): string[] {
+  const zone = status.stemMixerZone;
+  const zoneText =
+    zone === 'left' ? 'Left zone' :
+    zone === 'right' ? 'Right zone' :
+    zone === 'center' ? 'Mid zone' :
+    '—';
+  const filterHz = status.filterHz || 200;
+  const filterPct = Math.round(
+    Math.max(0, Math.min(100,
+      (Math.log(filterHz / 200) / Math.log(8000 / 200)) * 100
+    ))
+  );
+  return [`Mixer: ${zoneText}`, `Filter ${filterPct}%`];
 }
 
 /**
