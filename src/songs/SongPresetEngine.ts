@@ -699,9 +699,17 @@ export class SongPresetEngine {
     if (role === 'blue') return;
     if (!INSTRUMENT_PALETTE_BY_KEY[instrumentKey]) return;
     this.batonInstruments.set(role, instrumentKey);
-    if (this.batonModes.get(role) === 'instrument') {
+    const currentMode = this.batonModes.get(role);
+    if (currentMode === 'instrument') {
       const voice = this.voices.get(role);
       if (voice instanceof InstrumentVoice) {
+        voice.setPreset(instrumentKey);
+      }
+    } else if (currentMode === 'harmonizer' && role === 'green') {
+      // HarmonyVoice consumes the same batonInstruments map; swap its
+      // active player to match without rebuilding the voice.
+      const voice = this.voices.get(role);
+      if (voice instanceof HarmonyVoice) {
         voice.setPreset(instrumentKey);
       }
     }
@@ -941,6 +949,12 @@ export class SongPresetEngine {
     const voice = new HarmonyVoice(this.ctx!);
     voice.onNoteTrigger = () => this.triggerSidechain();
     voice.setHarmony(this.song?.harmony ?? []);
+    // Use the green baton's currently-selected instrument as the harmoniser's
+    // sound source. Same persistence map as instrument mode, so toggling
+    // between Instr and Harm preserves the instrument choice.
+    const instrumentKey =
+      this.batonInstruments.get('green') ?? DEFAULT_INSTRUMENT_KEY;
+    voice.setPreset(instrumentKey);
     return voice;
   }
 

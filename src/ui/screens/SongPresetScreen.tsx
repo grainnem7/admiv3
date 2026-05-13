@@ -962,23 +962,20 @@ function SongPresetScreen() {
                           </div>
                           {/* Preset selector — list depends on mode */}
                           {isHarmonizer ? (
-                            <div
-                              style={{
-                                height: 26,
-                                fontSize: 9,
-                                width: 86,
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                color: '#71718a',
-                                background: '#1c1c2a',
-                                border: '1px solid #2a2a3a',
-                                flexShrink: 0,
-                              }}
-                              title="Vocal-pad preset (fixed)"
+                            <select
+                              className="form-field__select"
+                              value={batonInstruments[r] ?? DEFAULT_INSTRUMENT_KEY}
+                              onChange={(e) =>
+                                handleBatonInstrumentChange(r, e.target.value)
+                              }
+                              aria-label={`${role.label} harmoniser instrument`}
+                              title="Pick the instrument the harmoniser uses"
+                              style={{ height: 26, fontSize: 10, width: 86, flexShrink: 0 }}
                             >
-                              Vocal pad
-                            </div>
+                              {INSTRUMENT_PALETTE_LIST.map((opt) => (
+                                <option key={opt.key} value={opt.key}>{opt.name}</option>
+                              ))}
+                            </select>
                           ) : isInstrument ? (
                             <select
                               className="form-field__select"

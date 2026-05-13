@@ -20,6 +20,7 @@
 import type { HarmonyEntry } from '../analysisLoader';
 import type { ChordEntry } from './chordLookup';
 import { ToneVoiceBase, clamp } from './ToneVoiceBase';
+import { SamplerPlayer, SAMPLE_CONFIGS } from './SamplerPlayer';
 import { SynthPlayer, type Player } from './SynthPlayer';
 import {
   HARMONY_PRESETS,
@@ -27,13 +28,34 @@ import {
   DEFAULT_HARMONY_PRESET,
   type HarmonyPreset,
 } from './presets/harmonyPresets';
+import {
+  INSTRUMENT_PALETTE_BY_KEY,
+  type InstrumentPaletteEntry,
+} from './presets/instrumentPalette';
 
 export { HARMONY_PRESET_LIST };
 
 type IntervalChoice = 'thirdDn' | 'thirdUp' | 'fifthUp' | 'sixthUp';
 
+/**
+ * Source from which the harmony voice's current Player is built.
+ * 'synth'  -> a HarmonyPreset (synthesised pad / saw)
+ * 'sampler' -> an InstrumentPaletteEntry (piano, strings, ...)
+ *
+ * The voice can be switched between these at runtime via setPreset() or
+ * setInstrument().  The runtime API exposes a single string key for each;
+ * we look it up in INSTRUMENT_PALETTE first, then HARMONY_PRESETS.
+ */
+type ActiveSource =
+  | { kind: 'synth'; preset: HarmonyPreset }
+  | { kind: 'sampler'; entry: InstrumentPaletteEntry };
+
 export class HarmonyVoice extends ToneVoiceBase {
-  private currentPreset: HarmonyPreset = HARMONY_PRESETS[DEFAULT_HARMONY_PRESET];
+  private source: ActiveSource = {
+    kind: 'synth',
+    preset: HARMONY_PRESETS[DEFAULT_HARMONY_PRESET],
+  };
+  private sourceKey: string = DEFAULT_HARMONY_PRESET;
   private player: Player;
   private harmony: HarmonyEntry[] = [];
 
@@ -44,7 +66,7 @@ export class HarmonyVoice extends ToneVoiceBase {
 
   constructor(ctx: AudioContext) {
     super(ctx);
-    this.player = new SynthPlayer(this.currentPreset.synthConfig, this.filterNode);
+    this.player = this.createPlayerFor(this.source);
   }
 
   setHarmony(harmony: HarmonyEntry[]): void {
@@ -53,12 +75,57 @@ export class HarmonyVoice extends ToneVoiceBase {
     this.lastTriggeredMidi = null;
   }
 
+  /**
+   * Switch instrument or synth preset at runtime.
+   *
+   * Resolution order:
+   *   1. If `key` matches an instrument-palette entry (piano, strings, ...),
+   *      load it as a SamplerPlayer.
+   *   2. Else if `key` matches a HARMONY_PRESETS entry (vocalPad, softSaw),
+   *      load it as a SynthPlayer.
+   *   3. Else: no-op (preserves the current instrument).
+   *
+   * The single string-key API matches setPreset() on the other voices so
+   * the engine can use the same persistence map.
+   */
   override setPreset(key: string): void {
+    if (key === this.sourceKey) return;
+    const instrument = INSTRUMENT_PALETTE_BY_KEY[key];
+    if (instrument) {
+      this.source = { kind: 'sampler', entry: instrument };
+      this.sourceKey = key;
+      this.swapPlayer();
+      return;
+    }
     const preset = HARMONY_PRESETS[key];
-    if (!preset) return;
-    this.currentPreset = preset;
+    if (preset) {
+      this.source = { kind: 'synth', preset };
+      this.sourceKey = key;
+      this.swapPlayer();
+    }
+  }
+
+  /** Returns the current source's key (instrument or harmony-preset). */
+  getInstrumentKey(): string {
+    return this.sourceKey;
+  }
+
+  private swapPlayer(): void {
+    this.player.releaseAll();
     this.player.dispose();
-    this.player = new SynthPlayer(preset.synthConfig, this.filterNode);
+    this.player = this.createPlayerFor(this.source);
+    this.lastTriggeredMidi = null;
+  }
+
+  private createPlayerFor(source: ActiveSource): Player {
+    if (source.kind === 'sampler') {
+      return new SamplerPlayer(SAMPLE_CONFIGS[source.entry.sampleKey], this.filterNode);
+    }
+    return new SynthPlayer(source.preset.synthConfig, this.filterNode);
+  }
+
+  private currentDuration(): number {
+    return this.source.kind === 'synth' ? this.source.preset.duration : 0.6;
   }
 
   update(playbackTime: number, _chord: ChordEntry | null, _velocity: number): void {
@@ -86,7 +153,7 @@ export class HarmonyVoice extends ToneVoiceBase {
       const noteVelocity = clamp(0.4 + this.velocity * 0.5, 0.4, 0.9);
       this.player.triggerAttackRelease(
         midi,
-        Math.max(entry.duration, this.currentPreset.duration),
+        Math.max(entry.duration, this.currentDuration()),
         undefined,
         noteVelocity,
       );
