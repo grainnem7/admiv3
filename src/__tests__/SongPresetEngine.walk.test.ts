@@ -245,4 +245,35 @@ describe('SongPresetEngine walk mode wiring', () => {
 
     engine.dispose();
   });
+
+  it('applyBatonAssignments restores a saved walk assignment', async () => {
+    const engine = new SongPresetEngine();
+    await engine.loadSong(makeMinimalSong());
+
+    engine.applyBatonAssignments({
+      yellow: { mode: 'walk', instrumentKey: 'strings' },
+    });
+
+    // @ts-expect-error — voices is private
+    const yellowVoice = engine.voices.get('yellow') as WalkVoice;
+    expect(yellowVoice).toBeInstanceOf(WalkVoice);
+    expect(yellowVoice.getInstrumentKey()).toBe('strings');
+
+    engine.dispose();
+  });
+
+  it('setBeatSnap is a no-op for walk voices (walk is beat-locked by design)', async () => {
+    const engine = new SongPresetEngine();
+    await engine.loadSong(makeMinimalSong());
+
+    engine.setBatonMode('green', 'walk');
+    // @ts-expect-error — voices is private
+    const walkVoice = engine.voices.get('green') as WalkVoice;
+    // WalkVoice has no setBeatSnap method — verify the engine doesn't
+    // attempt to call one (would throw if it tried).
+    expect(() => engine.setBeatSnap(true)).not.toThrow();
+    expect((walkVoice as unknown as { setBeatSnap?: unknown }).setBeatSnap).toBeUndefined();
+
+    engine.dispose();
+  });
 });

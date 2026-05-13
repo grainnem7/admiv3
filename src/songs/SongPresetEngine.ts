@@ -1380,7 +1380,9 @@ export class SongPresetEngine {
    * Toggle beat-snap mode for all instrument-mode voices.  Cheap to
    * call every frame — voices only react to the change.  No effect on
    * parameter-mode voices (which already produce beat-locked output by
-   * their own internal logic).
+   * their own internal logic) or on walk-mode voices (walk is
+   * intrinsically beat-locked — every walk note fires only on beat
+   * arrival).
    */
   setBeatSnap(enabled: boolean): void {
     if (this.beatSnap === enabled) return;
