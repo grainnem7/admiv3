@@ -254,4 +254,25 @@ describe('WalkVoice trigger logic', () => {
     voice.update(2.05, D_MAJOR, 0.5);
     expect(samplerTriggerAttackRelease).not.toHaveBeenCalled();
   });
+
+  it('Y position drives note velocity within the instrument range', () => {
+    // Piano palette entry has velocityRange { min: 0.35, max: 1.0 }.
+    const voice = makeActiveVoice();
+
+    // posY = 0 (top of frame) → loud → near max.
+    voice.setPosition(0.5, 0.0);
+    voice.update(1.05, D_MAJOR, 0.5);
+    const loudVel = samplerTriggerAttackRelease.mock.calls[0][3] as number;
+    expect(loudVel).toBeCloseTo(1.0, 2);
+
+    // posY = 1 (bottom of frame) → soft → near min.
+    voice.setPosition(0.5, 1.0);
+    voice.update(2.05, D_MAJOR, 0.5);
+    const softVel = samplerTriggerAttackRelease.mock.calls[1][3] as number;
+    expect(softVel).toBeCloseTo(0.35, 2);
+
+    // Movement speed is the SAME (0.5) for both calls — Y alone
+    // accounts for the difference.
+    expect(loudVel).toBeGreaterThan(softVel);
+  });
 });
