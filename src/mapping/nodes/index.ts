@@ -57,3 +57,6 @@ export type {
   ColorAutoMode,
   ColorAutoModeDefinition,
 } from './ColorExpressionNode';
+
+export { HeadRhythmNode, HeadBopDetector } from './HeadRhythmNode';
+export type { HeadRhythmConfig } from './HeadRhythmNode';
