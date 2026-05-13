@@ -97,6 +97,12 @@ export class HeadBopDetector {
   private direction: -1 | 0 | 1 = 0;
   /** Ms timestamp of the last bop event; -Infinity means none yet. */
   private lastBopAt = Number.NEGATIVE_INFINITY;
+  /**
+   * Descent amplitude (normalised frame-height units) of the most
+   * recent bop.  Used by callers to scale velocity / sound intensity
+   * from the gesture's energy.  0 until the first bop fires.
+   */
+  private lastBopAmplitude = 0;
 
   constructor(
     private minDownExcursion: number,
@@ -113,6 +119,17 @@ export class HeadBopDetector {
     this.descentTopY = Number.NaN;
     this.direction = 0;
     this.lastBopAt = Number.NEGATIVE_INFINITY;
+    this.lastBopAmplitude = 0;
+  }
+
+  /**
+   * Descent amplitude of the most recent bop, in normalised
+   * frame-height units (same scale as minDownExcursion).  Useful for
+   * mapping bop energy to note velocity / sound intensity.  0 before
+   * the first bop fires.
+   */
+  getLastBopAmplitude(): number {
+    return this.lastBopAmplitude;
   }
 
   /**
@@ -150,6 +167,7 @@ export class HeadBopDetector {
         ) {
           bopped = true;
           this.lastBopAt = timestampMs;
+          this.lastBopAmplitude = excursion;
         }
       }
     }

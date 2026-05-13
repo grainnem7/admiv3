@@ -133,4 +133,31 @@ describe('HeadBopDetector', () => {
     ]);
     expect(bops).toEqual([]);
   });
+
+  it('getLastBopAmplitude reports the descent magnitude of the most recent bop', () => {
+    const d = new HeadBopDetector(0.02, 100);
+    expect(d.getLastBopAmplitude()).toBe(0); // none yet
+
+    // Bop with ~5% descent: top at 0.5, bottom at 0.55, then up.
+    play(d, [
+      [0.50, 0],
+      [0.52, 16],
+      [0.55, 32],
+      [0.52, 48],
+    ]);
+    expect(d.getLastBopAmplitude()).toBeCloseTo(0.05, 4);
+  });
+
+  it('reset() clears the stored amplitude', () => {
+    const d = new HeadBopDetector(0.02, 100);
+    play(d, [
+      [0.50, 0],
+      [0.52, 16],
+      [0.55, 32],
+      [0.52, 48],
+    ]);
+    expect(d.getLastBopAmplitude()).toBeGreaterThan(0);
+    d.reset();
+    expect(d.getLastBopAmplitude()).toBe(0);
+  });
 });

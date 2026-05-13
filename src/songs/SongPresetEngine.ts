@@ -43,6 +43,8 @@ import {
 } from './voices/presets/instrumentPalette';
 import { loadSongAnalysis } from './analysisLoader';
 import { HeadBopDetector } from '../mapping/nodes/HeadRhythmNode';
+import { HeadBopKit, pickHeadBopDrum } from './voices/HeadBopKit';
+import type { HeadBopDrum } from './voices/HeadBopKit';
 import type { FaceLandmarks } from '../state/types';
 
 // ============================================
@@ -344,16 +346,25 @@ export class SongPresetEngine {
 
   // Head Bopping (Session 5 Change ID 6).  Detects rhythmic downward
   // head movements via FaceLandmarks Y of a chosen landmark (nose tip
-  // by default), and fires a percussive MembraneSynth note on each bop
-  // — beat-snapped if beatSnap is on so it lands on rhythm too.
-  // Lazy-initialised: the synth is only constructed when the user
-  // first enables head bopping (avoids paying the cost otherwise).
+  // by default), and fires a drum-kit hit on each bop.  The drum
+  // chosen depends on which beat of the bar is hit — downbeat gets a
+  // kick + crash splash, backbeats get a snare, others get a kick —
+  // and the bop's descent amplitude scales note velocity so small
+  // nods sound soft and big nods sound loud.  Beat-snapped if
+  // beatSnap is on so it always lands on rhythm.
   private headBopEnabled = false;
   private headBopDetector = new HeadBopDetector(0.025, 200);
-  private headBopSynth: Tone.MembraneSynth | null = null;
-  private headBopPending: { targetTime: number } | null = null;
+  private headBopKit: HeadBopKit | null = null;
+  private headBopPending: { targetTime: number; drum: HeadBopDrum; velocity: number } | null = null;
   /** Landmark index sampled for head Y; 1 = nose tip, 10 = forehead. */
   private headBopLandmarkIndex = 1;
+  /**
+   * Amplitude (frame-height fraction) that should map to maximum
+   * velocity (1.0).  Smaller bops below this still get scaled
+   * proportionally; larger bops clamp at the top.  Calibrated for the
+   * range of head movement typical in seated playing.
+   */
+  private readonly HEADBOP_AMPLITUDE_FOR_FULL_VELOCITY = 0.08;
   /** Last currentTime seen in update() — used by processFaceLandmarks. */
   private lastUpdateTime = 0;
 
@@ -1117,7 +1128,7 @@ export class SongPresetEngine {
     this.lastUpdateTime = currentTime;
     // Flush any pending head-bop whose target beat has now arrived.
     if (this.headBopPending && currentTime >= this.headBopPending.targetTime) {
-      this.playHeadBop();
+      this.headBopKit?.play(this.headBopPending.drum, this.headBopPending.velocity);
       this.headBopPending = null;
     }
     const effectiveEnd = this.loopEnd > 0 ? this.loopEnd : this.duration;
@@ -1355,19 +1366,19 @@ export class SongPresetEngine {
   // ---- Head Bopping (Change ID 6) ----
 
   /**
-   * Enable or disable the head-bop percussion trigger.  When enabled
-   * and the screen layer is calling processFaceLandmarks, each detected
-   * downward-then-upward head bop fires a MembraneSynth kick — beat-
-   * snapped if beatSnap is on.  No effect until processFaceLandmarks
-   * starts receiving data.
+   * Enable or disable the head-bop drum channel.  When enabled and
+   * the screen layer is calling processFaceLandmarks, each detected
+   * downward-then-upward head bop fires a drum hit (kick / snare /
+   * kick+crash depending on beat position in the bar).  Bop amplitude
+   * scales velocity.  Beat-snapped if beatSnap is on.
    */
   setHeadBopEnabled(enabled: boolean): void {
     this.headBopEnabled = enabled;
     if (!enabled) {
       this.headBopPending = null;
       this.headBopDetector.reset();
-    } else if (this.ctx && !this.headBopSynth) {
-      this.ensureHeadBopSynth();
+    } else if (!this.headBopKit) {
+      this.headBopKit = new HeadBopKit();
     }
   }
 
@@ -1404,45 +1415,35 @@ export class SongPresetEngine {
   }
 
   /**
-   * Fire a head-bop percussion event.  Honours the beat-snap toggle —
-   * when on, the kick is deferred to the next beat in the song's beat
-   * grid.  Otherwise plays immediately.  Note: the kick uses Tone's
-   * own audio context, not the engine's this.ctx, so head bopping
-   * works before a song is loaded (the user can hear feedback while
-   * setting up).
+   * Fire a head-bop drum event.  Picks the drum based on which beat
+   * of the bar the bop hits (downbeat → kick + crash; backbeat →
+   * snare; other → kick), and scales velocity from the bop's descent
+   * amplitude (clamped to a sensible max).
+   *
+   * Honours the beat-snap toggle: when on, the drum is deferred to
+   * the next beat in the song's beat grid; when off, plays
+   * immediately and uses the current playback time to pick the drum.
    */
   private triggerHeadBop(): void {
-    this.ensureHeadBopSynth();
-
-    if (this.beatSnap && this.song?.beats && this.song.beats.length > 0) {
-      const targetTime = nextBeatAfter(this.song.beats, this.lastUpdateTime);
-      this.headBopPending = { targetTime };
-    } else {
-      this.playHeadBop();
+    if (!this.headBopKit) {
+      this.headBopKit = new HeadBopKit();
     }
-  }
 
-  /**
-   * Construct the MembraneSynth on first use.  Routes through
-   * Tone.Destination so it inherits Tone's master volume — this
-   * sidesteps the raw-AudioNode vs Tone-node mismatch with
-   * generatedBus.  Mute via SongPresetEngine.setMuted() still works
-   * because that gates the engine's masterGainNode which is downstream
-   * of Tone.Destination.
-   */
-  private ensureHeadBopSynth(): void {
-    if (this.headBopSynth) return;
-    this.headBopSynth = new Tone.MembraneSynth({
-      pitchDecay: 0.05,
-      octaves: 6,
-      envelope: { attack: 0.001, decay: 0.3, sustain: 0.01, release: 0.4 },
-    }).toDestination();
-  }
+    const amplitude = this.headBopDetector.getLastBopAmplitude();
+    const velocity = clamp(amplitude / this.HEADBOP_AMPLITUDE_FOR_FULL_VELOCITY, 0, 1);
 
-  /** Play the kick now, regardless of beat alignment. */
-  private playHeadBop(): void {
-    if (!this.headBopSynth) return;
-    this.headBopSynth.triggerAttackRelease('C2', '8n');
+    const beats = this.song?.beats;
+    const downbeats = this.song?.downbeats;
+
+    if (this.beatSnap && beats && beats.length > 0) {
+      const targetTime = nextBeatAfter(beats, this.lastUpdateTime);
+      const drum = pickHeadBopDrum(targetTime, beats, downbeats);
+      this.headBopPending = { targetTime, drum, velocity };
+    } else {
+      // No beat snap — pick from the current playback time, fire now.
+      const drum = pickHeadBopDrum(this.lastUpdateTime, beats, downbeats);
+      this.headBopKit.play(drum, velocity);
+    }
   }
 
   /**
@@ -1524,6 +1525,11 @@ export class SongPresetEngine {
     this.voices.clear();
     this.stemMixerVoice = null;
     this.melodicVoice = null;
+
+    // Tear down the head-bop kit — lazy-built, so may be null if the
+    // user never enabled head bopping this session.
+    this.headBopKit?.dispose();
+    this.headBopKit = null;
 
     // Stop and disconnect stems
     for (const stem of this.stems.values()) {

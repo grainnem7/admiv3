@@ -1,13 +1,20 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-// Track each MembraneSynth instance + its triggerAttackRelease.
-const membraneTriggerAttackRelease = vi.fn();
-const membraneToDestination = vi.fn();
+// ---------------------------------------------------------------
+// Tone mock — exposes per-instrument triggerAttackRelease spies so
+// tests can distinguish kick / snare / crash calls.  Use vi.hoisted
+// because vi.mock factories run before any top-level code; plain
+// module-level vi.fn() refs aren't visible inside the factory.
+// ---------------------------------------------------------------
+
+const { kickTrigger, snareTrigger, hatTrigger, crashTrigger } = vi.hoisted(() => ({
+  kickTrigger: vi.fn(),
+  snareTrigger: vi.fn(),
+  hatTrigger: vi.fn(),
+  crashTrigger: vi.fn(),
+}));
 
 vi.mock('tone', () => {
-  // Provide just enough of the Tone surface that SongPresetEngine's
-  // constructor + setHeadBopEnabled paths work.  Anything we don't use
-  // here is a no-op spy so unrelated engine init paths don't crash.
   const fakeGain = () => ({
     value: 1,
     setTargetAtTime: vi.fn(),
@@ -37,21 +44,47 @@ vi.mock('tone', () => {
     return fakeNode();
   });
 
-  const MembraneSynth = vi.fn().mockImplementation(() => {
-    const node = fakeNode();
-    node.toDestination = vi.fn(() => {
-      membraneToDestination();
-      // Return a synth that has the spied triggerAttackRelease.
-      const after = fakeNode();
-      after.triggerAttackRelease = membraneTriggerAttackRelease;
-      return after;
+  // Build a synth factory that returns a node whose toDestination()
+  // returns an object with the given `triggerSpy` as its
+  // triggerAttackRelease — letting tests assert which drum was hit.
+  const synthWith = (triggerSpy: ReturnType<typeof vi.fn>) =>
+    vi.fn().mockImplementation(() => {
+      const node = fakeNode();
+      node.toDestination = vi.fn(() => {
+        const after = fakeNode();
+        after.triggerAttackRelease = triggerSpy;
+        return after;
+      });
+      return node;
     });
-    return node;
-  });
 
   return {
     Sampler,
-    MembraneSynth,
+    // MembraneSynth → kick.  NoiseSynth → both snare and hat (the kit
+    // builds two NoiseSynth instances).  MetalSynth → crash.
+    // For the NoiseSynth case, we track every instance and route
+    // their toDestination() through a shared spy each, but the kit
+    // builds them in order: snare first if a snare beat hits, hat
+    // first if a hat beat hits.  In the tests we either avoid that
+    // ambiguity or assert on call counts across both spies.
+    MembraneSynth: synthWith(kickTrigger),
+    NoiseSynth: vi.fn().mockImplementation(() => {
+      const node = fakeNode();
+      node.toDestination = vi.fn(() => {
+        const after = fakeNode();
+        // Use the snare spy by default; tests that exercise the hat
+        // path can swap by ordering of ensureSnare() vs ensureHat().
+        // The kit calls ensureSnare() before ensureHat() never (each
+        // is independent), so two separate NoiseSynth instances are
+        // built — first triggerAttackRelease call on each goes to
+        // distinct spies.  For simplicity, we lump both into snareTrigger
+        // since none of the current tests need to distinguish them.
+        after.triggerAttackRelease = snareTrigger;
+        return after;
+      });
+      return node;
+    }),
+    MetalSynth: synthWith(crashTrigger),
     Reverb: vi.fn().mockImplementation(() => fakeNode()),
     Filter: vi.fn().mockImplementation(() => fakeNode()),
     Gain: vi.fn().mockImplementation(() => fakeNode()),
@@ -69,14 +102,13 @@ vi.mock('tone', () => {
   };
 });
 
+// silence the unused warning while still leaving the spy available
+// to future tests that distinguish hat from snare.
+void hatTrigger;
+
 import { SongPresetEngine } from '../songs/SongPresetEngine';
 import type { FaceLandmarks } from '../state/types';
 
-/**
- * Build a FaceLandmarks payload with all 478 entries at the given Y
- * (only the nose-tip slot — index 1 — actually matters for the bop
- * detector; the others just need to exist so [1] doesn't read undefined).
- */
 function faceAtY(y: number): FaceLandmarks {
   const landmarks = Array.from({ length: 478 }, () => ({
     x: 0.5, y: 0.5, z: 0, visibility: 1,
@@ -89,56 +121,82 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
+/** Feed a clean down-up bop ramp.  Default amplitude crosses the threshold. */
+function feedOneBop(
+  engine: SongPresetEngine,
+  startTimeMs: number,
+  baseY = 0.50,
+  bottomY = 0.56,
+): void {
+  engine.processFaceLandmarks(faceAtY(baseY), startTimeMs);
+  engine.processFaceLandmarks(faceAtY(baseY + 0.02), startTimeMs + 30);
+  engine.processFaceLandmarks(faceAtY(bottomY), startTimeMs + 60);
+  engine.processFaceLandmarks(faceAtY(baseY + 0.02), startTimeMs + 90);
+}
+
 describe('SongPresetEngine head bopping', () => {
   it('does nothing while head bop is disabled', () => {
     const engine = new SongPresetEngine();
-    engine.processFaceLandmarks(faceAtY(0.5), 0);
-    engine.processFaceLandmarks(faceAtY(0.55), 30);
-    engine.processFaceLandmarks(faceAtY(0.5), 60);
-
-    expect(membraneTriggerAttackRelease).not.toHaveBeenCalled();
+    feedOneBop(engine, 0);
+    expect(kickTrigger).not.toHaveBeenCalled();
+    expect(snareTrigger).not.toHaveBeenCalled();
+    expect(crashTrigger).not.toHaveBeenCalled();
   });
 
-  it('fires a kick once head bop is enabled and a bop occurs', () => {
+  it('fires a kick on a bop with no song loaded (no beat data → default kick)', () => {
+    const engine = new SongPresetEngine();
+    engine.setHeadBopEnabled(true);
+    feedOneBop(engine, 0);
+
+    expect(kickTrigger).toHaveBeenCalledOnce();
+    // 4-arg shape: note, duration, time, velocity.
+    expect(kickTrigger.mock.calls[0][0]).toBe('C2');
+    expect(kickTrigger.mock.calls[0][1]).toBe('8n');
+    expect(snareTrigger).not.toHaveBeenCalled();
+    expect(crashTrigger).not.toHaveBeenCalled();
+  });
+
+  it('amplitude scales the kick velocity (small nod → low, big nod → high)', () => {
     const engine = new SongPresetEngine();
     engine.setHeadBopEnabled(true);
 
-    // Simulate a clean bop: rest → descend → rise.  Need to exceed the
-    // default minDownExcursion = 0.025.
-    engine.processFaceLandmarks(faceAtY(0.50), 0);
-    engine.processFaceLandmarks(faceAtY(0.52), 30);
-    engine.processFaceLandmarks(faceAtY(0.56), 60);
-    engine.processFaceLandmarks(faceAtY(0.52), 90);  // direction reverses here
+    // Small bop: ~3% excursion.
+    feedOneBop(engine, 0, 0.5, 0.53);
+    const smallCalls = kickTrigger.mock.calls;
+    const smallCallVelocity = smallCalls[smallCalls.length - 1]?.[3] as number;
 
-    expect(membraneTriggerAttackRelease).toHaveBeenCalledOnce();
-    expect(membraneTriggerAttackRelease).toHaveBeenCalledWith('C2', '8n');
-  });
-
-  it('toggling head bop off mid-session stops further kicks', () => {
-    const engine = new SongPresetEngine();
-    engine.setHeadBopEnabled(true);
-
-    // One bop fires.
-    engine.processFaceLandmarks(faceAtY(0.50), 0);
-    engine.processFaceLandmarks(faceAtY(0.52), 30);
-    engine.processFaceLandmarks(faceAtY(0.56), 60);
-    engine.processFaceLandmarks(faceAtY(0.52), 90);
-    expect(membraneTriggerAttackRelease).toHaveBeenCalledOnce();
-
-    // Disable — subsequent bops should produce no further kicks.
+    // Reset detector via toggle (drops state) before next bop.
     engine.setHeadBopEnabled(false);
-    engine.processFaceLandmarks(faceAtY(0.55), 300);
-    engine.processFaceLandmarks(faceAtY(0.60), 330);
-    engine.processFaceLandmarks(faceAtY(0.55), 360);
+    engine.setHeadBopEnabled(true);
+    kickTrigger.mockClear();
 
-    expect(membraneTriggerAttackRelease).toHaveBeenCalledOnce(); // still 1
+    // Big bop: ~9% excursion (saturates the velocity ramp).
+    feedOneBop(engine, 1000, 0.5, 0.59);
+    const bigCalls = kickTrigger.mock.calls;
+    const bigCallVelocity = bigCalls[bigCalls.length - 1]?.[3] as number;
+
+    expect(smallCallVelocity).toBeGreaterThan(0);
+    expect(bigCallVelocity).toBeGreaterThan(smallCallVelocity);
+    expect(bigCallVelocity).toBeLessThanOrEqual(1.0);
+  });
+
+  it('toggling head bop off mid-session stops further hits', () => {
+    const engine = new SongPresetEngine();
+    engine.setHeadBopEnabled(true);
+
+    feedOneBop(engine, 0);
+    expect(kickTrigger).toHaveBeenCalledOnce();
+
+    engine.setHeadBopEnabled(false);
+    feedOneBop(engine, 1000);
+    expect(kickTrigger).toHaveBeenCalledOnce(); // still 1
   });
 
   it('null face landmarks are ignored gracefully', () => {
     const engine = new SongPresetEngine();
     engine.setHeadBopEnabled(true);
     engine.processFaceLandmarks(null, 0);
-    expect(membraneTriggerAttackRelease).not.toHaveBeenCalled();
+    expect(kickTrigger).not.toHaveBeenCalled();
   });
 
   it('isHeadBopEnabled reflects the toggle state', () => {
@@ -153,15 +211,10 @@ describe('SongPresetEngine head bopping', () => {
   it('setHeadBopSensitivity changes the detector threshold live', () => {
     const engine = new SongPresetEngine();
     engine.setHeadBopEnabled(true);
-    // Raise the threshold to 10% — the 0.06-excursion bop below is
-    // still above 10%? 0.56-0.50=0.06=6% so should NOT fire.
-    engine.setHeadBopSensitivity(0.1, 200);
+    engine.setHeadBopSensitivity(0.1, 200); // 10% threshold
 
-    engine.processFaceLandmarks(faceAtY(0.50), 0);
-    engine.processFaceLandmarks(faceAtY(0.52), 30);
-    engine.processFaceLandmarks(faceAtY(0.56), 60);
-    engine.processFaceLandmarks(faceAtY(0.52), 90);
-
-    expect(membraneTriggerAttackRelease).not.toHaveBeenCalled();
+    // 6% excursion below new threshold → no bop.
+    feedOneBop(engine, 0, 0.5, 0.56);
+    expect(kickTrigger).not.toHaveBeenCalled();
   });
 });
