@@ -1,4 +1,7 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+// Shared spy — captured at module level so trigger-logic tests can inspect it.
+const samplerTriggerAttackRelease = vi.fn();
 
 // Prevent Tone.js from instantiating a real AudioContext during module load.
 // WalkVoice.ts imports SamplerPlayer which imports 'tone'; without this mock
@@ -9,7 +12,7 @@ vi.mock('tone', () => ({
     return {
       connect: vi.fn(),
       triggerAttack: vi.fn(),
-      triggerAttackRelease: vi.fn(),
+      triggerAttackRelease: samplerTriggerAttackRelease,
       triggerRelease: vi.fn(),
       releaseAll: vi.fn(),
       dispose: vi.fn(),
@@ -22,7 +25,8 @@ vi.mock('tone', () => ({
   now: vi.fn(() => 0),
 }));
 
-import { walkStepNote, latestBeatIndexAtOrBefore } from '../songs/voices/WalkVoice';
+import { walkStepNote, latestBeatIndexAtOrBefore, WalkVoice } from '../songs/voices/WalkVoice';
+import type { ChordEntry } from '../songs/voices/chordLookup';
 
 describe('walkStepNote', () => {
   it('walks a 4-note voicing as n0 n1 n2 n3 n2 n1 then loops', () => {
@@ -86,5 +90,168 @@ describe('latestBeatIndexAtOrBefore', () => {
     expect(latestBeatIndexAtOrBefore(beats, 3.999)).toBe(2);
     expect(latestBeatIndexAtOrBefore(beats, 4.0)).toBe(3);
     expect(latestBeatIndexAtOrBefore(beats, 100)).toBe(3);
+  });
+});
+
+// ============================================================
+// Trigger-logic helpers
+// ============================================================
+
+function makeFakeNode() {
+  return {
+    connect: vi.fn(),
+    disconnect: vi.fn(),
+    gain: { value: 1 },
+    frequency: { value: 4000 },
+    Q: { value: 0.7 },
+    type: 'lowpass',
+  };
+}
+
+function makeFakeContext(): AudioContext {
+  return {
+    currentTime: 0,
+    state: 'running' as const,
+    createGain: vi.fn(() => makeFakeNode()),
+    createBiquadFilter: vi.fn(() => makeFakeNode()),
+  } as unknown as AudioContext;
+}
+
+const D_MAJOR: ChordEntry = {
+  time: 0,
+  notes: [50, 57, 62, 66], // D3, A3, D4, F#4 — already sorted ascending
+  root: 50,
+  name: 'D',
+};
+
+const A_MAJOR: ChordEntry = {
+  time: 4,
+  notes: [45, 52, 57, 61], // A2, E3, A3, C#4 — also sorted ascending
+  root: 45,
+  name: 'A',
+};
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
+describe('WalkVoice trigger logic', () => {
+  function makeActiveVoice(): WalkVoice {
+    const ctx = makeFakeContext();
+    const voice = new WalkVoice(ctx, 'piano');
+    voice.setActive(true);
+    voice.updateFade();
+    voice.setBeatTimestamps([1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+    voice.setPosition(0.5, 0.5); // mid Y
+    return voice;
+  }
+
+  it('fires the first note on the first beat arrival when moving', () => {
+    const voice = makeActiveVoice();
+    // Pre-beat: no trigger.
+    voice.update(0.5, D_MAJOR, 0.5);
+    expect(samplerTriggerAttackRelease).not.toHaveBeenCalled();
+
+    // Beat 1.0 arrives: first walk-step note (n0 = 50) fires.
+    voice.update(1.05, D_MAJOR, 0.5);
+    expect(samplerTriggerAttackRelease).toHaveBeenCalledOnce();
+    const playedMidi = Number(
+      String(samplerTriggerAttackRelease.mock.calls[0][0]).replace('MIDI-', ''),
+    );
+    expect(playedMidi).toBe(50);
+  });
+
+  it('plays the up-down pattern 50-57-62-66-62-57 across 6 beats', () => {
+    const voice = makeActiveVoice();
+    const expectedSequence = [50, 57, 62, 66, 62, 57];
+    for (let i = 0; i < expectedSequence.length; i++) {
+      voice.update(1.0 + i + 0.05, D_MAJOR, 0.5);
+    }
+    const played = samplerTriggerAttackRelease.mock.calls.map((call) =>
+      Number(String(call[0]).replace('MIDI-', '')),
+    );
+    expect(played).toEqual(expectedSequence);
+  });
+
+  it('does not reset walkStep when the chord changes mid-cycle', () => {
+    const voice = makeActiveVoice();
+    // Beats 1, 2 with D major: plays 50, 57. walkStep is now 2.
+    voice.update(1.05, D_MAJOR, 0.5);
+    voice.update(2.05, D_MAJOR, 0.5);
+    expect(
+      samplerTriggerAttackRelease.mock.calls.map((c) =>
+        Number(String(c[0]).replace('MIDI-', '')),
+      ),
+    ).toEqual([50, 57]);
+
+    // Beat 3 with A major: walkStep 2 → A_MAJOR.notes[2] = 57 (A3).
+    voice.update(3.05, A_MAJOR, 0.5);
+    const calls3 = samplerTriggerAttackRelease.mock.calls;
+    const lastCall3 = calls3[calls3.length - 1];
+    const lastMidi = Number(String(lastCall3[0]).replace('MIDI-', ''));
+    expect(lastMidi).toBe(57);
+  });
+
+  it('does not fire when velocity is below the trigger threshold', () => {
+    const voice = makeActiveVoice();
+    voice.update(1.05, D_MAJOR, 0.02); // below default 0.04 threshold
+    expect(samplerTriggerAttackRelease).not.toHaveBeenCalled();
+  });
+
+  it('fires at most one note per beat regardless of update call count', () => {
+    const voice = makeActiveVoice();
+    // 5 update calls all within the same beat.
+    voice.update(1.05, D_MAJOR, 0.5);
+    voice.update(1.1, D_MAJOR, 0.5);
+    voice.update(1.5, D_MAJOR, 0.5);
+    voice.update(1.9, D_MAJOR, 0.5);
+    voice.update(1.99, D_MAJOR, 0.5);
+    expect(samplerTriggerAttackRelease).toHaveBeenCalledOnce();
+  });
+
+  it('is silent when no chord is loaded', () => {
+    const voice = makeActiveVoice();
+    voice.update(1.05, null, 0.5);
+    voice.update(2.05, null, 0.5);
+    expect(samplerTriggerAttackRelease).not.toHaveBeenCalled();
+  });
+
+  it('fires the sidechain callback once per triggered note', () => {
+    const voice = makeActiveVoice();
+    const sidechain = vi.fn();
+    voice.onNoteTrigger = sidechain;
+    voice.update(1.05, D_MAJOR, 0.5);
+    voice.update(2.05, D_MAJOR, 0.5);
+    expect(sidechain).toHaveBeenCalledTimes(2);
+  });
+
+  it('transport restart re-fires on the first new beat after restart', () => {
+    const voice = makeActiveVoice();
+    voice.update(1.05, D_MAJOR, 0.5);
+    voice.update(2.05, D_MAJOR, 0.5);
+    expect(samplerTriggerAttackRelease).toHaveBeenCalledTimes(2);
+
+    voice.onTransportStop();
+    voice.onTransportStart();
+
+    // After restart, beat 1.0 should fire again (walkStep persists, so
+    // the played note is the NEXT step in the cycle: 62).
+    voice.update(1.05, D_MAJOR, 0.5);
+    expect(samplerTriggerAttackRelease).toHaveBeenCalledTimes(3);
+    const callsRestart = samplerTriggerAttackRelease.mock.calls;
+    const lastCallRestart = callsRestart[callsRestart.length - 1];
+    expect(Number(String(lastCallRestart[0]).replace('MIDI-', ''))).toBe(62);
+  });
+
+  it('is silent when no beat data is available', () => {
+    const ctx = makeFakeContext();
+    const voice = new WalkVoice(ctx, 'piano');
+    voice.setActive(true);
+    voice.updateFade();
+    // No setBeatTimestamps — beats is null.
+    voice.setPosition(0.5, 0.5);
+    voice.update(1.05, D_MAJOR, 0.5);
+    voice.update(2.05, D_MAJOR, 0.5);
+    expect(samplerTriggerAttackRelease).not.toHaveBeenCalled();
   });
 });

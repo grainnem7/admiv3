@@ -21,7 +21,7 @@
  */
 
 import type { ChordEntry } from './chordLookup';
-import { ToneVoiceBase } from './ToneVoiceBase';
+import { ToneVoiceBase, clamp, lerp } from './ToneVoiceBase';
 import { SamplerPlayer, SAMPLE_CONFIGS } from './SamplerPlayer';
 import type { Player } from './SynthPlayer';
 import {
@@ -41,6 +41,7 @@ export class WalkVoice extends ToneVoiceBase {
   private player: Player;
 
   private currentChord: ChordEntry | null = null;
+  private sortedVoicing: readonly number[] = [];
   private walkStep = 0;
   private lastTriggeredBeatIndex = -1;
   private beats: readonly number[] | null = null;
@@ -78,13 +79,49 @@ export class WalkVoice extends ToneVoiceBase {
     return new SamplerPlayer(SAMPLE_CONFIGS[entry.sampleKey], this.filterNode);
   }
 
-  update(_playbackTime: number, _chord: ChordEntry | null, _velocity: number): void {
-    // Real logic in Task 3 — stub no-ops so the type checker is happy.
-    void this.currentChord;
-    void this.walkStep;
-    void this.lastTriggeredBeatIndex;
-    void this.beats;
-    void this.triggerThreshold;
+  update(playbackTime: number, chord: ChordEntry | null, velocity: number): void {
+    if (this.isSilent() && !this.active) return;
+
+    // Latch the new chord; do NOT reset walkStep on chord change — the
+    // cycle continues, new tones simply take effect on the next trigger.
+    if (chord !== this.currentChord) {
+      this.currentChord = chord;
+      this.sortedVoicing = chord
+        ? [...chord.notes].sort((a, b) => a - b)
+        : [];
+    }
+
+    if (!this.currentChord) return;
+    if (!this.beats || this.beats.length === 0) return;
+    if (velocity < this.triggerThreshold) return;
+
+    const beatIndex = latestBeatIndexAtOrBefore(this.beats, playbackTime);
+    if (beatIndex < 0) return;
+    if (beatIndex <= this.lastTriggeredBeatIndex) return;
+
+    const midi = walkStepNote(this.sortedVoicing, this.walkStep);
+    if (midi === null) return;
+
+    this.triggerNote(midi);
+    this.lastTriggeredBeatIndex = beatIndex;
+    this.walkStep++;
+  }
+
+  private triggerNote(midi: number): void {
+    if (!this.player.isReady()) return;
+
+    const { min, max } = this.entry.velocityRange;
+    // Y → dynamics. posY: 0 = top of frame = loud. lerp on (1 - posY).
+    const yLoudness = clamp(1 - this.posY, 0, 1);
+    const noteVelocity = lerp(min, max, yLoudness);
+
+    this.player.triggerAttackRelease(
+      midi,
+      this.entry.duration,
+      undefined,
+      clamp(noteVelocity, min, max),
+    );
+    this.onNoteTrigger?.();
   }
 
   onTransportStart(): void {
