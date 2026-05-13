@@ -37,6 +37,7 @@ import { HarmonyVoice } from './voices/HarmonyVoice';
 import { ArpeggioVoice } from './voices/ArpeggioVoice';
 import { BassSynthVoice } from './voices/BassSynthVoice';
 import { InstrumentVoice, nextBeatAfter } from './voices/InstrumentVoice';
+import { WalkVoice } from './voices/WalkVoice';
 import {
   DEFAULT_INSTRUMENT_KEY,
   INSTRUMENT_PALETTE_BY_KEY,
@@ -948,6 +949,8 @@ export class SongPresetEngine {
       voice = this.createInstrumentVoice(role);
     } else if (mode === 'harmonizer' && role === 'green') {
       voice = this.createHarmonyVoice();
+    } else if (mode === 'walk') {
+      voice = this.createWalkVoice(role);
     } else {
       voice = this.createParameterVoice(role);
     }
@@ -983,6 +986,29 @@ export class SongPresetEngine {
       voice.setBeatTimestamps(this.song.beats);
     }
     voice.setBeatSnap(this.beatSnap);
+    return voice;
+  }
+
+  /**
+   * Build a WalkVoice for the given role using the per-baton instrument
+   * map. Walk uses the same `batonInstruments` storage as instrument and
+   * harmonizer modes, so toggling between them preserves the user's
+   * instrument choice. The song's beat grid is wired in immediately
+   * since walk triggers only on beat arrival.
+   *
+   * WalkVoice is inherently beat-locked and has no setBeatSnap method —
+   * the engine's beatSnap flag is irrelevant here (setBeatSnap iterates
+   * voices and skips anything that isn't an InstrumentVoice).
+   */
+  private createWalkVoice(role: ColorRole): WalkVoice {
+    const instrumentKey =
+      this.batonInstruments.get(role) ?? DEFAULT_INSTRUMENT_KEY;
+    const voice = new WalkVoice(this.ctx!, instrumentKey);
+    voice.onNoteTrigger = () => this.triggerSidechain();
+    if (this.song?.beats && this.song.beats.length > 0) {
+      voice.setBeatTimestamps(this.song.beats);
+    }
+    voice.setTriggerThreshold(this.stillnessThreshold);
     return voice;
   }
 
