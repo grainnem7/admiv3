@@ -37,7 +37,7 @@ const baseStatus = (partial: Partial<SongPresetStatus> = {}): SongPresetStatus =
   accompVolume: 1, stemVolume: 1, chordOffset: 0, bpmAdjust: 0,
   effectiveBpm: 100, currentBeatIndex: -1, totalBeats: 0, hasAnalysis: false,
   continuousBackingEnabled: true, continuousBackingLevel: 0.4,
-  voicePresets: {}, batonModes: {}, batonInstruments: {}, currentChordRoot: null,
+  voicePresets: {}, batonModes: {}, batonInstruments: {}, beatSnap: false, currentChordRoot: null,
   ...partial,
 });
 

@@ -13,9 +13,12 @@ import {
   useIsMuted,
   useMasterVolume,
   useActiveNotes,
+  useActiveInputProfile,
 } from '../../state/store';
+import type { SmoothingLevel } from '../../state/types';
 import { getAudioEngine } from '../../sound/AudioEngine';
 import { getColorTracker } from '../../tracking/ColorTracker';
+import { getMultiModalProcessor } from '../../movement/MultiModalProcessor';
 
 function DebugPanel() {
   const isTracking = useIsTracking();
@@ -30,6 +33,14 @@ function DebugPanel() {
   const toggleDebugPanel = useAppStore((s) => s.toggleDebugPanel);
   const setAccessibilityMode = useAppStore((s) => s.setAccessibilityMode);
   const setSensitivity = useAppStore((s) => s.setSensitivity);
+  const setActiveInputProfile = useAppStore((s) => s.setActiveInputProfile);
+  const saveInputProfile = useAppStore((s) => s.saveInputProfile);
+
+  // Active input profile — read-write so we can adjust smoothing /
+  // velocity threshold in-session without restarting.  Changes are
+  // pushed back through MultiModalProcessor immediately so movement
+  // processing reflects the new settings on the very next frame.
+  const activeProfile = useActiveInputProfile();
 
   // Colour-tracker min-area slider state.  Initialised from the first
   // tracked colour (they're synchronised via setMinAreaForAll), and
@@ -214,6 +225,79 @@ function DebugPanel() {
             style={{ width: '100%' }}
           />
         </div>
+
+        {/* Movement-threshold controls (Change ID 2).  Edits the active
+            InputProfile in place and re-pushes it through the
+            MultiModalProcessor so the new thresholds apply on the next
+            tracked frame — useful for in-session tuning of fine motion. */}
+        {activeProfile && (
+          <>
+            <div style={{ marginTop: 'var(--space-sm)' }}>
+              <label style={{ display: 'block', marginBottom: '4px', fontSize: '11px' }}>
+                Smoothing
+              </label>
+              <select
+                value={activeProfile.movementSettings.smoothingLevel}
+                onChange={(e) => {
+                  const updated = {
+                    ...activeProfile,
+                    movementSettings: {
+                      ...activeProfile.movementSettings,
+                      smoothingLevel: e.target.value as SmoothingLevel,
+                    },
+                  };
+                  setActiveInputProfile(updated);
+                  saveInputProfile(updated);
+                  getMultiModalProcessor().setProfile(updated);
+                }}
+                style={{
+                  width: '100%',
+                  padding: '4px',
+                  backgroundColor: 'var(--color-bg)',
+                  color: 'var(--color-text)',
+                  border: '1px solid var(--color-text-muted)',
+                  borderRadius: 0,
+                  fontSize: '12px',
+                }}
+              >
+                <option value="none">None</option>
+                <option value="light">Light</option>
+                <option value="medium">Medium</option>
+                <option value="heavy">Heavy</option>
+              </select>
+            </div>
+
+            <div style={{ marginTop: 'var(--space-sm)' }}>
+              <label style={{ display: 'block', marginBottom: '4px', fontSize: '11px' }}>
+                Velocity threshold: {activeProfile.movementSettings.velocityThreshold.toFixed(3)}
+              </label>
+              <input
+                type="range"
+                min="0.001"
+                max="0.1"
+                step="0.001"
+                value={activeProfile.movementSettings.velocityThreshold}
+                onChange={(e) => {
+                  const value = parseFloat(e.target.value);
+                  const updated = {
+                    ...activeProfile,
+                    movementSettings: {
+                      ...activeProfile.movementSettings,
+                      velocityThreshold: value,
+                    },
+                  };
+                  setActiveInputProfile(updated);
+                  saveInputProfile(updated);
+                  getMultiModalProcessor().setProfile(updated);
+                }}
+                style={{ width: '100%' }}
+              />
+              <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                Lower = picks up smaller intentional movements; raise to reject tremor.
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Colour tracker section — visible whenever colour modality is active.

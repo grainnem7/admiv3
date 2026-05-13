@@ -112,6 +112,13 @@ export interface SongPresetStatus {
    * lose the previous selection.
    */
   batonInstruments: Record<string, string>;
+  /**
+   * Beat-snap (Beat Bopping) mode.  When true, every instrument-mode
+   * baton trigger is quantised to the next beat in the song's beat
+   * grid.  Has no effect on parameter-mode voices (which are already
+   * beat-aware) or on songs without beat data.
+   */
+  beatSnap: boolean;
   currentChordRoot: number | null;
 }
 
@@ -318,6 +325,13 @@ export class SongPresetEngine {
   private stillnessThreshold = STILLNESS_THRESHOLD_DEFAULT;
   private stillnessHysteresisMs = STILLNESS_HYSTERESIS_MS_DEFAULT;
   private onsetDebounceMs = ONSET_DEBOUNCE_MS_DEFAULT;
+
+  // Beat Bopping mode (Session 5 Change ID 7).  When on, every
+  // instrument-mode baton trigger is deferred to the next beat in the
+  // loaded song's beat grid — making it impossible to play off-rhythm.
+  // Off by default; applies to every InstrumentVoice currently in play
+  // and any new ones built on song load / mode switch.
+  private beatSnap = false;
 
   // Beat pulse tracking
   private lastDownbeatIndex = -1;
@@ -772,6 +786,7 @@ export class SongPresetEngine {
       voicePresets: Object.fromEntries(this.voicePresets),
       batonModes: Object.fromEntries(this.batonModes),
       batonInstruments: Object.fromEntries(this.batonInstruments),
+      beatSnap: this.beatSnap,
       currentChordRoot: this.currentChord?.root ?? null,
     };
   }
@@ -900,6 +915,13 @@ export class SongPresetEngine {
     // Instrument-mode notes feed the same sidechain ducking as the
     // parameter-mode voices that trigger discrete notes (pad, melody).
     voice.onNoteTrigger = () => this.triggerSidechain();
+    // Hand the voice the song's beat grid + apply the current beat-snap
+    // toggle.  The grid stays live for the voice's lifetime; toggling
+    // beatSnap on/off doesn't need to re-supply the timestamps.
+    if (this.song?.beats && this.song.beats.length > 0) {
+      voice.setBeatTimestamps(this.song.beats);
+    }
+    voice.setBeatSnap(this.beatSnap);
     return voice;
   }
 
@@ -1249,6 +1271,28 @@ export class SongPresetEngine {
   getStillnessThreshold(): number { return this.stillnessThreshold; }
   getStillnessHysteresisMs(): number { return this.stillnessHysteresisMs; }
   getOnsetDebounceMs(): number { return this.onsetDebounceMs; }
+
+  // ---- Beat Bopping (Change ID 7) ----
+
+  /**
+   * Toggle beat-snap mode for all instrument-mode voices.  Cheap to
+   * call every frame — voices only react to the change.  No effect on
+   * parameter-mode voices (which already produce beat-locked output by
+   * their own internal logic).
+   */
+  setBeatSnap(enabled: boolean): void {
+    if (this.beatSnap === enabled) return;
+    this.beatSnap = enabled;
+    for (const voice of this.voices.values()) {
+      if (voice instanceof InstrumentVoice) {
+        voice.setBeatSnap(enabled);
+      }
+    }
+  }
+
+  isBeatSnap(): boolean {
+    return this.beatSnap;
+  }
 
   /**
    * Return the beat timestamp closest to `targetTime` — either before

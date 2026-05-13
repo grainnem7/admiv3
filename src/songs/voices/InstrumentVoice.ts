@@ -43,6 +43,37 @@ import {
 } from './presets/instrumentPalette';
 
 // ============================================
+// Module helpers
+// ============================================
+
+/**
+ * Binary-search for the next beat strictly after `targetTime`.  When
+ * `targetTime` falls past the last beat, extrapolate one final beat
+ * interval beyond — keeps beat-snap working on the song's tail.
+ *
+ * Exported for unit testing; not part of the InstrumentVoice public API.
+ */
+export function nextBeatAfter(
+  beats: readonly number[],
+  targetTime: number,
+): number {
+  if (beats.length === 0) return targetTime;
+  let lo = 0, hi = beats.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (beats[mid] <= targetTime) lo = mid + 1;
+    else hi = mid;
+  }
+  if (lo >= beats.length) {
+    const interval = beats.length >= 2
+      ? beats[beats.length - 1] - beats[beats.length - 2]
+      : 0.5;
+    return beats[beats.length - 1] + interval;
+  }
+  return beats[lo];
+}
+
+// ============================================
 // Tuning constants
 // ============================================
 
@@ -91,10 +122,52 @@ export class InstrumentVoice extends ToneVoiceBase {
    */
   private lastTriggeredTime = Number.NEGATIVE_INFINITY;
 
+  /**
+   * Beat-snap mode (Session 5 Change ID 7 — "Beat Bopping").  When on,
+   * baton-driven note triggers are deferred to the next beat in
+   * `beatTimestamps` instead of firing immediately.  Pending triggers
+   * are overwritten by later baton motion, so the LAST pitch index
+   * picked before the beat is the one that plays — the user can adjust
+   * until the beat hits.
+   */
+  private beatSnap = false;
+  private beatTimestamps: readonly number[] | null = null;
+  private pendingTrigger:
+    | { midi: number; velocity: number; targetTime: number }
+    | null = null;
+
   constructor(ctx: AudioContext, instrumentKey: string) {
     super(ctx);
     this.entry = getInstrumentEntry(instrumentKey);
     this.player = this.createPlayer(this.entry);
+  }
+
+  /**
+   * Enable or disable beat quantisation.  When enabled, every triggered
+   * note waits for the next beat from `setBeatTimestamps` before
+   * actually firing — turning the baton into a beat-locked percussion
+   * trigger.  Behaves as a no-op if no beat data is available.
+   */
+  setBeatSnap(enabled: boolean): void {
+    this.beatSnap = enabled;
+    if (!enabled) {
+      // Drop any deferred note so disabling snap takes immediate effect.
+      this.pendingTrigger = null;
+    }
+  }
+
+  isBeatSnap(): boolean {
+    return this.beatSnap;
+  }
+
+  /**
+   * Provide the song's beat timestamp grid (in song-playback seconds).
+   * The baton-snap logic uses this directly — no Tone.Transport
+   * scheduling so it survives looping/seek without re-scheduling.
+   * Pass null to clear (snap then becomes a no-op).
+   */
+  setBeatTimestamps(beats: readonly number[] | null): void {
+    this.beatTimestamps = beats;
   }
 
   /**
@@ -124,7 +197,7 @@ export class InstrumentVoice extends ToneVoiceBase {
     return new SamplerPlayer(SAMPLE_CONFIGS[entry.sampleKey], this.filterNode);
   }
 
-  update(_playbackTime: number, chord: ChordEntry | null, velocity: number): void {
+  update(playbackTime: number, chord: ChordEntry | null, velocity: number): void {
     if (!chord) return;
     if (this.isSilent() && !this.active) return;
 
@@ -138,6 +211,11 @@ export class InstrumentVoice extends ToneVoiceBase {
       this.lastPitchIndex = -1;
       this.lastOctaveShift = Number.NaN;
     }
+
+    // Fire any pending beat-snapped trigger whose target beat has passed.
+    // Done BEFORE the new-trigger decision so the deferred note plays
+    // before any same-frame replacement is queued.
+    this.flushPendingTrigger(playbackTime);
 
     if (this.availablePitches.length === 0) return;
 
@@ -158,11 +236,37 @@ export class InstrumentVoice extends ToneVoiceBase {
     if (now - this.lastTriggeredTime < MIN_TRIGGER_INTERVAL_S) return;
 
     const basePitch = this.availablePitches[pitchIndex];
-    this.triggerNote(basePitch + octaveShift, velocity);
+    const targetMidi = basePitch + octaveShift;
+
+    if (this.beatSnap && this.beatTimestamps && this.beatTimestamps.length > 0) {
+      // Defer to next beat.  Overwrite any existing pending so the
+      // LAST pitch picked before the beat is what plays — gives the
+      // user a window to adjust their aim.
+      const targetTime = nextBeatAfter(this.beatTimestamps, playbackTime);
+      this.pendingTrigger = { midi: targetMidi, velocity, targetTime };
+    } else {
+      this.triggerNote(targetMidi, velocity);
+      this.lastTriggeredTime = now;
+    }
 
     this.lastPitchIndex = pitchIndex;
     this.lastOctaveShift = octaveShift;
-    this.lastTriggeredTime = now;
+  }
+
+  /**
+   * If a pending beat-snapped note's target time has arrived, fire it
+   * and clear.  Idempotent — safe to call every frame.
+   */
+  private flushPendingTrigger(playbackTime: number): void {
+    if (!this.pendingTrigger) return;
+    if (playbackTime < this.pendingTrigger.targetTime) return;
+
+    const now = this.ctx.currentTime;
+    if (now - this.lastTriggeredTime >= MIN_TRIGGER_INTERVAL_S) {
+      this.triggerNote(this.pendingTrigger.midi, this.pendingTrigger.velocity);
+      this.lastTriggeredTime = now;
+    }
+    this.pendingTrigger = null;
   }
 
   onTransportStop(): void {
@@ -170,6 +274,9 @@ export class InstrumentVoice extends ToneVoiceBase {
     this.lastPitchIndex = -1;
     this.lastOctaveShift = Number.NaN;
     this.lastTriggeredTime = Number.NEGATIVE_INFINITY;
+    // Drop pending beat-snapped triggers on stop — they were aimed at
+    // beats that won't arrive while the transport is paused.
+    this.pendingTrigger = null;
   }
 
   dispose(): void {

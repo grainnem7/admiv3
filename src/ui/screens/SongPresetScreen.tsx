@@ -96,6 +96,12 @@ function SongPresetScreen() {
   const [loopEnabled, setLoopEnabled] = useState(true);
   const [loopStart, setLoopStart] = useState(0);
   const [loopEnd, setLoopEnd] = useState(0);
+  /**
+   * Beat Bopping toggle.  When on, every instrument-mode baton trigger
+   * is quantised to the next beat in the song's beat grid — Tim's
+   * baton-driven notes always land on-rhythm with the accompaniment.
+   */
+  const [beatSnap, setBeatSnap] = useState(false);
 
   // Live status
   const [liveStatus, setLiveStatus] = useState<SongPresetStatus | null>(null);
@@ -503,6 +509,12 @@ function SongPresetScreen() {
     setLoopEnabled(newVal);
     engineRef.current.setLoopEnabled(newVal);
   }, [loopEnabled]);
+
+  const handleToggleBeatSnap = useCallback(() => {
+    const newVal = !beatSnap;
+    setBeatSnap(newVal);
+    engineRef.current.setBeatSnap(newVal);
+  }, [beatSnap]);
 
   const handleLoopStartChange = useCallback((val: number) => {
     setLoopStart(val);
@@ -1016,6 +1028,20 @@ function SongPresetScreen() {
                   </span>
                 </div>
               )}
+            </div>
+
+            {/* Beat Bopping toggle (Session 5 Change ID 7) — beat-snap
+                every instrument-mode baton trigger to the song's beat
+                grid so triggered notes always land on rhythm. */}
+            <div style={styles.section}>
+              <h3 style={styles.sectionTitle}>Beat Bopping</h3>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#a1a1b8', fontSize: 13 }}>
+                <input type="checkbox" checked={beatSnap} onChange={handleToggleBeatSnap} />
+                Snap instrument-baton notes to the beat
+              </label>
+              <div style={{ fontSize: 11, color: '#71718a', marginTop: 4 }}>
+                Only affects batons in instrument mode and songs with beat analysis.
+              </div>
             </div>
 
             {/* Loop controls */}
