@@ -56,14 +56,14 @@ import type { FaceLandmarks } from '../state/types';
  *   parameter  → existing colour-role behaviour (melody, bass, arp, chord pad)
  *   instrument → InstrumentVoice plays chord-tone notes on a chosen
  *                instrument from the curated palette.
+ *   harmonizer → green-only mode. Plays a chord-aware harmony to the
+ *                song's vocal melody (from analysis.json.harmony[]).
+ *   walk       → generates an up-down arpeggio over the current chord's
+ *                voicing notes. Triggers on beat while the baton moves.
+ *                X is ignored; Y drives dynamics. Available on any
+ *                generative baton (red/green/yellow/orange).
  */
-/**
- * harmonizer: green-only mode. Plays a chord-aware harmony to the song's
- * vocal melody (from analysis.json.harmony[]). Hand-height selects between
- * 3rd-down / 3rd-up / 5th-up / 6th-up — every interval is snapped to a
- * chord tone so any position is musically safe.
- */
-export type BatonMode = 'parameter' | 'instrument' | 'harmonizer';
+export type BatonMode = 'parameter' | 'instrument' | 'harmonizer' | 'walk';
 
 /** Persisted assignment for a single baton. */
 export interface BatonAssignment {
