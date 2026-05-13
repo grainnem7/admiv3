@@ -2740,5 +2740,5401 @@
     162.4352,
     162.621,
     163.3872
+  ],
+  "harmony": [
+    {
+      "time": 19.6093,
+      "duration": 0.1335,
+      "vocalMidi": 64,
+      "vocalLabel": "E4",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 5
+        },
+        "fifthUp": {
+          "midi": 73,
+          "label": "C#5",
+          "semitonesFromVocal": 9
+        },
+        "sixthUp": {
+          "midi": 73,
+          "label": "C#5",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 61,
+          "label": "C#4",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 19.8066,
+      "duration": 0.1509,
+      "vocalMidi": 66,
+      "vocalLabel": "F#4",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 3
+        },
+        "fifthUp": {
+          "midi": 73,
+          "label": "C#5",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 76,
+          "label": "E5",
+          "semitonesFromVocal": 10
+        },
+        "thirdDn": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": -2
+        }
+      }
+    },
+    {
+      "time": 20.0214,
+      "duration": 0.505,
+      "vocalMidi": 65,
+      "vocalLabel": "F4",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 73,
+          "label": "C#5",
+          "semitonesFromVocal": 8
+        },
+        "sixthUp": {
+          "midi": 73,
+          "label": "C#5",
+          "semitonesFromVocal": 8
+        },
+        "thirdDn": {
+          "midi": 61,
+          "label": "C#4",
+          "semitonesFromVocal": -4
+        }
+      }
+    },
+    {
+      "time": 21.0953,
+      "duration": 0.3483,
+      "vocalMidi": 62,
+      "vocalLabel": "D4",
+      "chord": "D",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 66,
+          "label": "F#4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 7
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -5
+        }
+      }
+    },
+    {
+      "time": 21.4494,
+      "duration": 0.1103,
+      "vocalMidi": 59,
+      "vocalLabel": "B3",
+      "chord": "D",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": 3
+        },
+        "fifthUp": {
+          "midi": 66,
+          "label": "F#4",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 10
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -2
+        }
+      }
+    },
+    {
+      "time": 21.6526,
+      "duration": 0.2148,
+      "vocalMidi": 62,
+      "vocalLabel": "D4",
+      "chord": "D",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 66,
+          "label": "F#4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 7
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -5
+        }
+      }
+    },
+    {
+      "time": 22.1402,
+      "duration": 0.1277,
+      "vocalMidi": 64,
+      "vocalLabel": "E4",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 67,
+          "label": "G4",
+          "semitonesFromVocal": 3
+        },
+        "fifthUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 10
+        },
+        "thirdDn": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": -2
+        }
+      }
+    },
+    {
+      "time": 22.2854,
+      "duration": 0.4528,
+      "vocalMidi": 62,
+      "vocalLabel": "D4",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 67,
+          "label": "G4",
+          "semitonesFromVocal": 5
+        },
+        "fifthUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 9
+        },
+        "sixthUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 59,
+          "label": "B3",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 23.1619,
+      "duration": 0.4992,
+      "vocalMidi": 65,
+      "vocalLabel": "F4",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 6
+        },
+        "fifthUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 6
+        },
+        "sixthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 23.9398,
+      "duration": 0.267,
+      "vocalMidi": 62,
+      "vocalLabel": "D4",
+      "chord": "D",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 66,
+          "label": "F#4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 7
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -5
+        }
+      }
+    },
+    {
+      "time": 24.3113,
+      "duration": 0.1393,
+      "vocalMidi": 60,
+      "vocalLabel": "C4",
+      "chord": "D",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 66,
+          "label": "F#4",
+          "semitonesFromVocal": 6
+        },
+        "fifthUp": {
+          "midi": 66,
+          "label": "F#4",
+          "semitonesFromVocal": 6
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 24.4796,
+      "duration": 0.1103,
+      "vocalMidi": 62,
+      "vocalLabel": "D4",
+      "chord": "D",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 66,
+          "label": "F#4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 7
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -5
+        }
+      }
+    },
+    {
+      "time": 24.5957,
+      "duration": 0.1741,
+      "vocalMidi": 64,
+      "vocalLabel": "E4",
+      "chord": "D",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 5
+        },
+        "fifthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 5
+        },
+        "sixthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 10
+        },
+        "thirdDn": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": -2
+        }
+      }
+    },
+    {
+      "time": 25.8438,
+      "duration": 0.1277,
+      "vocalMidi": 59,
+      "vocalLabel": "B3",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": 3
+        },
+        "fifthUp": {
+          "midi": 67,
+          "label": "G4",
+          "semitonesFromVocal": 8
+        },
+        "sixthUp": {
+          "midi": 67,
+          "label": "G4",
+          "semitonesFromVocal": 8
+        },
+        "thirdDn": {
+          "midi": 55,
+          "label": "G3",
+          "semitonesFromVocal": -4
+        }
+      }
+    },
+    {
+      "time": 26.2037,
+      "duration": 0.1045,
+      "vocalMidi": 65,
+      "vocalLabel": "F4",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 6
+        },
+        "fifthUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 6
+        },
+        "sixthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 26.5985,
+      "duration": 0.3483,
+      "vocalMidi": 65,
+      "vocalLabel": "F4",
+      "chord": "D",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 9
+        },
+        "sixthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 27.5331,
+      "duration": 0.3251,
+      "vocalMidi": 62,
+      "vocalLabel": "D4",
+      "chord": "D",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 66,
+          "label": "F#4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 7
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -5
+        }
+      }
+    },
+    {
+      "time": 27.9452,
+      "duration": 0.1335,
+      "vocalMidi": 64,
+      "vocalLabel": "E4",
+      "chord": "Bm",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 66,
+          "label": "F#4",
+          "semitonesFromVocal": 2
+        },
+        "fifthUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 10
+        },
+        "thirdDn": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": -2
+        }
+      }
+    },
+    {
+      "time": 28.8334,
+      "duration": 0.2264,
+      "vocalMidi": 62,
+      "vocalLabel": "D4",
+      "chord": "Bm",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 66,
+          "label": "F#4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 9
+        },
+        "sixthUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 59,
+          "label": "B3",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 29.1991,
+      "duration": 0.2032,
+      "vocalMidi": 64,
+      "vocalLabel": "E4",
+      "chord": "Bm",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 66,
+          "label": "F#4",
+          "semitonesFromVocal": 2
+        },
+        "fifthUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 10
+        },
+        "thirdDn": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": -2
+        }
+      }
+    },
+    {
+      "time": 29.5764,
+      "duration": 0.18,
+      "vocalMidi": 64,
+      "vocalLabel": "E4",
+      "chord": "Bm",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 66,
+          "label": "F#4",
+          "semitonesFromVocal": 2
+        },
+        "fifthUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 10
+        },
+        "thirdDn": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": -2
+        }
+      }
+    },
+    {
+      "time": 29.977,
+      "duration": 0.2612,
+      "vocalMidi": 64,
+      "vocalLabel": "E4",
+      "chord": "Bm",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 66,
+          "label": "F#4",
+          "semitonesFromVocal": 2
+        },
+        "fifthUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 10
+        },
+        "thirdDn": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": -2
+        }
+      }
+    },
+    {
+      "time": 30.3311,
+      "duration": 0.209,
+      "vocalMidi": 59,
+      "vocalLabel": "B3",
+      "chord": "Bm",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": 3
+        },
+        "fifthUp": {
+          "midi": 66,
+          "label": "F#4",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 66,
+          "label": "F#4",
+          "semitonesFromVocal": 7
+        },
+        "thirdDn": {
+          "midi": 54,
+          "label": "F#3",
+          "semitonesFromVocal": -5
+        }
+      }
+    },
+    {
+      "time": 30.5517,
+      "duration": 0.2148,
+      "vocalMidi": 57,
+      "vocalLabel": "A3",
+      "chord": "Bm",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": 5
+        },
+        "fifthUp": {
+          "midi": 66,
+          "label": "F#4",
+          "semitonesFromVocal": 9
+        },
+        "sixthUp": {
+          "midi": 66,
+          "label": "F#4",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 54,
+          "label": "F#3",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 31.672,
+      "duration": 0.1103,
+      "vocalMidi": 61,
+      "vocalLabel": "C#4",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 3
+        },
+        "fifthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 8
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 8
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -4
+        }
+      }
+    },
+    {
+      "time": 31.8113,
+      "duration": 0.1161,
+      "vocalMidi": 57,
+      "vocalLabel": "A3",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 61,
+          "label": "C#4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 7
+        },
+        "thirdDn": {
+          "midi": 52,
+          "label": "E3",
+          "semitonesFromVocal": -5
+        }
+      }
+    },
+    {
+      "time": 32.0377,
+      "duration": 0.238,
+      "vocalMidi": 60,
+      "vocalLabel": "C4",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 9
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 32.2815,
+      "duration": 0.1219,
+      "vocalMidi": 61,
+      "vocalLabel": "C#4",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 3
+        },
+        "fifthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 8
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 8
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -4
+        }
+      }
+    },
+    {
+      "time": 32.4093,
+      "duration": 0.4238,
+      "vocalMidi": 64,
+      "vocalLabel": "E4",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 5
+        },
+        "fifthUp": {
+          "midi": 73,
+          "label": "C#5",
+          "semitonesFromVocal": 9
+        },
+        "sixthUp": {
+          "midi": 73,
+          "label": "C#5",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 61,
+          "label": "C#4",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 32.8388,
+      "duration": 0.1045,
+      "vocalMidi": 67,
+      "vocalLabel": "G4",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 73,
+          "label": "C#5",
+          "semitonesFromVocal": 6
+        },
+        "fifthUp": {
+          "midi": 73,
+          "label": "C#5",
+          "semitonesFromVocal": 6
+        },
+        "sixthUp": {
+          "midi": 76,
+          "label": "E5",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 33.28,
+      "duration": 0.1451,
+      "vocalMidi": 63,
+      "vocalLabel": "D#4",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 6
+        },
+        "fifthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 6
+        },
+        "sixthUp": {
+          "midi": 73,
+          "label": "C#5",
+          "semitonesFromVocal": 10
+        },
+        "thirdDn": {
+          "midi": 61,
+          "label": "C#4",
+          "semitonesFromVocal": -2
+        }
+      }
+    },
+    {
+      "time": 34.6558,
+      "duration": 0.1451,
+      "vocalMidi": 64,
+      "vocalLabel": "E4",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 5
+        },
+        "fifthUp": {
+          "midi": 73,
+          "label": "C#5",
+          "semitonesFromVocal": 9
+        },
+        "sixthUp": {
+          "midi": 73,
+          "label": "C#5",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 61,
+          "label": "C#4",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 34.8067,
+      "duration": 0.1219,
+      "vocalMidi": 62,
+      "vocalLabel": "D4",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 2
+        },
+        "fifthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 73,
+          "label": "C#5",
+          "semitonesFromVocal": 11
+        },
+        "thirdDn": {
+          "midi": 61,
+          "label": "C#4",
+          "semitonesFromVocal": -1
+        }
+      }
+    },
+    {
+      "time": 35.0331,
+      "duration": 0.6037,
+      "vocalMidi": 64,
+      "vocalLabel": "E4",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 5
+        },
+        "fifthUp": {
+          "midi": 73,
+          "label": "C#5",
+          "semitonesFromVocal": 9
+        },
+        "sixthUp": {
+          "midi": 73,
+          "label": "C#5",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 61,
+          "label": "C#4",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 35.6426,
+      "duration": 0.1335,
+      "vocalMidi": 66,
+      "vocalLabel": "F#4",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 3
+        },
+        "fifthUp": {
+          "midi": 73,
+          "label": "C#5",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 76,
+          "label": "E5",
+          "semitonesFromVocal": 10
+        },
+        "thirdDn": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": -2
+        }
+      }
+    },
+    {
+      "time": 36.1535,
+      "duration": 0.2322,
+      "vocalMidi": 58,
+      "vocalLabel": "A#3",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 61,
+          "label": "C#4",
+          "semitonesFromVocal": 3
+        },
+        "fifthUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 6
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 11
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -1
+        }
+      }
+    },
+    {
+      "time": 36.4553,
+      "duration": 0.267,
+      "vocalMidi": 60,
+      "vocalLabel": "C4",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 9
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 36.7282,
+      "duration": 0.952,
+      "vocalMidi": 61,
+      "vocalLabel": "C#4",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 3
+        },
+        "fifthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 8
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 8
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -4
+        }
+      }
+    },
+    {
+      "time": 37.8311,
+      "duration": 0.1161,
+      "vocalMidi": 51,
+      "vocalLabel": "D#3",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": 6
+        },
+        "fifthUp": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": 6
+        },
+        "sixthUp": {
+          "midi": 61,
+          "label": "C#4",
+          "semitonesFromVocal": 10
+        },
+        "thirdDn": {
+          "midi": 49,
+          "label": "C#3",
+          "semitonesFromVocal": -2
+        }
+      }
+    },
+    {
+      "time": 38.9747,
+      "duration": 0.1219,
+      "vocalMidi": 48,
+      "vocalLabel": "C3",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 52,
+          "label": "E3",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": 9
+        },
+        "sixthUp": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 45,
+          "label": "A2",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 40.0428,
+      "duration": 0.3193,
+      "vocalMidi": 52,
+      "vocalLabel": "E3",
+      "chord": "A7",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": 5
+        },
+        "fifthUp": {
+          "midi": 61,
+          "label": "C#4",
+          "semitonesFromVocal": 9
+        },
+        "sixthUp": {
+          "midi": 61,
+          "label": "C#4",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 49,
+          "label": "C#3",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 40.9658,
+      "duration": 0.1683,
+      "vocalMidi": 61,
+      "vocalLabel": "C#4",
+      "chord": "A7",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 3
+        },
+        "fifthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 8
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 8
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -4
+        }
+      }
+    },
+    {
+      "time": 41.1632,
+      "duration": 0.5979,
+      "vocalMidi": 61,
+      "vocalLabel": "C#4",
+      "chord": "A7",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 3
+        },
+        "fifthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 8
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 8
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -4
+        }
+      }
+    },
+    {
+      "time": 41.8366,
+      "duration": 0.4992,
+      "vocalMidi": 61,
+      "vocalLabel": "C#4",
+      "chord": "A7",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 3
+        },
+        "fifthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 8
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 8
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -4
+        }
+      }
+    },
+    {
+      "time": 42.7712,
+      "duration": 0.685,
+      "vocalMidi": 57,
+      "vocalLabel": "A3",
+      "chord": "A7",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 61,
+          "label": "C#4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 67,
+          "label": "G4",
+          "semitonesFromVocal": 10
+        },
+        "thirdDn": {
+          "midi": 55,
+          "label": "G3",
+          "semitonesFromVocal": -2
+        }
+      }
+    },
+    {
+      "time": 43.462,
+      "duration": 0.4644,
+      "vocalMidi": 57,
+      "vocalLabel": "A3",
+      "chord": "Ebdim",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 63,
+          "label": "D#4",
+          "semitonesFromVocal": 6
+        },
+        "fifthUp": {
+          "midi": 63,
+          "label": "D#4",
+          "semitonesFromVocal": 6
+        },
+        "sixthUp": {
+          "midi": 66,
+          "label": "F#4",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 54,
+          "label": "F#3",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 43.9322,
+      "duration": 0.2961,
+      "vocalMidi": 58,
+      "vocalLabel": "A#3",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 61,
+          "label": "C#4",
+          "semitonesFromVocal": 3
+        },
+        "fifthUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 6
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 11
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -1
+        }
+      }
+    },
+    {
+      "time": 44.234,
+      "duration": 0.1974,
+      "vocalMidi": 59,
+      "vocalLabel": "B3",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 5
+        },
+        "fifthUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 5
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 10
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -2
+        }
+      }
+    },
+    {
+      "time": 44.5068,
+      "duration": 0.3947,
+      "vocalMidi": 50,
+      "vocalLabel": "D3",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 52,
+          "label": "E3",
+          "semitonesFromVocal": 2
+        },
+        "fifthUp": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 61,
+          "label": "C#4",
+          "semitonesFromVocal": 11
+        },
+        "thirdDn": {
+          "midi": 49,
+          "label": "C#3",
+          "semitonesFromVocal": -1
+        }
+      }
+    },
+    {
+      "time": 44.9422,
+      "duration": 0.2148,
+      "vocalMidi": 64,
+      "vocalLabel": "E4",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 5
+        },
+        "fifthUp": {
+          "midi": 73,
+          "label": "C#5",
+          "semitonesFromVocal": 9
+        },
+        "sixthUp": {
+          "midi": 73,
+          "label": "C#5",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 61,
+          "label": "C#4",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 45.1628,
+      "duration": 0.3773,
+      "vocalMidi": 66,
+      "vocalLabel": "F#4",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 3
+        },
+        "fifthUp": {
+          "midi": 73,
+          "label": "C#5",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 76,
+          "label": "E5",
+          "semitonesFromVocal": 10
+        },
+        "thirdDn": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": -2
+        }
+      }
+    },
+    {
+      "time": 45.7143,
+      "duration": 0.1625,
+      "vocalMidi": 69,
+      "vocalLabel": "A4",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 73,
+          "label": "C#5",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 76,
+          "label": "E5",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 76,
+          "label": "E5",
+          "semitonesFromVocal": 7
+        },
+        "thirdDn": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": -5
+        }
+      }
+    },
+    {
+      "time": 46.2135,
+      "duration": 0.1916,
+      "vocalMidi": 62,
+      "vocalLabel": "D4",
+      "chord": "D",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 66,
+          "label": "F#4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 7
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -5
+        }
+      }
+    },
+    {
+      "time": 47.1713,
+      "duration": 0.2496,
+      "vocalMidi": 67,
+      "vocalLabel": "G4",
+      "chord": "D",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 2
+        },
+        "fifthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 78,
+          "label": "F#5",
+          "semitonesFromVocal": 11
+        },
+        "thirdDn": {
+          "midi": 66,
+          "label": "F#4",
+          "semitonesFromVocal": -1
+        }
+      }
+    },
+    {
+      "time": 47.6067,
+      "duration": 0.209,
+      "vocalMidi": 67,
+      "vocalLabel": "G4",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 7
+        },
+        "thirdDn": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": -5
+        }
+      }
+    },
+    {
+      "time": 47.9608,
+      "duration": 0.2438,
+      "vocalMidi": 67,
+      "vocalLabel": "G4",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 7
+        },
+        "thirdDn": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": -5
+        }
+      }
+    },
+    {
+      "time": 48.3614,
+      "duration": 0.209,
+      "vocalMidi": 55,
+      "vocalLabel": "G3",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 59,
+          "label": "B3",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": 7
+        },
+        "thirdDn": {
+          "midi": 50,
+          "label": "D3",
+          "semitonesFromVocal": -5
+        }
+      }
+    },
+    {
+      "time": 48.7329,
+      "duration": 0.1916,
+      "vocalMidi": 57,
+      "vocalLabel": "A3",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": 5
+        },
+        "fifthUp": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": 5
+        },
+        "sixthUp": {
+          "midi": 67,
+          "label": "G4",
+          "semitonesFromVocal": 10
+        },
+        "thirdDn": {
+          "midi": 55,
+          "label": "G3",
+          "semitonesFromVocal": -2
+        }
+      }
+    },
+    {
+      "time": 49.0928,
+      "duration": 0.1858,
+      "vocalMidi": 57,
+      "vocalLabel": "A3",
+      "chord": "D",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": 5
+        },
+        "fifthUp": {
+          "midi": 66,
+          "label": "F#4",
+          "semitonesFromVocal": 9
+        },
+        "sixthUp": {
+          "midi": 66,
+          "label": "F#4",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 54,
+          "label": "F#3",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 49.2844,
+      "duration": 0.2206,
+      "vocalMidi": 55,
+      "vocalLabel": "G3",
+      "chord": "D",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": 2
+        },
+        "fifthUp": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 66,
+          "label": "F#4",
+          "semitonesFromVocal": 11
+        },
+        "thirdDn": {
+          "midi": 54,
+          "label": "F#3",
+          "semitonesFromVocal": -1
+        }
+      }
+    },
+    {
+      "time": 52.1578,
+      "duration": 0.2148,
+      "vocalMidi": 55,
+      "vocalLabel": "G3",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 59,
+          "label": "B3",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": 7
+        },
+        "thirdDn": {
+          "midi": 50,
+          "label": "D3",
+          "semitonesFromVocal": -5
+        }
+      }
+    },
+    {
+      "time": 52.5061,
+      "duration": 0.1683,
+      "vocalMidi": 67,
+      "vocalLabel": "G4",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 7
+        },
+        "thirdDn": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": -5
+        }
+      }
+    },
+    {
+      "time": 52.8893,
+      "duration": 0.1916,
+      "vocalMidi": 66,
+      "vocalLabel": "F#4",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 5
+        },
+        "fifthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 8
+        },
+        "sixthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 8
+        },
+        "thirdDn": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": -4
+        }
+      }
+    },
+    {
+      "time": 53.0866,
+      "duration": 0.1916,
+      "vocalMidi": 67,
+      "vocalLabel": "G4",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 7
+        },
+        "thirdDn": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": -5
+        }
+      }
+    },
+    {
+      "time": 55.7395,
+      "duration": 0.1103,
+      "vocalMidi": 64,
+      "vocalLabel": "E4",
+      "chord": "D",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 5
+        },
+        "fifthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 5
+        },
+        "sixthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 10
+        },
+        "thirdDn": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": -2
+        }
+      }
+    },
+    {
+      "time": 55.8846,
+      "duration": 0.1509,
+      "vocalMidi": 62,
+      "vocalLabel": "D4",
+      "chord": "D",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 66,
+          "label": "F#4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 7
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -5
+        }
+      }
+    },
+    {
+      "time": 56.2968,
+      "duration": 0.3251,
+      "vocalMidi": 62,
+      "vocalLabel": "D4",
+      "chord": "D",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 66,
+          "label": "F#4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 7
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -5
+        }
+      }
+    },
+    {
+      "time": 56.6683,
+      "duration": 0.1161,
+      "vocalMidi": 62,
+      "vocalLabel": "D4",
+      "chord": "D",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 66,
+          "label": "F#4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 7
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -5
+        }
+      }
+    },
+    {
+      "time": 56.8076,
+      "duration": 0.2902,
+      "vocalMidi": 65,
+      "vocalLabel": "F4",
+      "chord": "D",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 9
+        },
+        "sixthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 59.2399,
+      "duration": 0.3599,
+      "vocalMidi": 67,
+      "vocalLabel": "G4",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 7
+        },
+        "thirdDn": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": -5
+        }
+      }
+    },
+    {
+      "time": 59.6463,
+      "duration": 0.1509,
+      "vocalMidi": 65,
+      "vocalLabel": "F4",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 6
+        },
+        "fifthUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 6
+        },
+        "sixthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 59.8378,
+      "duration": 0.1974,
+      "vocalMidi": 67,
+      "vocalLabel": "G4",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 7
+        },
+        "thirdDn": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": -5
+        }
+      }
+    },
+    {
+      "time": 61.4226,
+      "duration": 0.2844,
+      "vocalMidi": 58,
+      "vocalLabel": "A#3",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 61,
+          "label": "C#4",
+          "semitonesFromVocal": 3
+        },
+        "fifthUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 6
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 11
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -1
+        }
+      }
+    },
+    {
+      "time": 61.7128,
+      "duration": 0.1683,
+      "vocalMidi": 57,
+      "vocalLabel": "A3",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 61,
+          "label": "C#4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 7
+        },
+        "thirdDn": {
+          "midi": 52,
+          "label": "E3",
+          "semitonesFromVocal": -5
+        }
+      }
+    },
+    {
+      "time": 61.8928,
+      "duration": 0.1509,
+      "vocalMidi": 59,
+      "vocalLabel": "B3",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 5
+        },
+        "fifthUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 5
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 10
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -2
+        }
+      }
+    },
+    {
+      "time": 62.2817,
+      "duration": 0.2554,
+      "vocalMidi": 60,
+      "vocalLabel": "C4",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 9
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 62.6416,
+      "duration": 0.2496,
+      "vocalMidi": 59,
+      "vocalLabel": "B3",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 5
+        },
+        "fifthUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 5
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 10
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -2
+        }
+      }
+    },
+    {
+      "time": 63.0306,
+      "duration": 0.3425,
+      "vocalMidi": 60,
+      "vocalLabel": "C4",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 9
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 63.4021,
+      "duration": 0.1451,
+      "vocalMidi": 59,
+      "vocalLabel": "B3",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 5
+        },
+        "fifthUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 5
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 10
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -2
+        }
+      }
+    },
+    {
+      "time": 63.582,
+      "duration": 0.1683,
+      "vocalMidi": 58,
+      "vocalLabel": "A#3",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 61,
+          "label": "C#4",
+          "semitonesFromVocal": 3
+        },
+        "fifthUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 6
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 11
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -1
+        }
+      }
+    },
+    {
+      "time": 64.9346,
+      "duration": 0.1045,
+      "vocalMidi": 59,
+      "vocalLabel": "B3",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 5
+        },
+        "fifthUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 5
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 10
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -2
+        }
+      }
+    },
+    {
+      "time": 65.2945,
+      "duration": 0.1858,
+      "vocalMidi": 60,
+      "vocalLabel": "C4",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 9
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 65.9853,
+      "duration": 0.209,
+      "vocalMidi": 62,
+      "vocalLabel": "D4",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 2
+        },
+        "fifthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 73,
+          "label": "C#5",
+          "semitonesFromVocal": 11
+        },
+        "thirdDn": {
+          "midi": 61,
+          "label": "C#4",
+          "semitonesFromVocal": -1
+        }
+      }
+    },
+    {
+      "time": 66.3975,
+      "duration": 0.1858,
+      "vocalMidi": 59,
+      "vocalLabel": "B3",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 5
+        },
+        "fifthUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 5
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 10
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -2
+        }
+      }
+    },
+    {
+      "time": 75.3023,
+      "duration": 0.1916,
+      "vocalMidi": 55,
+      "vocalLabel": "G3",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 61,
+          "label": "C#4",
+          "semitonesFromVocal": 6
+        },
+        "fifthUp": {
+          "midi": 61,
+          "label": "C#4",
+          "semitonesFromVocal": 6
+        },
+        "sixthUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 52,
+          "label": "E3",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 77.2992,
+      "duration": 0.1916,
+      "vocalMidi": 55,
+      "vocalLabel": "G3",
+      "chord": "D",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": 2
+        },
+        "fifthUp": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 66,
+          "label": "F#4",
+          "semitonesFromVocal": 11
+        },
+        "thirdDn": {
+          "midi": 54,
+          "label": "F#3",
+          "semitonesFromVocal": -1
+        }
+      }
+    },
+    {
+      "time": 78.4312,
+      "duration": 0.2322,
+      "vocalMidi": 55,
+      "vocalLabel": "G3",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 59,
+          "label": "B3",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": 7
+        },
+        "thirdDn": {
+          "midi": 50,
+          "label": "D3",
+          "semitonesFromVocal": -5
+        }
+      }
+    },
+    {
+      "time": 78.8782,
+      "duration": 0.1219,
+      "vocalMidi": 57,
+      "vocalLabel": "A3",
+      "chord": "D",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": 5
+        },
+        "fifthUp": {
+          "midi": 66,
+          "label": "F#4",
+          "semitonesFromVocal": 9
+        },
+        "sixthUp": {
+          "midi": 66,
+          "label": "F#4",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 54,
+          "label": "F#3",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 79.2497,
+      "duration": 0.1974,
+      "vocalMidi": 56,
+      "vocalLabel": "G#3",
+      "chord": "D",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": 6
+        },
+        "fifthUp": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": 6
+        },
+        "sixthUp": {
+          "midi": 66,
+          "label": "F#4",
+          "semitonesFromVocal": 10
+        },
+        "thirdDn": {
+          "midi": 54,
+          "label": "F#3",
+          "semitonesFromVocal": -2
+        }
+      }
+    },
+    {
+      "time": 79.4529,
+      "duration": 0.1219,
+      "vocalMidi": 53,
+      "vocalLabel": "F3",
+      "chord": "D",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": 9
+        },
+        "sixthUp": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 50,
+          "label": "D3",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 85.7687,
+      "duration": 0.1161,
+      "vocalMidi": 65,
+      "vocalLabel": "F4",
+      "chord": "D",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 9
+        },
+        "sixthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 85.9371,
+      "duration": 0.1393,
+      "vocalMidi": 62,
+      "vocalLabel": "D4",
+      "chord": "D",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 66,
+          "label": "F#4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 7
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -5
+        }
+      }
+    },
+    {
+      "time": 86.3318,
+      "duration": 0.3541,
+      "vocalMidi": 63,
+      "vocalLabel": "D#4",
+      "chord": "D",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 66,
+          "label": "F#4",
+          "semitonesFromVocal": 3
+        },
+        "fifthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 6
+        },
+        "sixthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 11
+        },
+        "thirdDn": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": -1
+        }
+      }
+    },
+    {
+      "time": 86.7498,
+      "duration": 0.3193,
+      "vocalMidi": 65,
+      "vocalLabel": "F4",
+      "chord": "D",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 9
+        },
+        "sixthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 87.098,
+      "duration": 0.1277,
+      "vocalMidi": 62,
+      "vocalLabel": "D4",
+      "chord": "D",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 66,
+          "label": "F#4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 7
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -5
+        }
+      }
+    },
+    {
+      "time": 89.2807,
+      "duration": 0.2264,
+      "vocalMidi": 67,
+      "vocalLabel": "G4",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 7
+        },
+        "thirdDn": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": -5
+        }
+      }
+    },
+    {
+      "time": 89.7219,
+      "duration": 0.1277,
+      "vocalMidi": 66,
+      "vocalLabel": "F#4",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 5
+        },
+        "fifthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 8
+        },
+        "sixthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 8
+        },
+        "thirdDn": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": -4
+        }
+      }
+    },
+    {
+      "time": 89.9657,
+      "duration": 0.1974,
+      "vocalMidi": 67,
+      "vocalLabel": "G4",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 7
+        },
+        "thirdDn": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": -5
+        }
+      }
+    },
+    {
+      "time": 91.98,
+      "duration": 0.1916,
+      "vocalMidi": 59,
+      "vocalLabel": "B3",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 5
+        },
+        "fifthUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 5
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 10
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -2
+        }
+      }
+    },
+    {
+      "time": 92.3806,
+      "duration": 0.2496,
+      "vocalMidi": 60,
+      "vocalLabel": "C4",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 9
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 92.7579,
+      "duration": 0.1393,
+      "vocalMidi": 60,
+      "vocalLabel": "C4",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 9
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 93.112,
+      "duration": 0.2961,
+      "vocalMidi": 59,
+      "vocalLabel": "B3",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 5
+        },
+        "fifthUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 5
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 10
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -2
+        }
+      }
+    },
+    {
+      "time": 93.501,
+      "duration": 0.1451,
+      "vocalMidi": 59,
+      "vocalLabel": "B3",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 5
+        },
+        "fifthUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 5
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 10
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -2
+        }
+      }
+    },
+    {
+      "time": 93.6751,
+      "duration": 0.1741,
+      "vocalMidi": 57,
+      "vocalLabel": "A3",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 61,
+          "label": "C#4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 7
+        },
+        "thirdDn": {
+          "midi": 52,
+          "label": "E3",
+          "semitonesFromVocal": -5
+        }
+      }
+    },
+    {
+      "time": 94.8361,
+      "duration": 0.1277,
+      "vocalMidi": 57,
+      "vocalLabel": "A3",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 61,
+          "label": "C#4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 7
+        },
+        "thirdDn": {
+          "midi": 52,
+          "label": "E3",
+          "semitonesFromVocal": -5
+        }
+      }
+    },
+    {
+      "time": 95.0102,
+      "duration": 0.1509,
+      "vocalMidi": 59,
+      "vocalLabel": "B3",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 5
+        },
+        "fifthUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 5
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 10
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -2
+        }
+      }
+    },
+    {
+      "time": 95.3527,
+      "duration": 0.1567,
+      "vocalMidi": 62,
+      "vocalLabel": "D4",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 2
+        },
+        "fifthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 73,
+          "label": "C#5",
+          "semitonesFromVocal": 11
+        },
+        "thirdDn": {
+          "midi": 61,
+          "label": "C#4",
+          "semitonesFromVocal": -1
+        }
+      }
+    },
+    {
+      "time": 96.1306,
+      "duration": 0.1045,
+      "vocalMidi": 60,
+      "vocalLabel": "C4",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 9
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 96.2873,
+      "duration": 0.1045,
+      "vocalMidi": 60,
+      "vocalLabel": "C4",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 9
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 100.2696,
+      "duration": 0.743,
+      "vocalMidi": 67,
+      "vocalLabel": "G4",
+      "chord": "A7",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 73,
+          "label": "C#5",
+          "semitonesFromVocal": 6
+        },
+        "fifthUp": {
+          "midi": 73,
+          "label": "C#5",
+          "semitonesFromVocal": 6
+        },
+        "sixthUp": {
+          "midi": 76,
+          "label": "E5",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 102.1736,
+      "duration": 0.1625,
+      "vocalMidi": 54,
+      "vocalLabel": "F#3",
+      "chord": "A7",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": 3
+        },
+        "fifthUp": {
+          "midi": 61,
+          "label": "C#4",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 10
+        },
+        "thirdDn": {
+          "midi": 52,
+          "label": "E3",
+          "semitonesFromVocal": -2
+        }
+      }
+    },
+    {
+      "time": 103.3868,
+      "duration": 0.6211,
+      "vocalMidi": 57,
+      "vocalLabel": "A3",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 61,
+          "label": "C#4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 7
+        },
+        "thirdDn": {
+          "midi": 52,
+          "label": "E3",
+          "semitonesFromVocal": -5
+        }
+      }
+    },
+    {
+      "time": 104.0138,
+      "duration": 0.4005,
+      "vocalMidi": 59,
+      "vocalLabel": "B3",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 5
+        },
+        "fifthUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 5
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 10
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -2
+        }
+      }
+    },
+    {
+      "time": 104.4201,
+      "duration": 0.3367,
+      "vocalMidi": 61,
+      "vocalLabel": "C#4",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 3
+        },
+        "fifthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 8
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 8
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -4
+        }
+      }
+    },
+    {
+      "time": 104.7626,
+      "duration": 0.1509,
+      "vocalMidi": 63,
+      "vocalLabel": "D#4",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 6
+        },
+        "fifthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 6
+        },
+        "sixthUp": {
+          "midi": 73,
+          "label": "C#5",
+          "semitonesFromVocal": 10
+        },
+        "thirdDn": {
+          "midi": 61,
+          "label": "C#4",
+          "semitonesFromVocal": -2
+        }
+      }
+    },
+    {
+      "time": 104.9194,
+      "duration": 0.209,
+      "vocalMidi": 65,
+      "vocalLabel": "F4",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 73,
+          "label": "C#5",
+          "semitonesFromVocal": 8
+        },
+        "sixthUp": {
+          "midi": 73,
+          "label": "C#5",
+          "semitonesFromVocal": 8
+        },
+        "thirdDn": {
+          "midi": 61,
+          "label": "C#4",
+          "semitonesFromVocal": -4
+        }
+      }
+    },
+    {
+      "time": 105.1341,
+      "duration": 0.3947,
+      "vocalMidi": 67,
+      "vocalLabel": "G4",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 73,
+          "label": "C#5",
+          "semitonesFromVocal": 6
+        },
+        "fifthUp": {
+          "midi": 73,
+          "label": "C#5",
+          "semitonesFromVocal": 6
+        },
+        "sixthUp": {
+          "midi": 76,
+          "label": "E5",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 105.5463,
+      "duration": 0.1567,
+      "vocalMidi": 68,
+      "vocalLabel": "G#4",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 73,
+          "label": "C#5",
+          "semitonesFromVocal": 5
+        },
+        "fifthUp": {
+          "midi": 76,
+          "label": "E5",
+          "semitonesFromVocal": 8
+        },
+        "sixthUp": {
+          "midi": 76,
+          "label": "E5",
+          "semitonesFromVocal": 8
+        },
+        "thirdDn": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": -4
+        }
+      }
+    },
+    {
+      "time": 105.7669,
+      "duration": 0.3831,
+      "vocalMidi": 65,
+      "vocalLabel": "F4",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 73,
+          "label": "C#5",
+          "semitonesFromVocal": 8
+        },
+        "sixthUp": {
+          "midi": 73,
+          "label": "C#5",
+          "semitonesFromVocal": 8
+        },
+        "thirdDn": {
+          "midi": 61,
+          "label": "C#4",
+          "semitonesFromVocal": -4
+        }
+      }
+    },
+    {
+      "time": 108.3733,
+      "duration": 0.3135,
+      "vocalMidi": 65,
+      "vocalLabel": "F4",
+      "chord": "G7",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 6
+        },
+        "fifthUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 6
+        },
+        "sixthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 108.7681,
+      "duration": 0.2264,
+      "vocalMidi": 65,
+      "vocalLabel": "F4",
+      "chord": "G7",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 6
+        },
+        "fifthUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 6
+        },
+        "sixthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 109.0467,
+      "duration": 0.1335,
+      "vocalMidi": 61,
+      "vocalLabel": "C#4",
+      "chord": "D",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 66,
+          "label": "F#4",
+          "semitonesFromVocal": 5
+        },
+        "fifthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 8
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 8
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -4
+        }
+      }
+    },
+    {
+      "time": 109.2383,
+      "duration": 0.2264,
+      "vocalMidi": 65,
+      "vocalLabel": "F4",
+      "chord": "D",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 9
+        },
+        "sixthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 111.5429,
+      "duration": 0.1509,
+      "vocalMidi": 69,
+      "vocalLabel": "A4",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 5
+        },
+        "fifthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 5
+        },
+        "sixthUp": {
+          "midi": 79,
+          "label": "G5",
+          "semitonesFromVocal": 10
+        },
+        "thirdDn": {
+          "midi": 67,
+          "label": "G4",
+          "semitonesFromVocal": -2
+        }
+      }
+    },
+    {
+      "time": 111.7576,
+      "duration": 0.1741,
+      "vocalMidi": 66,
+      "vocalLabel": "F#4",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 5
+        },
+        "fifthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 8
+        },
+        "sixthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 8
+        },
+        "thirdDn": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": -4
+        }
+      }
+    },
+    {
+      "time": 112.0943,
+      "duration": 0.1045,
+      "vocalMidi": 62,
+      "vocalLabel": "D4",
+      "chord": "D",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 66,
+          "label": "F#4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 7
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -5
+        }
+      }
+    },
+    {
+      "time": 112.2046,
+      "duration": 0.1161,
+      "vocalMidi": 59,
+      "vocalLabel": "B3",
+      "chord": "D",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": 3
+        },
+        "fifthUp": {
+          "midi": 66,
+          "label": "F#4",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 10
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -2
+        }
+      }
+    },
+    {
+      "time": 113.7894,
+      "duration": 0.3947,
+      "vocalMidi": 65,
+      "vocalLabel": "F4",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 6
+        },
+        "fifthUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 6
+        },
+        "sixthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 114.1899,
+      "duration": 0.1393,
+      "vocalMidi": 62,
+      "vocalLabel": "D4",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 67,
+          "label": "G4",
+          "semitonesFromVocal": 5
+        },
+        "fifthUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 9
+        },
+        "sixthUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 59,
+          "label": "B3",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 114.544,
+      "duration": 0.1683,
+      "vocalMidi": 65,
+      "vocalLabel": "F4",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 6
+        },
+        "fifthUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 6
+        },
+        "sixthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 114.7298,
+      "duration": 0.2264,
+      "vocalMidi": 65,
+      "vocalLabel": "F4",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 6
+        },
+        "fifthUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 6
+        },
+        "sixthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 115.0839,
+      "duration": 0.2032,
+      "vocalMidi": 63,
+      "vocalLabel": "D#4",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 67,
+          "label": "G4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 8
+        },
+        "sixthUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 8
+        },
+        "thirdDn": {
+          "midi": 59,
+          "label": "B3",
+          "semitonesFromVocal": -4
+        }
+      }
+    },
+    {
+      "time": 117.5336,
+      "duration": 0.1625,
+      "vocalMidi": 65,
+      "vocalLabel": "F4",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 6
+        },
+        "fifthUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 6
+        },
+        "sixthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 122.8336,
+      "duration": 0.3019,
+      "vocalMidi": 74,
+      "vocalLabel": "D5",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 79,
+          "label": "G5",
+          "semitonesFromVocal": 5
+        },
+        "fifthUp": {
+          "midi": 83,
+          "label": "B5",
+          "semitonesFromVocal": 9
+        },
+        "sixthUp": {
+          "midi": 83,
+          "label": "B5",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 123.2631,
+      "duration": 0.1335,
+      "vocalMidi": 60,
+      "vocalLabel": "C4",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": 2
+        },
+        "fifthUp": {
+          "midi": 67,
+          "label": "G4",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 11
+        },
+        "thirdDn": {
+          "midi": 59,
+          "label": "B3",
+          "semitonesFromVocal": -1
+        }
+      }
+    },
+    {
+      "time": 123.5766,
+      "duration": 0.1161,
+      "vocalMidi": 64,
+      "vocalLabel": "E4",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 67,
+          "label": "G4",
+          "semitonesFromVocal": 3
+        },
+        "fifthUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 10
+        },
+        "thirdDn": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": -2
+        }
+      }
+    },
+    {
+      "time": 123.9423,
+      "duration": 0.1567,
+      "vocalMidi": 66,
+      "vocalLabel": "F#4",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 5
+        },
+        "fifthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 8
+        },
+        "sixthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 8
+        },
+        "thirdDn": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": -4
+        }
+      }
+    },
+    {
+      "time": 124.1513,
+      "duration": 0.1393,
+      "vocalMidi": 53,
+      "vocalLabel": "F3",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 59,
+          "label": "B3",
+          "semitonesFromVocal": 6
+        },
+        "fifthUp": {
+          "midi": 59,
+          "label": "B3",
+          "semitonesFromVocal": 6
+        },
+        "sixthUp": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 50,
+          "label": "D3",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 126.4327,
+      "duration": 0.1045,
+      "vocalMidi": 58,
+      "vocalLabel": "A#3",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 67,
+          "label": "G4",
+          "semitonesFromVocal": 9
+        },
+        "sixthUp": {
+          "midi": 67,
+          "label": "G4",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 55,
+          "label": "G3",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 126.5952,
+      "duration": 0.1625,
+      "vocalMidi": 62,
+      "vocalLabel": "D4",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 67,
+          "label": "G4",
+          "semitonesFromVocal": 5
+        },
+        "fifthUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 9
+        },
+        "sixthUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 59,
+          "label": "B3",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 126.9609,
+      "duration": 0.1045,
+      "vocalMidi": 58,
+      "vocalLabel": "A#3",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 67,
+          "label": "G4",
+          "semitonesFromVocal": 9
+        },
+        "sixthUp": {
+          "midi": 67,
+          "label": "G4",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 55,
+          "label": "G3",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 127.0712,
+      "duration": 0.1045,
+      "vocalMidi": 56,
+      "vocalLabel": "G#3",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 59,
+          "label": "B3",
+          "semitonesFromVocal": 3
+        },
+        "fifthUp": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": 6
+        },
+        "sixthUp": {
+          "midi": 67,
+          "label": "G4",
+          "semitonesFromVocal": 11
+        },
+        "thirdDn": {
+          "midi": 55,
+          "label": "G3",
+          "semitonesFromVocal": -1
+        }
+      }
+    },
+    {
+      "time": 129.0855,
+      "duration": 0.4005,
+      "vocalMidi": 68,
+      "vocalLabel": "G#4",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 3
+        },
+        "fifthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 6
+        },
+        "sixthUp": {
+          "midi": 79,
+          "label": "G5",
+          "semitonesFromVocal": 11
+        },
+        "thirdDn": {
+          "midi": 67,
+          "label": "G4",
+          "semitonesFromVocal": -1
+        }
+      }
+    },
+    {
+      "time": 129.608,
+      "duration": 0.1277,
+      "vocalMidi": 68,
+      "vocalLabel": "G#4",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 3
+        },
+        "fifthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 6
+        },
+        "sixthUp": {
+          "midi": 79,
+          "label": "G5",
+          "semitonesFromVocal": 11
+        },
+        "thirdDn": {
+          "midi": 67,
+          "label": "G4",
+          "semitonesFromVocal": -1
+        }
+      }
+    },
+    {
+      "time": 129.9621,
+      "duration": 0.2032,
+      "vocalMidi": 68,
+      "vocalLabel": "G#4",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 3
+        },
+        "fifthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 6
+        },
+        "sixthUp": {
+          "midi": 79,
+          "label": "G5",
+          "semitonesFromVocal": 11
+        },
+        "thirdDn": {
+          "midi": 67,
+          "label": "G4",
+          "semitonesFromVocal": -1
+        }
+      }
+    },
+    {
+      "time": 131.8603,
+      "duration": 0.6618,
+      "vocalMidi": 65,
+      "vocalLabel": "F4",
+      "chord": "D",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 9
+        },
+        "sixthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 132.6092,
+      "duration": 0.1335,
+      "vocalMidi": 64,
+      "vocalLabel": "E4",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 67,
+          "label": "G4",
+          "semitonesFromVocal": 3
+        },
+        "fifthUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 10
+        },
+        "thirdDn": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": -2
+        }
+      }
+    },
+    {
+      "time": 132.8181,
+      "duration": 0.1335,
+      "vocalMidi": 62,
+      "vocalLabel": "D4",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 67,
+          "label": "G4",
+          "semitonesFromVocal": 5
+        },
+        "fifthUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 9
+        },
+        "sixthUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 59,
+          "label": "B3",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 135.0589,
+      "duration": 0.2496,
+      "vocalMidi": 64,
+      "vocalLabel": "E4",
+      "chord": "G7",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 67,
+          "label": "G4",
+          "semitonesFromVocal": 3
+        },
+        "fifthUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 10
+        },
+        "thirdDn": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": -2
+        }
+      }
+    },
+    {
+      "time": 135.4014,
+      "duration": 0.1161,
+      "vocalMidi": 59,
+      "vocalLabel": "B3",
+      "chord": "G7",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": 3
+        },
+        "fifthUp": {
+          "midi": 67,
+          "label": "G4",
+          "semitonesFromVocal": 8
+        },
+        "sixthUp": {
+          "midi": 67,
+          "label": "G4",
+          "semitonesFromVocal": 8
+        },
+        "thirdDn": {
+          "midi": 55,
+          "label": "G3",
+          "semitonesFromVocal": -4
+        }
+      }
+    },
+    {
+      "time": 135.947,
+      "duration": 0.1045,
+      "vocalMidi": 63,
+      "vocalLabel": "D#4",
+      "chord": "G7",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 67,
+          "label": "G4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 8
+        },
+        "sixthUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 8
+        },
+        "thirdDn": {
+          "midi": 59,
+          "label": "B3",
+          "semitonesFromVocal": -4
+        }
+      }
+    },
+    {
+      "time": 137.6595,
+      "duration": 0.1625,
+      "vocalMidi": 59,
+      "vocalLabel": "B3",
+      "chord": "D",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": 3
+        },
+        "fifthUp": {
+          "midi": 66,
+          "label": "F#4",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 10
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -2
+        }
+      }
+    },
+    {
+      "time": 137.9265,
+      "duration": 0.1103,
+      "vocalMidi": 56,
+      "vocalLabel": "G#3",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 59,
+          "label": "B3",
+          "semitonesFromVocal": 3
+        },
+        "fifthUp": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": 6
+        },
+        "sixthUp": {
+          "midi": 67,
+          "label": "G4",
+          "semitonesFromVocal": 11
+        },
+        "thirdDn": {
+          "midi": 55,
+          "label": "G3",
+          "semitonesFromVocal": -1
+        }
+      }
+    },
+    {
+      "time": 138.8205,
+      "duration": 0.18,
+      "vocalMidi": 67,
+      "vocalLabel": "G4",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 7
+        },
+        "thirdDn": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": -5
+        }
+      }
+    },
+    {
+      "time": 142.1235,
+      "duration": 0.1683,
+      "vocalMidi": 68,
+      "vocalLabel": "G#4",
+      "chord": "D",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 6
+        },
+        "fifthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 6
+        },
+        "sixthUp": {
+          "midi": 78,
+          "label": "F#5",
+          "semitonesFromVocal": 10
+        },
+        "thirdDn": {
+          "midi": 66,
+          "label": "F#4",
+          "semitonesFromVocal": -2
+        }
+      }
+    },
+    {
+      "time": 142.3035,
+      "duration": 0.238,
+      "vocalMidi": 69,
+      "vocalLabel": "A4",
+      "chord": "D",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 5
+        },
+        "fifthUp": {
+          "midi": 78,
+          "label": "F#5",
+          "semitonesFromVocal": 9
+        },
+        "sixthUp": {
+          "midi": 78,
+          "label": "F#5",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 66,
+          "label": "F#4",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 142.5937,
+      "duration": 0.1219,
+      "vocalMidi": 68,
+      "vocalLabel": "G#4",
+      "chord": "D",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 6
+        },
+        "fifthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 6
+        },
+        "sixthUp": {
+          "midi": 78,
+          "label": "F#5",
+          "semitonesFromVocal": 10
+        },
+        "thirdDn": {
+          "midi": 66,
+          "label": "F#4",
+          "semitonesFromVocal": -2
+        }
+      }
+    },
+    {
+      "time": 144.103,
+      "duration": 0.1045,
+      "vocalMidi": 63,
+      "vocalLabel": "D#4",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 67,
+          "label": "G4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 8
+        },
+        "sixthUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 8
+        },
+        "thirdDn": {
+          "midi": 59,
+          "label": "B3",
+          "semitonesFromVocal": -4
+        }
+      }
+    },
+    {
+      "time": 144.254,
+      "duration": 0.1741,
+      "vocalMidi": 65,
+      "vocalLabel": "F4",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 6
+        },
+        "fifthUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 6
+        },
+        "sixthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 144.4397,
+      "duration": 0.1509,
+      "vocalMidi": 66,
+      "vocalLabel": "F#4",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 5
+        },
+        "fifthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 8
+        },
+        "sixthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 8
+        },
+        "thirdDn": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": -4
+        }
+      }
+    },
+    {
+      "time": 144.6893,
+      "duration": 0.1161,
+      "vocalMidi": 55,
+      "vocalLabel": "G3",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 59,
+          "label": "B3",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": 7
+        },
+        "thirdDn": {
+          "midi": 50,
+          "label": "D3",
+          "semitonesFromVocal": -5
+        }
+      }
+    },
+    {
+      "time": 146.7211,
+      "duration": 0.2844,
+      "vocalMidi": 71,
+      "vocalLabel": "B4",
+      "chord": "D",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 3
+        },
+        "fifthUp": {
+          "midi": 78,
+          "label": "F#5",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 81,
+          "label": "A5",
+          "semitonesFromVocal": 10
+        },
+        "thirdDn": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": -2
+        }
+      }
+    },
+    {
+      "time": 147.0113,
+      "duration": 0.1277,
+      "vocalMidi": 62,
+      "vocalLabel": "D4",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 67,
+          "label": "G4",
+          "semitonesFromVocal": 5
+        },
+        "fifthUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 9
+        },
+        "sixthUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 59,
+          "label": "B3",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 147.2726,
+      "duration": 0.209,
+      "vocalMidi": 65,
+      "vocalLabel": "F4",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 6
+        },
+        "fifthUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 6
+        },
+        "sixthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 147.6615,
+      "duration": 0.1974,
+      "vocalMidi": 62,
+      "vocalLabel": "D4",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 67,
+          "label": "G4",
+          "semitonesFromVocal": 5
+        },
+        "fifthUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 9
+        },
+        "sixthUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 59,
+          "label": "B3",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 147.8647,
+      "duration": 0.4876,
+      "vocalMidi": 65,
+      "vocalLabel": "F4",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 6
+        },
+        "fifthUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 6
+        },
+        "sixthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 149.8616,
+      "duration": 0.1858,
+      "vocalMidi": 61,
+      "vocalLabel": "C#4",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 67,
+          "label": "G4",
+          "semitonesFromVocal": 6
+        },
+        "fifthUp": {
+          "midi": 67,
+          "label": "G4",
+          "semitonesFromVocal": 6
+        },
+        "sixthUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 10
+        },
+        "thirdDn": {
+          "midi": 59,
+          "label": "B3",
+          "semitonesFromVocal": -2
+        }
+      }
+    },
+    {
+      "time": 150.1751,
+      "duration": 0.209,
+      "vocalMidi": 62,
+      "vocalLabel": "D4",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 67,
+          "label": "G4",
+          "semitonesFromVocal": 5
+        },
+        "fifthUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 9
+        },
+        "sixthUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 59,
+          "label": "B3",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 150.6104,
+      "duration": 0.1974,
+      "vocalMidi": 62,
+      "vocalLabel": "D4",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 67,
+          "label": "G4",
+          "semitonesFromVocal": 5
+        },
+        "fifthUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 9
+        },
+        "sixthUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 59,
+          "label": "B3",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 154.018,
+      "duration": 0.8359,
+      "vocalMidi": 57,
+      "vocalLabel": "A3",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": 5
+        },
+        "fifthUp": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": 5
+        },
+        "sixthUp": {
+          "midi": 67,
+          "label": "G4",
+          "semitonesFromVocal": 10
+        },
+        "thirdDn": {
+          "midi": 55,
+          "label": "G3",
+          "semitonesFromVocal": -2
+        }
+      }
+    },
+    {
+      "time": 154.8597,
+      "duration": 0.656,
+      "vocalMidi": 59,
+      "vocalLabel": "B3",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 5
+        },
+        "fifthUp": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": 5
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 10
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -2
+        }
+      }
+    },
+    {
+      "time": 155.5795,
+      "duration": 0.3889,
+      "vocalMidi": 49,
+      "vocalLabel": "C#3",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 52,
+          "label": "E3",
+          "semitonesFromVocal": 3
+        },
+        "fifthUp": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": 8
+        },
+        "sixthUp": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": 8
+        },
+        "thirdDn": {
+          "midi": 45,
+          "label": "A2",
+          "semitonesFromVocal": -4
+        }
+      }
+    },
+    {
+      "time": 155.9742,
+      "duration": 0.1916,
+      "vocalMidi": 51,
+      "vocalLabel": "D#3",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": 6
+        },
+        "fifthUp": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": 6
+        },
+        "sixthUp": {
+          "midi": 61,
+          "label": "C#4",
+          "semitonesFromVocal": 10
+        },
+        "thirdDn": {
+          "midi": 49,
+          "label": "C#3",
+          "semitonesFromVocal": -2
+        }
+      }
+    },
+    {
+      "time": 156.2355,
+      "duration": 0.3599,
+      "vocalMidi": 64,
+      "vocalLabel": "E4",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 5
+        },
+        "fifthUp": {
+          "midi": 73,
+          "label": "C#5",
+          "semitonesFromVocal": 9
+        },
+        "sixthUp": {
+          "midi": 73,
+          "label": "C#5",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 61,
+          "label": "C#4",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 156.6012,
+      "duration": 0.2438,
+      "vocalMidi": 67,
+      "vocalLabel": "G4",
+      "chord": "A",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 73,
+          "label": "C#5",
+          "semitonesFromVocal": 6
+        },
+        "fifthUp": {
+          "midi": 73,
+          "label": "C#5",
+          "semitonesFromVocal": 6
+        },
+        "sixthUp": {
+          "midi": 76,
+          "label": "E5",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 64,
+          "label": "E4",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 157.0482,
+      "duration": 0.1567,
+      "vocalMidi": 69,
+      "vocalLabel": "A4",
+      "chord": "D",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 5
+        },
+        "fifthUp": {
+          "midi": 78,
+          "label": "F#5",
+          "semitonesFromVocal": 9
+        },
+        "sixthUp": {
+          "midi": 78,
+          "label": "F#5",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 66,
+          "label": "F#4",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 157.4255,
+      "duration": 0.2961,
+      "vocalMidi": 65,
+      "vocalLabel": "F4",
+      "chord": "D",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 9
+        },
+        "sixthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 157.7273,
+      "duration": 0.3309,
+      "vocalMidi": 62,
+      "vocalLabel": "D4",
+      "chord": "D",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 66,
+          "label": "F#4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 7
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -5
+        }
+      }
+    },
+    {
+      "time": 158.5517,
+      "duration": 0.1103,
+      "vocalMidi": 65,
+      "vocalLabel": "F4",
+      "chord": "D",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 9
+        },
+        "sixthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 159.2889,
+      "duration": 0.238,
+      "vocalMidi": 65,
+      "vocalLabel": "F4",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 6
+        },
+        "fifthUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 6
+        },
+        "sixthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 159.6604,
+      "duration": 0.1161,
+      "vocalMidi": 64,
+      "vocalLabel": "E4",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 67,
+          "label": "G4",
+          "semitonesFromVocal": 3
+        },
+        "fifthUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 10
+        },
+        "thirdDn": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": -2
+        }
+      }
+    },
+    {
+      "time": 160.0145,
+      "duration": 0.3135,
+      "vocalMidi": 65,
+      "vocalLabel": "F4",
+      "chord": "G",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 6
+        },
+        "fifthUp": {
+          "midi": 71,
+          "label": "B4",
+          "semitonesFromVocal": 6
+        },
+        "sixthUp": {
+          "midi": 74,
+          "label": "D5",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 160.4905,
+      "duration": 0.1219,
+      "vocalMidi": 62,
+      "vocalLabel": "D4",
+      "chord": "D",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 66,
+          "label": "F#4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 7
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -5
+        }
+      }
+    },
+    {
+      "time": 160.7227,
+      "duration": 0.2206,
+      "vocalMidi": 57,
+      "vocalLabel": "A3",
+      "chord": "D",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": 5
+        },
+        "fifthUp": {
+          "midi": 66,
+          "label": "F#4",
+          "semitonesFromVocal": 9
+        },
+        "sixthUp": {
+          "midi": 66,
+          "label": "F#4",
+          "semitonesFromVocal": 9
+        },
+        "thirdDn": {
+          "midi": 54,
+          "label": "F#3",
+          "semitonesFromVocal": -3
+        }
+      }
+    },
+    {
+      "time": 160.9491,
+      "duration": 0.1451,
+      "vocalMidi": 59,
+      "vocalLabel": "B3",
+      "chord": "D",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 62,
+          "label": "D4",
+          "semitonesFromVocal": 3
+        },
+        "fifthUp": {
+          "midi": 66,
+          "label": "F#4",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 10
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -2
+        }
+      }
+    },
+    {
+      "time": 161.1,
+      "duration": 0.1916,
+      "vocalMidi": 62,
+      "vocalLabel": "D4",
+      "chord": "D",
+      "harmonies": {
+        "thirdUp": {
+          "midi": 66,
+          "label": "F#4",
+          "semitonesFromVocal": 4
+        },
+        "fifthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 7
+        },
+        "sixthUp": {
+          "midi": 69,
+          "label": "A4",
+          "semitonesFromVocal": 7
+        },
+        "thirdDn": {
+          "midi": 57,
+          "label": "A3",
+          "semitonesFromVocal": -5
+        }
+      }
+    }
   ]
 }
