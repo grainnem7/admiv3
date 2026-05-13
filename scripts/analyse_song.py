@@ -89,7 +89,12 @@ def validate_label(label: str) -> bool:
 
 # Names of stems that might exist in a song directory, in priority order
 # when no specific stem is requested and we need to build a sum-mix.
-KNOWN_STEMS = ("drums.wav", "bass.wav", "other.wav", "vocals.wav")
+KNOWN_STEMS = (
+    "drums.wav", "drums.mp3",
+    "bass.wav", "bass.mp3",
+    "other.wav", "other.mp3",
+    "vocals.wav", "vocals.mp3",
+)
 FALLBACK_MIX_NAMES = (
     "mix.wav", "mix.mp3", "mix.m4a", "mix.flac",
     "full.wav", "full.mp3", "full.m4a", "full.flac",
@@ -103,13 +108,18 @@ def _load_librosa():
 
 
 def _resolve_signal(song_dir: Path, preferred_stem: str, sr: int) -> np.ndarray:
-    """Return mono audio at `sr`. Prefer `preferred_stem`; else sum-mix; else
-    a fallback mix.wav/full.wav. Raises FileNotFoundError if nothing usable."""
+    """Return mono audio at `sr`. Prefer `preferred_stem` (try both .wav and
+    .mp3 variants); else sum-mix; else a fallback mix.wav/full.wav.
+    Raises FileNotFoundError if nothing usable."""
     librosa = _load_librosa()
-    preferred = song_dir / preferred_stem
-    if preferred.exists():
-        y, _ = librosa.load(str(preferred), sr=sr, mono=True)
-        return y
+    # Try the requested name first, then swap extension wav <-> mp3
+    stem_base = Path(preferred_stem).stem
+    variants = [preferred_stem, f"{stem_base}.mp3", f"{stem_base}.wav"]
+    for variant in variants:
+        candidate = song_dir / variant
+        if candidate.exists():
+            y, _ = librosa.load(str(candidate), sr=sr, mono=True)
+            return y
     # Sum-mix from available KNOWN_STEMS
     available = [song_dir / s for s in KNOWN_STEMS if (song_dir / s).exists()]
     if available:

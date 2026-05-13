@@ -141,8 +141,21 @@ export const SONG_LIBRARY: SongConfig[] = [
     key: 'D Major',
     bpm: 158,
     timeSignature: '4/4',
-    stems: mixOnlyStems('shake-a-tail-feather'),
-    stemMixer: mixOnlyMixer,
+    stems: {
+      vocals: 'songs/shake-a-tail-feather/vocals.mp3',
+      drums:  'songs/shake-a-tail-feather/drums.mp3',
+      bass:   'songs/shake-a-tail-feather/bass.mp3',
+      other:  'songs/shake-a-tail-feather/other.mp3',
+    },
+    stemMixer: {
+      label: 'Stem Mixer',
+      // left = vocals + harmonic backing (no rhythm section)
+      leftZone:   { vocals: 1.0, drums: 0.0, bass: 0.0, other: 0.8 },
+      // centre = full band balance
+      centerZone: { vocals: 1.0, drums: 0.6, bass: 0.6, other: 0.7 },
+      // right = full mix at unity
+      rightZone:  { vocals: 1.0, drums: 1.0, bass: 1.0, other: 1.0 },
+    },
     analysisUrl: 'songs/shake-a-tail-feather/analysis.json',
   },
   {
