@@ -2,7 +2,7 @@
  * Debug Panel - Real-time data visualization for facilitators
  */
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import {
   useAppStore,
   useIsTracking,
@@ -15,6 +15,7 @@ import {
   useActiveNotes,
 } from '../../state/store';
 import { getAudioEngine } from '../../sound/AudioEngine';
+import { getColorTracker } from '../../tracking/ColorTracker';
 
 function DebugPanel() {
   const isTracking = useIsTracking();
@@ -29,6 +30,16 @@ function DebugPanel() {
   const toggleDebugPanel = useAppStore((s) => s.toggleDebugPanel);
   const setAccessibilityMode = useAppStore((s) => s.setAccessibilityMode);
   const setSensitivity = useAppStore((s) => s.setSensitivity);
+
+  // Colour-tracker min-area slider state.  Initialised from the first
+  // tracked colour (they're synchronised via setMinAreaForAll), and
+  // pushed back to the tracker live as the user drags so a poster
+  // colour clash can be tuned out without restarting the session.
+  const [minArea, setMinArea] = useState<number>(() => {
+    const colors = getColorTracker().getTrackedColors();
+    return colors[0]?.minArea ?? 0.0005;
+  });
+  const trackedColorCount = getColorTracker().getTrackedColors().length;
 
   // Keyboard shortcut to toggle
   useEffect(() => {
@@ -202,6 +213,41 @@ function DebugPanel() {
             onChange={(e) => setSensitivity(parseFloat(e.target.value))}
             style={{ width: '100%' }}
           />
+        </div>
+      </div>
+
+      {/* Colour tracker section — visible whenever colour modality is active.
+          Disabled when no colours are calibrated so the slider doesn't
+          mislead a facilitator into thinking they're tuning something. */}
+      <div style={{ marginBottom: 'var(--space-md)' }}>
+        <div className="debug-panel__title" style={{ fontSize: '12px', opacity: 0.7 }}>
+          COLOUR TRACKER
+        </div>
+        <div className="debug-panel__row">
+          <span className="debug-panel__label">Calibrated:</span>
+          <span className="debug-panel__value">{trackedColorCount}</span>
+        </div>
+        <div style={{ marginTop: 'var(--space-sm)' }}>
+          <label style={{ display: 'block', marginBottom: '4px', fontSize: '11px' }}>
+            Min blob area: {(minArea * 100).toFixed(3)}%
+          </label>
+          <input
+            type="range"
+            min="0.0001"
+            max="0.01"
+            step="0.0001"
+            value={minArea}
+            disabled={trackedColorCount === 0}
+            onChange={(e) => {
+              const value = parseFloat(e.target.value);
+              setMinArea(value);
+              getColorTracker().setMinAreaForAll(value);
+            }}
+            style={{ width: '100%' }}
+          />
+          <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+            Raise to reject small background patches; lower to keep distant batons.
+          </div>
         </div>
       </div>
 

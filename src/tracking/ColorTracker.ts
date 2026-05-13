@@ -140,6 +140,24 @@ export class ColorTracker {
   }
 
   /**
+   * Bulk-set the minimum-area threshold on every tracked colour.  Used
+   * by the facilitator panel slider so all batons share a coherent
+   * sensitivity floor — without this, raising the threshold to reject a
+   * background colour clash would require editing each colour
+   * individually.  Per-colour overrides are still possible via the
+   * per-field UI; this just sets the floor.
+   *
+   * Value is clamped to a safe range (0.00005 ≈ a handful of pixels,
+   * up to 0.05 ≈ 5% of the downscaled frame).
+   */
+  setMinAreaForAll(value: number): void {
+    const clamped = Math.max(0.00005, Math.min(0.05, value));
+    for (const color of this.trackedColors) {
+      color.minArea = clamped;
+    }
+  }
+
+  /**
    * Calibrate color from a pixel in the video
    */
   calibrateFromPixel(

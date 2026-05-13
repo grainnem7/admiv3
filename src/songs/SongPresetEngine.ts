@@ -125,11 +125,21 @@ const BEAT_PULSE_MS = 50;     // ms duration of beat pulse
 const SIDECHAIN_DEPTH = 0.7;  // gain during duck (≈-3dB)
 const SIDECHAIN_RECOVERY = 0.06; // time constant for recovery
 
-/** Smoothed velocity below which a baton is considered still */
-const STILLNESS_THRESHOLD = 0.04;
+/** Smoothed velocity below which a baton is considered still (default; tunable via setStillnessThreshold) */
+const STILLNESS_THRESHOLD_DEFAULT = 0.04;
 
-/** How long (ms) a baton must be below STILLNESS_THRESHOLD before its voice is muted */
-const STILLNESS_HYSTERESIS_MS = 300;
+/** How long (ms) a baton must be below threshold before its voice is muted (default; tunable via setStillnessHysteresisMs) */
+const STILLNESS_HYSTERESIS_MS_DEFAULT = 300;
+
+/**
+ * How long (ms) sustained motion above threshold is required before a
+ * silenced baton un-mutes.  Default 0 = un-mute on first motion frame,
+ * matching the original behaviour.  Raising this debounces the pick-up
+ * spike that occurs when a baton enters frame after being set down —
+ * without it, the centroid jump from "not detected" to "detected" can
+ * register as a note onset on the very first frame.
+ */
+const ONSET_DEBOUNCE_MS_DEFAULT = 0;
 
 // The 5 color roles in priority order (for selecting which 2 are active)
 const ROLE_PRIORITY: ColorRole[] = ['blue', 'red', 'green', 'yellow', 'orange'];
@@ -155,8 +165,10 @@ interface VelocityState {
   prevX: number;
   prevY: number;
   smoothVel: number;
-  /** Wall-clock timestamp (ms, Date.now()) when smoothVel first dropped below STILLNESS_THRESHOLD; null while moving */
+  /** Wall-clock timestamp (ms, Date.now()) when smoothVel first dropped below the still threshold; null while moving */
   stillSince: number | null;
+  /** Wall-clock timestamp when sustained motion above threshold first started; null while still or already unmuted */
+  motionSince: number | null;
   /** True when the stillness gate is currently silencing this role */
   isMuted: boolean;
 }
@@ -168,6 +180,30 @@ interface VelocityState {
 function applyCalibration(raw: number, min: number, max: number): number {
   if (max <= min) return 0.5;
   return clamp((raw - min) / (max - min), 0, 1);
+}
+
+/**
+ * Find the beat in `beats` closest to `targetTime`.  Returns null if
+ * the beat array is empty or undefined.  Exported (not just file-local)
+ * so unit tests can exercise the quantisation logic without
+ * instantiating the full engine + its Tone.js dependency tree.
+ */
+export function findNearestBeat(
+  beats: readonly number[] | undefined | null,
+  targetTime: number,
+): number | null {
+  if (!beats || beats.length === 0) return null;
+
+  // Binary-search for the insertion point.
+  let lo = 0, hi = beats.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (beats[mid] < targetTime) lo = mid + 1;
+    else hi = mid;
+  }
+  const after = beats[lo];
+  const before = lo > 0 ? beats[lo - 1] : after;
+  return Math.abs(after - targetTime) <= Math.abs(before - targetTime) ? after : before;
 }
 
 // ============================================
@@ -274,6 +310,14 @@ export class SongPresetEngine {
 
   // Velocity tracking
   private velocityState: Map<ColorRole, VelocityState> = new Map();
+
+  // Stillness gate (per-engine, applied to all colour roles).  Tunable
+  // at runtime so the facilitator can lower the threshold when Tim's
+  // movements are small, or raise the hysteresis when the camera is
+  // shaky.
+  private stillnessThreshold = STILLNESS_THRESHOLD_DEFAULT;
+  private stillnessHysteresisMs = STILLNESS_HYSTERESIS_MS_DEFAULT;
+  private onsetDebounceMs = ONSET_DEBOUNCE_MS_DEFAULT;
 
   // Beat pulse tracking
   private lastDownbeatIndex = -1;
@@ -1028,23 +1072,32 @@ export class SongPresetEngine {
     // Determine active colors (first 2 found and not gated, in priority order)
     this.updateActiveRoles();
 
-    // Look up current chord — quantise to nearest beat for rhythmic coherence.
-    // chordOffset trim is applied BEFORE getChordAtTime; beat quantisation
-    // is layered on top so both controls still work together.
+    // Look up current chord — quantise to the beat NEAREST the chord's
+    // analysis-listed change time (mapped back into playback time with
+    // chordOffset), not the next beat after the current frame.  Using
+    // the chord's own change time means a chord change slightly before
+    // a beat snaps forward to that beat, and a chord change slightly
+    // after a beat applies immediately rather than waiting an entire
+    // beat for the *next* one — closing the "lands slightly off the
+    // beat" issue from Session 5.
     if (this.song.chordProgression && this.song.chordProgression.length > 0) {
       const chordTime = currentTime - this.chordOffset;
       const candidateChord = getChordAtTime(this.song.chordProgression, chordTime);
 
       if (candidateChord && candidateChord.name !== this.lastAppliedChordName) {
-        const nextBeat = this.getNextBeatTime(currentTime);
+        // candidateChord.time is in analysis-space; shift back into
+        // playback-space the same way chordTime was shifted.
+        const chordEventPlaybackTime = candidateChord.time + this.chordOffset;
+        const nearestBeat = this.getNearestBeatTime(chordEventPlaybackTime);
         const bpm = this.song.bpm > 0 ? this.song.bpm : 0;
         const beatDurationMs = bpm > 0 ? (60 / bpm) * 1000 : 500;
         const beatDurationSec = beatDurationMs / 1000;
 
-        if (nextBeat !== null && nextBeat - currentTime <= beatDurationSec) {
-          // Defer until the upcoming beat
+        if (nearestBeat !== null && nearestBeat > currentTime && nearestBeat - currentTime <= beatDurationSec) {
+          // Nearest beat is still in the future and within a beat away
+          // — defer until that beat so the chord lands on it.
           this.pendingChord = candidateChord;
-          this.pendingChordBeat = nextBeat;
+          this.pendingChordBeat = nearestBeat;
         } else {
           // No beat data, or next beat too far away — apply immediately
           // to prevent perceptible drift / silent fallback.
@@ -1116,7 +1169,12 @@ export class SongPresetEngine {
           prevY: pos?.y ?? 0.5,
           smoothVel: 0,
           stillSince: null,
-          isMuted: false,
+          motionSince: null,
+          // Start muted so a baton entering frame for the first time must
+          // demonstrate motion (or zero onset-debounce) before producing
+          // sound — otherwise a brand-new tracked centroid sounds a note
+          // on the first frame, which sounds like a pop on pick-up.
+          isMuted: true,
         };
         this.velocityState.set(role, state);
       }
@@ -1136,37 +1194,71 @@ export class SongPresetEngine {
       }
 
       // Stillness gate: mute roles whose smoothed velocity has been below
-      // threshold for the full hysteresis window. Re-activate immediately on
-      // motion onset (no hysteresis on the un-mute side) so slow expressive
-      // gestures resume sound on the first frame of motion.
-      if (state.smoothVel < STILLNESS_THRESHOLD) {
+      // threshold for the full hysteresis window.  On the un-mute side,
+      // require `onsetDebounceMs` of sustained motion above threshold
+      // before activating — this debounces the pick-up centroid spike so
+      // setting a baton down and picking it back up doesn't spray notes.
+      if (state.smoothVel < this.stillnessThreshold) {
+        state.motionSince = null;
         if (state.stillSince === null) {
           state.stillSince = nowMs;
-        } else if (nowMs - state.stillSince >= STILLNESS_HYSTERESIS_MS) {
+        } else if (nowMs - state.stillSince >= this.stillnessHysteresisMs) {
           state.isMuted = true;
         }
       } else {
         state.stillSince = null;
-        state.isMuted = false;
+        if (this.onsetDebounceMs <= 0) {
+          state.isMuted = false;
+        } else if (state.motionSince === null) {
+          state.motionSince = nowMs;
+        } else if (nowMs - state.motionSince >= this.onsetDebounceMs) {
+          state.isMuted = false;
+        }
       }
     }
   }
 
-  /**
-   * Binary-search the beats array for the first beat at or after `currentTime`.
-   * Returns null if there is no beat data or all beats are in the past.
-   */
-  private getNextBeatTime(currentTime: number): number | null {
-    const beats = this.song?.beats;
-    if (!beats || beats.length === 0) return null;
+  // ---- Stillness gate tuning (called by DebugPanel / facilitator UI) ----
 
-    let lo = 0, hi = beats.length - 1;
-    while (lo < hi) {
-      const mid = (lo + hi) >> 1;
-      if (beats[mid] < currentTime) lo = mid + 1;
-      else hi = mid;
-    }
-    return beats[lo] >= currentTime ? beats[lo] : null;
+  /**
+   * Set the smoothed-velocity threshold below which a baton is treated
+   * as still.  Lower values pick up smaller intentional movements but
+   * also pick up more environmental noise / tremor.
+   */
+  setStillnessThreshold(value: number): void {
+    this.stillnessThreshold = clamp(value, 0, 1);
+  }
+
+  /**
+   * Set how long (ms) a baton must remain below the still threshold
+   * before its voice is gated off.
+   */
+  setStillnessHysteresisMs(ms: number): void {
+    this.stillnessHysteresisMs = Math.max(0, ms);
+  }
+
+  /**
+   * Set how long (ms) sustained motion above threshold is required
+   * before a gated baton un-mutes.  Set to 0 to disable onset
+   * debouncing (un-mute on the first motion frame).
+   */
+  setOnsetDebounceMs(ms: number): void {
+    this.onsetDebounceMs = Math.max(0, ms);
+  }
+
+  getStillnessThreshold(): number { return this.stillnessThreshold; }
+  getStillnessHysteresisMs(): number { return this.stillnessHysteresisMs; }
+  getOnsetDebounceMs(): number { return this.onsetDebounceMs; }
+
+  /**
+   * Return the beat timestamp closest to `targetTime` — either before
+   * or after.  Used for chord-quantisation against the chord's actual
+   * change time rather than the moment we detected the change.
+   *
+   * Null when the song has no beat data.
+   */
+  private getNearestBeatTime(targetTime: number): number | null {
+    return findNearestBeat(this.song?.beats, targetTime);
   }
 
   private updateReverb(): void {

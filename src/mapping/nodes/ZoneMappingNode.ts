@@ -53,6 +53,18 @@ export interface ZoneMappingConfig extends MappingNodeConfig {
    * @default true
    */
   emitEvents: boolean;
+  /**
+   * Optional calibrated movement envelope.  When supplied, the raw
+   * tracker position is remapped to envelope space (envelope min → 0,
+   * envelope max → 1) before zone lookup — so the user's reachable
+   * range covers the full zone grid rather than the literal frame
+   * extremes.
+   * @default null (no remapping; raw 0–1 frame coords are used)
+   */
+  inputRange: {
+    x: { min: number; max: number };
+    y: { min: number; max: number };
+  } | null;
 }
 
 const DEFAULT_CONFIG: Omit<ZoneMappingConfig, 'id' | 'name' | 'inputs' | 'zones' | 'zoneMappings'> = {
@@ -61,6 +73,7 @@ const DEFAULT_CONFIG: Omit<ZoneMappingConfig, 'id' | 'name' | 'inputs' | 'zones'
   onExit: 'stopChord',
   velocity: 0.7,
   emitEvents: true,
+  inputRange: null,
 };
 
 /**
@@ -152,7 +165,8 @@ export class ZoneMappingNode extends MappingNode {
     }
 
     // Get position from first input feature
-    const position = this.getPositionFromFrame(frame);
+    const rawPosition = this.getPositionFromFrame(frame);
+    const position = rawPosition && this.remapToEnvelope(rawPosition);
     if (!position) {
       // No position data - if we were in a zone, exit it
       if (this.currentZoneId) {
@@ -190,6 +204,24 @@ export class ZoneMappingNode extends MappingNode {
       active: newZoneId !== null,
       timestamp: frame.timestamp,
       events: this.pendingEvents,
+    };
+  }
+
+  /**
+   * Remap raw frame coordinates into the calibrated envelope so that
+   * zones (defined in 0–1 normalised space) cover the user's actual
+   * reachable range rather than the full frame.  Values outside the
+   * envelope are clamped to 0/1 so the user's edges still register as
+   * "in the zone closest to that edge".
+   */
+  private remapToEnvelope(
+    position: { x: number; y: number },
+  ): { x: number; y: number } {
+    const range = this.zoneConfig.inputRange;
+    if (!range) return position;
+    return {
+      x: clamp01(remapAxis(position.x, range.x.min, range.x.max)),
+      y: clamp01(remapAxis(position.y, range.y.min, range.y.max)),
     };
   }
 
@@ -372,10 +404,39 @@ export class ZoneMappingNode extends MappingNode {
   }
 
   /**
+   * Set (or clear) the calibrated movement envelope.  When set, raw
+   * positions are remapped into 0–1 zone space before lookup; when
+   * cleared (passing null), the node falls back to raw frame coords.
+   */
+  setInputRange(range: ZoneMappingConfig['inputRange']): void {
+    this.zoneConfig.inputRange = range;
+  }
+
+  /**
    * Reset zone state.
    */
   reset(): void {
     this.currentZoneId = null;
     this.pendingEvents = [];
   }
+}
+
+// ============================================
+// Helpers (file-local; not exported)
+// ============================================
+
+function remapAxis(value: number, min: number, max: number): number {
+  const span = max - min;
+  if (span <= 0) return value;
+  return (value - min) / span;
+}
+
+// Clamp to [0, 1).  The trailing open boundary matters because zone
+// containment uses half-open intervals (`p >= min && p < max`) — clamping
+// raw positions that overshoot the envelope to exactly 1.0 would leave
+// them in no zone at all on the right/bottom edge.
+function clamp01(value: number): number {
+  if (value < 0) return 0;
+  if (value >= 1) return 0.9999;
+  return value;
 }

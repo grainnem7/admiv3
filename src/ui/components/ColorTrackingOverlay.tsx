@@ -19,6 +19,14 @@ interface ColorTrackingOverlayProps {
   containerWidth: number;
   containerHeight: number;
   isCalibrating?: boolean;
+  /**
+   * When true, draws a per-blob role label and blob-area readout next to
+   * each tracked centroid.  Off by default to keep the performance view
+   * uncluttered; the facilitator panel turns it on so blob area is
+   * visible while tuning min-area thresholds.
+   * @default false
+   */
+  showRoleLabels?: boolean;
 }
 
 function ColorTrackingOverlay({
@@ -27,6 +35,7 @@ function ColorTrackingOverlay({
   containerWidth,
   containerHeight,
   isCalibrating = false,
+  showRoleLabels = false,
 }: ColorTrackingOverlayProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -110,6 +119,39 @@ function ColorTrackingOverlay({
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
       ctx.lineWidth = 1;
       ctx.stroke();
+
+      // Optional per-blob role label + area readout (Change 8 + 5).
+      // Two short lines: the role this baton plays, and its current
+      // pixel-area share — the latter helps the facilitator tune the
+      // min-area threshold against background colour clashes.
+      if (showRoleLabels) {
+        const role = describeBlobRole(blob.colorId, mappings);
+        const areaPct = (blob.area * 100).toFixed(2);
+        ctx.font = '11px sans-serif';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        const labelX = x + 22;
+
+        // Role line
+        const roleText = role;
+        const roleW = ctx.measureText(roleText).width;
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
+        roundRect(ctx, labelX - 4, y - 18, roleW + 8, 16, 4);
+        ctx.fill();
+        ctx.fillStyle = hueColor;
+        ctx.fillText(roleText, labelX, y - 10);
+
+        // Area readout line
+        const areaText = `${areaPct}%`;
+        const areaW = ctx.measureText(areaText).width;
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        roundRect(ctx, labelX - 4, y + 2, areaW + 8, 14, 4);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+        ctx.fillText(areaText, labelX, y + 9);
+
+        ctx.textBaseline = 'alphabetic';
+      }
     }
 
     // Show what it controls — single label at top
@@ -160,6 +202,29 @@ function getHueForBlob(colorId: string): number {
   const colors = getColorTracker().getTrackedColors();
   const found = colors.find(c => c.id === colorId);
   return found?.hue ?? 60;
+}
+
+/**
+ * Look up what musical role a given tracked colour is bound to, based
+ * on the active ColorExpressionMappings.  Returns a short, glanceable
+ * label like "PITCH" or "FILTER + REVERB"; falls back to the colour ID
+ * (uppercased) if no mappings target this colour.
+ */
+function describeBlobRole(
+  colorId: string,
+  mappings: ColorExpressionMapping[],
+): string {
+  const labels: Record<string, string> = {
+    pitch: 'PITCH',
+    volume: 'VOLUME',
+    filter_cutoff: 'FILTER',
+    reverb_mix: 'REVERB',
+    pan: 'PAN',
+  };
+  const matched = mappings.filter((m) => m.colorId === colorId);
+  if (matched.length === 0) return colorId.toUpperCase();
+  const parts = [...new Set(matched.map((m) => labels[m.parameter] ?? m.parameter.toUpperCase()))];
+  return parts.join(' + ');
 }
 
 function roundRect(

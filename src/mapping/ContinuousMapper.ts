@@ -15,6 +15,14 @@ export interface ContinuousMapperConfig {
   invertY?: boolean;
   /** Smoothing factor for output values */
   smoothing?: number;
+  /**
+   * Calibrated Y envelope (movementRange.minY/maxY).  When set, raw
+   * frame Y is remapped into this envelope's range before being
+   * converted to pitch — so the full pitch range is reachable within
+   * the user's actual playing zone, not the full frame.  When null,
+   * raw 0–1 frame coords are used.
+   */
+  yRange?: { min: number; max: number } | null;
 }
 
 const DEFAULT_CONFIG: Required<ContinuousMapperConfig> = {
@@ -22,6 +30,7 @@ const DEFAULT_CONFIG: Required<ContinuousMapperConfig> = {
   volumeRange: { min: 0.3, max: 1.0 },
   invertY: true, // Moving up = higher pitch
   smoothing: 0.3,
+  yRange: null,
 };
 
 export class ContinuousMapper {
@@ -44,8 +53,10 @@ export class ContinuousMapper {
       return;
     }
 
-    // Calculate target frequency from Y position
-    const yValue = this.config.invertY ? 1 - movement.position.y : movement.position.y;
+    // Remap raw Y → envelope-relative Y before inversion, so 0..1 means
+    // "bottom..top of user's reachable range" not "bottom..top of frame".
+    const envelopeY = this.applyEnvelope(movement.position.y);
+    const yValue = this.config.invertY ? 1 - envelopeY : envelopeY;
     const targetMidi = normalizeRange(
       yValue,
       0,
@@ -90,7 +101,8 @@ export class ContinuousMapper {
    * Get current frequency without emitting events
    */
   getFrequency(yPosition: number): number {
-    const yValue = this.config.invertY ? 1 - yPosition : yPosition;
+    const envelopeY = this.applyEnvelope(yPosition);
+    const yValue = this.config.invertY ? 1 - envelopeY : envelopeY;
     const midi = normalizeRange(
       yValue,
       0,
@@ -99,6 +111,15 @@ export class ContinuousMapper {
       this.config.noteRange.max
     );
     return midiToFrequency(clamp(midi, 21, 108));
+  }
+
+  /** Remap a raw 0–1 Y value into the calibrated envelope. */
+  private applyEnvelope(rawY: number): number {
+    const range = this.config.yRange;
+    if (!range) return rawY;
+    const span = range.max - range.min;
+    if (span <= 0) return rawY;
+    return clamp((rawY - range.min) / span, 0, 1);
   }
 
   /**

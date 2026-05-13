@@ -11,6 +11,7 @@ import { TrackingManager, getTrackingManager } from '../tracking/TrackingManager
 import { MultiModalProcessor, getMultiModalProcessor } from '../movement/MultiModalProcessor';
 import { MappingEngine, getMappingEngine } from '../mapping/MappingEngine';
 import { MusicController, getMusicController } from '../core/MusicController';
+import { useAppStore } from '../state/store';
 
 export interface PerformanceSystemsRefs {
   trackingManager: React.MutableRefObject<TrackingManager | null>;
@@ -88,9 +89,13 @@ export function usePerformanceSystems(
 
         if (!mounted) return;
 
-        // Apply initial profile
+        // Apply initial profile.  The active UserProfile (separate from
+        // InputProfile) carries the calibrated movement range — without
+        // it, position-driven mapping nodes default to the full 0–1 frame
+        // and ignore Tim's actual playing envelope.
+        const userMovementRange = useAppStore.getState().userProfile?.movementRange ?? null;
         processor.setProfile(initialProfile);
-        mappingEngine.configureFromProfile(initialProfile);
+        mappingEngine.configureFromProfile(initialProfile, userMovementRange);
         await trackingManager.setActiveModalities(initialProfile.activeModalities);
 
         // Start camera
@@ -164,6 +169,26 @@ export function usePerformanceSystems(
       }
     };
   }, []); // intentionally empty — profile changes handled separately
+
+  // Reconfigure the mapping engine when the active UserProfile changes —
+  // e.g. after the user completes a new calibration session, the engine
+  // should immediately consume the new movementRange without requiring a
+  // session restart.  Compare by reference equality on movementRange so
+  // unrelated UserProfile field updates don't trigger reconfiguration.
+  useEffect(() => {
+    let prevRange = useAppStore.getState().userProfile?.movementRange ?? null;
+    const unsub = useAppStore.subscribe((state) => {
+      const range = state.userProfile?.movementRange ?? null;
+      if (range === prevRange) return;
+      prevRange = range;
+      const engine = mappingEngineRef.current;
+      const profile = state.activeInputProfile;
+      if (engine && profile) {
+        engine.configureFromProfile(profile, range);
+      }
+    });
+    return unsub;
+  }, []);
 
   // Resume audio on user interaction
   const handleUserInteraction = useCallback(async () => {

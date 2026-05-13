@@ -191,6 +191,7 @@ export class MappingEngine {
     profile: InputProfile,
     movementRange?: MovementRange | null,
   ): void {
+    // xRange is reserved for future X-driven nodes; only yRange is consumed today.
     const { y: yRange } = resolveAxisRanges(movementRange);
     // Clear existing nodes
     this.nodes.clear();
@@ -247,7 +248,10 @@ export class MappingEngine {
       this.nodes.set('volume-main', this.volumeNode);
     }
 
-    // Create filter mapping node - use middle finger if available
+    // Create filter mapping node - use middle finger if available.
+    // Position-driven, so it consumes the calibrated Y envelope just like
+    // pitch/chord — otherwise tim has to move to the literal edge of the
+    // frame to sweep the filter.
     this.filterNode = new FilterMappingNode({
       id: 'filter-main',
       name: 'Main Filter',
@@ -256,7 +260,7 @@ export class MappingEngine {
             {
               sourceFeatureId: filterFeature.id,
               sourceType: 'position',
-              inputRange: { min: 0, max: 1 },
+              inputRange: { min: yRange.min, max: yRange.max },
               outputRange: { min: 0, max: 1 },
               curve: 'exponential',
               inverted: false,
