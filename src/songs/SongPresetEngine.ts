@@ -1351,6 +1351,14 @@ export class SongPresetEngine {
    */
   setStillnessThreshold(value: number): void {
     this.stillnessThreshold = clamp(value, 0, 1);
+    // Walk voices snapshot the threshold at construction; forward live
+    // changes so facilitator tweaks mid-session apply without needing to
+    // toggle the baton mode.
+    for (const voice of this.voices.values()) {
+      if (voice instanceof WalkVoice) {
+        voice.setTriggerThreshold(this.stillnessThreshold);
+      }
+    }
   }
 
   /**

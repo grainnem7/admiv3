@@ -925,7 +925,7 @@ function SongPresetScreen() {
                       } as React.CSSProperties);
                       return (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                          {/* Mode toggle: parameter / instrument / harmonizer (green only) */}
+                          {/* Mode toggle: parameter / instrument / harmonizer (green only) / walk */}
                           <div
                             role="group"
                             aria-label={`${role.label} mode`}
