@@ -125,6 +125,20 @@ def main(argv: list[str] | None = None) -> int:
         "or C:/Users/Public/songs/<id>/chordino.csv if that exists)",
     )
     parser.add_argument("--min-chord-beats", type=int, default=2)
+    parser.add_argument(
+        "--chord-shift-ms",
+        type=float,
+        default=None,
+        help="Shift Chordino chord-change times by this many ms before snapping "
+        "to beats. Use a negative value to compensate for Chordino's detection "
+        "lag (e.g. -250 if check_beat_alignment.py shows a +250 ms median "
+        "offset). Default: auto-compute median offset and use -median.",
+    )
+    parser.add_argument(
+        "--no-auto-shift",
+        action="store_true",
+        help="Disable auto-computed shift; use 0 ms unless --chord-shift-ms given.",
+    )
     args = parser.parse_args(argv)
 
     repo_root = SCRIPT_DIR.parent
@@ -166,6 +180,41 @@ def main(argv: list[str] | None = None) -> int:
     if not chord_segments:
         print(f"error: no parseable rows in {csv_path}", file=sys.stderr)
         return 2
+
+    # Determine the shift to apply to Chordino chord-change times.
+    # If the user passed --chord-shift-ms explicitly, use that. Otherwise,
+    # auto-compute the median offset between Chordino changes and nearest
+    # beats, and use its negation as the shift (so the median-aligned
+    # change lands on a beat).
+    if args.chord_shift_ms is not None:
+        shift_seconds = args.chord_shift_ms / 1000.0
+        print(f"Chord shift: {args.chord_shift_ms:+.0f} ms (user-supplied)")
+    elif args.no_auto_shift:
+        shift_seconds = 0.0
+        print("Chord shift: 0 ms (auto disabled)")
+    else:
+        beats_arr = np.asarray(beats, dtype=float)
+        offsets = []
+        for t, _ in chord_segments:
+            if t <= 0.0:
+                continue
+            idx = int(np.argmin(np.abs(beats_arr - t)))
+            offsets.append(t - float(beats_arr[idx]))
+        if offsets:
+            median_offset = float(np.median(offsets))
+            shift_seconds = -median_offset
+            print(
+                f"Chord shift: {shift_seconds*1000:+.0f} ms "
+                f"(auto: -median({median_offset*1000:+.0f} ms detection lag))"
+            )
+        else:
+            shift_seconds = 0.0
+
+    if shift_seconds != 0.0:
+        chord_segments = [
+            (max(0.0, t + shift_seconds), label) for t, label in chord_segments
+        ]
+        chord_segments.sort(key=lambda r: r[0])
 
     raw_labels: list[str] = []
     unmapped: dict[str, int] = {}
