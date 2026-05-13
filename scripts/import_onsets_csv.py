@@ -35,17 +35,28 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 
 
 def parse_csv(path: Path) -> list[tuple[float, float]]:
-    """Parse CSV as (time, value). Skips header-like rows."""
+    """Parse CSV as (time, value). Skips header-like rows.
+
+    Accepts rows of either form:
+      - `time, value`          (Onset Detection Function output)
+      - `time`                 (Note Onsets output; SV omits the value
+                                column when there isn't one)
+    """
     rows: list[tuple[float, float]] = []
     with path.open(newline="", encoding="utf-8") as f:
         for r in csv.reader(f):
-            if len(r) < 2:
+            if not r:
                 continue
             try:
                 t = float(r[0])
-                v = float(r[1])
-            except ValueError:
+            except (ValueError, IndexError):
                 continue
+            v = 1.0
+            if len(r) >= 2:
+                try:
+                    v = float(r[1])
+                except ValueError:
+                    v = 1.0
             rows.append((t, v))
     return rows
 
