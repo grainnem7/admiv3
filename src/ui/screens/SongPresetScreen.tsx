@@ -910,7 +910,8 @@ function SongPresetScreen() {
                       const mode = batonModes[r];
                       const isInstrument = mode === 'instrument';
                       const isHarmonizer = mode === 'harmonizer';
-                      const isParameter = !isInstrument && !isHarmonizer;
+                      const isWalk = mode === 'walk';
+                      const isParameter = !isInstrument && !isHarmonizer && !isWalk;
                       const canHarmonize = r === 'green';
                       const buttonStyle = (active: boolean) => ({
                         flex: 1,
@@ -959,31 +960,38 @@ function SongPresetScreen() {
                                 Harm
                               </button>
                             )}
+                            <button
+                              type="button"
+                              onClick={() => handleBatonModeChange(r, 'walk')}
+                              aria-pressed={isWalk}
+                              title="Walk mode (auto-arpeggiates chord tones on each beat while you move). Y picks loudness; X is ignored. Designed for users with limited horizontal range."
+                              style={buttonStyle(isWalk)}
+                            >
+                              Walk
+                            </button>
                           </div>
                           {/* Preset selector — list depends on mode */}
-                          {isHarmonizer ? (
+                          {isHarmonizer || isInstrument || isWalk ? (
                             <select
                               className="form-field__select"
                               value={batonInstruments[r] ?? DEFAULT_INSTRUMENT_KEY}
                               onChange={(e) =>
                                 handleBatonInstrumentChange(r, e.target.value)
                               }
-                              aria-label={`${role.label} harmoniser instrument`}
-                              title="Pick the instrument the harmoniser uses"
-                              style={{ height: 26, fontSize: 10, width: 86, flexShrink: 0 }}
-                            >
-                              {INSTRUMENT_PALETTE_LIST.map((opt) => (
-                                <option key={opt.key} value={opt.key}>{opt.name}</option>
-                              ))}
-                            </select>
-                          ) : isInstrument ? (
-                            <select
-                              className="form-field__select"
-                              value={batonInstruments[r] ?? DEFAULT_INSTRUMENT_KEY}
-                              onChange={(e) =>
-                                handleBatonInstrumentChange(r, e.target.value)
+                              aria-label={
+                                isHarmonizer
+                                  ? `${role.label} harmoniser instrument`
+                                  : isWalk
+                                    ? `${role.label} walk instrument`
+                                    : `${role.label} instrument`
                               }
-                              aria-label={`${role.label} instrument`}
+                              title={
+                                isHarmonizer
+                                  ? 'Pick the instrument the harmoniser uses'
+                                  : isWalk
+                                    ? 'Pick the instrument walk mode plays'
+                                    : undefined
+                              }
                               style={{ height: 26, fontSize: 10, width: 86, flexShrink: 0 }}
                             >
                               {INSTRUMENT_PALETTE_LIST.map((opt) => (
