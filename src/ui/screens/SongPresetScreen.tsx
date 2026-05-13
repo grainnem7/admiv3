@@ -1594,7 +1594,9 @@ function drawMarker(
       lines =
         mode === 'instrument'
           ? getInstrumentModeLines(role.id, pos, status)
-          : getRoleStateLines(role.id, pos, status.voicePresets[role.id] ?? '');
+          : mode === 'walk'
+            ? getWalkModeLines(role.id, pos, status)
+            : getRoleStateLines(role.id, pos, status.voicePresets[role.id] ?? '');
     }
     drawCallout(ctx, x, y, canvasW, color, lines);
   } else {
@@ -1644,6 +1646,27 @@ function getInstrumentModeLines(
   const octaveHint =
     pos.x < LEFT_THRESHOLD ? 'oct -1' : pos.x > RIGHT_THRESHOLD ? 'oct +1' : 'oct 0';
   return [`♩ ${instrumentLabel}`, `${pitchHint} · ${octaveHint}`];
+}
+
+/**
+ * Callout for an active baton in walk mode.
+ *
+ * Walk mode ignores X entirely, so only the instrument label and a
+ * Y-based dynamic hint are surfaced — there's no register / zone
+ * information to report. Keeps the callout short and consistent with
+ * the other instrument-style modes.
+ */
+function getWalkModeLines(
+  roleId: ColorRole,
+  pos: VoicePosition,
+  status: SongPresetStatus,
+): string[] {
+  const instrumentKey = status.batonInstruments?.[roleId] ?? DEFAULT_INSTRUMENT_KEY;
+  const entry = INSTRUMENT_PALETTE_BY_KEY[instrumentKey];
+  const instrumentLabel = entry?.name ?? instrumentKey;
+  // Y → dynamics. Top of frame = loud, bottom = soft.
+  const dynHint = pos.y < 0.33 ? 'loud' : pos.y > 0.66 ? 'soft' : 'mid';
+  return [`♩ ${instrumentLabel} (walk)`, dynHint];
 }
 
 function getRoleStateLines(roleId: ColorRole, pos: VoicePosition, preset: string): string[] {
