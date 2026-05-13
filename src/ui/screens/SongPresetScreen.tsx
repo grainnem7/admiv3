@@ -1493,10 +1493,12 @@ function getInstrumentModeLines(
   const instrumentKey = status.batonInstruments?.[roleId] ?? DEFAULT_INSTRUMENT_KEY;
   const entry = INSTRUMENT_PALETTE_BY_KEY[instrumentKey];
   const instrumentLabel = entry?.name ?? instrumentKey;
-  // Pitch zones map: top of frame = high pitch.  Show octave-ish hint
-  // so the user can predict pitch from gesture.
-  const zone = pos.y < 0.33 ? 'high' : pos.y > 0.66 ? 'low' : 'mid';
-  return [`♩ ${instrumentLabel}`, `${zone} range`];
+  // Y → pitch within the chord ladder.  Top = high, bottom = low.
+  const pitchHint = pos.y < 0.33 ? 'high' : pos.y > 0.66 ? 'low' : 'mid';
+  // X → octave register.  Matches getOctaveShift in InstrumentVoice.
+  const octaveHint =
+    pos.x < LEFT_THRESHOLD ? 'oct -1' : pos.x > RIGHT_THRESHOLD ? 'oct +1' : 'oct 0';
+  return [`♩ ${instrumentLabel}`, `${pitchHint} · ${octaveHint}`];
 }
 
 function getRoleStateLines(roleId: ColorRole, pos: VoicePosition, preset: string): string[] {

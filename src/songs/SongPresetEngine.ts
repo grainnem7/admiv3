@@ -35,11 +35,31 @@ import { ChordPadVoice } from './voices/ChordPadVoice';
 import { MelodicVoice } from './voices/MelodicVoice';
 import { ArpeggioVoice } from './voices/ArpeggioVoice';
 import { BassSynthVoice } from './voices/BassSynthVoice';
+import { InstrumentVoice } from './voices/InstrumentVoice';
+import {
+  DEFAULT_INSTRUMENT_KEY,
+  INSTRUMENT_PALETTE_BY_KEY,
+} from './voices/presets/instrumentPalette';
 import { loadSongAnalysis } from './analysisLoader';
 
 // ============================================
 // Types
 // ============================================
+
+/**
+ * Per-baton mode selector.
+ *   parameter  → existing colour-role behaviour (melody, bass, arp, chord pad)
+ *   instrument → InstrumentVoice plays chord-tone notes on a chosen
+ *                instrument from the curated palette.
+ */
+export type BatonMode = 'parameter' | 'instrument';
+
+/** Persisted assignment for a single baton. */
+export interface BatonAssignment {
+  mode: BatonMode;
+  /** Palette key (e.g. "piano"); only meaningful in instrument mode. */
+  instrumentKey: string;
+}
 
 export interface VoicePosition {
   x: number;   // 0-1 normalised horizontal
@@ -80,6 +100,18 @@ export interface SongPresetStatus {
   continuousBackingEnabled: boolean;
   continuousBackingLevel: number;
   voicePresets: Record<string, string>;
+  /**
+   * Per-baton mode ("parameter" or "instrument") for each of the four
+   * generative colour roles.  Blue (stem mixer) is omitted because it
+   * is not switchable.
+   */
+  batonModes: Record<string, BatonMode>;
+  /**
+   * Per-baton instrument-palette key when in instrument mode.  Kept
+   * even when the role is in parameter mode so toggling back doesn't
+   * lose the previous selection.
+   */
+  batonInstruments: Record<string, string>;
   currentChordRoot: number | null;
 }
 
@@ -206,12 +238,38 @@ export class SongPresetEngine {
   private continuousBackingEnabled = true;
   private continuousBackingLevel = 0.4;
 
-  // Voice instrument presets (persist across song loads)
+  // Voice instrument presets (persist across song loads).
+  // These are the *parameter-mode* presets — each role-specific voice
+  // class (ChordPadVoice, MelodicVoice, etc.) consumes its matching
+  // preset catalog (PAD_PRESETS, MELODY_PRESETS, ...).
   private voicePresets: Map<ColorRole, string> = new Map([
     ['red',    'rhodesEP'],     // was 'warmPad'
     ['green',  'clarinet'],     // was 'bell'
     ['yellow', 'nylonGuitar'],  // was 'sparkle'
     ['orange', 'upright'],      // was 'sub'
+  ]);
+
+  /**
+   * Per-baton mode.  Defaults to 'parameter' (existing behaviour).
+   * Blue (stem mixer) is intentionally absent — it is not switchable.
+   */
+  private batonModes: Map<ColorRole, BatonMode> = new Map([
+    ['red',    'parameter'],
+    ['green',  'parameter'],
+    ['yellow', 'parameter'],
+    ['orange', 'parameter'],
+  ]);
+
+  /**
+   * Per-baton instrument-palette key (used only when the matching role
+   * is in instrument mode).  Stored separately from voicePresets so
+   * toggling mode preserves both selections.
+   */
+  private batonInstruments: Map<ColorRole, string> = new Map([
+    ['red',    DEFAULT_INSTRUMENT_KEY],
+    ['green',  DEFAULT_INSTRUMENT_KEY],
+    ['yellow', DEFAULT_INSTRUMENT_KEY],
+    ['orange', DEFAULT_INSTRUMENT_KEY],
   ]);
 
   // Velocity tracking
@@ -515,11 +573,77 @@ export class SongPresetEngine {
 
   setVoicePreset(role: ColorRole, preset: string): void {
     this.voicePresets.set(role, preset);
-    this.voices.get(role)?.setPreset(preset);
+    // Only forward to the live voice if the role is currently in
+    // parameter mode — instrument-mode voices use a different preset
+    // catalog (the instrument palette) and would reject this key.
+    if (this.batonModes.get(role) !== 'instrument') {
+      this.voices.get(role)?.setPreset(preset);
+    }
   }
 
   getVoicePreset(role: ColorRole): string {
     return this.voicePresets.get(role) ?? '';
+  }
+
+  // ---- Per-baton mode + instrument ----
+
+  /**
+   * Switch a baton between parameter mode and instrument mode.
+   *
+   * Blue (stem mixer) is rejected — it has no equivalent instrument
+   * behaviour.  If a song is already loaded, the existing voice for the
+   * role is disposed and replaced in place; if no song is loaded, the
+   * new mode takes effect on the next buildVoices() call (after
+   * loadSong).
+   */
+  setBatonMode(role: ColorRole, mode: BatonMode): void {
+    if (role === 'blue') return;
+    if (this.batonModes.get(role) === mode) return;
+    this.batonModes.set(role, mode);
+    this.swapVoice(role);
+  }
+
+  getBatonMode(role: ColorRole): BatonMode {
+    return this.batonModes.get(role) ?? 'parameter';
+  }
+
+  /**
+   * Set the instrument-palette key for a baton.  Takes effect
+   * immediately if the role is currently in instrument mode; otherwise
+   * it's stored and applied the next time the mode flips to instrument.
+   */
+  setBatonInstrument(role: ColorRole, instrumentKey: string): void {
+    if (role === 'blue') return;
+    if (!INSTRUMENT_PALETTE_BY_KEY[instrumentKey]) return;
+    this.batonInstruments.set(role, instrumentKey);
+    if (this.batonModes.get(role) === 'instrument') {
+      const voice = this.voices.get(role);
+      if (voice instanceof InstrumentVoice) {
+        voice.setPreset(instrumentKey);
+      }
+    }
+  }
+
+  getBatonInstrument(role: ColorRole): string {
+    return this.batonInstruments.get(role) ?? DEFAULT_INSTRUMENT_KEY;
+  }
+
+  /**
+   * Bulk-apply baton assignments — used at session start when restoring
+   * from the profile.  Each entry is applied via setBatonMode /
+   * setBatonInstrument so any active voices swap correctly.
+   */
+  applyBatonAssignments(
+    assignments: Partial<Record<ColorRole, BatonAssignment>>,
+  ): void {
+    for (const [role, assignment] of Object.entries(assignments)) {
+      if (!assignment) continue;
+      if (role === 'blue') continue;
+      const r = role as ColorRole;
+      this.batonInstruments.set(r, assignment.instrumentKey);
+      // Set mode last so the swap (if any) picks up the new instrument.
+      this.setBatonMode(r, assignment.mode);
+    }
   }
 
   // ---- Sidechain ducking (called by voices) ----
@@ -602,6 +726,8 @@ export class SongPresetEngine {
       continuousBackingEnabled: this.continuousBackingEnabled,
       continuousBackingLevel: this.continuousBackingLevel,
       voicePresets: Object.fromEntries(this.voicePresets),
+      batonModes: Object.fromEntries(this.batonModes),
+      batonInstruments: Object.fromEntries(this.batonInstruments),
       currentChordRoot: this.currentChord?.root ?? null,
     };
   }
@@ -680,47 +806,137 @@ export class SongPresetEngine {
       });
     }
 
-    // Blue: Stem Mixer
+    // Blue: Stem Mixer (not mode-switchable)
     const stemMixer = new StemMixerVoice(this.ctx!, stemRefs, this.song.stemMixer);
     stemMixer.setContinuousBacking(this.continuousBackingEnabled, this.continuousBackingLevel);
     stemMixer.connect(this.stemBus!);
     this.stemMixerVoice = stemMixer;
     this.voices.set('blue', stemMixer);
 
-    // Only create generated voices if we have a chord progression
+    // Only create generated voices if we have a chord progression.
+    // Each generative role's voice is chosen by the per-baton mode
+    // (parameter or instrument) — see createVoiceForRole.
     if (this.song.chordProgression && this.song.chordProgression.length > 0) {
-      const sidechainTrigger = () => this.triggerSidechain();
-
-      // Red: Chord Pad
-      const padVoice = new ChordPadVoice(this.ctx!);
-      padVoice.setPreset(this.voicePresets.get('red') ?? 'rhodesEP');
-      padVoice.onNoteTrigger = sidechainTrigger;
-      padVoice.connect(this.generatedBus!);
-      this.voices.set('red', padVoice);
-
-      // Green: Melodic Notes
-      const melodyVoice = new MelodicVoice(this.ctx!, this.song.bpm);
-      melodyVoice.setPreset(this.voicePresets.get('green') ?? 'clarinet');
-      melodyVoice.onNoteTrigger = sidechainTrigger;
-      if (this.song.beats && this.song.beats.length > 0) {
-        melodyVoice.setBeatTimestamps(this.song.beats);
+      for (const role of ['red', 'green', 'yellow', 'orange'] as const) {
+        const voice = this.createVoiceForRole(role);
+        if (voice) {
+          this.voices.set(role, voice);
+        }
       }
-      melodyVoice.connect(this.generatedBus!);
-      this.melodicVoice = melodyVoice;
-      this.voices.set('green', melodyVoice);
+    }
+  }
 
-      // Yellow: Arpeggio
-      const arpVoice = new ArpeggioVoice(this.ctx!, this.song.bpm);
-      arpVoice.setPreset(this.voicePresets.get('yellow') ?? 'nylonGuitar');
-      arpVoice.connect(this.generatedBus!);
-      this.voices.set('yellow', arpVoice);
+  /**
+   * Construct (or rebuild) the voice for a single generative role
+   * according to its current mode + assignment.
+   *
+   * Connection to generatedBus, sidechain wiring, beat-timestamp
+   * injection, and stem-bass-gain callback are all applied here so
+   * callers (buildVoices / swapVoice) don't need to know the per-role
+   * differences.
+   */
+  private createVoiceForRole(role: ColorRole): ToneVoiceBase | null {
+    if (!this.ctx || !this.song) return null;
+    if (role === 'blue') return null;
 
-      // Orange: Bass Synth
-      const bassVoice = new BassSynthVoice(this.ctx!, this.song.bpm);
-      bassVoice.setPreset(this.voicePresets.get('orange') ?? 'upright');
-      bassVoice.connect(this.generatedBus!);
-      bassVoice.setStemBassGainCallback(() => this.stemMixerVoice?.getStemGain('bass') ?? 0);
-      this.voices.set('orange', bassVoice);
+    const mode = this.batonModes.get(role) ?? 'parameter';
+    const voice: ToneVoiceBase =
+      mode === 'instrument'
+        ? this.createInstrumentVoice(role)
+        : this.createParameterVoice(role);
+
+    voice.connect(this.generatedBus!);
+    return voice;
+  }
+
+  private createInstrumentVoice(role: ColorRole): InstrumentVoice {
+    const instrumentKey =
+      this.batonInstruments.get(role) ?? DEFAULT_INSTRUMENT_KEY;
+    const voice = new InstrumentVoice(this.ctx!, instrumentKey);
+    // Instrument-mode notes feed the same sidechain ducking as the
+    // parameter-mode voices that trigger discrete notes (pad, melody).
+    voice.onNoteTrigger = () => this.triggerSidechain();
+    return voice;
+  }
+
+  /**
+   * Build the role's parameter-mode voice with all the role-specific
+   * wiring (sidechain hooks, beat timestamps, stem-bass callback).
+   */
+  private createParameterVoice(role: ColorRole): ToneVoiceBase {
+    const ctx = this.ctx!;
+    const song = this.song!;
+    const sidechainTrigger = () => this.triggerSidechain();
+
+    switch (role) {
+      case 'red': {
+        const padVoice = new ChordPadVoice(ctx);
+        padVoice.setPreset(this.voicePresets.get('red') ?? 'rhodesEP');
+        padVoice.onNoteTrigger = sidechainTrigger;
+        return padVoice;
+      }
+      case 'green': {
+        const melodyVoice = new MelodicVoice(ctx, song.bpm);
+        melodyVoice.setPreset(this.voicePresets.get('green') ?? 'clarinet');
+        melodyVoice.onNoteTrigger = sidechainTrigger;
+        if (song.beats && song.beats.length > 0) {
+          melodyVoice.setBeatTimestamps(song.beats);
+        }
+        // Track the live melodic voice reference used by restart logic
+        this.melodicVoice = melodyVoice;
+        return melodyVoice;
+      }
+      case 'yellow': {
+        const arpVoice = new ArpeggioVoice(ctx, song.bpm);
+        arpVoice.setPreset(this.voicePresets.get('yellow') ?? 'nylonGuitar');
+        return arpVoice;
+      }
+      case 'orange': {
+        const bassVoice = new BassSynthVoice(ctx, song.bpm);
+        bassVoice.setPreset(this.voicePresets.get('orange') ?? 'upright');
+        bassVoice.setStemBassGainCallback(
+          () => this.stemMixerVoice?.getStemGain('bass') ?? 0,
+        );
+        return bassVoice;
+      }
+      default:
+        // Blue is filtered out by the caller — but keep TypeScript happy.
+        throw new Error(`[SongPresetEngine] No parameter voice for role: ${role}`);
+    }
+  }
+
+  /**
+   * Swap the voice for a single role (called when mode changes
+   * mid-session).  Disposes the existing voice, then constructs and
+   * connects its replacement.  If there's no audio context yet (song
+   * not loaded), the new mode is just stored and applied later by
+   * buildVoices().
+   */
+  private swapVoice(role: ColorRole): void {
+    if (!this.ctx) return;
+    if (role === 'blue') return;
+
+    const old = this.voices.get(role);
+    if (old) {
+      // Clear the melodicVoice reference if we're disposing it — the
+      // createParameterVoice('green') path will re-set it if green
+      // returns to parameter mode.
+      if (old === this.melodicVoice) {
+        this.melodicVoice = null;
+      }
+      old.disconnect();
+      old.dispose();
+      this.voices.delete(role);
+    }
+
+    // No chord progression → no generative voices at all.
+    if (!this.song?.chordProgression || this.song.chordProgression.length === 0) {
+      return;
+    }
+
+    const next = this.createVoiceForRole(role);
+    if (next) {
+      this.voices.set(role, next);
     }
   }
 

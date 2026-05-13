@@ -10,6 +10,12 @@
 
 import type { InputProfile } from '../state/types';
 import { DEFAULT_PRESETS, clonePreset } from './presets';
+import {
+  loadBatonAssignments,
+  saveBatonAssignments,
+  clearBatonAssignments,
+  type BatonAssignments,
+} from './BatonAssignments';
 
 const STORAGE_KEY = 'admi-input-profiles';
 const ACTIVE_PROFILE_KEY = 'admi-active-profile';
@@ -241,6 +247,30 @@ export class InputProfileManager {
       Array.isArray(p.trackedFeatures) &&
       typeof p.movementSettings === 'object'
     );
+  }
+
+  // ============================================
+  // Baton assignments (per-colour-role mode + instrument)
+  // ============================================
+  //
+  // Delegated to BatonAssignments.ts.  Exposed here so callers have a
+  // single point of entry for "user-profile-style persistence", matching
+  // the Workshop 5 directive to persist baton state via the profile
+  // manager.  The underlying storage key is independent of InputProfile.
+
+  /** Return the persisted per-baton mode + instrument map. */
+  getBatonAssignments(): BatonAssignments {
+    return loadBatonAssignments();
+  }
+
+  /** Persist per-baton assignments to localStorage. */
+  saveBatonAssignments(assignments: BatonAssignments): void {
+    saveBatonAssignments(assignments);
+  }
+
+  /** Remove all stored baton assignments. */
+  clearBatonAssignments(): void {
+    clearBatonAssignments();
   }
 
   /**
