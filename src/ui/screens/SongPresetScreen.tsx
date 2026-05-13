@@ -17,6 +17,7 @@ import { useAppStore, useIsMuted } from '../../state/store';
 import { CameraManager } from '../../tracking/CameraManager';
 import { ColorTracker } from '../../tracking/ColorTracker';
 import type { ColorBlob } from '../../tracking/ColorTracker';
+import { FaceDetector } from '../../tracking/FaceDetector';
 import { SongPresetEngine } from '../../songs/SongPresetEngine';
 import type {
   VoicePosition,
@@ -73,6 +74,13 @@ function SongPresetScreen() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const cameraRef = useRef<CameraManager | null>(null);
   const colorTrackerRef = useRef<ColorTracker | null>(null);
+  /**
+   * Face detector for the Head Bopping channel (Session 5 Change ID 6).
+   * Lazily started — only initialised when the user toggles head
+   * bopping on, so users who don't want it don't pay the MediaPipe
+   * face-landmarker load cost.
+   */
+  const faceDetectorRef = useRef<FaceDetector | null>(null);
   const engineRef = useRef(new SongPresetEngine());
 
   // Latest blob data
@@ -102,6 +110,13 @@ function SongPresetScreen() {
    * baton-driven notes always land on-rhythm with the accompaniment.
    */
   const [beatSnap, setBeatSnap] = useState(false);
+
+  /**
+   * Head Bopping toggle.  When on, a FaceDetector is started and each
+   * detected downward head bop fires a kick-drum sample on the engine
+   * — beat-snapped if Beat Bopping is also on.
+   */
+  const [headBopEnabled, setHeadBopEnabled] = useState(false);
 
   // Live status
   const [liveStatus, setLiveStatus] = useState<SongPresetStatus | null>(null);
@@ -235,6 +250,66 @@ function SongPresetScreen() {
   useEffect(() => {
     const engine = engineRef.current;
     return () => { engine.dispose(); };
+  }, []);
+
+  // Head Bopping lifecycle.  When toggled on, lazily initialise the
+  // FaceDetector (loads MediaPipe face-landmarker model on first use),
+  // start it on the video element, and push each frame's landmarks
+  // into the engine.  When toggled off, stop the detector but keep it
+  // alive — the model is expensive to load, so re-toggling shouldn't
+  // pay that cost again.
+  useEffect(() => {
+    const engine = engineRef.current;
+    engine.setHeadBopEnabled(headBopEnabled);
+    if (!headBopEnabled) {
+      faceDetectorRef.current?.stop();
+      return;
+    }
+
+    const video = videoRef.current;
+    if (!video) return;
+
+    let cancelled = false;
+    let unsub: (() => void) | null = null;
+
+    const startFace = async () => {
+      try {
+        if (!faceDetectorRef.current) {
+          const detector = new FaceDetector();
+          await detector.initialize();
+          if (cancelled) {
+            detector.dispose();
+            return;
+          }
+          faceDetectorRef.current = detector;
+        }
+        const detector = faceDetectorRef.current;
+        unsub = detector.onFace((result) => {
+          engine.processFaceLandmarks(result.face, result.timestamp);
+        });
+        detector.start(video);
+      } catch (err) {
+        console.error('[SongPresetScreen] Face detector init failed:', err);
+        setHeadBopEnabled(false);
+      }
+    };
+
+    startFace();
+
+    return () => {
+      cancelled = true;
+      unsub?.();
+      faceDetectorRef.current?.stop();
+    };
+  }, [headBopEnabled]);
+
+  // Dispose the FaceDetector entirely on unmount (the lifecycle effect
+  // above only stops it on toggle-off so the model stays cached).
+  useEffect(() => {
+    return () => {
+      faceDetectorRef.current?.dispose();
+      faceDetectorRef.current = null;
+    };
   }, []);
 
   // ---- Sync mute ----
@@ -834,9 +909,22 @@ function SongPresetScreen() {
                       const r = role.id as ColorRole;
                       const mode = batonModes[r];
                       const isInstrument = mode === 'instrument';
+                      const isHarmonizer = mode === 'harmonizer';
+                      const isParameter = !isInstrument && !isHarmonizer;
+                      const canHarmonize = r === 'green';
+                      const buttonStyle = (active: boolean) => ({
+                        flex: 1,
+                        padding: '0 4px',
+                        fontSize: 9,
+                        background: active ? role.cssColor : '#1c1c2a',
+                        color: active ? '#000' : '#a1a1b8',
+                        border: `1px solid ${active ? role.cssColor : '#2a2a3a'}`,
+                        cursor: 'pointer',
+                        fontWeight: active ? 700 : 400,
+                      } as React.CSSProperties);
                       return (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                          {/* Mode toggle: parameter ↔ instrument */}
+                          {/* Mode toggle: parameter / instrument / harmonizer (green only) */}
                           <div
                             role="group"
                             aria-label={`${role.label} mode`}
@@ -845,18 +933,9 @@ function SongPresetScreen() {
                             <button
                               type="button"
                               onClick={() => handleBatonModeChange(r, 'parameter')}
-                              aria-pressed={!isInstrument}
+                              aria-pressed={isParameter}
                               title="Parameter mode (default behaviour)"
-                              style={{
-                                flex: 1,
-                                padding: '0 4px',
-                                fontSize: 9,
-                                background: !isInstrument ? role.cssColor : '#1c1c2a',
-                                color: !isInstrument ? '#000' : '#a1a1b8',
-                                border: `1px solid ${!isInstrument ? role.cssColor : '#2a2a3a'}`,
-                                cursor: 'pointer',
-                                fontWeight: !isInstrument ? 700 : 400,
-                              }}
+                              style={buttonStyle(isParameter)}
                             >
                               Param
                             </button>
@@ -865,22 +944,42 @@ function SongPresetScreen() {
                               onClick={() => handleBatonModeChange(r, 'instrument')}
                               aria-pressed={isInstrument}
                               title="Instrument mode (plays chord-tone notes on a chosen instrument)"
-                              style={{
-                                flex: 1,
-                                padding: '0 4px',
-                                fontSize: 9,
-                                background: isInstrument ? role.cssColor : '#1c1c2a',
-                                color: isInstrument ? '#000' : '#a1a1b8',
-                                border: `1px solid ${isInstrument ? role.cssColor : '#2a2a3a'}`,
-                                cursor: 'pointer',
-                                fontWeight: isInstrument ? 700 : 400,
-                              }}
+                              style={buttonStyle(isInstrument)}
                             >
                               Instr
                             </button>
+                            {canHarmonize && (
+                              <button
+                                type="button"
+                                onClick={() => handleBatonModeChange(r, 'harmonizer')}
+                                aria-pressed={isHarmonizer}
+                                title="Harmonizer mode (sings chord-aware harmony to the vocal). Hand height picks the interval. Only works on songs that have a vocal-harmony track."
+                                style={buttonStyle(isHarmonizer)}
+                              >
+                                Harm
+                              </button>
+                            )}
                           </div>
                           {/* Preset selector — list depends on mode */}
-                          {isInstrument ? (
+                          {isHarmonizer ? (
+                            <div
+                              style={{
+                                height: 26,
+                                fontSize: 9,
+                                width: 86,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: '#71718a',
+                                background: '#1c1c2a',
+                                border: '1px solid #2a2a3a',
+                                flexShrink: 0,
+                              }}
+                              title="Vocal-pad preset (fixed)"
+                            >
+                              Vocal pad
+                            </div>
+                          ) : isInstrument ? (
                             <select
                               className="form-field__select"
                               value={batonInstruments[r] ?? DEFAULT_INSTRUMENT_KEY}
@@ -1032,7 +1131,9 @@ function SongPresetScreen() {
 
             {/* Beat Bopping toggle (Session 5 Change ID 7) — beat-snap
                 every instrument-mode baton trigger to the song's beat
-                grid so triggered notes always land on rhythm. */}
+                grid so triggered notes always land on rhythm.  Head
+                Bopping toggle below adds a percussion channel driven by
+                head movement; honours the beat-snap setting too. */}
             <div style={styles.section}>
               <h3 style={styles.sectionTitle}>Beat Bopping</h3>
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#a1a1b8', fontSize: 13 }}>
@@ -1041,6 +1142,19 @@ function SongPresetScreen() {
               </label>
               <div style={{ fontSize: 11, color: '#71718a', marginTop: 4 }}>
                 Only affects batons in instrument mode and songs with beat analysis.
+              </div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#a1a1b8', fontSize: 13, marginTop: 10 }}>
+                <input
+                  type="checkbox"
+                  checked={headBopEnabled}
+                  onChange={(e) => setHeadBopEnabled(e.target.checked)}
+                />
+                Head bopping (kick on each downward nod)
+              </label>
+              <div style={{ fontSize: 11, color: '#71718a', marginTop: 4 }}>
+                Loads the face tracker the first time you toggle it on.
+                Kick fires on each nod, beat-snapped when the toggle
+                above is also on.
               </div>
             </div>
 

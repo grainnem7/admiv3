@@ -18,6 +18,32 @@ export interface AnalysisChord {
   label: string;
 }
 
+/**
+ * One pre-computed harmony entry (produced by scripts/build_harmony.py).
+ * Each candidate interval (thirdUp, fifthUp, sixthUp, thirdDn) is the nearest
+ * chord tone to that nominal interval above/below the vocal — so harmony is
+ * always chord-aware.
+ */
+export interface HarmonyCandidate {
+  midi: number;
+  label: string;
+  semitonesFromVocal: number;
+}
+
+export interface HarmonyEntry {
+  time: number;
+  duration: number;
+  vocalMidi: number;
+  vocalLabel: string;
+  chord: string;
+  harmonies: {
+    thirdUp: HarmonyCandidate;
+    fifthUp: HarmonyCandidate;
+    sixthUp: HarmonyCandidate;
+    thirdDn: HarmonyCandidate;
+  };
+}
+
 export interface SongAnalysis {
   title: string;
   artist: string;
@@ -27,6 +53,8 @@ export interface SongAnalysis {
   beats: number[];
   downbeats: number[];
   chords: AnalysisChord[];
+  /** Optional vocal-harmony track produced by scripts/build_harmony.py. */
+  harmony?: HarmonyEntry[];
 }
 
 // ============================================
@@ -148,6 +176,7 @@ export async function loadSongAnalysis(url: string): Promise<{
   bpm: number;
   key: string;
   timeSignature: string;
+  harmony: HarmonyEntry[];
 }> {
   const analysis = await loadAnalysis(url);
   const chordProgression = analysisToChordProgression(analysis);
@@ -159,5 +188,6 @@ export async function loadSongAnalysis(url: string): Promise<{
     bpm: analysis.bpm,
     key: analysis.key,
     timeSignature: analysis.timeSignature,
+    harmony: analysis.harmony ?? [],
   };
 }

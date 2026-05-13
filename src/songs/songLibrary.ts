@@ -9,6 +9,7 @@
  */
 
 import type { ChordEntry } from './voices/chordLookup';
+import type { HarmonyEntry } from './analysisLoader';
 
 // ============================================
 // Types
@@ -51,6 +52,8 @@ export interface SongConfig {
   beats?: number[];
   /** Downbeat (bar boundary) timestamps from audio analysis. */
   downbeats?: number[];
+  /** Pre-computed vocal harmony entries (populated at runtime). */
+  harmony?: HarmonyEntry[];
 }
 
 // ============================================

@@ -33,14 +33,17 @@ import { StemMixerVoice } from './voices/StemMixerVoice';
 import type { StemGainRef } from './voices/StemMixerVoice';
 import { ChordPadVoice } from './voices/ChordPadVoice';
 import { MelodicVoice } from './voices/MelodicVoice';
+import { HarmonyVoice } from './voices/HarmonyVoice';
 import { ArpeggioVoice } from './voices/ArpeggioVoice';
 import { BassSynthVoice } from './voices/BassSynthVoice';
-import { InstrumentVoice } from './voices/InstrumentVoice';
+import { InstrumentVoice, nextBeatAfter } from './voices/InstrumentVoice';
 import {
   DEFAULT_INSTRUMENT_KEY,
   INSTRUMENT_PALETTE_BY_KEY,
 } from './voices/presets/instrumentPalette';
 import { loadSongAnalysis } from './analysisLoader';
+import { HeadBopDetector } from '../mapping/nodes/HeadRhythmNode';
+import type { FaceLandmarks } from '../state/types';
 
 // ============================================
 // Types
@@ -52,7 +55,13 @@ import { loadSongAnalysis } from './analysisLoader';
  *   instrument → InstrumentVoice plays chord-tone notes on a chosen
  *                instrument from the curated palette.
  */
-export type BatonMode = 'parameter' | 'instrument';
+/**
+ * harmonizer: green-only mode. Plays a chord-aware harmony to the song's
+ * vocal melody (from analysis.json.harmony[]). Hand-height selects between
+ * 3rd-down / 3rd-up / 5th-up / 6th-up — every interval is snapped to a
+ * chord tone so any position is musically safe.
+ */
+export type BatonMode = 'parameter' | 'instrument' | 'harmonizer';
 
 /** Persisted assignment for a single baton. */
 export interface BatonAssignment {
@@ -333,6 +342,21 @@ export class SongPresetEngine {
   // and any new ones built on song load / mode switch.
   private beatSnap = false;
 
+  // Head Bopping (Session 5 Change ID 6).  Detects rhythmic downward
+  // head movements via FaceLandmarks Y of a chosen landmark (nose tip
+  // by default), and fires a percussive MembraneSynth note on each bop
+  // — beat-snapped if beatSnap is on so it lands on rhythm too.
+  // Lazy-initialised: the synth is only constructed when the user
+  // first enables head bopping (avoids paying the cost otherwise).
+  private headBopEnabled = false;
+  private headBopDetector = new HeadBopDetector(0.025, 200);
+  private headBopSynth: Tone.MembraneSynth | null = null;
+  private headBopPending: { targetTime: number } | null = null;
+  /** Landmark index sampled for head Y; 1 = nose tip, 10 = forehead. */
+  private headBopLandmarkIndex = 1;
+  /** Last currentTime seen in update() — used by processFaceLandmarks. */
+  private lastUpdateTime = 0;
+
   // Beat pulse tracking
   private lastDownbeatIndex = -1;
 
@@ -400,6 +424,7 @@ export class SongPresetEngine {
         song.chordProgression = analysis.chordProgression;
         song.beats = analysis.beats;
         song.downbeats = analysis.downbeats;
+        song.harmony = analysis.harmony;
         if (Math.abs(analysis.bpm - song.bpm) < 5) {
           song.bpm = analysis.bpm;
         }
@@ -899,12 +924,23 @@ export class SongPresetEngine {
     if (role === 'blue') return null;
 
     const mode = this.batonModes.get(role) ?? 'parameter';
-    const voice: ToneVoiceBase =
-      mode === 'instrument'
-        ? this.createInstrumentVoice(role)
-        : this.createParameterVoice(role);
+    let voice: ToneVoiceBase;
+    if (mode === 'instrument') {
+      voice = this.createInstrumentVoice(role);
+    } else if (mode === 'harmonizer' && role === 'green') {
+      voice = this.createHarmonyVoice();
+    } else {
+      voice = this.createParameterVoice(role);
+    }
 
     voice.connect(this.generatedBus!);
+    return voice;
+  }
+
+  private createHarmonyVoice(): HarmonyVoice {
+    const voice = new HarmonyVoice(this.ctx!);
+    voice.onNoteTrigger = () => this.triggerSidechain();
+    voice.setHarmony(this.song?.harmony ?? []);
     return voice;
   }
 
@@ -1062,6 +1098,14 @@ export class SongPresetEngine {
 
     // Check for end of song / loop
     const currentTime = this.getCurrentTime();
+    // Stash so processFaceLandmarks (called from screen layer, no
+    // playback-time arg) can compute beat-snap targets.
+    this.lastUpdateTime = currentTime;
+    // Flush any pending head-bop whose target beat has now arrived.
+    if (this.headBopPending && currentTime >= this.headBopPending.targetTime) {
+      this.playHeadBop();
+      this.headBopPending = null;
+    }
     const effectiveEnd = this.loopEnd > 0 ? this.loopEnd : this.duration;
 
     if (currentTime >= effectiveEnd) {
@@ -1292,6 +1336,99 @@ export class SongPresetEngine {
 
   isBeatSnap(): boolean {
     return this.beatSnap;
+  }
+
+  // ---- Head Bopping (Change ID 6) ----
+
+  /**
+   * Enable or disable the head-bop percussion trigger.  When enabled
+   * and the screen layer is calling processFaceLandmarks, each detected
+   * downward-then-upward head bop fires a MembraneSynth kick — beat-
+   * snapped if beatSnap is on.  No effect until processFaceLandmarks
+   * starts receiving data.
+   */
+  setHeadBopEnabled(enabled: boolean): void {
+    this.headBopEnabled = enabled;
+    if (!enabled) {
+      this.headBopPending = null;
+      this.headBopDetector.reset();
+    } else if (this.ctx && !this.headBopSynth) {
+      this.ensureHeadBopSynth();
+    }
+  }
+
+  isHeadBopEnabled(): boolean {
+    return this.headBopEnabled;
+  }
+
+  /**
+   * Tune the head-bop sensitivity.  Lower minDownExcursion catches
+   * subtler bops at the cost of accepting more involuntary motion.
+   */
+  setHeadBopSensitivity(minDownExcursion: number, cooldownMs: number): void {
+    this.headBopDetector.setConfig(minDownExcursion, cooldownMs);
+  }
+
+  /**
+   * Feed face landmarks from the screen layer.  Pulled out of update()
+   * so the engine doesn't need to know how face tracking is wired in
+   * the host screen — SongPresetScreen owns its own FaceDetector and
+   * pushes results here on each frame.
+   *
+   * Idempotent / cheap: returns early if head-bop is disabled or if
+   * landmarks are missing.  The Y value comes from a single landmark
+   * (nose tip by default) which is more stable than averaging a region.
+   */
+  processFaceLandmarks(landmarks: FaceLandmarks | null, timestampMs: number): void {
+    if (!this.headBopEnabled || !landmarks) return;
+    const lm = landmarks.landmarks[this.headBopLandmarkIndex];
+    if (!lm) return;
+
+    if (this.headBopDetector.step(lm.y, timestampMs)) {
+      this.triggerHeadBop();
+    }
+  }
+
+  /**
+   * Fire a head-bop percussion event.  Honours the beat-snap toggle —
+   * when on, the kick is deferred to the next beat in the song's beat
+   * grid.  Otherwise plays immediately.  Note: the kick uses Tone's
+   * own audio context, not the engine's this.ctx, so head bopping
+   * works before a song is loaded (the user can hear feedback while
+   * setting up).
+   */
+  private triggerHeadBop(): void {
+    this.ensureHeadBopSynth();
+
+    if (this.beatSnap && this.song?.beats && this.song.beats.length > 0) {
+      const targetTime = nextBeatAfter(this.song.beats, this.lastUpdateTime);
+      this.headBopPending = { targetTime };
+    } else {
+      this.playHeadBop();
+    }
+  }
+
+  /**
+   * Construct the MembraneSynth on first use.  Routes through
+   * Tone.Destination so it inherits Tone's master volume — this
+   * sidesteps the raw-AudioNode vs Tone-node mismatch with
+   * generatedBus.  Mute via SongPresetEngine.setMuted() still works
+   * because that gates the engine's masterGainNode which is downstream
+   * of Tone.Destination.
+   */
+  private ensureHeadBopSynth(): void {
+    if (this.headBopSynth) return;
+    this.headBopSynth = new Tone.MembraneSynth({
+      pitchDecay: 0.05,
+      octaves: 6,
+      envelope: { attack: 0.001, decay: 0.3, sustain: 0.01, release: 0.4 },
+    }).toDestination();
+  }
+
+  /** Play the kick now, regardless of beat alignment. */
+  private playHeadBop(): void {
+    if (!this.headBopSynth) return;
+    this.headBopSynth.triggerAttackRelease('C2', '8n');
   }
 
   /**
