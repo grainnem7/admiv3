@@ -724,6 +724,13 @@ export class SongPresetEngine {
       if (voice instanceof HarmonyVoice) {
         voice.setPreset(instrumentKey);
       }
+    } else if (currentMode === 'walk') {
+      // WalkVoice shares the instrument palette with instrument and
+      // harmonizer modes; swap its player without rebuilding the voice.
+      const voice = this.voices.get(role);
+      if (voice instanceof WalkVoice) {
+        voice.setPreset(instrumentKey);
+      }
     }
   }
 

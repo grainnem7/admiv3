@@ -209,4 +209,40 @@ describe('SongPresetEngine walk mode wiring', () => {
 
     engine.dispose();
   });
+
+  it('setBatonInstrument forwards to a live WalkVoice', async () => {
+    const engine = new SongPresetEngine();
+    await engine.loadSong(makeMinimalSong());
+
+    engine.setBatonMode('green', 'walk');
+    // @ts-expect-error — voices is private
+    const voice = engine.voices.get('green') as WalkVoice;
+    const setPresetSpy = vi.spyOn(voice, 'setPreset');
+
+    engine.setBatonInstrument('green', 'strings');
+
+    expect(setPresetSpy).toHaveBeenCalledWith('strings');
+    engine.dispose();
+  });
+
+  it('switching mode preserves the instrument choice across walk/instrument/walk', async () => {
+    const engine = new SongPresetEngine();
+    await engine.loadSong(makeMinimalSong());
+
+    engine.setBatonMode('green', 'walk');
+    engine.setBatonInstrument('green', 'strings');
+
+    engine.setBatonMode('green', 'instrument');
+    // @ts-expect-error — voices is private
+    const instrumentVoice = engine.voices.get('green');
+    // InstrumentVoice exposes getInstrumentKey()
+    expect((instrumentVoice as unknown as { getInstrumentKey: () => string }).getInstrumentKey()).toBe('strings');
+
+    engine.setBatonMode('green', 'walk');
+    // @ts-expect-error — voices is private
+    const walkVoice = engine.voices.get('green') as WalkVoice;
+    expect(walkVoice.getInstrumentKey()).toBe('strings');
+
+    engine.dispose();
+  });
 });
