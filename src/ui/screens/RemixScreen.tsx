@@ -35,6 +35,9 @@ import { usePadState } from './songPreset/usePadState';
 /** ColorRole used for the single touch baton. */
 const TOUCH_BATON_ROLE: ColorRole = 'red';
 
+/** Duration (ms) of the cycle-flash highlight on the destination tile. */
+const CYCLE_FLASH_MS = 300;
+
 /** Human-readable label + accent colour for each stem tile. */
 const STEM_META: Record<StemId, { label: string; color: string }> = {
   vocals: { label: 'Vocals', color: '#a78bfa' },
@@ -71,6 +74,12 @@ export default function RemixScreen() {
    * false, so tiles go latched as soon as the baton leaves.
    */
   const lastFoundRef  = useRef<Map<ColorRole, boolean>>(new Map());
+  /**
+   * Per-role timestamp (performance.now()) of the last observed cycled=true frame.
+   * Used to compute cycle-flash opacity without React state or setTimeout.
+   * Flash is active while (now - flashTime) < CYCLE_FLASH_MS.
+   */
+  const cycleFlashRef = useRef<Map<ColorRole, number>>(new Map());
 
   // ---- Touch pad ----
   const { state: padState, bind: padBind, reset: resetPad } = usePadState();
@@ -223,6 +232,7 @@ export default function RemixScreen() {
         const out = baton.update({ x: pad.x, y: pad.y, found }, nowMs);
         lastOutputsRef.current.set(role, out);
         lastFoundRef.current.set(role, found);
+        if (out.cycled) cycleFlashRef.current.set(role, nowMs);
         engine.applyBaton(out);
       } else {
         // Camera mode: iterate all tracked colour roles
@@ -241,6 +251,8 @@ export default function RemixScreen() {
               const out = baton.update({ x, y, found: false }, nowMs);
               lastOutputsRef.current.set(role.id, out);
               lastFoundRef.current.set(role.id, false);
+              // out.cycled is always false when found=false, but guard for safety
+              if (out.cycled) cycleFlashRef.current.set(role.id, nowMs);
               engine.applyBaton(out);
             }
             continue;
@@ -255,6 +267,7 @@ export default function RemixScreen() {
           const out = baton.update({ x, y, found }, nowMs);
           lastOutputsRef.current.set(role.id, out);
           lastFoundRef.current.set(role.id, true);
+          if (out.cycled) cycleFlashRef.current.set(role.id, nowMs);
           engine.applyBaton(out);
         }
       }
@@ -437,20 +450,54 @@ export default function RemixScreen() {
             const meta   = STEM_META[stem];
             const filterN = state?.filterNorm ?? 0;
 
-            // Which baton role is assigned to this stem?
-            let assignedRole: ColorRole | null = null;
+            // Collect ALL baton roles assigned to this stem (two batons may share a tile).
+            const assignedRoles: ColorRole[] = [];
             for (const [role, baton] of batonsRef.current) {
-              if (baton.assignedStem === stem) {
-                assignedRole = role;
-                break;
-              }
+              if (baton.assignedStem === stem) assignedRoles.push(role);
             }
-            const isLive = assignedRole !== null && activeBatonRoles.includes(assignedRole);
+            // Primary role for border/bar colour (first found; preserved Task-8 behaviour).
+            const assignedRole: ColorRole | null = assignedRoles[0] ?? null;
+            const isLive = assignedRoles.some((r) => activeBatonRoles.includes(r));
             const assignedColor = assignedRole
               ? (COLOR_ROLES.find((r) => r.id === assignedRole)?.cssColor ?? meta.color)
               : meta.color;
 
             const stuttering = state?.stuttering ?? false;
+
+            // ---- Cycle flash ----
+            // Active when any role that currently occupies this stem flashed within CYCLE_FLASH_MS.
+            const nowMs = performance.now();
+            let cycleFlashOpacity = 0;
+            let cycleFlashColor = '#ffffff';
+            for (const role of assignedRoles) {
+              const flashTime = cycleFlashRef.current.get(role);
+              if (flashTime !== undefined) {
+                const elapsed = nowMs - flashTime;
+                if (elapsed < CYCLE_FLASH_MS) {
+                  // Fade from 1 → 0 over the window
+                  const opacity = 1 - elapsed / CYCLE_FLASH_MS;
+                  if (opacity > cycleFlashOpacity) {
+                    cycleFlashOpacity = opacity;
+                    cycleFlashColor = COLOR_ROLES.find((r) => r.id === role)?.cssColor ?? '#ffffff';
+                  }
+                }
+              }
+            }
+
+            // ---- Dwell progress ----
+            // Collect dwell progress for each present baton on this stem.
+            const dwellEntries: { role: ColorRole; progress: number; color: string }[] = [];
+            for (const role of assignedRoles) {
+              if (!activeBatonRoles.includes(role)) continue;
+              const out = lastOutputsRef.current.get(role);
+              if (out && out.dwellProgress > 0) {
+                dwellEntries.push({
+                  role,
+                  progress: out.dwellProgress,
+                  color: COLOR_ROLES.find((r) => r.id === role)?.cssColor ?? meta.color,
+                });
+              }
+            }
 
             return (
               <div
@@ -463,31 +510,109 @@ export default function RemixScreen() {
                   // Stutter strobe: flash opacity
                   opacity: stuttering ? (frameCountRef.current % 2 === 0 ? 1 : 0.45) : 1,
                   transition: stuttering ? 'none' : 'opacity 0.15s',
+                  position: 'relative',
                 }}
-                aria-label={`${meta.label} stem: level ${Math.round(filterN * 100)}%${stuttering ? ', stuttering' : ''}`}
+                aria-label={`${meta.label} stem: level ${Math.round(filterN * 100)}%${stuttering ? ', stuttering' : ''}${assignedRoles.length > 0 ? `, controlled by ${assignedRoles.join(' and ')} baton${assignedRoles.length > 1 ? 's' : ''}` : ''}`}
               >
+                {/* Cycle flash overlay — fades out over CYCLE_FLASH_MS on the destination tile */}
+                {cycleFlashOpacity > 0 && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      borderRadius: 10,
+                      background: cycleFlashColor,
+                      opacity: cycleFlashOpacity * 0.25,
+                      pointerEvents: 'none',
+                    }}
+                    aria-label={`Baton arrived — cycle flash`}
+                  />
+                )}
+
                 {/* Tile header */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
                   <span style={{ fontSize: 13, fontWeight: 700, color: isLive ? assignedColor : meta.color }}>
                     {meta.label}
                   </span>
-                  {assignedRole && (
-                    <span
-                      style={{
-                        fontSize: 9,
-                        fontWeight: 700,
-                        padding: '1px 5px',
-                        borderRadius: 4,
-                        background: `${assignedColor}30`,
-                        color: assignedColor,
-                        border: `1px solid ${assignedColor}60`,
-                        textTransform: 'uppercase' as const,
-                      }}
-                      title={`Controlled by ${assignedRole} baton`}
-                    >
-                      {assignedRole}
-                    </span>
-                  )}
+                  {/* Baton markers — one badge per assigned role (never colour-only: text + colour) */}
+                  <div style={{ display: 'flex', gap: 3 }}>
+                    {assignedRoles.map((role) => {
+                      const roleColor = COLOR_ROLES.find((r) => r.id === role)?.cssColor ?? meta.color;
+                      const present   = activeBatonRoles.includes(role);
+                      const out       = lastOutputsRef.current.get(role);
+                      const dwell     = out?.dwellProgress ?? 0;
+                      // Ring dimensions
+                      const R = 9; // radius of SVG arc
+                      const cx = 12; const cy = 12; const size = 24;
+                      // Arc: sweep from 12-o'clock (−π/2) clockwise by dwell * 2π
+                      const angle = dwell * 2 * Math.PI;
+                      const endX  = cx + R * Math.sin(angle);
+                      const endY  = cy - R * Math.cos(angle);
+                      const largeArc = angle > Math.PI ? 1 : 0;
+                      const arcPath  = dwell >= 1
+                        // Full circle
+                        ? `M ${cx} ${cy - R} A ${R} ${R} 0 1 1 ${cx - 0.001} ${cy - R} Z`
+                        : dwell > 0
+                          ? `M ${cx} ${cy - R} A ${R} ${R} 0 ${largeArc} 1 ${endX} ${endY}`
+                          : '';
+                      return (
+                        <div
+                          key={role}
+                          style={{ display: 'flex', alignItems: 'center', gap: 2 }}
+                          title={`${role} baton${present ? ' — active' : ' — latched'}${dwell > 0 ? `, dwell ${Math.round(dwell * 100)}%` : ''}`}
+                        >
+                          {/* Dwell ring SVG — shown whenever progress > 0 */}
+                          {dwell > 0 && (
+                            <svg
+                              width={size}
+                              height={size}
+                              style={{ flexShrink: 0 }}
+                              aria-label={`${role} dwell ${Math.round(dwell * 100)}%`}
+                              role="img"
+                            >
+                              {/* Track */}
+                              <circle cx={cx} cy={cy} r={R} fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth={2} />
+                              {/* Progress arc */}
+                              <path
+                                d={arcPath}
+                                fill="none"
+                                stroke={roleColor}
+                                strokeWidth={2.5}
+                                strokeLinecap="round"
+                              />
+                              {/* Numeric percent inside ring */}
+                              <text
+                                x={cx}
+                                y={cy + 3.5}
+                                textAnchor="middle"
+                                fontSize={6}
+                                fill={roleColor}
+                                fontWeight="bold"
+                              >
+                                {Math.round(dwell * 100)}
+                              </text>
+                            </svg>
+                          )}
+                          {/* Role badge — text + colour; always visible when assigned */}
+                          <span
+                            style={{
+                              fontSize: 9,
+                              fontWeight: 700,
+                              padding: '1px 5px',
+                              borderRadius: 4,
+                              background: `${roleColor}30`,
+                              color: roleColor,
+                              border: `1px solid ${roleColor}${present ? 'aa' : '60'}`,
+                              textTransform: 'uppercase' as const,
+                              opacity: present ? 1 : 0.65,
+                            }}
+                          >
+                            {role}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 {/* Level bar — accessibility: numeric label + bar so deaf/HoH/colour-blind users get state */}
@@ -539,6 +664,46 @@ export default function RemixScreen() {
                     <span style={{ color: '#f97316', fontWeight: 700 }}>STUTTER</span>
                   )}
                 </div>
+
+                {/* Standalone dwell progress bars — shown below status for present batons */}
+                {dwellEntries.map(({ role, progress, color }) => (
+                  <div
+                    key={role}
+                    style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}
+                    aria-label={`${role} dwell ${Math.round(progress * 100)}%`}
+                  >
+                    <span style={{ fontSize: 8, color, textTransform: 'uppercase', width: 28, flexShrink: 0 }}>
+                      {role}
+                    </span>
+                    <div
+                      style={{
+                        flex: 1,
+                        height: 3,
+                        background: 'rgba(255,255,255,0.08)',
+                        borderRadius: 2,
+                        overflow: 'hidden',
+                      }}
+                      role="progressbar"
+                      aria-valuenow={Math.round(progress * 100)}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-label={`${role} dwell progress`}
+                    >
+                      <div
+                        style={{
+                          height: '100%',
+                          width: `${progress * 100}%`,
+                          background: color,
+                          borderRadius: 2,
+                          transition: 'width 50ms linear',
+                        }}
+                      />
+                    </div>
+                    <span style={{ fontSize: 8, color, fontFamily: 'monospace', width: 24, textAlign: 'right', flexShrink: 0 }}>
+                      {Math.round(progress * 100)}%
+                    </span>
+                  </div>
+                ))}
               </div>
             );
           })}
