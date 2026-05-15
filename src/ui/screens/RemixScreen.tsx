@@ -1,12 +1,1020 @@
 /**
- * RemixScreen — placeholder shell. Full camera/touch UI lands in the
- * next task; this makes routing compile and navigable first.
+ * RemixScreen — camera + touch input screen driving RemixEngine.
+ *
+ * Two input paths:
+ *   Webcam: ColorTracker tracking up to 5 colour roles; click-to-calibrate.
+ *   Touch:  usePadState single-pointer pad; uses the 'red' ColorRole.
+ *
+ * Per frame:
+ *   1. Build baton inputs from camera blobs or touch pad state.
+ *   2. For each input, get/create a RemixBaton, call baton.update().
+ *   3. Call engine.applyBaton() for each output.
+ *   4. Call engine.renderFrame(transport.seconds) once.
+ *   5. Read engine.getStemStates() once and render the 4 stem tiles.
  */
+
+import { useEffect, useRef, useState, useCallback } from 'react';
+import * as Tone from 'tone';
+import { useAppStore } from '../../state/store';
+import { CameraManager } from '../../tracking/CameraManager';
+import { ColorTracker } from '../../tracking/ColorTracker';
+import type { ColorBlob } from '../../tracking/ColorTracker';
+import { RemixEngine } from '../../remix/RemixEngine';
+import type { RemixStemState } from '../../remix/RemixEngine';
+import { RemixBaton } from '../../remix/RemixBaton';
+import type { StemId } from '../../remix/RemixBaton';
+import { STEM_CYCLE_ORDER } from '../../remix/RemixBaton';
+import { SONG_LIBRARY, COLOR_ROLES } from '../../songs/songLibrary';
+import type { SongConfig, ColorRole } from '../../songs/songLibrary';
+import { usePadState } from './songPreset/usePadState';
+
+// ============================================
+// Constants
+// ============================================
+
+/** ColorRole used for the single touch baton. */
+const TOUCH_BATON_ROLE: ColorRole = 'red';
+
+/** Human-readable label + accent colour for each stem tile. */
+const STEM_META: Record<StemId, { label: string; color: string }> = {
+  vocals: { label: 'Vocals', color: '#a78bfa' },
+  drums:  { label: 'Drums',  color: '#f97316' },
+  bass:   { label: 'Bass',   color: '#3b82f6' },
+  other:  { label: 'Other',  color: '#22c55e' },
+};
+
+// ============================================
+// Component
+// ============================================
+
 export default function RemixScreen() {
+  // ---- Refs ----
+  const videoRef      = useRef<HTMLVideoElement>(null);
+  const cameraRef     = useRef<CameraManager | null>(null);
+  const trackerRef    = useRef<ColorTracker | null>(null);
+  const engineRef     = useRef(new RemixEngine());
+  /** Latest blobs from ColorTracker callback — written off the RAF path. */
+  const blobsRef      = useRef<ColorBlob[]>([]);
+  /**
+   * Per-role RemixBaton instances.  Lazily created on first frame a given
+   * colour is seen.  Kept in a ref so Task 9 can read baton state (e.g.
+   * dwellProgress) without prop-drilling.
+   */
+  const batonsRef     = useRef<Map<ColorRole, RemixBaton>>(new Map());
+  /** Track last baton outputs so Task 9 can extend (dwell ring, cycle flash). */
+  const lastOutputsRef = useRef<Map<ColorRole, ReturnType<RemixBaton['update']>>>(new Map());
+  const rafRef        = useRef<number | null>(null);
+  /**
+   * Per-frame "found" flag per role.  Written inside the RAF loop; read during
+   * render to derive activeBatonRoles.  Using a separate map (not lastOutputsRef)
+   * avoids the stale-non-null problem: a role not seen this frame is explicitly
+   * false, so tiles go latched as soon as the baton leaves.
+   */
+  const lastFoundRef  = useRef<Map<ColorRole, boolean>>(new Map());
+
+  // ---- Touch pad ----
+  const { state: padState, bind: padBind, reset: resetPad } = usePadState();
+  const padStateRef = useRef(padState);
+  useEffect(() => { padStateRef.current = padState; }, [padState]);
+
+  /**
+   * usePadState's padReducer deliberately keeps held:true after pointer-up
+   * ("persist-on-lift") — this is the StemMixerTouchPad contract, pinned by
+   * its own tests.  RemixScreen needs the opposite: latch-on-release.  We
+   * achieve this without touching usePadState by calling resetPad() after the
+   * original onPointerUp/onPointerCancel handlers.  After reset, state becomes
+   * INITIAL_PAD_STATE (held:false), so the RAF builds found:false, baton.update
+   * returns filterNorm:null, engine.applyBaton no-ops, and the stem latches.
+   */
+  const handlePadPointerUp = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      padBind.onPointerUp(e);
+      resetPad();
+    },
+    [padBind, resetPad],
+  );
+
+  // ---- UI state ----
+  const [inputMode,    setInputMode]    = useState<'webcam' | 'touch'>('webcam');
+  const [isInit,       setIsInit]       = useState(false);
+  const [error,        setError]        = useState<string | null>(null);
+  const [selectedSong, setSelectedSong] = useState<SongConfig | null>(null);
+  const [loadingMsg,   setLoadingMsg]   = useState<string | null>(null);
+  const [isLoaded,     setIsLoaded]     = useState(false);
+  const [isPlaying,    setIsPlaying]    = useState(false);
+
+  // Color calibration
+  const [colorCalState,  setColorCalState]  = useState<Record<ColorRole, boolean>>({
+    blue: false, red: false, green: false, yellow: false, orange: false,
+  });
+  const [colorCalMode,   setColorCalMode]   = useState<ColorRole | null>(null);
+  const colorCalModeRef = useRef<ColorRole | null>(null);
+  useEffect(() => { colorCalModeRef.current = colorCalMode; }, [colorCalMode]);
+
+  // Per-colour sensitivity (mirrors SongPresetScreen)
+  const [colorSensitivity, setColorSensitivity] = useState<Record<ColorRole, number>>({
+    blue: 0.0005, red: 0.0005, green: 0.0005, yellow: 0.0005, orange: 0.0005,
+  });
+
+  /**
+   * Stem-tile visual state — updated every ~10 frames via setInterval-
+   * style frame-counter.  We store the whole Record so the render always
+   * has a coherent snapshot; initialise to zeros so the tiles show
+   * immediately even before playback starts.
+   */
+  const [stemStates, setStemStates] = useState<Record<StemId, RemixStemState>>(() => {
+    const out = {} as Record<StemId, RemixStemState>;
+    for (const s of STEM_CYCLE_ORDER) {
+      out[s] = { filterNorm: 0, targetFilterNorm: 0, gain: 0, stuttering: false };
+    }
+    return out;
+  });
+  const frameCountRef = useRef(0);
+
+  // Beat dot: derive beat phase from Tone transport once we have beats.
+  const [beatPhase,  setBeatPhase]  = useState(0); // 0–1 across one beat
+
+  const setCurrentScreen = useAppStore((s) => s.setCurrentScreen);
+
+  // ============================================
+  // Camera + tracker init
+  // ============================================
+
+  useEffect(() => {
+    if (inputMode !== 'webcam') {
+      setIsInit(true);
+      return;
+    }
+
+    let cancelled = false;
+    let unsubTracking: (() => void) | null = null;
+
+    const init = async () => {
+      try {
+        const video = videoRef.current;
+        if (!video) throw new Error('Video element not mounted');
+
+        const camera = new CameraManager();
+        cameraRef.current = camera;
+        await camera.start(video);
+
+        const tracker = new ColorTracker({ frameSkip: 1, smoothing: 0.3 });
+        trackerRef.current = tracker;
+
+        unsubTracking = tracker.onTracking((output) => {
+          blobsRef.current = output.blobs;
+        });
+
+        tracker.start(video);
+
+        if (!cancelled) setIsInit(true);
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Camera failed');
+      }
+    };
+
+    init();
+
+    return () => {
+      cancelled = true;
+      trackerRef.current?.stop();
+      trackerRef.current?.dispose();
+      trackerRef.current = null;
+      cameraRef.current?.stop();
+      cameraRef.current = null;
+      unsubTracking?.();
+    };
+  }, [inputMode]);
+
+  // Dispose engine once on unmount (separate from camera effect so engine
+  // survives input-mode switches).
+  useEffect(() => {
+    const engine = engineRef.current;
+    return () => { engine.dispose(); };
+  }, []);
+
+  // ============================================
+  // Main RAF loop
+  // ============================================
+
+  useEffect(() => {
+    if (!isInit) return;
+    let running = true;
+
+    const loop = () => {
+      if (!running) return;
+
+      const nowMs = performance.now();
+      const engine = engineRef.current;
+
+      // --- Build baton inputs ---
+      // Clear per-frame found map so roles not seen this frame are false.
+      lastFoundRef.current.clear();
+
+      if (inputMode === 'touch') {
+        const pad = padStateRef.current;
+        const role = TOUCH_BATON_ROLE;
+        let baton = batonsRef.current.get(role);
+        if (!baton) {
+          baton = new RemixBaton(role);
+          batonsRef.current.set(role, baton);
+        }
+        const found = pad.held;
+        const out = baton.update({ x: pad.x, y: pad.y, found }, nowMs);
+        lastOutputsRef.current.set(role, out);
+        lastFoundRef.current.set(role, found);
+        engine.applyBaton(out);
+      } else {
+        // Camera mode: iterate all tracked colour roles
+        const blobs = blobsRef.current;
+        for (const role of COLOR_ROLES) {
+          const blob = blobs.find((b) => b.colorId === role.id);
+          // Mirror X (video is CSS-mirrored) to match SongPresetScreen convention
+          const found = blob?.found ?? false;
+          const x = found ? 1 - (blob?.x ?? 0.5) : 0.5;
+          const y = found ? (blob?.y ?? 0.5) : 0.5;
+
+          if (!found) {
+            // Only update existing batons; don't create one for absent colours
+            const baton = batonsRef.current.get(role.id);
+            if (baton) {
+              const out = baton.update({ x, y, found: false }, nowMs);
+              lastOutputsRef.current.set(role.id, out);
+              lastFoundRef.current.set(role.id, false);
+              engine.applyBaton(out);
+            }
+            continue;
+          }
+
+          // Colour present — lazily create baton
+          let baton = batonsRef.current.get(role.id);
+          if (!baton) {
+            baton = new RemixBaton(role.id);
+            batonsRef.current.set(role.id, baton);
+          }
+          const out = baton.update({ x, y, found }, nowMs);
+          lastOutputsRef.current.set(role.id, out);
+          lastFoundRef.current.set(role.id, true);
+          engine.applyBaton(out);
+        }
+      }
+
+      // --- Render frame (audio) ---
+      engine.renderFrame(Tone.getTransport().seconds);
+
+      // --- Read stem states ONCE per frame ---
+      const states = engine.getStemStates();
+
+      // --- Update React state periodically (~10 fps feels smooth for tiles) ---
+      frameCountRef.current++;
+      if (frameCountRef.current % 6 === 0) {
+        setStemStates(states);
+        setIsPlaying(engine.isPlaying());
+
+        // Beat dot: find next beat after current playback position
+        const nowSec = Tone.getTransport().seconds;
+        // We use states reference only for rendering; beat calc is local.
+        // (states is only used for setStemStates above — keep this separate.)
+        if (selectedSong) {
+          const beats = (selectedSong as SongConfig & { beats?: number[] }).beats;
+          if (beats && beats.length > 0) {
+            // Find the beat interval we're currently in
+            let phase = 0;
+            for (let i = 0; i < beats.length - 1; i++) {
+              if (nowSec >= beats[i] && nowSec < beats[i + 1]) {
+                const interval = beats[i + 1] - beats[i];
+                phase = interval > 0 ? (nowSec - beats[i]) / interval : 0;
+                break;
+              }
+            }
+            setBeatPhase(phase);
+          } else if (selectedSong.bpm > 0) {
+            // Fallback: derive beat phase from BPM
+            const beatDur = 60 / selectedSong.bpm;
+            setBeatPhase((nowSec % beatDur) / beatDur);
+          }
+        }
+      }
+
+      rafRef.current = requestAnimationFrame(loop);
+    };
+
+    rafRef.current = requestAnimationFrame(loop);
+
+    return () => {
+      running = false;
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+    };
+  }, [isInit, inputMode, selectedSong]);
+
+  // ============================================
+  // Song loading
+  // ============================================
+
+  const handleSelectSong = useCallback(async (song: SongConfig) => {
+    setSelectedSong(song);
+    setIsLoaded(false);
+    setLoadingMsg(`Loading stems… 0/${Object.keys(song.stems).length}`);
+    const engine = engineRef.current;
+    try {
+      await engine.loadSong(song);
+      setIsLoaded(true);
+      setLoadingMsg(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load song');
+      setLoadingMsg(null);
+    }
+  }, []);
+
+  // ============================================
+  // Transport handlers
+  // ============================================
+
+  const handlePlay = useCallback(async () => {
+    await Tone.start();
+    engineRef.current.play();
+    setIsPlaying(true);
+  }, []);
+
+  const handleStop = useCallback(() => {
+    engineRef.current.stop();
+    setIsPlaying(false);
+  }, []);
+
+  const handleRestart = useCallback(async () => {
+    engineRef.current.stop();
+    await Tone.start();
+    engineRef.current.play();
+    setIsPlaying(true);
+  }, []);
+
+  // ============================================
+  // Color calibration (mirrors SongPresetScreen)
+  // ============================================
+
+  const handleVideoAreaClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const mode = colorCalModeRef.current;
+    if (!mode || !trackerRef.current || !videoRef.current) return;
+
+    const videoEl = videoRef.current;
+    const rect = videoEl.getBoundingClientRect();
+    const screenX = (e.clientX - rect.left) / rect.width;
+    const y       = (e.clientY - rect.top)  / rect.height;
+    if (screenX < 0 || screenX > 1 || y < 0 || y > 1) return;
+
+    // Video is CSS-mirrored — flip X back to raw video coords for pixel sampling
+    const rawX = 1 - screenX;
+    trackerRef.current.calibrateFromPixel(videoEl, rawX, y, mode);
+
+    setColorCalState((prev) => ({ ...prev, [mode]: true }));
+    setColorSensitivity((prev) => ({ ...prev, [mode]: 0.0005 }));
+    setColorCalMode(null);
+  }, []);
+
+  const handleColorSensitivityChange = useCallback((role: ColorRole, minArea: number) => {
+    setColorSensitivity((prev) => ({ ...prev, [role]: minArea }));
+    const tracker = trackerRef.current;
+    if (!tracker) return;
+    const existing = tracker.getColor(role);
+    if (!existing) return;
+    tracker.addColor({ ...existing, minArea });
+  }, []);
+
+  // ============================================
+  // Navigation
+  // ============================================
+
+  const handleBack = useCallback(() => {
+    engineRef.current.stop();
+    resetPad();
+    setCurrentScreen('performance');
+  }, [setCurrentScreen, resetPad]);
+
+  // ============================================
+  // Derived render data
+  // ============================================
+
+  /**
+   * Which roles have an active baton THIS frame (found:true in the most recent
+   * RAF tick).  Derived from lastFoundRef (written each frame) rather than
+   * lastOutputsRef.filterNorm, which would stay non-null after a baton lifts
+   * and make tiles show LIVE permanently.
+   */
+  const activeBatonRoles: ColorRole[] = [];
+  for (const [role, found] of lastFoundRef.current) {
+    if (found) activeBatonRoles.push(role);
+  }
+
+  // ============================================
+  // Render
+  // ============================================
+
+  if (error) {
+    return (
+      <div style={styles.container}>
+        <div style={styles.errorBox}>
+          <h2>Error</h2>
+          <p>{error}</p>
+          <button onClick={handleBack} style={styles.btn}>Back</button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div id="main-content" style={{ padding: 24, color: '#a1a1b8' }}>
-      <h1 style={{ color: '#e5e5f0' }}>Remix</h1>
-      <p>Remix mode is loading…</p>
+    <div id="main-content" style={styles.container}>
+
+      {/* ---- Stage (left panel) ---- */}
+      <div style={styles.stage}>
+
+        {/* Stem tiles */}
+        <div style={styles.stemGrid}>
+          {STEM_CYCLE_ORDER.map((stem) => {
+            const state  = stemStates[stem];
+            const meta   = STEM_META[stem];
+            const filterN = state?.filterNorm ?? 0;
+
+            // Which baton role is assigned to this stem?
+            let assignedRole: ColorRole | null = null;
+            for (const [role, baton] of batonsRef.current) {
+              if (baton.assignedStem === stem) {
+                assignedRole = role;
+                break;
+              }
+            }
+            const isLive = assignedRole !== null && activeBatonRoles.includes(assignedRole);
+            const assignedColor = assignedRole
+              ? (COLOR_ROLES.find((r) => r.id === assignedRole)?.cssColor ?? meta.color)
+              : meta.color;
+
+            const stuttering = state?.stuttering ?? false;
+
+            return (
+              <div
+                key={stem}
+                style={{
+                  ...styles.stemTile,
+                  border: isLive
+                    ? `2px solid ${assignedColor}`
+                    : `2px solid rgba(255,255,255,0.08)`,
+                  // Stutter strobe: flash opacity
+                  opacity: stuttering ? (frameCountRef.current % 2 === 0 ? 1 : 0.45) : 1,
+                  transition: stuttering ? 'none' : 'opacity 0.15s',
+                }}
+                aria-label={`${meta.label} stem: level ${Math.round(filterN * 100)}%${stuttering ? ', stuttering' : ''}`}
+              >
+                {/* Tile header */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: isLive ? assignedColor : meta.color }}>
+                    {meta.label}
+                  </span>
+                  {assignedRole && (
+                    <span
+                      style={{
+                        fontSize: 9,
+                        fontWeight: 700,
+                        padding: '1px 5px',
+                        borderRadius: 4,
+                        background: `${assignedColor}30`,
+                        color: assignedColor,
+                        border: `1px solid ${assignedColor}60`,
+                        textTransform: 'uppercase' as const,
+                      }}
+                      title={`Controlled by ${assignedRole} baton`}
+                    >
+                      {assignedRole}
+                    </span>
+                  )}
+                </div>
+
+                {/* Level bar — accessibility: numeric label + bar so deaf/HoH/colour-blind users get state */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div
+                    style={{
+                      flex: 1,
+                      height: 10,
+                      background: 'rgba(255,255,255,0.08)',
+                      borderRadius: 5,
+                      overflow: 'hidden',
+                    }}
+                    role="progressbar"
+                    aria-valuenow={Math.round(filterN * 100)}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-label={`${meta.label} level`}
+                  >
+                    <div
+                      style={{
+                        height: '100%',
+                        width: `${filterN * 100}%`,
+                        background: isLive
+                          ? assignedColor
+                          : `color-mix(in srgb, ${meta.color} ${Math.round(40 + filterN * 60)}%, #333)`,
+                        borderRadius: 5,
+                        transition: 'width 80ms linear',
+                      }}
+                    />
+                  </div>
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontFamily: 'monospace',
+                      color: '#a1a1b8',
+                      width: 34,
+                      textAlign: 'right' as const,
+                      flexShrink: 0,
+                    }}
+                  >
+                    {Math.round(filterN * 100)}%
+                  </span>
+                </div>
+
+                {/* Status row */}
+                <div style={{ display: 'flex', gap: 6, marginTop: 5, fontSize: 10, color: '#71718a' }}>
+                  <span>{isLive ? 'LIVE' : 'latched'}</span>
+                  {stuttering && (
+                    <span style={{ color: '#f97316', fontWeight: 700 }}>STUTTER</span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Beat dot — always visible; shows song pulse even when all stems silent */}
+        <div style={styles.beatDotRow} aria-label={`Beat phase: ${Math.round(beatPhase * 100)}%`}>
+          <span style={{ fontSize: 11, color: '#555570', marginRight: 8 }}>Beat</span>
+          <div
+            style={{
+              width: 16,
+              height: 16,
+              borderRadius: '50%',
+              background: isPlaying
+                ? `rgba(249,115,22,${0.3 + beatPhase * 0.7})`
+                : 'rgba(255,255,255,0.08)',
+              border: `2px solid ${isPlaying ? '#f97316' : 'rgba(255,255,255,0.15)'}`,
+              transition: isPlaying ? 'none' : 'background 0.3s',
+            }}
+          />
+          <span style={{ fontSize: 10, fontFamily: 'monospace', color: '#555570', marginLeft: 8 }}>
+            {Math.round(beatPhase * 100)}%
+          </span>
+        </div>
+
+        {/* Camera view / touch pad */}
+        {inputMode === 'touch' ? (
+          <div
+            {...padBind}
+            onPointerUp={handlePadPointerUp}
+            onPointerCancel={handlePadPointerUp}
+            style={{
+              flex: 1,
+              background: '#0d0d18',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: padState.held ? 'none' : 'crosshair',
+              position: 'relative',
+              userSelect: 'none',
+              touchAction: 'none',
+            }}
+            aria-label="Touch pad — drag to control the red baton"
+          >
+            <span style={{ fontSize: 13, color: '#555570', pointerEvents: 'none' }}>
+              Touch &amp; drag to control remix
+            </span>
+            {padState.held && (
+              <div
+                style={{
+                  position: 'absolute',
+                  left: `${padState.x * 100}%`,
+                  top: `${padState.y * 100}%`,
+                  transform: 'translate(-50%, -50%)',
+                  width: 32,
+                  height: 32,
+                  borderRadius: '50%',
+                  border: '3px solid #ef4444',
+                  background: 'rgba(239,68,68,0.2)',
+                  pointerEvents: 'none',
+                }}
+              />
+            )}
+          </div>
+        ) : (
+          <div
+            style={{
+              flex: 1,
+              position: 'relative',
+              background: '#000',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              minHeight: 0,
+              cursor: colorCalMode ? 'crosshair' : 'default',
+            }}
+            onClick={handleVideoAreaClick}
+          >
+            <video ref={videoRef} autoPlay playsInline muted style={styles.video} />
+
+            {/* Color calibration prompt */}
+            {colorCalMode && (
+              <div style={styles.colorCalBanner}>
+                Click on the{' '}
+                <strong style={{ margin: '0 4px', color: COLOR_ROLES.find((r) => r.id === colorCalMode)?.cssColor }}>
+                  {COLOR_ROLES.find((r) => r.id === colorCalMode)?.label}
+                </strong>{' '}
+                coloured object in the video
+                <button
+                  onClick={(e) => { e.stopPropagation(); setColorCalMode(null); }}
+                  style={{ ...styles.btn, marginLeft: 12, fontSize: 11 }}
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+
+            {/* Loading overlay */}
+            {loadingMsg && (
+              <div style={styles.loadingOverlay}>
+                <div style={{ fontSize: 18, fontWeight: 600 }}>{loadingMsg}</div>
+                <div style={styles.spinner} />
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ---- Controls panel (right) ---- */}
+      <div style={styles.controlsPanel}>
+
+        {/* Header */}
+        <div style={styles.header}>
+          <button onClick={handleBack} style={styles.btnSmall} aria-label="Back to performance">
+            &larr; Back
+          </button>
+          <h2 style={{ margin: 0, fontSize: 16, color: '#e2e2e8' }}>Remix</h2>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
+            <button
+              onClick={() => setInputMode('webcam')}
+              style={inputMode === 'webcam' ? styles.btnActive : styles.btnSmall}
+              aria-pressed={inputMode === 'webcam'}
+            >
+              Webcam
+            </button>
+            <button
+              onClick={() => setInputMode('touch')}
+              style={inputMode === 'touch' ? styles.btnActive : styles.btnSmall}
+              aria-pressed={inputMode === 'touch'}
+            >
+              Touch
+            </button>
+          </div>
+        </div>
+
+        {/* Song picker */}
+        <div style={styles.section}>
+          <h3 style={styles.sectionTitle}>Song Library</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {SONG_LIBRARY.map((song) => (
+              <button
+                key={song.id}
+                onClick={() => { void handleSelectSong(song); }}
+                style={selectedSong?.id === song.id ? styles.songBtnActive : styles.songBtn}
+              >
+                <div style={{ fontWeight: 600, fontSize: 13 }}>{song.title}</div>
+                <div style={{ fontSize: 11, opacity: 0.7 }}>
+                  {song.artist} · {song.key} · {song.bpm} BPM
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Transport */}
+        {isLoaded && selectedSong && (
+          <div style={styles.section}>
+            <h3 style={styles.sectionTitle}>Transport</h3>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
+              <button
+                onClick={() => { void handlePlay(); }}
+                style={isPlaying ? styles.btn : styles.btnPrimary}
+                disabled={isPlaying}
+                aria-label="Play"
+              >
+                ▶ Play
+              </button>
+              <button
+                onClick={handleStop}
+                style={styles.btn}
+                disabled={!isPlaying}
+                aria-label="Stop"
+              >
+                ■ Stop
+              </button>
+              <button
+                onClick={() => { void handleRestart(); }}
+                style={styles.btn}
+                aria-label="Restart"
+              >
+                ⏮ Restart
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Color calibration (webcam only) */}
+        {inputMode === 'webcam' && (
+          <div style={styles.section}>
+            <h3 style={styles.sectionTitle}>Color Calibration</h3>
+            <p style={styles.hint}>Click a button, then click the coloured object in the video</p>
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' as const }}>
+              {COLOR_ROLES.map((role) => (
+                <button
+                  key={role.id}
+                  onClick={() => setColorCalMode(role.id)}
+                  style={{
+                    ...styles.btn,
+                    fontSize: 10,
+                    padding: '4px 8px',
+                    borderColor: colorCalState[role.id] ? `${role.cssColor}60` : undefined,
+                    color: colorCalState[role.id] ? role.cssColor : undefined,
+                  }}
+                >
+                  {colorCalState[role.id] ? '✓' : '●'} {role.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Per-colour sensitivity sliders (calibrated colours only) */}
+            {COLOR_ROLES.filter((r) => colorCalState[r.id]).length > 0 && (
+              <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {COLOR_ROLES.filter((r) => colorCalState[r.id]).map((role) => {
+                  const sliderId = `remix-sensitivity-${role.id}`;
+                  const value    = colorSensitivity[role.id];
+                  return (
+                    <div key={role.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <label
+                        htmlFor={sliderId}
+                        style={{ fontSize: 11, color: role.cssColor, width: 90, flexShrink: 0 }}
+                      >
+                        {role.label} sens.
+                      </label>
+                      <input
+                        id={sliderId}
+                        type="range"
+                        min={0.0001}
+                        max={0.005}
+                        step={0.0001}
+                        value={value}
+                        onChange={(e) => handleColorSensitivityChange(role.id, Number(e.target.value))}
+                        style={{ flex: 1 }}
+                        aria-label={`${role.label} detection sensitivity`}
+                      />
+                      <span style={{ fontSize: 10, color: '#71718a', width: 56, textAlign: 'right' as const, fontFamily: 'monospace' }}>
+                        {value.toFixed(4)}
+                      </span>
+                    </div>
+                  );
+                })}
+                <p style={{ ...styles.hint, marginTop: 2 }}>
+                  Decrease number to detect smaller blobs; increase to reduce false positives.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Stem assignment info */}
+        <div style={styles.section}>
+          <h3 style={styles.sectionTitle}>Baton Assignments</h3>
+          <p style={styles.hint}>Dwell (hold still 1.2 s) to cycle a baton to the next stem.</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {STEM_CYCLE_ORDER.map((stem) => {
+              const meta = STEM_META[stem];
+              // Find role assigned to this stem
+              let assignedRole: ColorRole | null = null;
+              for (const [role, baton] of batonsRef.current) {
+                if (baton.assignedStem === stem) {
+                  assignedRole = role;
+                  break;
+                }
+              }
+              const roleColor = assignedRole
+                ? (COLOR_ROLES.find((r) => r.id === assignedRole)?.cssColor ?? '#71718a')
+                : '#71718a';
+              return (
+                <div key={stem} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ width: 10, height: 10, borderRadius: '50%', background: meta.color, flexShrink: 0 }} />
+                  <span style={{ fontSize: 12, color: '#a1a1b8', flex: 1 }}>{meta.label}</span>
+                  {assignedRole ? (
+                    <span style={{ fontSize: 11, color: roleColor, fontWeight: 600 }}>{assignedRole}</span>
+                  ) : (
+                    <span style={{ fontSize: 11, color: '#555570' }}>unassigned</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* How-to hint */}
+        <div style={styles.section}>
+          <h3 style={styles.sectionTitle}>How to Play</h3>
+          <p style={styles.hint}>
+            Y position (up/down) opens each stem's filter. Shake to stutter.
+            Dwell in one spot for 1.2 s to cycle your baton to the next stem.
+            {inputMode === 'webcam'
+              ? ' Calibrate a colour, then hold that object in view.'
+              : ' Touch and drag in the stage area on the left.'}
+          </p>
+        </div>
+
+      </div>
     </div>
   );
 }
+
+// ============================================
+// Styles (inline — matches SongPresetScreen idiom)
+// ============================================
+
+const styles: Record<string, React.CSSProperties> = {
+  container: {
+    display: 'flex',
+    width: '100vw',
+    height: '100vh',
+    background: '#0a0a0f',
+    color: '#e2e2e8',
+    fontFamily: 'system-ui, sans-serif',
+    overflow: 'hidden',
+  },
+  stage: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    background: '#000',
+    minWidth: 0,
+  },
+  stemGrid: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: 8,
+    padding: 12,
+  },
+  stemTile: {
+    borderRadius: 10,
+    padding: 12,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 2,
+    background: 'rgba(20,20,30,0.95)',
+    minHeight: 80,
+  },
+  beatDotRow: {
+    display: 'flex',
+    alignItems: 'center',
+    padding: '4px 16px',
+    borderBottom: '1px solid rgba(255,255,255,0.05)',
+  },
+  video: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'contain',
+    transform: 'scaleX(-1)',
+  },
+  controlsPanel: {
+    width: 300,
+    borderLeft: '1px solid rgba(255,255,255,0.08)',
+    background: '#111118',
+    overflowY: 'auto',
+    padding: 16,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 16,
+  },
+  header: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 12,
+    paddingBottom: 8,
+    borderBottom: '1px solid rgba(255,255,255,0.06)',
+  },
+  section: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 6,
+  },
+  sectionTitle: {
+    margin: 0,
+    fontSize: 11,
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+    color: '#71718a',
+    fontWeight: 600,
+  },
+  hint: {
+    margin: 0,
+    fontSize: 11,
+    color: '#555570',
+  },
+  btn: {
+    padding: '6px 12px',
+    borderRadius: 6,
+    border: '1px solid rgba(255,255,255,0.1)',
+    background: 'rgba(255,255,255,0.05)',
+    color: '#a1a1b8',
+    cursor: 'pointer',
+    fontSize: 12,
+    fontWeight: 500,
+  },
+  btnSmall: {
+    padding: '4px 8px',
+    borderRadius: 4,
+    border: '1px solid rgba(255,255,255,0.1)',
+    background: 'transparent',
+    color: '#71718a',
+    cursor: 'pointer',
+    fontSize: 11,
+  },
+  btnPrimary: {
+    padding: '6px 16px',
+    borderRadius: 6,
+    border: 'none',
+    background: '#22c55e',
+    color: '#000',
+    cursor: 'pointer',
+    fontSize: 13,
+    fontWeight: 600,
+  },
+  btnActive: {
+    padding: '6px 12px',
+    borderRadius: 6,
+    border: '1px solid rgba(249,115,22,0.4)',
+    background: 'rgba(249,115,22,0.15)',
+    color: '#f97316',
+    cursor: 'pointer',
+    fontSize: 12,
+    fontWeight: 600,
+  },
+  songBtn: {
+    padding: '8px 12px',
+    borderRadius: 8,
+    border: '1px solid rgba(255,255,255,0.08)',
+    background: 'rgba(255,255,255,0.03)',
+    color: '#a1a1b8',
+    cursor: 'pointer',
+    textAlign: 'left',
+  },
+  songBtnActive: {
+    padding: '8px 12px',
+    borderRadius: 8,
+    border: '1px solid rgba(249,115,22,0.4)',
+    background: 'rgba(249,115,22,0.1)',
+    color: '#f97316',
+    cursor: 'pointer',
+    textAlign: 'left',
+  },
+  errorBox: {
+    textAlign: 'center',
+    padding: 32,
+  },
+  colorCalBanner: {
+    position: 'absolute',
+    top: 16,
+    left: '50%',
+    transform: 'translateX(-50%)',
+    background: 'rgba(0,0,0,0.85)',
+    borderRadius: 8,
+    padding: '8px 16px',
+    fontSize: 13,
+    color: '#e2e2e8',
+    border: '1px solid rgba(59,130,246,0.4)',
+    display: 'flex',
+    alignItems: 'center',
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    background: 'rgba(0,0,0,0.7)',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 16,
+    color: '#e2e2e8',
+  },
+  spinner: {
+    width: 32,
+    height: 32,
+    border: '3px solid rgba(255,255,255,0.1)',
+    borderTopColor: '#f97316',
+    borderRadius: '50%',
+    animation: 'spin 0.8s linear infinite',
+  },
+};
