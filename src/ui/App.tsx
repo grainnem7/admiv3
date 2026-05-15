@@ -20,6 +20,7 @@ import PerformanceScreen from './screens/PerformanceScreenV2';
 import BetweenUsScreen from './screens/BetweenUsScreen';
 import HarmonicBlendingScreen from './screens/HarmonicBlendingScreen';
 import SongPresetScreen from './screens/SongPresetScreen';
+import RemixScreen from './screens/RemixScreen';
 import InfoScreen from './screens/InfoScreen';
 
 // Components
@@ -104,6 +105,8 @@ function App() {
         return <HarmonicBlendingScreen />;
       case 'songPreset':
         return <SongPresetScreen />;
+      case 'remix':
+        return <RemixScreen />;
       case 'info':
         return <InfoScreen />;
       default:

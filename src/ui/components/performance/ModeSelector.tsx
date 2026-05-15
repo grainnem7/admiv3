@@ -12,14 +12,16 @@ const MODES: { id: PerformanceView; label: string }[] = [
   { id: 'betweenUs', label: 'Between Us' },
   { id: 'harmonicBlending', label: 'Harmonic Blend' },
   { id: 'songPreset', label: 'Song Preset' },
+  { id: 'remix', label: 'Remix' },
   { id: 'minimal', label: 'Minimal' },
 ];
 
 /** Modes that use their own dedicated screen */
-const SCREEN_MODES: Partial<Record<PerformanceView, 'betweenUs' | 'harmonicBlending' | 'songPreset'>> = {
+const SCREEN_MODES: Partial<Record<PerformanceView, 'betweenUs' | 'harmonicBlending' | 'songPreset' | 'remix'>> = {
   betweenUs: 'betweenUs',
   harmonicBlending: 'harmonicBlending',
   songPreset: 'songPreset',
+  remix: 'remix',
 };
 
 export default function ModeSelector() {
