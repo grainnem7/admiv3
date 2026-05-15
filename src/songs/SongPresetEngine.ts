@@ -42,6 +42,7 @@ import {
   DEFAULT_INSTRUMENT_KEY,
   INSTRUMENT_PALETTE_BY_KEY,
 } from './voices/presets/instrumentPalette';
+import { loadStemBuffers } from '../remix/loadStemBuffers';
 import { loadSongAnalysis } from './analysisLoader';
 import { HeadBopDetector } from '../mapping/nodes/HeadRhythmNode';
 import { HeadBopKit, pickHeadBopDrum } from './voices/HeadBopKit';
@@ -403,17 +404,18 @@ export class SongPresetEngine {
     // Build shared routing
     this.buildRouting();
 
-    // Load all stems (raw AudioBufferSourceNode for simplicity)
-    const loadPromises = stemIds.map(async (stemId) => {
-      const url = song.stems[stemId];
-      const response = await fetch(url);
-      if (!response.ok) throw new Error(`Failed to load ${url}: ${response.status}`);
-      const arrayBuffer = await response.arrayBuffer();
-      const audioBuffer = await this.ctx!.decodeAudioData(arrayBuffer);
-
+    // Load all stems via the shared helper, then build per-stem gain nodes.
+    const buffers = await loadStemBuffers(
+      this.ctx!,
+      song.stems,
+      (loaded, total) => {
+        this.stemsLoaded = loaded;
+        this.onLoadProgress?.(loaded, total);
+      },
+    );
+    for (const [stemId, audioBuffer] of buffers) {
       const gainNode = this.ctx!.createGain();
       gainNode.gain.value = 0;
-
       this.stems.set(stemId, {
         id: stemId,
         buffer: audioBuffer,
@@ -422,12 +424,7 @@ export class SongPresetEngine {
         currentGain: 0,
         targetGain: 0,
       });
-
-      this.stemsLoaded++;
-      this.onLoadProgress?.(this.stemsLoaded, this.stemsTotal);
-    });
-
-    await Promise.all(loadPromises);
+    }
 
     // Load AI analysis data if available
     if (song.analysisUrl) {
