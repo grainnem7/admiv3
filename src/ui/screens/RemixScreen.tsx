@@ -743,7 +743,7 @@ export default function RemixScreen() {
       } else if (action.kind === 'loopLen') {
         const cur    = loopLengthBarsRef.current;
         const curIdx = LOOP_LENGTH_CYCLE.indexOf(cur);
-        const nextIdx = (curIdx + action.dir + LOOP_LENGTH_CYCLE.length) % LOOP_LENGTH_CYCLE.length;
+        const nextIdx = Math.max(0, Math.min(LOOP_LENGTH_CYCLE.length - 1, curIdx + action.dir));
         const next   = LOOP_LENGTH_CYCLE[nextIdx];
         engine.setLoopLengthBars(next);
         loopLengthBarsRef.current = next;
@@ -810,7 +810,7 @@ export default function RemixScreen() {
             const state  = stemStates[stem];
             const meta   = STEM_META[stem];
             const filterN = state?.filterNorm ?? 0;
-            const isFocused = keyboardMode && focusedStemIndex === stemIdx;
+            const isFocused = (keyboardMode || headNodEnabled) && focusedStemIndex === stemIdx;
 
             // Collect ALL baton roles assigned to this stem (two batons may share a tile).
             const assignedRoles: ColorRole[] = [];

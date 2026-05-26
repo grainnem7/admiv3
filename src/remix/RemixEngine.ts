@@ -47,6 +47,11 @@ const GLIDE_LERP = 0.12;         // per-frame glide toward target (~250ms)
 const MASTER_GAIN = 0.9;         // master bus output level
 const DUCK_TC = 0.01;            // stutter overlay: time-constant for ducking stem gain to 0
 const GLIDE_EXIT_EPSILON = 0.01; // distance below which glide is considered complete
+// Hysteresis for wrap detection: a burst ends when the playhead has jumped back
+// more than this far before the burst start. 0.25 s is comfortably below a bar
+// at typical tempos so it never false-fires on the very first frame before the
+// playhead has advanced past startSec.
+const WRAP_EPSILON = 0.25;
 
 export class RemixEngine {
   private ctx: AudioContext | null = null;
@@ -216,12 +221,28 @@ export class RemixEngine {
 
       // End an in-flight burst once its window elapses.
       if (n.pendingWindow) {
-        n.scheduler.tick(playbackNowSec, n.pendingWindow, () =>
-          this.stopOverlay(n),
-        );
-        if (!n.scheduler.isActive()) {
+        // Transport looped back past the burst start → end the burst (the
+        // seam clamp makes burstEnd == loopEnd, which tick() can't observe
+        // because the playhead wraps to loopStart at exactly that instant).
+        // A wrap has occurred when the loop is active and the playhead has
+        // jumped back to near loopStart while the burst started well after it.
+        const loopStart = this.loopRegion?.startSec ?? 0;
+        const wrappedBack =
+          this.loopRegion !== null &&
+          playbackNowSec < loopStart + WRAP_EPSILON &&
+          n.pendingWindow.startSec > loopStart + WRAP_EPSILON;
+        if (wrappedBack) {
+          n.scheduler.forceStop(() => this.stopOverlay(n));
           n.pendingWindow = null;
           state.stuttering = false;
+        } else {
+          n.scheduler.tick(playbackNowSec, n.pendingWindow, () =>
+            this.stopOverlay(n),
+          );
+          if (!n.scheduler.isActive()) {
+            n.pendingWindow = null;
+            state.stuttering = false;
+          }
         }
       }
     }

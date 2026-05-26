@@ -298,6 +298,23 @@ describe('RemixEngine', () => {
     e.dispose();
   });
 
+  it('ends a stutter burst when the transport loops back past the burst start', async () => {
+    const Tone = await import('tone');
+    const e = new RemixEngine();
+    await e.loadSong(songWithBars());
+    e.setLoopLengthBars(4); // loopEnd = 4
+    e.play();
+    Tone.getTransport().seconds = 3.6;
+    // @ts-expect-error private — trigger directly
+    e.triggerStutter('drums');
+    e.renderFrame(3.6);
+    expect(e.getStemStates().drums.stuttering).toBe(true);
+    // Transport wraps back to loopStart (0) at the seam:
+    e.renderFrame(0.05);
+    expect(e.getStemStates().drums.stuttering).toBe(false);
+    e.dispose();
+  });
+
   function makeFace(y: number) {
     // FaceLandmarks shape: { landmarks: { x; y; z }[] }. Index 1 = nose tip.
     const landmarks = Array.from({ length: 2 }, () => ({ x: 0.5, y, z: 0 }));
