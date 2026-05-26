@@ -320,6 +320,12 @@ export class RemixEngine {
 
     const playbackNow = Tone.getTransport().seconds;
     const win = computeStutterWindow(playbackNow, this.beats, this.downbeats);
+    if (this.loopRegion) {
+      const maxDur = this.loopRegion.endSec - win.startSec;
+      if (win.burstDurSec > maxDur) {
+        win.burstDurSec = Math.max(0, maxDur);
+      }
+    }
     const began = n.scheduler.begin(win, (w) => this.startOverlay(n, w));
     if (began) {
       n.pendingWindow = win;

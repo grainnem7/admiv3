@@ -280,6 +280,24 @@ describe('RemixEngine', () => {
     e.dispose();
   });
 
+  it('clamps a stutter burst end to the loop end (no bleed past the seam)', async () => {
+    const e = new RemixEngine();
+    await e.loadSong(songWithBars());
+    e.setLoopLengthBars(4); // loopEnd = 4
+    e.play();
+    // place playback near the loop end so the burst would overrun without clamping
+    const Tone = await import('tone');
+    Tone.getTransport().seconds = 3.6;
+    // @ts-expect-error private — trigger directly for the test
+    e.triggerStutter('drums');
+    // @ts-expect-error private — inspect the pending window
+    const n = e.nodes.get('drums') as { pendingWindow: { startSec: number; burstDurSec: number } | null };
+    const win = n.pendingWindow;
+    expect(win).not.toBeNull();
+    expect(win!.startSec + win!.burstDurSec).toBeLessThanOrEqual(4 + 1e-6);
+    e.dispose();
+  });
+
   it('restores the stem gain after a stutter burst ends', async () => {
     const Tone = await import('tone');
 
