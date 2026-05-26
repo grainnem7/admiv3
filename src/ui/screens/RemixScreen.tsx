@@ -28,6 +28,7 @@ import { keyToRemixAction } from '../../remix/remixKeyMap';
 import { SONG_LIBRARY, COLOR_ROLES } from '../../songs/songLibrary';
 import type { SongConfig, ColorRole } from '../../songs/songLibrary';
 import { usePadState } from './songPreset/usePadState';
+import type { AxisRange } from '../../remix/batonCalibration';
 
 // ============================================
 // Constants
@@ -141,6 +142,29 @@ export default function RemixScreen() {
   });
   const frameCountRef = useRef(0);
 
+  // ---- Range calibration ----
+  /** Reach margin applied to all batons (0–0.3). */
+  const [reachMargin, setReachMargin] = useState(0.1);
+  const reachMarginRef = useRef(0.1);
+  /** Whether a range-capture session is currently active. */
+  const [calibratingRange, setCalibratingRange] = useState(false);
+  const calibratingRangeRef = useRef(false);
+  /** Countdown seconds remaining during capture (for display). */
+  const [calCountdown, setCalCountdown] = useState(0);
+  /** Captured per-role axis ranges (persisted for the session). */
+  const capturedRangesRef = useRef<Map<ColorRole, { x: AxisRange; y: AxisRange }>>(new Map());
+  /**
+   * Accumulator for the current capture session.
+   * Per role: tracks running min/max of x and y.
+   */
+  const calAccRef = useRef<Map<ColorRole, { xMin: number; xMax: number; yMin: number; yMax: number }>>(new Map());
+  /** Handle for the capture-end setTimeout — cleared on unmount. */
+  const calTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Handle for the countdown setInterval — cleared on unmount. */
+  const calTickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  /** Roles that have captured range data — drives the status message in render. */
+  const [capturedRoles, setCapturedRoles] = useState<ColorRole[]>([]);
+
   // Beat dot: derive beat phase from Tone transport once we have beats.
   const [beatPhase,  setBeatPhase]  = useState(0); // 0–1 across one beat
 
@@ -158,8 +182,10 @@ export default function RemixScreen() {
   // Refs so keyboard handler sees current values without stale closure
   const focusedStemIndexRef  = useRef<0 | 1 | 2 | 3>(0);
   const loopLengthBarsRef    = useRef<0 | 4 | 8 | 16>(8);
-  useEffect(() => { focusedStemIndexRef.current = focusedStemIndex; }, [focusedStemIndex]);
-  useEffect(() => { loopLengthBarsRef.current   = loopLengthBars;   }, [loopLengthBars]);
+  useEffect(() => { focusedStemIndexRef.current  = focusedStemIndex;  }, [focusedStemIndex]);
+  useEffect(() => { loopLengthBarsRef.current    = loopLengthBars;    }, [loopLengthBars]);
+  useEffect(() => { reachMarginRef.current       = reachMargin;       }, [reachMargin]);
+  useEffect(() => { calibratingRangeRef.current  = calibratingRange;  }, [calibratingRange]);
 
   const setCurrentScreen = useAppStore((s) => s.setCurrentScreen);
 
@@ -214,10 +240,21 @@ export default function RemixScreen() {
   }, [inputMode]);
 
   // Dispose engine once on unmount (separate from camera effect so engine
-  // survives input-mode switches).
+  // survives input-mode switches).  Also clear any in-flight capture timers
+  // so setState is never called after unmount.
   useEffect(() => {
     const engine = engineRef.current;
-    return () => { engine.dispose(); };
+    return () => {
+      engine.dispose();
+      if (calTimerRef.current !== null) {
+        clearTimeout(calTimerRef.current);
+        calTimerRef.current = null;
+      }
+      if (calTickRef.current !== null) {
+        clearInterval(calTickRef.current);
+        calTickRef.current = null;
+      }
+    };
   }, []);
 
   // ============================================
@@ -247,6 +284,21 @@ export default function RemixScreen() {
           batonsRef.current.set(role, baton);
         }
         const found = pad.held;
+        // Apply captured calibration live, before update
+        const capturedRange = capturedRangesRef.current.get(role);
+        baton.setCalibration(
+          { x: capturedRange?.x ?? null, y: capturedRange?.y ?? null },
+          reachMarginRef.current,
+        );
+        // Accumulate raw positions during capture
+        if (calibratingRangeRef.current && found) {
+          const acc = calAccRef.current.get(role) ?? { xMin: pad.x, xMax: pad.x, yMin: pad.y, yMax: pad.y };
+          acc.xMin = Math.min(acc.xMin, pad.x);
+          acc.xMax = Math.max(acc.xMax, pad.x);
+          acc.yMin = Math.min(acc.yMin, pad.y);
+          acc.yMax = Math.max(acc.yMax, pad.y);
+          calAccRef.current.set(role, acc);
+        }
         const out = baton.update({ x: pad.x, y: pad.y, found }, nowMs);
         lastOutputsRef.current.set(role, out);
         lastFoundRef.current.set(role, found);
@@ -266,6 +318,12 @@ export default function RemixScreen() {
             // Only update existing batons; don't create one for absent colours
             const baton = batonsRef.current.get(role.id);
             if (baton) {
+              // Apply captured calibration live, before update
+              const capturedRange = capturedRangesRef.current.get(role.id);
+              baton.setCalibration(
+                { x: capturedRange?.x ?? null, y: capturedRange?.y ?? null },
+                reachMarginRef.current,
+              );
               const out = baton.update({ x, y, found: false }, nowMs);
               lastOutputsRef.current.set(role.id, out);
               lastFoundRef.current.set(role.id, false);
@@ -281,6 +339,22 @@ export default function RemixScreen() {
           if (!baton) {
             baton = new RemixBaton(role.id);
             batonsRef.current.set(role.id, baton);
+          }
+          // Apply captured calibration live, before update
+          const capturedRange = capturedRangesRef.current.get(role.id);
+          baton.setCalibration(
+            { x: capturedRange?.x ?? null, y: capturedRange?.y ?? null },
+            reachMarginRef.current,
+          );
+          // Accumulate raw positions during capture (pre-mirror x to stay in tracker space)
+          if (calibratingRangeRef.current) {
+            const rawX = blob?.x ?? 0.5; // raw tracker x (before mirror)
+            const acc = calAccRef.current.get(role.id) ?? { xMin: rawX, xMax: rawX, yMin: y, yMax: y };
+            acc.xMin = Math.min(acc.xMin, rawX);
+            acc.xMax = Math.max(acc.xMax, rawX);
+            acc.yMin = Math.min(acc.yMin, y);
+            acc.yMax = Math.max(acc.yMax, y);
+            calAccRef.current.set(role.id, acc);
           }
           const out = baton.update({ x, y, found }, nowMs);
           lastOutputsRef.current.set(role.id, out);
@@ -429,6 +503,49 @@ export default function RemixScreen() {
     const existing = tracker.getColor(role);
     if (!existing) return;
     tracker.addColor({ ...existing, minArea });
+  }, []);
+
+  // ============================================
+  // Range calibration handlers
+  // ============================================
+
+  const CAPTURE_DURATION_MS = 5000;
+
+  const handleStartRangeCalibration = useCallback(() => {
+    // Reset accumulator and start capture
+    calAccRef.current.clear();
+    calibratingRangeRef.current = true;
+    setCalibratingRange(true);
+    setCalCountdown(5);
+
+    // Countdown ticks
+    let remaining = 4;
+    calTickRef.current = setInterval(() => {
+      setCalCountdown(remaining);
+      remaining--;
+    }, 1000);
+
+    // End capture after CAPTURE_DURATION_MS
+    calTimerRef.current = setTimeout(() => {
+      if (calTickRef.current !== null) {
+        clearInterval(calTickRef.current);
+        calTickRef.current = null;
+      }
+      calTimerRef.current = null;
+      calibratingRangeRef.current = false;
+      setCalibratingRange(false);
+      setCalCountdown(0);
+
+      // Write accumulated ranges to capturedRangesRef
+      calAccRef.current.forEach((acc, role) => {
+        capturedRangesRef.current.set(role, {
+          x: { min: acc.xMin, max: acc.xMax },
+          y: { min: acc.yMin, max: acc.yMax },
+        });
+      });
+      // Update state so render reflects captured roles immediately
+      setCapturedRoles(Array.from(capturedRangesRef.current.keys()));
+    }, CAPTURE_DURATION_MS);
   }, []);
 
   // ============================================
@@ -1032,6 +1149,7 @@ export default function RemixScreen() {
                     key={len}
                     onClick={() => {
                       engineRef.current.setLoopLengthBars(len);
+                      loopLengthBarsRef.current = len;
                       setLoopLengthBars(len);
                     }}
                     style={loopLengthBars === len ? styles.btnActive : styles.btnSmall}
@@ -1202,6 +1320,51 @@ export default function RemixScreen() {
             )}
           </div>
         )}
+
+        {/* Range calibration */}
+        <div style={styles.section}>
+          <h3 style={styles.sectionTitle}>Reach Calibration</h3>
+          <p style={styles.hint}>
+            Click "Calibrate range" and move each baton across its full reach for 5 seconds.
+            The captured range maps that motion to the full filter range.
+          </p>
+          <button
+            onClick={handleStartRangeCalibration}
+            disabled={calibratingRange}
+            style={calibratingRange ? styles.btnActive : styles.btn}
+            aria-label={calibratingRange ? `Capturing range — ${calCountdown}s remaining` : 'Start 5-second range capture'}
+          >
+            {calibratingRange ? `Capturing… ${calCountdown}s` : 'Calibrate range'}
+          </button>
+          {capturedRoles.length > 0 && !calibratingRange && (
+            <p style={{ ...styles.hint, color: '#22c55e' }}>
+              Range captured for: {capturedRoles.join(', ')}
+            </p>
+          )}
+          {/* Reach margin slider */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+            <label
+              htmlFor="remix-reach-margin"
+              style={{ fontSize: 11, color: '#a1a1b8', flexShrink: 0 }}
+            >
+              Reach margin
+            </label>
+            <input
+              id="remix-reach-margin"
+              type="range"
+              min={0}
+              max={0.3}
+              step={0.01}
+              value={reachMargin}
+              onChange={(e) => { setReachMargin(Number(e.target.value)); }}
+              style={{ flex: 1 }}
+              aria-label={`Reach margin: ${reachMargin.toFixed(2)}`}
+            />
+            <span style={{ fontSize: 10, color: '#71718a', width: 32, textAlign: 'right' as const, fontFamily: 'monospace', flexShrink: 0 }}>
+              {reachMargin.toFixed(2)}
+            </span>
+          </div>
+        </div>
 
         {/* Stem assignment info */}
         <div style={styles.section}>
