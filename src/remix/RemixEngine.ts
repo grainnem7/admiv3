@@ -22,6 +22,8 @@ import {
 import type { StemId, RemixBatonOutput } from './RemixBaton';
 import { STEM_CYCLE_ORDER } from './RemixBaton';
 import { computeLoopRegion, nudgeOrigin } from './loopRegion';
+import { HeadBopDetector } from '../mapping/nodes/HeadRhythmNode';
+import type { FaceLandmarks } from '../state/types';
 
 export interface RemixStemState {
   filterNorm: number;
@@ -60,6 +62,9 @@ export class RemixEngine {
   private loopOriginBar = 0;
   private duration = 0;
   private focusedStem: StemId = STEM_CYCLE_ORDER[0];
+  private headNodEnabled = false;
+  private headNodDetector = new HeadBopDetector(0.025, 200);
+  private readonly headNodLandmarkIndex = 1; // nose tip
 
   async loadSong(song: SongConfig): Promise<void> {
     this.dispose();
@@ -296,6 +301,25 @@ export class RemixEngine {
   /** Public wrapper over the private stutter trigger (keyboard/head-nod). */
   triggerStutterFor(stem: StemId): void {
     this.triggerStutter(stem);
+  }
+
+  setHeadNodEnabled(enabled: boolean): void {
+    this.headNodEnabled = enabled;
+    if (!enabled) this.headNodDetector.reset();
+  }
+
+  setHeadNodSensitivity(minDownExcursion: number, cooldownMs: number): void {
+    this.headNodDetector.setConfig(minDownExcursion, cooldownMs);
+  }
+
+  /** Feed face landmarks; a detected nod stutters the focused stem. */
+  processFaceLandmarks(landmarks: FaceLandmarks | null, timestampMs: number): void {
+    if (!this.headNodEnabled || !landmarks) return;
+    const lm = landmarks.landmarks[this.headNodLandmarkIndex];
+    if (!lm) return;
+    if (this.headNodDetector.step(lm.y, timestampMs)) {
+      this.triggerStutterFor(this.focusedStem);
+    }
   }
 
   // ---- internal ----

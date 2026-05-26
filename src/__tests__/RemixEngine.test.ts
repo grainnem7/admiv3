@@ -298,6 +298,45 @@ describe('RemixEngine', () => {
     e.dispose();
   });
 
+  function makeFace(y: number) {
+    // FaceLandmarks shape: { landmarks: { x; y; z }[] }. Index 1 = nose tip.
+    const landmarks = Array.from({ length: 2 }, () => ({ x: 0.5, y, z: 0 }));
+    return { landmarks } as unknown as import('../state/types').FaceLandmarks;
+  }
+
+  it('a head nod fires a stutter on the focused stem when enabled', async () => {
+    const e = new RemixEngine();
+    await e.loadSong(songWithBars());
+    e.play();
+    e.setFocusedStem('drums');
+    e.setHeadNodEnabled(true);
+    e.setHeadNodSensitivity(0.02, 100);
+    // Down (y increasing) then up (y decreasing) = one bop. Excursion 0.1 > 0.02.
+    let t = 0;
+    e.processFaceLandmarks(makeFace(0.40), (t += 16));
+    e.processFaceLandmarks(makeFace(0.45), (t += 16));
+    e.processFaceLandmarks(makeFace(0.50), (t += 16));
+    e.processFaceLandmarks(makeFace(0.45), (t += 16)); // reversal → bop
+    e.renderFrame(0);
+    expect(e.getStemStates().drums.stuttering).toBe(true);
+    e.dispose();
+  });
+
+  it('head-nod does nothing when disabled', async () => {
+    const e = new RemixEngine();
+    await e.loadSong(songWithBars());
+    e.play();
+    e.setFocusedStem('drums');
+    // not enabled
+    let t = 0;
+    e.processFaceLandmarks(makeFace(0.40), (t += 16));
+    e.processFaceLandmarks(makeFace(0.50), (t += 16));
+    e.processFaceLandmarks(makeFace(0.45), (t += 16));
+    e.renderFrame(0);
+    expect(e.getStemStates().drums.stuttering).toBe(false);
+    e.dispose();
+  });
+
   it('restores the stem gain after a stutter burst ends', async () => {
     const Tone = await import('tone');
 
