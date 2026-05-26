@@ -21,6 +21,7 @@ import {
 } from './StutterScheduler';
 import type { StemId, RemixBatonOutput } from './RemixBaton';
 import { STEM_CYCLE_ORDER } from './RemixBaton';
+import { computeLoopRegion, nudgeOrigin } from './loopRegion';
 
 export interface RemixStemState {
   filterNorm: number;
@@ -55,6 +56,9 @@ export class RemixEngine {
   private downbeats: number[] = [];
   private playing = false;
   private loopRegion: { startSec: number; endSec: number } | null = null;
+  private loopLengthBars: 0 | 4 | 8 | 16 = 8;
+  private loopOriginBar = 0;
+  private duration = 0;
 
   async loadSong(song: SongConfig): Promise<void> {
     this.dispose();
@@ -66,6 +70,7 @@ export class RemixEngine {
     this.master.connect(this.ctx.destination);
 
     const buffers = await loadStemBuffers(this.ctx, song.stems);
+    this.duration = Math.max(0, ...[...buffers.values()].map((b) => b.duration), 0);
 
     for (const stem of STEM_CYCLE_ORDER) {
       const buffer = buffers.get(stem);
@@ -111,6 +116,10 @@ export class RemixEngine {
       this.beats = song.beats ?? [];
       this.downbeats = song.downbeats ?? [];
     }
+
+    this.loopOriginBar = 0;
+    this.loopLengthBars = this.downbeats.length >= 2 ? 8 : 0;
+    this.applyLoop();
 
     Tone.getTransport().bpm.value = song.bpm;
   }
@@ -221,6 +230,33 @@ export class RemixEngine {
     return this.playing;
   }
 
+  setLoopLengthBars(n: 0 | 4 | 8 | 16): void {
+    this.loopLengthBars = this.downbeats.length >= 2 ? n : 0;
+    const barCount = Math.max(0, this.downbeats.length - 1);
+    this.loopOriginBar = Math.max(
+      0,
+      Math.min(this.loopOriginBar, Math.max(0, barCount - this.loopLengthBars)),
+    );
+    this.applyLoop();
+  }
+
+  nudgeLoop(dir: 1 | -1): void {
+    if (this.loopLengthBars <= 0) return;
+    const barCount = Math.max(0, this.downbeats.length - 1);
+    this.loopOriginBar = nudgeOrigin(this.loopOriginBar, dir, this.loopLengthBars, barCount);
+    this.applyLoop();
+  }
+
+  getLoopRegion(): { startSec: number; endSec: number; lengthBars: number; originBar: number } | null {
+    if (!this.loopRegion) return null;
+    return {
+      startSec: this.loopRegion.startSec,
+      endSec: this.loopRegion.endSec,
+      lengthBars: this.loopLengthBars,
+      originBar: this.loopOriginBar,
+    };
+  }
+
   dispose(): void {
     this.stop();
     for (const n of this.nodes.values()) {
@@ -238,6 +274,18 @@ export class RemixEngine {
   }
 
   // ---- internal ----
+
+  private applyLoop(): void {
+    const t = Tone.getTransport();
+    const region = this.loopLengthBars > 0
+      ? computeLoopRegion(this.downbeats, this.loopOriginBar, this.loopLengthBars)
+      : { startSec: 0, endSec: this.duration };
+    this.loopRegion = region;
+    if (!region) { t.loop = false; return; }
+    t.loop = true;
+    t.loopStart = region.startSec;
+    t.loopEnd = region.endSec;
+  }
 
   private triggerStutter(stem: StemId): void {
     if (!this.ctx) return;

@@ -208,6 +208,57 @@ describe('RemixEngine', () => {
     e.dispose();
   });
 
+  function songWithBars(): SongConfig {
+    const s = song();
+    s.beats = [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5, 8];
+    s.downbeats = [0, 1, 2, 3, 4, 5, 6, 7, 8]; // 8 bars, 1s each
+    return s;
+  }
+
+  it('applies a default 8-bar loop on load and sets Transport loop points', async () => {
+    const Tone = await import('tone');
+    const t = Tone.getTransport();
+    const e = new RemixEngine();
+    await e.loadSong(songWithBars());
+    expect(t.loop).toBe(true);
+    expect(t.loopStart).toBe(0);
+    expect(t.loopEnd).toBe(8); // 8 bars from origin 0
+    expect(e.getLoopRegion()).toEqual({ startSec: 0, endSec: 8, lengthBars: 8, originBar: 0 });
+    e.dispose();
+  });
+
+  it('setLoopLengthBars(4) tightens the window to 4 bars', async () => {
+    const Tone = await import('tone');
+    const e = new RemixEngine();
+    await e.loadSong(songWithBars());
+    e.setLoopLengthBars(4);
+    expect(Tone.getTransport().loopEnd).toBe(4);
+    expect(e.getLoopRegion()).toEqual({ startSec: 0, endSec: 4, lengthBars: 4, originBar: 0 });
+    e.dispose();
+  });
+
+  it('nudgeLoop steps the window forward and clamps at the end', async () => {
+    const e = new RemixEngine();
+    await e.loadSong(songWithBars());
+    e.setLoopLengthBars(4);
+    e.nudgeLoop(1);
+    expect(e.getLoopRegion()).toEqual({ startSec: 4, endSec: 8, lengthBars: 4, originBar: 4 });
+    e.nudgeLoop(1); // clamps (lastValidOrigin = 8-4 = 4)
+    expect(e.getLoopRegion()?.originBar).toBe(4);
+    e.dispose();
+  });
+
+  it('setLoopLengthBars(0) turns looping off (whole song)', async () => {
+    const e = new RemixEngine();
+    await e.loadSong(songWithBars());
+    e.setLoopLengthBars(0);
+    const r = e.getLoopRegion();
+    expect(r).not.toBeNull();
+    expect(r!.lengthBars).toBe(0);
+    expect(r!.startSec).toBe(0);
+    e.dispose();
+  });
+
   it('restores the stem gain after a stutter burst ends', async () => {
     const Tone = await import('tone');
 
