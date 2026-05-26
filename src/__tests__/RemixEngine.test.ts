@@ -8,12 +8,27 @@ vi.mock('tone', () => {
     stop: vi.fn(),
     pause: vi.fn(),
     cancel: vi.fn(),
+    loop: false,
+    loopStart: 0,
+    loopEnd: 0,
+    scheduleOnce: vi.fn(),
+    state: 'stopped',
   };
   return {
     start: vi.fn().mockResolvedValue(undefined),
     getContext: vi.fn(() => ({ rawContext: makeRawCtx() })),
     getTransport: vi.fn(() => Transport),
     now: vi.fn(() => 0),
+    Player: vi.fn().mockImplementation((buffer: AudioBuffer) => ({
+      buffer,
+      loop: false,
+      sync: vi.fn().mockReturnThis(),
+      start: vi.fn().mockReturnThis(),
+      stop: vi.fn().mockReturnThis(),
+      unsync: vi.fn().mockReturnThis(),
+      connect: vi.fn(),
+      dispose: vi.fn(),
+    })),
   };
 });
 
@@ -167,6 +182,29 @@ describe('RemixEngine', () => {
     );
     expect(ducked).toBe(true);
 
+    e.dispose();
+  });
+
+  it('creates a synced Tone.Player per stem on load', async () => {
+    const Tone = await import('tone');
+    const PlayerMock = Tone.Player as unknown as { mock: { calls: unknown[] } };
+    const callsBefore = PlayerMock.mock.calls.length;
+    const e = new RemixEngine();
+    await e.loadSong(song());
+    // 4 stems → 4 Player constructions.
+    expect(PlayerMock.mock.calls.length - callsBefore).toBe(4);
+    e.dispose();
+  });
+
+  it('sets loop=true on every stem player', async () => {
+    const Tone = await import('tone');
+    const PlayerMock = Tone.Player as unknown as { mock: { results: { value: { loop: boolean } }[] } };
+    const before = PlayerMock.mock.results.length;
+    const e = new RemixEngine();
+    await e.loadSong(song());
+    const created = PlayerMock.mock.results.slice(before);
+    expect(created.length).toBe(4);
+    expect(created.every((r) => r.value.loop === true)).toBe(true);
     e.dispose();
   });
 

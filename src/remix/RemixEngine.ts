@@ -1,7 +1,7 @@
 /**
  * RemixEngine — stem playback for the Remix screen.
  *
- * Per stem: AudioBufferSource → stemGain → stemFilter → masterGain.
+ * Per stem: Tone.Player → stemGain → stemFilter → masterGain.
  * Sources always run (looped); silence is gain 0, never stop, so all
  * stems stay sample-aligned for the whole session. Build-from-silence:
  * every stem starts inaudible. A RemixBaton writes filterNorm; the
@@ -31,7 +31,7 @@ export interface RemixStemState {
 
 interface StemNodes {
   buffer: AudioBuffer;
-  source: AudioBufferSourceNode | null;
+  player: Tone.Player | null;
   gain: GainNode;
   filter: BiquadFilterNode;
   stutterSource: AudioBufferSourceNode | null;
@@ -54,6 +54,7 @@ export class RemixEngine {
   private beats: number[] = [];
   private downbeats: number[] = [];
   private playing = false;
+  private loopRegion: { startSec: number; endSec: number } | null = null;
 
   async loadSong(song: SongConfig): Promise<void> {
     this.dispose();
@@ -77,9 +78,12 @@ export class RemixEngine {
       filter.Q.value = 0.7;
       gain.connect(filter);
       filter.connect(this.master);
+      const player = new Tone.Player(buffer);
+      player.loop = true;          // stems run continuously; silence is gain 0, never stop
+      player.connect(gain);
       this.nodes.set(stem, {
         buffer,
-        source: null,
+        player,
         gain,
         filter,
         stutterSource: null,
@@ -112,36 +116,44 @@ export class RemixEngine {
   }
 
   play(): void {
-    if (!this.ctx || this.playing) return;
-    for (const n of this.nodes.values()) {
-      const src = this.ctx.createBufferSource();
-      src.buffer = n.buffer;
-      src.loop = true;
-      src.connect(n.gain);
-      src.start(0, 0);
-      n.source = src;
+    if (this.playing) return;
+    const t = Tone.getTransport();
+    const resuming = t.state === 'paused';
+    if (!resuming) {
+      // Fresh start: (re-)align each player to transport time 0.
+      // unsync() first so a prior sync's scheduled events are cleared
+      // (idempotent — avoids duplicate start events across play cycles).
+      for (const n of this.nodes.values()) {
+        n.player?.unsync().sync().start(0);
+      }
     }
-    Tone.getTransport().seconds = 0;
-    Tone.getTransport().start();
+    t.start();
     this.playing = true;
   }
 
   stop(): void {
     for (const [stem, n] of this.nodes) {
       n.scheduler.forceStop(() => this.stopOverlay(n));
-      if (n.source) {
-        try { n.source.stop(); } catch { /* already stopped */ }
-        n.source.disconnect();
-        n.source = null;
-      }
+      try { n.player?.unsync().stop(); } catch { /* not started */ }
       // Clear mid-burst state so a subsequent play() does not permanently
       // suppress the stem's gain writes via the !state.stuttering guard.
       n.pendingWindow = null;
       const state = this.states.get(stem);
       if (state) state.stuttering = false;
     }
-    Tone.getTransport().stop();
+    const t = Tone.getTransport();
+    t.stop();
+    t.seconds = this.loopRegion ? this.loopRegion.startSec : 0;
     this.playing = false;
+  }
+
+  togglePlay(): void {
+    if (Tone.getTransport().state === 'started') {
+      Tone.getTransport().pause();
+      this.playing = false;
+    } else {
+      this.play();
+    }
   }
 
   /** Apply one baton's output for this frame. */
@@ -212,6 +224,8 @@ export class RemixEngine {
   dispose(): void {
     this.stop();
     for (const n of this.nodes.values()) {
+      try { n.player?.unsync(); } catch { /* noop */ }
+      n.player?.dispose();
       n.gain.disconnect();
       n.filter.disconnect();
     }
