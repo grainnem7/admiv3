@@ -95,4 +95,15 @@ describe('RemixBaton', () => {
     b.update({ x: 0.3, y: 0.7, found: true }, 0);
     expect(b.centroid()).toEqual({ x: 0.3, y: 0.7, found: true });
   });
+
+  it('forceCycle advances the assigned stem through the cycle order and wraps', () => {
+    const b = new RemixBaton('red');
+    // STEM_CYCLE_ORDER = vocals, drums, bass, other.
+    expect(b.assignedStem).toBe(STEM_CYCLE_ORDER[0]);
+    expect(b.forceCycle()).toBe(STEM_CYCLE_ORDER[1]);
+    expect(b.forceCycle()).toBe(STEM_CYCLE_ORDER[2]);
+    expect(b.forceCycle()).toBe(STEM_CYCLE_ORDER[3]);
+    expect(b.forceCycle()).toBe(STEM_CYCLE_ORDER[0]); // wraps
+    expect(b.assignedStem).toBe(STEM_CYCLE_ORDER[0]);
+  });
 });

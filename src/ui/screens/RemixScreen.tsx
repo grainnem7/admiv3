@@ -24,6 +24,7 @@ import type { RemixStemState } from '../../remix/RemixEngine';
 import { RemixBaton } from '../../remix/RemixBaton';
 import type { StemId } from '../../remix/RemixBaton';
 import { STEM_CYCLE_ORDER } from '../../remix/RemixBaton';
+import { BatonTouchDetector } from '../../remix/BatonTouchDetector';
 import { keyToRemixAction } from '../../remix/remixKeyMap';
 import { SONG_LIBRARY, COLOR_ROLES } from '../../songs/songLibrary';
 import type { SongConfig, ColorRole } from '../../songs/songLibrary';
@@ -82,6 +83,17 @@ export default function RemixScreen() {
    * Flash is active while (now - flashTime) < CYCLE_FLASH_MS.
    */
   const cycleFlashRef = useRef<Map<ColorRole, number>>(new Map());
+  /** BatonTouchDetector for the two-baton touch-to-cycle gesture. */
+  const touchDetectorRef = useRef(new BatonTouchDetector({ touchRadius: 0.12, cooldownMs: 600 }));
+  /**
+   * Last two "present" baton centroids used for the touch proximity visual.
+   * Written each RAF frame; read in render.
+   */
+  const lastTouchPairRef = useRef<{
+    a: { x: number; y: number; role: ColorRole } | null;
+    b: { x: number; y: number; role: ColorRole } | null;
+    withinRadius: boolean;
+  }>({ a: null, b: null, withinRadius: false });
 
   // ---- Touch pad ----
   const { state: padState, bind: padBind, reset: resetPad } = usePadState();
@@ -104,6 +116,23 @@ export default function RemixScreen() {
     },
     [padBind, resetPad],
   );
+
+  // ---- Baton-touch + dwell toggles ----
+  const [batonTouchEnabled,  setBatonTouchEnabled]  = useState(true);
+  const [dwellCycleEnabled,  setDwellCycleEnabled]  = useState(true);
+  const [touchRadius,        setTouchRadius]        = useState(0.12);
+  const batonTouchEnabledRef = useRef(true);
+  const dwellCycleEnabledRef = useRef(true);
+  const touchRadiusRef       = useRef(0.12);
+  useEffect(() => { batonTouchEnabledRef.current = batonTouchEnabled; }, [batonTouchEnabled]);
+  useEffect(() => { touchRadiusRef.current       = touchRadius;       }, [touchRadius]);
+  useEffect(() => {
+    dwellCycleEnabledRef.current = dwellCycleEnabled;
+    // Propagate live to all existing batons
+    for (const baton of batonsRef.current.values()) {
+      baton.setDwellCycleEnabled(dwellCycleEnabled);
+    }
+  }, [dwellCycleEnabled]);
 
   // ---- UI state ----
   const [inputMode,    setInputMode]    = useState<'webcam' | 'touch'>('webcam');
@@ -281,6 +310,8 @@ export default function RemixScreen() {
         let baton = batonsRef.current.get(role);
         if (!baton) {
           baton = new RemixBaton(role);
+          // Apply current dwell-cycle toggle to newly-created batons
+          baton.setDwellCycleEnabled(dwellCycleEnabledRef.current);
           batonsRef.current.set(role, baton);
         }
         const found = pad.held;
@@ -338,6 +369,8 @@ export default function RemixScreen() {
           let baton = batonsRef.current.get(role.id);
           if (!baton) {
             baton = new RemixBaton(role.id);
+            // Apply current dwell-cycle toggle to newly-created batons
+            baton.setDwellCycleEnabled(dwellCycleEnabledRef.current);
             batonsRef.current.set(role.id, baton);
           }
           // Apply captured calibration live, before update
@@ -361,6 +394,48 @@ export default function RemixScreen() {
           lastFoundRef.current.set(role.id, true);
           if (out.cycled) cycleFlashRef.current.set(role.id, nowMs);
           engine.applyBaton(out);
+        }
+      }
+
+      // --- Baton-touch detection ---
+      // Gather the two highest-priority PRESENT baton centroids (COLOR_ROLES order).
+      // In touch mode only one baton exists, so touch detection naturally no-ops.
+      {
+        const presentPair: { centroid: { x: number; y: number; found: boolean }; role: ColorRole; baton: RemixBaton }[] = [];
+        for (const role of COLOR_ROLES) {
+          if (presentPair.length >= 2) break;
+          const b = batonsRef.current.get(role.id);
+          if (!b) continue;
+          const c = b.centroid();
+          if (c.found) presentPair.push({ centroid: c, role: role.id, baton: b });
+        }
+        if (presentPair.length >= 2) {
+          const aEntry = presentPair[0];
+          const bEntry = presentPair[1];
+          const dx = aEntry.centroid.x - bEntry.centroid.x;
+          const dy = aEntry.centroid.y - bEntry.centroid.y;
+          const within = Math.sqrt(dx * dx + dy * dy) <= touchRadiusRef.current;
+          lastTouchPairRef.current = {
+            a: { x: aEntry.centroid.x, y: aEntry.centroid.y, role: aEntry.role },
+            b: { x: bEntry.centroid.x, y: bEntry.centroid.y, role: bEntry.role },
+            withinRadius: within,
+          };
+          if (batonTouchEnabledRef.current) {
+            const fired = touchDetectorRef.current.update(aEntry.centroid, bEntry.centroid, nowMs);
+            if (fired) {
+              // PRIMARY = higher-priority baton (first in COLOR_ROLES order = aEntry)
+              const primaryBaton = aEntry.baton;
+              const primaryRole  = aEntry.role;
+              const newStem = primaryBaton.forceCycle();
+              cycleFlashRef.current.set(primaryRole, nowMs);
+              const filterNorm = 1 - Math.min(1, Math.max(0, primaryBaton.centroid().y));
+              engine.applyBaton({ stem: newStem, filterNorm, cycled: true, stutter: false, dwellProgress: 0 });
+              engine.setFocusedStem(newStem);
+            }
+          }
+        } else {
+          // Fewer than two batons present — clear proximity visual
+          lastTouchPairRef.current = { a: null, b: null, withinRadius: false };
         }
       }
 
@@ -1001,6 +1076,57 @@ export default function RemixScreen() {
           >
             <video ref={videoRef} autoPlay playsInline muted style={styles.video} />
 
+            {/* Baton-touch proximity overlay — connecting line when two batons are close */}
+            {(() => {
+              const pair = lastTouchPairRef.current;
+              if (!batonTouchEnabled || !pair.a || !pair.b) return null;
+              const aColor = COLOR_ROLES.find((r) => r.id === pair.a!.role)?.cssColor ?? '#ffffff';
+              const bColor = COLOR_ROLES.find((r) => r.id === pair.b!.role)?.cssColor ?? '#ffffff';
+              const lineColor = pair.withinRadius ? '#ffffff' : 'rgba(255,255,255,0.25)';
+              const lineWidth = pair.withinRadius ? 2.5 : 1.5;
+              return (
+                <svg
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    width: '100%',
+                    height: '100%',
+                    pointerEvents: 'none',
+                    overflow: 'visible',
+                  }}
+                  aria-label={pair.withinRadius ? 'Batons touching — cycle will fire' : 'Two batons tracked'}
+                  role="img"
+                >
+                  {/* Connecting line */}
+                  <line
+                    x1={`${pair.a.x * 100}%`}
+                    y1={`${pair.a.y * 100}%`}
+                    x2={`${pair.b.x * 100}%`}
+                    y2={`${pair.b.y * 100}%`}
+                    stroke={lineColor}
+                    strokeWidth={lineWidth}
+                    strokeDasharray={pair.withinRadius ? undefined : '4 4'}
+                  />
+                  {/* Dot for baton A (primary / higher priority) */}
+                  <circle
+                    cx={`${pair.a.x * 100}%`}
+                    cy={`${pair.a.y * 100}%`}
+                    r={pair.withinRadius ? 7 : 5}
+                    fill={aColor}
+                    opacity={pair.withinRadius ? 0.9 : 0.5}
+                  />
+                  {/* Dot for baton B */}
+                  <circle
+                    cx={`${pair.b.x * 100}%`}
+                    cy={`${pair.b.y * 100}%`}
+                    r={pair.withinRadius ? 7 : 5}
+                    fill={bColor}
+                    opacity={pair.withinRadius ? 0.9 : 0.5}
+                  />
+                </svg>
+              );
+            })()}
+
             {/* Color calibration prompt */}
             {colorCalMode && (
               <div style={styles.colorCalBanner}>
@@ -1364,6 +1490,68 @@ export default function RemixScreen() {
               {reachMargin.toFixed(2)}
             </span>
           </div>
+        </div>
+
+        {/* Cycle triggers */}
+        <div style={styles.section}>
+          <h3 style={styles.sectionTitle}>Cycle Triggers</h3>
+          <p style={styles.hint}>Choose how batons advance to the next stem.</p>
+
+          {/* Baton touch toggle */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button
+              onClick={() => setBatonTouchEnabled((v) => !v)}
+              style={batonTouchEnabled ? styles.btnActive : styles.btn}
+              aria-pressed={batonTouchEnabled}
+              aria-label={batonTouchEnabled ? 'Baton touch cycle: on' : 'Baton touch cycle: off'}
+            >
+              {batonTouchEnabled ? 'Baton touch ON' : 'Baton touch OFF'}
+            </button>
+          </div>
+          <p style={styles.hint}>Bring two batons together to cycle the primary baton&apos;s stem.</p>
+
+          {/* Touch radius slider */}
+          {batonTouchEnabled && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <label
+                htmlFor="remix-touch-radius"
+                style={{ fontSize: 11, color: '#a1a1b8', flexShrink: 0 }}
+              >
+                Touch radius
+              </label>
+              <input
+                id="remix-touch-radius"
+                type="range"
+                min={0.05}
+                max={0.3}
+                step={0.01}
+                value={touchRadius}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  setTouchRadius(v);
+                  touchDetectorRef.current.setTouchRadius(v);
+                }}
+                style={{ flex: 1 }}
+                aria-label={`Touch radius: ${touchRadius.toFixed(2)}`}
+              />
+              <span style={{ fontSize: 10, color: '#71718a', width: 32, textAlign: 'right' as const, fontFamily: 'monospace', flexShrink: 0 }}>
+                {touchRadius.toFixed(2)}
+              </span>
+            </div>
+          )}
+
+          {/* Dwell-cycle toggle */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
+            <button
+              onClick={() => setDwellCycleEnabled((v) => !v)}
+              style={dwellCycleEnabled ? styles.btnActive : styles.btn}
+              aria-pressed={dwellCycleEnabled}
+              aria-label={dwellCycleEnabled ? 'Dwell to cycle: on' : 'Dwell to cycle: off'}
+            >
+              {dwellCycleEnabled ? 'Dwell to cycle ON' : 'Dwell to cycle OFF'}
+            </button>
+          </div>
+          <p style={styles.hint}>Hold still for 1.2 s to cycle the baton&apos;s stem.</p>
         </div>
 
         {/* Stem assignment info */}

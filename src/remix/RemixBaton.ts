@@ -123,6 +123,12 @@ export class RemixBaton {
     return { ...this.lastInput };
   }
 
+  /** Advance to the next stem programmatically (e.g. baton-touch trigger). */
+  forceCycle(): StemId {
+    this.stemIndex = (this.stemIndex + 1) % STEM_CYCLE_ORDER.length;
+    return this.assignedStem;
+  }
+
   update(input: BatonInput, nowMs: number): RemixBatonOutput {
     const stem = this.assignedStem;
 
