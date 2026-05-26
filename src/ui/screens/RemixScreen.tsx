@@ -24,6 +24,7 @@ import type { RemixStemState } from '../../remix/RemixEngine';
 import { RemixBaton } from '../../remix/RemixBaton';
 import type { StemId } from '../../remix/RemixBaton';
 import { STEM_CYCLE_ORDER } from '../../remix/RemixBaton';
+import { keyToRemixAction } from '../../remix/remixKeyMap';
 import { SONG_LIBRARY, COLOR_ROLES } from '../../songs/songLibrary';
 import type { SongConfig, ColorRole } from '../../songs/songLibrary';
 import { usePadState } from './songPreset/usePadState';
@@ -142,6 +143,23 @@ export default function RemixScreen() {
 
   // Beat dot: derive beat phase from Tone transport once we have beats.
   const [beatPhase,  setBeatPhase]  = useState(0); // 0–1 across one beat
+
+  // Keyboard test mode
+  const [keyboardMode,       setKeyboardMode]       = useState(false);
+  const [focusedStemIndex,   setFocusedStemIndex]   = useState<0 | 1 | 2 | 3>(0);
+  const [loopLengthBars,     setLoopLengthBars]     = useState<0 | 4 | 8 | 16>(8);
+  // Song duration in seconds (derived after load)
+  const [songDurationSec,    setSongDurationSec]    = useState(0);
+  // Loop timeline display — updated each render frame alongside stemStates
+  const [loopRegionDisplay,  setLoopRegionDisplay]  = useState<{
+    startSec: number; endSec: number; lengthBars: number; originBar: number;
+  } | null>(null);
+  const [transportSec,       setTransportSec]       = useState(0);
+  // Refs so keyboard handler sees current values without stale closure
+  const focusedStemIndexRef  = useRef<0 | 1 | 2 | 3>(0);
+  const loopLengthBarsRef    = useRef<0 | 4 | 8 | 16>(8);
+  useEffect(() => { focusedStemIndexRef.current = focusedStemIndex; }, [focusedStemIndex]);
+  useEffect(() => { loopLengthBarsRef.current   = loopLengthBars;   }, [loopLengthBars]);
 
   const setCurrentScreen = useAppStore((s) => s.setCurrentScreen);
 
@@ -283,6 +301,8 @@ export default function RemixScreen() {
       if (frameCountRef.current % 6 === 0) {
         setStemStates(states);
         setIsPlaying(engine.isPlaying());
+        setLoopRegionDisplay(engine.getLoopRegion());
+        setTransportSec(Tone.getTransport().seconds);
 
         // Beat dot: find next beat after current playback position
         const nowSec = Tone.getTransport().seconds;
@@ -336,6 +356,21 @@ export default function RemixScreen() {
       await engine.loadSong(song);
       setIsLoaded(true);
       setLoadingMsg(null);
+      // Derive song duration from the off-loop region (loopLen=0 ⇒ endSec = full duration).
+      // We temporarily read at loopLen=0 then restore the previous length.
+      const currentLen = engine.getLoopRegion()?.lengthBars ?? 8;
+      engine.setLoopLengthBars(0);
+      const fullRegion = engine.getLoopRegion();
+      const dur = fullRegion?.endSec ?? 0;
+      setSongDurationSec(dur);
+      // Restore loop length
+      const restoredLen = currentLen as 0 | 4 | 8 | 16;
+      engine.setLoopLengthBars(restoredLen);
+      // Sync state to what engine actually set after load
+      const afterRegion = engine.getLoopRegion();
+      const effectiveLen = afterRegion?.lengthBars ?? 0;
+      setLoopLengthBars(effectiveLen as 0 | 4 | 8 | 16);
+      loopLengthBarsRef.current = effectiveLen as 0 | 4 | 8 | 16;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load song');
       setLoadingMsg(null);
@@ -397,6 +432,52 @@ export default function RemixScreen() {
   }, []);
 
   // ============================================
+  // Keyboard test mode handler (mirrors SongPresetScreen pattern)
+  // ============================================
+
+  useEffect(() => {
+    if (!keyboardMode) return;
+
+    const LOOP_LENGTH_CYCLE: (0 | 4 | 8 | 16)[] = [0, 4, 8, 16];
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const action = keyToRemixAction(e.key);
+      if (!action) return;
+      e.preventDefault();
+      const engine = engineRef.current;
+
+      if (action.kind === 'focusStem') {
+        const idx = action.index;
+        focusedStemIndexRef.current = idx;
+        setFocusedStemIndex(idx);
+        engine.setFocusedStem(STEM_CYCLE_ORDER[idx]);
+      } else if (action.kind === 'filter') {
+        const stem = STEM_CYCLE_ORDER[focusedStemIndexRef.current];
+        const cur  = engine.getStemFilterNorm(stem);
+        const next = Math.max(0, Math.min(1, cur + action.dir * 0.1));
+        engine.setStemFilterNorm(stem, next);
+      } else if (action.kind === 'stutter') {
+        engine.triggerStutterFor(STEM_CYCLE_ORDER[focusedStemIndexRef.current]);
+      } else if (action.kind === 'nudgeLoop') {
+        engine.nudgeLoop(action.dir);
+      } else if (action.kind === 'loopLen') {
+        const cur    = loopLengthBarsRef.current;
+        const curIdx = LOOP_LENGTH_CYCLE.indexOf(cur);
+        const nextIdx = (curIdx + action.dir + LOOP_LENGTH_CYCLE.length) % LOOP_LENGTH_CYCLE.length;
+        const next   = LOOP_LENGTH_CYCLE[nextIdx];
+        engine.setLoopLengthBars(next);
+        loopLengthBarsRef.current = next;
+        setLoopLengthBars(next);
+      } else if (action.kind === 'togglePlay') {
+        void Tone.start().then(() => { engine.togglePlay(); });
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => { window.removeEventListener('keydown', handleKeyDown); };
+  }, [keyboardMode]);
+
+  // ============================================
   // Navigation
   // ============================================
 
@@ -445,10 +526,11 @@ export default function RemixScreen() {
 
         {/* Stem tiles */}
         <div style={styles.stemGrid}>
-          {STEM_CYCLE_ORDER.map((stem) => {
+          {STEM_CYCLE_ORDER.map((stem, stemIdx) => {
             const state  = stemStates[stem];
             const meta   = STEM_META[stem];
             const filterN = state?.filterNorm ?? 0;
+            const isFocused = keyboardMode && focusedStemIndex === stemIdx;
 
             // Collect ALL baton roles assigned to this stem (two batons may share a tile).
             const assignedRoles: ColorRole[] = [];
@@ -504,15 +586,18 @@ export default function RemixScreen() {
                 key={stem}
                 style={{
                   ...styles.stemTile,
-                  border: isLive
-                    ? `2px solid ${assignedColor}`
-                    : `2px solid rgba(255,255,255,0.08)`,
+                  border: isFocused
+                    ? `2px solid #facc15`
+                    : isLive
+                      ? `2px solid ${assignedColor}`
+                      : `2px solid rgba(255,255,255,0.08)`,
+                  boxShadow: isFocused ? '0 0 0 2px rgba(250,204,21,0.3)' : undefined,
                   // Stutter strobe: flash opacity
                   opacity: stuttering ? (frameCountRef.current % 2 === 0 ? 1 : 0.45) : 1,
                   transition: stuttering ? 'none' : 'opacity 0.15s',
                   position: 'relative',
                 }}
-                aria-label={`${meta.label} stem: level ${Math.round(filterN * 100)}%${stuttering ? ', stuttering' : ''}${assignedRoles.length > 0 ? `, controlled by ${assignedRoles.join(' and ')} baton${assignedRoles.length > 1 ? 's' : ''}` : ''}`}
+                aria-label={`${meta.label} stem${isFocused ? ', focused' : ''}: level ${Math.round(filterN * 100)}%${stuttering ? ', stuttering' : ''}${assignedRoles.length > 0 ? `, controlled by ${assignedRoles.join(' and ')} baton${assignedRoles.length > 1 ? 's' : ''}` : ''}`}
               >
                 {/* Cycle flash overlay — fades out over CYCLE_FLASH_MS on the destination tile */}
                 {cycleFlashOpacity > 0 && (
@@ -531,9 +616,24 @@ export default function RemixScreen() {
 
                 {/* Tile header */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: isLive ? assignedColor : meta.color }}>
-                    {meta.label}
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    {isFocused && (
+                      <span
+                        style={{ fontSize: 11, color: '#facc15', fontWeight: 700 }}
+                        aria-hidden="true"
+                      >
+                        ▸
+                      </span>
+                    )}
+                    <span style={{ fontSize: 13, fontWeight: 700, color: isFocused ? '#facc15' : isLive ? assignedColor : meta.color }}>
+                      {meta.label}
+                    </span>
+                    {isFocused && (
+                      <span style={{ fontSize: 9, color: '#facc15', fontWeight: 600, marginLeft: 2 }}>
+                        focused
+                      </span>
+                    )}
+                  </div>
                   {/* Baton markers — one badge per assigned role (never colour-only: text + colour) */}
                   <div style={{ display: 'flex', gap: 3 }}>
                     {assignedRoles.map((role) => {
@@ -887,6 +987,157 @@ export default function RemixScreen() {
                 ⏮ Restart
               </button>
             </div>
+          </div>
+        )}
+
+        {/* Keyboard mode + Loop controls */}
+        {isLoaded && selectedSong && (
+          <div style={styles.section}>
+            <h3 style={styles.sectionTitle}>Keyboard Mode</h3>
+
+            {/* Keyboard-mode toggle */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <button
+                onClick={() => setKeyboardMode((k) => !k)}
+                style={keyboardMode ? styles.btnActive : styles.btn}
+                aria-pressed={keyboardMode}
+                aria-label={keyboardMode ? 'Keyboard mode on' : 'Keyboard mode off'}
+              >
+                {keyboardMode ? 'Keys ON' : 'Keys OFF'}
+              </button>
+              {keyboardMode && (
+                <span style={{ fontSize: 10, color: '#71718a' }}>
+                  1–4 stem · ↑↓ filter · S stutter · ←→ loop · [ ] length · space play
+                </span>
+              )}
+            </div>
+
+            {/* Play/Pause button (keyboard equivalent) */}
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' as const }}>
+              <button
+                onClick={() => { void Tone.start().then(() => { engineRef.current.togglePlay(); }); }}
+                style={styles.btn}
+                aria-label={isPlaying ? 'Pause playback' : 'Resume playback'}
+              >
+                {isPlaying ? '⏸ Pause' : '▶ Resume'}
+              </button>
+            </div>
+
+            {/* Loop length selector */}
+            <div>
+              <div style={{ fontSize: 11, color: '#71718a', marginBottom: 4 }}>Loop length</div>
+              <div style={{ display: 'flex', gap: 4 }}>
+                {([0, 4, 8, 16] as (0 | 4 | 8 | 16)[]).map((len) => (
+                  <button
+                    key={len}
+                    onClick={() => {
+                      engineRef.current.setLoopLengthBars(len);
+                      setLoopLengthBars(len);
+                    }}
+                    style={loopLengthBars === len ? styles.btnActive : styles.btnSmall}
+                    aria-pressed={loopLengthBars === len}
+                    aria-label={len === 0 ? 'Loop off' : `Loop ${len} bars`}
+                  >
+                    {len === 0 ? 'Off' : `${len}`}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Loop nudge buttons */}
+            {loopLengthBars > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 11, color: '#71718a' }}>Nudge loop</span>
+                <button
+                  onClick={() => { engineRef.current.nudgeLoop(-1); }}
+                  style={styles.btnSmall}
+                  aria-label="Nudge loop earlier"
+                >
+                  ◀
+                </button>
+                <button
+                  onClick={() => { engineRef.current.nudgeLoop(1); }}
+                  style={styles.btnSmall}
+                  aria-label="Nudge loop later"
+                >
+                  ▶
+                </button>
+              </div>
+            )}
+
+            {/* Loop-window timeline */}
+            {(() => {
+              const region = loopRegionDisplay;
+              const dur    = songDurationSec;
+              const loopLabel = region && region.lengthBars > 0
+                ? `Loop: bars ${region.originBar + 1}–${region.originBar + region.lengthBars} (${region.lengthBars} bars)`
+                : 'Loop: off';
+              const curSec  = transportSec;
+              const totalSec = dur > 0 ? dur : 1;
+              const curM  = Math.floor(curSec / 60);
+              const curS  = Math.floor(curSec % 60);
+              const totM  = Math.floor(totalSec / 60);
+              const totS  = Math.floor(totalSec % 60);
+              const fmtSec = (m: number, s: number) =>
+                `${m}:${s.toString().padStart(2, '0')}`;
+
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {/* Text label — never colour-only */}
+                  <div style={{ fontSize: 11, color: '#a1a1b8', fontFamily: 'monospace' }}>
+                    {loopLabel}
+                  </div>
+                  {/* Transport position readout */}
+                  <div style={{ fontSize: 10, color: '#71718a', fontFamily: 'monospace' }}>
+                    {fmtSec(curM, curS)} / {fmtSec(totM, totS)}
+                  </div>
+                  {/* Timeline bar */}
+                  {dur > 0 && (
+                    <div
+                      style={{
+                        position: 'relative',
+                        height: 18,
+                        background: 'rgba(255,255,255,0.05)',
+                        borderRadius: 4,
+                        overflow: 'hidden',
+                      }}
+                      role="img"
+                      aria-label={`Song timeline. ${loopLabel}. Position ${fmtSec(curM, curS)} of ${fmtSec(totM, totS)}`}
+                    >
+                      {/* Loop window highlight */}
+                      {region && region.lengthBars > 0 && (
+                        <div
+                          style={{
+                            position: 'absolute',
+                            top: 0,
+                            bottom: 0,
+                            left:  `${(region.startSec / totalSec) * 100}%`,
+                            width: `${((region.endSec - region.startSec) / totalSec) * 100}%`,
+                            background: 'rgba(249,115,22,0.25)',
+                            borderLeft:  '2px solid #f97316',
+                            borderRight: '2px solid #f97316',
+                          }}
+                          aria-hidden="true"
+                        />
+                      )}
+                      {/* Playhead */}
+                      <div
+                        style={{
+                          position: 'absolute',
+                          top: 0,
+                          bottom: 0,
+                          left: `${(curSec / totalSec) * 100}%`,
+                          width: 2,
+                          background: '#ffffff',
+                          opacity: 0.8,
+                        }}
+                        aria-hidden="true"
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         )}
 
