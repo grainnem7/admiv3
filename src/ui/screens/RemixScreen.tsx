@@ -129,6 +129,8 @@ export default function RemixScreen() {
   const [batonTouchEnabled,  setBatonTouchEnabled]  = useState(true);
   const [dwellCycleEnabled,  setDwellCycleEnabled]  = useState(true);
   const [touchRadius,        setTouchRadius]        = useState(0.12);
+  /** Shake-to-stutter: forwards to engine.setShakeStutterEnabled. Default on. */
+  const [shakeStutterEnabled, setShakeStutterEnabled] = useState(true);
 
   /**
    * Head Nod → stutter toggle.  When on, a FaceDetector is started and each
@@ -150,6 +152,9 @@ export default function RemixScreen() {
       baton.setDwellCycleEnabled(dwellCycleEnabled);
     }
   }, [dwellCycleEnabled]);
+  useEffect(() => {
+    engineRef.current.setShakeStutterEnabled(shakeStutterEnabled);
+  }, [shakeStutterEnabled]);
 
   // ---- UI state ----
   const [inputMode,    setInputMode]    = useState<'webcam' | 'touch'>('webcam');
@@ -1530,121 +1535,29 @@ export default function RemixScreen() {
           </div>
         )}
 
-        {/* Range calibration */}
-        <div style={styles.section}>
-          <h3 style={styles.sectionTitle}>Reach Calibration</h3>
+        {/* ---- Triggers (facilitator) ---- */}
+        <div style={{ ...styles.section, borderTop: '2px solid rgba(249,115,22,0.25)', paddingTop: 10 }}>
+          <h3 style={{ ...styles.sectionTitle, color: '#f97316' }}>Triggers (facilitator)</h3>
           <p style={styles.hint}>
-            Click "Calibrate range" and move each baton across its full reach for 5 seconds.
-            The captured range maps that motion to the full filter range.
+            Compose the player&apos;s trigger scheme. For Tim: dwell off, baton-touch on,
+            head-nod on, shake off.
           </p>
-          <button
-            onClick={handleStartRangeCalibration}
-            disabled={calibratingRange}
-            style={calibratingRange ? styles.btnActive : styles.btn}
-            aria-label={calibratingRange ? `Capturing range — ${calCountdown}s remaining` : 'Start 5-second range capture'}
-          >
-            {calibratingRange ? `Capturing… ${calCountdown}s` : 'Calibrate range'}
-          </button>
-          {capturedRoles.length > 0 && !calibratingRange && (
-            <p style={{ ...styles.hint, color: '#22c55e' }}>
-              Range captured for: {capturedRoles.join(', ')}
-            </p>
-          )}
-          {/* Reach margin slider */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
-            <label
-              htmlFor="remix-reach-margin"
-              style={{ fontSize: 11, color: '#a1a1b8', flexShrink: 0 }}
-            >
-              Reach margin
-            </label>
-            <input
-              id="remix-reach-margin"
-              type="range"
-              min={0}
-              max={0.3}
-              step={0.01}
-              value={reachMargin}
-              onChange={(e) => { setReachMargin(Number(e.target.value)); }}
-              style={{ flex: 1 }}
-              aria-label={`Reach margin: ${reachMargin.toFixed(2)}`}
-            />
-            <span style={{ fontSize: 10, color: '#71718a', width: 32, textAlign: 'right' as const, fontFamily: 'monospace', flexShrink: 0 }}>
-              {reachMargin.toFixed(2)}
-            </span>
-          </div>
-        </div>
 
-        {/* Head nod stutter — webcam only (needs video element for FaceDetector) */}
-        {inputMode === 'webcam' && (
-          <div style={styles.section}>
-            <h3 style={styles.sectionTitle}>Head Nod Stutter</h3>
-            <p style={styles.hint}>Nod down to stutter the focused stem (gross-motor alternative to shake).</p>
+          {/* ---- Cycle triggers ---- */}
+          <div style={{ fontSize: 11, color: '#71718a', fontWeight: 600, marginTop: 4 }}>Cycle</div>
+
+          {/* Dwell-cycle toggle */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <button
-              onClick={() => setHeadNodEnabled((v) => !v)}
-              style={headNodEnabled ? styles.btnActive : styles.btn}
-              aria-pressed={headNodEnabled}
-              aria-label={headNodEnabled ? 'Head nod stutter: on' : 'Head nod stutter: off'}
+              onClick={() => setDwellCycleEnabled((v) => !v)}
+              style={dwellCycleEnabled ? styles.btnActive : styles.btn}
+              aria-pressed={dwellCycleEnabled}
+              aria-label={dwellCycleEnabled ? 'Dwell to cycle: on' : 'Dwell to cycle: off'}
             >
-              {headNodEnabled ? 'Head nod ON' : 'Head nod OFF'}
+              {dwellCycleEnabled ? 'Dwell ON' : 'Dwell OFF'}
             </button>
-            {headNodEnabled && (
-              <>
-                {/* Min excursion slider */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <label
-                    htmlFor="remix-nod-excursion"
-                    style={{ fontSize: 11, color: '#a1a1b8', flexShrink: 0, width: 90 }}
-                  >
-                    Min excursion
-                  </label>
-                  <input
-                    id="remix-nod-excursion"
-                    type="range"
-                    min={0.01}
-                    max={0.08}
-                    step={0.005}
-                    value={headNodMinExcursion}
-                    onChange={(e) => setHeadNodMinExcursion(Number(e.target.value))}
-                    style={{ flex: 1 }}
-                    aria-label={`Minimum nod excursion: ${headNodMinExcursion.toFixed(3)}`}
-                  />
-                  <span style={{ fontSize: 10, color: '#71718a', width: 40, textAlign: 'right' as const, fontFamily: 'monospace', flexShrink: 0 }}>
-                    {headNodMinExcursion.toFixed(3)}
-                  </span>
-                </div>
-                {/* Cooldown slider */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <label
-                    htmlFor="remix-nod-cooldown"
-                    style={{ fontSize: 11, color: '#a1a1b8', flexShrink: 0, width: 90 }}
-                  >
-                    Cooldown (ms)
-                  </label>
-                  <input
-                    id="remix-nod-cooldown"
-                    type="range"
-                    min={100}
-                    max={600}
-                    step={50}
-                    value={headNodCooldownMs}
-                    onChange={(e) => setHeadNodCooldownMs(Number(e.target.value))}
-                    style={{ flex: 1 }}
-                    aria-label={`Nod cooldown: ${headNodCooldownMs} ms`}
-                  />
-                  <span style={{ fontSize: 10, color: '#71718a', width: 40, textAlign: 'right' as const, fontFamily: 'monospace', flexShrink: 0 }}>
-                    {headNodCooldownMs}
-                  </span>
-                </div>
-              </>
-            )}
+            <span style={{ fontSize: 11, color: '#555570' }}>Hold still 1.2 s to cycle stem</span>
           </div>
-        )}
-
-        {/* Cycle triggers */}
-        <div style={styles.section}>
-          <h3 style={styles.sectionTitle}>Cycle Triggers</h3>
-          <p style={styles.hint}>Choose how batons advance to the next stem.</p>
 
           {/* Baton touch toggle */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1656,15 +1569,15 @@ export default function RemixScreen() {
             >
               {batonTouchEnabled ? 'Baton touch ON' : 'Baton touch OFF'}
             </button>
+            <span style={{ fontSize: 11, color: '#555570' }}>Two batons together to cycle</span>
           </div>
-          <p style={styles.hint}>Bring two batons together to cycle the primary baton&apos;s stem.</p>
 
-          {/* Touch radius slider */}
+          {/* Touch radius slider — shown when baton-touch is enabled */}
           {batonTouchEnabled && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingLeft: 8 }}>
               <label
                 htmlFor="remix-touch-radius"
-                style={{ fontSize: 11, color: '#a1a1b8', flexShrink: 0 }}
+                style={{ fontSize: 11, color: '#a1a1b8', flexShrink: 0, width: 80 }}
               >
                 Touch radius
               </label>
@@ -1689,18 +1602,130 @@ export default function RemixScreen() {
             </div>
           )}
 
-          {/* Dwell-cycle toggle */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
+          {/* ---- Stutter triggers ---- */}
+          <div style={{ fontSize: 11, color: '#71718a', fontWeight: 600, marginTop: 6 }}>Stutter</div>
+
+          {/* Shake-to-stutter toggle */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <button
-              onClick={() => setDwellCycleEnabled((v) => !v)}
-              style={dwellCycleEnabled ? styles.btnActive : styles.btn}
-              aria-pressed={dwellCycleEnabled}
-              aria-label={dwellCycleEnabled ? 'Dwell to cycle: on' : 'Dwell to cycle: off'}
+              onClick={() => setShakeStutterEnabled((v) => !v)}
+              style={shakeStutterEnabled ? styles.btnActive : styles.btn}
+              aria-pressed={shakeStutterEnabled}
+              aria-label={shakeStutterEnabled ? 'Shake stutter: on' : 'Shake stutter: off'}
             >
-              {dwellCycleEnabled ? 'Dwell to cycle ON' : 'Dwell to cycle OFF'}
+              {shakeStutterEnabled ? 'Shake ON' : 'Shake OFF'}
             </button>
+            <span style={{ fontSize: 11, color: '#555570' }}>Fast shake to stutter</span>
           </div>
-          <p style={styles.hint}>Hold still for 1.2 s to cycle the baton&apos;s stem.</p>
+
+          {/* Head-nod toggle — webcam only */}
+          {inputMode === 'webcam' && (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <button
+                  onClick={() => setHeadNodEnabled((v) => !v)}
+                  style={headNodEnabled ? styles.btnActive : styles.btn}
+                  aria-pressed={headNodEnabled}
+                  aria-label={headNodEnabled ? 'Head nod stutter: on' : 'Head nod stutter: off'}
+                >
+                  {headNodEnabled ? 'Head nod ON' : 'Head nod OFF'}
+                </button>
+                <span style={{ fontSize: 11, color: '#555570' }}>Nod down to stutter</span>
+              </div>
+              {headNodEnabled && (
+                <>
+                  {/* Min excursion slider */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingLeft: 8 }}>
+                    <label
+                      htmlFor="remix-nod-excursion"
+                      style={{ fontSize: 11, color: '#a1a1b8', flexShrink: 0, width: 80 }}
+                    >
+                      Min excursion
+                    </label>
+                    <input
+                      id="remix-nod-excursion"
+                      type="range"
+                      min={0.01}
+                      max={0.08}
+                      step={0.005}
+                      value={headNodMinExcursion}
+                      onChange={(e) => setHeadNodMinExcursion(Number(e.target.value))}
+                      style={{ flex: 1 }}
+                      aria-label={`Minimum nod excursion: ${headNodMinExcursion.toFixed(3)}`}
+                    />
+                    <span style={{ fontSize: 10, color: '#71718a', width: 40, textAlign: 'right' as const, fontFamily: 'monospace', flexShrink: 0 }}>
+                      {headNodMinExcursion.toFixed(3)}
+                    </span>
+                  </div>
+                  {/* Cooldown slider */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingLeft: 8 }}>
+                    <label
+                      htmlFor="remix-nod-cooldown"
+                      style={{ fontSize: 11, color: '#a1a1b8', flexShrink: 0, width: 80 }}
+                    >
+                      Cooldown (ms)
+                    </label>
+                    <input
+                      id="remix-nod-cooldown"
+                      type="range"
+                      min={100}
+                      max={600}
+                      step={50}
+                      value={headNodCooldownMs}
+                      onChange={(e) => setHeadNodCooldownMs(Number(e.target.value))}
+                      style={{ flex: 1 }}
+                      aria-label={`Nod cooldown: ${headNodCooldownMs} ms`}
+                    />
+                    <span style={{ fontSize: 10, color: '#71718a', width: 40, textAlign: 'right' as const, fontFamily: 'monospace', flexShrink: 0 }}>
+                      {headNodCooldownMs}
+                    </span>
+                  </div>
+                </>
+              )}
+            </>
+          )}
+
+          {/* ---- Reach calibration ---- */}
+          <div style={{ fontSize: 11, color: '#71718a', fontWeight: 600, marginTop: 6 }}>Reach</div>
+          <p style={styles.hint}>
+            Move each baton across its full reach for 5 s to calibrate the filter range.
+          </p>
+          <button
+            onClick={handleStartRangeCalibration}
+            disabled={calibratingRange}
+            style={calibratingRange ? styles.btnActive : styles.btn}
+            aria-label={calibratingRange ? `Capturing range — ${calCountdown}s remaining` : 'Start 5-second range capture'}
+          >
+            {calibratingRange ? `Capturing… ${calCountdown}s` : 'Calibrate range'}
+          </button>
+          {capturedRoles.length > 0 && !calibratingRange && (
+            <p style={{ ...styles.hint, color: '#22c55e' }}>
+              Range captured for: {capturedRoles.join(', ')}
+            </p>
+          )}
+          {/* Reach margin slider */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <label
+              htmlFor="remix-reach-margin"
+              style={{ fontSize: 11, color: '#a1a1b8', flexShrink: 0, width: 80 }}
+            >
+              Reach margin
+            </label>
+            <input
+              id="remix-reach-margin"
+              type="range"
+              min={0}
+              max={0.3}
+              step={0.01}
+              value={reachMargin}
+              onChange={(e) => { setReachMargin(Number(e.target.value)); }}
+              style={{ flex: 1 }}
+              aria-label={`Reach margin: ${reachMargin.toFixed(2)}`}
+            />
+            <span style={{ fontSize: 10, color: '#71718a', width: 32, textAlign: 'right' as const, fontFamily: 'monospace', flexShrink: 0 }}>
+              {reachMargin.toFixed(2)}
+            </span>
+          </div>
         </div>
 
         {/* Stem assignment info */}
