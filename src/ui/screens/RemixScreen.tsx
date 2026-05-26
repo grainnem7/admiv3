@@ -19,6 +19,7 @@ import { useAppStore } from '../../state/store';
 import { CameraManager } from '../../tracking/CameraManager';
 import { ColorTracker } from '../../tracking/ColorTracker';
 import type { ColorBlob } from '../../tracking/ColorTracker';
+import { FaceDetector } from '../../tracking/FaceDetector';
 import { RemixEngine } from '../../remix/RemixEngine';
 import type { RemixStemState } from '../../remix/RemixEngine';
 import { RemixBaton } from '../../remix/RemixBaton';
@@ -59,6 +60,13 @@ export default function RemixScreen() {
   const cameraRef     = useRef<CameraManager | null>(null);
   const trackerRef    = useRef<ColorTracker | null>(null);
   const engineRef     = useRef(new RemixEngine());
+  /**
+   * Face detector for Head Nod → stutter (Tim's gross-motor replacement for the
+   * shake gesture).  Lazily started — only initialised when the user toggles
+   * head-nod on, so users who don't want it don't pay the MediaPipe
+   * face-landmarker load cost.
+   */
+  const faceDetectorRef = useRef<FaceDetector | null>(null);
   /** Latest blobs from ColorTracker callback — written off the RAF path. */
   const blobsRef      = useRef<ColorBlob[]>([]);
   /**
@@ -121,6 +129,15 @@ export default function RemixScreen() {
   const [batonTouchEnabled,  setBatonTouchEnabled]  = useState(true);
   const [dwellCycleEnabled,  setDwellCycleEnabled]  = useState(true);
   const [touchRadius,        setTouchRadius]        = useState(0.12);
+
+  /**
+   * Head Nod → stutter toggle.  When on, a FaceDetector is started and each
+   * detected downward head nod fires a stutter on the currently-focused stem
+   * — Tim's gross-motor replacement for the shake gesture.
+   */
+  const [headNodEnabled,      setHeadNodEnabled]      = useState(false);
+  const [headNodMinExcursion, setHeadNodMinExcursion] = useState(0.025);
+  const [headNodCooldownMs,   setHeadNodCooldownMs]   = useState(200);
   const batonTouchEnabledRef = useRef(true);
   const dwellCycleEnabledRef = useRef(true);
   const touchRadiusRef       = useRef(0.12);
@@ -285,6 +302,72 @@ export default function RemixScreen() {
       }
     };
   }, []);
+
+  // Head Nod lifecycle.  When toggled on, lazily initialise the FaceDetector
+  // (loads MediaPipe face-landmarker model on first use), start it on the
+  // video element, and push each frame's landmarks into the engine.  When
+  // toggled off, stop the detector but keep it alive — the model is expensive
+  // to load, so re-toggling shouldn't pay that cost again.
+  useEffect(() => {
+    const engine = engineRef.current;
+    engine.setHeadNodEnabled(headNodEnabled);
+    if (!headNodEnabled) {
+      faceDetectorRef.current?.stop();
+      return;
+    }
+
+    const video = videoRef.current;
+    if (!video) return;
+
+    let cancelled = false;
+    let unsub: (() => void) | null = null;
+
+    const startFace = async () => {
+      try {
+        if (!faceDetectorRef.current) {
+          const detector = new FaceDetector();
+          await detector.initialize();
+          if (cancelled) {
+            detector.dispose();
+            return;
+          }
+          faceDetectorRef.current = detector;
+        }
+        const detector = faceDetectorRef.current;
+        unsub = detector.onFace((result) => {
+          engine.processFaceLandmarks(result.face, result.timestamp);
+        });
+        detector.start(video);
+      } catch (err) {
+        console.error('[RemixScreen] Face detector init failed:', err);
+        setHeadNodEnabled(false);
+      }
+    };
+
+    void startFace();
+
+    return () => {
+      cancelled = true;
+      unsub?.();
+      faceDetectorRef.current?.stop();
+    };
+  }, [headNodEnabled]);
+
+  // Dispose the FaceDetector entirely on unmount (the lifecycle effect above
+  // only stops it on toggle-off so the model stays cached).
+  useEffect(() => {
+    return () => {
+      faceDetectorRef.current?.dispose();
+      faceDetectorRef.current = null;
+    };
+  }, []);
+
+  // Apply sensitivity whenever the sliders change (also applied on enable via
+  // the headNodEnabled effect, which always sets enabled=true before the
+  // detector starts, so we don't need a combined effect).
+  useEffect(() => {
+    engineRef.current.setHeadNodSensitivity(headNodMinExcursion, headNodCooldownMs);
+  }, [headNodMinExcursion, headNodCooldownMs]);
 
   // ============================================
   // Main RAF loop
@@ -1491,6 +1574,72 @@ export default function RemixScreen() {
             </span>
           </div>
         </div>
+
+        {/* Head nod stutter — webcam only (needs video element for FaceDetector) */}
+        {inputMode === 'webcam' && (
+          <div style={styles.section}>
+            <h3 style={styles.sectionTitle}>Head Nod Stutter</h3>
+            <p style={styles.hint}>Nod down to stutter the focused stem (gross-motor alternative to shake).</p>
+            <button
+              onClick={() => setHeadNodEnabled((v) => !v)}
+              style={headNodEnabled ? styles.btnActive : styles.btn}
+              aria-pressed={headNodEnabled}
+              aria-label={headNodEnabled ? 'Head nod stutter: on' : 'Head nod stutter: off'}
+            >
+              {headNodEnabled ? 'Head nod ON' : 'Head nod OFF'}
+            </button>
+            {headNodEnabled && (
+              <>
+                {/* Min excursion slider */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <label
+                    htmlFor="remix-nod-excursion"
+                    style={{ fontSize: 11, color: '#a1a1b8', flexShrink: 0, width: 90 }}
+                  >
+                    Min excursion
+                  </label>
+                  <input
+                    id="remix-nod-excursion"
+                    type="range"
+                    min={0.01}
+                    max={0.08}
+                    step={0.005}
+                    value={headNodMinExcursion}
+                    onChange={(e) => setHeadNodMinExcursion(Number(e.target.value))}
+                    style={{ flex: 1 }}
+                    aria-label={`Minimum nod excursion: ${headNodMinExcursion.toFixed(3)}`}
+                  />
+                  <span style={{ fontSize: 10, color: '#71718a', width: 40, textAlign: 'right' as const, fontFamily: 'monospace', flexShrink: 0 }}>
+                    {headNodMinExcursion.toFixed(3)}
+                  </span>
+                </div>
+                {/* Cooldown slider */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <label
+                    htmlFor="remix-nod-cooldown"
+                    style={{ fontSize: 11, color: '#a1a1b8', flexShrink: 0, width: 90 }}
+                  >
+                    Cooldown (ms)
+                  </label>
+                  <input
+                    id="remix-nod-cooldown"
+                    type="range"
+                    min={100}
+                    max={600}
+                    step={50}
+                    value={headNodCooldownMs}
+                    onChange={(e) => setHeadNodCooldownMs(Number(e.target.value))}
+                    style={{ flex: 1 }}
+                    aria-label={`Nod cooldown: ${headNodCooldownMs} ms`}
+                  />
+                  <span style={{ fontSize: 10, color: '#71718a', width: 40, textAlign: 'right' as const, fontFamily: 'monospace', flexShrink: 0 }}>
+                    {headNodCooldownMs}
+                  </span>
+                </div>
+              </>
+            )}
+          </div>
+        )}
 
         {/* Cycle triggers */}
         <div style={styles.section}>
