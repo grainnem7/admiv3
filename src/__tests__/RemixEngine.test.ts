@@ -259,6 +259,27 @@ describe('RemixEngine', () => {
     e.dispose();
   });
 
+  it('setStemFilterNorm writes the target for the named stem (clamped)', async () => {
+    const e = new RemixEngine();
+    await e.loadSong(songWithBars());
+    e.setStemFilterNorm('drums', 1.5); // clamps to 1
+    e.renderFrame(0);
+    expect(e.getStemStates().drums.filterNorm).toBeGreaterThan(0.9);
+    e.dispose();
+  });
+
+  it('setFocusedStem + triggerStutterFor(focused) starts a burst', async () => {
+    const e = new RemixEngine();
+    await e.loadSong(songWithBars());
+    e.play();
+    e.setFocusedStem('bass');
+    expect(e.getFocusedStem()).toBe('bass');
+    e.triggerStutterFor(e.getFocusedStem());
+    e.renderFrame(0);
+    expect(e.getStemStates().bass.stuttering).toBe(true);
+    e.dispose();
+  });
+
   it('restores the stem gain after a stutter burst ends', async () => {
     const Tone = await import('tone');
 

@@ -59,6 +59,7 @@ export class RemixEngine {
   private loopLengthBars: 0 | 4 | 8 | 16 = 8;
   private loopOriginBar = 0;
   private duration = 0;
+  private focusedStem: StemId = STEM_CYCLE_ORDER[0];
 
   async loadSong(song: SongConfig): Promise<void> {
     this.dispose();
@@ -271,6 +272,30 @@ export class RemixEngine {
     this.master?.disconnect();
     this.master = null;
     this.ctx = null;
+  }
+
+  setStemFilterNorm(stem: StemId, value: number): void {
+    const state = this.states.get(stem);
+    if (!state) return;
+    state.targetFilterNorm = Math.max(0, Math.min(1, value));
+    this.gliding.delete(stem); // direct control, no glide
+  }
+
+  getStemFilterNorm(stem: StemId): number {
+    return this.states.get(stem)?.targetFilterNorm ?? 0;
+  }
+
+  setFocusedStem(stem: StemId): void {
+    this.focusedStem = stem;
+  }
+
+  getFocusedStem(): StemId {
+    return this.focusedStem;
+  }
+
+  /** Public wrapper over the private stutter trigger (keyboard/head-nod). */
+  triggerStutterFor(stem: StemId): void {
+    this.triggerStutter(stem);
   }
 
   // ---- internal ----
