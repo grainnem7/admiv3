@@ -10,6 +10,7 @@
 import type { ColorRole } from '../songs/songLibrary';
 import { DwellDetector } from '../movement/DwellDetector';
 import { ShakeDetector } from './ShakeDetector';
+import { applyAxisCalibration, type AxisRange } from './batonCalibration';
 
 export type StemId = 'vocals' | 'drums' | 'bass' | 'other';
 
@@ -79,6 +80,12 @@ export class RemixBaton {
   });
   private shake = new ShakeDetector({ threshold: 0.55, cooldownMs: 600 });
 
+  private calX: AxisRange | null = null;
+  private calY: AxisRange | null = null;
+  private reachMargin = 0.1;
+  private dwellCycleEnabled = true;
+  private lastInput: BatonInput = { x: 0.5, y: 0.5, found: false };
+
   private prevX = 0.5;
   private prevY = 0.5;
   private smoothVel = 0;
@@ -101,11 +108,27 @@ export class RemixBaton {
     return STEM_CYCLE_ORDER[this.stemIndex];
   }
 
+  setCalibration(cal: { x: AxisRange | null; y: AxisRange | null }, margin: number): void {
+    this.calX = cal.x;
+    this.calY = cal.y;
+    this.reachMargin = margin;
+  }
+
+  setDwellCycleEnabled(enabled: boolean): void {
+    this.dwellCycleEnabled = enabled;
+    if (!enabled) this.dwell.reset();
+  }
+
+  centroid(): BatonInput {
+    return { ...this.lastInput };
+  }
+
   update(input: BatonInput, nowMs: number): RemixBatonOutput {
     const stem = this.assignedStem;
 
     if (!input.found) {
       // Absent → detectors idle, nothing written, stem latches.
+      this.lastInput = { x: input.x, y: input.y, found: false };
       this.smoothVel = this.smoothVel * 0.7;
       this.dwell.reset();
       this.triggeredPending = false;
@@ -119,6 +142,11 @@ export class RemixBaton {
       };
     }
 
+    // Apply per-axis calibration so a player's limited range maps to full 0–1.
+    const cx = applyAxisCalibration(input.x, this.calX, this.reachMargin);
+    const cy = applyAxisCalibration(input.y, this.calY, this.reachMargin);
+    this.lastInput = { x: cx, y: cy, found: true };
+
     // See GAP_RESET_MS docblock — reset dwell if this frame arrived too late.
     const frameGap = this.prevFrameMs < 0 ? 0 : nowMs - this.prevFrameMs;
     if (frameGap > GAP_RESET_MS) {
@@ -130,20 +158,20 @@ export class RemixBaton {
     // Velocity (smoothed) for the shake detector.
     // Faster smoothing than walk-mode (SongPresetEngine uses 0.15/0.3):
     // remix shake gestures are deliberate and short, so respond quicker.
-    const inst = normalizedVelocity(this.prevX, this.prevY, input.x, input.y);
+    const inst = normalizedVelocity(this.prevX, this.prevY, cx, cy);
     this.smoothVel = this.smoothVel + (inst - this.smoothVel) * 0.4;
-    this.prevX = input.x;
-    this.prevY = input.y;
+    this.prevX = cx;
+    this.prevY = cy;
 
     const stutter = this.shake.update(this.smoothVel, nowMs);
 
     // DwellDetector uses `!this.dwellStartTime` as a null-guard, which
     // incorrectly treats timestamp=0 as unset. Offset by 1ms to avoid the
     // falsy-zero bug without changing any observable timing behaviour.
-    const dwellRes = this.dwell.update({ x: input.x, y: input.y }, nowMs + 1);
+    const dwellRes = this.dwell.update({ x: cx, y: cy }, nowMs + 1);
 
     let cycled = false;
-    if (dwellRes.state === 'triggered') {
+    if (this.dwellCycleEnabled && dwellRes.state === 'triggered') {
       if (!this.triggeredPending) {
         // First triggered frame: advance the stem index, then reset the dwell
         // so that any subsequent update call (even far in the future) starts
@@ -156,13 +184,13 @@ export class RemixBaton {
       }
       // Second triggered frame (before DwellDetector transitions to cooldown):
       // triggeredPending is already true so we skip advancing again.
-    } else {
+    } else if (dwellRes.state !== 'triggered') {
       // Once we leave the triggered state, clear the guard.
       this.triggeredPending = false;
     }
 
     // posY: 0 = top of frame → open (filterNorm 1); 1 = bottom → 0.
-    const filterNorm = 1 - Math.min(1, Math.max(0, input.y));
+    const filterNorm = 1 - Math.min(1, Math.max(0, cy));
 
     return {
       stem: cycled ? this.assignedStem : stem,

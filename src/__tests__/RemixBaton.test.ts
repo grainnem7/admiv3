@@ -69,4 +69,30 @@ describe('RemixBaton', () => {
     expect(mid.dwellProgress).toBeGreaterThan(0);
     expect(mid.dwellProgress).toBeLessThanOrEqual(1);
   });
+
+  it('applies axis calibration so a narrow Y range reaches the full filter range', () => {
+    const b = new RemixBaton('red');
+    // Tim only reaches y in [0.4, 0.6]. Map it to full range, margin 0.
+    b.setCalibration({ x: null, y: { min: 0.4, max: 0.6 } }, 0);
+    // raw y=0.4 (top of his range) → calibrated 0 → filterNorm 1 (open).
+    expect(b.update({ x: 0.5, y: 0.4, found: true }, 0).filterNorm).toBeCloseTo(1, 5);
+    // raw y=0.6 (bottom of his range) → calibrated 1 → filterNorm 0 (silent).
+    expect(b.update({ x: 0.5, y: 0.6, found: true }, 16).filterNorm).toBeCloseTo(0, 5);
+  });
+
+  it('does not cycle on dwell when dwell-cycle is disabled', () => {
+    const b = new RemixBaton('red');
+    b.setDwellCycleEnabled(false);
+    let cycled = false;
+    for (let i = 0; i < 40; i++) {
+      if (b.update({ x: 0.5, y: 0.5, found: true }, i * 60).cycled) cycled = true;
+    }
+    expect(cycled).toBe(false);
+  });
+
+  it('exposes its last calibrated centroid for touch detection', () => {
+    const b = new RemixBaton('red');
+    b.update({ x: 0.3, y: 0.7, found: true }, 0);
+    expect(b.centroid()).toEqual({ x: 0.3, y: 0.7, found: true });
+  });
 });
