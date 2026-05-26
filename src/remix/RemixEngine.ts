@@ -62,6 +62,7 @@ export class RemixEngine {
   private loopOriginBar = 0;
   private duration = 0;
   private focusedStem: StemId = STEM_CYCLE_ORDER[0];
+  private shakeStutterEnabled = true;
   private headNodEnabled = false;
   private headNodDetector = new HeadBopDetector(0.025, 200);
   private readonly headNodLandmarkIndex = 1; // nose tip
@@ -180,7 +181,7 @@ export class RemixEngine {
     state.targetFilterNorm = out.filterNorm;
     if (out.cycled) this.gliding.add(out.stem);
 
-    if (out.stutter) this.triggerStutter(out.stem);
+    if (out.stutter && this.shakeStutterEnabled) this.triggerStutter(out.stem);
   }
 
   /** Render all stem state → audio nodes. `playbackNowSec` from transport. */
@@ -301,6 +302,10 @@ export class RemixEngine {
   /** Public wrapper over the private stutter trigger (keyboard/head-nod). */
   triggerStutterFor(stem: StemId): void {
     this.triggerStutter(stem);
+  }
+
+  setShakeStutterEnabled(enabled: boolean): void {
+    this.shakeStutterEnabled = enabled;
   }
 
   setHeadNodEnabled(enabled: boolean): void {

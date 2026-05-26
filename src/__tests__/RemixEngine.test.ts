@@ -337,6 +337,27 @@ describe('RemixEngine', () => {
     e.dispose();
   });
 
+  it('setShakeStutterEnabled(false) ignores baton stutter output', async () => {
+    const e = new RemixEngine();
+    await e.loadSong(songWithBars());
+    e.play();
+    e.setShakeStutterEnabled(false);
+    e.applyBaton({ stem: 'drums', filterNorm: 1, cycled: false, stutter: true, dwellProgress: 0 });
+    e.renderFrame(0);
+    expect(e.getStemStates().drums.stuttering).toBe(false);
+    e.dispose();
+  });
+
+  it('baton stutter still fires when shake-stutter is enabled (default)', async () => {
+    const e = new RemixEngine();
+    await e.loadSong(songWithBars());
+    e.play();
+    e.applyBaton({ stem: 'drums', filterNorm: 1, cycled: false, stutter: true, dwellProgress: 0 });
+    e.renderFrame(0);
+    expect(e.getStemStates().drums.stuttering).toBe(true);
+    e.dispose();
+  });
+
   it('restores the stem gain after a stutter burst ends', async () => {
     const Tone = await import('tone');
 
