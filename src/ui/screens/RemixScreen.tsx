@@ -26,6 +26,7 @@ import { RemixBaton } from '../../remix/RemixBaton';
 import type { StemId } from '../../remix/RemixBaton';
 import { STEM_CYCLE_ORDER } from '../../remix/RemixBaton';
 import { BatonTouchDetector } from '../../remix/BatonTouchDetector';
+import { RemixLoopBaton } from '../../remix/RemixLoopBaton';
 import { keyToRemixAction } from '../../remix/remixKeyMap';
 import { SONG_LIBRARY, COLOR_ROLES } from '../../songs/songLibrary';
 import type { SongConfig, ColorRole } from '../../songs/songLibrary';
@@ -38,6 +39,9 @@ import type { AxisRange } from '../../remix/batonCalibration';
 
 /** ColorRole used for the single touch baton. */
 const TOUCH_BATON_ROLE: ColorRole = 'red';
+
+/** ColorRole dedicated to the loop-layer baton (not a stem). */
+const LOOP_BATON_ROLE: ColorRole = 'orange';
 
 /** Duration (ms) of the cycle-flash highlight on the destination tile. */
 const CYCLE_FLASH_MS = 300;
@@ -145,6 +149,14 @@ export default function RemixScreen() {
   const percussionVolumeRef  = useRef(0.8);
   useEffect(() => { percussionEnabledRef.current = percussionEnabled; }, [percussionEnabled]);
   useEffect(() => { percussionVolumeRef.current  = percussionVolume;  }, [percussionVolume]);
+
+  // ---- Loop baton + loop layer ----
+  const loopBatonRef       = useRef(new RemixLoopBaton());
+  const loopInfoRef        = useRef<{ count: number; activeIndex: number; names: string[] }>({ count: 0, activeIndex: 0, names: [] });
+  const loopPresentRef     = useRef(false);
+  const loopActiveIndexRef = useRef(0);
+  const [loopInfo, setLoopInfo]       = useState<{ count: number; activeIndex: number; names: string[] }>({ count: 0, activeIndex: 0, names: [] });
+  const [loopPresent, setLoopPresent] = useState(false);
   const [headNodMinExcursion, setHeadNodMinExcursion] = useState(0.025);
   const [headNodCooldownMs,   setHeadNodCooldownMs]   = useState(200);
   const batonTouchEnabledRef = useRef(true);
@@ -438,6 +450,29 @@ export default function RemixScreen() {
           const x = found ? 1 - (blob?.x ?? 0.5) : 0.5;
           const y = found ? (blob?.y ?? 0.5) : 0.5;
 
+          // Loop baton: routes to the loop LAYER, not a stem.
+          if (role.id === LOOP_BATON_ROLE) {
+            const lb = loopBatonRef.current;
+            const capturedRange = capturedRangesRef.current.get(role.id);
+            lb.setCalibration(capturedRange?.x ?? null, capturedRange?.y ?? null);
+            // Accumulate raw range during calibration capture (same convention as stems).
+            if (found && calibratingRangeRef.current) {
+              const rawX = blob?.x ?? 0.5;
+              const acc = calAccRef.current.get(role.id) ?? { xMin: rawX, xMax: rawX, yMin: y, yMax: y };
+              acc.xMin = Math.min(acc.xMin, rawX);
+              acc.xMax = Math.max(acc.xMax, rawX);
+              acc.yMin = Math.min(acc.yMin, y);
+              acc.yMax = Math.max(acc.yMax, y);
+              calAccRef.current.set(role.id, acc);
+            }
+            const lout = lb.process(found ? { x, y } : null);
+            engine.applyLoopBaton(lout);
+            lastFoundRef.current.set(role.id, found);
+            loopPresentRef.current = lout.present;
+            if (lout.present) loopActiveIndexRef.current = lout.loopIndex;
+            continue;
+          }
+
           if (!found) {
             // Only update existing batons; don't create one for absent colours
             const baton = batonsRef.current.get(role.id);
@@ -548,6 +583,15 @@ export default function RemixScreen() {
         setLoopRegionDisplay(engine.getLoopRegion());
         setTransportSec(Tone.getTransport().seconds);
 
+        if (loopInfoRef.current.count > 0) {
+          setLoopPresent(loopPresentRef.current);
+          if (loopActiveIndexRef.current !== loopInfoRef.current.activeIndex) {
+            const nextLoopInfo = { ...loopInfoRef.current, activeIndex: loopActiveIndexRef.current };
+            loopInfoRef.current = nextLoopInfo;
+            setLoopInfo(nextLoopInfo);
+          }
+        }
+
         // Beat dot: find next beat after current playback position
         const nowSec = Tone.getTransport().seconds;
         // We use states reference only for rendering; beat calc is local.
@@ -619,6 +663,14 @@ export default function RemixScreen() {
       // (loadSong rebuilds it disabled at default volume).
       engine.setLayerVolume('percussion', percussionVolumeRef.current);
       engine.setLayerEnabled('percussion', percussionEnabledRef.current);
+      // Initialise the loop baton + UI from the freshly-built loop layer.
+      const loopInfoNow = engine.getLoopInfo();
+      loopBatonRef.current.setLoopCount(Math.max(1, loopInfoNow.count));
+      loopActiveIndexRef.current = loopInfoNow.activeIndex;
+      loopPresentRef.current = false;
+      loopInfoRef.current = loopInfoNow;
+      setLoopInfo(loopInfoNow);
+      setLoopPresent(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load song');
       setLoadingMsg(null);
@@ -759,6 +811,20 @@ export default function RemixScreen() {
         engine.setLoopLengthBars(next);
         loopLengthBarsRef.current = next;
         setLoopLengthBars(next);
+      } else if (action.kind === 'cycleLoop') {
+        const info = engine.getLoopInfo();
+        if (info.count > 0) {
+          const next = (info.activeIndex + 1) % info.count;
+          engine.selectLoop(next);
+          engine.setLayerEnabled('loop', true); // keyboard test mode brings the loop in
+          loopBatonRef.current.setLoopCount(info.count);
+          loopActiveIndexRef.current = next;
+          loopPresentRef.current = true;
+          const updated = { ...info, activeIndex: next };
+          loopInfoRef.current = updated;
+          setLoopInfo(updated);
+          setLoopPresent(true);
+        }
       } else if (action.kind === 'togglePlay') {
         void Tone.start().then(() => { engine.togglePlay(); });
       }
@@ -1653,6 +1719,27 @@ export default function RemixScreen() {
                 {percussionVolume.toFixed(2)}
               </span>
             </div>
+          )}
+
+          {/* ---- Loop layer readout (deaf/HoH feedback) ---- */}
+          {loopInfo.count > 0 && (
+            <>
+              <div style={{ fontSize: 11, color: '#71718a', fontWeight: 600, marginTop: 6 }}>Loop layer</div>
+              <div
+                style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+                aria-label={`Loop layer ${loopPresent ? `in: ${loopInfo.names[loopInfo.activeIndex] ?? ''}` : 'off'}`}
+              >
+                <span style={{ fontSize: 11, color: '#a1a1b8', flexShrink: 0, width: 80 }}>
+                  {loopPresent ? 'In' : 'Off'}
+                </span>
+                <span
+                  style={{ fontSize: 11, color: loopPresent ? '#22c55e' : '#555570', fontFamily: 'monospace' }}
+                  aria-live="polite"
+                >
+                  {loopPresent ? `▶ ${loopInfo.names[loopInfo.activeIndex] ?? ''}` : 'off'}
+                </span>
+              </div>
+            </>
           )}
 
           {/* Head-nod toggle — webcam only */}
