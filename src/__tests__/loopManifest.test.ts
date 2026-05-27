@@ -8,6 +8,9 @@ describe('parseBpmFromFilename', () => {
   it('parses "130 BPM" with space and uppercase', () => {
     expect(parseBpmFromFilename('Ed HiHat1 Loop_130 BPM.wav')).toBe(130);
   });
+  it('parses 2-digit BPM like "90bpm"', () => {
+    expect(parseBpmFromFilename('loop_90bpm.wav')).toBe(90);
+  });
   it('returns null when no bpm present', () => {
     expect(parseBpmFromFilename('break_unknown.wav')).toBeNull();
   });
@@ -30,6 +33,10 @@ describe('parseLoopManifest', () => {
       { file: 'nobpm.wav', name: 'Mystery' },
     ]);
     expect(out).toEqual([{ file: 'good_90bpm.wav', name: 'Half-Time', bpm: 90 }]);
+  });
+  it('drops null / non-object / wrong-typed entries', () => {
+    expect(parseLoopManifest([null, 42, {}, { file: 123, name: 'x' }, { file: 'ok_100bpm.wav', name: 'OK' }]))
+      .toEqual([{ file: 'ok_100bpm.wav', name: 'OK', bpm: 100 }]);
   });
   it('returns [] for non-array / empty input', () => {
     expect(parseLoopManifest(undefined)).toEqual([]);

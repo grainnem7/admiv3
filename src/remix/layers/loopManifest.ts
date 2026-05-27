@@ -21,7 +21,7 @@ export interface LoopDef {
 
 /** Extract a BPM (2–3 digits) from a filename, or null if absent. */
 export function parseBpmFromFilename(file: string): number | null {
-  const m = /(\d{2,3})\s?bpm/i.exec(file);
+  const m = /(?<!\d)(\d{2,3})\s?bpm/i.exec(file);
   return m ? Number(m[1]) : null;
 }
 
@@ -30,10 +30,12 @@ export function parseLoopManifest(raw: unknown): LoopDef[] {
   if (!Array.isArray(raw)) return [];
   const out: LoopDef[] = [];
   for (const entry of raw) {
-    if (!entry || typeof entry.file !== 'string' || typeof entry.name !== 'string') continue;
-    const bpm = parseBpmFromFilename(entry.file);
+    if (!entry || typeof entry !== 'object') continue;
+    const e = entry as Record<string, unknown>;
+    if (typeof e.file !== 'string' || typeof e.name !== 'string') continue;
+    const bpm = parseBpmFromFilename(e.file);
     if (bpm === null) continue;
-    out.push({ file: entry.file, name: entry.name, bpm });
+    out.push({ file: e.file, name: e.name, bpm });
   }
   return out;
 }
