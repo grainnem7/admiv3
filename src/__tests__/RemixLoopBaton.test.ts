@@ -63,4 +63,12 @@ describe('RemixLoopBaton', () => {
     const out = b.process(null);
     expect(out.loopIndex).toBe(0);
   });
+
+  it('setCurrentIndex seeds + clamps the selected index', () => {
+    const b = make(); // loopCount 3
+    b.setCurrentIndex(9);
+    expect(b.process(null).loopIndex).toBe(2); // clamped to count-1
+    b.setCurrentIndex(1);
+    expect(b.process(null).loopIndex).toBe(1);
+  });
 });

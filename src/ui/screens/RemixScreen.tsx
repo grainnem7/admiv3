@@ -825,6 +825,7 @@ export default function RemixScreen() {
           engine.selectLoop(next);
           engine.setLayerEnabled('loop', true); // keyboard test mode brings the loop in
           loopBatonRef.current.setLoopCount(info.count);
+          loopBatonRef.current.setCurrentIndex(next); // keep camera re-entry in sync
           loopActiveIndexRef.current = next;
           loopPresentRef.current = true;
           const updated = { ...info, activeIndex: next };

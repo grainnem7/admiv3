@@ -59,6 +59,15 @@ export class RemixLoopBaton {
     this.yRange = y;
   }
 
+  /**
+   * Seed the selected index (e.g. after a keyboard cycle) so that when the
+   * baton next appears, hysteresis continues from this loop rather than
+   * snapping from a stale value.
+   */
+  setCurrentIndex(i: number): void {
+    this.currentIndex = Math.max(0, Math.min(this.loopCount - 1, Math.floor(i)));
+  }
+
   process(centroid: Centroid | null): RemixLoopBatonOutput {
     if (!centroid) {
       return {
