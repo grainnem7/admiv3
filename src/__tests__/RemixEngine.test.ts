@@ -380,3 +380,41 @@ describe('RemixEngine recording', () => {
     e.dispose();
   });
 });
+
+describe('RemixEngine arrangement playback', () => {
+  it('playArrangement applies composited stem filter for the section under the playhead', async () => {
+    const e = new RemixEngine();
+    await e.loadSong(song());
+    e.loadArrangement({
+      songId: 't',
+      sections: [{ originBar: 0, lengthBars: 8, layers: [
+        { id: 'k1', muted: false, events: [{ t: 0, kind: 'stemFilter', stem: 'vocals', value: 0.9 }] },
+      ] }],
+    });
+    e.playArrangement();
+    expect(e.isPlayingArrangement()).toBe(true);
+    e.renderFrame(0.0);
+    e.renderFrame(0.1);
+    expect(e.getStemFilterNorm('vocals')).toBeCloseTo(0.9, 5);
+    e.stopArrangement();
+    expect(e.isPlayingArrangement()).toBe(false);
+    e.dispose();
+  });
+
+  it('muteTake and deleteTake delegate to the arranger', async () => {
+    const e = new RemixEngine();
+    await e.loadSong(song());
+    e.loadArrangement({
+      songId: 't',
+      sections: [{ originBar: 0, lengthBars: 8, layers: [
+        { id: 'k1', muted: false, events: [] },
+        { id: 'k2', muted: false, events: [] },
+      ] }],
+    });
+    e.muteTake(0, 'k1', true);
+    expect(e.getArrangement().sections[0].layers[0].muted).toBe(true);
+    e.deleteTake(0, 'k2');
+    expect(e.getArrangement().sections[0].layers.map((l) => l.id)).toEqual(['k1']);
+    e.dispose();
+  });
+});

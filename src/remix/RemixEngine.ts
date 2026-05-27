@@ -69,6 +69,7 @@ export class RemixEngine {
   private recSectionOriginBar = 0;
   private recSectionLengthBars: 0 | 4 | 8 | 16 = 8;
   private lastTickSec = 0;
+  private playingArrangement = false;
   private loopRegion: { startSec: number; endSec: number } | null = null;
   private loopLengthBars: 0 | 4 | 8 | 16 = 8;
   private loopOriginBar = 0;
@@ -224,6 +225,7 @@ export class RemixEngine {
         this.arranger.addTake(this.recSectionOriginBar, this.recSectionLengthBars, this.recorder.commitTake());
       }
     }
+    if (this.playingArrangement) this.tickArrangement(nowSec);
     const now = this.ctx.currentTime;
 
     for (const [stem, state] of this.states) {
@@ -437,6 +439,60 @@ export class RemixEngine {
 
   getArrangement(): RemixArrangement {
     return this.arranger.getArrangement();
+  }
+
+  playArrangement(): void {
+    this.playingArrangement = true;
+    this.lastTickSec = Tone.getTransport().seconds;
+  }
+
+  stopArrangement(): void {
+    this.playingArrangement = false;
+  }
+
+  isPlayingArrangement(): boolean {
+    return this.playingArrangement;
+  }
+
+  loadArrangement(a: RemixArrangement): void {
+    this.arranger.load(a);
+  }
+
+  muteTake(sectionIdx: number, takeId: string, muted: boolean): void {
+    this.arranger.muteTake(sectionIdx, takeId, muted);
+  }
+
+  deleteTake(sectionIdx: number, takeId: string): void {
+    this.arranger.deleteTake(sectionIdx, takeId);
+  }
+
+  /** Absolute start time of a section; falls back to 0 when the region can't be resolved. */
+  private sectionBounds(originBar: number, lengthBars: number): { start: number; end: number } {
+    const region = computeLoopRegion(this.downbeats, originBar, lengthBars);
+    if (region) return { start: region.startSec, end: region.endSec };
+    return { start: 0, end: this.duration > 0 ? this.duration : Number.POSITIVE_INFINITY };
+  }
+
+  private tickArrangement(nowSec: number): void {
+    const arr = this.arranger.getArrangement();
+    for (const section of arr.sections) {
+      const { start, end } = this.sectionBounds(section.originBar, section.lengthBars);
+      if (nowSec < start || nowSec >= end) continue;
+      const t = nowSec - start;
+      const comp = RemixArranger.composite(section, t);
+      for (const stem of STEM_CYCLE_ORDER) {
+        const v = comp.filters[stem];
+        if (v !== undefined) this.setStemFilterNorm(stem, v);
+      }
+      if (comp.loopEnable !== undefined) this.setLayerEnabled('loop', comp.loopEnable);
+      if (comp.loopSelect !== undefined) this.selectLoop(comp.loopSelect);
+      if (comp.loopVolume !== undefined) this.setLayerVolume('loop', comp.loopVolume);
+      const fromT = this.lastTickSec - start;
+      const hits = RemixArranger.discreteEventsInWindow(section, fromT, t);
+      for (const hit of hits) {
+        if (hit.kind === 'percussion') this.triggerPercussion(nowSec, hit.velocity);
+      }
+    }
   }
 
   // ---- internal ----
