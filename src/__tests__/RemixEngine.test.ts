@@ -115,12 +115,12 @@ describe('RemixEngine', () => {
     const e = new RemixEngine();
     await e.loadSong(song());
 
-    e.applyBaton({ stem: 'vocals', filterNorm: 1, cycled: false, stutter: false, dwellProgress: 0 });
+    e.applyBaton({ stem: 'vocals', filterNorm: 1, cycled: false, shake: false, dwellProgress: 0 });
     e.renderFrame(0);
     expect(e.getStemStates().vocals.filterNorm).toBeGreaterThan(0);
 
     const before = e.getStemStates().vocals.filterNorm;
-    e.applyBaton({ stem: 'vocals', filterNorm: null, cycled: false, stutter: false, dwellProgress: 0 });
+    e.applyBaton({ stem: 'vocals', filterNorm: null, cycled: false, shake: false, dwellProgress: 0 });
     e.renderFrame(16);
     expect(e.getStemStates().vocals.filterNorm).toBeCloseTo(before, 2);
     e.dispose();
@@ -129,9 +129,9 @@ describe('RemixEngine', () => {
   it('glide-takeover ramps a re-focused stem rather than snapping', async () => {
     const e = new RemixEngine();
     await e.loadSong(song());
-    e.applyBaton({ stem: 'drums', filterNorm: 0.2, cycled: false, stutter: false, dwellProgress: 0 });
+    e.applyBaton({ stem: 'drums', filterNorm: 0.2, cycled: false, shake: false, dwellProgress: 0 });
     e.renderFrame(0);
-    e.applyBaton({ stem: 'drums', filterNorm: 1, cycled: true, stutter: false, dwellProgress: 0 });
+    e.applyBaton({ stem: 'drums', filterNorm: 1, cycled: true, shake: false, dwellProgress: 0 });
     e.renderFrame(16);
     const v = e.getStemStates().drums.filterNorm;
     expect(v).toBeGreaterThan(0.2);
@@ -145,45 +145,6 @@ describe('RemixEngine', () => {
     expect(() => e.dispose()).not.toThrow();
   });
 
-  it('ducks the main stem gain to 0 while a stutter burst owns the sound', async () => {
-    const Tone = await import('tone');
-
-    // Record how many getContext calls have happened before this test
-    const getContextMock = Tone.getContext as ReturnType<typeof vi.fn>;
-    const callsBefore = getContextMock.mock.results.length;
-
-    const e = new RemixEngine();
-    await e.loadSong(song());
-    e.play();
-
-    // Grab the raw context used by this engine instance (the call made during loadSong)
-    const rawCtx = getContextMock.mock.results[callsBefore].value.rawContext;
-
-    // Render with drums audible (non-stutter frame)
-    e.applyBaton({ stem: 'drums', filterNorm: 1, cycled: false, stutter: false, dwellProgress: 0 });
-    e.renderFrame(0);
-
-    // Collect all GainNodes created for this engine and clear prior calls
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const gainMock = rawCtx.createGain as ReturnType<typeof vi.fn>;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const allGainNodes = gainMock.mock.results.map((r: any) => r.value as ReturnType<typeof makeNode>);
-    allGainNodes.forEach(n => (n.gain.setTargetAtTime as ReturnType<typeof vi.fn>).mockClear());
-
-    // Trigger stutter — startOverlay must duck n.gain to 0 immediately
-    e.applyBaton({ stem: 'drums', filterNorm: 1, cycled: false, stutter: true, dwellProgress: 0 });
-    e.renderFrame(0);
-
-    // At least one GainNode must have received setTargetAtTime(0, ...) — the duck
-    const ducked = allGainNodes.some((n: ReturnType<typeof makeNode>) =>
-      (n.gain.setTargetAtTime as ReturnType<typeof vi.fn>).mock.calls.some(
-        (call: unknown[]) => call[0] === 0,
-      ),
-    );
-    expect(ducked).toBe(true);
-
-    e.dispose();
-  });
 
   it('creates a synced Tone.Player per stem on load', async () => {
     const Tone = await import('tone');
@@ -268,159 +229,5 @@ describe('RemixEngine', () => {
     e.dispose();
   });
 
-  it('setFocusedStem + triggerStutterFor(focused) starts a burst', async () => {
-    const e = new RemixEngine();
-    await e.loadSong(songWithBars());
-    e.play();
-    e.setFocusedStem('bass');
-    expect(e.getFocusedStem()).toBe('bass');
-    e.triggerStutterFor(e.getFocusedStem());
-    e.renderFrame(0);
-    expect(e.getStemStates().bass.stuttering).toBe(true);
-    e.dispose();
-  });
 
-  it('clamps a stutter burst end to the loop end (no bleed past the seam)', async () => {
-    const e = new RemixEngine();
-    await e.loadSong(songWithBars());
-    e.setLoopLengthBars(4); // loopEnd = 4
-    e.play();
-    // place playback near the loop end so the burst would overrun without clamping
-    const Tone = await import('tone');
-    Tone.getTransport().seconds = 3.6;
-    // @ts-expect-error private — trigger directly for the test
-    e.triggerStutter('drums');
-    // @ts-expect-error private — inspect the pending window
-    const n = e.nodes.get('drums') as { pendingWindow: { startSec: number; burstDurSec: number } | null };
-    const win = n.pendingWindow;
-    expect(win).not.toBeNull();
-    expect(win!.startSec + win!.burstDurSec).toBeLessThanOrEqual(4 + 1e-6);
-    e.dispose();
-  });
-
-  it('ends a stutter burst when the transport loops back past the burst start', async () => {
-    const Tone = await import('tone');
-    const e = new RemixEngine();
-    await e.loadSong(songWithBars());
-    e.setLoopLengthBars(4); // loopEnd = 4
-    e.play();
-    Tone.getTransport().seconds = 3.6;
-    // @ts-expect-error private — trigger directly
-    e.triggerStutter('drums');
-    e.renderFrame(3.6);
-    expect(e.getStemStates().drums.stuttering).toBe(true);
-    // Transport wraps back to loopStart (0) at the seam:
-    e.renderFrame(0.05);
-    expect(e.getStemStates().drums.stuttering).toBe(false);
-    e.dispose();
-  });
-
-  function makeFace(y: number) {
-    // FaceLandmarks shape: { landmarks: { x; y; z }[] }. Index 1 = nose tip.
-    const landmarks = Array.from({ length: 2 }, () => ({ x: 0.5, y, z: 0 }));
-    return { landmarks } as unknown as import('../state/types').FaceLandmarks;
-  }
-
-  it('a head nod fires a stutter on the focused stem when enabled', async () => {
-    const e = new RemixEngine();
-    await e.loadSong(songWithBars());
-    e.play();
-    e.setFocusedStem('drums');
-    e.setHeadNodEnabled(true);
-    e.setHeadNodSensitivity(0.02, 100);
-    // Down (y increasing) then up (y decreasing) = one bop. Excursion 0.1 > 0.02.
-    let t = 0;
-    e.processFaceLandmarks(makeFace(0.40), (t += 16));
-    e.processFaceLandmarks(makeFace(0.45), (t += 16));
-    e.processFaceLandmarks(makeFace(0.50), (t += 16));
-    e.processFaceLandmarks(makeFace(0.45), (t += 16)); // reversal → bop
-    e.renderFrame(0);
-    expect(e.getStemStates().drums.stuttering).toBe(true);
-    e.dispose();
-  });
-
-  it('head-nod does nothing when disabled', async () => {
-    const e = new RemixEngine();
-    await e.loadSong(songWithBars());
-    e.play();
-    e.setFocusedStem('drums');
-    // not enabled
-    let t = 0;
-    e.processFaceLandmarks(makeFace(0.40), (t += 16));
-    e.processFaceLandmarks(makeFace(0.50), (t += 16));
-    e.processFaceLandmarks(makeFace(0.45), (t += 16));
-    e.renderFrame(0);
-    expect(e.getStemStates().drums.stuttering).toBe(false);
-    e.dispose();
-  });
-
-  it('setShakeStutterEnabled(false) ignores baton stutter output', async () => {
-    const e = new RemixEngine();
-    await e.loadSong(songWithBars());
-    e.play();
-    e.setShakeStutterEnabled(false);
-    e.applyBaton({ stem: 'drums', filterNorm: 1, cycled: false, stutter: true, dwellProgress: 0 });
-    e.renderFrame(0);
-    expect(e.getStemStates().drums.stuttering).toBe(false);
-    e.dispose();
-  });
-
-  it('baton stutter still fires when shake-stutter is enabled (default)', async () => {
-    const e = new RemixEngine();
-    await e.loadSong(songWithBars());
-    e.play();
-    e.applyBaton({ stem: 'drums', filterNorm: 1, cycled: false, stutter: true, dwellProgress: 0 });
-    e.renderFrame(0);
-    expect(e.getStemStates().drums.stuttering).toBe(true);
-    e.dispose();
-  });
-
-  it('restores the stem gain after a stutter burst ends', async () => {
-    const Tone = await import('tone');
-
-    // Record context call count before this test (same isolation pattern as the duck test)
-    const getContextMock = Tone.getContext as ReturnType<typeof vi.fn>;
-    const callsBefore = getContextMock.mock.results.length;
-
-    const e = new RemixEngine();
-    await e.loadSong(song());
-    e.play();
-
-    // Grab the raw context used by this engine instance
-    const rawCtx = getContextMock.mock.results[callsBefore].value.rawContext;
-    const gainMock = rawCtx.createGain as ReturnType<typeof vi.fn>;
-
-    // Step 1: bring drums audible, render a non-stutter frame
-    e.applyBaton({ stem: 'drums', filterNorm: 1, cycled: false, stutter: false, dwellProgress: 0 });
-    e.renderFrame(0);
-
-    // Step 2: trigger a stutter burst, verify stuttering is true
-    e.applyBaton({ stem: 'drums', filterNorm: 1, cycled: false, stutter: true, dwellProgress: 0 });
-    e.renderFrame(0);
-    expect(e.getStemStates().drums.stuttering).toBe(true);
-
-    // Step 3: advance well past the burst window (startSec=0, burstDurSec=2.0) and render
-    // This makes StutterScheduler.tick end the burst (1000 >= 0 + 2.0).
-    e.renderFrame(1000);
-    expect(e.getStemStates().drums.stuttering).toBe(false);
-
-    // Step 4: clear all gain mock histories so we only observe post-burst writes
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const allGainNodes = gainMock.mock.results.map((r: any) => r.value as ReturnType<typeof makeNode>);
-    allGainNodes.forEach(n => (n.gain.setTargetAtTime as ReturnType<typeof vi.fn>).mockClear());
-
-    // Step 5: render one more frame — the !stuttering guard is now lifted, so the
-    // normal taper gain (remixTaper(1).gain === 1) must be written to the drums GainNode.
-    e.renderFrame(1016);
-
-    // At least one GainNode must have received setTargetAtTime with a value > 0
-    const restored = allGainNodes.some((n: ReturnType<typeof makeNode>) =>
-      (n.gain.setTargetAtTime as ReturnType<typeof vi.fn>).mock.calls.some(
-        (call: unknown[]) => (call[0] as number) > 0,
-      ),
-    );
-    expect(restored).toBe(true);
-
-    e.dispose();
-  });
 });
