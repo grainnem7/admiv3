@@ -84,14 +84,16 @@ describe('LoopLayer', () => {
     expect(layerGain.gain.setTargetAtTime).not.toHaveBeenCalled();
   });
 
-  it('disabled layer is silent; setVolume applies when enabled', () => {
+  it('disabled layer is silent; setVolume ramps gain when enabled', () => {
     const l = new LoopLayer(fakeCtx(), LOOPS, 120);
-    expect(gains[0].gain.value).toBeCloseTo(0, 5); // layer gain starts at 0
+    expect(gains[0].gain.value).toBeCloseTo(0, 5); // layer gain starts at 0 (direct init)
     l.setVolume(0.7);
-    expect(gains[0].gain.value).toBeCloseTo(0, 5); // still disabled
+    expect(gains[0].gain.value).toBeCloseTo(0, 5); // still disabled → no write
     l.setEnabled(true);
+    expect(gains[0].gain.setTargetAtTime).toHaveBeenCalledWith(0.7, expect.any(Number), expect.any(Number));
     expect(gains[0].gain.value).toBeCloseTo(0.7, 5);
     l.setEnabled(false);
+    expect(gains[0].gain.setTargetAtTime).toHaveBeenCalledWith(0, expect.any(Number), expect.any(Number));
     expect(gains[0].gain.value).toBeCloseTo(0, 5);
   });
 

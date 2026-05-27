@@ -249,8 +249,10 @@ export default function RemixScreen() {
   // Refs so keyboard handler sees current values without stale closure
   const focusedStemIndexRef  = useRef<0 | 1 | 2 | 3>(0);
   const loopLengthBarsRef    = useRef<0 | 4 | 8 | 16>(8);
+  const keyboardModeRef      = useRef(false);
   useEffect(() => { focusedStemIndexRef.current  = focusedStemIndex;  }, [focusedStemIndex]);
   useEffect(() => { loopLengthBarsRef.current    = loopLengthBars;    }, [loopLengthBars]);
+  useEffect(() => { keyboardModeRef.current      = keyboardMode;      }, [keyboardMode]);
   useEffect(() => { reachMarginRef.current       = reachMargin;       }, [reachMargin]);
   useEffect(() => { calibratingRangeRef.current  = calibratingRange;  }, [calibratingRange]);
 
@@ -465,11 +467,16 @@ export default function RemixScreen() {
               acc.yMax = Math.max(acc.yMax, y);
               calAccRef.current.set(role.id, acc);
             }
-            const lout = lb.process(found ? { x, y } : null);
-            engine.applyLoopBaton(lout);
-            lastFoundRef.current.set(role.id, found);
-            loopPresentRef.current = lout.present;
-            if (lout.present) loopActiveIndexRef.current = lout.loopIndex;
+            // In keyboard test mode the keyboard owns the loop layer; the camera
+            // path must not drive it (an absent orange blob would otherwise send
+            // present:false every frame and disable what the keyboard enabled).
+            if (!keyboardModeRef.current) {
+              const lout = lb.process(found ? { x, y } : null);
+              engine.applyLoopBaton(lout);
+              lastFoundRef.current.set(role.id, found);
+              loopPresentRef.current = lout.present;
+              if (lout.present) loopActiveIndexRef.current = lout.loopIndex;
+            }
             continue;
           }
 

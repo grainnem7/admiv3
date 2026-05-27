@@ -13,6 +13,7 @@ import type { SyncedRemixLayer } from './RemixLayer';
 import type { LoopDef } from './loopManifest';
 
 const SWITCH_TC = 0.03; // ~30ms crossfade when switching loops
+const GAIN_TC = 0.05;   // volume/enable ramp time-constant (matches stem smoothing)
 
 interface LoopVoice {
   player: Tone.GrainPlayer;
@@ -68,7 +69,7 @@ export class LoopLayer implements SyncedRemixLayer {
     // redundant gain write when the enabled state hasn't changed.
     if (this.enabled === on) return;
     this.enabled = on;
-    this.layerGain.gain.value = on ? this.volume : 0;
+    this.layerGain.gain.setTargetAtTime(on ? this.volume : 0, this.ctx.currentTime, GAIN_TC);
   }
 
   isEnabled(): boolean {
@@ -77,7 +78,7 @@ export class LoopLayer implements SyncedRemixLayer {
 
   setVolume(v: number): void {
     this.volume = Math.max(0, Math.min(1, v));
-    if (this.enabled) this.layerGain.gain.value = this.volume;
+    if (this.enabled) this.layerGain.gain.setTargetAtTime(this.volume, this.ctx.currentTime, GAIN_TC);
   }
 
   isReady(): boolean {
