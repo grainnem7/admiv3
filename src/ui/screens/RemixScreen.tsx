@@ -719,10 +719,20 @@ export default function RemixScreen() {
   // Remix recorder handlers
   // ============================================
 
-  const handleArmToggle = useCallback(() => {
+  const handleArmToggle = useCallback(async () => {
     const e = engineRef.current;
-    if (e.isRecording()) e.disarmRecording(); else e.armRecording();
+    if (e.isRecording()) {
+      e.disarmRecording();
+    } else {
+      // Recording needs the transport advancing to capture + commit takes, so
+      // arming also starts playback (one button, no precise timing required).
+      await Tone.start();
+      e.armRecording();
+      if (!e.isPlaying()) e.play();
+      setRemixPlaying(false);
+    }
     setRecArmed(e.isRecording());
+    setIsPlaying(e.isPlaying());
     setArrangement(e.getArrangement());
   }, []);
 
@@ -1461,7 +1471,7 @@ export default function RemixScreen() {
           <div style={styles.section}>
             <h3 style={styles.sectionTitle}>Remix recorder</h3>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
-              <button onClick={handleArmToggle} aria-pressed={recArmed} style={recArmed ? styles.btnActive : styles.btn}>
+              <button onClick={() => { void handleArmToggle(); }} aria-pressed={recArmed} style={recArmed ? styles.btnActive : styles.btn}>
                 {recArmed ? '● Recording' : '○ Arm record'}
               </button>
               <button onClick={handleAdvanceSection} style={styles.btn}>Next section →</button>

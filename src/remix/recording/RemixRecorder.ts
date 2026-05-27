@@ -67,7 +67,10 @@ export class RemixRecorder {
     const events = this.buffer.slice().sort((a, b) => a.t - b.t);
     this.buffer = [];
     this.lastValue.clear();
-    return { id: `take-${++this.seq}`, muted: false, events };
+    // Random suffix so ids don't collide with takes from a loaded arrangement
+    // (seq restarts at 0 on a fresh recorder, but loaded takes keep old ids).
+    const suffix = Math.random().toString(36).slice(2, 8);
+    return { id: `take-${++this.seq}-${suffix}`, muted: false, events };
   }
 
   hasBuffered(): boolean {
