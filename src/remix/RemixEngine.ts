@@ -20,7 +20,11 @@ import { computeLoopRegion, nudgeOrigin } from './loopRegion';
 import { HeadBopDetector } from '../mapping/nodes/HeadRhythmNode';
 import type { FaceLandmarks } from '../state/types';
 import type { RemixLayer } from './layers/RemixLayer';
+import { isSyncedLayer } from './layers/RemixLayer';
 import { PercussionLayer } from './layers/PercussionLayer';
+import { LoopLayer } from './layers/LoopLayer';
+import { loadLoopManifest } from './layers/loadLoopManifest';
+import type { RemixLoopBatonOutput } from './RemixLoopBaton';
 
 export interface RemixStemState {
   filterNorm: number;
@@ -128,6 +132,14 @@ export class RemixEngine {
     percussion.setEnabled(false); // opt-in
     this.layers.set(percussion.id, percussion);
 
+    const loopDefs = await loadLoopManifest();
+    if (loopDefs.length > 0) {
+      const loop = new LoopLayer(this.ctx, loopDefs, song.bpm);
+      loop.connect(this.layersBus);
+      loop.setEnabled(false); // opt-in, brought in by the loop baton
+      this.layers.set(loop.id, loop);
+    }
+
     this.loopOriginBar = 0;
     this.loopLengthBars = this.downbeats.length >= 2 ? 8 : 0;
     this.applyLoop();
@@ -146,6 +158,9 @@ export class RemixEngine {
       for (const n of this.nodes.values()) {
         n.player?.unsync().sync().start(0);
       }
+      for (const l of this.layers.values()) {
+        if (isSyncedLayer(l)) l.syncStart();
+      }
     }
     t.start();
     this.playing = true;
@@ -154,6 +169,9 @@ export class RemixEngine {
   stop(): void {
     for (const n of this.nodes) {
       try { n[1].player?.unsync().stop(); } catch { /* not started */ }
+    }
+    for (const l of this.layers.values()) {
+      if (isSyncedLayer(l)) l.syncStop();
     }
     const t = Tone.getTransport();
     t.stop();
@@ -304,6 +322,30 @@ export class RemixEngine {
   }
   setLayerEnabled(id: string, on: boolean): void { this.layers.get(id)?.setEnabled(on); }
   setLayerVolume(id: string, v: number): void { this.layers.get(id)?.setVolume(v); }
+
+  /** Make loop `i` the single audible loop. No-op if there's no loop layer. */
+  selectLoop(i: number): void {
+    const l = this.layers.get('loop');
+    if (l instanceof LoopLayer) l.selectLoop(i);
+  }
+
+  /** Loop-layer summary for the UI. count 0 when there's no loop layer. */
+  getLoopInfo(): { count: number; activeIndex: number; names: string[] } {
+    const l = this.layers.get('loop');
+    if (!(l instanceof LoopLayer)) return { count: 0, activeIndex: 0, names: [] };
+    const names: string[] = [];
+    for (let i = 0; i < l.getLoopCount(); i++) names.push(l.getLoopName(i));
+    return { count: l.getLoopCount(), activeIndex: l.getActiveLoopIndex(), names };
+  }
+
+  /** Route the loop baton's per-frame output to the loop layer. */
+  applyLoopBaton(out: RemixLoopBatonOutput): void {
+    this.setLayerEnabled('loop', out.present);
+    if (out.present) {
+      this.selectLoop(out.loopIndex);
+      this.setLayerVolume('loop', out.volume);
+    }
+  }
   /** Fire the percussion layer (head-nod / shake / keyboard-S route here). */
   triggerPercussion(timeSec: number, velocity: number): void {
     const layer = this.layers.get('percussion');

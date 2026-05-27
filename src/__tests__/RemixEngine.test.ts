@@ -36,8 +36,28 @@ vi.mock('tone', () => {
         volume: { value: 0 },
       };
     }),
+    GrainPlayer: vi.fn().mockImplementation((opts: { onload?: () => void }) => {
+      opts?.onload?.();
+      return {
+        playbackRate: 1,
+        loop: false,
+        sync: vi.fn().mockReturnThis(),
+        start: vi.fn().mockReturnThis(),
+        stop: vi.fn().mockReturnThis(),
+        unsync: vi.fn().mockReturnThis(),
+        connect: vi.fn(),
+        dispose: vi.fn(),
+      };
+    }),
   };
 });
+
+vi.mock('../remix/layers/loadLoopManifest', () => ({
+  loadLoopManifest: vi.fn().mockResolvedValue([
+    { file: 'a_120bpm.wav', name: 'A', bpm: 120 },
+    { file: 'b_140bpm.wav', name: 'B', bpm: 140 },
+  ]),
+}));
 
 function makeParam() {
   return {
@@ -291,4 +311,34 @@ describe('RemixEngine', () => {
     e.dispose();
   });
 
+});
+
+describe('RemixEngine loop layer', () => {
+  it('builds a loop layer from the manifest after loadSong', async () => {
+    const e = new RemixEngine();
+    await e.loadSong(song());
+    const info = e.getLoopInfo();
+    expect(info.count).toBe(2);
+    expect(info.names).toEqual(['A', 'B']);
+    expect(info.activeIndex).toBe(0);
+    e.dispose();
+  });
+
+  it('applyLoopBaton enables + selects + sets volume when present', async () => {
+    const e = new RemixEngine();
+    await e.loadSong(song());
+    e.applyLoopBaton({ present: true, loopIndex: 1, volume: 0.5 });
+    expect(e.getLoopInfo().activeIndex).toBe(1);
+    expect(e.getLayer('loop')?.isEnabled()).toBe(true);
+    e.dispose();
+  });
+
+  it('applyLoopBaton disables the layer when absent', async () => {
+    const e = new RemixEngine();
+    await e.loadSong(song());
+    e.applyLoopBaton({ present: true, loopIndex: 1, volume: 0.5 });
+    e.applyLoopBaton({ present: false, loopIndex: 1, volume: 0.5 });
+    expect(e.getLayer('loop')?.isEnabled()).toBe(false);
+    e.dispose();
+  });
 });
