@@ -61,7 +61,7 @@ export default function RemixScreen() {
   const trackerRef    = useRef<ColorTracker | null>(null);
   const engineRef     = useRef(new RemixEngine());
   /**
-   * Face detector for Head Nod → stutter (Tim's gross-motor replacement for the
+   * Face detector for Head Nod → drums (Tim's gross-motor replacement for the
    * shake gesture).  Lazily started — only initialised when the user toggles
    * head-nod on, so users who don't want it don't pay the MediaPipe
    * face-landmarker load cost.
@@ -129,15 +129,17 @@ export default function RemixScreen() {
   const [batonTouchEnabled,  setBatonTouchEnabled]  = useState(true);
   const [dwellCycleEnabled,  setDwellCycleEnabled]  = useState(true);
   const [touchRadius,        setTouchRadius]        = useState(0.12);
-  /** Shake-to-stutter: forwards to engine.setShakeStutterEnabled. Default on. */
-  const [shakeStutterEnabled, setShakeStutterEnabled] = useState(true);
 
   /**
-   * Head Nod → stutter toggle.  When on, a FaceDetector is started and each
-   * detected downward head nod fires a stutter on the currently-focused stem
-   * — Tim's gross-motor replacement for the shake gesture.
+   * Head Nod → drums toggle.  When on, a FaceDetector is started and each
+   * detected downward head nod fires a percussion hit — Tim's gross-motor
+   * replacement for the shake gesture.
    */
   const [headNodEnabled,      setHeadNodEnabled]      = useState(false);
+
+  // ---- Percussion controls ----
+  const [percussionEnabled, setPercussionEnabled] = useState(false);
+  const [percussionVolume,  setPercussionVolume]  = useState(0.8);
   const [headNodMinExcursion, setHeadNodMinExcursion] = useState(0.025);
   const [headNodCooldownMs,   setHeadNodCooldownMs]   = useState(200);
   const batonTouchEnabledRef = useRef(true);
@@ -152,9 +154,6 @@ export default function RemixScreen() {
       baton.setDwellCycleEnabled(dwellCycleEnabled);
     }
   }, [dwellCycleEnabled]);
-  useEffect(() => {
-    engineRef.current.setShakeStutterEnabled(shakeStutterEnabled);
-  }, [shakeStutterEnabled]);
 
   // ---- UI state ----
   const [inputMode,    setInputMode]    = useState<'webcam' | 'touch'>('webcam');
@@ -187,7 +186,7 @@ export default function RemixScreen() {
   const [stemStates, setStemStates] = useState<Record<StemId, RemixStemState>>(() => {
     const out = {} as Record<StemId, RemixStemState>;
     for (const s of STEM_CYCLE_ORDER) {
-      out[s] = { filterNorm: 0, targetFilterNorm: 0, gain: 0, stuttering: false };
+      out[s] = { filterNorm: 0, targetFilterNorm: 0, gain: 0 };
     }
     return out;
   });
@@ -423,6 +422,7 @@ export default function RemixScreen() {
         lastFoundRef.current.set(role, found);
         if (out.cycled) cycleFlashRef.current.set(role, nowMs);
         engine.applyBaton(out);
+        if (out.shake) engine.triggerPercussion(Tone.getTransport().seconds, 0.9);
       } else {
         // Camera mode: iterate all tracked colour roles
         const blobs = blobsRef.current;
@@ -449,6 +449,7 @@ export default function RemixScreen() {
               // out.cycled is always false when found=false, but guard for safety
               if (out.cycled) cycleFlashRef.current.set(role.id, nowMs);
               engine.applyBaton(out);
+              if (out.shake) engine.triggerPercussion(Tone.getTransport().seconds, 0.9);
             }
             continue;
           }
@@ -482,6 +483,7 @@ export default function RemixScreen() {
           lastFoundRef.current.set(role.id, true);
           if (out.cycled) cycleFlashRef.current.set(role.id, nowMs);
           engine.applyBaton(out);
+          if (out.shake) engine.triggerPercussion(Tone.getTransport().seconds, 0.9);
         }
       }
 
@@ -517,7 +519,7 @@ export default function RemixScreen() {
               const newStem = primaryBaton.forceCycle();
               cycleFlashRef.current.set(primaryRole, nowMs);
               const filterNorm = 1 - Math.min(1, Math.max(0, primaryBaton.centroid().y));
-              engine.applyBaton({ stem: newStem, filterNorm, cycled: true, stutter: false, dwellProgress: 0 });
+              engine.applyBaton({ stem: newStem, filterNorm, cycled: true, shake: false, dwellProgress: 0 });
               engine.setFocusedStem(newStem);
             }
           }
@@ -736,8 +738,8 @@ export default function RemixScreen() {
         const cur  = engine.getStemFilterNorm(stem);
         const next = Math.max(0, Math.min(1, cur + action.dir * 0.1));
         engine.setStemFilterNorm(stem, next);
-      } else if (action.kind === 'stutter') {
-        engine.triggerStutterFor(STEM_CYCLE_ORDER[focusedStemIndexRef.current]);
+      } else if (action.kind === 'percussion') {
+        engine.triggerPercussion(Tone.getTransport().seconds, 0.8);
       } else if (action.kind === 'nudgeLoop') {
         engine.nudgeLoop(action.dir);
       } else if (action.kind === 'loopLen') {
@@ -810,7 +812,7 @@ export default function RemixScreen() {
             const state  = stemStates[stem];
             const meta   = STEM_META[stem];
             const filterN = state?.filterNorm ?? 0;
-            const isFocused = (keyboardMode || headNodEnabled) && focusedStemIndex === stemIdx;
+            const isFocused = keyboardMode && focusedStemIndex === stemIdx;
 
             // Collect ALL baton roles assigned to this stem (two batons may share a tile).
             const assignedRoles: ColorRole[] = [];
@@ -823,8 +825,6 @@ export default function RemixScreen() {
             const assignedColor = assignedRole
               ? (COLOR_ROLES.find((r) => r.id === assignedRole)?.cssColor ?? meta.color)
               : meta.color;
-
-            const stuttering = state?.stuttering ?? false;
 
             // ---- Cycle flash ----
             // Active when any role that currently occupies this stem flashed within CYCLE_FLASH_MS.
@@ -872,12 +872,9 @@ export default function RemixScreen() {
                       ? `2px solid ${assignedColor}`
                       : `2px solid rgba(255,255,255,0.08)`,
                   boxShadow: isFocused ? '0 0 0 2px rgba(250,204,21,0.3)' : undefined,
-                  // Stutter strobe: flash opacity
-                  opacity: stuttering ? (frameCountRef.current % 2 === 0 ? 1 : 0.45) : 1,
-                  transition: stuttering ? 'none' : 'opacity 0.15s',
                   position: 'relative',
                 }}
-                aria-label={`${meta.label} stem${isFocused ? ', focused' : ''}: level ${Math.round(filterN * 100)}%${stuttering ? ', stuttering' : ''}${assignedRoles.length > 0 ? `, controlled by ${assignedRoles.join(' and ')} baton${assignedRoles.length > 1 ? 's' : ''}` : ''}`}
+                aria-label={`${meta.label} stem${isFocused ? ', focused' : ''}: level ${Math.round(filterN * 100)}%${assignedRoles.length > 0 ? `, controlled by ${assignedRoles.join(' and ')} baton${assignedRoles.length > 1 ? 's' : ''}` : ''}`}
               >
                 {/* Cycle flash overlay — fades out over CYCLE_FLASH_MS on the destination tile */}
                 {cycleFlashOpacity > 0 && (
@@ -1040,9 +1037,6 @@ export default function RemixScreen() {
                 {/* Status row */}
                 <div style={{ display: 'flex', gap: 6, marginTop: 5, fontSize: 10, color: '#71718a' }}>
                   <span>{isLive ? 'LIVE' : 'latched'}</span>
-                  {stuttering && (
-                    <span style={{ color: '#f97316', fontWeight: 700 }}>STUTTER</span>
-                  )}
                 </div>
 
                 {/* Standalone dwell progress bars — shown below status for present batons */}
@@ -1338,7 +1332,7 @@ export default function RemixScreen() {
               </button>
               {keyboardMode && (
                 <span style={{ fontSize: 10, color: '#71718a' }}>
-                  1–4 stem · ↑↓ filter · S stutter · ←→ loop · [ ] length · space play
+                  1–4 stem · ↑↓ filter · S drum · ←→ loop · [ ] length · space play
                 </span>
               )}
             </div>
@@ -1602,21 +1596,55 @@ export default function RemixScreen() {
             </div>
           )}
 
-          {/* ---- Stutter triggers ---- */}
-          <div style={{ fontSize: 11, color: '#71718a', fontWeight: 600, marginTop: 6 }}>Stutter</div>
+          {/* ---- Percussion triggers ---- */}
+          <div style={{ fontSize: 11, color: '#71718a', fontWeight: 600, marginTop: 6 }}>Percussion</div>
 
-          {/* Shake-to-stutter toggle */}
+          {/* Percussion enable toggle */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <button
-              onClick={() => setShakeStutterEnabled((v) => !v)}
-              style={shakeStutterEnabled ? styles.btnActive : styles.btn}
-              aria-pressed={shakeStutterEnabled}
-              aria-label={shakeStutterEnabled ? 'Shake stutter: on' : 'Shake stutter: off'}
+              onClick={() => {
+                const next = !percussionEnabled;
+                setPercussionEnabled(next);
+                engineRef.current.setLayerEnabled('percussion', next);
+              }}
+              style={percussionEnabled ? styles.btnActive : styles.btn}
+              aria-pressed={percussionEnabled}
+              aria-label={percussionEnabled ? 'Percussion: on' : 'Percussion: off'}
             >
-              {shakeStutterEnabled ? 'Shake ON' : 'Shake OFF'}
+              {percussionEnabled ? 'Drums ON' : 'Drums OFF'}
             </button>
-            <span style={{ fontSize: 11, color: '#555570' }}>Fast shake to stutter</span>
+            <span style={{ fontSize: 11, color: '#555570' }}>Add percussion layer</span>
           </div>
+
+          {/* Percussion volume slider */}
+          {percussionEnabled && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingLeft: 8 }}>
+              <label
+                htmlFor="remix-percussion-volume"
+                style={{ fontSize: 11, color: '#a1a1b8', flexShrink: 0, width: 80 }}
+              >
+                Drums vol.
+              </label>
+              <input
+                id="remix-percussion-volume"
+                type="range"
+                min={0}
+                max={1}
+                step={0.05}
+                value={percussionVolume}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  setPercussionVolume(v);
+                  engineRef.current.setLayerVolume('percussion', v);
+                }}
+                style={{ flex: 1 }}
+                aria-label={`Percussion volume: ${percussionVolume.toFixed(2)}`}
+              />
+              <span style={{ fontSize: 10, color: '#71718a', width: 32, textAlign: 'right' as const, fontFamily: 'monospace', flexShrink: 0 }}>
+                {percussionVolume.toFixed(2)}
+              </span>
+            </div>
+          )}
 
           {/* Head-nod toggle — webcam only */}
           {inputMode === 'webcam' && (
@@ -1626,11 +1654,11 @@ export default function RemixScreen() {
                   onClick={() => setHeadNodEnabled((v) => !v)}
                   style={headNodEnabled ? styles.btnActive : styles.btn}
                   aria-pressed={headNodEnabled}
-                  aria-label={headNodEnabled ? 'Head nod stutter: on' : 'Head nod stutter: off'}
+                  aria-label={headNodEnabled ? 'Head nod → drums: on' : 'Head nod → drums: off'}
                 >
                   {headNodEnabled ? 'Head nod ON' : 'Head nod OFF'}
                 </button>
-                <span style={{ fontSize: 11, color: '#555570' }}>Nod down to stutter</span>
+                <span style={{ fontSize: 11, color: '#555570' }}>Nod down → drums</span>
               </div>
               {headNodEnabled && (
                 <>
@@ -1765,7 +1793,7 @@ export default function RemixScreen() {
         <div style={styles.section}>
           <h3 style={styles.sectionTitle}>How to Play</h3>
           <p style={styles.hint}>
-            Y position (up/down) opens each stem's filter. Shake to stutter.
+            Y position (up/down) opens each stem's filter. Shake or nod to hit drums.
             Dwell in one spot for 1.2 s to cycle your baton to the next stem.
             {inputMode === 'webcam'
               ? ' Calibrate a colour, then hold that object in view.'
