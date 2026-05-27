@@ -70,13 +70,18 @@ describe('LoopLayer', () => {
     expect(l.getActiveLoopIndex()).toBe(0); // first loop active by default
   });
 
-  it('selectLoop gates exactly one sub-gain on, others off', () => {
+  it('selectLoop crossfades exactly the right sub-gain up and the rest down', () => {
     const l = new LoopLayer(fakeCtx(), LOOPS, 120);
-    // gains[0] = layer gain; gains[1..] = per-loop sub-gains in order.
+    const layerGain = gains[0]; // created first
+    const sub0 = gains[1];
+    const sub1 = gains[2];
     l.selectLoop(1);
     expect(l.getActiveLoopIndex()).toBe(1);
-    expect(gains[1].gain.value).toBeCloseTo(0, 5); // loop 0 sub-gain off
-    expect(gains[2].gain.value).toBeCloseTo(1, 5); // loop 1 sub-gain on
+    // assert on the ramp target, not the mock's snapshotted value:
+    expect(sub1.gain.setTargetAtTime).toHaveBeenCalledWith(1, expect.any(Number), expect.any(Number));
+    expect(sub0.gain.setTargetAtTime).toHaveBeenCalledWith(0, expect.any(Number), expect.any(Number));
+    // selectLoop must not touch the layer (master) gain:
+    expect(layerGain.gain.setTargetAtTime).not.toHaveBeenCalled();
   });
 
   it('disabled layer is silent; setVolume applies when enabled', () => {

@@ -124,5 +124,6 @@ export class LoopLayer implements SyncedRemixLayer {
     this.voices = [];
     this.layerGain.disconnect();
     this.ready = false;
+    this.loaded = 0;
   }
 }
