@@ -14,9 +14,9 @@ describe('keyToRemixAction', () => {
     expect(keyToRemixAction('ArrowRight')).toEqual({ kind: 'nudgeLoop', dir: 1 });
   });
 
-  it('maps S to stutter, [ ] to loop length, space to togglePlay', () => {
-    expect(keyToRemixAction('s')).toEqual({ kind: 'stutter' });
-    expect(keyToRemixAction('S')).toEqual({ kind: 'stutter' });
+  it('maps S to percussion, [ ] to loop length, space to togglePlay', () => {
+    expect(keyToRemixAction('s')).toEqual({ kind: 'percussion' });
+    expect(keyToRemixAction('S')).toEqual({ kind: 'percussion' });
     expect(keyToRemixAction('[')).toEqual({ kind: 'loopLen', dir: -1 });
     expect(keyToRemixAction(']')).toEqual({ kind: 'loopLen', dir: 1 });
     expect(keyToRemixAction(' ')).toEqual({ kind: 'togglePlay' });

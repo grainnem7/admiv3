@@ -6,7 +6,7 @@
 export type RemixKeyAction =
   | { kind: 'focusStem'; index: 0 | 1 | 2 | 3 }
   | { kind: 'filter'; dir: 1 | -1 }
-  | { kind: 'stutter' }
+  | { kind: 'percussion' }
   | { kind: 'nudgeLoop'; dir: 1 | -1 }
   | { kind: 'loopLen'; dir: 1 | -1 }
   | { kind: 'togglePlay' }
@@ -23,7 +23,7 @@ export function keyToRemixAction(key: string): RemixKeyAction {
     case 'ArrowLeft': return { kind: 'nudgeLoop', dir: -1 };
     case 'ArrowRight': return { kind: 'nudgeLoop', dir: 1 };
     case 's':
-    case 'S': return { kind: 'stutter' };
+    case 'S': return { kind: 'percussion' };
     case '[': return { kind: 'loopLen', dir: -1 };
     case ']': return { kind: 'loopLen', dir: 1 };
     case ' ': return { kind: 'togglePlay' };
