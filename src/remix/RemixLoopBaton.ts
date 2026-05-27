@@ -5,6 +5,8 @@
  * loops; Y is the loop volume; presence brings the layer in/out.
  */
 
+import { applyAxisCalibration, type AxisRange } from './batonCalibration';
+
 function clamp01(v: number): number {
   return v < 0 ? 0 : v > 1 ? 1 : v;
 }
@@ -24,4 +26,51 @@ export function selectLoopZone(x: number, n: number, current: number, hysteresis
   if (cx > upper + hysteresis) return direct;
   if (cx < lower - hysteresis) return direct;
   return current;
+}
+
+export interface RemixLoopBatonOutput {
+  present: boolean;
+  loopIndex: number; // 0..count-1; latched when absent
+  volume: number;    // 0..1
+}
+
+const REACH_MARGIN = 0.1;   // matches the stem batons' forgiving extremes
+const ZONE_HYSTERESIS = 0.04;
+
+export interface Centroid {
+  x: number;
+  y: number;
+}
+
+export class RemixLoopBaton {
+  private loopCount = 1;
+  private xRange: AxisRange | null = null;
+  private yRange: AxisRange | null = null;
+  private currentIndex = -1;
+  private lastVolume = 0;
+
+  setLoopCount(n: number): void {
+    this.loopCount = Math.max(1, Math.floor(n));
+    if (this.currentIndex > this.loopCount - 1) this.currentIndex = this.loopCount - 1;
+  }
+
+  setCalibration(x: AxisRange | null, y: AxisRange | null): void {
+    this.xRange = x;
+    this.yRange = y;
+  }
+
+  process(centroid: Centroid | null): RemixLoopBatonOutput {
+    if (!centroid) {
+      return {
+        present: false,
+        loopIndex: Math.max(0, this.currentIndex),
+        volume: this.lastVolume,
+      };
+    }
+    const x = applyAxisCalibration(centroid.x, this.xRange, REACH_MARGIN);
+    const y = applyAxisCalibration(centroid.y, this.yRange, REACH_MARGIN);
+    this.currentIndex = selectLoopZone(x, this.loopCount, this.currentIndex, ZONE_HYSTERESIS);
+    this.lastVolume = y;
+    return { present: true, loopIndex: this.currentIndex, volume: y };
+  }
 }

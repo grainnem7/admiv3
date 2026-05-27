@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { selectLoopZone } from '../remix/RemixLoopBaton';
+import { selectLoopZone, RemixLoopBaton } from '../remix/RemixLoopBaton';
 
 const H = 0.04;
 
@@ -24,5 +24,43 @@ describe('selectLoopZone', () => {
   it('clamps to valid zone range', () => {
     expect(selectLoopZone(1.5, 3, -1, H)).toBe(2);
     expect(selectLoopZone(-0.5, 3, -1, H)).toBe(0);
+  });
+});
+
+describe('RemixLoopBaton', () => {
+  function make() {
+    const b = new RemixLoopBaton();
+    b.setLoopCount(3);
+    return b;
+  }
+
+  it('absent centroid → present:false, latches last index + volume', () => {
+    const b = make();
+    b.process({ x: 0.9, y: 0.5 }); // present, sets index 2, volume 0.5
+    const out = b.process(null);
+    expect(out.present).toBe(false);
+    expect(out.loopIndex).toBe(2);
+    expect(out.volume).toBeCloseTo(0.5, 5);
+  });
+
+  it('present centroid → present:true, index from X, volume from Y', () => {
+    const b = make();
+    const out = b.process({ x: 0.1, y: 0.75 });
+    expect(out.present).toBe(true);
+    expect(out.loopIndex).toBe(0);
+    expect(out.volume).toBeCloseTo(0.75, 5);
+  });
+
+  it('applies X calibration to loop selection', () => {
+    const b = make();
+    b.setCalibration({ min: 0.25, max: 0.75 }, null);
+    const out = b.process({ x: 0.75, y: 0.5 });
+    expect(out.loopIndex).toBe(2);
+  });
+
+  it('latches index 0 (not -1) before any present frame', () => {
+    const b = make();
+    const out = b.process(null);
+    expect(out.loopIndex).toBe(0);
   });
 });
