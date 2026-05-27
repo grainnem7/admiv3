@@ -35,8 +35,24 @@ sample sets (e.g. LANDR free samples) are royalty-free for use in productions bu
   samples are included there too — which requires a kit whose licence permits
   redistribution (a CC0 one-shot kit is the clean choice for shipping).
 
-## Drum LOOPS (for the future loop-layer feature)
-The longer `*_bpm.wav` loop/break files in this folder are **not** used by the
-percussion one-shot layer. They are staged for the upcoming tempo-synced **loop-layer**
-feature (roadmap), which brings a tempo-matched drum loop in/out under the song. Same
-licensing/redistribution caveat applies.
+## Drum LOOPS (loop-layer feature)
+The tempo-synced **loop layer** (`src/remix/layers/LoopLayer.ts`) brings one of a
+curated set of drum loops in and out under the song via the loop baton, each
+pitch-preservingly time-stretched to the song BPM.
+
+- The loop WAVs live in `loops/` (a sibling of `default/`) and stay **git-ignored**.
+- The curated set is listed in `loops/loops.json` (committed): one `{ "file", "name" }`
+  entry per loop. The layer fetches this manifest at song load.
+- Each loop's **filename must contain its source BPM** (e.g. `Dub Drums_97bpm.wav`,
+  `Ed HiHat1 Loop_130 BPM.wav`). BPM is parsed from the filename; a loop whose name
+  has no parseable BPM is dropped.
+- **Curate loops whose BPM is close to the song's tempo.** `GrainPlayer` granular
+  time-stretch smears drum transients when the stretch ratio is far from 1. The songs
+  in `SONG_LIBRARY` sit around 96 BPM (range 67–158), so the current set is clustered
+  at 94–100 BPM. The longer `*_bpm.wav` files still in `default/` are the source pool
+  to pick from.
+- **Current local set** (copied from `default/`, not committed):
+  `Run Down drums_94bpm.wav` (Run Down), `Dub Drums_97bpm.wav` (Dub),
+  `Shroom LANDR Break09_100bpm.wav` (Break), `Feel_me_more_100bpm.wav` (Feel Me).
+- Same licensing/deployment caveat as the one-shots: a deployed build needs a
+  redistributable (CC0) loop set placed in `loops/`.

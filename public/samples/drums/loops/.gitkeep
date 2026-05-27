@@ -1,0 +1,5 @@
+# Place curated drum LOOP WAVs here (git-ignored, like the one-shots).
+# Each filename MUST encode its source BPM, e.g. "drumloop_124bpm.wav",
+# so the loop layer can time-stretch it to the song tempo. Loops without
+# a parseable BPM are dropped. The chosen files are listed in loops.json.
+# See ../SAMPLE_SOURCES.md.
