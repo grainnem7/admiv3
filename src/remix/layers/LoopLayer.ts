@@ -64,6 +64,9 @@ export class LoopLayer implements SyncedRemixLayer {
   }
 
   setEnabled(on: boolean): void {
+    // Idempotent: applyLoopBaton calls this every frame, so skip the
+    // redundant gain write when the enabled state hasn't changed.
+    if (this.enabled === on) return;
     this.enabled = on;
     this.layerGain.gain.value = on ? this.volume : 0;
   }

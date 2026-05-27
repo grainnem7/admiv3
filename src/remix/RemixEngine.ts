@@ -158,6 +158,9 @@ export class RemixEngine {
       for (const n of this.nodes.values()) {
         n.player?.unsync().sync().start(0);
       }
+      // Synced layers (e.g. loops) align the same way as stems, and only
+      // on a fresh start — pause/resume resumes the transport without
+      // re-syncing, so the loops stay phase-locked and keep running.
       for (const l of this.layers.values()) {
         if (isSyncedLayer(l)) l.syncStart();
       }
