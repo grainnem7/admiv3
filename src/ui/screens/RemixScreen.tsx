@@ -28,6 +28,8 @@ import { STEM_CYCLE_ORDER } from '../../remix/RemixBaton';
 import { BatonTouchDetector } from '../../remix/BatonTouchDetector';
 import { RemixLoopBaton } from '../../remix/RemixLoopBaton';
 import { keyToRemixAction } from '../../remix/remixKeyMap';
+import { saveArrangement, loadArrangementFromStore } from '../../remix/recording/arrangementStore';
+import type { RemixArrangement } from '../../remix/recording/remixRecording';
 import { SONG_LIBRARY, COLOR_ROLES } from '../../songs/songLibrary';
 import type { SongConfig, ColorRole } from '../../songs/songLibrary';
 import { usePadState } from './songPreset/usePadState';
@@ -157,6 +159,10 @@ export default function RemixScreen() {
   const loopActiveIndexRef = useRef(0);
   const [loopInfo, setLoopInfo]       = useState<{ count: number; activeIndex: number; names: string[] }>({ count: 0, activeIndex: 0, names: [] });
   const [loopPresent, setLoopPresent] = useState(false);
+  // ---- Remix recorder ----
+  const [recArmed, setRecArmed] = useState(false);
+  const [remixPlaying, setRemixPlaying] = useState(false);
+  const [arrangement, setArrangement] = useState<RemixArrangement>({ songId: '', sections: [] });
   const [headNodMinExcursion, setHeadNodMinExcursion] = useState(0.025);
   const [headNodCooldownMs,   setHeadNodCooldownMs]   = useState(200);
   const batonTouchEnabledRef = useRef(true);
@@ -589,6 +595,9 @@ export default function RemixScreen() {
         setIsPlaying(engine.isPlaying());
         setLoopRegionDisplay(engine.getLoopRegion());
         setTransportSec(Tone.getTransport().seconds);
+        setRecArmed(engine.isRecording());
+        setRemixPlaying(engine.isPlayingArrangement());
+        setArrangement(engine.getArrangement());
 
         if (loopInfoRef.current.count > 0) {
           setLoopPresent(loopPresentRef.current);
@@ -704,6 +713,55 @@ export default function RemixScreen() {
     await Tone.start();
     engineRef.current.play();
     setIsPlaying(true);
+  }, []);
+
+  // ============================================
+  // Remix recorder handlers
+  // ============================================
+
+  const handleArmToggle = useCallback(() => {
+    const e = engineRef.current;
+    if (e.isRecording()) e.disarmRecording(); else e.armRecording();
+    setRecArmed(e.isRecording());
+    setArrangement(e.getArrangement());
+  }, []);
+
+  const handleAdvanceSection = useCallback(() => {
+    engineRef.current.advanceSection();
+    setArrangement(engineRef.current.getArrangement());
+  }, []);
+
+  const handlePlayRemix = useCallback(async () => {
+    await Tone.start();
+    const e = engineRef.current;
+    if (e.isPlayingArrangement()) { e.stopArrangement(); setRemixPlaying(false); return; }
+    e.playArrangement();
+    if (!e.isPlaying()) e.play();
+    setRecArmed(false);
+    setRemixPlaying(true);
+  }, []);
+
+  const handleMuteTake = useCallback((sectionIdx: number, takeId: string, muted: boolean) => {
+    engineRef.current.muteTake(sectionIdx, takeId, muted);
+    setArrangement(engineRef.current.getArrangement());
+  }, []);
+
+  const handleDeleteTake = useCallback((sectionIdx: number, takeId: string) => {
+    engineRef.current.deleteTake(sectionIdx, takeId);
+    setArrangement(engineRef.current.getArrangement());
+  }, []);
+
+  const handleSaveRemix = useCallback(() => {
+    const arr = engineRef.current.getArrangement();
+    if (!arr.songId) return;
+    saveArrangement('default', arr);
+  }, []);
+
+  const handleLoadRemix = useCallback(() => {
+    const songId = engineRef.current.getSongId();
+    if (!songId) return;
+    const loaded = loadArrangementFromStore(songId, 'default');
+    if (loaded) { engineRef.current.loadArrangement(loaded); setArrangement(loaded); }
   }, []);
 
   // ============================================
@@ -1395,6 +1453,40 @@ export default function RemixScreen() {
                 ⏮ Restart
               </button>
             </div>
+          </div>
+        )}
+
+        {/* Remix recorder */}
+        {isLoaded && selectedSong && (
+          <div style={styles.section}>
+            <h3 style={styles.sectionTitle}>Remix recorder</h3>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
+              <button onClick={handleArmToggle} aria-pressed={recArmed} style={recArmed ? styles.btnActive : styles.btn}>
+                {recArmed ? '● Recording' : '○ Arm record'}
+              </button>
+              <button onClick={handleAdvanceSection} style={styles.btn}>Next section →</button>
+              <button onClick={() => { void handlePlayRemix(); }} style={remixPlaying ? styles.btnActive : styles.btn}>
+                {remixPlaying ? '■ Stop remix' : '▶ Play remix'}
+              </button>
+              <button onClick={handleSaveRemix} style={styles.btn}>Save</button>
+              <button onClick={handleLoadRemix} style={styles.btn}>Load</button>
+            </div>
+            {arrangement.sections.map((sec, sIdx) => (
+              <div key={`${sec.originBar}-${sec.lengthBars}`} style={{ marginTop: 6 }}>
+                <div style={{ fontSize: 11, color: '#71718a' }}>
+                  Section @bar {sec.originBar} · {sec.lengthBars} bars · {sec.layers.length} layer(s)
+                </div>
+                {sec.layers.map((take) => (
+                  <div key={take.id} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <span aria-live="polite">{take.muted ? 'muted' : 'on'}: {take.id}</span>
+                    <button onClick={() => handleMuteTake(sIdx, take.id, !take.muted)} style={styles.btnSmall}>
+                      {take.muted ? 'Unmute' : 'Mute'}
+                    </button>
+                    <button onClick={() => handleDeleteTake(sIdx, take.id)} aria-label={`Delete ${take.id}`} style={styles.btnSmall}>✕</button>
+                  </div>
+                ))}
+              </div>
+            ))}
           </div>
         )}
 
