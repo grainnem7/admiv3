@@ -9,6 +9,7 @@ export type RemixKeyAction =
   | { kind: 'percussion' }
   | { kind: 'nudgeLoop'; dir: 1 | -1 }
   | { kind: 'loopLen'; dir: 1 | -1 }
+  | { kind: 'cycleLoop' }
   | { kind: 'togglePlay' }
   | null;
 
@@ -26,6 +27,8 @@ export function keyToRemixAction(key: string): RemixKeyAction {
     case 'S': return { kind: 'percussion' };
     case '[': return { kind: 'loopLen', dir: -1 };
     case ']': return { kind: 'loopLen', dir: 1 };
+    case 'l':
+    case 'L': return { kind: 'cycleLoop' };
     case ' ': return { kind: 'togglePlay' };
     default: return null;
   }

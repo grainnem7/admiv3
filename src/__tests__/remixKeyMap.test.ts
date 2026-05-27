@@ -22,6 +22,11 @@ describe('keyToRemixAction', () => {
     expect(keyToRemixAction(' ')).toEqual({ kind: 'togglePlay' });
   });
 
+  it('maps L (either case) to cycleLoop', () => {
+    expect(keyToRemixAction('l')).toEqual({ kind: 'cycleLoop' });
+    expect(keyToRemixAction('L')).toEqual({ kind: 'cycleLoop' });
+  });
+
   it('returns null for unmapped keys', () => {
     expect(keyToRemixAction('q')).toBeNull();
     expect(keyToRemixAction('5')).toBeNull();
