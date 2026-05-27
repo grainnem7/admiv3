@@ -22,3 +22,21 @@ export interface RemixLayer {
   isReady(): boolean;
   dispose(): void;
 }
+
+/**
+ * A RemixLayer that runs a continuous source synced to the transport
+ * (vs. a trigger layer like percussion). The engine aligns these at
+ * transport time 0 on a fresh play, and stops them on stop.
+ */
+export interface SyncedRemixLayer extends RemixLayer {
+  syncStart(): void;
+  syncStop(): void;
+}
+
+/** True when a layer participates in transport sync. */
+export function isSyncedLayer(l: RemixLayer): l is SyncedRemixLayer {
+  return (
+    typeof (l as Partial<SyncedRemixLayer>).syncStart === 'function' &&
+    typeof (l as Partial<SyncedRemixLayer>).syncStop === 'function'
+  );
+}
