@@ -140,6 +140,11 @@ export default function RemixScreen() {
   // ---- Percussion controls ----
   const [percussionEnabled, setPercussionEnabled] = useState(false);
   const [percussionVolume,  setPercussionVolume]  = useState(0.8);
+  // Refs so handleSelectSong (useCallback []) can read current values without stale closure.
+  const percussionEnabledRef = useRef(false);
+  const percussionVolumeRef  = useRef(0.8);
+  useEffect(() => { percussionEnabledRef.current = percussionEnabled; }, [percussionEnabled]);
+  useEffect(() => { percussionVolumeRef.current  = percussionVolume;  }, [percussionVolume]);
   const [headNodMinExcursion, setHeadNodMinExcursion] = useState(0.025);
   const [headNodCooldownMs,   setHeadNodCooldownMs]   = useState(200);
   const batonTouchEnabledRef = useRef(true);
@@ -610,6 +615,10 @@ export default function RemixScreen() {
       const effectiveLen = afterRegion?.lengthBars ?? 0;
       setLoopLengthBars(effectiveLen as 0 | 4 | 8 | 16);
       loopLengthBarsRef.current = effectiveLen as 0 | 4 | 8 | 16;
+      // Re-apply percussion layer state to the freshly-rebuilt layer
+      // (loadSong rebuilds it disabled at default volume).
+      engine.setLayerVolume('percussion', percussionVolumeRef.current);
+      engine.setLayerEnabled('percussion', percussionEnabledRef.current);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load song');
       setLoadingMsg(null);

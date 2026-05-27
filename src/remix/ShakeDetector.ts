@@ -3,7 +3,7 @@
  * threshold, then requires the velocity to drop back below threshold
  * AND a cooldown to elapse before it can fire again.
  *
- * "Fast shake" is the Remix stutter trigger; the rising-edge + cooldown
+ * "Fast shake" is the Remix percussion-accent trigger; the rising-edge + cooldown
  * design stops a single sustained fast move from spraying triggers.
  */
 
