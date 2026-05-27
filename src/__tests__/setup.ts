@@ -1,6 +1,8 @@
 // Vitest global setup for ADMIv3 tests
 // Mock browser APIs that don't exist in jsdom
 
+import { vi } from 'vitest';
+
 // Mock Web Audio API
 Object.defineProperty(window, 'AudioContext', {
   writable: true,
@@ -26,5 +28,5 @@ Object.defineProperty(navigator, 'mediaDevices', {
 });
 
 // Mock requestAnimationFrame
-global.requestAnimationFrame = vi.fn(cb => setTimeout(cb, 16) as unknown as number);
-global.cancelAnimationFrame = vi.fn(id => clearTimeout(id as unknown as ReturnType<typeof setTimeout>));
+globalThis.requestAnimationFrame = vi.fn((cb: FrameRequestCallback) => setTimeout(cb, 16) as unknown as number);
+globalThis.cancelAnimationFrame = vi.fn((id: number) => clearTimeout(id as unknown as ReturnType<typeof setTimeout>));
