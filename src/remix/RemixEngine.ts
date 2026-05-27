@@ -19,6 +19,8 @@ import { STEM_CYCLE_ORDER } from './RemixBaton';
 import { computeLoopRegion, nudgeOrigin } from './loopRegion';
 import { HeadBopDetector } from '../mapping/nodes/HeadRhythmNode';
 import type { FaceLandmarks } from '../state/types';
+import type { RemixLayer } from './layers/RemixLayer';
+import { PercussionLayer } from './layers/PercussionLayer';
 
 export interface RemixStemState {
   filterNorm: number;
@@ -38,6 +40,11 @@ const GLIDE_LERP = 0.12;         // per-frame glide toward target (~250ms)
 const MASTER_GAIN = 0.9;         // master bus output level
 const GLIDE_EXIT_EPSILON = 0.01; // distance below which glide is considered complete
 
+/** Map a head-nod amplitude to a musical velocity (0.4 floor … 1). */
+function clampVel(amp: number): number {
+  return Math.max(0.4, Math.min(1, 0.4 + amp * 6));
+}
+
 export class RemixEngine {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
@@ -45,6 +52,9 @@ export class RemixEngine {
   private states = new Map<StemId, RemixStemState>();
   private gliding = new Set<StemId>();
   private downbeats: number[] = [];
+  private beats: number[] = [];
+  private layersBus: GainNode | null = null;
+  private layers = new Map<string, RemixLayer>();
   private playing = false;
   private loopRegion: { startSec: number; endSec: number } | null = null;
   private loopLengthBars: 0 | 4 | 8 | 16 = 8;
@@ -98,12 +108,25 @@ export class RemixEngine {
       try {
         const a = await loadSongAnalysis(song.analysisUrl);
         this.downbeats = a.downbeats;
+        this.beats = a.beats ?? [];
       } catch {
         this.downbeats = song.downbeats ?? [];
+        this.beats = song.beats ?? [];
       }
     } else {
       this.downbeats = song.downbeats ?? [];
+      this.beats = song.beats ?? [];
     }
+
+    this.layersBus = this.ctx.createGain();
+    this.layersBus.gain.value = 1;
+    this.layersBus.connect(this.master);
+
+    const percussion = new PercussionLayer(this.ctx, 'default');
+    percussion.connect(this.layersBus);
+    percussion.setBeatGrid(this.beats, this.downbeats);
+    percussion.setEnabled(false); // opt-in
+    this.layers.set(percussion.id, percussion);
 
     this.loopOriginBar = 0;
     this.loopLengthBars = this.downbeats.length >= 2 ? 8 : 0;
@@ -236,6 +259,10 @@ export class RemixEngine {
     this.nodes.clear();
     this.states.clear();
     this.gliding.clear();
+    for (const l of this.layers.values()) l.dispose();
+    this.layers.clear();
+    this.layersBus?.disconnect();
+    this.layersBus = null;
     this.master?.disconnect();
     this.master = null;
     this.ctx = null;
@@ -269,13 +296,29 @@ export class RemixEngine {
     this.headNodDetector.setConfig(minDownExcursion, cooldownMs);
   }
 
-  /** Feed face landmarks; a detected nod will trigger percussion (wired in a later task). */
+  addLayer(layer: RemixLayer): void { this.layers.set(layer.id, layer); }
+  getLayer(id: string): RemixLayer | undefined { return this.layers.get(id); }
+  removeLayer(id: string): void {
+    const l = this.layers.get(id);
+    if (l) { l.dispose(); this.layers.delete(id); }
+  }
+  setLayerEnabled(id: string, on: boolean): void { this.layers.get(id)?.setEnabled(on); }
+  setLayerVolume(id: string, v: number): void { this.layers.get(id)?.setVolume(v); }
+  /** Fire the percussion layer (head-nod / shake / keyboard-S route here). */
+  triggerPercussion(timeSec: number, velocity: number): void {
+    const layer = this.layers.get('percussion');
+    if (layer instanceof PercussionLayer && layer.isEnabled()) layer.hit(timeSec, velocity);
+  }
+
+  /** Feed face landmarks; a detected nod triggers the percussion layer. */
   processFaceLandmarks(landmarks: FaceLandmarks | null, timestampMs: number): void {
     if (!this.headNodEnabled || !landmarks) return;
     const lm = landmarks.landmarks[this.headNodLandmarkIndex];
     if (!lm) return;
-    // HeadBopDetector step result is available for future percussion wiring.
-    this.headNodDetector.step(lm.y, timestampMs);
+    if (this.headNodDetector.step(lm.y, timestampMs)) {
+      const velocity = clampVel(this.headNodDetector.getLastBopAmplitude());
+      this.triggerPercussion(Tone.getTransport().seconds, velocity);
+    }
   }
 
   // ---- internal ----

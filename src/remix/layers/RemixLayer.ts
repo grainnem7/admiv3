@@ -14,6 +14,8 @@ export interface RemixLayer {
   connect(dest: AudioNode): void;
   /** Bring the layer into / out of the mix. */
   setEnabled(on: boolean): void;
+  /** Whether the layer is currently enabled. */
+  isEnabled(): boolean;
   /** The layer's own level, 0–1. */
   setVolume(v: number): void;
   /** True once the layer's samples are loaded and it can play. */

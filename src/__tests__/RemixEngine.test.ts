@@ -19,16 +19,23 @@ vi.mock('tone', () => {
     getContext: vi.fn(() => ({ rawContext: makeRawCtx() })),
     getTransport: vi.fn(() => Transport),
     now: vi.fn(() => 0),
-    Player: vi.fn().mockImplementation((buffer: AudioBuffer) => ({
-      buffer,
-      loop: false,
-      sync: vi.fn().mockReturnThis(),
-      start: vi.fn().mockReturnThis(),
-      stop: vi.fn().mockReturnThis(),
-      unsync: vi.fn().mockReturnThis(),
-      connect: vi.fn(),
-      dispose: vi.fn(),
-    })),
+    Player: vi.fn().mockImplementation((opts: AudioBuffer | { onload?: () => void }) => {
+      // Support both `new Tone.Player(buffer)` and `new Tone.Player({ url, onload })`
+      if (opts && typeof opts === 'object' && 'onload' in opts) {
+        (opts as { onload?: () => void }).onload?.();
+      }
+      return {
+        buffer: opts,
+        loop: false,
+        sync: vi.fn().mockReturnThis(),
+        start: vi.fn().mockReturnThis(),
+        stop: vi.fn().mockReturnThis(),
+        unsync: vi.fn().mockReturnThis(),
+        connect: vi.fn(),
+        dispose: vi.fn(),
+        volume: { value: 0 },
+      };
+    }),
   };
 });
 
@@ -74,6 +81,7 @@ function makeRawCtx() {
 }
 
 import { RemixEngine } from '../remix/RemixEngine';
+import type { PercussionLayer } from '../remix/layers/PercussionLayer';
 import type { SongConfig } from '../songs/songLibrary';
 
 function song(): SongConfig {
@@ -152,8 +160,8 @@ describe('RemixEngine', () => {
     const callsBefore = PlayerMock.mock.calls.length;
     const e = new RemixEngine();
     await e.loadSong(song());
-    // 4 stems → 4 Player constructions.
-    expect(PlayerMock.mock.calls.length - callsBefore).toBe(4);
+    // 4 stems + 4 DrumKit players → 8 Player constructions total.
+    expect(PlayerMock.mock.calls.length - callsBefore).toBe(8);
     e.dispose();
   });
 
@@ -164,8 +172,9 @@ describe('RemixEngine', () => {
     const e = new RemixEngine();
     await e.loadSong(song());
     const created = PlayerMock.mock.results.slice(before);
-    expect(created.length).toBe(4);
-    expect(created.every((r) => r.value.loop === true)).toBe(true);
+    // 4 stem players (loop=true) + 4 DrumKit players (loop=false)
+    const stemPlayers = created.filter((r) => r.value.loop === true);
+    expect(stemPlayers.length).toBe(4);
     e.dispose();
   });
 
@@ -174,6 +183,15 @@ describe('RemixEngine', () => {
     s.beats = [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5, 8];
     s.downbeats = [0, 1, 2, 3, 4, 5, 6, 7, 8]; // 8 bars, 1s each
     return s;
+  }
+
+  /** Build a minimal FaceLandmarks with landmark[1].y = y (nose tip). */
+  function makeFace(y: number) {
+    const lm = (yy: number) => ({ x: 0.5, y: yy, z: 0, visibility: 1 });
+    return {
+      landmarks: [lm(0.5), lm(y)],
+      blendshapes: [],
+    };
   }
 
   it('applies a default 8-bar loop on load and sets Transport loop points', async () => {
@@ -229,5 +247,48 @@ describe('RemixEngine', () => {
     e.dispose();
   });
 
+  it('adds a disabled percussion layer on load and exposes layer controls', async () => {
+    const e = new RemixEngine();
+    await e.loadSong(songWithBars());
+    // @ts-expect-error private — inspect the layers map
+    const layer = e.layers.get('percussion') as PercussionLayer;
+    expect(layer).toBeTruthy();
+    expect(layer.kind).toBe('percussion');
+    expect(() => e.setLayerEnabled('percussion', true)).not.toThrow();
+    expect(() => e.setLayerVolume('percussion', 0.5)).not.toThrow();
+    e.dispose();
+  });
+
+  it('triggerPercussion fires the layer only when enabled', async () => {
+    const e = new RemixEngine();
+    await e.loadSong(songWithBars());
+    // @ts-expect-error private
+    const layer = e.layers.get('percussion') as PercussionLayer;
+    const hitSpy = vi.spyOn(layer, 'hit');
+    e.triggerPercussion(0, 0.8);
+    expect(hitSpy).not.toHaveBeenCalled();      // disabled
+    e.setLayerEnabled('percussion', true);
+    e.triggerPercussion(0, 0.8);
+    expect(hitSpy).toHaveBeenCalledWith(0, 0.8); // enabled
+    e.dispose();
+  });
+
+  it('a head nod calls triggerPercussion when percussion is enabled', async () => {
+    const e = new RemixEngine();
+    await e.loadSong(songWithBars());
+    e.setLayerEnabled('percussion', true);
+    e.setHeadNodEnabled(true);
+    e.setHeadNodSensitivity(0.02, 100);
+    // @ts-expect-error private
+    const layer = e.layers.get('percussion') as PercussionLayer;
+    const hitSpy = vi.spyOn(layer, 'hit');
+    let t = 0;
+    e.processFaceLandmarks(makeFace(0.40), (t += 16));
+    e.processFaceLandmarks(makeFace(0.45), (t += 16));
+    e.processFaceLandmarks(makeFace(0.50), (t += 16));
+    e.processFaceLandmarks(makeFace(0.45), (t += 16)); // bop
+    expect(hitSpy).toHaveBeenCalled();
+    e.dispose();
+  });
 
 });

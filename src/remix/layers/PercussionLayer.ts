@@ -41,6 +41,10 @@ export class PercussionLayer implements RemixLayer {
     this.gain.gain.value = on ? this.volume : 0;
   }
 
+  isEnabled(): boolean {
+    return this.enabled;
+  }
+
   setVolume(v: number): void {
     this.volume = Math.max(0, Math.min(1, v));
     if (this.enabled) this.gain.gain.value = this.volume;
