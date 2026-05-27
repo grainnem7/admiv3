@@ -1,0 +1,13 @@
+# Drum-kit audio is a LOCAL asset, not committed.
+#
+# Licensing varies and many "free" sample sets (e.g. LANDR free samples) are
+# royalty-free for use in productions but NOT redistributable in a source repo.
+# So we keep the audio binaries out of git. Place your licensed kit one-shots
+# (kick.wav / snare.wav / hat.wav / crash.wav) in default/ locally — see
+# SAMPLE_SOURCES.md. The percussion layer no-ops gracefully when they're absent.
+*.wav
+*.mp3
+*.aif
+*.aiff
+*.flac
+*.ogg
