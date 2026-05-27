@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { parseBpmFromFilename, parseLoopManifest } from '../remix/layers/loopManifest';
 
 describe('parseBpmFromFilename', () => {
@@ -41,5 +41,34 @@ describe('parseLoopManifest', () => {
   it('returns [] for non-array / empty input', () => {
     expect(parseLoopManifest(undefined)).toEqual([]);
     expect(parseLoopManifest([])).toEqual([]);
+  });
+});
+
+import { loadLoopManifest } from '../remix/layers/loadLoopManifest';
+
+describe('loadLoopManifest', () => {
+  const realFetch = globalThis.fetch;
+  afterEach(() => { globalThis.fetch = realFetch; });
+
+  it('fetches loops.json, parses bpm, drops no-bpm entries', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => [
+        { file: 'a_120bpm.wav', name: 'A' },
+        { file: 'nobpm.wav', name: 'B' },
+      ],
+    }) as unknown as typeof fetch;
+    const loops = await loadLoopManifest();
+    expect(loops).toEqual([{ file: 'a_120bpm.wav', name: 'A', bpm: 120 }]);
+  });
+
+  it('returns [] when fetch fails', async () => {
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error('404')) as unknown as typeof fetch;
+    expect(await loadLoopManifest()).toEqual([]);
+  });
+
+  it('returns [] when response is not ok', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: false }) as unknown as typeof fetch;
+    expect(await loadLoopManifest()).toEqual([]);
   });
 });
