@@ -342,3 +342,41 @@ describe('RemixEngine loop layer', () => {
     e.dispose();
   });
 });
+
+describe('RemixEngine recording', () => {
+  it('captures stem filter + percussion into a take on section advance', async () => {
+    const e = new RemixEngine();
+    await e.loadSong(song());
+    e.armRecording();
+    expect(e.isRecording()).toBe(true);
+    e.setStemFilterNorm('vocals', 0.7);
+    e.triggerPercussion(0.5, 0.9);
+    e.advanceSection();
+    const arr = e.getArrangement();
+    const allEvents = arr.sections.flatMap((s) => s.layers.flatMap((l) => l.events));
+    expect(allEvents.some((ev) => ev.kind === 'stemFilter')).toBe(true);
+    expect(allEvents.some((ev) => ev.kind === 'percussion')).toBe(true);
+    e.dispose();
+  });
+
+  it('does not capture when not recording', async () => {
+    const e = new RemixEngine();
+    await e.loadSong(song());
+    e.setStemFilterNorm('vocals', 0.7);
+    e.armRecording();
+    e.advanceSection();
+    const arr = e.getArrangement();
+    const allEvents = arr.sections.flatMap((s) => s.layers.flatMap((l) => l.events));
+    expect(allEvents).toHaveLength(0);
+    e.dispose();
+  });
+
+  it('disarmRecording stops capture', async () => {
+    const e = new RemixEngine();
+    await e.loadSong(song());
+    e.armRecording();
+    e.disarmRecording();
+    expect(e.isRecording()).toBe(false);
+    e.dispose();
+  });
+});

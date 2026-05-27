@@ -25,6 +25,9 @@ import { PercussionLayer } from './layers/PercussionLayer';
 import { LoopLayer } from './layers/LoopLayer';
 import { loadLoopManifest } from './layers/loadLoopManifest';
 import type { RemixLoopBatonOutput } from './RemixLoopBaton';
+import { RemixRecorder } from './recording/RemixRecorder';
+import { RemixArranger } from './recording/RemixArranger';
+import type { CaptureInput, RemixArrangement } from './recording/remixRecording';
 
 export interface RemixStemState {
   filterNorm: number;
@@ -60,6 +63,12 @@ export class RemixEngine {
   private layersBus: GainNode | null = null;
   private layers = new Map<string, RemixLayer>();
   private playing = false;
+  private recorder = new RemixRecorder();
+  private arranger = new RemixArranger('');
+  private songId = '';
+  private recSectionOriginBar = 0;
+  private recSectionLengthBars: 0 | 4 | 8 | 16 = 8;
+  private lastTickSec = 0;
   private loopRegion: { startSec: number; endSec: number } | null = null;
   private loopLengthBars: 0 | 4 | 8 | 16 = 8;
   private loopOriginBar = 0;
@@ -145,6 +154,9 @@ export class RemixEngine {
     this.applyLoop();
 
     Tone.getTransport().bpm.value = song.bpm;
+    this.songId = song.id;
+    this.arranger = new RemixArranger(song.id);
+    this.recorder.disarm();
   }
 
   play(): void {
@@ -198,14 +210,20 @@ export class RemixEngine {
     if (out.filterNorm === null) return; // absent → latch (no write)
 
     state.targetFilterNorm = out.filterNorm;
+    this.captureNow({ kind: 'stemFilter', stem: out.stem, value: out.filterNorm });
     if (out.cycled) this.gliding.add(out.stem);
     // out.shake is intentionally ignored here; the screen routes shake
     // to the percussion layer (wired in a later task).
   }
 
   /** Render all stem state → audio nodes. `playbackNowSec` from transport. */
-  renderFrame(_playbackNowSec: number): void {
+  renderFrame(nowSec: number): void {
     if (!this.ctx) return;
+    if (this.recorder.isArmed() && nowSec + 1e-3 < this.lastTickSec) {
+      if (this.recorder.hasBuffered()) {
+        this.arranger.addTake(this.recSectionOriginBar, this.recSectionLengthBars, this.recorder.commitTake());
+      }
+    }
     const now = this.ctx.currentTime;
 
     for (const [stem, state] of this.states) {
@@ -230,6 +248,7 @@ export class RemixEngine {
       n.filter.frequency.setTargetAtTime(cutoffHz, now, SMOOTH_TC);
       n.gain.gain.setTargetAtTime(gain, now, SMOOTH_TC);
     }
+    this.lastTickSec = nowSec;
   }
 
   getStemStates(): Record<StemId, RemixStemState> {
@@ -294,6 +313,7 @@ export class RemixEngine {
     if (!state) return;
     state.targetFilterNorm = Math.max(0, Math.min(1, value));
     this.gliding.delete(stem); // direct control, no glide
+    this.captureNow({ kind: 'stemFilter', stem, value: Math.max(0, Math.min(1, value)) });
   }
 
   getStemFilterNorm(stem: StemId): number {
@@ -330,6 +350,7 @@ export class RemixEngine {
   selectLoop(i: number): void {
     const l = this.layers.get('loop');
     if (l instanceof LoopLayer) l.selectLoop(i);
+    this.captureNow({ kind: 'loopSelect', index: i });
   }
 
   /** Loop-layer summary for the UI. count 0 when there's no loop layer. */
@@ -344,13 +365,16 @@ export class RemixEngine {
   /** Route the loop baton's per-frame output to the loop layer. */
   applyLoopBaton(out: RemixLoopBatonOutput): void {
     this.setLayerEnabled('loop', out.present);
+    this.captureNow({ kind: 'loopEnable', on: out.present });
     if (out.present) {
       this.selectLoop(out.loopIndex);
       this.setLayerVolume('loop', out.volume);
+      this.captureNow({ kind: 'loopVolume', value: out.volume });
     }
   }
   /** Fire the percussion layer (head-nod / shake / keyboard-S route here). */
   triggerPercussion(timeSec: number, velocity: number): void {
+    this.captureNow({ kind: 'percussion', velocity });
     const layer = this.layers.get('percussion');
     if (layer instanceof PercussionLayer && layer.isEnabled()) layer.hit(timeSec, velocity);
   }
@@ -364,6 +388,55 @@ export class RemixEngine {
       const velocity = clampVel(this.headNodDetector.getLastBopAmplitude());
       this.triggerPercussion(Tone.getTransport().seconds, velocity);
     }
+  }
+
+  getSongId(): string {
+    return this.songId;
+  }
+
+  private captureNow(input: CaptureInput): void {
+    if (this.recorder.isArmed()) this.recorder.capture(input, Tone.getTransport().seconds);
+  }
+
+  private currentSectionTimes(): { startSec: number; lengthSec: number } {
+    const region = this.getLoopRegion();
+    if (region) return { startSec: region.startSec, lengthSec: Math.max(0, region.endSec - region.startSec) };
+    return { startSec: 0, lengthSec: this.duration };
+  }
+
+  armRecording(): void {
+    const { startSec, lengthSec } = this.currentSectionTimes();
+    this.recSectionOriginBar = this.loopOriginBar;
+    this.recSectionLengthBars = this.loopLengthBars;
+    this.recorder.arm(startSec, lengthSec);
+    this.lastTickSec = Tone.getTransport().seconds;
+  }
+
+  disarmRecording(): void {
+    if (this.recorder.hasBuffered()) {
+      this.arranger.addTake(this.recSectionOriginBar, this.recSectionLengthBars, this.recorder.commitTake());
+    }
+    this.recorder.disarm();
+  }
+
+  isRecording(): boolean {
+    return this.recorder.isArmed();
+  }
+
+  advanceSection(): void {
+    if (this.recorder.hasBuffered()) {
+      this.arranger.addTake(this.recSectionOriginBar, this.recSectionLengthBars, this.recorder.commitTake());
+    }
+    this.nudgeLoop(1);
+    const { startSec, lengthSec } = this.currentSectionTimes();
+    this.recSectionOriginBar = this.loopOriginBar;
+    this.recSectionLengthBars = this.loopLengthBars;
+    if (this.recorder.isArmed()) this.recorder.arm(startSec, lengthSec);
+    this.lastTickSec = Tone.getTransport().seconds;
+  }
+
+  getArrangement(): RemixArrangement {
+    return this.arranger.getArrangement();
   }
 
   // ---- internal ----
