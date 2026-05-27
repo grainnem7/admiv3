@@ -47,19 +47,19 @@ describe('RemixBaton', () => {
     expect(b.update(STILL, t).stem).toBe(STEM_CYCLE_ORDER[0]);
   });
 
-  it('fires a stutter on a fast move and not on a dwell', () => {
+  it('fires a shake on a fast move and not on a dwell', () => {
     const b = new RemixBaton('red');
     // Big position jump between frames → high velocity → shake.
     b.update({ x: 0.1, y: 0.5, found: true }, 0);
     const out = b.update({ x: 0.9, y: 0.5, found: true }, 16);
-    expect(out.stutter).toBe(true);
-    // A still hold never reports stutter.
+    expect(out.shake).toBe(true);
+    // A still hold never reports shake.
     const b2 = new RemixBaton('red');
-    let anyStutter = false;
+    let anyShake = false;
     for (let i = 0; i < 40; i++) {
-      if (b2.update(STILL, i * 60).stutter) anyStutter = true;
+      if (b2.update(STILL, i * 60).shake) anyShake = true;
     }
-    expect(anyStutter).toBe(false);
+    expect(anyShake).toBe(false);
   });
 
   it('reports dwell progress 0..1 while holding still', () => {

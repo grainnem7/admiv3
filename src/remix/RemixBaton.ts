@@ -3,7 +3,7 @@
  *
  * One baton owns one stem at a time and cycles through the four stems
  * with a dwell gesture. While present it writes its stem's filterNorm
- * from Y; a fast-shake fires a one-shot stutter. Absent → writes null
+ * from Y; a fast-shake fires a one-shot shake signal. Absent → writes null
  * (the engine latches the stem). Pure logic; no Web Audio.
  */
 
@@ -51,8 +51,8 @@ export interface RemixBatonOutput {
   filterNorm: number | null;
   /** True only on the frame a cycle fired (engine applies glide-takeover). */
   cycled: boolean;
-  /** True only on the frame a stutter should fire. */
-  stutter: boolean;
+  /** True only on the frame a shake gesture fired. */
+  shake: boolean;
   /** Dwell ring progress 0–1 for visual feedback. */
   dwellProgress: number;
 }
@@ -143,7 +143,7 @@ export class RemixBaton {
         stem,
         filterNorm: null,
         cycled: false,
-        stutter: false,
+        shake: false,
         dwellProgress: 0,
       };
     }
@@ -169,7 +169,7 @@ export class RemixBaton {
     this.prevX = cx;
     this.prevY = cy;
 
-    const stutter = this.shake.update(this.smoothVel, nowMs);
+    const shake = this.shake.update(this.smoothVel, nowMs);
 
     // DwellDetector uses `!this.dwellStartTime` as a null-guard, which
     // incorrectly treats timestamp=0 as unset. Offset by 1ms to avoid the
@@ -202,7 +202,7 @@ export class RemixBaton {
       stem: cycled ? this.assignedStem : stem,
       filterNorm,
       cycled,
-      stutter,
+      shake,
       dwellProgress: dwellRes.progress,
     };
   }
