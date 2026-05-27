@@ -39,11 +39,6 @@ export class RemixRecorder {
     this.lastValue.clear();
   }
 
-  setSection(sectionStartSec: number, sectionLengthSec: number): void {
-    this.sectionStartSec = sectionStartSec;
-    this.sectionLengthSec = sectionLengthSec;
-  }
-
   disarm(): void {
     this.armed = false;
   }

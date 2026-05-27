@@ -158,6 +158,7 @@ export class RemixEngine {
     this.songId = song.id;
     this.arranger = new RemixArranger(song.id);
     this.recorder.disarm();
+    this.playingArrangement = false; // a song change cancels any in-progress remix playback
   }
 
   play(): void {
@@ -292,6 +293,8 @@ export class RemixEngine {
 
   dispose(): void {
     this.stop();
+    this.recorder.disarm();
+    this.playingArrangement = false;
     for (const n of this.nodes.values()) {
       try { n.player?.unsync(); } catch { /* noop */ }
       n.player?.dispose();
@@ -407,6 +410,7 @@ export class RemixEngine {
   }
 
   armRecording(): void {
+    this.playingArrangement = false; // recording and remix playback are mutually exclusive
     const { startSec, lengthSec } = this.currentSectionTimes();
     this.recSectionOriginBar = this.loopOriginBar;
     this.recSectionLengthBars = this.loopLengthBars;
@@ -442,6 +446,9 @@ export class RemixEngine {
   }
 
   playArrangement(): void {
+    // Disarm any recording so playback never feeds composited automation back
+    // into a live take (the capture hooks would otherwise re-record it).
+    this.recorder.disarm();
     this.playingArrangement = true;
     this.lastTickSec = Tone.getTransport().seconds;
   }
@@ -487,7 +494,12 @@ export class RemixEngine {
       if (comp.loopEnable !== undefined) this.setLayerEnabled('loop', comp.loopEnable);
       if (comp.loopSelect !== undefined) this.selectLoop(comp.loopSelect);
       if (comp.loopVolume !== undefined) this.setLayerVolume('loop', comp.loopVolume);
-      const fromT = this.lastTickSec - start;
+      // Percussion window since the last tick. On a transport loop-wrap nowSec
+      // jumps backward (nowSec < lastTickSec); widen the window to the section
+      // start so hits near the seam fire on the new cycle instead of being
+      // dropped because fromT would exceed t.
+      const wrapped = nowSec < this.lastTickSec;
+      const fromT = wrapped ? -Infinity : this.lastTickSec - start;
       const hits = RemixArranger.discreteEventsInWindow(section, fromT, t);
       for (const hit of hits) {
         if (hit.kind === 'percussion') this.triggerPercussion(nowSec, hit.velocity);

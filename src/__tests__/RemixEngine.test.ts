@@ -417,4 +417,25 @@ describe('RemixEngine arrangement playback', () => {
     expect(e.getArrangement().sections[0].layers.map((l) => l.id)).toEqual(['k1']);
     e.dispose();
   });
+
+  it('loadSong cancels in-progress remix playback', async () => {
+    const e = new RemixEngine();
+    await e.loadSong(song());
+    e.playArrangement();
+    expect(e.isPlayingArrangement()).toBe(true);
+    await e.loadSong(song());
+    expect(e.isPlayingArrangement()).toBe(false);
+    e.dispose();
+  });
+
+  it('recording and remix playback are mutually exclusive', async () => {
+    const e = new RemixEngine();
+    await e.loadSong(song());
+    e.armRecording();
+    e.playArrangement();
+    expect(e.isRecording()).toBe(false); // playback disarmed recording
+    e.armRecording();
+    expect(e.isPlayingArrangement()).toBe(false); // arming stopped playback
+    e.dispose();
+  });
 });
