@@ -61,7 +61,6 @@ const LEFT_THRESHOLD = 0.30;
 const RIGHT_THRESHOLD = 0.70;
 
 // Surface-press defaults (commissioner-overridable).
-const SURFACE_BUTTON_COUNT = 5;
 const SURFACE_DEFAULT_INSTRUMENT = 'piano';
 // Per-tube colour-search box around the calibration click: tight horizontally
 // (neighbours differ in hue), generous vertically up from the click and down
@@ -886,21 +885,8 @@ function SongPresetScreen() {
           color,
         });
       }
-      if (surfaceKeysRef.current.length >= SURFACE_BUTTON_COUNT) {
-        const cfg: SurfacePressStored = {
-          enabled: true,
-          touchDist: 0.06,      // finger within ~6% of frame of the tube line
-          releaseDist: 0.1,     // larger → anti-chatter distance hysteresis
-          occlusionEnter: 0.65, // press once ≥35% of the tube is covered
-          occlusionExit: 0.85,  // release once ≥85% is visible again
-          defaultVelocity: 0.7,
-          keys: surfaceKeysRef.current,
-        };
-        surfaceConfigRef.current = cfg;
-        getInputProfileManager().saveSurfacePressConfig(cfg);
-        setSurfaceCalStage('idle');
-        setSurfacePressEnabled(true);
-      }
+      // Any number of tubes: keep registering on each click. The facilitator
+      // clicks "Done" (finishSurfaceCalibration) to finalise.
       setSurfaceCalTick((t) => t + 1);
       return;
     }
@@ -977,6 +963,25 @@ function SongPresetScreen() {
   const startSurfaceCalibration = useCallback(() => {
     surfaceKeysRef.current = [];
     setSurfaceCalStage('keys');
+    setSurfaceCalTick((t) => t + 1);
+  }, []);
+
+  // Finalise surface calibration with however many tubes were registered.
+  const finishSurfaceCalibration = useCallback(() => {
+    if (surfaceKeysRef.current.length === 0) return;
+    const cfg: SurfacePressStored = {
+      enabled: true,
+      touchDist: 0.06,      // finger within ~6% of frame of the tube line
+      releaseDist: 0.1,     // larger → anti-chatter distance hysteresis
+      occlusionEnter: 0.65, // press once ≥35% of the tube is covered
+      occlusionExit: 0.85,  // release once ≥85% is visible again
+      defaultVelocity: 0.7,
+      keys: surfaceKeysRef.current,
+    };
+    surfaceConfigRef.current = cfg;
+    getInputProfileManager().saveSurfacePressConfig(cfg);
+    setSurfaceCalStage('idle');
+    setSurfacePressEnabled(true);
     setSurfaceCalTick((t) => t + 1);
   }, []);
 
@@ -1655,9 +1660,18 @@ function SongPresetScreen() {
               Calibrate surface press
             </button>
             {surfaceCalStage === 'keys' && (
-              <span style={{ fontSize: 11, color: '#0ff' }}>
-                Click each tube ({surfaceKeysRef.current.length}/{SURFACE_BUTTON_COUNT})…
-              </span>
+              <>
+                <span style={{ fontSize: 11, color: '#0ff' }}>
+                  {surfaceKeysRef.current.length} tube(s) — click each, then Done
+                </span>
+                <button
+                  onClick={finishSurfaceCalibration}
+                  style={{ ...styles.btn, fontSize: 10, padding: '4px 8px' }}
+                  disabled={surfaceKeysRef.current.length === 0}
+                >
+                  Done
+                </button>
+              </>
             )}
           </div>
           <p style={styles.hint}>
