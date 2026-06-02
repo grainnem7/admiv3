@@ -37,6 +37,9 @@ import {
   DEFAULT_INSTRUMENT_KEY,
 } from '../../songs/voices/presets/instrumentPalette';
 import { getInputProfileManager } from '../../profiles/InputProfileManager';
+import { SurfacePressMode, type SurfaceTrackPoint } from '../../tracking/SurfacePressMode';
+import { fitSurfaceLine } from '../../tracking/SurfaceModel';
+import type { SurfacePressStored } from '../../profiles/SurfacePressConfig';
 import { StemMixerStrip } from './songPreset/StemMixerStrip';
 import { StemMixerTouchPad } from './songPreset/StemMixerTouchPad';
 import type { PadState } from './songPreset/usePadState';
@@ -55,6 +58,10 @@ const VOICE_PRESET_OPTIONS: Record<string, Array<{ key: string; name: string }>>
 const CALIBRATION_DURATION_MS = 10_000;
 const LEFT_THRESHOLD = 0.30;
 const RIGHT_THRESHOLD = 0.70;
+
+// Surface-press defaults (commissioner-overridable).
+const SURFACE_BUTTON_COUNT = 4;
+const SURFACE_DEFAULT_INSTRUMENT = 'piano';
 
 const ROLE_KEYS: Record<string, ColorRole> = {
   '1': 'blue',
@@ -85,6 +92,29 @@ function SongPresetScreen() {
 
   // Latest blob data
   const blobsRef = useRef<ColorBlob[]>([]);
+
+  // ---- Surface-press mode (opt-in; default off) ----
+  // Coloured objects on a table act as press-triggers. Entirely behind the
+  // surfacePressEnabled flag: when off, no colours are added, the detector is
+  // not fed, and no overlay is drawn, so the baton path is unchanged.
+  const surfacePressModeRef = useRef<SurfacePressMode | null>(null);
+  const surfaceConfigRef = useRef<SurfacePressStored | null>(
+    getInputProfileManager().getSurfacePressConfig(),
+  );
+  const [surfacePressEnabled, setSurfacePressEnabled] = useState<boolean>(
+    surfaceConfigRef.current?.enabled ?? false,
+  );
+  const [surfaceCalStage, setSurfaceCalStage] =
+    useState<'idle' | 'surface' | 'buttons'>('idle');
+  const surfaceCalStageRef = useRef<'idle' | 'surface' | 'buttons'>('idle');
+  // Mirror of surfacePressEnabled for the rAF loop (whose effect deps don't
+  // include it, so it must read the live value via a ref).
+  const surfacePressEnabledRef = useRef<boolean>(surfaceConfigRef.current?.enabled ?? false);
+  const surfacePointsRef = useRef<{ x: number; y: number }[]>([]);
+  const surfaceButtonsRef = useRef<SurfacePressStored['buttons']>([]);
+  // Bump to force a re-render of the calibration progress hints (refs alone
+  // don't trigger React updates).
+  const [surfaceCalTick, setSurfaceCalTick] = useState(0);
 
   // UI state
   const [isInitialized, setIsInitialized] = useState(false);
@@ -198,6 +228,8 @@ function SongPresetScreen() {
   useEffect(() => { colorCalModeRef.current = colorCalMode; }, [colorCalMode]);
   useEffect(() => { calibrationStepRef.current = calibrationStep; }, [calibrationStep]);
   useEffect(() => { keyboardActiveRef.current = keyboardActive; }, [keyboardActive]);
+  useEffect(() => { surfaceCalStageRef.current = surfaceCalStage; }, [surfaceCalStage]);
+  useEffect(() => { surfacePressEnabledRef.current = surfacePressEnabled; }, [surfacePressEnabled]);
 
   // ---- Initialize camera + color tracker ----
   useEffect(() => {
@@ -312,6 +344,40 @@ function SongPresetScreen() {
     };
   }, []);
 
+  // ---- Surface-press enable/disable ----
+  // Pushes the calibrated config into both the engine (instrument mapping)
+  // and the pure detector (line + thresholds), registers each button's
+  // colour for tracking, and persists the enabled flag. When disabling, the
+  // detector is reset and NO colours/overlay/feed are produced — the baton
+  // path is untouched.
+  useEffect(() => {
+    const engine = engineRef.current;
+    engine.setSurfacePressEnabled(surfacePressEnabled);
+
+    const cfg = surfaceConfigRef.current;
+    if (surfacePressEnabled && cfg) {
+      if (!surfacePressModeRef.current) surfacePressModeRef.current = new SurfacePressMode();
+      surfacePressModeRef.current.setConfig({
+        line: { a: cfg.surface.a, b: cfg.surface.b },
+        pressGap: cfg.pressGap,
+        releaseGap: cfg.releaseGap,
+        descentForFullVelocity: cfg.descentForFullVelocity,
+        defaultVelocity: cfg.defaultVelocity,
+        buttons: cfg.buttons.map((b) => ({ id: b.id, x: b.x, minBlobArea: b.minBlobArea })),
+      });
+      engine.setSurfacePressConfig({
+        buttons: cfg.buttons.map((b) => ({ id: b.id, instrumentKey: b.instrumentKey })),
+      });
+      for (const b of cfg.buttons) colorTrackerRef.current?.addColor(b.color);
+    } else {
+      surfacePressModeRef.current?.reset();
+    }
+
+    if (cfg) {
+      getInputProfileManager().saveSurfacePressConfig({ ...cfg, enabled: surfacePressEnabled });
+    }
+  }, [surfacePressEnabled]);
+
   // ---- Sync mute ----
   useEffect(() => {
     engineRef.current.setMuted(isMuted || isMutedLocal);
@@ -407,6 +473,38 @@ function SongPresetScreen() {
       // Feed to engine
       engineRef.current.setAllPositions(positions);
 
+      // ---- Surface-press: feed tracked points to the detector ----
+      // Only runs when enabled AND calibrated. Buttons use the `press-N`
+      // namespace (never baton ColorRoles), so this cannot disturb the baton
+      // path. X is mirrored to match the CSS-mirrored video, matching how
+      // baton positions are built above.
+      if (
+        surfacePressEnabledRef.current &&
+        surfacePressModeRef.current &&
+        surfaceConfigRef.current
+      ) {
+        const cfg = surfaceConfigRef.current;
+        const blobs = blobsRef.current;
+        const pts: SurfaceTrackPoint[] = cfg.buttons.map((b) => {
+          const blob = blobs.find((bl) => bl.colorId === b.id);
+          const yRaw = blob?.bottomY ?? blob?.y ?? 0.5;
+          return {
+            id: b.id,
+            x: blob ? 1 - blob.x : b.x,
+            y: yRaw,
+            found: blob?.found ?? false,
+            area: blob?.area ?? 0,
+          };
+        });
+        for (const ev of surfacePressModeRef.current.step(pts, performance.now())) {
+          if (ev.type === 'press') {
+            engineRef.current.pressSurfaceButton(ev.buttonId, ev.velocity);
+          } else {
+            engineRef.current.releaseSurfaceButton(ev.buttonId);
+          }
+        }
+      }
+
       // Accumulate calibration data (only meaningful with a positional input + ongoing calibration)
       if (calibrationDataRef.current && calibrationStepRef.current) {
         const role = calibrationStepRef.current;
@@ -445,6 +543,14 @@ function SongPresetScreen() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             if (showOverlay && selectedSong) {
               drawOverlay(ctx, canvas.width, canvas.height, positions, status, selectedSong, showNoteNames);
+            }
+            // Surface-press facilitator overlay: the calibrated surface line
+            // plus a marker per button (red when at/past the surface, white
+            // otherwise). Drawn whenever surface mode is on, independent of
+            // the researcher-overlay toggle, so facilitators always get
+            // surface feedback. Sound is the primary feedback; this is modest.
+            if (surfacePressEnabledRef.current && surfaceConfigRef.current) {
+              drawSurfaceOverlay(ctx, canvas.width, canvas.height, surfaceConfigRef.current, blobsRef.current);
             }
           }
         }
@@ -655,6 +761,58 @@ function SongPresetScreen() {
 
   // ---- Color calibration ----
   const handleVideoAreaClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    // ---- Surface-press calibration routing (takes priority when active) ----
+    // All stored coords are RAW (unmirrored, 1 - screenX) so they line up with
+    // the raw video coords the detector/overlay work in.
+    const surfaceStage = surfaceCalStageRef.current;
+    if (surfaceStage !== 'idle' && videoRef.current) {
+      const videoEl = videoRef.current;
+      const rect = videoEl.getBoundingClientRect();
+      const sx = (e.clientX - rect.left) / rect.width;
+      const sy = (e.clientY - rect.top) / rect.height;
+      if (sx < 0 || sx > 1 || sy < 0 || sy > 1) return;
+      const rawX = 1 - sx;
+
+      if (surfaceStage === 'surface') {
+        surfacePointsRef.current.push({ x: rawX, y: sy });
+        if (surfacePointsRef.current.length >= 2) setSurfaceCalStage('buttons');
+        setSurfaceCalTick((t) => t + 1);
+        return;
+      }
+
+      // surfaceStage === 'buttons'
+      const id = `press-${surfaceButtonsRef.current.length + 1}`;
+      const color = colorTrackerRef.current?.calibrateFromPixel(videoEl, rawX, sy, id);
+      if (color) {
+        surfaceButtonsRef.current.push({
+          id,
+          x: rawX,
+          minBlobArea: 0.0005,
+          instrumentKey: SURFACE_DEFAULT_INSTRUMENT,
+          color,
+        });
+      }
+      if (surfaceButtonsRef.current.length >= SURFACE_BUTTON_COUNT) {
+        const line = fitSurfaceLine(surfacePointsRef.current);
+        const cfg: SurfacePressStored = {
+          enabled: true,
+          surface: { a: line.a, b: line.b, points: surfacePointsRef.current },
+          pressGap: 0,
+          releaseGap: 0.1,
+          descentForFullVelocity: 0.1,
+          defaultVelocity: 0.6,
+          useFingertip: false,
+          buttons: surfaceButtonsRef.current,
+        };
+        surfaceConfigRef.current = cfg;
+        getInputProfileManager().saveSurfacePressConfig(cfg);
+        setSurfaceCalStage('idle');
+        setSurfacePressEnabled(true);
+      }
+      setSurfaceCalTick((t) => t + 1);
+      return;
+    }
+
     const mode = colorCalModeRef.current;
     if (!mode || !colorTrackerRef.current || !videoRef.current) return;
 
@@ -723,6 +881,14 @@ function SongPresetScreen() {
     calibrationDataRef.current = null;
   }, []);
 
+  // ---- Surface-press calibration ----
+  const startSurfaceCalibration = useCallback(() => {
+    surfacePointsRef.current = [];
+    surfaceButtonsRef.current = [];
+    setSurfaceCalStage('surface');
+    setSurfaceCalTick((t) => t + 1);
+  }, []);
+
   const handleBack = useCallback(() => {
     engineRef.current.stopPlayback();
     setCurrentScreen('performance');
@@ -769,7 +935,7 @@ function SongPresetScreen() {
       <div
         style={{
           ...styles.videoContainer,
-          cursor: colorCalMode ? 'crosshair' : 'default',
+          cursor: colorCalMode || surfaceCalStage !== 'idle' ? 'crosshair' : 'default',
         }}
         onClick={handleVideoAreaClick}
       >
@@ -1374,6 +1540,46 @@ function SongPresetScreen() {
           </div>
         </div>
 
+        {/* Surface Press (opt-in; default off) — coloured objects on a table
+            become press triggers. Behind the surfacePressEnabled flag; when
+            off the baton path is unchanged. surfaceCalTick re-renders the
+            progress hints (which read ref counts). */}
+        <div style={styles.section} data-cal-tick={surfaceCalTick}>
+          <h3 style={styles.sectionTitle}>Surface Press</h3>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#a1a1b8', fontSize: 13 }}>
+            <input
+              type="checkbox"
+              checked={surfacePressEnabled}
+              disabled={!surfaceConfigRef.current}
+              onChange={(e) => setSurfacePressEnabled(e.target.checked)}
+            />
+            Surface press mode {surfaceConfigRef.current ? '' : '(calibrate first)'}
+          </label>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 4, flexWrap: 'wrap' }}>
+            <button
+              onClick={startSurfaceCalibration}
+              style={{ ...styles.btn, fontSize: 10, padding: '4px 8px' }}
+              disabled={surfaceCalStage !== 'idle'}
+            >
+              Calibrate surface press
+            </button>
+            {surfaceCalStage === 'surface' && (
+              <span style={{ fontSize: 11, color: '#0ff' }}>
+                Click {2 - surfacePointsRef.current.length} more point(s) along the table edge…
+              </span>
+            )}
+            {surfaceCalStage === 'buttons' && (
+              <span style={{ fontSize: 11, color: '#0ff' }}>
+                Click each object on the table ({surfaceButtonsRef.current.length}/{SURFACE_BUTTON_COUNT})…
+              </span>
+            )}
+          </div>
+          <p style={styles.hint}>
+            Click two points along the table edge, then click each object.
+            Press an object down to the surface to play its note.
+          </p>
+        </div>
+
         {/* Keyboard Test Mode */}
         <div style={styles.section}>
           <h3 style={styles.sectionTitle}>Testing</h3>
@@ -1556,6 +1762,48 @@ function drawOverlay(
     h - 8,
   );
   ctx.globalAlpha = 1;
+}
+
+/**
+ * Surface-press facilitator overlay.
+ *
+ * Draws the calibrated surface line (the press threshold) across the frame
+ * and one marker per button. The X axis is mirrored (`1 - x`) to match the
+ * CSS-mirrored video, identical to how the detector mirrors tracked points.
+ * A button turns red when its bottom edge has reached/passed the press line.
+ */
+function drawSurfaceOverlay(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  cfg: SurfacePressStored,
+  blobs: ColorBlob[],
+): void {
+  const { a, b } = cfg.surface;
+  // Surface line in raw (unmirrored) x = 0..1, mirrored to screen via (1 - x).
+  ctx.save();
+  ctx.strokeStyle = 'rgba(0,200,255,0.8)';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([6, 6]);
+  ctx.beginPath();
+  ctx.moveTo((1 - 0) * w, (a * 0 + b) * h);
+  ctx.lineTo((1 - 1) * w, (a * 1 + b) * h);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  for (const btn of cfg.buttons) {
+    const blob = blobs.find((bl) => bl.colorId === btn.id);
+    const surfaceYAtBtn = a * btn.x + b;
+    const yb = blob?.bottomY ?? surfaceYAtBtn;
+    const down = (blob?.bottomY ?? -1) >= surfaceYAtBtn - cfg.pressGap;
+    const cx = (1 - btn.x) * w;
+    const cy = yb * h;
+    ctx.fillStyle = down ? 'rgba(255,80,80,0.9)' : 'rgba(255,255,255,0.6)';
+    ctx.beginPath();
+    ctx.arc(cx, cy, down ? 12 : 8, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
 }
 
 function drawMarker(
