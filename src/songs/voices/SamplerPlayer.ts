@@ -78,62 +78,53 @@ export class SamplerPlayer implements Player {
 }
 
 // ============================================
-// CDN base URLs
+// Local sample base + note maps
+//
+// Samples are bundled under public/samples/instruments/ (CC-BY 3.0; see
+// ATTRIBUTION.md) so Song Present works offline with no CDN dependency.
+// Previously streamed from:
+//   Salamander  https://tonejs.github.io/audio/salamander/
+//   nbrosowsky  https://nbrosowsky.github.io/tonejs-instruments/samples/<inst>/
+// The note lists below mirror public/samples/instruments/manifest.json exactly.
 // ============================================
 
-export const SALAMANDER_BASE = 'https://tonejs.github.io/audio/salamander/';
+const local = (folder: string): string => `samples/instruments/${folder}/`;
 
-const nbrosowskyBase = (instrument: string): string =>
-  `https://nbrosowsky.github.io/tonejs-instruments/samples/${instrument}/`;
-
-// ============================================
-// Shared note URL maps (relative to base URL)
-// ============================================
-
-const A_NOTES_3_4_5: Record<string, string> = { A3: 'A3.mp3', A4: 'A4.mp3', A5: 'A5.mp3' };
-const A_NOTES_2_3_4: Record<string, string> = { A2: 'A2.mp3', A3: 'A3.mp3', A4: 'A4.mp3' };
-
-// Clarinet: no A-notes on CDN; use D-notes (D3, D4, D5 available)
-const CLARINET_NOTES: Record<string, string> = { D3: 'D3.mp3', D4: 'D4.mp3', D5: 'D5.mp3' };
-// Tuba: no A-notes on CDN; use As1, As2, D3 (lowest available spread)
-const TUBA_NOTES: Record<string, string> = { 'Bb1': 'As1.mp3', 'Bb2': 'As2.mp3', D3: 'D3.mp3' };
-
-// Contrabass: A1.mp3 returns 404; only A2 is reachable on the CDN.
-const CONTRABASS_NOTES: Record<string, string> = { A2: 'A2.mp3' };
-// French horn: A4.mp3 returns 404; only A3 is reachable on the CDN.
-const FRENCH_HORN_NOTES: Record<string, string> = { A3: 'A3.mp3' };
-// Harp: A3.mp3 and A5.mp3 return 404; only A4 is reachable on the CDN.
-const HARP_NOTES: Record<string, string> = { A4: 'A4.mp3' };
+/** ['C4','Fs4'] → { C4: 'C4.mp3', Fs4: 'Fs4.mp3' } */
+const noteMap = (notes: readonly string[]): Record<string, string> =>
+  Object.fromEntries(notes.map((n) => [n, `${n}.mp3`]));
 
 // ============================================
 // Per-instrument sample configs
 //
-// Every entry here is used by exactly one preset in a presets/*Presets.ts file.
-// Adding a new entry: just append below.  Removing: delete here AND from any
-// catalog that references it (the catalog is discriminated-union typed so the
-// compiler will flag unreferenced keys).
+// Every entry here is used by exactly one preset in a presets/*Presets.ts file
+// (plus the instrument palette). The compiler flags unreferenced keys via the
+// discriminated-union catalogs.
 // ============================================
 
 export const SAMPLE_CONFIGS = {
-  // Piano (Salamander — kept, best-in-class)
-  piano:       { urls: A_NOTES_3_4_5, baseUrl: SALAMANDER_BASE,               attack: 0.005, release: 1.5 },
+  // Piano (Salamander — best-in-class)
+  piano:       { urls: noteMap(['C2','C3','C4','C5','C6','Fs2','Fs3','Fs4','Fs5']), baseUrl: local('piano'),        attack: 0.005, release: 1.5 },
 
-  // Strings section (nbrosowsky)
-  violin:      { urls: A_NOTES_3_4_5, baseUrl: nbrosowskyBase('violin'),      attack: 0.1,   release: 0.4 },
-  cello:       { urls: A_NOTES_2_3_4, baseUrl: nbrosowskyBase('cello'),       attack: 0.15,  release: 0.5 },
-  contrabass:  { urls: CONTRABASS_NOTES,   baseUrl: nbrosowskyBase('contrabass'),  attack: 0.05,  release: 0.4 },
+  // Strings (nbrosowsky)
+  violin:      { urls: noteMap(['E4','E5','G3','G4']),                              baseUrl: local('violin'),       attack: 0.1,   release: 0.4 },
+  cello:       { urls: noteMap(['A2','A3','C2','C3','C4','Ds2','Ds3','Fs3']),       baseUrl: local('cello'),        attack: 0.15,  release: 0.5 },
+  contrabass:  { urls: noteMap(['A2','C2','E2','G1']),                              baseUrl: local('contrabass'),   attack: 0.05,  release: 0.4 },
 
   // Winds (nbrosowsky)
-  clarinet:    { urls: CLARINET_NOTES, baseUrl: nbrosowskyBase('clarinet'),    attack: 0.08,  release: 0.3 },
-  frenchHorn:  { urls: FRENCH_HORN_NOTES,   baseUrl: nbrosowskyBase('french-horn'), attack: 0.1,   release: 0.4 },
-  tuba:        { urls: TUBA_NOTES,    baseUrl: nbrosowskyBase('tuba'),        attack: 0.08,  release: 0.4 },
+  clarinet:    { urls: noteMap(['As3','As4','D3','D4','D5']),                       baseUrl: local('clarinet'),     attack: 0.08,  release: 0.3 },
+  frenchHorn:  { urls: noteMap(['A3','C4','D3','D5','F3','G2']),                    baseUrl: local('french-horn'),  attack: 0.1,   release: 0.4 },
+  tuba:        { urls: noteMap(['As1','As2','D3','F2','F3']),                       baseUrl: local('tuba'),         attack: 0.08,  release: 0.4 },
 
   // Plucked (nbrosowsky)
-  harp:        { urls: HARP_NOTES,    baseUrl: nbrosowskyBase('harp'),        attack: 0.005, release: 0.8 },
-  guitarNylon: { urls: A_NOTES_3_4_5, baseUrl: nbrosowskyBase('guitar-nylon'),attack: 0.005, release: 0.3 },
+  harp:        { urls: noteMap(['C3','C5','G3','G5']),                              baseUrl: local('harp'),         attack: 0.005, release: 0.8 },
+  guitarNylon: { urls: noteMap(['A2','A4','B3','D3','E2','E4','G3']),               baseUrl: local('guitar-nylon'), attack: 0.005, release: 0.3 },
 
   // Keys (nbrosowsky)
-  organ:       { urls: A_NOTES_2_3_4, baseUrl: nbrosowskyBase('organ'),       attack: 0.01,  release: 0.3 },
+  organ:       { urls: noteMap(['C2','C3','C4','C5']),                              baseUrl: local('organ'),        attack: 0.01,  release: 0.3 },
+
+  // Bass (nbrosowsky electric — real multi-note bass; replaces 1-note contrabass bass)
+  bassElectric:{ urls: noteMap(['As1','As2','Cs2','Cs3','E1','E2','E3','G1','G2']), baseUrl: local('bass-electric'),attack: 0.008, release: 0.25 },
 } as const satisfies Record<string, SamplerPlayerOptions>;
 
 // Convenience: legal sample config keys.
