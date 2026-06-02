@@ -240,6 +240,9 @@ export class SongPresetEngine {
   private stems: Map<string, StemState> = new Map();
   private stemsLoaded = 0;
   private stemsTotal = 0;
+  // Cancellation token: each loadSong bumps this; a load whose token no longer
+  // matches has been superseded by a newer song-switch and must bail.
+  private loadToken = 0;
 
   // Voices (now ToneVoiceBase)
   private voices: Map<ColorRole, ToneVoiceBase> = new Map();
@@ -396,6 +399,8 @@ export class SongPresetEngine {
     this.stopPlayback();
     this.disposeAudio();
 
+    const myToken = ++this.loadToken;
+
     this.song = song;
     const stemIds = Object.keys(song.stems);
     this.stemsTotal = stemIds.length;
@@ -403,6 +408,7 @@ export class SongPresetEngine {
 
     // Ensure Tone.js audio context is started
     await Tone.start();
+    if (myToken !== this.loadToken) return;
     this.ctx = Tone.getContext().rawContext as AudioContext;
 
     // Build shared routing
@@ -417,6 +423,7 @@ export class SongPresetEngine {
         this.onLoadProgress?.(loaded, total);
       },
     );
+    if (myToken !== this.loadToken) return;
     for (const [stemId, audioBuffer] of buffers) {
       const gainNode = this.ctx!.createGain();
       gainNode.gain.value = 0;
@@ -434,6 +441,7 @@ export class SongPresetEngine {
     if (song.analysisUrl) {
       try {
         const analysis = await loadSongAnalysis(song.analysisUrl);
+        if (myToken !== this.loadToken) return;
         song.chordProgression = analysis.chordProgression;
         song.beats = analysis.beats;
         song.downbeats = analysis.downbeats;
@@ -470,6 +478,7 @@ export class SongPresetEngine {
       Tone.loaded(),
       new Promise<void>((resolve) => setTimeout(resolve, 10_000)),
     ]);
+    if (myToken !== this.loadToken) return;
 
     console.log(`[SongPresetEngine] Loaded "${song.title}" — ${stemIds.length} stems, ${maxDuration.toFixed(1)}s, ${song.chordProgression ? song.chordProgression.length + ' chords' : 'no chords'}`);
   }
