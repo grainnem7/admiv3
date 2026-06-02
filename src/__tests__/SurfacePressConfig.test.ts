@@ -10,6 +10,8 @@ const sample = (): SurfacePressStored => ({
   enabled: true,
   touchDist: 0.06,
   releaseDist: 0.1,
+  occlusionEnter: 0.65,
+  occlusionExit: 0.85,
   defaultVelocity: 0.7,
   keys: [
     {
@@ -55,7 +57,18 @@ describe('SurfacePressConfig persistence', () => {
     const loaded = loadSurfacePressConfig()!;
     expect(loaded.touchDist).toBeCloseTo(0.06, 6);
     expect(loaded.releaseDist).toBeCloseTo(0.1, 6);
+    expect(loaded.occlusionEnter).toBeCloseTo(0.65, 6);
+    expect(loaded.occlusionExit).toBeCloseTo(0.85, 6);
     expect(loaded.defaultVelocity).toBeCloseTo(0.7, 6);
+  });
+
+  it('round-trips a per-key colour search region', () => {
+    const cfg = sample();
+    cfg.keys[0].color.searchRegion = { minX: 0.2, minY: 0.5, maxX: 0.5, maxY: 1 };
+    saveSurfacePressConfig(cfg);
+    expect(loadSurfacePressConfig()!.keys[0].color.searchRegion).toEqual({
+      minX: 0.2, minY: 0.5, maxX: 0.5, maxY: 1,
+    });
   });
 
   it('clear removes the stored config', () => {

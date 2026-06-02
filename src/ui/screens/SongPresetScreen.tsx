@@ -63,6 +63,11 @@ const RIGHT_THRESHOLD = 0.70;
 // Surface-press defaults (commissioner-overridable).
 const SURFACE_BUTTON_COUNT = 5;
 const SURFACE_DEFAULT_INSTRUMENT = 'piano';
+// Per-tube colour-search box around the calibration click: tight horizontally
+// (neighbours differ in hue), generous vertically up from the click and down
+// to the near edge (tubes are long, foreshortened toward the camera).
+const SURFACE_SEARCH_HALF_W = 0.15;
+const SURFACE_SEARCH_UP = 0.22;
 
 const ROLE_KEYS: Record<string, ColorRole> = {
   '1': 'blue',
@@ -366,6 +371,8 @@ function SongPresetScreen() {
       surfacePressModeRef.current.setConfig({
         touchDist: cfg.touchDist,
         releaseDist: cfg.releaseDist,
+        occlusionEnter: cfg.occlusionEnter,
+        occlusionExit: cfg.occlusionExit,
         defaultVelocity: cfg.defaultVelocity,
       });
       engine.setSurfacePressConfig({
@@ -555,7 +562,13 @@ function SongPresetScreen() {
 
         const keyFrames: SurfaceKeyFrame[] = cfg.keys.map((k) => {
           const blob = blobs.find((bl) => bl.colorId === k.id);
-          return { id: k.id, segment: blob?.found ? (blob.axis ?? null) : null };
+          const found = blob?.found ?? false;
+          return {
+            id: k.id,
+            segment: found ? (blob!.axis ?? null) : null,
+            area: found ? blob!.area : 0,
+            found,
+          };
         });
 
         for (const ev of surfacePressModeRef.current.step(keyFrames, fingers, performance.now())) {
@@ -846,6 +859,18 @@ function SongPresetScreen() {
       const id = `press-${surfaceKeysRef.current.length + 1}`;
       const color = colorTrackerRef.current?.calibrateFromPixel(videoEl, rawX, sy, id);
       if (color) {
+        // Constrain this tube's colour search to a box around where it was
+        // clicked, so a same-hue wall / sweater / skin elsewhere in the frame
+        // can't pollute the tube's blob (and its derived line). Generous
+        // vertically (tubes are long) and down to the near edge; tight
+        // horizontally (neighbours are a different hue anyway).
+        color.searchRegion = {
+          minX: Math.max(0, rawX - SURFACE_SEARCH_HALF_W),
+          maxX: Math.min(1, rawX + SURFACE_SEARCH_HALF_W),
+          minY: Math.max(0, sy - SURFACE_SEARCH_UP),
+          maxY: 1,
+        };
+        colorTrackerRef.current?.addColor(color); // upsert with the region
         surfaceKeysRef.current.push({
           id,
           instrumentKey: SURFACE_DEFAULT_INSTRUMENT,
@@ -855,8 +880,10 @@ function SongPresetScreen() {
       if (surfaceKeysRef.current.length >= SURFACE_BUTTON_COUNT) {
         const cfg: SurfacePressStored = {
           enabled: true,
-          touchDist: 0.06,   // press when a finger is within ~6% of frame of the tube
-          releaseDist: 0.1,  // larger release distance → anti-chatter hysteresis
+          touchDist: 0.06,      // finger within ~6% of frame of the tube line
+          releaseDist: 0.1,     // larger → anti-chatter distance hysteresis
+          occlusionEnter: 0.65, // press once ≥35% of the tube is covered
+          occlusionExit: 0.85,  // release once ≥85% is visible again
           defaultVelocity: 0.7,
           keys: surfaceKeysRef.current,
         };
@@ -1625,8 +1652,8 @@ function SongPresetScreen() {
             )}
           </div>
           <p style={styles.hint}>
-            Click each tube once to register its colour. Then press a finger
-            anywhere along a tube to play its note — the whole tube is live.
+            Click the MIDDLE of each tube once to register its colour. Then press
+            a finger anywhere along a tube to play its note — the whole tube is live.
           </p>
         </div>
 

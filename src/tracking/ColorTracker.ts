@@ -26,6 +26,14 @@ export interface TrackedColor {
   minValue: number;
   /** Minimum blob area to detect (0-1, default: 0.001) */
   minArea: number;
+  /**
+   * Optional normalised search box (0-1). When set, only pixels inside it
+   * are considered for this colour — used by surface-press to track each
+   * tube near its calibrated position, so background regions sharing the
+   * tube's hue (a wall, clothing, skin) can't pollute the blob. Omitted →
+   * the whole frame is searched (baton behaviour, unchanged).
+   */
+  searchRegion?: { minX: number; minY: number; maxX: number; maxY: number };
 }
 
 export interface ColorBlob {
@@ -362,8 +370,16 @@ export class ColorTracker {
 
     const totalPixels = width * height;
 
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
+    // Optional search box (normalised → pixel bounds). Restricting the scan to
+    // where a tube actually sits keeps same-hue background out of the blob.
+    const sr = color.searchRegion;
+    const x0 = sr ? Math.max(0, Math.floor(sr.minX * width)) : 0;
+    const x1 = sr ? Math.min(width, Math.ceil(sr.maxX * width)) : width;
+    const y0 = sr ? Math.max(0, Math.floor(sr.minY * height)) : 0;
+    const y1 = sr ? Math.min(height, Math.ceil(sr.maxY * height)) : height;
+
+    for (let y = y0; y < y1; y++) {
+      for (let x = x0; x < x1; x++) {
         const i = (y * width + x) * 4;
         const r = data[i];
         const g = data[i + 1];

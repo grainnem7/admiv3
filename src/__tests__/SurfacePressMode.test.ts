@@ -7,64 +7,87 @@ import {
 
 // A vertical tube at x=0.5, near end (0.5,0.8) → far end (0.5,0.4).
 const TUBE = { ax: 0.5, ay: 0.8, bx: 0.5, by: 0.4 };
+
 const thresholds = (): SurfacePressThresholds => ({
   touchDist: 0.05,
   releaseDist: 0.1,
+  occlusionEnter: 0.65, // press needs ≥35% of the tube covered
+  occlusionExit: 0.85,  // release once ≥85% of the tube is visible again
   defaultVelocity: 0.7,
 });
-const keys = (segment: typeof TUBE | null = TUBE): SurfaceKeyFrame[] => [
-  { id: 'press-1', segment },
-];
 
-describe('SurfacePressMode — press anywhere along a tube', () => {
-  it('fires when a finger touches the MIDDLE of the tube (not just an end)', () => {
+const key = (
+  area: number,
+  segment: typeof TUBE | null = TUBE,
+  found = true,
+): SurfaceKeyFrame[] => [{ id: 'press-1', segment, area, found }];
+
+const onLine = [{ x: 0.5, y: 0.6 }]; // perpendicular distance 0 to TUBE
+
+describe('SurfacePressMode — contact = on the tube AND its colour is covered', () => {
+  it('fires when a finger is on the tube AND the tube area dips (covered)', () => {
     const m = new SurfacePressMode();
     m.setConfig(thresholds());
-    const ev = m.step(keys(), [{ x: 0.5, y: 0.6 }], 0); // mid-tube, dist 0
+    m.step(key(0.10), onLine, 0);             // baseline area 0.10, full → no press
+    const ev = m.step(key(0.05), onLine, 16); // ~50% covered + on line → press
     expect(ev).toHaveLength(1);
     expect(ev[0].type).toBe('press');
-    expect(ev[0].buttonId).toBe('press-1');
     expect(ev[0].velocity).toBeCloseTo(0.7, 6);
   });
 
-  it('fires when a finger touches near the FAR end of the tube', () => {
+  it('does NOT fire when the finger is on the line but the tube is fully visible (hover, not covering)', () => {
     const m = new SurfacePressMode();
     m.setConfig(thresholds());
-    expect(m.step(keys(), [{ x: 0.5, y: 0.42 }], 0)[0].type).toBe('press');
+    m.step(key(0.10), onLine, 0);
+    expect(m.step(key(0.10), onLine, 16)).toEqual([]); // no area dip → no press
   });
 
-  it('does NOT fire when the finger is far from the tube line', () => {
+  it('does NOT fire when the area dips but no finger is near (something else covered it)', () => {
     const m = new SurfacePressMode();
     m.setConfig(thresholds());
-    expect(m.step(keys(), [{ x: 0.5, y: 0.2 }], 0)).toEqual([]); // dist 0.2 > touchDist
+    m.step(key(0.10), [], 0);
+    expect(m.step(key(0.04), [], 16)).toEqual([]); // covered but no finger → no press
   });
 
-  it('releases when the finger leaves the tube (no finger nearby)', () => {
+  it('releases when the tube colour comes back (finger lifted off)', () => {
     const m = new SurfacePressMode();
     m.setConfig(thresholds());
-    m.step(keys(), [{ x: 0.5, y: 0.6 }], 0);      // press
-    const ev = m.step(keys(), [], 16);            // finger gone → release
+    m.step(key(0.10), onLine, 0);
+    m.step(key(0.05), onLine, 16);            // press
+    const ev = m.step(key(0.10), onLine, 32); // area recovered → release
     expect(ev).toHaveLength(1);
     expect(ev[0].type).toBe('release');
   });
 
-  it('hysteresis: stays down between touch and release distance, releases beyond', () => {
+  it('releases when the finger moves off the tube line', () => {
     const m = new SurfacePressMode();
     m.setConfig(thresholds());
-    m.step(keys(), [{ x: 0.5, y: 0.6 }], 0);      // press (dist 0)
-    expect(m.step(keys(), [{ x: 0.57, y: 0.6 }], 16)).toEqual([]); // dist 0.07: between → stay
-    const rel = m.step(keys(), [{ x: 0.62, y: 0.6 }], 32);          // dist 0.12 ≥ release
-    expect(rel).toHaveLength(1);
-    expect(rel[0].type).toBe('release');
-  });
-
-  it('a key whose segment is null this frame is not pressable; releases if held', () => {
-    const m = new SurfacePressMode();
-    m.setConfig(thresholds());
-    m.step(keys(), [{ x: 0.5, y: 0.6 }], 0);      // press
-    const ev = m.step(keys(null), [{ x: 0.5, y: 0.6 }], 16); // tube lost → release
+    m.step(key(0.10), onLine, 0);
+    m.step(key(0.05), onLine, 16);            // press
+    const ev = m.step(key(0.05), [{ x: 0.7, y: 0.6 }], 32); // finger far → release
     expect(ev).toHaveLength(1);
     expect(ev[0].type).toBe('release');
+  });
+
+  it('holds the press under full coverage (tube not found) while a finger stays on it', () => {
+    const m = new SurfacePressMode();
+    m.setConfig(thresholds());
+    m.step(key(0.10), onLine, 0);
+    m.step(key(0.05), onLine, 16);            // press
+    // Fully covered: tube not found, area 0, no segment — uses last segment,
+    // coverage 1 → still occluded, finger still on it → stays down.
+    expect(m.step([{ id: 'press-1', segment: null, area: 0, found: false }], onLine, 32)).toEqual([]);
+  });
+
+  it('does not adapt its baseline away while pressed (sustained press stays down)', () => {
+    const m = new SurfacePressMode();
+    m.setConfig(thresholds());
+    m.step(key(0.10), onLine, 0);
+    m.step(key(0.04), onLine, 16);            // press
+    // Hold covered for many frames — must not drift back to idle.
+    let events: ReturnType<typeof m.step> = [];
+    for (let t = 32; t < 32 + 60 * 16; t += 16) events = m.step(key(0.04), onLine, t);
+    expect(events).toEqual([]); // still held, no spurious release
   });
 });
 
@@ -72,27 +95,23 @@ describe('SurfacePressMode — nearest key wins', () => {
   const A = { ax: 0.3, ay: 0.8, bx: 0.3, by: 0.4 };
   const B = { ax: 0.7, ay: 0.8, bx: 0.7, by: 0.4 };
 
-  it('a finger presses only the tube it is closest to', () => {
+  it('a finger covering tube A presses only A', () => {
     const m = new SurfacePressMode();
     m.setConfig(thresholds());
+    const keysFull: SurfaceKeyFrame[] = [
+      { id: 'press-A', segment: A, area: 0.1, found: true },
+      { id: 'press-B', segment: B, area: 0.1, found: true },
+    ];
+    m.step(keysFull, [{ x: 0.31, y: 0.6 }], 0); // baselines
     const ev = m.step(
-      [{ id: 'press-A', segment: A }, { id: 'press-B', segment: B }],
-      [{ x: 0.31, y: 0.6 }], // near A
-      0,
+      [
+        { id: 'press-A', segment: A, area: 0.05, found: true }, // A covered
+        { id: 'press-B', segment: B, area: 0.1, found: true },
+      ],
+      [{ x: 0.31, y: 0.6 }], // finger near A
+      16,
     );
     expect(ev).toHaveLength(1);
     expect(ev[0].buttonId).toBe('press-A');
-  });
-
-  it('two fingers can press two different tubes at once', () => {
-    const m = new SurfacePressMode();
-    m.setConfig(thresholds());
-    const ev = m.step(
-      [{ id: 'press-A', segment: A }, { id: 'press-B', segment: B }],
-      [{ x: 0.3, y: 0.6 }, { x: 0.7, y: 0.6 }],
-      0,
-    );
-    expect(ev.map((e) => e.buttonId).sort()).toEqual(['press-A', 'press-B']);
-    expect(ev.every((e) => e.type === 'press')).toBe(true);
   });
 });

@@ -36,6 +36,10 @@ export interface SurfacePressStored {
   touchDist: number;
   /** Release when the finger pulls beyond this distance (> touchDist). */
   releaseDist: number;
+  /** Press needs visible area ≤ this fraction of baseline (finger covering it). */
+  occlusionEnter: number;
+  /** Release once visible area recovers ≥ this fraction of baseline. */
+  occlusionExit: number;
   /** Velocity for a press. */
   defaultVelocity: number;
   keys: SurfaceKeyStored[];
@@ -94,6 +98,11 @@ function sanitize(input: unknown): SurfacePressStored | null {
       typeof ko.instrumentKey === 'string' && INSTRUMENT_PALETTE_BY_KEY[ko.instrumentKey]
         ? ko.instrumentKey
         : DEFAULT_INSTRUMENT_KEY;
+    const region = color.searchRegion as Record<string, unknown> | undefined;
+    const searchRegion =
+      region && isNum(region.minX) && isNum(region.minY) && isNum(region.maxX) && isNum(region.maxY)
+        ? { minX: region.minX, minY: region.minY, maxX: region.maxX, maxY: region.maxY }
+        : undefined;
     keys.push({
       id: ko.id,
       instrumentKey,
@@ -104,6 +113,7 @@ function sanitize(input: unknown): SurfacePressStored | null {
         minSaturation: isNum(color.minSaturation) ? color.minSaturation : 30,
         minValue: isNum(color.minValue) ? color.minValue : 30,
         minArea: isNum(color.minArea) ? color.minArea : 0.0005,
+        ...(searchRegion ? { searchRegion } : {}),
       },
     });
   }
@@ -112,6 +122,8 @@ function sanitize(input: unknown): SurfacePressStored | null {
     enabled: o.enabled === true,
     touchDist: isNum(o.touchDist) ? o.touchDist : 0.06,
     releaseDist: isNum(o.releaseDist) ? o.releaseDist : 0.1,
+    occlusionEnter: isNum(o.occlusionEnter) ? o.occlusionEnter : 0.65,
+    occlusionExit: isNum(o.occlusionExit) ? o.occlusionExit : 0.85,
     defaultVelocity: isNum(o.defaultVelocity) ? o.defaultVelocity : 0.7,
     keys,
   };
