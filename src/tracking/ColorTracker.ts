@@ -101,6 +101,79 @@ const DEFAULT_CONFIG: Required<ColorTrackerConfig> = {
 const DEFAULT_COLORS: TrackedColor[] = [];
 
 // ============================================
+// Pure HSV helpers (module-level, unit-testable without DOM)
+// ============================================
+
+/**
+ * Convert RGB (0-255 each) to HSV (h: 0-360, s: 0-100, v: 0-100).
+ * Canonical implementation — BoardReader and the class both delegate here.
+ */
+export function rgbToHsv(r: number, g: number, b: number): { h: number; s: number; v: number } {
+  r /= 255;
+  g /= 255;
+  b /= 255;
+
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const diff = max - min;
+
+  let h = 0;
+  const s = max === 0 ? 0 : (diff / max) * 100;
+  const v = max * 100;
+
+  if (diff !== 0) {
+    switch (max) {
+      case r:
+        h = ((g - b) / diff) % 6;
+        break;
+      case g:
+        h = (b - r) / diff + 2;
+        break;
+      default:
+        h = (r - g) / diff + 4;
+        break;
+    }
+    h *= 60;
+    if (h < 0) h += 360;
+  }
+
+  return { h, s, v };
+}
+
+/**
+ * Returns true when `hsv` falls within the calibrated band for `color`,
+ * including skin-tone exclusion for orange/red-adjacent hues.
+ * Canonical implementation — BoardReader and the class both delegate here.
+ */
+export function matchesTrackedColor(
+  hsv: { h: number; s: number; v: number },
+  color: TrackedColor,
+): boolean {
+  // Check saturation and value thresholds
+  if (hsv.s < color.minSaturation || hsv.v < color.minValue) {
+    return false;
+  }
+
+  // Skin tone exclusion for orange/red-adjacent tracked colors.
+  // When the target hue is in the orange range, additionally reject any
+  // pixel whose hue lands in the skin-tone band AND whose saturation is
+  // below 60 — vivid orange objects stay well above this even under
+  // bright overhead lighting; skin does not.
+  if (color.hue <= 40 || color.hue >= 340) {
+    const ph = hsv.h;
+    if ((ph <= 32 || ph >= 345) && hsv.s < 60) return false;
+  }
+
+  // Check hue with wrap-around handling
+  let hueDiff = Math.abs(hsv.h - color.hue);
+  if (hueDiff > 180) {
+    hueDiff = 360 - hueDiff;
+  }
+
+  return hueDiff <= color.hueTolerance;
+}
+
+// ============================================
 // ColorTracker Class
 // ============================================
 
@@ -473,66 +546,19 @@ export class ColorTracker {
   }
 
   /**
-   * Check if HSV values match a tracked color
+   * Check if HSV values match a tracked color.
+   * Delegates to the module-level `matchesTrackedColor` — single source of truth.
    */
   private matchesColor(hsv: { h: number; s: number; v: number }, color: TrackedColor): boolean {
-    // Check saturation and value thresholds
-    if (hsv.s < color.minSaturation || hsv.v < color.minValue) {
-      return false;
-    }
-
-    // Skin tone exclusion for orange/red-adjacent tracked colors.
-    // When the target hue is in the orange range, additionally reject any
-    // pixel whose hue lands in the skin-tone band AND whose saturation is
-    // below 60 — vivid orange objects stay well above this even under
-    // bright overhead lighting; skin does not.
-    if (color.hue <= 40 || color.hue >= 340) {
-      const ph = hsv.h;
-      if ((ph <= 32 || ph >= 345) && hsv.s < 60) return false;
-    }
-
-    // Check hue with wrap-around handling
-    let hueDiff = Math.abs(hsv.h - color.hue);
-    if (hueDiff > 180) {
-      hueDiff = 360 - hueDiff;
-    }
-
-    return hueDiff <= color.hueTolerance;
+    return matchesTrackedColor(hsv, color);
   }
 
   /**
-   * Convert RGB to HSV
+   * Convert RGB to HSV.
+   * Delegates to the module-level `rgbToHsv` — single source of truth.
    */
   private rgbToHsv(r: number, g: number, b: number): { h: number; s: number; v: number } {
-    r /= 255;
-    g /= 255;
-    b /= 255;
-
-    const max = Math.max(r, g, b);
-    const min = Math.min(r, g, b);
-    const diff = max - min;
-
-    let h = 0;
-    const s = max === 0 ? 0 : (diff / max) * 100;
-    const v = max * 100;
-
-    if (diff !== 0) {
-      switch (max) {
-        case r:
-          h = ((g - b) / diff) % 6;
-          break;
-        case g:
-          h = (b - r) / diff + 2;
-          break;
-        case b:
-          h = (r - g) / diff + 4;
-          break;
-      }
-      h *= 60;
-      if (h < 0) h += 360;
-    }
-
-    return { h, s, v };
+    return rgbToHsv(r, g, b);
   }
 
   /**
