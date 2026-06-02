@@ -14,6 +14,7 @@ const sample = (): SurfacePressStored => ({
   descentForFullVelocity: 0.1,
   defaultVelocity: 0.6,
   useFingertip: false,
+  keyZoneHalfWidth: 0.06,
   buttons: [
     {
       id: 'press-1', x: 0.3, minBlobArea: 0.0005, instrumentKey: 'piano',

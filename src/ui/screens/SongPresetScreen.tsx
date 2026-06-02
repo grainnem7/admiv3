@@ -39,6 +39,8 @@ import {
 import { getInputProfileManager } from '../../profiles/InputProfileManager';
 import { SurfacePressMode, type SurfaceTrackPoint } from '../../tracking/SurfacePressMode';
 import { fitSurfaceLine } from '../../tracking/SurfaceModel';
+import { HandDetector, type HandDetectionResult } from '../../tracking/HandDetector';
+import { lowestFingertip } from '../../tracking/handPressPoint';
 import type { SurfacePressStored } from '../../profiles/SurfacePressConfig';
 import { StemMixerStrip } from './songPreset/StemMixerStrip';
 import { StemMixerTouchPad } from './songPreset/StemMixerTouchPad';
@@ -115,6 +117,12 @@ function SongPresetScreen() {
   // Bump to force a re-render of the calibration progress hints (refs alone
   // don't trigger React updates).
   const [surfaceCalTick, setSurfaceCalTick] = useState(0);
+  // Hand tracking for the pressing finger (lazily started while surface mode
+  // is on). Latest result is stashed for the rAF loop. `pressedTubesRef`
+  // tracks which keys are currently down, for the facilitator overlay.
+  const handDetectorRef = useRef<HandDetector | null>(null);
+  const handsRef = useRef<HandDetectionResult | null>(null);
+  const pressedTubesRef = useRef<Set<string>>(new Set());
 
   // UI state
   const [isInitialized, setIsInitialized] = useState(false);
@@ -363,6 +371,10 @@ function SongPresetScreen() {
         releaseGap: cfg.releaseGap,
         descentForFullVelocity: cfg.descentForFullVelocity,
         defaultVelocity: cfg.defaultVelocity,
+        // Fingertip model: release a held key when the finger moves off it,
+        // not only when it lifts — otherwise moving to the next key would
+        // leave the previous note stuck on.
+        releaseOnLost: true,
         buttons: cfg.buttons.map((b) => ({ id: b.id, x: b.x, minBlobArea: b.minBlobArea })),
       });
       engine.setSurfacePressConfig({
@@ -377,6 +389,58 @@ function SongPresetScreen() {
       getInputProfileManager().saveSurfacePressConfig({ ...cfg, enabled: surfacePressEnabled });
     }
   }, [surfacePressEnabled]);
+
+  // Surface-press hand tracking. The pressing finger is tracked by MediaPipe
+  // Hands, started lazily only while surface mode is on (the model is
+  // expensive to load). Each frame's result is stashed in handsRef for the
+  // rAF loop, which maps the lowest fingertip onto the table keys.
+  useEffect(() => {
+    if (!surfacePressEnabled || inputMode !== 'webcam') {
+      handDetectorRef.current?.stop();
+      handsRef.current = null;
+      pressedTubesRef.current.clear();
+      return;
+    }
+    const video = videoRef.current;
+    if (!video) return;
+
+    let cancelled = false;
+    let unsub: (() => void) | null = null;
+
+    const startHands = async () => {
+      try {
+        if (!handDetectorRef.current) {
+          const detector = new HandDetector({ numHands: 2 });
+          await detector.initialize();
+          if (cancelled) { detector.dispose(); return; }
+          handDetectorRef.current = detector;
+        }
+        const detector = handDetectorRef.current;
+        unsub = detector.onHands((result) => { handsRef.current = result; });
+        detector.start(video);
+      } catch (err) {
+        console.error('[SongPresetScreen] Hand detector init failed:', err);
+      }
+    };
+
+    startHands();
+
+    return () => {
+      cancelled = true;
+      unsub?.();
+      handDetectorRef.current?.stop();
+      handsRef.current = null;
+    };
+  }, [surfacePressEnabled, inputMode]);
+
+  // Dispose the HandDetector entirely on unmount (the effect above only stops
+  // it on toggle-off so the model stays cached).
+  useEffect(() => {
+    return () => {
+      handDetectorRef.current?.dispose();
+      handDetectorRef.current = null;
+    };
+  }, []);
 
   // ---- Sync mute ----
   useEffect(() => {
@@ -473,11 +537,15 @@ function SongPresetScreen() {
       // Feed to engine
       engineRef.current.setAllPositions(positions);
 
-      // ---- Surface-press: feed tracked points to the detector ----
-      // Only runs when enabled AND calibrated. Buttons use the `press-N`
-      // namespace (never baton ColorRoles), so this cannot disturb the baton
-      // path. X is mirrored to match the CSS-mirrored video, matching how
-      // baton positions are built above.
+      // ---- Surface-press: map fingertips onto the table keys ----
+      // The keys are fixed coloured objects; the pressing finger is tracked
+      // by MediaPipe Hands. For each key, its tracked point is the lowest
+      // fingertip currently over that key's x (or absent). The detector then
+      // decides press/release by the finger descending to the surface line,
+      // releasing when the finger lifts OR leaves the key (releaseOnLost).
+      // `press-N` ids never collide with baton ColorRoles, so the baton path
+      // is untouched. All x are RAW (unmirrored) to match the surface line
+      // and tube centres; HandDetector mirrors x to screen space, so raw = 1-x.
       if (
         surfacePressEnabledRef.current &&
         surfacePressModeRef.current &&
@@ -485,22 +553,38 @@ function SongPresetScreen() {
       ) {
         const cfg = surfaceConfigRef.current;
         const blobs = blobsRef.current;
+        const hands = handsRef.current;
+
+        const fingers: { x: number; y: number }[] = [];
+        for (const hand of [hands?.leftHand, hands?.rightHand]) {
+          const tip = lowestFingertip(hand?.landmarks ?? null);
+          if (tip) fingers.push({ x: 1 - tip.x, y: tip.y });
+        }
+
+        const zone = cfg.keyZoneHalfWidth;
         const pts: SurfaceTrackPoint[] = cfg.buttons.map((b) => {
+          // Live key centre (raw x) from the colour blob, else calibrated x.
           const blob = blobs.find((bl) => bl.colorId === b.id);
-          const yRaw = blob?.bottomY ?? blob?.y ?? 0.5;
-          return {
-            id: b.id,
-            x: blob ? 1 - blob.x : b.x,
-            y: yRaw,
-            found: blob?.found ?? false,
-            area: blob?.area ?? 0,
-          };
+          const centreX = blob?.found ? blob.x : b.x;
+          // Nearest finger within the key's x-zone becomes its tracked point.
+          let nearest: { x: number; y: number } | null = null;
+          let nearestDist = zone;
+          for (const f of fingers) {
+            const d = Math.abs(f.x - centreX);
+            if (d < nearestDist) { nearest = f; nearestDist = d; }
+          }
+          return nearest
+            ? { id: b.id, x: nearest.x, y: nearest.y, found: true, area: 1 }
+            : { id: b.id, x: centreX, y: 0, found: false, area: 0 };
         });
+
         for (const ev of surfacePressModeRef.current.step(pts, performance.now())) {
           if (ev.type === 'press') {
             engineRef.current.pressSurfaceButton(ev.buttonId, ev.velocity);
+            pressedTubesRef.current.add(ev.buttonId);
           } else {
             engineRef.current.releaseSurfaceButton(ev.buttonId);
+            pressedTubesRef.current.delete(ev.buttonId);
           }
         }
       }
@@ -550,7 +634,11 @@ function SongPresetScreen() {
             // the researcher-overlay toggle, so facilitators always get
             // surface feedback. Sound is the primary feedback; this is modest.
             if (surfacePressEnabledRef.current && surfaceConfigRef.current) {
-              drawSurfaceOverlay(ctx, canvas.width, canvas.height, surfaceConfigRef.current, blobsRef.current);
+              drawSurfaceOverlay(
+                ctx, canvas.width, canvas.height,
+                surfaceConfigRef.current, blobsRef.current,
+                pressedTubesRef.current, handsRef.current,
+              );
             }
           }
         }
@@ -794,14 +882,23 @@ function SongPresetScreen() {
       }
       if (surfaceButtonsRef.current.length >= SURFACE_BUTTON_COUNT) {
         const line = fitSurfaceLine(surfacePointsRef.current);
+        // Key zone = half the smallest gap between adjacent keys, so a finger
+        // maps to exactly one key without overlap. Falls back to 0.06.
+        const xs = surfaceButtonsRef.current.map((bn) => bn.x).sort((p, q) => p - q);
+        let minGap = Infinity;
+        for (let i = 1; i < xs.length; i++) minGap = Math.min(minGap, xs[i] - xs[i - 1]);
+        const keyZoneHalfWidth = Number.isFinite(minGap) ? Math.max(0.03, minGap * 0.5) : 0.06;
         const cfg: SurfacePressStored = {
           enabled: true,
           surface: { a: line.a, b: line.b, points: surfacePointsRef.current },
-          pressGap: 0,
+          // Slightly forgiving press gap: fire just before the finger reaches
+          // the line. releaseGap is larger for anti-chatter hysteresis.
+          pressGap: 0.02,
           releaseGap: 0.1,
           descentForFullVelocity: 0.1,
           defaultVelocity: 0.6,
-          useFingertip: false,
+          useFingertip: true,
+          keyZoneHalfWidth,
           buttons: surfaceButtonsRef.current,
         };
         surfaceConfigRef.current = cfg;
@@ -1565,18 +1662,18 @@ function SongPresetScreen() {
             </button>
             {surfaceCalStage === 'surface' && (
               <span style={{ fontSize: 11, color: '#0ff' }}>
-                Click {2 - surfacePointsRef.current.length} more point(s) along the table edge…
+                Click {2 - surfacePointsRef.current.length} more point(s) along the TOP of the tube row…
               </span>
             )}
             {surfaceCalStage === 'buttons' && (
               <span style={{ fontSize: 11, color: '#0ff' }}>
-                Click each object on the table ({surfaceButtonsRef.current.length}/{SURFACE_BUTTON_COUNT})…
+                Click each tube ({surfaceButtonsRef.current.length}/{SURFACE_BUTTON_COUNT})…
               </span>
             )}
           </div>
           <p style={styles.hint}>
-            Click two points along the table edge, then click each object.
-            Press an object down to the surface to play its note.
+            Click two points along the top of the tube row (where a finger lands),
+            then click each tube. Press a finger down onto a tube to play its note.
           </p>
         </div>
 
@@ -1767,10 +1864,11 @@ function drawOverlay(
 /**
  * Surface-press facilitator overlay.
  *
- * Draws the calibrated surface line (the press threshold) across the frame
- * and one marker per button. The X axis is mirrored (`1 - x`) to match the
- * CSS-mirrored video, identical to how the detector mirrors tracked points.
- * A button turns red when its bottom edge has reached/passed the press line.
+ * Draws the calibrated surface line (the press threshold) across the frame,
+ * a marker per key (at its live colour-blob centre, on the line), and the
+ * pressing fingertip(s). The X axis is mirrored (`1 - x`) for the line and
+ * keys (whose coords are raw); fingertips come from HandDetector already in
+ * screen space. A key turns red while it is currently pressed.
  */
 function drawSurfaceOverlay(
   ctx: CanvasRenderingContext2D,
@@ -1778,10 +1876,12 @@ function drawSurfaceOverlay(
   h: number,
   cfg: SurfacePressStored,
   blobs: ColorBlob[],
+  pressed: Set<string>,
+  hands: HandDetectionResult | null,
 ): void {
   const { a, b } = cfg.surface;
-  // Surface line in raw (unmirrored) x = 0..1, mirrored to screen via (1 - x).
   ctx.save();
+  // Surface line in raw (unmirrored) x = 0..1, mirrored to screen via (1 - x).
   ctx.strokeStyle = 'rgba(0,200,255,0.8)';
   ctx.lineWidth = 2;
   ctx.setLineDash([6, 6]);
@@ -1791,17 +1891,30 @@ function drawSurfaceOverlay(
   ctx.stroke();
   ctx.setLineDash([]);
 
+  // Key markers, at each key's live centre, sitting on the surface line.
   for (const btn of cfg.buttons) {
     const blob = blobs.find((bl) => bl.colorId === btn.id);
-    const surfaceYAtBtn = a * btn.x + b;
-    const yb = blob?.bottomY ?? surfaceYAtBtn;
-    const down = (blob?.bottomY ?? -1) >= surfaceYAtBtn - cfg.pressGap;
-    const cx = (1 - btn.x) * w;
-    const cy = yb * h;
-    ctx.fillStyle = down ? 'rgba(255,80,80,0.9)' : 'rgba(255,255,255,0.6)';
+    const centreX = blob?.found ? blob.x : btn.x;
+    const down = pressed.has(btn.id);
+    const cx = (1 - centreX) * w;
+    const cy = (a * centreX + b) * h;
+    ctx.fillStyle = down ? 'rgba(255,80,80,0.95)' : 'rgba(255,255,255,0.55)';
     ctx.beginPath();
-    ctx.arc(cx, cy, down ? 12 : 8, 0, Math.PI * 2);
+    ctx.arc(cx, cy, down ? 14 : 9, 0, Math.PI * 2);
     ctx.fill();
+  }
+
+  // Pressing fingertip(s) — already in screen space (HandDetector mirrors x).
+  if (hands) {
+    ctx.fillStyle = 'rgba(80,255,140,0.9)';
+    for (const hand of [hands.leftHand, hands.rightHand]) {
+      const tip = lowestFingertip(hand?.landmarks ?? null);
+      if (tip) {
+        ctx.beginPath();
+        ctx.arc(tip.x * w, tip.y * h, 7, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
   }
   ctx.restore();
 }

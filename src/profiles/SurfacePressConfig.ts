@@ -33,6 +33,12 @@ export interface SurfacePressStored {
   defaultVelocity: number;
   /** Colour-blob bottom edge (false) vs HandDetector fingertip (true). */
   useFingertip: boolean;
+  /**
+   * How close (in normalised x) the pressing finger must be to a key's
+   * centre to count as "over" that key. Half the spacing between adjacent
+   * keys is a good value; calibratable per setup.
+   */
+  keyZoneHalfWidth: number;
   buttons: SurfacePressButtonStored[];
 }
 
@@ -125,6 +131,7 @@ function sanitize(input: unknown): SurfacePressStored | null {
     descentForFullVelocity: isNum(o.descentForFullVelocity) ? o.descentForFullVelocity : 0.1,
     defaultVelocity: isNum(o.defaultVelocity) ? o.defaultVelocity : 0.6,
     useFingertip: o.useFingertip === true,
+    keyZoneHalfWidth: isNum(o.keyZoneHalfWidth) ? o.keyZoneHalfWidth : 0.06,
     buttons,
   };
 }

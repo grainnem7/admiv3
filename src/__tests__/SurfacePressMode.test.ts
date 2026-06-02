@@ -77,3 +77,42 @@ describe('SurfacePressMode', () => {
     expect(m.step([{ id: 'press-1', x: 0.5, y: 0.9, found: true, area: 0.001 }], 16)).toEqual([]);
   });
 });
+
+// Fingertip-onto-key model: the tracked point is a fingertip over the key,
+// which vanishes when the finger moves away. releaseOnLost ends the note then.
+describe('SurfacePressMode — releaseOnLost (fingertip model)', () => {
+  it('releases a held key when the finger leaves it (no point this frame)', () => {
+    const m = new SurfacePressMode();
+    m.setConfig({ ...flatConfig(), releaseOnLost: true });
+    m.step(pt(0.5), 0);          // finger over key, lifted → idle
+    m.step(pt(0.82), 16);        // descends to surface → press
+    const ev = m.step([], 32);   // finger leaves the key → release
+    expect(ev).toHaveLength(1);
+    expect(ev[0].type).toBe('release');
+    expect(ev[0].buttonId).toBe('press-1');
+  });
+
+  it('without releaseOnLost (default), a lost point does NOT release', () => {
+    const m = new SurfacePressMode();
+    m.setConfig(flatConfig());   // releaseOnLost undefined → false
+    m.step(pt(0.5), 0);
+    m.step(pt(0.82), 16);        // press
+    expect(m.step([], 32)).toEqual([]); // no release on lost
+  });
+
+  it('fires a press when a finger arrives over a key already at the surface', () => {
+    const m = new SurfacePressMode();
+    m.setConfig({ ...flatConfig(), releaseOnLost: true });
+    m.step([], 0);               // no finger yet → key armed idle
+    const ev = m.step(pt(0.85), 16); // finger appears already below the line → press
+    expect(ev).toHaveLength(1);
+    expect(ev[0].type).toBe('press');
+  });
+
+  it('does not double-release: a lost key already idle stays silent', () => {
+    const m = new SurfacePressMode();
+    m.setConfig({ ...flatConfig(), releaseOnLost: true });
+    m.step([], 0);               // armed idle
+    expect(m.step([], 16)).toEqual([]); // still no finger, still idle → nothing
+  });
+});
