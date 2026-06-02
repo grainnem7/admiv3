@@ -985,6 +985,20 @@ function SongPresetScreen() {
     setSurfaceCalTick((t) => t + 1);
   }, []);
 
+  // Change the instrument a tube plays. Persists and rebuilds that voice.
+  const handleSurfaceInstrumentChange = useCallback((keyId: string, instrumentKey: string) => {
+    const cfg = surfaceConfigRef.current;
+    if (!cfg) return;
+    const key = cfg.keys.find((k) => k.id === keyId);
+    if (!key) return;
+    key.instrumentKey = instrumentKey;
+    getInputProfileManager().saveSurfacePressConfig(cfg);
+    engineRef.current.setSurfacePressConfig({
+      buttons: cfg.keys.map((k) => ({ id: k.id, instrumentKey: k.instrumentKey })),
+    });
+    setSurfaceCalTick((t) => t + 1);
+  }, []);
+
   const handleBack = useCallback(() => {
     engineRef.current.stopPlayback();
     setCurrentScreen('performance');
@@ -1678,6 +1692,36 @@ function SongPresetScreen() {
             Click the MIDDLE of each tube once to register its colour. Then press
             a finger anywhere along a tube to play its note — the whole tube is live.
           </p>
+
+          {/* Per-tube instrument assignment (once calibrated). */}
+          {surfaceCalStage === 'idle' && surfaceConfigRef.current && surfaceConfigRef.current.keys.length > 0 && (
+            <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {surfaceConfigRef.current.keys.map((k, i) => (
+                <div key={k.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span
+                    title={`Tube ${i + 1}`}
+                    style={{
+                      width: 14, height: 14, borderRadius: 7, flexShrink: 0,
+                      background: `hsl(${Math.round(k.color.hue)}, 80%, 50%)`,
+                      border: '1px solid rgba(255,255,255,0.4)',
+                    }}
+                  />
+                  <span style={{ fontSize: 11, color: '#a1a1b8', width: 48 }}>Tube {i + 1}</span>
+                  <select
+                    className="form-field__select"
+                    value={k.instrumentKey}
+                    onChange={(e) => handleSurfaceInstrumentChange(k.id, e.target.value)}
+                    aria-label={`Tube ${i + 1} instrument`}
+                    style={{ fontSize: 11, flex: 1 }}
+                  >
+                    {INSTRUMENT_PALETTE_LIST.map((opt) => (
+                      <option key={opt.key} value={opt.key}>{opt.name}</option>
+                    ))}
+                  </select>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Keyboard Test Mode */}
