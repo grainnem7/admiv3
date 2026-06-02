@@ -91,8 +91,8 @@ export class SamplerPlayer implements Player {
 const local = (folder: string): string => `samples/instruments/${folder}/`;
 
 /** ['C4','Fs4'] → { C4: 'C4.mp3', Fs4: 'Fs4.mp3' } */
-const noteMap = (notes: readonly string[]): Record<string, string> =>
-  Object.fromEntries(notes.map((n) => [n, `${n}.mp3`]));
+const noteMap = (notes: readonly string[], ext = 'mp3'): Record<string, string> =>
+  Object.fromEntries(notes.map((n) => [n, `${n}.${ext}`]));
 
 // ============================================
 // Per-instrument sample configs
@@ -125,6 +125,10 @@ export const SAMPLE_CONFIGS = {
 
   // Bass (nbrosowsky electric — real multi-note bass; replaces 1-note contrabass bass)
   bassElectric:{ urls: noteMap(['As1','As2','Cs2','Cs3','E1','E2','E3','G1','G2']), baseUrl: local('bass-electric'),attack: 0.008, release: 0.25 },
+
+  // Electric piano + choir pad (FreePats, CC0, FLAC — see ATTRIBUTION.md)
+  electricPiano:{ urls: noteMap(['C2','Fs1','Fs2','C3','Fs3','C4','Fs4','C5','Fs5','C6','Fs6','C7'], 'flac'), baseUrl: local('electric-piano'), attack: 0.005, release: 0.6 },
+  padChoir:     { urls: noteMap(['C2','Fs2','C3','Fs3','C4','Fs4','C5','Fs5','C6','Fs6','C7','Fs7'], 'flac'), baseUrl: local('pad-choir'),     attack: 0.4,   release: 1.2 },
 } as const satisfies Record<string, SamplerPlayerOptions>;
 
 // Convenience: legal sample config keys.
