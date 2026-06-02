@@ -1,65 +1,46 @@
 /**
- * SurfacePressMode — turns coloured objects on a table into press triggers.
+ * SurfacePressMode — turns coloured tubes on a table into press triggers.
  *
- * Pure (no audio, no DOM). Sibling of ThereminMode. Given a calibrated
- * surface line and one tracked point per key each frame, it runs a
- * per-key hysteresis state machine and emits typed press/release events.
+ * Pure (no audio, no DOM). Sibling of ThereminMode.
  *
- * The intended driver (Stage 1) is a fingertip: the keys are coloured
- * objects lying still on the table, and the tracked point for a key is
- * the pressing finger CURRENTLY over that key's x (or absent when no
- * finger is there). "Descends to the surface line" = the point's y rises
- * to pressLine(x). Release requires either rising clear of the higher
- * releaseLine(x) — the anti-chatter hysteresis band — or, when
- * `releaseOnLost` is set, the tracked point disappearing (the finger
- * moving off the key). All thresholds are supplied by config (calibrated
- * per user); none are hardcoded here.
+ * The tubes radiate toward the oblique camera, so each one appears as a
+ * LINE SEGMENT in the image (its full length, at whatever angle it lies) —
+ * supplied live each frame from the colour blob's principal axis. Tim
+ * presses anywhere along a tube, so a press is decided by the perpendicular
+ * distance from the pressing fingertip to the tube's line, NOT by a single
+ * point or a global surface line:
  *
- * The camera angle (front/side/oblique) is irrelevant: the surface line
- * is whatever was fitted from the user's touched points.
+ *   - press  when a finger is within `touchDist` of a tube's line and that
+ *     tube is the finger's nearest;
+ *   - release when the finger moves beyond `releaseDist` (anti-chatter
+ *     hysteresis) or off the tube entirely (or the tube is lost this frame).
+ *
+ * Each finger presses only its single nearest tube, so a finger between two
+ * tubes can't trigger both. All thresholds come from config (calibrated per
+ * user); none are hardcoded here.
  */
 
-import { surfaceY, type SurfaceLine } from './SurfaceModel';
+import { distToSegment, type AxisSegment } from './segmentGeometry';
 
-export interface SurfacePressButtonConfig {
-  /** Stable button id, e.g. "press-1". Own namespace, NOT a baton ColorRole. */
-  id: string;
-  /** Resting image x, used to evaluate surfaceY(x) for this button. */
-  x: number;
-  /** Minimum blob area to accept (reject noise). 0 in fingertip mode. */
-  minBlobArea: number;
-}
-
-export interface SurfacePressConfigInput {
-  line: SurfaceLine;
-  /** Gap above the surface at which a press fires (≥0). */
-  pressGap: number;
-  /** Larger gap above the surface at which a release fires (> pressGap). */
-  releaseGap: number;
-  /** Per-frame descent (Δy) mapping to full velocity. */
-  descentForFullVelocity: number;
-  /** Velocity used when descent can't be measured. */
+export interface SurfacePressThresholds {
+  /** Press fires when the finger-to-tube distance ≤ this (normalised). */
+  touchDist: number;
+  /** Release when the distance ≥ this (> touchDist) — hysteresis band. */
+  releaseDist: number;
+  /** Velocity for a press (descent speed isn't reliable from one camera). */
   defaultVelocity: number;
-  /**
-   * When true, a key in the 'down' state is released as soon as its
-   * tracked point disappears (e.g. the finger moves off the key) — not
-   * only when the point lifts above releaseLine. Required for the
-   * fingertip model so moving to the next key doesn't leave a stuck note.
-   * @default false (object-bottom model: only release on lift)
-   */
-  releaseOnLost?: boolean;
-  buttons: SurfacePressButtonConfig[];
 }
 
-/** One tracked point per button for the current frame. */
-export interface SurfaceTrackPoint {
-  id: string;
+/** A pressing point (a fingertip), in normalised image coords. */
+export interface FingerPoint {
   x: number;
-  /** Tracked y (0 top … 1 bottom): blob bottom-edge or fingertip. */
   y: number;
-  found: boolean;
-  /** Blob area (0..1); 0 for fingertips. */
-  area: number;
+}
+
+/** A key and its live line segment this frame (null when the tube isn't seen). */
+export interface SurfaceKeyFrame {
+  id: string;
+  segment: AxisSegment | null;
 }
 
 export interface SurfacePressEvent {
@@ -72,91 +53,69 @@ export interface SurfacePressEvent {
 
 type Phase = 'idle' | 'down';
 
-interface ButtonState {
-  phase: Phase;
-  lastY: number;
-  initialised: boolean;
-}
-
-function clamp(v: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, v));
-}
-
 export class SurfacePressMode {
-  private config: SurfacePressConfigInput | null = null;
-  private states = new Map<string, ButtonState>();
+  private thresholds: SurfacePressThresholds | null = null;
+  private phases = new Map<string, Phase>();
 
-  setConfig(config: SurfacePressConfigInput): void {
-    this.config = config;
-    // Drop state for buttons that no longer exist.
-    const ids = new Set(config.buttons.map((b) => b.id));
-    for (const id of [...this.states.keys()]) {
-      if (!ids.has(id)) this.states.delete(id);
-    }
+  setConfig(thresholds: SurfacePressThresholds): void {
+    this.thresholds = thresholds;
   }
 
   reset(): void {
-    this.states.clear();
+    this.phases.clear();
   }
 
-  /** Process one frame; returns the press/release events fired this frame. */
-  step(points: SurfaceTrackPoint[], timestamp: number): SurfacePressEvent[] {
-    if (!this.config) return [];
+  /**
+   * Process one frame.
+   * @param keys    every configured key with its live segment (or null)
+   * @param fingers the pressing points (e.g. one lowest-fingertip per hand)
+   */
+  step(keys: SurfaceKeyFrame[], fingers: FingerPoint[], timestamp: number): SurfacePressEvent[] {
+    if (!this.thresholds) return [];
+    const { touchDist, releaseDist, defaultVelocity } = this.thresholds;
     const events: SurfacePressEvent[] = [];
-    const releaseOnLost = this.config.releaseOnLost ?? false;
 
-    for (const btn of this.config.buttons) {
-      const pt = points.find((p) => p.id === btn.id);
-      const present = !!pt && pt.found && pt.area >= btn.minBlobArea;
-      let state = this.states.get(btn.id);
+    // Assign each finger to its single nearest key (among keys seen this
+    // frame), so a finger between two tubes can't trigger both.
+    const nearestKeyForFinger: (string | null)[] = fingers.map((f) => {
+      let bestId: string | null = null;
+      let bestDist = Infinity;
+      for (const k of keys) {
+        if (!k.segment) continue;
+        const d = distToSegment(f.x, f.y, k.segment.ax, k.segment.ay, k.segment.bx, k.segment.by);
+        if (d < bestDist) { bestDist = d; bestId = k.id; }
+      }
+      return bestId;
+    });
 
-      // No tracked point this frame (e.g. no fingertip over this key).
-      if (!present) {
-        if (state?.phase === 'down' && releaseOnLost) {
-          events.push({ type: 'release', buttonId: btn.id, velocity: 0, timestamp });
-          state.phase = 'idle';
+    for (const k of keys) {
+      // The engaging finger for this key = the closest finger whose nearest
+      // key is this one. Distance is Infinity when no finger claims the key.
+      let engDist = Infinity;
+      if (k.segment) {
+        for (let i = 0; i < fingers.length; i++) {
+          if (nearestKeyForFinger[i] !== k.id) continue;
+          const f = fingers[i];
+          const d = distToSegment(f.x, f.y, k.segment.ax, k.segment.ay, k.segment.bx, k.segment.by);
+          if (d < engDist) engDist = d;
         }
-        // Initialise as idle (silently) so a finger that later ARRIVES over
-        // the key and is already below the line registers as a press.
-        if (!state) {
-          this.states.set(btn.id, { phase: 'idle', lastY: Number.NaN, initialised: true });
+      }
+
+      const phase = this.phases.get(k.id) ?? 'idle';
+
+      if (phase === 'idle') {
+        if (engDist <= touchDist) {
+          events.push({ type: 'press', buttonId: k.id, velocity: defaultVelocity, timestamp });
+          this.phases.set(k.id, 'down');
         }
-        continue;
+      } else {
+        // Down: release when the finger pulls beyond the release band or
+        // leaves the tube (engDist Infinity).
+        if (engDist >= releaseDist) {
+          events.push({ type: 'release', buttonId: k.id, velocity: 0, timestamp });
+          this.phases.set(k.id, 'idle');
+        }
       }
-
-      const sy = surfaceY(this.config.line, pt!.x);
-      const pressLine = sy - this.config.pressGap;     // larger y (lower in image)
-      const releaseLine = sy - this.config.releaseGap; // smaller y (higher in image)
-
-      if (!state || !state.initialised) {
-        // First reading WITH a point present: arm without firing. If it's
-        // already at/below the surface, start "down" silently so a key that
-        // happens to have a finger on it at startup doesn't auto-sound.
-        state = {
-          phase: pt!.y >= pressLine ? 'down' : 'idle',
-          lastY: pt!.y,
-          initialised: true,
-        };
-        this.states.set(btn.id, state);
-        continue;
-      }
-
-      if (state.phase === 'idle' && pt!.y >= pressLine) {
-        // descent is meaningless if lastY is NaN (key was just armed while the
-        // finger was absent) — fall back to the calibrated default velocity.
-        const descent = Number.isNaN(state.lastY) ? 0 : pt!.y - state.lastY;
-        const velocity =
-          descent > 0
-            ? clamp(descent / this.config.descentForFullVelocity, 0.1, 1)
-            : this.config.defaultVelocity;
-        events.push({ type: 'press', buttonId: btn.id, velocity, timestamp });
-        state.phase = 'down';
-      } else if (state.phase === 'down' && pt!.y <= releaseLine) {
-        events.push({ type: 'release', buttonId: btn.id, velocity: 0, timestamp });
-        state.phase = 'idle';
-      }
-
-      state.lastY = pt!.y;
     }
 
     return events;

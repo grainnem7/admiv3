@@ -1,11 +1,16 @@
 /**
  * Surface-press configuration persistence.
  *
- * Stores the calibrated surface line, per-user thresholds, and per-button
- * colour + instrument under a dedicated localStorage key — mirroring the
+ * Stores the per-key colour + instrument and the press/release distance
+ * thresholds under a dedicated localStorage key — mirroring the
  * BatonAssignments pattern (separate key, sanitised on load, exposed via
  * InputProfileManager). A corrupt store can never break loading: any
  * failure yields null and the screen falls back to "not yet calibrated".
+ *
+ * Note there is no geometry here: each tube's line is derived LIVE from its
+ * colour blob's principal axis (see ColorTracker / SurfacePressMode), so the
+ * only thing worth persisting per key is which colour it is and which
+ * instrument it plays.
  */
 
 import type { TrackedColor } from '../tracking/ColorTracker';
@@ -16,30 +21,24 @@ import {
 
 const STORAGE_KEY = 'admi-surface-press';
 
-export interface SurfacePressButtonStored {
+export interface SurfaceKeyStored {
+  /** Stable key id, e.g. "press-1". Own namespace, NOT a baton ColorRole. */
   id: string;
-  x: number;
-  minBlobArea: number;
+  /** Instrument played when this key is pressed (palette key). */
   instrumentKey: string;
+  /** Calibrated colour used to locate + track the tube. */
   color: TrackedColor;
 }
 
 export interface SurfacePressStored {
   enabled: boolean;
-  surface: { a: number; b: number; points: { x: number; y: number }[] };
-  pressGap: number;
-  releaseGap: number;
-  descentForFullVelocity: number;
+  /** Press fires when a finger is within this normalised distance of a tube. */
+  touchDist: number;
+  /** Release when the finger pulls beyond this distance (> touchDist). */
+  releaseDist: number;
+  /** Velocity for a press. */
   defaultVelocity: number;
-  /** Colour-blob bottom edge (false) vs HandDetector fingertip (true). */
-  useFingertip: boolean;
-  /**
-   * How close (in normalised x) the pressing finger must be to a key's
-   * centre to count as "over" that key. Half the spacing between adjacent
-   * keys is a good value; calibratable per setup.
-   */
-  keyZoneHalfWidth: number;
-  buttons: SurfacePressButtonStored[];
+  keys: SurfaceKeyStored[];
 }
 
 export function loadSurfacePressConfig(): SurfacePressStored | null {
@@ -83,37 +82,23 @@ function sanitize(input: unknown): SurfacePressStored | null {
   if (typeof input !== 'object' || input === null) return null;
   const o = input as Record<string, unknown>;
 
-  const surface = o.surface as Record<string, unknown> | undefined;
-  if (!surface || !isNum(surface.a) || !isNum(surface.b) || !Array.isArray(surface.points)) {
-    return null;
-  }
-  const points = surface.points
-    .filter((p): p is { x: number; y: number } =>
-      typeof p === 'object' &&
-      p !== null &&
-      isNum((p as Record<string, unknown>).x) &&
-      isNum((p as Record<string, unknown>).y),
-    )
-    .map((p) => ({ x: p.x, y: p.y }));
+  if (!Array.isArray(o.keys)) return null;
 
-  const buttonsRaw = Array.isArray(o.buttons) ? o.buttons : [];
-  const buttons: SurfacePressButtonStored[] = [];
-  for (const b of buttonsRaw) {
-    if (typeof b !== 'object' || b === null) continue;
-    const bo = b as Record<string, unknown>;
-    const color = bo.color as Record<string, unknown> | undefined;
-    if (typeof bo.id !== 'string' || !isNum(bo.x) || !color) continue;
-    const key =
-      typeof bo.instrumentKey === 'string' && INSTRUMENT_PALETTE_BY_KEY[bo.instrumentKey]
-        ? bo.instrumentKey
+  const keys: SurfaceKeyStored[] = [];
+  for (const k of o.keys) {
+    if (typeof k !== 'object' || k === null) continue;
+    const ko = k as Record<string, unknown>;
+    const color = ko.color as Record<string, unknown> | undefined;
+    if (typeof ko.id !== 'string' || !color) continue;
+    const instrumentKey =
+      typeof ko.instrumentKey === 'string' && INSTRUMENT_PALETTE_BY_KEY[ko.instrumentKey]
+        ? ko.instrumentKey
         : DEFAULT_INSTRUMENT_KEY;
-    buttons.push({
-      id: bo.id,
-      x: bo.x,
-      minBlobArea: isNum(bo.minBlobArea) ? bo.minBlobArea : 0.0005,
-      instrumentKey: key,
+    keys.push({
+      id: ko.id,
+      instrumentKey,
       color: {
-        id: typeof color.id === 'string' ? color.id : bo.id,
+        id: typeof color.id === 'string' ? color.id : ko.id,
         hue: isNum(color.hue) ? color.hue : 0,
         hueTolerance: isNum(color.hueTolerance) ? color.hueTolerance : 15,
         minSaturation: isNum(color.minSaturation) ? color.minSaturation : 30,
@@ -125,13 +110,9 @@ function sanitize(input: unknown): SurfacePressStored | null {
 
   return {
     enabled: o.enabled === true,
-    surface: { a: surface.a, b: surface.b, points },
-    pressGap: isNum(o.pressGap) ? o.pressGap : 0,
-    releaseGap: isNum(o.releaseGap) ? o.releaseGap : 0.1,
-    descentForFullVelocity: isNum(o.descentForFullVelocity) ? o.descentForFullVelocity : 0.1,
-    defaultVelocity: isNum(o.defaultVelocity) ? o.defaultVelocity : 0.6,
-    useFingertip: o.useFingertip === true,
-    keyZoneHalfWidth: isNum(o.keyZoneHalfWidth) ? o.keyZoneHalfWidth : 0.06,
-    buttons,
+    touchDist: isNum(o.touchDist) ? o.touchDist : 0.06,
+    releaseDist: isNum(o.releaseDist) ? o.releaseDist : 0.1,
+    defaultVelocity: isNum(o.defaultVelocity) ? o.defaultVelocity : 0.7,
+    keys,
   };
 }

@@ -7,6 +7,8 @@
  * - Click-to-calibrate color selection
  */
 
+import { axisFromMoments, type AxisSegment } from './segmentGeometry';
+
 // ============================================
 // Types
 // ============================================
@@ -44,6 +46,14 @@ export interface ColorBlob {
    * (baton path) ignore it. Undefined when the blob is not found.
    */
   bottomY?: number;
+  /**
+   * The blob's long-axis line segment in normalised coords (the principal
+   * axis of the matched pixels), near end (larger y) first. For an
+   * elongated object like a tube this is its full length as a vector —
+   * used by SurfacePressMode so a finger can press anywhere along the
+   * tube. Optional/additive; undefined when the blob is not found.
+   */
+  axis?: AxisSegment;
 }
 
 export interface ColorTrackingOutput {
@@ -96,8 +106,11 @@ export class ColorTracker {
   private frameCount: number = 0;
   private animationFrameId: number | null = null;
 
-  // Smoothed blob positions
-  private smoothedBlobs: Map<string, { x: number; y: number; area: number; bottomY: number }> = new Map();
+  // Smoothed blob positions (centroid, area, bottom edge, and long-axis ends)
+  private smoothedBlobs: Map<
+    string,
+    { x: number; y: number; area: number; bottomY: number; axis: AxisSegment }
+  > = new Map();
 
   // Callbacks
   private callbacks: Set<ColorTrackingCallback> = new Set();
@@ -341,6 +354,9 @@ export class ColorTracker {
   ): ColorBlob {
     let totalX = 0;
     let totalY = 0;
+    let totalXX = 0;           // pixel-space second moments, for the long axis
+    let totalYY = 0;
+    let totalXY = 0;
     let maxYpx = -1;            // lowest matched pixel row (bottom edge)
     let matchingPixels = 0;
 
@@ -360,6 +376,9 @@ export class ColorTracker {
         if (this.matchesColor(hsv, color)) {
           totalX += x;
           totalY += y;
+          totalXX += x * x;
+          totalYY += y * y;
+          totalXY += x * y;
           if (y > maxYpx) maxYpx = y;
           matchingPixels++;
         }
@@ -379,7 +398,7 @@ export class ColorTracker {
         if (smoothed.area < 0.0001) {
           return { colorId: color.id, x: 0.5, y: 0.5, area: 0, found: false };
         }
-        return { colorId: color.id, x: smoothed.x, y: smoothed.y, area: smoothed.area, found: false, bottomY: smoothed.bottomY };
+        return { colorId: color.id, x: smoothed.x, y: smoothed.y, area: smoothed.area, found: false, bottomY: smoothed.bottomY, axis: smoothed.axis };
       }
       return { colorId: color.id, x: 0.5, y: 0.5, area: 0, found: false };
     }
@@ -389,6 +408,18 @@ export class ColorTracker {
     const rawY = totalY / matchingPixels / height;
     const rawBottomY = maxYpx / height;
 
+    // Long-axis segment from the matched pixels' moments, in normalised
+    // space (x/width, y/height) so it lives in the same 0..1 frame as the
+    // fingertip coordinates the detector compares against.
+    const rawAxis = axisFromMoments(
+      totalX / width,
+      totalY / height,
+      totalXX / (width * width),
+      totalYY / (height * height),
+      totalXY / (width * height),
+      matchingPixels,
+    );
+
     // Apply smoothing
     const alpha = this.config.smoothing;
     const prev = this.smoothedBlobs.get(color.id);
@@ -397,15 +428,22 @@ export class ColorTracker {
     let smoothedY = rawY;
     let smoothedArea = area;
     let smoothedBottomY = rawBottomY;
+    let smoothedAxis = rawAxis;
 
     if (prev) {
       smoothedX = alpha * prev.x + (1 - alpha) * rawX;
       smoothedY = alpha * prev.y + (1 - alpha) * rawY;
       smoothedArea = alpha * prev.area + (1 - alpha) * area;
       smoothedBottomY = alpha * prev.bottomY + (1 - alpha) * rawBottomY;
+      smoothedAxis = {
+        ax: alpha * prev.axis.ax + (1 - alpha) * rawAxis.ax,
+        ay: alpha * prev.axis.ay + (1 - alpha) * rawAxis.ay,
+        bx: alpha * prev.axis.bx + (1 - alpha) * rawAxis.bx,
+        by: alpha * prev.axis.by + (1 - alpha) * rawAxis.by,
+      };
     }
 
-    this.smoothedBlobs.set(color.id, { x: smoothedX, y: smoothedY, area: smoothedArea, bottomY: smoothedBottomY });
+    this.smoothedBlobs.set(color.id, { x: smoothedX, y: smoothedY, area: smoothedArea, bottomY: smoothedBottomY, axis: smoothedAxis });
 
     return {
       colorId: color.id,
@@ -414,6 +452,7 @@ export class ColorTracker {
       area: smoothedArea,
       found: true,
       bottomY: smoothedBottomY,
+      axis: smoothedAxis,
     };
   }
 

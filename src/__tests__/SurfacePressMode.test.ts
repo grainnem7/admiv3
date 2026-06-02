@@ -1,118 +1,98 @@
 import { describe, it, expect } from 'vitest';
-import { SurfacePressMode, type SurfacePressConfigInput, type SurfaceTrackPoint } from '../tracking/SurfacePressMode';
+import {
+  SurfacePressMode,
+  type SurfacePressThresholds,
+  type SurfaceKeyFrame,
+} from '../tracking/SurfacePressMode';
 
-// Horizontal surface at y=0.8 for simple cases; press gap 0, release gap 0.1.
-const flatConfig = (): SurfacePressConfigInput => ({
-  line: { a: 0, b: 0.8 },
-  pressGap: 0,
-  releaseGap: 0.1,
-  descentForFullVelocity: 0.1,
-  defaultVelocity: 0.6,
-  buttons: [{ id: 'press-1', x: 0.5, minBlobArea: 0 }],
+// A vertical tube at x=0.5, near end (0.5,0.8) → far end (0.5,0.4).
+const TUBE = { ax: 0.5, ay: 0.8, bx: 0.5, by: 0.4 };
+const thresholds = (): SurfacePressThresholds => ({
+  touchDist: 0.05,
+  releaseDist: 0.1,
+  defaultVelocity: 0.7,
 });
-
-const pt = (y: number, found = true): SurfaceTrackPoint[] => [
-  { id: 'press-1', x: 0.5, y, found, area: 1 },
+const keys = (segment: typeof TUBE | null = TUBE): SurfaceKeyFrame[] => [
+  { id: 'press-1', segment },
 ];
 
-describe('SurfacePressMode', () => {
-  it('does NOT fire on the first frame even if the object starts on the surface (resting)', () => {
+describe('SurfacePressMode — press anywhere along a tube', () => {
+  it('fires when a finger touches the MIDDLE of the tube (not just an end)', () => {
     const m = new SurfacePressMode();
-    m.setConfig(flatConfig());
-    expect(m.step(pt(0.85), 0)).toEqual([]); // starts below the line → armed as "down", silent
+    m.setConfig(thresholds());
+    const ev = m.step(keys(), [{ x: 0.5, y: 0.6 }], 0); // mid-tube, dist 0
+    expect(ev).toHaveLength(1);
+    expect(ev[0].type).toBe('press');
+    expect(ev[0].buttonId).toBe('press-1');
+    expect(ev[0].velocity).toBeCloseTo(0.7, 6);
   });
 
-  it('fires a press when the point descends to the surface line', () => {
+  it('fires when a finger touches near the FAR end of the tube', () => {
     const m = new SurfacePressMode();
-    m.setConfig(flatConfig());
-    m.step(pt(0.5), 0);                      // lifted, idle
-    const events = m.step(pt(0.82), 16);     // descends past pressLine (0.8)
-    expect(events).toHaveLength(1);
-    expect(events[0].type).toBe('press');
-    expect(events[0].buttonId).toBe('press-1');
+    m.setConfig(thresholds());
+    expect(m.step(keys(), [{ x: 0.5, y: 0.42 }], 0)[0].type).toBe('press');
   });
 
-  it('does not chatter: no release until the point rises above the higher release line', () => {
+  it('does NOT fire when the finger is far from the tube line', () => {
     const m = new SurfacePressMode();
-    m.setConfig(flatConfig());
-    m.step(pt(0.5), 0);
-    m.step(pt(0.82), 16);                    // press
-    expect(m.step(pt(0.78), 32)).toEqual([]); // above pressLine but inside hysteresis band → no release
-    expect(m.step(pt(0.72), 48)).toEqual([]); // still inside band (release line = 0.7)
-    const rel = m.step(pt(0.68), 64);        // above release line (0.7) → release
+    m.setConfig(thresholds());
+    expect(m.step(keys(), [{ x: 0.5, y: 0.2 }], 0)).toEqual([]); // dist 0.2 > touchDist
+  });
+
+  it('releases when the finger leaves the tube (no finger nearby)', () => {
+    const m = new SurfacePressMode();
+    m.setConfig(thresholds());
+    m.step(keys(), [{ x: 0.5, y: 0.6 }], 0);      // press
+    const ev = m.step(keys(), [], 16);            // finger gone → release
+    expect(ev).toHaveLength(1);
+    expect(ev[0].type).toBe('release');
+  });
+
+  it('hysteresis: stays down between touch and release distance, releases beyond', () => {
+    const m = new SurfacePressMode();
+    m.setConfig(thresholds());
+    m.step(keys(), [{ x: 0.5, y: 0.6 }], 0);      // press (dist 0)
+    expect(m.step(keys(), [{ x: 0.57, y: 0.6 }], 16)).toEqual([]); // dist 0.07: between → stay
+    const rel = m.step(keys(), [{ x: 0.62, y: 0.6 }], 32);          // dist 0.12 ≥ release
     expect(rel).toHaveLength(1);
     expect(rel[0].type).toBe('release');
   });
 
-  it('press threshold follows the oblique surface line across x', () => {
+  it('a key whose segment is null this frame is not pressable; releases if held', () => {
     const m = new SurfacePressMode();
-    m.setConfig({
-      ...flatConfig(),
-      line: { a: -0.2, b: 0.8 },             // surfaceY: 0.8 at x=0, 0.6 at x=1
-      buttons: [{ id: 'press-1', x: 1, minBlobArea: 0 }],
-    });
-    m.step([{ id: 'press-1', x: 1, y: 0.4, found: true, area: 1 }], 0);   // lifted
-    // At x=1 the surface line is 0.6; y=0.55 is above it → no press.
-    expect(m.step([{ id: 'press-1', x: 1, y: 0.55, found: true, area: 1 }], 16)).toEqual([]);
-    // y=0.62 descends past the line → press.
-    const ev = m.step([{ id: 'press-1', x: 1, y: 0.62, found: true, area: 1 }], 32);
+    m.setConfig(thresholds());
+    m.step(keys(), [{ x: 0.5, y: 0.6 }], 0);      // press
+    const ev = m.step(keys(null), [{ x: 0.5, y: 0.6 }], 16); // tube lost → release
     expect(ev).toHaveLength(1);
-    expect(ev[0].type).toBe('press');
-  });
-
-  it('a faster descent yields a higher press velocity', () => {
-    const slow = new SurfacePressMode(); slow.setConfig(flatConfig());
-    slow.step(pt(0.78), 0); const sEv = slow.step(pt(0.81), 16); // Δ0.03
-
-    const fast = new SurfacePressMode(); fast.setConfig(flatConfig());
-    fast.step(pt(0.5), 0); const fEv = fast.step(pt(0.95), 16);  // Δ0.45
-
-    expect(fEv[0].velocity).toBeGreaterThan(sEv[0].velocity);
-  });
-
-  it('ignores a button whose blob is below minBlobArea', () => {
-    const m = new SurfacePressMode();
-    m.setConfig({ ...flatConfig(), buttons: [{ id: 'press-1', x: 0.5, minBlobArea: 0.01 }] });
-    m.step(pt(0.5), 0);
-    expect(m.step([{ id: 'press-1', x: 0.5, y: 0.9, found: true, area: 0.001 }], 16)).toEqual([]);
+    expect(ev[0].type).toBe('release');
   });
 });
 
-// Fingertip-onto-key model: the tracked point is a fingertip over the key,
-// which vanishes when the finger moves away. releaseOnLost ends the note then.
-describe('SurfacePressMode — releaseOnLost (fingertip model)', () => {
-  it('releases a held key when the finger leaves it (no point this frame)', () => {
+describe('SurfacePressMode — nearest key wins', () => {
+  const A = { ax: 0.3, ay: 0.8, bx: 0.3, by: 0.4 };
+  const B = { ax: 0.7, ay: 0.8, bx: 0.7, by: 0.4 };
+
+  it('a finger presses only the tube it is closest to', () => {
     const m = new SurfacePressMode();
-    m.setConfig({ ...flatConfig(), releaseOnLost: true });
-    m.step(pt(0.5), 0);          // finger over key, lifted → idle
-    m.step(pt(0.82), 16);        // descends to surface → press
-    const ev = m.step([], 32);   // finger leaves the key → release
+    m.setConfig(thresholds());
+    const ev = m.step(
+      [{ id: 'press-A', segment: A }, { id: 'press-B', segment: B }],
+      [{ x: 0.31, y: 0.6 }], // near A
+      0,
+    );
     expect(ev).toHaveLength(1);
-    expect(ev[0].type).toBe('release');
-    expect(ev[0].buttonId).toBe('press-1');
+    expect(ev[0].buttonId).toBe('press-A');
   });
 
-  it('without releaseOnLost (default), a lost point does NOT release', () => {
+  it('two fingers can press two different tubes at once', () => {
     const m = new SurfacePressMode();
-    m.setConfig(flatConfig());   // releaseOnLost undefined → false
-    m.step(pt(0.5), 0);
-    m.step(pt(0.82), 16);        // press
-    expect(m.step([], 32)).toEqual([]); // no release on lost
-  });
-
-  it('fires a press when a finger arrives over a key already at the surface', () => {
-    const m = new SurfacePressMode();
-    m.setConfig({ ...flatConfig(), releaseOnLost: true });
-    m.step([], 0);               // no finger yet → key armed idle
-    const ev = m.step(pt(0.85), 16); // finger appears already below the line → press
-    expect(ev).toHaveLength(1);
-    expect(ev[0].type).toBe('press');
-  });
-
-  it('does not double-release: a lost key already idle stays silent', () => {
-    const m = new SurfacePressMode();
-    m.setConfig({ ...flatConfig(), releaseOnLost: true });
-    m.step([], 0);               // armed idle
-    expect(m.step([], 16)).toEqual([]); // still no finger, still idle → nothing
+    m.setConfig(thresholds());
+    const ev = m.step(
+      [{ id: 'press-A', segment: A }, { id: 'press-B', segment: B }],
+      [{ x: 0.3, y: 0.6 }, { x: 0.7, y: 0.6 }],
+      0,
+    );
+    expect(ev.map((e) => e.buttonId).sort()).toEqual(['press-A', 'press-B']);
+    expect(ev.every((e) => e.type === 'press')).toBe(true);
   });
 });

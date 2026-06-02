@@ -8,16 +8,13 @@ import {
 
 const sample = (): SurfacePressStored => ({
   enabled: true,
-  surface: { a: -0.2, b: 0.8, points: [{ x: 0, y: 0.8 }, { x: 1, y: 0.6 }] },
-  pressGap: 0,
-  releaseGap: 0.1,
-  descentForFullVelocity: 0.1,
-  defaultVelocity: 0.6,
-  useFingertip: false,
-  keyZoneHalfWidth: 0.06,
-  buttons: [
+  touchDist: 0.06,
+  releaseDist: 0.1,
+  defaultVelocity: 0.7,
+  keys: [
     {
-      id: 'press-1', x: 0.3, minBlobArea: 0.0005, instrumentKey: 'piano',
+      id: 'press-1',
+      instrumentKey: 'piano',
       color: { id: 'press-1', hue: 200, hueTolerance: 12, minSaturation: 40, minValue: 35, minArea: 0.0005 },
     },
   ],
@@ -41,11 +38,24 @@ describe('SurfacePressConfig persistence', () => {
     expect(loadSurfacePressConfig()).toBeNull();
   });
 
-  it('drops buttons with an unknown instrument key by defaulting it', () => {
+  it('returns null when the keys array is missing', () => {
+    localStorage.setItem('admi-surface-press', JSON.stringify({ enabled: true }));
+    expect(loadSurfacePressConfig()).toBeNull();
+  });
+
+  it('coerces an unknown instrument key to the default', () => {
     const cfg = sample();
-    cfg.buttons[0].instrumentKey = 'definitely-not-real';
+    cfg.keys[0].instrumentKey = 'definitely-not-real';
     saveSurfacePressConfig(cfg);
-    expect(loadSurfacePressConfig()!.buttons[0].instrumentKey).toBe('piano');
+    expect(loadSurfacePressConfig()!.keys[0].instrumentKey).toBe('piano');
+  });
+
+  it('fills default thresholds when absent', () => {
+    localStorage.setItem('admi-surface-press', JSON.stringify({ enabled: false, keys: [] }));
+    const loaded = loadSurfacePressConfig()!;
+    expect(loaded.touchDist).toBeCloseTo(0.06, 6);
+    expect(loaded.releaseDist).toBeCloseTo(0.1, 6);
+    expect(loaded.defaultVelocity).toBeCloseTo(0.7, 6);
   });
 
   it('clear removes the stored config', () => {
