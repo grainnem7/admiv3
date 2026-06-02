@@ -19,12 +19,12 @@ export type Mat3 = readonly [
 ];
 
 /** Unit-square corners in TL, TR, BR, BL order. */
-export const UNIT_SQUARE: Point[] = [
+export const UNIT_SQUARE: readonly [Readonly<Point>, Readonly<Point>, Readonly<Point>, Readonly<Point>] = [
   { x: 0, y: 0 },
   { x: 1, y: 0 },
   { x: 1, y: 1 },
   { x: 0, y: 1 },
-];
+] as const;
 
 /** Solve a square linear system A x = b via Gaussian elimination (partial pivot). */
 function solveLinear(A: number[][], b: number[]): number[] {
@@ -55,7 +55,7 @@ function solveLinear(A: number[][], b: number[]): number[] {
   return m.map((row, i) => row[n] / row[i]);
 }
 
-export function computeHomography(src: Point[], dst: Point[]): Mat3 {
+export function computeHomography(src: readonly Point[], dst: readonly Point[]): Mat3 {
   if (src.length !== 4 || dst.length !== 4) {
     throw new Error('homography: need exactly 4 point correspondences');
   }
