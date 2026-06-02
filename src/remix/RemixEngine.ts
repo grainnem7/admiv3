@@ -78,6 +78,7 @@ export class RemixEngine {
   private loopLengthBars: 0 | 4 | 8 | 16 = 8;
   private loopOriginBar = 0;
   private duration = 0;
+  private loadToken = 0;
   private focusedStem: StemId = STEM_CYCLE_ORDER[0];
   private headNodEnabled = false;
   private headNodDetector = new HeadBopDetector(0.025, 200);
@@ -85,7 +86,9 @@ export class RemixEngine {
 
   async loadSong(song: SongConfig): Promise<void> {
     this.dispose();
+    const myToken = ++this.loadToken;
     await Tone.start();
+    if (myToken !== this.loadToken) return;
     this.ctx = Tone.getContext().rawContext as AudioContext;
 
     this.master = this.ctx.createGain();
@@ -98,6 +101,7 @@ export class RemixEngine {
     this.master.connect(this.spaceReverb.send);
 
     const buffers = await loadStemBuffers(this.ctx, song.stems);
+    if (myToken !== this.loadToken) return;
     this.duration = Math.max(0, ...[...buffers.values()].map((b) => b.duration), 0);
 
     for (const stem of STEM_CYCLE_ORDER) {
@@ -130,6 +134,7 @@ export class RemixEngine {
     if (song.analysisUrl) {
       try {
         const a = await loadSongAnalysis(song.analysisUrl);
+        if (myToken !== this.loadToken) return;
         this.downbeats = a.downbeats;
         this.beats = a.beats ?? [];
       } catch {
@@ -152,6 +157,7 @@ export class RemixEngine {
     this.layers.set(percussion.id, percussion);
 
     const loopDefs = await loadLoopManifest();
+    if (myToken !== this.loadToken) return;
     if (loopDefs.length > 0) {
       const loop = new LoopLayer(this.ctx, loopDefs, song.bpm);
       loop.connect(this.layersBus);
