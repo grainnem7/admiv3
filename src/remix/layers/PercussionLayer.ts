@@ -1,6 +1,6 @@
 /**
- * PercussionLayer — a RemixLayer of kind 'percussion'. Owns a DrumKit and
- * fires a beat-appropriate drum on hit(), chosen by pickHeadBopDrum from the
+ * PercussionLayer — a RemixLayer of kind 'percussion'. Owns a RoundRobinDrumKit
+ * and fires a beat-appropriate drum on hit(), chosen by pickHeadBopDrum from the
  * song's beat grid (kick on downbeats, snare on backbeats). Routed to by the
  * head-nod, shake, and keyboard-S gestures via the engine.
  */
