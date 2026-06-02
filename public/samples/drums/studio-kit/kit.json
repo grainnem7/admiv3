@@ -1,0 +1,6 @@
+{
+  "kick":  ["kick-01.wav", "kick-02.wav", "kick-03.wav", "kick-04.wav"],
+  "snare": ["snare-01.wav", "snare-02.wav", "snare-03.wav", "snare-04.wav"],
+  "hat":   ["hat-closed-01.wav"],
+  "crash": ["crash-01.wav"]
+}

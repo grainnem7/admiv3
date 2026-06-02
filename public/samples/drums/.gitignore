@@ -11,3 +11,7 @@
 *.aiff
 *.flac
 *.ogg
+
+# Bundled CC0 kit (redistributable) — committed so deployed builds have drums.
+!studio-kit/
+!studio-kit/**
