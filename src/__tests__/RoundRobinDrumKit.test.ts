@@ -150,9 +150,9 @@ describe('RoundRobinDrumKit', () => {
     const kicks = startSpy.mock.calls.map((c) => c[0] as string);
     expect(kicks).toEqual(['kick-01.wav', 'kick-01.wav']);
 
-    // snare had only a bad sample → that drum is dropped → play() is a no-op.
+    // snare had only a bad sample → that drum is dropped → falls back to the kick.
     startSpy.mockClear();
     kit.play('snare', 0.8);
-    expect(startSpy).not.toHaveBeenCalled();
+    expect(startSpy.mock.calls.map((c) => c[0] as string)).toEqual(['kick-01.wav']);
   });
 });
