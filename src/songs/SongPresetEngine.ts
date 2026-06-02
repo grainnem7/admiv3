@@ -38,6 +38,10 @@ import { ArpeggioVoice } from './voices/ArpeggioVoice';
 import { BassSynthVoice } from './voices/BassSynthVoice';
 import { InstrumentVoice, nextBeatAfter } from './voices/InstrumentVoice';
 import { WalkVoice } from './voices/WalkVoice';
+import { SurfacePressVoice } from './voices/SurfacePressVoice';
+import { ChordToneNoteSource, type NoteSource } from './voices/NoteSource';
+import { resolvePressTime, PendingPressQueue } from './surfacePressTiming';
+import { createNoteEvent, type NoteEvent } from '../mapping/events';
 import { MasterChain } from '../audio/MasterChain';
 import {
   DEFAULT_INSTRUMENT_KEY,
@@ -377,6 +381,20 @@ export class SongPresetEngine {
   private readonly HEADBOP_AMPLITUDE_FOR_FULL_VELOCITY = 0.08;
   /** Last currentTime seen in update() — used by processFaceLandmarks. */
   private lastUpdateTime = 0;
+
+  // ---- Surface press mode (opt-in; default off) ----
+  private surfacePressEnabled = false;
+  /** Per-button sampled voices, keyed by button id (e.g. "press-1"). */
+  private surfacePressVoices = new Map<string, SurfacePressVoice>();
+  /** MIDI note currently held per button (for release + mirror correctness). */
+  private surfaceHeldMidi = new Map<string, number>();
+  private surfaceNoteSource: NoteSource = new ChordToneNoteSource([]);
+  private surfacePressQueue = new PendingPressQueue();
+  /** Remembered instrument key per button so voices can be rebuilt on song load. */
+  private surfacePressInstrumentKeys = new Map<string, string>();
+
+  /** Mirror of surface note-on/off as typed events (facilitator visuals / future MIDI). */
+  onSurfaceNote?: (event: NoteEvent) => void;
 
   // Beat pulse tracking
   private lastDownbeatIndex = -1;
@@ -953,6 +971,13 @@ export class SongPresetEngine {
         }
       }
     }
+
+    // Rebuild surface-press voices now that ctx + generatedBus exist.
+    if (this.surfacePressVoices.size === 0 && this.surfacePressInstrumentKeys.size > 0) {
+      this.setSurfacePressConfig({
+        buttons: [...this.surfacePressInstrumentKeys].map(([id, instrumentKey]) => ({ id, instrumentKey })),
+      });
+    }
   }
 
   /**
@@ -1181,6 +1206,12 @@ export class SongPresetEngine {
     if (this.headBopPending && currentTime >= this.headBopPending.targetTime) {
       this.playHeadBopDrum(this.headBopPending.drum, this.headBopPending.velocity);
       this.headBopPending = null;
+    }
+    // Flush any beat-snapped surface presses whose target beat has arrived.
+    if (this.surfacePressEnabled) {
+      for (const due of this.surfacePressQueue.flushDue(currentTime)) {
+        this.playSurfaceNote(due.buttonId, due.midi, due.velocity);
+      }
     }
     const effectiveEnd = this.loopEnd > 0 ? this.loopEnd : this.duration;
 
@@ -1424,6 +1455,89 @@ export class SongPresetEngine {
     return this.beatSnap;
   }
 
+  // ---- Surface press mode ----
+
+  setSurfacePressEnabled(enabled: boolean): void {
+    this.surfacePressEnabled = enabled;
+    if (!enabled) {
+      for (const [buttonId] of this.surfaceHeldMidi) {
+        this.surfacePressVoices.get(buttonId)?.release();
+      }
+      this.surfaceHeldMidi.clear();
+      this.surfacePressQueue.clear();
+    }
+  }
+
+  isSurfacePressEnabled(): boolean {
+    return this.surfacePressEnabled;
+  }
+
+  setSurfacePressConfig(config: { buttons: { id: string; instrumentKey: string }[] }): void {
+    this.surfaceNoteSource = new ChordToneNoteSource(config.buttons.map((b) => b.id));
+    this.surfacePressInstrumentKeys = new Map(config.buttons.map((b) => [b.id, b.instrumentKey]));
+
+    const ids = new Set(config.buttons.map((b) => b.id));
+    for (const [id, voice] of [...this.surfacePressVoices]) {
+      if (!ids.has(id)) {
+        voice.disconnect();
+        voice.dispose();
+        this.surfacePressVoices.delete(id);
+        this.surfaceHeldMidi.delete(id);
+      }
+    }
+
+    if (this.ctx && this.generatedBus) {
+      for (const b of config.buttons) {
+        const existing = this.surfacePressVoices.get(b.id);
+        // SurfacePressVoice has no setPreset; rebuild if the instrument changed.
+        if (existing) {
+          existing.disconnect();
+          existing.dispose();
+          this.surfacePressVoices.delete(b.id);
+          this.surfaceHeldMidi.delete(b.id);
+        }
+        const voice = new SurfacePressVoice(this.ctx, b.instrumentKey);
+        voice.onNoteTrigger = () => this.triggerSidechain();
+        voice.connect(this.generatedBus);
+        this.surfacePressVoices.set(b.id, voice);
+      }
+    }
+  }
+
+  pressSurfaceButton(buttonId: string, velocity = 0.7): void {
+    if (!this.surfacePressEnabled || !this.currentChord) return;
+    const voice = this.surfacePressVoices.get(buttonId);
+    if (!voice) return;
+
+    const midi = this.surfaceNoteSource.noteForPress(buttonId, this.currentChord);
+    const targetTime = resolvePressTime(this.song?.beats, this.getCurrentTime(), this.beatSnap);
+
+    if (this.beatSnap && this.song?.beats && this.song.beats.length > 0 && this.isPlayingState) {
+      this.surfacePressQueue.schedule(buttonId, midi, velocity, targetTime);
+    } else {
+      this.playSurfaceNote(buttonId, midi, velocity);
+    }
+  }
+
+  releaseSurfaceButton(buttonId: string): void {
+    this.surfacePressQueue.cancel(buttonId);
+    const voice = this.surfacePressVoices.get(buttonId);
+    if (!voice) return;
+    const held = this.surfaceHeldMidi.get(buttonId);
+    if (held === undefined) return;
+    voice.release();
+    this.surfaceHeldMidi.delete(buttonId);
+    this.onSurfaceNote?.(createNoteEvent('noteOff', held, 0, performance.now()));
+  }
+
+  private playSurfaceNote(buttonId: string, midi: number, velocity: number): void {
+    const voice = this.surfacePressVoices.get(buttonId);
+    if (!voice) return;
+    voice.press(midi, velocity);
+    this.surfaceHeldMidi.set(buttonId, midi);
+    this.onSurfaceNote?.(createNoteEvent('noteOn', midi, velocity, performance.now()));
+  }
+
   // ---- Head Bopping (Change ID 6) ----
 
   /**
@@ -1613,6 +1727,16 @@ export class SongPresetEngine {
     this.headBopKit = null;
     this.headBopSampleKit?.dispose();
     this.headBopSampleKit = null;
+
+    // Surface-press voices are rebuilt on the next song load from the
+    // remembered instrument keys (which deliberately survive this teardown).
+    for (const voice of this.surfacePressVoices.values()) {
+      voice.disconnect();
+      voice.dispose();
+    }
+    this.surfacePressVoices.clear();
+    this.surfaceHeldMidi.clear();
+    this.surfacePressQueue.clear();
 
     // Stop and disconnect stems
     for (const stem of this.stems.values()) {
