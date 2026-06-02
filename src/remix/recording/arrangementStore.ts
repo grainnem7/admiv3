@@ -7,15 +7,40 @@ import type { RemixArrangement } from './remixRecording';
 const PREFIX = 'remix:arr:';
 const key = (songId: string, name: string) => `${PREFIX}${songId}:${name}`;
 
-export function saveArrangement(name: string, a: RemixArrangement): void {
-  localStorage.setItem(key(a.songId, name), JSON.stringify(a));
+/** Returns false if storage rejected the write (e.g. quota exceeded / disabled). */
+export function saveArrangement(name: string, a: RemixArrangement): boolean {
+  try {
+    localStorage.setItem(key(a.songId, name), JSON.stringify(a));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Structural guard so malformed / schema-drifted blobs can't crash compositing later. */
+function isValidArrangement(v: unknown): v is RemixArrangement {
+  if (!v || typeof v !== 'object') return false;
+  const a = v as Partial<RemixArrangement>;
+  if (typeof a.songId !== 'string' || !Array.isArray(a.sections)) return false;
+  return a.sections.every(
+    (s) =>
+      s != null &&
+      Array.isArray((s as { layers?: unknown }).layers) &&
+      (s as { layers: unknown[] }).layers.every(
+        (t) =>
+          t != null &&
+          typeof (t as { id?: unknown }).id === 'string' &&
+          Array.isArray((t as { events?: unknown }).events),
+      ),
+  );
 }
 
 export function loadArrangementFromStore(songId: string, name: string): RemixArrangement | null {
   const raw = localStorage.getItem(key(songId, name));
   if (!raw) return null;
   try {
-    return JSON.parse(raw) as RemixArrangement;
+    const parsed: unknown = JSON.parse(raw);
+    return isValidArrangement(parsed) ? parsed : null;
   } catch {
     return null;
   }
