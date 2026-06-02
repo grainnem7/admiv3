@@ -39,7 +39,7 @@ import {
 import { getInputProfileManager } from '../../profiles/InputProfileManager';
 import { SurfacePressMode, type SurfaceKeyFrame, type FingerPoint } from '../../tracking/SurfacePressMode';
 import { HandDetector, type HandDetectionResult } from '../../tracking/HandDetector';
-import { lowestFingertip } from '../../tracking/handPressPoint';
+import { indexFingertip } from '../../tracking/handPressPoint';
 import type { SurfacePressStored } from '../../profiles/SurfacePressConfig';
 import { StemMixerStrip } from './songPreset/StemMixerStrip';
 import { StemMixerTouchPad } from './songPreset/StemMixerTouchPad';
@@ -568,7 +568,7 @@ function SongPresetScreen() {
 
         const fingers: FingerPoint[] = [];
         for (const hand of [hands?.leftHand, hands?.rightHand]) {
-          const tip = lowestFingertip(hand?.landmarks ?? null);
+          const tip = indexFingertip(hand?.landmarks ?? null);
           if (tip) fingers.push({ x: 1 - tip.x, y: tip.y });
         }
 
@@ -1950,7 +1950,7 @@ function drawSurfaceOverlay(
   if (hands) {
     ctx.fillStyle = 'rgba(80,255,140,0.9)';
     for (const hand of [hands.leftHand, hands.rightHand]) {
-      const tip = lowestFingertip(hand?.landmarks ?? null);
+      const tip = indexFingertip(hand?.landmarks ?? null);
       if (tip) {
         ctx.beginPath();
         ctx.arc(tip.x * w, tip.y * h, 7, 0, Math.PI * 2);

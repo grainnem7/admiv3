@@ -17,9 +17,26 @@
 /** MediaPipe hand fingertip landmark indices: thumb, index, middle, ring, pinky. */
 const FINGERTIP_INDICES = [4, 8, 12, 16, 20] as const;
 
+/** MediaPipe index-finger tip landmark index. */
+const INDEX_TIP = 8;
+
 export interface Point2D {
   x: number;
   y: number;
+}
+
+/**
+ * Return the index-finger tip (landmark 8), or null if the landmark array is
+ * missing or shorter than a full hand. Use this when the pressing point should
+ * be specifically the index finger (a deliberate "pointing" press) rather than
+ * whichever fingertip is lowest.
+ */
+export function indexFingertip(
+  landmarks: readonly Point2D[] | null | undefined,
+): Point2D | null {
+  if (!landmarks || landmarks.length < 21) return null;
+  const lm = landmarks[INDEX_TIP];
+  return lm ? { x: lm.x, y: lm.y } : null;
 }
 
 /**
