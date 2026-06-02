@@ -10,6 +10,8 @@
  */
 
 import * as Tone from 'tone';
+import { MasterChain } from '../audio/MasterChain';
+import { SpaceReverb } from '../audio/SpaceReverb';
 import type { SongConfig } from '../songs/songLibrary';
 import { loadStemBuffers } from './loadStemBuffers';
 import { loadSongAnalysis } from '../songs/analysisLoader';
@@ -55,6 +57,8 @@ function clampVel(amp: number): number {
 export class RemixEngine {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
+  private masterChain: MasterChain | null = null;
+  private spaceReverb: SpaceReverb | null = null;
   private nodes = new Map<StemId, StemNodes>();
   private states = new Map<StemId, RemixStemState>();
   private gliding = new Set<StemId>();
@@ -86,7 +90,12 @@ export class RemixEngine {
 
     this.master = this.ctx.createGain();
     this.master.gain.value = MASTER_GAIN;
-    this.master.connect(this.ctx.destination);
+    // Shared studio chain: master → EQ/comp/sat/limiter → destination.
+    this.masterChain = new MasterChain(this.ctx);
+    this.master.connect(this.masterChain.input);
+    // Parallel space reverb: tap the full mix, return wet into the master chain.
+    this.spaceReverb = new SpaceReverb(this.ctx, this.masterChain.input);
+    this.master.connect(this.spaceReverb.send);
 
     const buffers = await loadStemBuffers(this.ctx, song.stems);
     this.duration = Math.max(0, ...[...buffers.values()].map((b) => b.duration), 0);
@@ -309,6 +318,10 @@ export class RemixEngine {
     this.layersBus?.disconnect();
     this.layersBus = null;
     this.master?.disconnect();
+    this.spaceReverb?.dispose();
+    this.spaceReverb = null;
+    this.masterChain?.dispose();
+    this.masterChain = null;
     this.master = null;
     this.ctx = null;
   }
