@@ -106,15 +106,16 @@ function SongPresetScreen() {
   const surfaceConfigRef = useRef<SurfacePressStored | null>(
     getInputProfileManager().getSurfacePressConfig(),
   );
-  const [surfacePressEnabled, setSurfacePressEnabled] = useState<boolean>(
-    surfaceConfigRef.current?.enabled ?? false,
-  );
+  // Always start OFF on load, even if a calibration is saved — surface press
+  // is opt-in and must never auto-fire notes when the screen loads. The saved
+  // calibration is still loaded (so the toggle is ready), the user turns it on.
+  const [surfacePressEnabled, setSurfacePressEnabled] = useState<boolean>(false);
   const [surfaceCalStage, setSurfaceCalStage] =
     useState<'idle' | 'keys'>('idle');
   const surfaceCalStageRef = useRef<'idle' | 'keys'>('idle');
   // Mirror of surfacePressEnabled for the rAF loop (whose effect deps don't
   // include it, so it must read the live value via a ref).
-  const surfacePressEnabledRef = useRef<boolean>(surfaceConfigRef.current?.enabled ?? false);
+  const surfacePressEnabledRef = useRef<boolean>(false);
   const surfaceKeysRef = useRef<SurfacePressStored['keys']>([]);
   // Bump to force a re-render of the calibration progress hints (refs alone
   // don't trigger React updates).
