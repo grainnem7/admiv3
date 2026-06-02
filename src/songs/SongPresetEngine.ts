@@ -263,6 +263,7 @@ export class SongPresetEngine {
   private reverbWetGain: GainNode | null = null;
   private masterGainNode: GainNode | null = null;
   private masterChain: MasterChain | null = null;
+  private muted = false;
 
   // Playback state
   private isPlayingState = false;
@@ -602,6 +603,7 @@ export class SongPresetEngine {
   }
 
   setMuted(muted: boolean): void {
+    this.muted = muted;
     if (this.masterGainNode && this.ctx) {
       const now = this.ctx.currentTime;
       this.masterGainNode.gain.setTargetAtTime(muted ? 0 : 0.8, now, 0.05);
@@ -1555,6 +1557,8 @@ export class SongPresetEngine {
   }
 
   private updateBeatPulse(currentTime: number): void {
+    // Muted? Skip — otherwise the pulse's ramp-back-to-0.8 would un-mute.
+    if (this.muted) return;
     const downbeats = this.song?.downbeats;
     if (!downbeats || downbeats.length === 0 || !this.masterGainNode) return;
 
