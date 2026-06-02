@@ -44,17 +44,15 @@ vi.mock('tone', () => {
     return fakeNode();
   });
 
-  // Build a synth factory that returns a node whose toDestination()
-  // returns an object with the given `triggerSpy` as its
-  // triggerAttackRelease — letting tests assert which drum was hit.
+  // Build a synth factory that returns a node carrying the given
+  // `triggerSpy` as its triggerAttackRelease — letting tests assert
+  // which drum was hit.  The kit now calls .connect(...) (which returns
+  // the node, Tone-style) and triggers on the node itself.
   const synthWith = (triggerSpy: ReturnType<typeof vi.fn>) =>
     vi.fn().mockImplementation(() => {
       const node = fakeNode();
-      node.toDestination = vi.fn(() => {
-        const after = fakeNode();
-        after.triggerAttackRelease = triggerSpy;
-        return after;
-      });
+      node.connect = vi.fn(() => node); // .connect() returns the node (Tone-style)
+      node.triggerAttackRelease = triggerSpy;
       return node;
     });
 
@@ -70,18 +68,13 @@ vi.mock('tone', () => {
     MembraneSynth: synthWith(kickTrigger),
     NoiseSynth: vi.fn().mockImplementation(() => {
       const node = fakeNode();
-      node.toDestination = vi.fn(() => {
-        const after = fakeNode();
-        // Use the snare spy by default; tests that exercise the hat
-        // path can swap by ordering of ensureSnare() vs ensureHat().
-        // The kit calls ensureSnare() before ensureHat() never (each
-        // is independent), so two separate NoiseSynth instances are
-        // built — first triggerAttackRelease call on each goes to
-        // distinct spies.  For simplicity, we lump both into snareTrigger
-        // since none of the current tests need to distinguish them.
-        after.triggerAttackRelease = snareTrigger;
-        return after;
-      });
+      node.connect = vi.fn(() => node); // .connect() returns the node (Tone-style)
+      // Use the snare spy for both NoiseSynth instances (snare + hat).
+      // The kit builds two NoiseSynth instances — first
+      // triggerAttackRelease call on each goes to distinct spies.  For
+      // simplicity, we lump both into snareTrigger since none of the
+      // current tests need to distinguish them.
+      node.triggerAttackRelease = snareTrigger;
       return node;
     }),
     MetalSynth: synthWith(crashTrigger),

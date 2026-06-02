@@ -1440,6 +1440,7 @@ export class SongPresetEngine {
       this.headBopDetector.reset();
     } else if (!this.headBopKit) {
       this.headBopKit = new HeadBopKit();
+      if (this.masterGainNode) this.headBopKit.connect(this.masterGainNode);
     }
   }
 
@@ -1488,6 +1489,7 @@ export class SongPresetEngine {
   private triggerHeadBop(): void {
     if (!this.headBopKit) {
       this.headBopKit = new HeadBopKit();
+      if (this.masterGainNode) this.headBopKit.connect(this.masterGainNode);
     }
 
     const amplitude = this.headBopDetector.getLastBopAmplitude();
@@ -1516,7 +1518,10 @@ export class SongPresetEngine {
       this.headBopSampleKit.play(drum, velocity);
       return;
     }
-    if (!this.headBopKit) this.headBopKit = new HeadBopKit();
+    if (!this.headBopKit) {
+      this.headBopKit = new HeadBopKit();
+      if (this.masterGainNode) this.headBopKit.connect(this.masterGainNode);
+    }
     this.headBopKit.play(drum, velocity);
   }
 

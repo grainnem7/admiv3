@@ -17,6 +17,11 @@
  * All four pieces are lazily constructed on first use so callers that
  * never trigger a snare/crash don't pay the construction cost.
  *
+ * Output routes to a destination provided via {@link HeadBopKit.connect}
+ * (e.g. the engine's master gain node so head-bop drums respect Mute and
+ * pick up the master glue), falling back to the main output when no
+ * destination has been supplied.
+ *
  * @see pickHeadBopDrum for the beat-position-aware pattern that
  *      chooses which piece to play.
  */
@@ -47,6 +52,12 @@ export class HeadBopKit {
   private snareSynth: Tone.NoiseSynth | null = null;
   private hatSynth: Tone.NoiseSynth | null = null;
   private crashSynth: Tone.MetalSynth | null = null;
+  private dest: AudioNode | null = null;
+
+  /** Route this kit's output to `dest` (e.g. the engine master). Call before play(). */
+  connect(dest: AudioNode): void {
+    this.dest = dest;
+  }
 
   /**
    * Play a drum sound at the given velocity (0–1).  Builds the synth
@@ -104,7 +115,7 @@ export class HeadBopKit {
       pitchDecay: 0.05,
       octaves: 6,
       envelope: { attack: 0.001, decay: 0.3, sustain: 0.01, release: 0.4 },
-    }).toDestination();
+    }).connect(this.dest ?? Tone.getDestination());
   }
 
   private ensureSnare(): void {
@@ -116,7 +127,7 @@ export class HeadBopKit {
     this.snareSynth = new Tone.NoiseSynth({
       noise: { type: 'white' },
       envelope: { attack: 0.001, decay: 0.15, sustain: 0 },
-    }).toDestination();
+    }).connect(this.dest ?? Tone.getDestination());
   }
 
   private ensureHat(): void {
@@ -124,7 +135,7 @@ export class HeadBopKit {
     this.hatSynth = new Tone.NoiseSynth({
       noise: { type: 'white' },
       envelope: { attack: 0.001, decay: 0.05, sustain: 0 },
-    }).toDestination();
+    }).connect(this.dest ?? Tone.getDestination());
   }
 
   private ensureCrash(): void {
@@ -138,7 +149,7 @@ export class HeadBopKit {
       modulationIndex: 32,
       resonance: 4000,
       octaves: 1.5,
-    }).toDestination();
+    }).connect(this.dest ?? Tone.getDestination());
   }
 }
 
