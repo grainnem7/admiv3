@@ -492,17 +492,19 @@ export class RemixEngine {
     this.arranger.deleteTake(sectionIdx, takeId);
   }
 
-  /** Absolute start time of a section; falls back to 0 when the region can't be resolved. */
-  private sectionBounds(originBar: number, lengthBars: number): { start: number; end: number } {
+  /** Absolute bounds of a section, or null when its loop region can't be resolved
+   *  (e.g. an arrangement loaded against a different song's bar grid). */
+  private sectionBounds(originBar: number, lengthBars: number): { start: number; end: number } | null {
     const region = computeLoopRegion(this.downbeats, originBar, lengthBars);
-    if (region) return { start: region.startSec, end: region.endSec };
-    return { start: 0, end: this.duration > 0 ? this.duration : Number.POSITIVE_INFINITY };
+    return region ? { start: region.startSec, end: region.endSec } : null;
   }
 
   private tickArrangement(nowSec: number): void {
     const arr = this.arranger.getArrangement();
     for (const section of arr.sections) {
-      const { start, end } = this.sectionBounds(section.originBar, section.lengthBars);
+      const bounds = this.sectionBounds(section.originBar, section.lengthBars);
+      if (!bounds) continue; // unresolved region → don't flood the whole timeline
+      const { start, end } = bounds;
       if (nowSec < start || nowSec >= end) continue;
       const t = nowSec - start;
       const comp = RemixArranger.composite(section, t);

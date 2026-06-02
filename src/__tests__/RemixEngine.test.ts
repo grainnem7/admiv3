@@ -173,6 +173,15 @@ describe('RemixEngine', () => {
     expect(() => e.dispose()).not.toThrow();
   });
 
+  it('sectionBounds returns null when the loop region cannot be resolved', () => {
+    const e = new RemixEngine();
+    // No bar grid (fewer than 2 downbeats) → computeLoopRegion can't resolve,
+    // so the section must be skipped rather than playing across the whole song.
+    (e as unknown as { downbeats: number[] }).downbeats = [];
+    const bounds = (e as unknown as { sectionBounds(o: number, l: number): unknown }).sectionBounds(0, 4);
+    expect(bounds).toBeNull();
+  });
+
 
   it('creates a synced Tone.Player per stem on load', async () => {
     const Tone = await import('tone');
