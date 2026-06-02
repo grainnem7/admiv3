@@ -16,6 +16,12 @@ import {
   clearBatonAssignments,
   type BatonAssignments,
 } from './BatonAssignments';
+import {
+  loadSurfacePressConfig,
+  saveSurfacePressConfig,
+  clearSurfacePressConfig,
+  type SurfacePressStored,
+} from './SurfacePressConfig';
 
 const STORAGE_KEY = 'admi-input-profiles';
 const ACTIVE_PROFILE_KEY = 'admi-active-profile';
@@ -271,6 +277,30 @@ export class InputProfileManager {
   /** Remove all stored baton assignments. */
   clearBatonAssignments(): void {
     clearBatonAssignments();
+  }
+
+  // ============================================
+  // Surface-press configuration
+  // ============================================
+  //
+  // Delegated to SurfacePressConfig.ts.  Exposed here so callers have a
+  // single point of entry for "user-profile-style persistence", matching
+  // the baton-assignments pattern.  The underlying storage key is
+  // independent of InputProfile.
+
+  /** Return the persisted surface-press configuration, or null if not yet calibrated. */
+  getSurfacePressConfig(): SurfacePressStored | null {
+    return loadSurfacePressConfig();
+  }
+
+  /** Persist the surface-press configuration to localStorage. */
+  saveSurfacePressConfig(config: SurfacePressStored): void {
+    saveSurfacePressConfig(config);
+  }
+
+  /** Remove all stored surface-press configuration. */
+  clearSurfacePressConfig(): void {
+    clearSurfacePressConfig();
   }
 
   /**
