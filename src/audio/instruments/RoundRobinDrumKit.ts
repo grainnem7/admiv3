@@ -116,11 +116,18 @@ export class RoundRobinDrumKit {
   }
 
   private fire(name: DrumName, gainDb: number): void {
-    const players = this.samples.get(name);
+    // Fall back to the kick if the requested drum didn't load (e.g. its sample
+    // 404'd), so every hit makes a sound instead of an intermittent silence.
+    let key = name;
+    let players = this.samples.get(key);
+    if ((!players || players.length === 0) && name !== 'kick') {
+      key = 'kick';
+      players = this.samples.get(key);
+    }
     if (!players || players.length === 0) return;
-    const i = this.rrIndex.get(name) ?? 0;
+    const i = this.rrIndex.get(key) ?? 0;
     const p = players[i];
-    this.rrIndex.set(name, (i + 1) % players.length);
+    this.rrIndex.set(key, (i + 1) % players.length);
     p.volume.value = gainDb;
     p.start();
   }

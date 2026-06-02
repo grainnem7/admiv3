@@ -114,6 +114,19 @@ describe('RoundRobinDrumKit', () => {
     expect(kit.isReady()).toBe(false);
   });
 
+  it('falls back to a kick when the requested drum has no samples', async () => {
+    // Manifest with kick + hat but NO snare.
+    (globalThis as { fetch: typeof fetch }).fetch = vi.fn().mockResolvedValue({
+      ok: true, status: 200,
+      json: () => Promise.resolve({ kick: ['kick-01.wav'], hat: ['hat-closed-01.wav'] }),
+    }) as unknown as typeof fetch;
+    const kit = new RoundRobinDrumKit(fakeCtx(), 'studio-kit');
+    await kit.whenReady();
+    kit.play('snare', 0.8); // snare absent → should fire the kick instead of silence
+    const fired = startSpy.mock.calls.map((c) => c[0] as string);
+    expect(fired).toEqual(['kick-01.wav']);
+  });
+
   it('still loads and plays the rest when one sample 404s', async () => {
     // kick has a bad sample among two; snare's only sample is bad.
     (globalThis as { fetch: typeof fetch }).fetch = vi.fn().mockResolvedValue({
