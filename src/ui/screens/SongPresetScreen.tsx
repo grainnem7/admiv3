@@ -430,7 +430,10 @@ function SongPresetScreen() {
       handDetectorRef.current?.stop();
       handsRef.current = null;
     };
-  }, [surfacePressEnabled, inputMode]);
+    // isInitialized is a dependency so this re-runs once the camera is ready:
+    // if surface press is already enabled on load, videoRef is null on the
+    // first pass and we must retry when the video element exists.
+  }, [surfacePressEnabled, inputMode, isInitialized]);
 
   // Dispose the HandDetector entirely on unmount (the effect above only stops
   // it on toggle-off so the model stays cached).

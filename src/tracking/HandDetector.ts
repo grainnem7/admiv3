@@ -157,6 +157,14 @@ export class HandDetector {
 
     const startTimeMs = performance.now();
 
+    // Skip until the video has real dimensions — MediaPipe's detectForVideo
+    // throws on a 0×0 frame (e.g. before the stream is ready), which would
+    // otherwise spam errors when started early.
+    if (videoElement.videoWidth === 0 || videoElement.videoHeight === 0) {
+      this.animationFrameId = requestAnimationFrame(() => this.detectLoop(videoElement));
+      return;
+    }
+
     // Only process new frames
     if (videoElement.currentTime !== this.lastVideoTime) {
       this.lastVideoTime = videoElement.currentTime;
