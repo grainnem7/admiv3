@@ -62,7 +62,7 @@ const LEFT_THRESHOLD = 0.30;
 const RIGHT_THRESHOLD = 0.70;
 
 // Surface-press defaults (commissioner-overridable).
-const SURFACE_BUTTON_COUNT = 4;
+const SURFACE_BUTTON_COUNT = 5;
 const SURFACE_DEFAULT_INSTRUMENT = 'piano';
 
 const ROLE_KEYS: Record<string, ColorRole> = {
