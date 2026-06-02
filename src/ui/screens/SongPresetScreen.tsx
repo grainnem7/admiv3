@@ -532,7 +532,16 @@ function SongPresetScreen() {
     const loop = () => {
       if (!running) return;
 
-      const positions = buildPositions();
+      // Surface-press mode and moving-baton mode are mutually exclusive — it
+      // makes no sense to expect both at once. While surface press is on, feed
+      // the engine all-"not found" positions so the continuous baton voices
+      // stay silent and the instrument is purely tap-based. (The engine still
+      // tracks chord/beat, which the tap voices need.)
+      const positions = surfacePressEnabledRef.current
+        ? new Map<ColorRole, VoicePosition>(
+            COLOR_ROLES.map((r) => [r.id, { x: 0, y: 0, found: false }]),
+          )
+        : buildPositions();
 
       // Feed to engine
       engineRef.current.setAllPositions(positions);
