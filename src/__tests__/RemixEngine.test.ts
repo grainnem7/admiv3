@@ -180,8 +180,9 @@ describe('RemixEngine', () => {
     const callsBefore = PlayerMock.mock.calls.length;
     const e = new RemixEngine();
     await e.loadSong(song());
-    // 4 stems + 4 DrumKit players → 8 Player constructions total.
-    expect(PlayerMock.mock.calls.length - callsBefore).toBe(8);
+    // 4 stem players (the round-robin drum kit loads async from a fetched
+    // manifest, which this mock's fetch doesn't supply → 0 drum players here).
+    expect(PlayerMock.mock.calls.length - callsBefore).toBe(4);
     e.dispose();
   });
 
@@ -192,7 +193,7 @@ describe('RemixEngine', () => {
     const e = new RemixEngine();
     await e.loadSong(song());
     const created = PlayerMock.mock.results.slice(before);
-    // 4 stem players (loop=true) + 4 DrumKit players (loop=false)
+    // 4 stem players (loop=true); the round-robin kit adds none under this mock.
     const stemPlayers = created.filter((r) => r.value.loop === true);
     expect(stemPlayers.length).toBe(4);
     e.dispose();

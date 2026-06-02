@@ -145,7 +145,7 @@ export class RemixEngine {
     this.layersBus.gain.value = 1;
     this.layersBus.connect(this.master);
 
-    const percussion = new PercussionLayer(this.ctx, 'default');
+    const percussion = new PercussionLayer(this.ctx, 'studio-kit');
     percussion.connect(this.layersBus);
     percussion.setBeatGrid(this.beats, this.downbeats);
     percussion.setEnabled(false); // opt-in

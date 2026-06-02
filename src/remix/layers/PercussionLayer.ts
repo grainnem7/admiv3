@@ -6,14 +6,14 @@
  */
 
 import type { RemixLayer } from './RemixLayer';
-import { DrumKit } from './DrumKit';
+import { RoundRobinDrumKit } from '../../audio/instruments/RoundRobinDrumKit';
 import { pickHeadBopDrum } from '../../songs/voices/HeadBopKit';
 
 export class PercussionLayer implements RemixLayer {
   readonly id = 'percussion';
   readonly kind = 'percussion' as const;
 
-  private kit: DrumKit;
+  private kit: RoundRobinDrumKit;
   private gain: GainNode;
   private enabled = false;
   private volume = 0.8;
@@ -23,7 +23,7 @@ export class PercussionLayer implements RemixLayer {
   constructor(ctx: AudioContext, kitId: string) {
     this.gain = ctx.createGain();
     this.gain.gain.value = 0; // disabled → silent
-    this.kit = new DrumKit(ctx, kitId);
+    this.kit = new RoundRobinDrumKit(ctx, kitId);
     this.kit.connect(this.gain);
   }
 

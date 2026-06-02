@@ -10,9 +10,10 @@ vi.mock('tone', () => ({
 }));
 
 const playSpy = vi.fn();
-vi.mock('../remix/layers/DrumKit', () => ({
-  DrumKit: vi.fn().mockImplementation(() => ({
+vi.mock('../audio/instruments/RoundRobinDrumKit', () => ({
+  RoundRobinDrumKit: vi.fn().mockImplementation(() => ({
     isReady: () => true,
+    whenReady: () => Promise.resolve(),
     connect: vi.fn(),
     play: playSpy,
     dispose: vi.fn(),
