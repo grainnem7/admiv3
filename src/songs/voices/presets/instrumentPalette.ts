@@ -80,7 +80,7 @@ export const INSTRUMENT_PALETTE: InstrumentPaletteEntry[] = [
     duration: 1.6,
     velocityRange: { min: 0.45, max: 1.0 },
     brightnessBoostHz: 2500,
-    source: 'nbrosowsky/tonejs-instruments (organ, CC-BY-SA 3.0)',
+    source: 'nbrosowsky/tonejs-instruments (organ, CC-BY 3.0)',
     notes:
       'Substitute: organ samples standing in for electric piano until ' +
       'true Rhodes/Wurlitzer samples are sourced. See SAMPLE_SOURCES.md.',
@@ -106,7 +106,7 @@ export const INSTRUMENT_PALETTE: InstrumentPaletteEntry[] = [
     duration: 2.5,
     velocityRange: { min: 0.4, max: 0.95 },
     brightnessBoostHz: 2200,
-    source: 'nbrosowsky/tonejs-instruments (cello, CC-BY-SA 3.0)',
+    source: 'nbrosowsky/tonejs-instruments (cello, CC-BY 3.0)',
   },
   {
     key: 'percussion',
@@ -119,7 +119,7 @@ export const INSTRUMENT_PALETTE: InstrumentPaletteEntry[] = [
     duration: 0.45,
     velocityRange: { min: 0.4, max: 0.95 },
     brightnessBoostHz: 2000,
-    source: 'nbrosowsky/tonejs-instruments (guitar-nylon, CC-BY-SA 3.0)',
+    source: 'nbrosowsky/tonejs-instruments (guitar-nylon, CC-BY 3.0)',
     notes:
       'Substitute: nylon-guitar plucks standing in for percussion until ' +
       'a sampled congas / clean-kit set is sourced. See SAMPLE_SOURCES.md.',
