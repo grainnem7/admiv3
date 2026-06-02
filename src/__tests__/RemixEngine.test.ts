@@ -180,9 +180,11 @@ describe('RemixEngine', () => {
     const callsBefore = PlayerMock.mock.calls.length;
     const e = new RemixEngine();
     await e.loadSong(song());
-    // 4 stem players (the round-robin drum kit loads async from a fetched
-    // manifest, which this mock's fetch doesn't supply → 0 drum players here).
-    expect(PlayerMock.mock.calls.length - callsBefore).toBe(4);
+    // 4 stem players + 1 loop player: the round-robin drum kit loads async from
+    // a fetched manifest this mock's fetch doesn't supply (→ 0 drum players), and
+    // the loop manifest's 120bpm loop at song 120bpm needs no stretch, so the loop
+    // layer builds it as a plain Tone.Player (the 140bpm loop builds a GrainPlayer).
+    expect(PlayerMock.mock.calls.length - callsBefore).toBe(5);
     e.dispose();
   });
 
