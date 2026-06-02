@@ -32,8 +32,11 @@ export { BASS_PRESET_LIST };
 // Constants
 // ============================================
 
-const BASS_MIN_MIDI = 38; // D2
-const BASS_MAX_MIDI = 50; // D3
+// Electric-bass register: roots sit around E1–D2. (Chord roots in the
+// progression are written at E2–D3; an octave higher than a bass guitar plays,
+// so we fold them down into this range.)
+const BASS_MIN_MIDI = 26; // D1
+const BASS_MAX_MIDI = 38; // D2
 const FILTER_LERP = 0.06;
 
 // ============================================
