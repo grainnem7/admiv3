@@ -1460,8 +1460,9 @@ export class SongPresetEngine {
   setSurfacePressEnabled(enabled: boolean): void {
     this.surfacePressEnabled = enabled;
     if (!enabled) {
-      for (const [buttonId] of this.surfaceHeldMidi) {
+      for (const [buttonId, held] of this.surfaceHeldMidi) {
         this.surfacePressVoices.get(buttonId)?.release();
+        this.onSurfaceNote?.(createNoteEvent('noteOff', held, 0, performance.now()));
       }
       this.surfaceHeldMidi.clear();
       this.surfacePressQueue.clear();
