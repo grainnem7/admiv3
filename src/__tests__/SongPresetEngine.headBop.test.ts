@@ -156,6 +156,22 @@ describe('SongPresetEngine head bopping', () => {
     expect(crashTrigger).not.toHaveBeenCalled();
   });
 
+  it('plays immediately (no queued burst) when beat-snap is on but transport is stopped', () => {
+    const engine = new SongPresetEngine();
+    engine.setHeadBopEnabled(true);
+    // Beat-snap on + a beat grid, but never played (transport stopped). Without
+    // the fix this would queue a pending bop that only the play-loop flushes,
+    // so the drum would pile up and burst on Play; with the fix it fires now.
+    const priv = engine as unknown as {
+      beatSnap: boolean;
+      song: { beats: number[]; downbeats: number[] };
+    };
+    priv.beatSnap = true;
+    priv.song = { beats: [0, 0.5, 1.0, 1.5], downbeats: [0] };
+    feedOneBop(engine, 0);
+    expect(kickTrigger).toHaveBeenCalled(); // fired immediately, not deferred
+  });
+
   it('amplitude scales the kick velocity (small nod → low, big nod → high)', () => {
     const engine = new SongPresetEngine();
     engine.setHeadBopEnabled(true);

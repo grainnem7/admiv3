@@ -1496,7 +1496,10 @@ export class SongPresetEngine {
     const beats = this.song?.beats;
     const downbeats = this.song?.downbeats;
 
-    if (this.beatSnap && beats && beats.length > 0) {
+    // Only defer to the beat grid while actually playing — the pending slot is
+    // flushed by the play-loop, so deferring while stopped would let nods pile
+    // up and all fire at once on Play. When stopped, play immediately.
+    if (this.beatSnap && this.isPlayingState && beats && beats.length > 0) {
       const targetTime = nextBeatAfter(beats, this.lastUpdateTime);
       const drum = pickHeadBopDrum(targetTime, beats, downbeats);
       this.headBopPending = { targetTime, drum, velocity };
