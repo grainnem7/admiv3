@@ -470,10 +470,10 @@ export interface MappingResult {
 // UI Types
 // ============================================
 
-export type Screen = 'welcome' | 'setup' | 'calibration' | 'performance' | 'betweenUs' | 'harmonicBlending' | 'songPreset' | 'remix' | 'settings' | 'info';
+export type Screen = 'welcome' | 'setup' | 'calibration' | 'performance' | 'betweenUs' | 'harmonicBlending' | 'songPreset' | 'remix' | 'surfaceKeyboard' | 'settings' | 'info';
 
 export type ExperienceLevel = 'beginner' | 'intermediate' | 'advanced';
-export type PerformanceView = 'standard' | 'betweenUs' | 'harmonicBlending' | 'songPreset' | 'remix' | 'minimal';
+export type PerformanceView = 'standard' | 'betweenUs' | 'harmonicBlending' | 'songPreset' | 'remix' | 'surfaceKeyboard' | 'minimal';
 export type UISize = 'standard' | 'large';
 
 // ============================================

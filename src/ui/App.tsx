@@ -21,6 +21,7 @@ import BetweenUsScreen from './screens/BetweenUsScreen';
 import HarmonicBlendingScreen from './screens/HarmonicBlendingScreen';
 import SongPresetScreen from './screens/SongPresetScreen';
 import RemixScreen from './screens/RemixScreen';
+import SurfaceKeyboardScreen from './screens/SurfaceKeyboardScreen';
 import InfoScreen from './screens/InfoScreen';
 
 // Components
@@ -107,6 +108,8 @@ function App() {
         return <SongPresetScreen />;
       case 'remix':
         return <RemixScreen />;
+      case 'surfaceKeyboard':
+        return <SurfaceKeyboardScreen />;
       case 'info':
         return <InfoScreen />;
       default:

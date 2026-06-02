@@ -13,15 +13,17 @@ const MODES: { id: PerformanceView; label: string }[] = [
   { id: 'harmonicBlending', label: 'Harmonic Blend' },
   { id: 'songPreset', label: 'Song Preset' },
   { id: 'remix', label: 'Remix' },
+  { id: 'surfaceKeyboard', label: 'Surface Keys' },
   { id: 'minimal', label: 'Minimal' },
 ];
 
 /** Modes that use their own dedicated screen */
-const SCREEN_MODES: Partial<Record<PerformanceView, 'betweenUs' | 'harmonicBlending' | 'songPreset' | 'remix'>> = {
+const SCREEN_MODES: Partial<Record<PerformanceView, 'betweenUs' | 'harmonicBlending' | 'songPreset' | 'remix' | 'surfaceKeyboard'>> = {
   betweenUs: 'betweenUs',
   harmonicBlending: 'harmonicBlending',
   songPreset: 'songPreset',
   remix: 'remix',
+  surfaceKeyboard: 'surfaceKeyboard',
 };
 
 export default function ModeSelector() {
