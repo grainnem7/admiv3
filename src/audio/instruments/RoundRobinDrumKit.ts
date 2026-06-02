@@ -77,6 +77,9 @@ export class RoundRobinDrumKit {
       return; // offline / missing manifest → stay not-ready, play() no-ops
     }
 
+    // Load each sample independently: resolve on EITHER onload or onerror so a
+    // single 404 can't wedge the whole kit. After all settle, keep only the
+    // players that actually loaded (Tone.Player.loaded), dropping any failures.
     const loads: Promise<void>[] = [];
     for (const name of DRUM_NAMES) {
       const files = manifest[name];
@@ -84,7 +87,11 @@ export class RoundRobinDrumKit {
       const players: Tone.Player[] = [];
       for (const file of files) {
         const done = new Promise<void>((resolve) => {
-          const p = new Tone.Player({ url: `${base}${file}`, onload: () => resolve() });
+          const p = new Tone.Player({
+            url: `${base}${file}`,
+            onload: () => resolve(),
+            onerror: () => resolve(),
+          });
           if (this.dest) p.connect(this.dest);
           players.push(p);
         });
@@ -95,6 +102,16 @@ export class RoundRobinDrumKit {
     }
 
     await Promise.all(loads);
+    // Prune samples that failed to load; drop drums left with none.
+    for (const [name, players] of [...this.samples]) {
+      const loaded = players.filter((p) => p.loaded !== false);
+      if (loaded.length === 0) {
+        this.samples.delete(name);
+        this.rrIndex.delete(name);
+      } else {
+        this.samples.set(name, loaded);
+      }
+    }
     this.ready = this.samples.size > 0;
   }
 

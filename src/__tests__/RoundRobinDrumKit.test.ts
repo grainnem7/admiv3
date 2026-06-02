@@ -10,18 +10,23 @@ const { startSpy, players } = vi.hoisted(() => ({
 }));
 
 vi.mock('tone', () => {
-  const Player = vi.fn().mockImplementation((opts: { url: string; onload?: () => void }) => {
-    players.push({ url: opts.url });
-    opts.onload?.();
-    return {
-      url: opts.url,
-      loaded: true,
-      connect: vi.fn(),
-      start: (t?: number) => startSpy(opts.url.split('/').pop(), t),
-      dispose: vi.fn(),
-      volume: { value: 0 },
-    };
-  });
+  // A url containing 'BAD' simulates a 404: fires onerror and reports loaded=false.
+  const Player = vi
+    .fn()
+    .mockImplementation((opts: { url: string; onload?: () => void; onerror?: (e?: unknown) => void }) => {
+      players.push({ url: opts.url });
+      const bad = opts.url.includes('BAD');
+      if (bad) opts.onerror?.(new Error('404'));
+      else opts.onload?.();
+      return {
+        url: opts.url,
+        loaded: !bad,
+        connect: vi.fn(),
+        start: (t?: number) => startSpy(opts.url.split('/').pop(), t),
+        dispose: vi.fn(),
+        volume: { value: 0 },
+      };
+    });
   return { Player };
 });
 
@@ -107,5 +112,34 @@ describe('RoundRobinDrumKit', () => {
     await kit.whenReady();
     expect(() => kit.dispose()).not.toThrow();
     expect(kit.isReady()).toBe(false);
+  });
+
+  it('still loads and plays the rest when one sample 404s', async () => {
+    // kick has a bad sample among two; snare's only sample is bad.
+    (globalThis as { fetch: typeof fetch }).fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () =>
+        Promise.resolve({
+          kick: ['kick-01.wav', 'kick-BAD.wav'],
+          snare: ['snare-BAD.wav'],
+          hat: ['hat-closed-01.wav'],
+        }),
+    }) as unknown as typeof fetch;
+
+    const kit = new RoundRobinDrumKit(fakeCtx(), 'studio-kit');
+    await kit.whenReady();
+    expect(kit.isReady()).toBe(true); // one bad sample doesn't wedge the kit
+
+    // kick only ever fires the good sample (the 404'd one is pruned).
+    kit.play('kick', 0.8);
+    kit.play('kick', 0.8);
+    const kicks = startSpy.mock.calls.map((c) => c[0] as string);
+    expect(kicks).toEqual(['kick-01.wav', 'kick-01.wav']);
+
+    // snare had only a bad sample → that drum is dropped → play() is a no-op.
+    startSpy.mockClear();
+    kit.play('snare', 0.8);
+    expect(startSpy).not.toHaveBeenCalled();
   });
 });
