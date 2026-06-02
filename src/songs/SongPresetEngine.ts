@@ -38,6 +38,7 @@ import { ArpeggioVoice } from './voices/ArpeggioVoice';
 import { BassSynthVoice } from './voices/BassSynthVoice';
 import { InstrumentVoice, nextBeatAfter } from './voices/InstrumentVoice';
 import { WalkVoice } from './voices/WalkVoice';
+import { MasterChain } from '../audio/MasterChain';
 import {
   DEFAULT_INSTRUMENT_KEY,
   INSTRUMENT_PALETTE_BY_KEY,
@@ -257,6 +258,7 @@ export class SongPresetEngine {
   private reverb: Tone.Reverb | null = null;
   private reverbWetGain: GainNode | null = null;
   private masterGainNode: GainNode | null = null;
+  private masterChain: MasterChain | null = null;
 
   // Playback state
   private isPlayingState = false;
@@ -859,10 +861,11 @@ export class SongPresetEngine {
   private buildRouting(): void {
     const ctx = this.ctx!;
 
-    // Master output gain → destination (no compressor/limiter — avoids distortion)
+    // Master output gain → shared studio MasterChain → destination.
     this.masterGainNode = ctx.createGain();
     this.masterGainNode.gain.value = 0.8;
-    this.masterGainNode.connect(ctx.destination);
+    this.masterChain = new MasterChain(ctx);
+    this.masterGainNode.connect(this.masterChain.input);
 
     // Dry mix (stems + generated voices merge here)
     this.dryGain = ctx.createGain();
@@ -1590,6 +1593,7 @@ export class SongPresetEngine {
     this.generatedBus?.disconnect();
     this.dryGain?.disconnect();
     this.masterGainNode?.disconnect();
+    this.masterChain?.dispose();
 
     this.reverbSend = null;
     this.reverb = null;
@@ -1599,6 +1603,7 @@ export class SongPresetEngine {
     this.generatedBus = null;
     this.dryGain = null;
     this.masterGainNode = null;
+    this.masterChain = null;
 
     // Stop Transport but don't dispose it (singleton)
     Tone.getTransport().stop();
