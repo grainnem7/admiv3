@@ -2,15 +2,22 @@
  * Slide-and-settle: the pure heart of the board sequencer. No audio, no DOM.
  * Sibling of SurfacePressMode.
  *
- * A cell becomes SETTLED_ACTIVE only when occupied by a red piece whose
- * velocity has stayed below `velocityFloor` for `settleWindowMs`. A piece in
- * transit (velocity >= floor) never accumulates still-time, so it never fires.
- * Movement of a settled piece deactivates its cell immediately; brief blob
- * loss (occlusion) is absorbed for `occupancyGraceMs` before deactivating.
+ * Each cell is judged INDEPENDENTLY (no cross-cell or board-global signals):
+ *  - It ACTIVATES only when a red piece sits on it with velocity below
+ *    `velocityFloor` continuously for `settleWindowMs`.
+ *  - A settled cell DEACTIVATES when either (a) its piece is seen moving
+ *    (velocity >= floor) for a sustained `motionConfirmMs` — hysteresis, so a
+ *    single jitter frame is ignored — or (b) the cell loses occupancy for
+ *    longer than `occupancyGraceMs` (a brief occlusion is tolerated).
+ *
+ * Velocity is in unit-square units per millisecond. On first sighting or on
+ * recovery from a brief occlusion the velocity is unmeasurable, so the piece
+ * is treated as still (an occluded settled cell survives recovery; an idle
+ * cell still needs the full settle window before it can activate).
  *
  * This deliberately does NOT use the baton `found === false` mute semantic:
- * occupancy comes from the recognizer's filled fraction, and a single dropped
- * frame does not mute.
+ * occupancy comes from the recognizer's filled fraction, and neither a single
+ * dropped frame nor a single jitter frame changes a settled cell.
  */
 
 export interface Point {
@@ -45,12 +52,15 @@ export interface BoardSettleConfig {
   velocitySmoothing: number;
   /** A settled cell tolerates this much occupancy loss before deactivating. */
   occupancyGraceMs: number;
+  /** Sustained motion required before a settled cell deactivates (jitter tolerance). */
+  motionConfirmMs: number;
 }
 
 interface CellState {
   lastCentroid: Point | null;
   velocity: number;
   stillMs: number;
+  movingMs: number;
   lostMs: number;
   phase: 'idle' | 'settled';
 }
@@ -71,78 +81,71 @@ export class BoardSequencerMode {
   }
 
   step(readings: CellReading[], dtMs: number, _nowMs: number): BoardStepResult {
-    const { settleWindowMs, velocityFloor, velocitySmoothing, occupancyGraceMs } = this.cfg;
+    const {
+      settleWindowMs, velocityFloor, velocitySmoothing, occupancyGraceMs, motionConfirmMs,
+    } = this.cfg;
     const justSettled: CellRef[] = [];
     const justDeactivated: CellRef[] = [];
-
-    // A new red piece has appeared if it is occupied+red in a cell that had no
-    // lastCentroid (i.e. wasn't tracking a piece last frame).
-    const hasNewRedPiece = readings.some(r => {
-      if (!(r.occupied && r.colour === 'red' && r.centroid !== null)) return false;
-      const existing = this.states.get(keyOf(r.row, r.col));
-      return !existing || existing.lastCentroid === null;
-    });
 
     for (const r of readings) {
       const k = keyOf(r.row, r.col);
       let st = this.states.get(k);
       if (!st) {
-        st = { lastCentroid: null, velocity: 0, stillMs: 0, lostMs: 0, phase: 'idle' };
+        st = { lastCentroid: null, velocity: 0, stillMs: 0, movingMs: 0, lostMs: 0, phase: 'idle' };
         this.states.set(k, st);
       }
 
       const isRed = r.occupied && r.colour === 'red' && r.centroid !== null;
 
       if (isRed && r.centroid) {
-        const wasInGrace = st.phase === 'settled' && st.lastCentroid === null && st.lostMs > 0;
         st.lostMs = 0;
-
         if (st.lastCentroid) {
           const inst = dist(r.centroid, st.lastCentroid) / Math.max(dtMs, 1e-6);
           st.velocity = st.velocity + velocitySmoothing * (inst - st.velocity);
-        } else if (wasInGrace) {
-          // Piece returned after a brief occlusion — treat as still so settled
-          // cells are not immediately deactivated by the velocity check.
-          st.velocity = 0;
         } else {
-          st.velocity = velocityFloor;
+          // First sighting or recovery from occlusion: velocity unmeasurable →
+          // treat as still so an occluded settled cell survives recovery.
+          st.velocity = 0;
         }
         st.lastCentroid = r.centroid;
 
-        if (st.velocity < velocityFloor) {
-          st.stillMs += dtMs;
-        } else {
+        const moving = st.velocity >= velocityFloor;
+        if (moving) {
+          st.movingMs += dtMs;
           st.stillMs = 0;
-          if (st.phase === 'settled') {
-            st.phase = 'idle';
-            justDeactivated.push({ row: r.row, col: r.col });
-          }
+        } else {
+          st.stillMs += dtMs;
+          st.movingMs = 0;
         }
 
-        if (st.phase === 'idle' && st.stillMs >= settleWindowMs) {
-          st.phase = 'settled';
-          justSettled.push({ row: r.row, col: r.col });
+        if (st.phase === 'idle') {
+          if (st.stillMs >= settleWindowMs) {
+            st.phase = 'settled';
+            st.movingMs = 0;
+            justSettled.push({ row: r.row, col: r.col });
+          }
+        } else if (st.movingMs >= motionConfirmMs) {
+          st.phase = 'idle';
+          st.stillMs = 0;
+          st.movingMs = 0;
+          justDeactivated.push({ row: r.row, col: r.col });
         }
       } else {
-        // Not a red piece this frame — possible occlusion or piece moved away.
+        // Not occupied-red this frame (empty or occluded).
         st.lastCentroid = null;
         st.velocity = 0;
-        st.stillMs = 0;
+        st.movingMs = 0;
         if (st.phase === 'settled') {
-          // If a new red piece appeared elsewhere this same step, the piece has
-          // moved rather than been briefly occluded — deactivate immediately.
-          if (hasNewRedPiece) {
+          st.lostMs += dtMs;
+          if (st.lostMs >= occupancyGraceMs) {
             st.phase = 'idle';
             st.lostMs = 0;
+            st.stillMs = 0;
             justDeactivated.push({ row: r.row, col: r.col });
-          } else {
-            st.lostMs += dtMs;
-            if (st.lostMs >= occupancyGraceMs) {
-              st.phase = 'idle';
-              st.lostMs = 0;
-              justDeactivated.push({ row: r.row, col: r.col });
-            }
           }
+        } else {
+          st.stillMs = 0;
+          st.lostMs = 0;
         }
       }
     }

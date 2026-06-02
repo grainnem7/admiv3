@@ -6,6 +6,7 @@ const cfg = {
   velocityFloor: 0.0005,
   velocitySmoothing: 1,
   occupancyGraceMs: 150,
+  motionConfirmMs: 48,
 };
 
 const redAt = (row: number, col: number, x: number, y: number): CellReading => ({
@@ -41,19 +42,26 @@ describe('BoardSequencerMode slide-and-settle', () => {
     expect(settledCount).toBe(1);
   });
 
-  it('moving a settled piece deactivates the old cell immediately', () => {
+  it('moving a settled piece (visible, sliding) deactivates it after the motion-confirm window', () => {
     const m = new BoardSequencerMode(cfg);
-    for (let t = 0; t <= 800; t += 16) m.step([redAt(0, 0, 0.2, 0.2)], 16, t);
-    const res = m.step([empty(0, 0), redAt(0, 1, 0.7, 0.2)], 16, 816);
-    expect(res.justDeactivated).toContainEqual({ row: 0, col: 0 });
-    expect(res.activeCells).not.toContainEqual({ row: 0, col: 0 });
+    for (let t = 0; t <= 800; t += 16) m.step([redAt(0, 0, 0.05, 0.05)], 16, t);
+    let x = 0.05;
+    let deact = 0;
+    let res = m.step([redAt(0, 0, x, 0.05)], 16, 800);
+    for (let t = 816; t <= 1000; t += 16) {
+      x += 0.02; // 0.02/16ms = 0.00125 > floor → moving
+      res = m.step([redAt(0, 0, x, 0.05)], 16, t);
+      deact += res.justDeactivated.filter((c) => c.row === 0 && c.col === 0).length;
+    }
+    expect(deact).toBe(1);
+    expect(res.activeCells).toHaveLength(0);
   });
 
   it('the destination cell activates after settling', () => {
     const m = new BoardSequencerMode(cfg);
-    let res = m.step([empty(0, 0), redAt(0, 1, 0.7, 0.2)], 16, 0);
+    let res = m.step([redAt(0, 1, 0.7, 0.2)], 16, 0);
     for (let t = 16; t <= 800; t += 16) {
-      res = m.step([empty(0, 0), redAt(0, 1, 0.7, 0.2)], 16, t);
+      res = m.step([redAt(0, 1, 0.7, 0.2)], 16, t);
     }
     expect(res.activeCells).toEqual([{ row: 0, col: 1 }]);
   });
@@ -73,5 +81,24 @@ describe('BoardSequencerMode slide-and-settle', () => {
     let res = { activeCells: [{ row: 0, col: 0 }] } as ReturnType<BoardSequencerMode['step']>;
     for (let t = 816; t <= 1100; t += 16) res = m.step([empty(0, 0)], 16, t);
     expect(res.activeCells).toHaveLength(0);
+  });
+
+  it('occlusion of one cell while a new piece appears elsewhere does NOT deactivate the occluded cell (per-cell)', () => {
+    const m = new BoardSequencerMode(cfg);
+    for (let t = 0; t <= 800; t += 16) m.step([redAt(0, 0, 0.2, 0.2)], 16, t);
+    const res = m.step([empty(0, 0), redAt(1, 1, 0.8, 0.8)], 16, 816);
+    expect(res.activeCells).toContainEqual({ row: 0, col: 0 });
+    expect(res.justDeactivated).not.toContainEqual({ row: 0, col: 0 });
+  });
+
+  it('a single jitter frame does NOT deactivate a settled cell (velocity hysteresis)', () => {
+    const m = new BoardSequencerMode(cfg);
+    for (let t = 0; t <= 800; t += 16) m.step([redAt(0, 0, 0.5, 0.5)], 16, t);
+    let res = m.step([redAt(0, 0, 0.6, 0.5)], 16, 816); // one big jump → moving for 1 frame
+    expect(res.activeCells).toEqual([{ row: 0, col: 0 }]);
+    expect(res.justDeactivated).toHaveLength(0);
+    res = m.step([redAt(0, 0, 0.6, 0.5)], 16, 832); // back to still
+    res = m.step([redAt(0, 0, 0.6, 0.5)], 16, 848);
+    expect(res.activeCells).toEqual([{ row: 0, col: 0 }]);
   });
 });

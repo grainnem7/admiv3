@@ -108,17 +108,21 @@ interface BoardStepResult {
 ```
 
 ### Per-cell state machine
-Each cell holds: `occupiedColour`, `lastCentroid`, low-passed `velocity`, `stillMs` (accumulated time below the velocity floor), and `phase ∈ { idle, settled }`.
+Each cell is judged **strictly independently** — there is no cross-cell or board-global signal (no global "new piece appeared" heuristic). Each cell holds: `lastCentroid`, low-passed `velocity`, `stillMs` (time below the velocity floor), `movingMs` (time at/above the floor), `lostMs` (occupancy-loss accumulator), and `phase ∈ { idle, settled }`.
 
-- **Velocity** = `distance(centroid, lastCentroid) / dtMs`, low-pass smoothed. If the cell is unoccupied or has no centroid, treat as "no piece" (reset).
+- **Velocity** = `distance(centroid, lastCentroid) / dtMs`, low-pass smoothed. On first sighting or on recovery from a brief occlusion the velocity is unmeasurable, so the piece is **treated as still** (velocity 0) — this keeps an occluded settled cell alive on recovery, while an idle cell still needs the full settle window before it can activate.
 - **idle → settled** when: occupied-red **AND** `velocity < velocityFloor` continuously for `stillMs ≥ settleWindowMs`. On transition, the cell is emitted in `justSettled`.
-- **settled → idle** (immediate) when: occupancy lost **OR** `velocity ≥ velocityFloor` (piece started moving). On transition, the cell is emitted in `justDeactivated`. Timer resets.
+- **settled → idle** (per-cell) when **EITHER**:
+  - (a) the piece is seen **moving** (`velocity ≥ velocityFloor`) for a sustained `movingMs ≥ motionConfirmMs` — **velocity hysteresis**, so a single jitter frame is ignored, **OR**
+  - (b) occupancy is lost for longer than `lostMs ≥ occupancyGraceMs` — a brief occlusion (single dropped frame) is tolerated and does **not** deactivate.
+
+  On transition, the cell is emitted in `justDeactivated`. Timers reset.
 - A piece in transit keeps `velocity ≥ floor`, so `stillMs` never accumulates → **never fires**.
-- Moving a settled piece off cell A raises A's velocity → A deactivates immediately; when the piece settles on cell B, B activates after the settle window.
+- Moving a settled piece off cell A sustains A's velocity → A deactivates after `motionConfirmMs` (or after the grace window once A loses occupancy); when the piece settles on cell B, B activates after the settle window.
 
-**Config (all calibratable, no magic numbers in the hot path):** `settleWindowMs` (default 600), `velocityFloor` (unit-square units per ms; tuned default), velocity smoothing factor.
+**Config (all calibratable, no magic numbers in the hot path):** `settleWindowMs` (default 600), `velocityFloor` (unit-square units per ms; tuned default), `velocitySmoothing` (velocity low-pass factor), `occupancyGraceMs` (occupancy-loss tolerance before deactivating), `motionConfirmMs` (sustained motion required before deactivating; jitter tolerance).
 
-**`found === false` is not used here.** Occupancy comes from the recogniser's filled-fraction test, not from a colour-blob `found` flag, and a single dropped frame is absorbed by the smoothing/last-centroid rather than forcing a mute.
+**`found === false` is not used here.** Occupancy comes from the recogniser's filled-fraction test, not from a colour-blob `found` flag. Neither a single dropped frame nor a single jitter frame changes a settled cell.
 
 ---
 
@@ -258,11 +262,15 @@ No existing mode files are modified beyond additive registration. Baton/ColorExp
 
 Unit tests (Vitest; `vi.mock` Tone.js where needed):
 
-1. **Slide-and-settle (`BoardSequencerMode`):**
+1. **Slide-and-settle (`BoardSequencerMode`)** — 8 tests:
    - A piece with moving centroid (velocity above floor) produces **no** active cell, no matter how many frames.
    - A piece whose centroid is still for ≥ `settleWindowMs` becomes active exactly once (emitted in `justSettled`).
-   - A settled piece that starts moving deactivates its old cell **immediately**; arriving and settling on a new cell activates the new cell after the window.
-   - Occupancy loss deactivates immediately; a single dropped frame (still occupied next frame) does **not** spuriously deactivate.
+   - Moving a settled piece (visible, sliding) deactivates it after the `motionConfirmMs` window.
+   - The destination cell activates after settling there.
+   - A single dropped frame (still occupied next frame) does **not** spuriously deactivate a settled cell.
+   - Sustained occupancy loss deactivates after the `occupancyGraceMs` grace window.
+   - **(per-cell)** Occlusion of one cell while a new piece appears elsewhere does **not** deactivate the occluded cell — confirms no board-global signal.
+   - **(velocity hysteresis)** A single jitter frame does **not** deactivate a settled cell.
 2. **Cell classification (`PieceRecognizer`):** red vs empty against `minFilledFraction` (L1 occupancy and L2 red), including the `redFraction` threshold boundary.
 3. **Homography mapping (`homography.ts`):** a warped grid point round-trips to the correct cell; cell-centre → image → (inverse) → cell-centre within tolerance; oblique (non-axis-aligned) corner sets map correctly.
 4. **Pentatonic row resolution:** active cell at row `r` resolves to `pentatonic[r]` (replaces the brief's "chord tones from chordLookup", per the standalone decision); ascending order; root/length honoured from config.
