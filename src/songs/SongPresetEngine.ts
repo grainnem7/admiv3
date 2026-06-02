@@ -47,6 +47,7 @@ import { loadStemBuffers } from '../remix/loadStemBuffers';
 import { loadSongAnalysis } from './analysisLoader';
 import { HeadBopDetector } from '../mapping/nodes/HeadRhythmNode';
 import { HeadBopKit, pickHeadBopDrum } from './voices/HeadBopKit';
+import { RoundRobinDrumKit } from '../audio/instruments/RoundRobinDrumKit';
 import type { HeadBopDrum } from './voices/HeadBopKit';
 import type { FaceLandmarks } from '../state/types';
 
@@ -359,6 +360,7 @@ export class SongPresetEngine {
   private headBopEnabled = false;
   private headBopDetector = new HeadBopDetector(0.025, 200);
   private headBopKit: HeadBopKit | null = null;
+  private headBopSampleKit: RoundRobinDrumKit | null = null;
   private headBopPending: { targetTime: number; drum: HeadBopDrum; velocity: number } | null = null;
   /** Landmark index sampled for head Y; 1 = nose tip, 10 = forehead. */
   private headBopLandmarkIndex = 1;
@@ -457,6 +459,11 @@ export class SongPresetEngine {
 
     // Build voices (creates Tone.Sampler instances that start loading)
     this.buildVoices();
+
+    // Sampled head-bop kit (glued by the master chain). Falls back to the
+    // synth HeadBopKit until/unless these samples are ready.
+    this.headBopSampleKit = new RoundRobinDrumKit(this.ctx!, 'studio-kit');
+    if (this.masterGainNode) this.headBopSampleKit.connect(this.masterGainNode);
 
     // Wait for all instrument samples to load (10 s timeout in case CDN is slow/offline)
     await Promise.race([
@@ -1161,7 +1168,7 @@ export class SongPresetEngine {
     this.lastUpdateTime = currentTime;
     // Flush any pending head-bop whose target beat has now arrived.
     if (this.headBopPending && currentTime >= this.headBopPending.targetTime) {
-      this.headBopKit?.play(this.headBopPending.drum, this.headBopPending.velocity);
+      this.playHeadBopDrum(this.headBopPending.drum, this.headBopPending.velocity);
       this.headBopPending = null;
     }
     const effectiveEnd = this.loopEnd > 0 ? this.loopEnd : this.duration;
@@ -1485,8 +1492,18 @@ export class SongPresetEngine {
     } else {
       // No beat snap — pick from the current playback time, fire now.
       const drum = pickHeadBopDrum(this.lastUpdateTime, beats, downbeats);
-      this.headBopKit.play(drum, velocity);
+      this.playHeadBopDrum(drum, velocity);
     }
+  }
+
+  /** Play a head-bop drum: sampled kit when ready, else the synth fallback. */
+  private playHeadBopDrum(drum: HeadBopDrum, velocity: number): void {
+    if (this.headBopSampleKit?.isReady()) {
+      this.headBopSampleKit.play(drum, velocity);
+      return;
+    }
+    if (!this.headBopKit) this.headBopKit = new HeadBopKit();
+    this.headBopKit.play(drum, velocity);
   }
 
   /**
@@ -1573,6 +1590,8 @@ export class SongPresetEngine {
     // user never enabled head bopping this session.
     this.headBopKit?.dispose();
     this.headBopKit = null;
+    this.headBopSampleKit?.dispose();
+    this.headBopSampleKit = null;
 
     // Stop and disconnect stems
     for (const stem of this.stems.values()) {
