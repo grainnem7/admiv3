@@ -1,22 +1,31 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// Capture each GrainPlayer instance so we can assert per-loop state.
-const grainInstances: Array<Record<string, unknown>> = [];
+// Track every constructed player (GrainPlayer or plain Player), in order,
+// tagged with its __type so tests can assert which kind was built per loop.
+const instances: Array<Record<string, unknown>> = [];
+function makeInst(type: 'grain' | 'player') {
+  const inst = {
+    __type: type,
+    playbackRate: 1,
+    loop: false,
+    connect: vi.fn(),
+    sync: vi.fn().mockReturnThis(),
+    start: vi.fn().mockReturnThis(),
+    unsync: vi.fn().mockReturnThis(),
+    stop: vi.fn().mockReturnThis(),
+    dispose: vi.fn(),
+  };
+  instances.push(inst);
+  return inst;
+}
 vi.mock('tone', () => ({
   GrainPlayer: vi.fn().mockImplementation((opts: { onload?: () => void }) => {
     opts.onload?.();
-    const inst = {
-      playbackRate: 1,
-      loop: false,
-      connect: vi.fn(),
-      sync: vi.fn().mockReturnThis(),
-      start: vi.fn().mockReturnThis(),
-      unsync: vi.fn().mockReturnThis(),
-      stop: vi.fn().mockReturnThis(),
-      dispose: vi.fn(),
-    };
-    grainInstances.push(inst);
-    return inst;
+    return makeInst('grain');
+  }),
+  Player: vi.fn().mockImplementation((opts: { onload?: () => void }) => {
+    opts.onload?.();
+    return makeInst('player');
   }),
 }));
 
@@ -34,13 +43,14 @@ function fakeCtx(): AudioContext {
   return { currentTime: 0, createGain: vi.fn(() => fakeGain()) } as unknown as AudioContext;
 }
 
+// loop A matches song tempo (rate 1.0 → plain Player); loop B needs stretch (GrainPlayer).
 const LOOPS: LoopDef[] = [
   { file: 'a_120bpm.wav', name: 'A', bpm: 120 },
   { file: 'b_140bpm.wav', name: 'B', bpm: 140 },
 ];
 
 beforeEach(() => {
-  grainInstances.length = 0;
+  instances.length = 0;
   gains.length = 0;
   vi.clearAllMocks();
 });
@@ -54,8 +64,20 @@ describe('LoopLayer', () => {
 
   it('sets playbackRate = songBpm / loopBpm per loop', () => {
     new LoopLayer(fakeCtx(), LOOPS, 120);
-    expect(grainInstances[0].playbackRate).toBeCloseTo(1.0, 5);   // 120/120
-    expect(grainInstances[1].playbackRate).toBeCloseTo(120 / 140, 5);
+    expect(instances[0].playbackRate).toBeCloseTo(1.0, 5);   // 120/120
+    expect(instances[1].playbackRate).toBeCloseTo(120 / 140, 5);
+  });
+
+  it('uses a plain Player when the loop tempo matches the song (no stretch)', () => {
+    new LoopLayer(fakeCtx(), [{ file: 'a_120bpm.wav', name: 'A', bpm: 120 }], 120);
+    expect(instances).toHaveLength(1);
+    expect(instances[0].__type).toBe('player');
+  });
+
+  it('uses a GrainPlayer when the loop must be time-stretched', () => {
+    new LoopLayer(fakeCtx(), [{ file: 'b_90bpm.wav', name: 'B', bpm: 90 }], 120);
+    expect(instances).toHaveLength(1);
+    expect(instances[0].__type).toBe('grain');
   });
 
   it('isReady() true once all players loaded', () => {
@@ -67,28 +89,26 @@ describe('LoopLayer', () => {
     const l = new LoopLayer(fakeCtx(), LOOPS, 120);
     expect(l.getLoopCount()).toBe(2);
     expect(l.getLoopName(1)).toBe('B');
-    expect(l.getActiveLoopIndex()).toBe(0); // first loop active by default
+    expect(l.getActiveLoopIndex()).toBe(0);
   });
 
   it('selectLoop crossfades exactly the right sub-gain up and the rest down', () => {
     const l = new LoopLayer(fakeCtx(), LOOPS, 120);
-    const layerGain = gains[0]; // created first
+    const layerGain = gains[0];
     const sub0 = gains[1];
     const sub1 = gains[2];
     l.selectLoop(1);
     expect(l.getActiveLoopIndex()).toBe(1);
-    // assert on the ramp target, not the mock's snapshotted value:
     expect(sub1.gain.setTargetAtTime).toHaveBeenCalledWith(1, expect.any(Number), expect.any(Number));
     expect(sub0.gain.setTargetAtTime).toHaveBeenCalledWith(0, expect.any(Number), expect.any(Number));
-    // selectLoop must not touch the layer (master) gain:
     expect(layerGain.gain.setTargetAtTime).not.toHaveBeenCalled();
   });
 
   it('disabled layer is silent; setVolume ramps gain when enabled', () => {
     const l = new LoopLayer(fakeCtx(), LOOPS, 120);
-    expect(gains[0].gain.value).toBeCloseTo(0, 5); // layer gain starts at 0 (direct init)
+    expect(gains[0].gain.value).toBeCloseTo(0, 5);
     l.setVolume(0.7);
-    expect(gains[0].gain.value).toBeCloseTo(0, 5); // still disabled → no write
+    expect(gains[0].gain.value).toBeCloseTo(0, 5);
     l.setEnabled(true);
     expect(gains[0].gain.setTargetAtTime).toHaveBeenCalledWith(0.7, expect.any(Number), expect.any(Number));
     expect(gains[0].gain.value).toBeCloseTo(0.7, 5);
@@ -100,11 +120,11 @@ describe('LoopLayer', () => {
   it('syncStart starts every player at 0; syncStop stops them', () => {
     const l = new LoopLayer(fakeCtx(), LOOPS, 120);
     l.syncStart();
-    for (const g of grainInstances) {
+    for (const g of instances) {
       expect(g.start).toHaveBeenCalledWith(0);
       expect(g.loop).toBe(true);
     }
     l.syncStop();
-    for (const g of grainInstances) expect(g.stop).toHaveBeenCalled();
+    for (const g of instances) expect(g.stop).toHaveBeenCalled();
   });
 });

@@ -1,6 +1,6 @@
 /**
- * LoopLayer — a RemixLayer of kind 'loop'. Owns one Tone.GrainPlayer per
- * curated loop, each pitch-preservingly time-stretched to the song BPM
+ * LoopLayer — a RemixLayer of kind 'loop'. Owns one Tone.Player (or GrainPlayer
+ * when time-stretched) per curated loop, each pitch-preservingly time-stretched to the song BPM
  * (playbackRate = songBpm / loopBpm) and looping its whole-bar buffer.
  * All players sync().start(0) so they stay phase-locked with the stems;
  * exactly one loop is audible at a time via per-loop sub-gains. Loop
@@ -14,9 +14,10 @@ import type { LoopDef } from './loopManifest';
 
 const SWITCH_TC = 0.03; // ~30ms crossfade when switching loops
 const GAIN_TC = 0.05;   // volume/enable ramp time-constant (matches stem smoothing)
+const STRETCH_DEADZONE = 0.02; // |rate−1| below this → no audible stretch, skip granulation
 
 interface LoopVoice {
-  player: Tone.GrainPlayer;
+  player: Tone.GrainPlayer | Tone.Player;
   sub: GainNode;
 }
 
@@ -44,15 +45,26 @@ export class LoopLayer implements SyncedRemixLayer {
       const sub = ctx.createGain();
       sub.gain.value = i === 0 ? 1 : 0; // first loop active by default
       sub.connect(this.layerGain);
-      const player = new Tone.GrainPlayer({
-        url: `samples/drums/loops/${def.file}`,
-        loop: true,
-        onload: () => {
-          this.loaded += 1;
-          if (this.loaded >= loops.length) this.ready = true;
-        },
-      });
-      player.playbackRate = songBpm / def.bpm; // GrainPlayer preserves pitch
+      const rate = songBpm / def.bpm;
+      const needsStretch = Math.abs(rate - 1) > STRETCH_DEADZONE;
+      const onload = () => {
+        this.loaded += 1;
+        if (this.loaded >= loops.length) this.ready = true;
+      };
+      const player = needsStretch
+        ? new Tone.GrainPlayer({
+            url: `samples/drums/loops/${def.file}`,
+            loop: true,
+            grainSize: 0.2,
+            overlap: 0.1,
+            onload,
+          })
+        : new Tone.Player({
+            url: `samples/drums/loops/${def.file}`,
+            loop: true,
+            onload,
+          });
+      player.playbackRate = rate;
       player.connect(sub);
       this.voices.push({ player, sub });
     });
