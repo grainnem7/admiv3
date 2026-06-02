@@ -22,6 +22,12 @@ import {
   clearSurfacePressConfig,
   type SurfacePressStored,
 } from './SurfacePressConfig';
+import {
+  loadBoardSequencerConfig as loadBoardCfg,
+  saveBoardSequencerConfig as saveBoardCfg,
+  clearBoardSequencerConfig as clearBoardCfg,
+  type BoardSequencerStored,
+} from './BoardSequencerConfig';
 
 const STORAGE_KEY = 'admi-input-profiles';
 const ACTIVE_PROFILE_KEY = 'admi-active-profile';
@@ -301,6 +307,30 @@ export class InputProfileManager {
   /** Remove all stored surface-press configuration. */
   clearSurfacePressConfig(): void {
     clearSurfacePressConfig();
+  }
+
+  // ============================================
+  // Board-sequencer configuration
+  // ============================================
+  //
+  // Delegated to BoardSequencerConfig.ts.  Exposed here so callers have a
+  // single point of entry for "user-profile-style persistence", matching
+  // the surface-press pattern.  The underlying storage key is independent
+  // of InputProfile.
+
+  /** Return the persisted board-sequencer configuration, or null if not yet calibrated. */
+  getBoardSequencerConfig(): BoardSequencerStored | null {
+    return loadBoardCfg();
+  }
+
+  /** Persist the board-sequencer configuration to localStorage. */
+  saveBoardSequencerConfig(config: BoardSequencerStored): void {
+    saveBoardCfg(config);
+  }
+
+  /** Remove all stored board-sequencer configuration. */
+  clearBoardSequencerConfig(): void {
+    clearBoardCfg();
   }
 
   /**
