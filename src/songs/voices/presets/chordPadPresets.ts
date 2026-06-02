@@ -64,18 +64,13 @@ export const PAD_PRESETS: Record<string, PadPreset> = {
       chorusDepth: 0.5,
     },
   },
+  // Real sampled strings (cello) — a string section reads far better than the
+  // old 5-saw synth, which sounded harsh as a sustained pad.
   strings: {
-    kind: 'synth',
+    kind: 'sampled',
     name: 'Strings',
     sustained: true,
-    synthConfig: {
-      kind: 'poly', polyphony: 8, polyVoice: 'synth',
-      options: {
-        oscillator: { type: 'sawtooth', spread: 30, count: 5 },
-        envelope: { attack: 1.2, decay: 0.3, sustain: 0.8, release: 2.5 },
-      },
-      chorusDepth: 0.3,
-    },
+    sampleKey: 'cello',
   },
   choir: {
     kind: 'synth',
