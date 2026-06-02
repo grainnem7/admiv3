@@ -43,7 +43,7 @@ const FILTER_LERP = 0.06;
 export class BassSynthVoice extends ToneVoiceBase {
   private bpm: number;
   private filterCutoff = FILTER_MAX_HZ;
-  private currentPreset: BassPreset = BASS_PRESETS['upright'];
+  private currentPreset: BassPreset = BASS_PRESETS['electric'];
   private player: Player;
 
   private currentRoot = 0;

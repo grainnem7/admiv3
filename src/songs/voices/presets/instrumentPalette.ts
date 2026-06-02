@@ -87,16 +87,15 @@ export const INSTRUMENT_PALETTE: InstrumentPaletteEntry[] = [
   },
   {
     key: 'bass',
-    name: 'Upright Bass',
-    sampleKey: 'contrabass',
+    name: 'Electric Bass',
+    sampleKey: 'bassElectric',
     duration: 0.7,
     velocityRange: { min: 0.4, max: 0.85 },
     brightnessBoostHz: 1800,
-    source: 'nbrosowsky/tonejs-instruments (contrabass, CC-BY-SA 3.0)',
+    source: 'nbrosowsky/tonejs-instruments (bass-electric, CC-BY 3.0)',
     notes:
-      'CDN provides only A2 — pitch-shifted across the bass range. A ' +
-      'multi-octave sampled bass would sound less rubber-bandy at the ' +
-      'extremes; see SAMPLE_SOURCES.md.',
+      'Multi-note sampled electric bass (local). Replaces the single-note ' +
+      'pitch-shifted contrabass.',
   },
   {
     key: 'strings',

@@ -65,7 +65,7 @@ describe('preset catalog integrity', () => {
     expect(Object.keys(PAD_PRESETS).length).toBe(7);
     expect(Object.keys(MELODY_PRESETS).length).toBe(7);
     expect(Object.keys(ARP_PRESETS).length).toBe(7);
-    expect(Object.keys(BASS_PRESETS).length).toBe(6);
+    expect(Object.keys(BASS_PRESETS).length).toBe(7);
   });
 
   it('engine default voice preset keys exist in their catalogs', () => {

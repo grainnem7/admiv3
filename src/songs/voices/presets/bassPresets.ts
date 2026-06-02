@@ -24,9 +24,10 @@ export type BassPreset =
 
 export const BASS_PRESETS: Record<string, BassPreset> = {
   upright: { kind: 'sampled', name: 'Upright Bass', duration: 0.5, sampleKey: 'contrabass' },
-  electric: {
+  electric: { kind: 'sampled', name: 'Electric Bass', duration: 0.5, sampleKey: 'bassElectric' },
+  electricSynth: {
     kind: 'synth',
-    name: 'Electric Bass',
+    name: 'Electric Bass (Synth)',
     duration: 0.4,
     synthConfig: {
       kind: 'mono',
