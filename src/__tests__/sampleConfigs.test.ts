@@ -32,4 +32,17 @@ describe('SAMPLE_CONFIGS', () => {
       expect(Object.keys(cfg.urls).length, key).toBeGreaterThanOrEqual(3);
     }
   });
+
+  it('every url key is a valid Tone note name (# for sharps, not s)', () => {
+    // Tone.Sampler rejects keys like "Fs2" ("url key is neither a note or midi
+    // pitch") — sharps must be "#". Files keep the "s" spelling; only keys differ.
+    const valid = /^[A-G](#|b)?-?\d$/;
+    const bad: string[] = [];
+    for (const [key, cfg] of Object.entries(SAMPLE_CONFIGS)) {
+      for (const note of Object.keys(cfg.urls)) {
+        if (!valid.test(note)) bad.push(`${key}: "${note}"`);
+      }
+    }
+    expect(bad).toEqual([]);
+  });
 });

@@ -90,9 +90,14 @@ export class SamplerPlayer implements Player {
 
 const local = (folder: string): string => `samples/instruments/${folder}/`;
 
-/** ['C4','Fs4'] → { C4: 'C4.mp3', Fs4: 'Fs4.mp3' } */
+/**
+ * Build a Tone.Sampler `urls` map from sample note names. Files are spelled with
+ * `s` for sharps (e.g. `Fs2.mp3`), but Tone.Sampler KEYS must be valid note names
+ * using `#` (e.g. `F#2`) — so the key is `#`-spelled and the value keeps the `s`
+ * filename. e.g. ['C4','Fs4'] → { 'C4': 'C4.mp3', 'F#4': 'Fs4.mp3' }.
+ */
 const noteMap = (notes: readonly string[], ext = 'mp3'): Record<string, string> =>
-  Object.fromEntries(notes.map((n) => [n, `${n}.${ext}`]));
+  Object.fromEntries(notes.map((n) => [n.replace(/^([A-G])s/, '$1#'), `${n}.${ext}`]));
 
 // ============================================
 // Per-instrument sample configs
