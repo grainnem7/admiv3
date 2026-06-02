@@ -37,6 +37,13 @@ export interface ColorBlob {
   area: number;
   /** Whether this blob was found this frame */
   found: boolean;
+  /**
+   * Normalised y (0 top … 1 bottom) of the LOWEST matched pixel — the
+   * blob's bottom edge. Used by SurfacePressMode to detect an object
+   * descending to the table. Optional and additive: existing consumers
+   * (baton path) ignore it. Undefined when the blob is not found.
+   */
+  bottomY?: number;
 }
 
 export interface ColorTrackingOutput {
@@ -90,7 +97,7 @@ export class ColorTracker {
   private animationFrameId: number | null = null;
 
   // Smoothed blob positions
-  private smoothedBlobs: Map<string, { x: number; y: number; area: number }> = new Map();
+  private smoothedBlobs: Map<string, { x: number; y: number; area: number; bottomY: number }> = new Map();
 
   // Callbacks
   private callbacks: Set<ColorTrackingCallback> = new Set();
@@ -334,6 +341,7 @@ export class ColorTracker {
   ): ColorBlob {
     let totalX = 0;
     let totalY = 0;
+    let maxYpx = -1;            // lowest matched pixel row (bottom edge)
     let matchingPixels = 0;
 
     const totalPixels = width * height;
@@ -352,6 +360,7 @@ export class ColorTracker {
         if (this.matchesColor(hsv, color)) {
           totalX += x;
           totalY += y;
+          if (y > maxYpx) maxYpx = y;
           matchingPixels++;
         }
       }
@@ -370,7 +379,7 @@ export class ColorTracker {
         if (smoothed.area < 0.0001) {
           return { colorId: color.id, x: 0.5, y: 0.5, area: 0, found: false };
         }
-        return { colorId: color.id, x: smoothed.x, y: smoothed.y, area: smoothed.area, found: false };
+        return { colorId: color.id, x: smoothed.x, y: smoothed.y, area: smoothed.area, found: false, bottomY: smoothed.bottomY };
       }
       return { colorId: color.id, x: 0.5, y: 0.5, area: 0, found: false };
     }
@@ -378,6 +387,7 @@ export class ColorTracker {
     // Calculate centroid
     const rawX = totalX / matchingPixels / width;
     const rawY = totalY / matchingPixels / height;
+    const rawBottomY = maxYpx / height;
 
     // Apply smoothing
     const alpha = this.config.smoothing;
@@ -386,14 +396,16 @@ export class ColorTracker {
     let smoothedX = rawX;
     let smoothedY = rawY;
     let smoothedArea = area;
+    let smoothedBottomY = rawBottomY;
 
     if (prev) {
       smoothedX = alpha * prev.x + (1 - alpha) * rawX;
       smoothedY = alpha * prev.y + (1 - alpha) * rawY;
       smoothedArea = alpha * prev.area + (1 - alpha) * area;
+      smoothedBottomY = alpha * prev.bottomY + (1 - alpha) * rawBottomY;
     }
 
-    this.smoothedBlobs.set(color.id, { x: smoothedX, y: smoothedY, area: smoothedArea });
+    this.smoothedBlobs.set(color.id, { x: smoothedX, y: smoothedY, area: smoothedArea, bottomY: smoothedBottomY });
 
     return {
       colorId: color.id,
@@ -401,6 +413,7 @@ export class ColorTracker {
       y: smoothedY,
       area: smoothedArea,
       found: true,
+      bottomY: smoothedBottomY,
     };
   }
 
