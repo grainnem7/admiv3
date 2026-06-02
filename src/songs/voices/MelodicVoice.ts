@@ -22,7 +22,7 @@ export { MELODY_PRESET_LIST };
 
 export class MelodicVoice extends ToneVoiceBase {
   private quantizer: EighthNoteQuantizer;
-  private currentPreset: MelodyPreset = MELODY_PRESETS['celesta'];
+  private currentPreset: MelodyPreset = MELODY_PRESETS['clarinet'];
   private player: Player;
 
   private currentZoneIndex = -1;

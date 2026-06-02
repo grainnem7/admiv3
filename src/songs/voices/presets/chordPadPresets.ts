@@ -114,6 +114,18 @@ export const PAD_PRESETS: Record<string, PadPreset> = {
     sustained: true,
     sampleKey: 'organ',
   },
+  electricPiano: {
+    kind: 'sampled',
+    name: 'Electric Piano',
+    sustained: true,
+    sampleKey: 'electricPiano',
+  },
+  choirPad: {
+    kind: 'sampled',
+    name: 'Choir Pad',
+    sustained: true,
+    sampleKey: 'padChoir',
+  },
   stab: {
     kind: 'synth',
     name: 'Stab',

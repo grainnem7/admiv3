@@ -49,7 +49,7 @@ export class ChordPadVoice extends ToneVoiceBase {
   private currentChordName: string | null = null;
   private filterCutoff = FILTER_MAX_HZ;
   private lastRetriggerTime = 0;
-  private currentPreset: PadPreset = PAD_PRESETS['warmPad'];
+  private currentPreset: PadPreset = PAD_PRESETS['electricPiano'];
   private player: Player;
 
   private currentZone: 'left' | 'center' | 'right' = 'center';

@@ -42,6 +42,7 @@ export const MELODY_PRESETS: Record<string, MelodyPreset> = {
   clarinet:   { kind: 'sampled', name: 'Clarinet',    duration: 2.0, sampleKey: 'clarinet' },
   frenchHorn: { kind: 'sampled', name: 'French Horn', duration: 2.2, sampleKey: 'frenchHorn' },
   nylonPluck: { kind: 'sampled', name: 'Nylon Pluck', duration: 1.5, sampleKey: 'guitarNylon' },
+  electricPiano: { kind: 'sampled', name: 'Electric Piano', duration: 1.8, sampleKey: 'electricPiano' },
   musicBox: {
     kind: 'synth',
     name: 'Music Box',

@@ -74,16 +74,14 @@ export const INSTRUMENT_PALETTE: InstrumentPaletteEntry[] = [
   {
     key: 'electricPiano',
     name: 'Electric Piano',
-    // Substitute: organ samples — until a Rhodes/Wurlitzer sample set is
-    // sourced, organ is the closest sampled keyboard timbre in the bundle.
-    sampleKey: 'organ',
+    sampleKey: 'electricPiano',
     duration: 1.6,
     velocityRange: { min: 0.45, max: 1.0 },
     brightnessBoostHz: 2500,
-    source: 'nbrosowsky/tonejs-instruments (organ, CC-BY 3.0)',
+    source: 'FreePats Electric Piano (CC0, public domain)',
     notes:
-      'Substitute: organ samples standing in for electric piano until ' +
-      'true Rhodes/Wurlitzer samples are sourced. See SAMPLE_SOURCES.md.',
+      'Real sampled electric piano (FreePats, CC0). Replaces the earlier ' +
+      'organ substitute.',
   },
   {
     key: 'bass',

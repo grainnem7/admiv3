@@ -62,8 +62,8 @@ describe('preset catalog integrity', () => {
   }
 
   it('expected preset totals match the design', () => {
-    expect(Object.keys(PAD_PRESETS).length).toBe(7);
-    expect(Object.keys(MELODY_PRESETS).length).toBe(7);
+    expect(Object.keys(PAD_PRESETS).length).toBe(9);
+    expect(Object.keys(MELODY_PRESETS).length).toBe(8);
     expect(Object.keys(ARP_PRESETS).length).toBe(7);
     expect(Object.keys(BASS_PRESETS).length).toBe(7);
   });
