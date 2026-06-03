@@ -27,9 +27,11 @@ export class BoardSequencerVoice extends ToneVoiceBase {
     // instrument samples); fall back to the curated palette for legacy keys.
     const sampleConfig = instrumentKey === 'pad'
       ? SAMPLE_CONFIGS.padChoir
-      : instrumentKey in SAMPLE_CONFIGS
-        ? SAMPLE_CONFIGS[instrumentKey as keyof typeof SAMPLE_CONFIGS]
-        : SAMPLE_CONFIGS[getInstrumentEntry(instrumentKey).sampleKey];
+      : instrumentKey === 'chord'
+        ? SAMPLE_CONFIGS.electricPiano // 'chord' = stacked notes on electric piano
+        : instrumentKey in SAMPLE_CONFIGS
+          ? SAMPLE_CONFIGS[instrumentKey as keyof typeof SAMPLE_CONFIGS]
+          : SAMPLE_CONFIGS[getInstrumentEntry(instrumentKey).sampleKey];
     this.player = new SamplerPlayer(sampleConfig, this.filterNode);
   }
 

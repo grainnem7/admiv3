@@ -53,6 +53,7 @@ const INSTRUMENT_OPTIONS: { key: string; name: string }[] = [
   { key: 'guitarNylon', name: 'Nylon guitar' },
   { key: 'bassElectric', name: 'Electric bass' },
   { key: 'pad', name: 'Pad (sustained)' },
+  { key: 'chord', name: 'Chord stab' },
 ];
 
 interface DetStats {

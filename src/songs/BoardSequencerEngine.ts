@@ -13,7 +13,7 @@
 
 import * as Tone from 'tone';
 import { BoardSequencerVoice } from './voices/BoardSequencerVoice';
-import { voicingForCells, drumForRow, DEFAULT_DRUM_ROWS } from './boardSequencerScale';
+import { voicingForCells, degreeMidi, drumForRow, DEFAULT_DRUM_ROWS } from './boardSequencerScale';
 import type { ActiveCell } from '../tracking/BoardSequencerMode';
 import { getEffectChainManager } from '../effects';
 import { RoundRobinDrumKit } from '../audio/instruments/RoundRobinDrumKit';
@@ -336,6 +336,19 @@ export class BoardSequencerEngine {
     return this.cfg.blueBass && cell.colour === 'blue';
   }
 
+  /** Notes for a chord-stab cell: the song chord (when locked) or a scale triad. */
+  private chordStack(cell: ActiveCell, chord: BoardChord | null, axis: 'row' | 'col'): number[] {
+    if (chord && chord.notes.length > 0) return chord.notes;
+    const degree = axis === 'row' ? this.cfg.rows - 1 - cell.row : cell.col;
+    const root = this.cfg.scaleRootMidi;
+    const semis = this.cfg.scaleSemitones;
+    return [
+      degreeMidi(degree, root, semis),
+      degreeMidi(degree + 2, root, semis),
+      degreeMidi(degree + 4, root, semis),
+    ];
+  }
+
   /** The instrument a row plays: its per-row override if set, else the default. */
   private instrumentForRow(row: number): string {
     const k = this.cfg.rowInstruments[row];
@@ -376,14 +389,22 @@ export class BoardSequencerEngine {
       } else if (this.isBassCell(cell)) {
         this.bassVoice?.play(bassMidi, vel, durSec, stepTime);
       } else {
-        const midi = voicing.get(`${cell.row},${cell.col}`);
-        if (midi !== undefined) {
-          // Pad rows sustain for a whole loop (re-triggered each pass) so they
-          // act as a held harmonic bed; other rows play the short note length.
-          const dur = this.instrumentForRow(cell.row) === 'pad'
-            ? secPerBeat * this.cfg.cols
-            : durSec;
-          this.voices[cell.row].play(midi + oct, vel, dur, stepTime);
+        const voice = this.voices[cell.row];
+        if (!voice) continue;
+        const inst = this.instrumentForRow(cell.row);
+        if (inst === 'chord') {
+          // Chord stab: play a stack (the song chord, or a scale triad) at once.
+          for (const n of this.chordStack(cell, chord, axis)) {
+            voice.play(n + oct, vel, durSec, stepTime);
+          }
+        } else {
+          const midi = voicing.get(`${cell.row},${cell.col}`);
+          if (midi !== undefined) {
+            // Pad rows sustain for a whole loop (re-triggered each pass) so they
+            // act as a held harmonic bed; other rows play the short note length.
+            const dur = inst === 'pad' ? secPerBeat * this.cfg.cols : durSec;
+            voice.play(midi + oct, vel, dur, stepTime);
+          }
         }
       }
     }
