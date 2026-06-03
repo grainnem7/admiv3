@@ -34,4 +34,13 @@ describe('boardSequencerScale', () => {
     expect(stepIndexAt(2.0, 0, secPerBeat, steps)).toBe(0);
     expect(stepIndexAt(2.5, 0, secPerBeat, steps)).toBe(1);
   });
+
+  it('wraps into higher octaves when there are more rows than scale degrees', () => {
+    const penta = [0, 2, 4, 7, 9]; // C D E G A (5-note major pentatonic)
+    // 6 rows, root C4 = 60. Bottom row (5) = C4; ascending D E G A; top row (0) = C5.
+    expect(cellMidi(5, 6, 60, penta)).toBe(60); // C4 (level 0)
+    expect(cellMidi(4, 6, 60, penta)).toBe(62); // D4 (level 1)
+    expect(cellMidi(1, 6, 60, penta)).toBe(69); // A4 (level 4)
+    expect(cellMidi(0, 6, 60, penta)).toBe(72); // C5 (level 5 → octave wrap)
+  });
 });

@@ -13,7 +13,9 @@ import type { CellRef } from '../tracking/BoardSequencerMode';
 
 /**
  * MIDI for a cell. row 0 = top (highest), row (rows-1) = bottom (lowest).
- * semitones is ascending from the bottom row.
+ * `semitones` is the within-octave pattern, ascending from the bottom row.
+ * When there are more rows than scale degrees, levels wrap into higher
+ * octaves (level N → octave floor(N/len), degree N mod len).
  */
 export function cellMidi(
   row: number,
@@ -22,7 +24,10 @@ export function cellMidi(
   semitones: number[],
 ): number {
   const levelFromBottom = rows - 1 - row;
-  return rootMidi + semitones[levelFromBottom];
+  const len = semitones.length;
+  const octave = Math.floor(levelFromBottom / len);
+  const idx = ((levelFromBottom % len) + len) % len;
+  return rootMidi + octave * 12 + semitones[idx];
 }
 
 /** Pitches to trigger at `step` (column): one per active cell in that column. */
