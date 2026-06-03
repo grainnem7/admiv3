@@ -37,6 +37,9 @@ export interface BoardSequencerStored {
   tickEnabled: boolean;
   instrumentKey: string;
   rowMode: 'pitched' | 'drumKit';
+  /** Display + sampling orientation. Calibration is captured in this same space. */
+  mirrorX: boolean;
+  mirrorY: boolean;
 }
 
 const ZERO_CORNERS: [BoardPoint, BoardPoint, BoardPoint, BoardPoint] = [
@@ -72,6 +75,8 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   tickEnabled: true,
   instrumentKey: 'electricPiano',
   rowMode: 'pitched',
+  mirrorX: true,
+  mirrorY: false,
 };
 
 function isNum(v: unknown): v is number {
@@ -130,6 +135,8 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     tickEnabled: o.tickEnabled !== false,
     instrumentKey: typeof o.instrumentKey === 'string' ? o.instrumentKey : d.instrumentKey,
     rowMode: o.rowMode === 'drumKit' ? 'drumKit' : 'pitched',
+    mirrorX: o.mirrorX !== false,
+    mirrorY: o.mirrorY === true,
   };
 }
 

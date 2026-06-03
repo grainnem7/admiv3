@@ -3,14 +3,20 @@
  *
  * Place red pieces on a physical grid in view of the camera; each settled piece
  * activates a cell. A playhead sweeps the columns at the chosen tempo and sounds
- * the active cells (rows = a fixed pentatonic scale). Reached by explicit
- * navigation from the Welcome screen; OFF by default (no auto-enable). It does
- * not touch any other mode/screen.
+ * the active cells (rows = a fixed pentatonic scale, or a drum kit). Reached by
+ * explicit navigation from the Welcome screen; OFF by default. It does not touch
+ * any other mode/screen.
  *
- * Pipeline: CameraManager → BoardReader (homography + red recognizer) →
- * BoardSequencerMode (slide-and-settle) → BoardSequencerEngine (audio). The UI
- * only calls Tone.start() for the user-gesture audio unlock and Tone.now() for
- * the playhead; all note/tick audio goes through the engine.
+ * A single rAF loop runs whenever the board is calibrated: it reads the frame,
+ * draws the detection overlay (our grid + per-cell red/active state) onto the
+ * camera, and — while running — steps slide-and-settle and drives the audio
+ * engine. The UI only calls Tone.start() (audio unlock) and Tone.now() (playhead);
+ * all note/tick audio goes through the engine.
+ *
+ * Orientation (mirrorX/mirrorY) is applied to BOTH the displayed video and the
+ * sampled frame, and calibration is captured in that same space — so changing
+ * orientation invalidates calibration (you re-click the corners), which prevents
+ * a saved calibration from silently mismatching the orientation.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -21,7 +27,7 @@ import { BoardReader } from '../../tracking/BoardReader';
 import { BoardSequencerMode, type CellRef } from '../../tracking/BoardSequencerMode';
 import { RedColourRecognizer } from '../../tracking/PieceRecognizer';
 import { BoardSequencerEngine } from '../../songs/BoardSequencerEngine';
-import { computeHomography, UNIT_SQUARE, type Mat3 } from '../../utils/homography';
+import { computeHomography, applyHomography, UNIT_SQUARE, type Mat3 } from '../../utils/homography';
 import { stepIndexAt } from '../../songs/boardSequencerScale';
 import {
   loadBoardSequencerConfig, saveBoardSequencerConfig, DEFAULT_BOARD_SEQUENCER_CONFIG,
@@ -31,30 +37,40 @@ import BoardCalibrationOverlay from '../components/board/BoardCalibrationOverlay
 import WarpedBoardView from '../components/board/WarpedBoardView';
 import { INSTRUMENT_PALETTE_LIST } from '../../songs/voices/presets/instrumentPalette';
 
+interface DetStats {
+  occupied: number;
+  settled: number;
+  maxRed: number;
+}
+
 export default function BoardSequencerScreen() {
   const setCurrentScreen = useAppStore((s) => s.setCurrentScreen);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const overlayRef = useRef<HTMLCanvasElement>(null);
   const cameraRef = useRef<CameraManager | null>(null);
   const readerRef = useRef<BoardReader | null>(null);
   const modeRef = useRef<BoardSequencerMode | null>(null);
   const engineRef = useRef<BoardSequencerEngine | null>(null);
   const homographyRef = useRef<Mat3 | null>(null);
-  const rafRef = useRef<number>(0);
+  const runningRef = useRef(false);
   const startSecRef = useRef(0);
 
   const storedRef = useRef<BoardSequencerStored | null>(loadBoardSequencerConfig());
   const [config, setConfig] = useState<BoardSequencerStored>(
     () => storedRef.current ?? DEFAULT_BOARD_SEQUENCER_CONFIG,
   );
+  const configRef = useRef(config);
+  configRef.current = config;
+
   // Not-yet-calibrated is a first-class state: true only once a config has been
-  // saved (loaded from storage or calibrated this session). The default corners
-  // are the unit square, so corner values cannot be used as the signal.
+  // saved (loaded from storage or calibrated this session).
   const [calibrated, setCalibrated] = useState<boolean>(storedRef.current !== null);
   const [calibrating, setCalibrating] = useState(false);
   const [active, setActive] = useState<CellRef[]>([]);
   const [playheadCol, setPlayheadCol] = useState(0);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [stats, setStats] = useState<DetStats>({ occupied: 0, settled: 0, maxRed: 0 });
 
   const update = useCallback((patch: Partial<BoardSequencerStored>) => {
     setConfig((prev) => {
@@ -64,6 +80,62 @@ export default function BoardSequencerScreen() {
     });
   }, []);
 
+  const buildHomography = useCallback((corners: BoardPoint[], video: HTMLVideoElement): Mat3 => {
+    const dst = corners.map((c) => ({ x: c.x * video.videoWidth, y: c.y * video.videoHeight }));
+    return computeHomography(UNIT_SQUARE, dst);
+  }, []);
+
+  // Draw our sampling grid onto the camera, tinting cells by detection state.
+  const drawOverlay = useCallback(
+    (occupied: Set<string>, activeSet: Set<string>, cfg: BoardSequencerStored, playCol: number) => {
+      const cv = overlayRef.current;
+      const video = videoRef.current;
+      if (!cv || !video) return;
+      const W = video.clientWidth;
+      const H = video.clientHeight;
+      if (W <= 0 || H <= 0) return;
+      if (cv.width !== W) cv.width = W;
+      if (cv.height !== H) cv.height = H;
+      const ctx = cv.getContext('2d');
+      if (!ctx) return;
+      ctx.clearRect(0, 0, W, H);
+      let hn: Mat3;
+      try {
+        hn = computeHomography(UNIT_SQUARE, cfg.corners);
+      } catch {
+        return;
+      }
+      const toPx = (ux: number, uy: number) => {
+        const p = applyHomography(hn, { x: ux, y: uy });
+        return { x: p.x * W, y: p.y * H };
+      };
+      for (let r = 0; r < cfg.rows; r++) {
+        for (let c = 0; c < cfg.cols; c++) {
+          const a = toPx(c / cfg.cols, r / cfg.rows);
+          const b = toPx((c + 1) / cfg.cols, r / cfg.rows);
+          const d = toPx((c + 1) / cfg.cols, (r + 1) / cfg.rows);
+          const e = toPx(c / cfg.cols, (r + 1) / cfg.rows);
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(b.x, b.y);
+          ctx.lineTo(d.x, d.y);
+          ctx.lineTo(e.x, e.y);
+          ctx.closePath();
+          const key = `${r},${c}`;
+          if (activeSet.has(key)) ctx.fillStyle = 'rgba(255,40,40,0.5)';
+          else if (occupied.has(key)) ctx.fillStyle = 'rgba(255,170,40,0.32)';
+          else ctx.fillStyle = 'rgba(0,0,0,0)';
+          ctx.fill();
+          ctx.lineWidth = c === playCol && runningRef.current ? 3 : 1;
+          ctx.strokeStyle = c === playCol && runningRef.current ? 'rgba(80,200,255,0.95)' : 'rgba(80,200,255,0.4)';
+          ctx.stroke();
+        }
+      }
+    },
+    [],
+  );
+
+  // Camera lifecycle.
   useEffect(() => {
     const cam = new CameraManager();
     cameraRef.current = cam;
@@ -75,32 +147,86 @@ export default function BoardSequencerScreen() {
       });
     }
     return () => {
-      cancelAnimationFrame(rafRef.current);
       engineRef.current?.dispose();
       engineRef.current = null;
       cam.stop();
     };
   }, []);
 
-  const buildHomography = useCallback((corners: BoardPoint[], video: HTMLVideoElement): Mat3 => {
-    const dst = corners.map((c) => ({ x: c.x * video.videoWidth, y: c.y * video.videoHeight }));
-    return computeHomography(UNIT_SQUARE, dst);
-  }, []);
+  // Single rAF loop while calibrated: read → draw overlay → (if running) step + audio.
+  useEffect(() => {
+    if (!calibrated) return;
+    let raf = 0;
+    let last = performance.now();
+    let lastStateMs = 0;
+    const loop = () => {
+      const now = performance.now();
+      const dt = now - last;
+      last = now;
+      const video = videoRef.current;
+      const reader = readerRef.current;
+      const cfg = configRef.current;
+      if (video && reader && video.videoWidth > 0) {
+        if (!homographyRef.current) {
+          try {
+            homographyRef.current = buildHomography(cfg.corners, video);
+          } catch {
+            /* degenerate corners — wait for recalibration */
+          }
+        }
+        const h = homographyRef.current;
+        if (h) {
+          const recognizer = new RedColourRecognizer(cfg.minFilledFraction);
+          const readings = reader.read(video, {
+            homography: h, rows: cfg.rows, cols: cfg.cols, red: cfg.redColour, recognizer,
+            mirrorX: cfg.mirrorX, mirrorY: cfg.mirrorY,
+          });
+          const occupied = new Set<string>();
+          let maxRed = 0;
+          for (const rd of readings) {
+            if (rd.occupied) occupied.add(`${rd.row},${rd.col}`);
+            const rf = rd.redFraction ?? 0;
+            if (rf > maxRed) maxRed = rf;
+          }
+          let activeArr: CellRef[] = [];
+          let playCol = 0;
+          if (runningRef.current && modeRef.current && engineRef.current) {
+            const res = modeRef.current.step(readings, dt, now);
+            engineRef.current.setActiveCells(res.activeCells);
+            if (res.justSettled.length > 0) engineRef.current.fireTick();
+            activeArr = res.activeCells;
+            playCol = stepIndexAt(Tone.now(), startSecRef.current, 60 / cfg.bpm, cfg.cols);
+          }
+          const activeSet = new Set(activeArr.map((c) => `${c.row},${c.col}`));
+          drawOverlay(occupied, activeSet, cfg, playCol);
+          if (now - lastStateMs > 100) {
+            lastStateMs = now;
+            setActive(activeArr);
+            setPlayheadCol(playCol);
+            setStats({ occupied: occupied.size, settled: activeSet.size, maxRed });
+          }
+        }
+      }
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [calibrated, drawOverlay, buildHomography]);
 
   const handleCalibrated = useCallback(
     (corners: [BoardPoint, BoardPoint, BoardPoint, BoardPoint]) => {
-      const next = { ...config, corners, enabled: true };
+      const next = { ...configRef.current, corners, enabled: true };
       setConfig(next);
       saveBoardSequencerConfig(next);
       if (videoRef.current) homographyRef.current = buildHomography(corners, videoRef.current);
       setCalibrated(true);
       setCalibrating(false);
     },
-    [config, buildHomography],
+    [buildHomography],
   );
 
   const stop = useCallback(() => {
-    cancelAnimationFrame(rafRef.current);
+    runningRef.current = false;
     engineRef.current?.dispose();
     engineRef.current = null;
     modeRef.current = null;
@@ -109,56 +235,54 @@ export default function BoardSequencerScreen() {
 
   const start = useCallback(async () => {
     await Tone.start();
-    if (engineRef.current) { engineRef.current.dispose(); engineRef.current = null; }
-    cancelAnimationFrame(rafRef.current);
+    if (engineRef.current) {
+      engineRef.current.dispose();
+      engineRef.current = null;
+    }
+    const cfg = configRef.current;
     if (videoRef.current && !homographyRef.current) {
-      homographyRef.current = buildHomography(config.corners, videoRef.current);
+      homographyRef.current = buildHomography(cfg.corners, videoRef.current);
     }
     modeRef.current = new BoardSequencerMode({
-      settleWindowMs: config.settleWindowMs,
-      velocityFloor: config.velocityFloor,
-      velocitySmoothing: config.velocitySmoothing,
-      occupancyGraceMs: config.occupancyGraceMs,
-      motionConfirmMs: config.motionConfirmMs,
+      settleWindowMs: cfg.settleWindowMs,
+      velocityFloor: cfg.velocityFloor,
+      velocitySmoothing: cfg.velocitySmoothing,
+      occupancyGraceMs: cfg.occupancyGraceMs,
+      motionConfirmMs: cfg.motionConfirmMs,
     });
     const engine = new BoardSequencerEngine({
-      bpm: config.bpm, rows: config.rows, cols: config.cols,
-      scaleRootMidi: config.scaleRootMidi, scaleSemitones: config.scaleSemitones,
-      noteLengthBeats: config.noteLengthBeats, velocity: config.velocity,
-      tickEnabled: config.tickEnabled, instrumentKey: config.instrumentKey,
-      rowMode: config.rowMode,
+      bpm: cfg.bpm, rows: cfg.rows, cols: cfg.cols,
+      scaleRootMidi: cfg.scaleRootMidi, scaleSemitones: cfg.scaleSemitones,
+      noteLengthBeats: cfg.noteLengthBeats, velocity: cfg.velocity,
+      tickEnabled: cfg.tickEnabled, instrumentKey: cfg.instrumentKey,
+      rowMode: cfg.rowMode,
     });
     await engine.init();
     engine.start();
     engineRef.current = engine;
     startSecRef.current = Tone.now();
+    runningRef.current = true;
     setRunning(true);
+  }, [buildHomography]);
 
-    const recognizer = new RedColourRecognizer(config.minFilledFraction);
-    let last = performance.now();
-    const loop = () => {
-      const now = performance.now();
-      const dt = now - last;
-      last = now;
-      const video = videoRef.current;
-      const reader = readerRef.current;
-      const mode = modeRef.current;
-      const h = homographyRef.current;
-      if (video && reader && mode && h && video.videoWidth > 0) {
-        const readings = reader.read(video, {
-          homography: h, rows: config.rows, cols: config.cols, red: config.redColour, recognizer,
-          mirror: true,
-        });
-        const res = mode.step(readings, dt, now);
-        engine.setActiveCells(res.activeCells);
-        if (res.justSettled.length > 0) engine.fireTick();
-        setActive(res.activeCells);
-        setPlayheadCol(stepIndexAt(Tone.now(), startSecRef.current, 60 / config.bpm, config.cols));
-      }
-      rafRef.current = requestAnimationFrame(loop);
-    };
-    rafRef.current = requestAnimationFrame(loop);
-  }, [config, buildHomography]);
+  // Changing orientation invalidates calibration (it was captured in the old
+  // orientation), so force a fresh corner click in the new space.
+  const changeOrientation = useCallback((patch: Partial<BoardSequencerStored>) => {
+    homographyRef.current = null;
+    setCalibrated(false);
+    setConfig((prev) => {
+      const next = {
+        ...prev, ...patch,
+        corners: DEFAULT_BOARD_SEQUENCER_CONFIG.corners,
+        enabled: false,
+      };
+      saveBoardSequencerConfig(next);
+      return next;
+    });
+    setCalibrating(true);
+  }, []);
+
+  const transform = `scaleX(${config.mirrorX ? -1 : 1}) scaleY(${config.mirrorY ? -1 : 1})`;
 
   return (
     <div
@@ -180,6 +304,11 @@ export default function BoardSequencerScreen() {
             Start
           </button>
           <button type="button" disabled={!running} onClick={stop}>Stop</button>
+
+          <p style={{ fontSize: 12, opacity: 0.85, margin: '4px 0' }}>
+            Detected: <strong>{stats.occupied}</strong> · Settled: <strong>{stats.settled}</strong> · max red {Math.round(stats.maxRed * 100)}%
+          </p>
+
           <label>
             Tempo {config.bpm} BPM
             <input
@@ -193,6 +322,21 @@ export default function BoardSequencerScreen() {
               onChange={(e) => update({ tickEnabled: e.target.checked })}
             />
             Confirmation tick
+          </label>
+
+          <label>
+            <input
+              type="checkbox" checked={config.mirrorX} disabled={running}
+              onChange={(e) => changeOrientation({ mirrorX: e.target.checked })}
+            />
+            Mirror horizontally
+          </label>
+          <label>
+            <input
+              type="checkbox" checked={config.mirrorY} disabled={running}
+              onChange={(e) => changeOrientation({ mirrorY: e.target.checked })}
+            />
+            Flip vertically
           </label>
 
           <label>
@@ -236,23 +380,27 @@ export default function BoardSequencerScreen() {
               {[4, 8, 16].map((n) => <option key={n} value={n}>{n}</option>)}
             </select>
           </label>
-          <p style={{ fontSize: 11, opacity: 0.7, margin: 0 }}>Stop to change grid/mode/instrument</p>
+          <p style={{ fontSize: 11, opacity: 0.7, margin: 0 }}>Stop to change grid/mode/orientation</p>
         </div>
 
-        {/* Camera + calibration */}
+        {/* Camera + grid/detection overlay + calibration */}
         <div style={{ flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
           <div style={{ position: 'relative', width: '100%' }}>
             <video
               ref={videoRef}
               autoPlay playsInline muted
-              style={{ width: '100%', display: 'block', transform: 'scaleX(-1)', borderRadius: 6 }}
+              style={{ width: '100%', display: 'block', transform, borderRadius: 6 }}
+            />
+            <canvas
+              ref={overlayRef}
+              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
             />
             {calibrating && <BoardCalibrationOverlay onComplete={handleCalibrated} />}
             {error && <div style={{ position: 'absolute', top: 8, left: 8, color: '#ff8080' }}>{error}</div>}
           </div>
         </div>
 
-        {/* Warped board (facilitator feedback) */}
+        {/* Warped board (abstract view) */}
         <div style={{ flex: '1 1 0', minWidth: 0, minHeight: 0 }}>
           <WarpedBoardView rows={config.rows} cols={config.cols} active={active} playheadCol={playheadCol} />
         </div>

@@ -31,6 +31,8 @@ export interface CellReading {
   occupied: boolean;
   colour: 'red' | 'black' | null;
   centroid: Point | null;
+  /** Fraction of the sampled region matching the red band this frame (0..1). Diagnostic. */
+  redFraction?: number;
 }
 
 export interface CellRef {

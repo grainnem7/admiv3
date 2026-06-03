@@ -88,12 +88,14 @@ export interface BoardReaderOptions {
   samplesPerAxis?: number;
   downscale?: number;
   /**
-   * Mirror the video horizontally when drawing to the sampling canvas. Use when
-   * the on-screen <video> is displayed mirrored (selfie view) so the sampled
-   * pixels share one coordinate space with the displayed view — corner clicks in
-   * displayed space then map directly through the homography with no per-axis flip.
+   * Mirror the video on each axis when drawing to the sampling canvas, matching
+   * the on-screen <video> display transform. Keeping the sampled pixels in the
+   * SAME (possibly flipped) coordinate space as the displayed video means corner
+   * clicks in displayed space map directly through the homography — no per-axis
+   * flip in the homography. mirrorX = horizontal (selfie), mirrorY = vertical.
    */
-  mirror?: boolean;
+  mirrorX?: boolean;
+  mirrorY?: boolean;
 }
 
 /**
@@ -119,7 +121,8 @@ export class BoardReader {
     this.canvas.width = w;
     this.canvas.height = h;
     this.ctx.save();
-    if (opts.mirror) { this.ctx.translate(w, 0); this.ctx.scale(-1, 1); }
+    this.ctx.translate(opts.mirrorX ? w : 0, opts.mirrorY ? h : 0);
+    this.ctx.scale(opts.mirrorX ? -1 : 1, opts.mirrorY ? -1 : 1);
     this.ctx.drawImage(video, 0, 0, w, h);
     this.ctx.restore();
     const data = this.ctx.getImageData(0, 0, w, h).data;
@@ -138,7 +141,7 @@ export class BoardReader {
           sampler, opts.homography, row, col, opts.rows, opts.cols, opts.red, samples,
         );
         const cls = opts.recognizer.classify({ filledFraction: redFraction, redFraction });
-        readings.push({ row, col, occupied: cls.occupied, colour: cls.colour, centroid });
+        readings.push({ row, col, occupied: cls.occupied, colour: cls.colour, centroid, redFraction });
       }
     }
     return readings;
