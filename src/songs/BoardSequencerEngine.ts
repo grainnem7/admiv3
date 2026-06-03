@@ -13,7 +13,7 @@
 
 import * as Tone from 'tone';
 import { BoardSequencerVoice } from './voices/BoardSequencerVoice';
-import { voicingForCells, degreeMidi, drumForRowChoice, loopLen, roleStep, strictlyAfter } from './boardSequencerScale';
+import { voicingForCells, degreeMidi, drumForRowChoice, loopLen, roleStep, strictlyAfter, pageIndexAt } from './boardSequencerScale';
 import type { ActiveCell } from '../tracking/BoardSequencerMode';
 import { getEffectChainManager } from '../effects';
 import { RoundRobinDrumKit } from '../audio/instruments/RoundRobinDrumKit';
@@ -66,6 +66,8 @@ export interface BoardEngineConfig {
   loopStepsRed: number;
   loopStepsBlack: number;
   loopStepsBlue: number;
+  /** Pattern chaining: number of pages (master loop = numPages * cols steps). */
+  numPages: number;
   /** Per-row mixer (indexed by row): volume, tone/brightness, reverb-send, delay-send (0..1). */
   rowVolume: number[];
   rowTone: number[];
@@ -111,6 +113,11 @@ export class BoardSequencerEngine {
   private rowRevSends: GainNode[] = [];
   private rowDlySends: GainNode[] = [];
   private active: ActiveCell[] = [];
+  // Pattern chaining: captured page snapshots (the selected page plays live from
+  // `active`; other pages play from their stored snapshot here).
+  private pages: ActiveCell[][] = [];
+  private selectedPage = 0;
+  private lastFiredPage = 0;
   private startSec = 0;
   private lastInternalBeat = -1;
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -271,6 +278,33 @@ export class BoardSequencerEngine {
     else this.cfg.loopStepsBlue = steps;
   }
 
+  /** Set the number of chained pages live (master loop = numPages * cols). */
+  setNumPages(n: number): void {
+    this.cfg.numPages = Math.max(1, Math.floor(n));
+  }
+
+  /** Choose which page is bound to the live camera board (others play snapshots). */
+  setSelectedPage(i: number): void {
+    this.selectedPage = Math.max(0, Math.floor(i));
+  }
+
+  /** Replace all captured page snapshots (e.g. on start or after a capture). */
+  setPages(pages: ActiveCell[][]): void {
+    this.pages = pages.map((p) => [...p]);
+  }
+
+  /** Store a snapshot into a single page slot. */
+  setPageSnapshot(i: number, cells: ActiveCell[]): void {
+    if (i < 0) return;
+    while (this.pages.length <= i) this.pages.push([]);
+    this.pages[i] = [...cells];
+  }
+
+  /** The page the sequencer last fired (for UI highlight); 0 when single-page. */
+  getCurrentPage(): number {
+    return this.lastFiredPage;
+  }
+
   /** Attach (or clear) a backing song to lock tempo/beat + chords to. */
   setSyncSource(src: BoardSyncSource | null): void {
     this.syncSource = src;
@@ -391,10 +425,15 @@ export class BoardSequencerEngine {
     if (this.muted) return;
     const durSec = this.cfg.noteLengthBeats * secPerBeat;
     const melodicLoop = loopLen(this.rawLoop('melodic'), this.cfg.cols);
+    // Pattern chaining: pick this beat's page. The selected page plays live from
+    // the camera (`active`); other pages play from their captured snapshot.
+    const page = pageIndexAt(beat, this.cfg.cols, this.cfg.numPages);
+    this.lastFiredPage = page;
+    const cells = page === this.selectedPage ? this.active : (this.pages[page] ?? []);
     // Voice ALL active melodic cells together so pitch is a complementary
     // spread that depends on the whole board (re-voices as pieces change /
     // follows the chord when locked); then play only this column's cells.
-    const melodic = this.active.filter(
+    const melodic = cells.filter(
       (c) => !this.isDrumCell(c) && !this.isBassCell(c) && c.row >= 0 && c.row < this.voices.length,
     );
     // Per-row instruments: each instrument (row) plays a melody across columns
@@ -410,7 +449,7 @@ export class BoardSequencerEngine {
       ? Math.min(...chord.notes)
       : this.cfg.scaleRootMidi) - 12 + oct;
     const h = this.cfg.humanize;
-    for (const cell of this.active) {
+    for (const cell of cells) {
       // Per-role polyrhythm: a cell fires when its column matches the role's
       // own playhead (beat wrapped at that role's loop length).
       const role = this.isDrumCell(cell) ? 'drum' : this.isBassCell(cell) ? 'bass' : 'melodic';

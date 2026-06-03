@@ -4,7 +4,7 @@ import {
 } from '../songs/boardSequencerScale';
 import {
   drumForRow, drumForRowChoice, drumsForStep, DEFAULT_DRUM_ROWS,
-  loopLen, roleStep, strictlyAfter,
+  loopLen, roleStep, strictlyAfter, pageIndexAt,
 } from '../songs/boardSequencerScale';
 import type { CellRef } from '../tracking/BoardSequencerMode';
 
@@ -240,5 +240,34 @@ describe('strictlyAfter (monophonic tick start-time guard)', () => {
     const t3 = strictlyAfter(now, t2);
     expect(t1).toBeLessThan(t2);
     expect(t2).toBeLessThan(t3);
+  });
+});
+
+describe('pageIndexAt (multi-page pattern chaining)', () => {
+  it('always returns page 0 with a single page', () => {
+    for (let beat = 0; beat < 20; beat++) {
+      expect(pageIndexAt(beat, 8, 1)).toBe(0);
+    }
+  });
+
+  it('advances one page per full grid width and wraps', () => {
+    const cols = 8;
+    // Page 0 for beats 0..7, page 1 for 8..15, then wrap to 0 for 16..23.
+    expect(pageIndexAt(0, cols, 2)).toBe(0);
+    expect(pageIndexAt(7, cols, 2)).toBe(0);
+    expect(pageIndexAt(8, cols, 2)).toBe(1);
+    expect(pageIndexAt(15, cols, 2)).toBe(1);
+    expect(pageIndexAt(16, cols, 2)).toBe(0);
+  });
+
+  it('chains four pages in order', () => {
+    expect([0, 8, 16, 24, 32].map((b) => pageIndexAt(b, 8, 4)))
+      .toEqual([0, 1, 2, 3, 0]);
+  });
+
+  it('handles negative beats defensively', () => {
+    expect(pageIndexAt(-1, 8, 2)).toBe(1);
+    expect(pageIndexAt(-8, 8, 2)).toBe(1);
+    expect(pageIndexAt(-16, 8, 2)).toBe(0);
   });
 });

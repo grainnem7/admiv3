@@ -200,6 +200,17 @@ export function roleStep(beat: number, loopSteps: number, cols: number): number 
   return ((beat % len) + len) % len;
 }
 
+/**
+ * Which page a given GLOBAL beat falls on when the sequence is chained across
+ * `numPages` pages of `cols` columns each (so the master loop is numPages*cols
+ * steps long). 1 page → always 0. Handles negative beats defensively.
+ */
+export function pageIndexAt(beat: number, cols: number, numPages: number): number {
+  if (numPages <= 1 || cols < 1) return 0;
+  const p = Math.floor(beat / cols);
+  return ((p % numPages) + numPages) % numPages;
+}
+
 /** Which step the playhead is on at `nowSec`, given loop start, beat length, and step count. */
 export function stepIndexAt(
   nowSec: number,

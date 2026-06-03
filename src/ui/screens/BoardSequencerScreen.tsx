@@ -24,7 +24,7 @@ import * as Tone from 'tone';
 import { useAppStore } from '../../state/store';
 import { CameraManager } from '../../tracking/CameraManager';
 import { BoardReader } from '../../tracking/BoardReader';
-import { BoardSequencerMode, type CellRef, type PieceColour } from '../../tracking/BoardSequencerMode';
+import { BoardSequencerMode, type CellRef, type PieceColour, type ActiveCell } from '../../tracking/BoardSequencerMode';
 import { RedColourRecognizer, ColourRecognizer } from '../../tracking/PieceRecognizer';
 import { rgbToHsv } from '../../tracking/ColorTracker';
 import { BoardSequencerEngine } from '../../songs/BoardSequencerEngine';
@@ -99,6 +99,8 @@ export default function BoardSequencerScreen() {
   const homographyRef = useRef<Mat3 | null>(null);
   const runningRef = useRef(false);
   const startSecRef = useRef(0);
+  // Freshest live settled cells (with colour), for capturing page snapshots.
+  const activeCellsRef = useRef<ActiveCell[]>([]);
 
   const storedRef = useRef<BoardSequencerStored | null>(loadBoardSequencerConfig());
   const [config, setConfig] = useState<BoardSequencerStored>(
@@ -115,6 +117,11 @@ export default function BoardSequencerScreen() {
   const [calibratingBlack, setCalibratingBlack] = useState(false);
   const [active, setActive] = useState<CellRef[]>([]);
   const [playheadCol, setPlayheadCol] = useState(0);
+  // Pattern chaining: which page the live camera edits, and which is playing now.
+  const [selectedPage, setSelectedPage] = useState(0);
+  const selectedPageRef = useRef(0);
+  selectedPageRef.current = selectedPage;
+  const [playingPage, setPlayingPage] = useState(0);
   const [running, setRunning] = useState(false);
   const [muted, setMuted] = useState(false);
   const mutedRef = useRef(false);
@@ -181,6 +188,43 @@ export default function BoardSequencerScreen() {
       saveBoardSequencerConfig(next);
       return next;
     });
+  }, []);
+
+  // Pattern chaining: select which page the live camera edits.
+  const selectPage = useCallback((i: number) => {
+    setSelectedPage(i);
+    engineRef.current?.setSelectedPage(i);
+  }, []);
+
+  // Change how many pages the sequence chains across; clamp the selection.
+  const setPagesCount = useCallback((n: number) => {
+    setConfig((prev) => {
+      const next = { ...prev, numPages: n };
+      saveBoardSequencerConfig(next);
+      return next;
+    });
+    engineRef.current?.setNumPages(n);
+    if (selectedPageRef.current >= n) selectPage(0);
+  }, [selectPage]);
+
+  // Freeze the current live board into the selected page, then auto-advance so
+  // the next page can be laid down.
+  const capturePage = useCallback(() => {
+    const i = selectedPageRef.current;
+    const cells = activeCellsRef.current.map((c) => ({ row: c.row, col: c.col, colour: c.colour }));
+    setConfig((prev) => {
+      const pages = prev.pages.map((p) => [...p]);
+      while (pages.length <= i) pages.push([]);
+      pages[i] = cells;
+      const next = { ...prev, pages };
+      saveBoardSequencerConfig(next);
+      return next;
+    });
+    engineRef.current?.setPageSnapshot(i, activeCellsRef.current);
+    const n = Math.max(1, configRef.current.numPages);
+    const nextPage = (i + 1) % n;
+    setSelectedPage(nextPage);
+    engineRef.current?.setSelectedPage(nextPage);
   }, []);
 
   const buildHomography = useCallback((corners: BoardPoint[], video: HTMLVideoElement): Mat3 => {
@@ -325,6 +369,7 @@ export default function BoardSequencerScreen() {
           if (runningRef.current && modeRef.current && engineRef.current) {
             const res = modeRef.current.step(readings, dt, now);
             engineRef.current.setActiveCells(res.activeCells);
+            activeCellsRef.current = res.activeCells;
             if (res.justSettled.length > 0) engineRef.current.fireTick();
             activeArr = res.activeCells;
             for (const c of res.activeCells) activeMap.set(`${c.row},${c.col}`, c.colour);
@@ -335,6 +380,9 @@ export default function BoardSequencerScreen() {
             lastStateMs = now;
             setActive(activeArr);
             setPlayheadCol(playCol);
+            if (cfg.numPages > 1 && engineRef.current) {
+              setPlayingPage(engineRef.current.getCurrentPage());
+            }
             setStats({ red: redCount, black: blackCount, blue: blueCount, settled: activeMap.size, maxRed });
           }
         }
@@ -430,13 +478,16 @@ export default function BoardSequencerScreen() {
       rowMode: cfg.rowMode, blackDrums: cfg.blackDrums, blueBass: cfg.blueBass,
       rowInstruments: cfg.rowInstruments, rowDrums: cfg.rowDrums,
       loopStepsRed: cfg.loopStepsRed, loopStepsBlack: cfg.loopStepsBlack,
-      loopStepsBlue: cfg.loopStepsBlue,
+      loopStepsBlue: cfg.loopStepsBlue, numPages: cfg.numPages,
       octaveShift: cfg.octaveShift, volume: cfg.volume,
       rowVolume: cfg.rowVolume, rowTone: cfg.rowTone,
       rowReverbSend: cfg.rowReverbSend, rowDelaySend: cfg.rowDelaySend,
     });
     await engine.init();
     engine.setMuted(mutedRef.current);
+    // Pattern chaining: load captured page snapshots + the live (selected) page.
+    engine.setPages(cfg.pages as ActiveCell[][]);
+    engine.setSelectedPage(selectedPageRef.current);
     // Lock to the backing song (tempo/beat + chords) if one is loaded.
     const songEngine = songEngineRef.current;
     if (songEngine && songStatusRef.current === 'loaded') {
@@ -870,6 +921,48 @@ export default function BoardSequencerScreen() {
               {[4, 8, 16].map((n) => <option key={n} value={n}>{n}</option>)}
             </select>
           </label>
+          <label>
+            Pages
+            <select
+              value={config.numPages} disabled={running}
+              onChange={(e) => setPagesCount(Number(e.target.value))}
+            >
+              {[1, 2, 4].map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </label>
+          {config.numPages > 1 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <span style={{ fontSize: 12, opacity: 0.8 }}>
+                Pages — the selected page (●) plays live from the camera; Capture freezes it and moves to the next. Loop = {config.numPages * config.cols} steps.
+              </span>
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                {Array.from({ length: config.numPages }, (_, i) => {
+                  const isSel = i === selectedPage;
+                  const isPlaying = running && i === playingPage;
+                  const hasSnapshot = (config.pages[i]?.length ?? 0) > 0;
+                  return (
+                    <button
+                      key={i} type="button" onClick={() => selectPage(i)}
+                      style={{
+                        fontSize: 12, padding: '4px 10px',
+                        fontWeight: isSel ? 700 : 400,
+                        border: isPlaying ? '2px solid #4caf50' : '1px solid #888',
+                        opacity: hasSnapshot || isSel ? 1 : 0.5,
+                      }}
+                    >
+                      {String.fromCharCode(65 + i)}{isSel ? ' ●' : ''}
+                    </button>
+                  );
+                })}
+              </div>
+              <button
+                type="button" style={{ fontSize: 12 }} disabled={!running}
+                onClick={capturePage}
+              >
+                Capture board → Page {String.fromCharCode(65 + selectedPage)}
+              </button>
+            </div>
+          )}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <span style={{ fontSize: 12, opacity: 0.8 }}>
               Polyrhythm — loop length per role (Off = full {config.cols} steps; shorter values drift against each other)

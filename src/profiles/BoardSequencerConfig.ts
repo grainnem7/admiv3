@@ -16,6 +16,13 @@ export interface BoardPoint {
   y: number;
 }
 
+/** A single settled cell as persisted in a captured page snapshot. */
+export interface StoredBoardCell {
+  row: number;
+  col: number;
+  colour: 'red' | 'black' | 'blue';
+}
+
 export interface BoardSequencerStored {
   enabled: boolean;
   /** Four board corners (normalised image coords) in TL, TR, BR, BL order. */
@@ -67,6 +74,14 @@ export interface BoardSequencerStored {
   loopStepsRed: number;
   loopStepsBlack: number;
   loopStepsBlue: number;
+  /**
+   * Pattern chaining: number of pages the sequence is built from (master loop =
+   * numPages * cols steps). The selected page plays live from the camera; the
+   * others play from their captured snapshots in `pages`.
+   */
+  numPages: number;
+  /** Captured page snapshots (indexed by page); each is a list of settled cells. */
+  pages: StoredBoardCell[][];
   /** Black-piece detection: a pixel is "black" if value ≤ blackMaxValue and saturation ≤ blackMaxSaturation. */
   blackMaxValue: number;
   blackMaxSaturation: number;
@@ -138,6 +153,8 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   loopStepsRed: 0,
   loopStepsBlack: 0,
   loopStepsBlue: 0,
+  numPages: 1,
+  pages: [],
   blackMaxValue: 34,
   blackMaxSaturation: 45,
   blueBass: false,
@@ -165,6 +182,21 @@ function sanitizeCorners(v: unknown): [BoardPoint, BoardPoint, BoardPoint, Board
     return { x: num(o.x, 0), y: num(o.y, 0) };
   });
   return [pts[0], pts[1], pts[2], pts[3]];
+}
+
+function sanitizePages(v: unknown): StoredBoardCell[][] {
+  if (!Array.isArray(v)) return [];
+  return v.map((page) => {
+    if (!Array.isArray(page)) return [];
+    return page.flatMap((c) => {
+      const o = (typeof c === 'object' && c !== null ? c : {}) as Record<string, unknown>;
+      if (!isNum(o.row) || !isNum(o.col)) return [];
+      const colour = o.colour === 'red' || o.colour === 'black' || o.colour === 'blue'
+        ? o.colour : null;
+      if (!colour) return [];
+      return [{ row: o.row, col: o.col, colour }];
+    });
+  });
 }
 
 function sanitizeColour(v: unknown, fallback: TrackedColor): TrackedColor {
@@ -231,6 +263,8 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     loopStepsRed: num(o.loopStepsRed, d.loopStepsRed),
     loopStepsBlack: num(o.loopStepsBlack, d.loopStepsBlack),
     loopStepsBlue: num(o.loopStepsBlue, d.loopStepsBlue),
+    numPages: num(o.numPages, d.numPages),
+    pages: sanitizePages(o.pages),
     blackMaxValue: num(o.blackMaxValue, d.blackMaxValue),
     blackMaxSaturation: num(o.blackMaxSaturation, d.blackMaxSaturation),
     blueBass: o.blueBass === true,

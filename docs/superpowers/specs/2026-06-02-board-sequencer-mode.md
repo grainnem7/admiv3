@@ -364,6 +364,9 @@ Degrees map through the ascending scale (or the locked chord's tones), wrapping 
 - **Per-row drum choice + bigger kit:** any row can be assigned kick / snare / hat / crash / kick+crash / **tom / clap / rim** (new one-shots added to `studio-kit`); `drumForRowChoice` resolves an override else the default bottom→top mapping. `RoundRobinDrumKit` widened (`KitDrum`, `DRUM_NAMES`) to round-robin the new pieces.
 - **Polyrhythm:** melody / drums / bass can each loop at their own step length (Off = full grid width), wrapping independently so the roles drift. `fireStep` works off the global beat index; `loopLen` / `roleStep` are pure + unit-tested.
 
+### Pattern chaining (pages) — longer sequences from a small board
+The physical board only has ~8 columns, so a longer sequence is built by **chaining pages**: `numPages` (1/2/4) snapshots of the 8-column grid play back-to-back, giving a master loop of `numPages * cols` steps. The **selected page plays live** from the camera (move a piece → hear it in place within the long loop); the other pages play from their **captured snapshots**. **Capture** freezes the live board into the selected page and auto-advances, so the workflow is: arrange → Capture (Page A) → rearrange → Capture (Page B)… The currently-playing page is highlighted. Pure `pageIndexAt(beat, cols, numPages)` selects the page per beat (unit-tested); snapshots persist in config (`pages`). Composes with polyrhythm (per-role column wrap) and song-sync (pages advance on song beats).
+
 ### Audio routing note
 All board audio (per-row voices → per-row gain + FX sends → shared reverb/delay buses → mix → limiter) terminates at `EffectChainManager.getInput()`. `BoardSequencerVoice` maps `SAMPLE_CONFIGS` keys directly (the real sample sets), with `'pad'` → choir pad and `'chord'` → electric piano aliases.
 
