@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   cellMidi, columnMidi, degreeMidi, chordDegreeMidi, voicingForCells, notesForStep, stepIndexAt,
 } from '../songs/boardSequencerScale';
-import { drumForRow, drumsForStep, DEFAULT_DRUM_ROWS } from '../songs/boardSequencerScale';
+import { drumForRow, drumForRowChoice, drumsForStep, DEFAULT_DRUM_ROWS } from '../songs/boardSequencerScale';
 import type { CellRef } from '../tracking/BoardSequencerMode';
 
 const ROWS = 4;
@@ -161,5 +161,28 @@ describe('boardSequencerScale drum mapping', () => {
     expect(drumsForStep(active, 0, rows, DEFAULT_DRUM_ROWS).sort()).toEqual(['hat', 'kick']);
     expect(drumsForStep(active, 2, rows, DEFAULT_DRUM_ROWS)).toEqual(['crash']);
     expect(drumsForStep(active, 1, rows, DEFAULT_DRUM_ROWS)).toEqual([]);
+  });
+
+  it('drumForRowChoice falls back to the default kit mapping when no override is set', () => {
+    const rows = 4;
+    const rowDrums = ['', '', '', ''];
+    expect(drumForRowChoice(3, rows, rowDrums)).toBe('kick');  // bottom row default
+    expect(drumForRowChoice(0, rows, rowDrums)).toBe('crash'); // top row default
+  });
+
+  it('drumForRowChoice honours an explicit per-row override (incl. extra kit pieces)', () => {
+    const rows = 4;
+    const rowDrums = ['clap', '', 'tom', ''];
+    expect(drumForRowChoice(0, rows, rowDrums)).toBe('clap'); // override beats default 'crash'
+    expect(drumForRowChoice(1, rows, rowDrums)).toBe('hat');  // '' → default
+    expect(drumForRowChoice(2, rows, rowDrums)).toBe('tom');  // override
+  });
+
+  it('drumForRowChoice lets overrides give drums to rows beyond the 4-piece kit', () => {
+    const rows = 6; // rows above the default kit normally fall to null
+    const rowDrums = ['rim', 'clap', '', '', '', ''];
+    expect(drumForRowChoice(0, rows, rowDrums)).toBe('rim');  // top row would be null by default
+    expect(drumForRowChoice(1, rows, rowDrums)).toBe('clap');
+    expect(drumForRow(1, rows, DEFAULT_DRUM_ROWS)).toBeNull(); // confirms default would be null
   });
 });

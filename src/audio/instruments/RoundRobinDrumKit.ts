@@ -1,10 +1,12 @@
 // src/audio/instruments/RoundRobinDrumKit.ts
 import * as Tone from 'tone';
-import type { HeadBopDrum } from '../../songs/voices/HeadBopKit';
 
 /** Canonical single-drum names the kit holds samples for. */
-type DrumName = 'kick' | 'snare' | 'hat' | 'crash';
-const DRUM_NAMES: readonly DrumName[] = ['kick', 'snare', 'hat', 'crash'];
+type DrumName = 'kick' | 'snare' | 'hat' | 'crash' | 'tom' | 'clap' | 'rim';
+const DRUM_NAMES: readonly DrumName[] = ['kick', 'snare', 'hat', 'crash', 'tom', 'clap', 'rim'];
+
+/** Every drum the kit can be asked to play (single pieces + compounds). */
+export type KitDrum = DrumName | 'kickCrash';
 
 type KitManifest = Partial<Record<DrumName, string[]>>;
 
@@ -54,7 +56,7 @@ export class RoundRobinDrumKit {
    *               identical behaviour to the pre-scheduling API. Callers that do
    *               not pass `time` are entirely unaffected.
    */
-  play(drum: HeadBopDrum, velocity: number, time?: number): void {
+  play(drum: KitDrum, velocity: number, time?: number): void {
     if (!this.ready) return;
     const gainDb = velToDb(Math.max(0, Math.min(1, velocity)));
     if (drum === 'kickCrash') {

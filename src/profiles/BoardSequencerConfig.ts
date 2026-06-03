@@ -57,6 +57,8 @@ export interface BoardSequencerStored {
   blackDrums: boolean;
   /** Per-row palette keys for 'instruments' mode (indexed by row, 0 = top). */
   rowInstruments: string[];
+  /** Per-row drum override (indexed by row, 0 = top); '' = default kit mapping. */
+  rowDrums: string[];
   /** Black-piece detection: a pixel is "black" if value ≤ blackMaxValue and saturation ≤ blackMaxSaturation. */
   blackMaxValue: number;
   blackMaxSaturation: number;
@@ -123,6 +125,8 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   blackDrums: false,
   // Empty = "use the default instrument" for that row; override per row in the UI.
   rowInstruments: ['', '', '', '', '', '', '', ''],
+  // Empty = "use the default kit mapping" for that row; override per row in the UI.
+  rowDrums: ['', '', '', '', '', '', '', ''],
   blackMaxValue: 34,
   blackMaxSaturation: 45,
   blueBass: false,
@@ -209,6 +213,10 @@ function sanitize(input: unknown): BoardSequencerStored | null {
       Array.isArray(o.rowInstruments) && o.rowInstruments.every((k) => typeof k === 'string')
         ? (o.rowInstruments as string[])
         : d.rowInstruments,
+    rowDrums:
+      Array.isArray(o.rowDrums) && o.rowDrums.every((k) => typeof k === 'string')
+        ? (o.rowDrums as string[])
+        : d.rowDrums,
     blackMaxValue: num(o.blackMaxValue, d.blackMaxValue),
     blackMaxSaturation: num(o.blackMaxSaturation, d.blackMaxSaturation),
     blueBass: o.blueBass === true,

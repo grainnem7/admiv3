@@ -13,11 +13,11 @@
 
 import * as Tone from 'tone';
 import { BoardSequencerVoice } from './voices/BoardSequencerVoice';
-import { voicingForCells, degreeMidi, drumForRow, DEFAULT_DRUM_ROWS } from './boardSequencerScale';
+import { voicingForCells, degreeMidi, drumForRowChoice } from './boardSequencerScale';
 import type { ActiveCell } from '../tracking/BoardSequencerMode';
 import { getEffectChainManager } from '../effects';
 import { RoundRobinDrumKit } from '../audio/instruments/RoundRobinDrumKit';
-import type { HeadBopDrum } from './voices/HeadBopKit';
+import type { KitDrum } from '../audio/instruments/RoundRobinDrumKit';
 
 /** Minimal chord shape the board needs for chord-locked pitch. */
 export interface BoardChord {
@@ -60,6 +60,8 @@ export interface BoardEngineConfig {
   blueBass: boolean;
   /** Per-row palette keys, used in 'instruments' mode (indexed by row, 0 = top). */
   rowInstruments: string[];
+  /** Per-row drum override (indexed by row, 0 = top); '' = default kit mapping. */
+  rowDrums: string[];
   /** Per-row mixer (indexed by row): volume, tone/brightness, reverb-send, delay-send (0..1). */
   rowVolume: number[];
   rowTone: number[];
@@ -384,8 +386,8 @@ export class BoardSequencerEngine {
       if (h > 0 && Math.random() < h * 0.5) continue;
       const vel = h > 0 ? this.cfg.velocity * (1 - Math.random() * h * 0.4) : this.cfg.velocity;
       if (this.isDrumCell(cell)) {
-        const drum = drumForRow(cell.row, this.cfg.rows, DEFAULT_DRUM_ROWS);
-        if (drum) this.drumKit?.play(drum as HeadBopDrum, vel, stepTime);
+        const drum = drumForRowChoice(cell.row, this.cfg.rows, this.cfg.rowDrums);
+        if (drum) this.drumKit?.play(drum as KitDrum, vel, stepTime);
       } else if (this.isBassCell(cell)) {
         this.bassVoice?.play(bassMidi, vel, durSec, stepTime);
       } else {

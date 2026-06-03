@@ -127,6 +127,29 @@ export function notesForStep(
 /** Default drum-kit row order, bottom row → top row. */
 export const DEFAULT_DRUM_ROWS = ['kick', 'snare', 'hat', 'crash'] as const;
 
+/** Every drum a row can be assigned in the per-row drum picker. */
+export const DRUM_CHOICES = [
+  'kick', 'snare', 'hat', 'crash', 'kickCrash', 'tom', 'clap', 'rim',
+] as const;
+export type DrumChoice = (typeof DRUM_CHOICES)[number];
+
+/**
+ * Resolve the drum a row should play: an explicit per-row choice (from the
+ * picker) wins; otherwise fall back to the default bottom→top kit mapping;
+ * null means the row plays no drum. `rowDrums` is indexed by row (0 = top),
+ * '' = "use the default for this row".
+ */
+export function drumForRowChoice(
+  row: number,
+  rows: number,
+  rowDrums: readonly string[],
+  defaults: readonly string[] = DEFAULT_DRUM_ROWS,
+): string | null {
+  const choice = rowDrums[row];
+  if (choice && choice.length > 0) return choice;
+  return drumForRow(row, rows, defaults);
+}
+
 /** The drum name for a grid row, or null if the row is above the kit size. */
 export function drumForRow(row: number, rows: number, drumNames: readonly string[]): string | null {
   const levelFromBottom = rows - 1 - row;

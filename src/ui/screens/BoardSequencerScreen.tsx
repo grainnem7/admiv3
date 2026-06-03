@@ -56,6 +56,19 @@ const INSTRUMENT_OPTIONS: { key: string; name: string }[] = [
   { key: 'chord', name: 'Chord stab' },
 ];
 
+// Per-row drum choices (kit pieces the RoundRobinDrumKit can play). '' keeps the
+// default bottom→top mapping (kick, snare, hat, crash) for that row.
+const DRUM_OPTIONS: { key: string; name: string }[] = [
+  { key: 'kick', name: 'Kick' },
+  { key: 'snare', name: 'Snare' },
+  { key: 'hat', name: 'Hi-hat' },
+  { key: 'crash', name: 'Crash' },
+  { key: 'kickCrash', name: 'Kick + crash' },
+  { key: 'tom', name: 'Tom' },
+  { key: 'clap', name: 'Clap' },
+  { key: 'rim', name: 'Rim' },
+];
+
 interface DetStats {
   red: number;
   black: number;
@@ -141,6 +154,19 @@ export default function BoardSequencerScreen() {
       while (arr.length <= row) arr.push('');
       arr[row] = key;
       const next = { ...prev, rowInstruments: arr };
+      saveBoardSequencerConfig(next);
+      return next;
+    });
+  }, []);
+
+  // Set the drum for one row (per-row drum choice), growing the array to cover
+  // the current row count. '' = use the default kit mapping for that row.
+  const setRowDrum = useCallback((row: number, drum: string) => {
+    setConfig((prev) => {
+      const arr = [...prev.rowDrums];
+      while (arr.length <= row) arr.push('');
+      arr[row] = drum;
+      const next = { ...prev, rowDrums: arr };
       saveBoardSequencerConfig(next);
       return next;
     });
@@ -391,7 +417,7 @@ export default function BoardSequencerScreen() {
       noteLengthBeats: cfg.noteLengthBeats, velocity: cfg.velocity,
       tickEnabled: cfg.tickEnabled, instrumentKey: cfg.instrumentKey,
       rowMode: cfg.rowMode, blackDrums: cfg.blackDrums, blueBass: cfg.blueBass,
-      rowInstruments: cfg.rowInstruments,
+      rowInstruments: cfg.rowInstruments, rowDrums: cfg.rowDrums,
       octaveShift: cfg.octaveShift, volume: cfg.volume,
       rowVolume: cfg.rowVolume, rowTone: cfg.rowTone,
       rowReverbSend: cfg.rowReverbSend, rowDelaySend: cfg.rowDelaySend,
@@ -789,6 +815,29 @@ export default function BoardSequencerScreen() {
                 ))}
               </div>
             </>
+          )}
+          {(config.rowMode === 'drumKit' || config.blackDrums) && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <span style={{ fontSize: 12, opacity: 0.8 }}>
+                Per-row drum{config.rowMode !== 'drumKit' ? ' (black pieces)' : ''} — “Default” = kick/snare/hat/crash bottom→top
+              </span>
+              {Array.from({ length: config.rows }, (_, r) => (
+                <label key={r} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+                  <span style={{ width: 64 }}>
+                    Row {r + 1}{r === 0 ? ' (top)' : r === config.rows - 1 ? ' (bottom)' : ''}
+                  </span>
+                  <select
+                    value={config.rowDrums[r] ?? ''} disabled={running}
+                    onChange={(e) => setRowDrum(r, e.target.value)}
+                  >
+                    <option value="">Default</option>
+                    {DRUM_OPTIONS.map((d) => (
+                      <option key={d.key} value={d.key}>{d.name}</option>
+                    ))}
+                  </select>
+                </label>
+              ))}
+            </div>
           )}
           <label>
             Rows
