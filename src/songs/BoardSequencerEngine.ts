@@ -236,9 +236,12 @@ export class BoardSequencerEngine {
     const melodic = this.active.filter(
       (c) => !this.isDrumCell(c) && c.row >= 0 && c.row < this.voices.length,
     );
+    // Per-row instruments: each instrument (row) plays a melody across columns
+    // → pitch by column. Pitched (single instrument): piano roll → pitch by row.
+    const axis = this.cfg.rowMode === 'instruments' ? 'col' : 'row';
     const voicing = voicingForCells(
       melodic, this.cfg.scaleRootMidi, this.cfg.scaleSemitones,
-      chord && chord.notes.length > 0 ? chord.notes : null,
+      chord && chord.notes.length > 0 ? chord.notes : null, axis,
     );
     for (const cell of this.active) {
       if (cell.col !== step) continue;

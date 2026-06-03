@@ -64,35 +64,40 @@ export function chordDegreeMidi(degree: number, chordNotes: readonly number[]): 
 }
 
 /**
- * Context-aware voicing — pitch is a property of the ROW, not the column.
+ * Context-aware voicing along one axis. Pitch is a property of either the ROW
+ * or the COLUMN, depending on the mode:
  *
- * Each ACTIVE ROW (a row with at least one piece) is ranked by board height
- * (bottom row = lowest) and assigned the next degree of the pentatonic (or, when
- * a chord is given, that chord's tones). Every cell in a row therefore plays
- * that row's note regardless of its column — the column is purely timing. The
- * voicing depends on which rows are in play: it widens as you use more rows, and
- * adding/removing a row re-voices the others. Returns a map keyed by
- * `${row},${col}` → MIDI.
+ *  - axis 'row'  (Pitched mode / piano roll): each ACTIVE ROW gets a note,
+ *    ranked by height (bottom = lowest). A row across columns is one note; a
+ *    column stack is a chord. Column = time.
+ *  - axis 'col'  (Per-row instruments): each ACTIVE COLUMN gets a note, ranked
+ *    left → right (left = lowest). A row (one instrument) across columns is a
+ *    melody; a column stack layers instruments on the same note.
+ *
+ * Either way only the in-use values get notes, mapped to ascending pentatonic
+ * degrees (or the given chord's tones) — so the set is always complementary and
+ * re-voices as you place/remove pieces. Returns a map keyed by `${row},${col}`.
  */
 export function voicingForCells(
   cells: CellRef[],
   rootMidi: number,
   semitones: number[],
   chordNotes: readonly number[] | null,
+  axis: 'row' | 'col' = 'row',
 ): Map<string, number> {
-  // Distinct active rows, bottom (highest index) first → lowest pitch.
-  const activeRows = [...new Set(cells.map((c) => c.row))].sort((a, b) => b - a);
-  const rankOfRow = new Map<number, number>();
-  activeRows.forEach((row, rank) => rankOfRow.set(row, rank));
-  const pitchOfRow = (row: number): number => {
-    const rank = rankOfRow.get(row) ?? 0;
-    return chordNotes && chordNotes.length > 0
-      ? chordDegreeMidi(rank, chordNotes)
-      : degreeMidi(rank, rootMidi, semitones);
-  };
+  const valueOf = (c: CellRef): number => (axis === 'row' ? c.row : c.col);
+  // 'row': bottom (highest index) first → lowest pitch. 'col': left first.
+  const sortValues = (a: number, b: number): number => (axis === 'row' ? b - a : a - b);
+  const ranked = [...new Set(cells.map(valueOf))].sort(sortValues);
+  const rankOf = new Map<number, number>();
+  ranked.forEach((v, rank) => rankOf.set(v, rank));
   const map = new Map<string, number>();
   for (const c of cells) {
-    map.set(`${c.row},${c.col}`, pitchOfRow(c.row));
+    const rank = rankOf.get(valueOf(c)) ?? 0;
+    const midi = chordNotes && chordNotes.length > 0
+      ? chordDegreeMidi(rank, chordNotes)
+      : degreeMidi(rank, rootMidi, semitones);
+    map.set(`${c.row},${c.col}`, midi);
   }
   return map;
 }

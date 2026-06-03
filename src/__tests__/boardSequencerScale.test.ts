@@ -75,6 +75,21 @@ describe('boardSequencerScale pentatonic generators', () => {
     expect(v.get('3,0')).toBe(62); // bottom row → first chord tone
     expect(v.get('0,0')).toBe(66); // top row → second chord tone
   });
+
+  it("voicingForCells axis 'col': a row's pieces ascend across columns (per-instrument melody)", () => {
+    // one row (one instrument), three columns → an ascending melody by column
+    const v = voicingForCells(
+      [{ row: 2, col: 0 }, { row: 2, col: 1 }, { row: 2, col: 3 }], 60, penta5, null, 'col',
+    );
+    expect(v.get('2,0')).toBe(degreeMidi(0, 60, penta5)); // leftmost → lowest
+    expect(v.get('2,1')).toBe(degreeMidi(1, 60, penta5));
+    expect(v.get('2,3')).toBe(degreeMidi(2, 60, penta5)); // rank by used columns
+  });
+
+  it("voicingForCells axis 'col': cells in the same column share a note (layered instruments)", () => {
+    const v = voicingForCells([{ row: 0, col: 1 }, { row: 3, col: 1 }], 60, penta5, null, 'col');
+    expect(v.get('0,1')).toBe(v.get('3,1'));
+  });
 });
 
 describe('boardSequencerScale', () => {
