@@ -4,7 +4,7 @@ import {
 } from '../songs/boardSequencerScale';
 import {
   drumForRow, drumForRowChoice, drumsForStep, DEFAULT_DRUM_ROWS,
-  loopLen, roleStep,
+  loopLen, roleStep, strictlyAfter,
 } from '../songs/boardSequencerScale';
 import type { CellRef } from '../tracking/BoardSequencerMode';
 
@@ -220,5 +220,25 @@ describe('polyrhythm loop length', () => {
   it('roleStep handles negative beats defensively', () => {
     expect(roleStep(-1, 3, 8)).toBe(2);
     expect(roleStep(-3, 3, 8)).toBe(0);
+  });
+});
+
+describe('strictlyAfter (monophonic tick start-time guard)', () => {
+  it('returns now when it is already after the previous start time', () => {
+    expect(strictlyAfter(1.5, 1.0)).toBe(1.5);
+  });
+
+  it('bumps past the previous time when now repeats or goes backwards', () => {
+    expect(strictlyAfter(1.0, 1.0)).toBeCloseTo(1.001); // same quantum → strictly later
+    expect(strictlyAfter(0.9, 1.0)).toBeCloseTo(1.001); // backwards → still strictly later
+  });
+
+  it('chained calls with a repeated now stay strictly increasing', () => {
+    const now = 2.0;
+    const t1 = strictlyAfter(now, 0);
+    const t2 = strictlyAfter(now, t1);
+    const t3 = strictlyAfter(now, t2);
+    expect(t1).toBeLessThan(t2);
+    expect(t2).toBeLessThan(t3);
   });
 });

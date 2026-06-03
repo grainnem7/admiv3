@@ -13,7 +13,7 @@
 
 import * as Tone from 'tone';
 import { BoardSequencerVoice } from './voices/BoardSequencerVoice';
-import { voicingForCells, degreeMidi, drumForRowChoice, loopLen, roleStep } from './boardSequencerScale';
+import { voicingForCells, degreeMidi, drumForRowChoice, loopLen, roleStep, strictlyAfter } from './boardSequencerScale';
 import type { ActiveCell } from '../tracking/BoardSequencerMode';
 import { getEffectChainManager } from '../effects';
 import { RoundRobinDrumKit } from '../audio/instruments/RoundRobinDrumKit';
@@ -117,6 +117,7 @@ export class BoardSequencerEngine {
   private muted = false;
   private syncSource: BoardSyncSource | null = null;
   private lastBeatIndex = -1;
+  private lastTickTime = 0;
 
   constructor(cfg: BoardEngineConfig) {
     this.cfg = cfg;
@@ -278,14 +279,21 @@ export class BoardSequencerEngine {
 
   /** Fire the confirmation tick immediately (distinct from a sequenced note). */
   fireTick(): void {
-    if (this.muted) return;
-    if (this.tick) this.tick.triggerAttackRelease('C2', 0.05, Tone.now());
+    if (this.muted || !this.tick) return;
+    // The tick is a monophonic MembraneSynth; Tone requires strictly increasing
+    // start times. Two cells settling in the same audio quantum repeat Tone.now(),
+    // so guard against a non-increasing time (was throwing "Start time must be
+    // strictly greater than previous start time").
+    const t = strictlyAfter(Tone.now(), this.lastTickTime);
+    this.lastTickTime = t;
+    this.tick.triggerAttackRelease('C2', 0.05, t);
   }
 
   start(): void {
     this.startSec = Tone.now();
     this.lastInternalBeat = -1;
     this.lastBeatIndex = -1;
+    this.lastTickTime = 0;
     if (this.timer) clearInterval(this.timer);
     this.timer = setInterval(() => this.scheduleTick(), TICK_INTERVAL_MS);
   }

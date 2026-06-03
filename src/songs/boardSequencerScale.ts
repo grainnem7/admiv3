@@ -172,6 +172,16 @@ export function drumsForStep(
 }
 
 /**
+ * A start time strictly after `last`. Tone.js monophonic voices (e.g. the
+ * confirmation-tick MembraneSynth) assert that successive start times strictly
+ * increase; when two events land in the same audio quantum `Tone.now()` repeats,
+ * so we bump past `last` by `minGap`. Returns `now` when it already qualifies.
+ */
+export function strictlyAfter(now: number, last: number, minGap = 0.001): number {
+  return now > last ? now : last + minGap;
+}
+
+/**
  * A role's effective loop length given its polyrhythm setting and the grid width.
  * `loopSteps` 0 (or < 1) means "no polyrhythm" → the full grid width `cols`.
  * Loops longer than the grid are clamped to the grid.
