@@ -14,12 +14,32 @@
 import * as Tone from 'tone';
 import { BoardSequencerVoice } from './voices/BoardSequencerVoice';
 import {
-  cellMidi, columnMidi, drumsForStep, drumForRow, DEFAULT_DRUM_ROWS,
+  degreeMidi, chordDegreeMidi, drumForRow, DEFAULT_DRUM_ROWS,
 } from './boardSequencerScale';
 import type { ActiveCell } from '../tracking/BoardSequencerMode';
 import { getEffectChainManager } from '../effects';
 import { RoundRobinDrumKit } from '../audio/instruments/RoundRobinDrumKit';
 import type { HeadBopDrum } from './voices/HeadBopKit';
+
+/** Minimal chord shape the board needs for chord-locked pitch. */
+export interface BoardChord {
+  notes: number[];
+}
+
+/**
+ * Optional sync to a backing song. When present (with beats), the board stops
+ * using its internal clock and instead fires a step on each of the song's beats
+ * (tempo + phase lock), and melodic pitch is taken from the song's CURRENT
+ * chord (chord-lock) instead of the standalone pentatonic.
+ */
+export interface BoardSyncSource {
+  /** Current song playback time in seconds. */
+  getTime(): number;
+  /** Beat timestamps (seconds from song start), ascending. */
+  beats: number[];
+  /** The chord active at a given song time, or null. */
+  chordAt(timeSec: number): BoardChord | null;
+}
 
 export interface BoardEngineConfig {
   bpm: number;
@@ -39,6 +59,23 @@ export interface BoardEngineConfig {
 const LOOKAHEAD_SEC = 0.1;
 const TICK_INTERVAL_MS = 25;
 
+/** Largest index whose beats[idx] <= t, or -1 if none. Binary search. */
+function lastIndexLEQ(beats: number[], t: number): number {
+  let lo = 0;
+  let hi = beats.length - 1;
+  let ans = -1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (beats[mid] <= t) {
+      ans = mid;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return ans;
+}
+
 export class BoardSequencerEngine {
   private ctx: AudioContext;
   private cfg: BoardEngineConfig;
@@ -50,6 +87,8 @@ export class BoardSequencerEngine {
   private lastScheduledStep = -1;
   private timer: ReturnType<typeof setInterval> | null = null;
   private muted = false;
+  private syncSource: BoardSyncSource | null = null;
+  private lastBeatIndex = -1;
 
   constructor(cfg: BoardEngineConfig) {
     this.cfg = cfg;
@@ -107,6 +146,12 @@ export class BoardSequencerEngine {
     this.muted = muted;
   }
 
+  /** Attach (or clear) a backing song to lock tempo/beat + chords to. */
+  setSyncSource(src: BoardSyncSource | null): void {
+    this.syncSource = src;
+    this.lastBeatIndex = -1;
+  }
+
   /** Fire the confirmation tick immediately (distinct from a sequenced note). */
   fireTick(): void {
     if (this.muted) return;
@@ -116,55 +161,86 @@ export class BoardSequencerEngine {
   start(): void {
     this.startSec = Tone.now();
     this.lastScheduledStep = -1;
+    this.lastBeatIndex = -1;
     if (this.timer) clearInterval(this.timer);
     this.timer = setInterval(() => this.scheduleTick(), TICK_INTERVAL_MS);
   }
 
   private scheduleTick(): void {
+    if (this.syncSource && this.syncSource.beats.length > 0) {
+      this.scheduleSynced(this.syncSource);
+    } else {
+      this.scheduleInternal();
+    }
+  }
+
+  /** Standalone clock: advance one step per beat at the configured BPM. */
+  private scheduleInternal(): void {
     const secPerBeat = 60 / this.cfg.bpm;
     const now = Tone.now();
     const beatIdx = Math.floor((now + LOOKAHEAD_SEC - this.startSec) / secPerBeat);
-    const lookaheadStep = ((beatIdx % this.cfg.cols) + this.cfg.cols) % this.cfg.cols;
-    if (lookaheadStep === this.lastScheduledStep) return;
-    this.lastScheduledStep = lookaheadStep;
-    // Advance the step silently while muted (so unmuting doesn't dump a burst).
-    if (this.muted) return;
+    const step = ((beatIdx % this.cfg.cols) + this.cfg.cols) % this.cfg.cols;
+    if (step === this.lastScheduledStep) return;
+    this.lastScheduledStep = step;
     const stepTime = this.startSec + beatIdx * secPerBeat;
-    if (this.cfg.rowMode === 'drumKit') {
-      const drums = drumsForStep(this.active, lookaheadStep, this.cfg.rows, DEFAULT_DRUM_ROWS);
-      for (const drum of drums) {
-        this.drumKit?.play(drum as HeadBopDrum, this.cfg.velocity, stepTime);
-      }
-    } else if (this.cfg.rowMode === 'redBlack') {
-      // Red → per-row instrument at the column's pentatonic pitch.
-      // Black → per-row drum. Both play on this beat.
-      const durSec = this.cfg.noteLengthBeats * secPerBeat;
-      for (const cell of this.active) {
-        if (cell.col !== lookaheadStep) continue;
-        if (cell.colour === 'black') {
-          const drum = drumForRow(cell.row, this.cfg.rows, DEFAULT_DRUM_ROWS);
-          if (drum) this.drumKit?.play(drum as HeadBopDrum, this.cfg.velocity, stepTime);
-        } else if (cell.row >= 0 && cell.row < this.voices.length) {
-          const midi = columnMidi(cell.col, this.cfg.scaleRootMidi, this.cfg.scaleSemitones);
-          this.voices[cell.row].play(midi, this.cfg.velocity, durSec, stepTime);
-        }
-      }
-    } else {
-      // Pitched: row → pitch (bottom row lowest), one instrument for all.
-      // Instruments: row → instrument, pitch generated from the COLUMN so it is
-      // always pentatonic. Either way every active cell in this column plays on
-      // its row's voice.
-      const instruments = this.cfg.rowMode === 'instruments';
-      const durSec = this.cfg.noteLengthBeats * secPerBeat;
-      for (const cell of this.active) {
-        if (cell.col !== lookaheadStep) continue;
-        if (cell.row < 0 || cell.row >= this.voices.length) continue;
-        const midi = instruments
-          ? columnMidi(cell.col, this.cfg.scaleRootMidi, this.cfg.scaleSemitones)
-          : cellMidi(cell.row, this.cfg.rows, this.cfg.scaleRootMidi, this.cfg.scaleSemitones);
-        this.voices[cell.row].play(midi, this.cfg.velocity, durSec, stepTime);
+    this.fireStep(step, stepTime, secPerBeat, null);
+  }
+
+  /** Locked to a song: fire a step on each of the song's beats, chord-locked. */
+  private scheduleSynced(src: BoardSyncSource): void {
+    const beats = src.beats;
+    const t = src.getTime();
+    const now = Tone.now();
+    // Re-align the beat pointer on start / seek / loop (when it no longer
+    // straddles the current song time).
+    const cur = this.lastBeatIndex;
+    const aligned = cur >= 0 && cur < beats.length
+      && beats[cur] <= t + 0.2
+      && (cur + 1 >= beats.length || beats[cur + 1] >= t - 0.2);
+    if (!aligned) this.lastBeatIndex = lastIndexLEQ(beats, t);
+
+    const horizon = t + LOOKAHEAD_SEC;
+    let i = this.lastBeatIndex + 1;
+    while (i < beats.length && beats[i] <= horizon) {
+      const beatTime = beats[i];
+      const audioTime = now + Math.max(0, beatTime - t);
+      const step = ((i % this.cfg.cols) + this.cfg.cols) % this.cfg.cols;
+      const spacing = i + 1 < beats.length
+        ? Math.max(0.05, beats[i + 1] - beatTime)
+        : (i > 0 ? Math.max(0.05, beatTime - beats[i - 1]) : 0.5);
+      this.fireStep(step, audioTime, spacing, src.chordAt(beatTime));
+      this.lastBeatIndex = i;
+      i++;
+    }
+  }
+
+  /** Play every active cell in `step` at `stepTime`. chord locks melodic pitch. */
+  private fireStep(step: number, stepTime: number, secPerBeat: number, chord: BoardChord | null): void {
+    if (this.muted) return;
+    const mode = this.cfg.rowMode;
+    const durSec = this.cfg.noteLengthBeats * secPerBeat;
+    for (const cell of this.active) {
+      if (cell.col !== step) continue;
+      const asDrum = mode === 'drumKit' || (mode === 'redBlack' && cell.colour === 'black');
+      if (asDrum) {
+        const drum = drumForRow(cell.row, this.cfg.rows, DEFAULT_DRUM_ROWS);
+        if (drum) this.drumKit?.play(drum as HeadBopDrum, this.cfg.velocity, stepTime);
+      } else if (cell.row >= 0 && cell.row < this.voices.length) {
+        this.voices[cell.row].play(this.pitchFor(cell, chord), this.cfg.velocity, durSec, stepTime);
       }
     }
+  }
+
+  /**
+   * Melodic pitch for a cell. 'pitched' uses the row (bottom = lowest); the
+   * other modes use the column. The degree indexes the song's CURRENT chord
+   * when locked, otherwise the standalone pentatonic — so it is always in key.
+   */
+  private pitchFor(cell: ActiveCell, chord: BoardChord | null): number {
+    const degree = this.cfg.rowMode === 'pitched' ? this.cfg.rows - 1 - cell.row : cell.col;
+    return chord && chord.notes.length > 0
+      ? chordDegreeMidi(degree, chord.notes)
+      : degreeMidi(degree, this.cfg.scaleRootMidi, this.cfg.scaleSemitones);
   }
 
   stop(): void {

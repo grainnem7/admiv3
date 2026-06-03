@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { cellMidi, columnMidi, degreeMidi, notesForStep, stepIndexAt } from '../songs/boardSequencerScale';
+import {
+  cellMidi, columnMidi, degreeMidi, chordDegreeMidi, notesForStep, stepIndexAt,
+} from '../songs/boardSequencerScale';
 import { drumForRow, drumsForStep, DEFAULT_DRUM_ROWS } from '../songs/boardSequencerScale';
 import type { CellRef } from '../tracking/BoardSequencerMode';
 
@@ -26,6 +28,20 @@ describe('boardSequencerScale pentatonic generators', () => {
   it('cellMidi is degreeMidi of the level from the bottom row', () => {
     expect(cellMidi(3, 4, 60, penta5)).toBe(degreeMidi(0, 60, penta5));
     expect(cellMidi(0, 4, 60, penta5)).toBe(degreeMidi(3, 60, penta5));
+  });
+
+  it('chordDegreeMidi walks the chord tones, wrapping octaves (always in key)', () => {
+    const dMajor = [62, 66, 69]; // D F# A
+    expect(chordDegreeMidi(0, dMajor)).toBe(62);
+    expect(chordDegreeMidi(1, dMajor)).toBe(66);
+    expect(chordDegreeMidi(2, dMajor)).toBe(69);
+    expect(chordDegreeMidi(3, dMajor)).toBe(74); // D up an octave
+    expect(chordDegreeMidi(4, dMajor)).toBe(78); // F# up an octave
+  });
+
+  it('chordDegreeMidi sorts notes defensively and is safe for empty chords', () => {
+    expect(chordDegreeMidi(1, [69, 62, 66])).toBe(66); // unsorted → F#
+    expect(chordDegreeMidi(0, [])).toBe(60); // empty → safe fallback
   });
 });
 

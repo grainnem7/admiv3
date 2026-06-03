@@ -47,6 +47,22 @@ export function columnMidi(col: number, rootMidi: number, semitones: number[]): 
   return degreeMidi(col, rootMidi, semitones);
 }
 
+/**
+ * MIDI for an ascending "degree" within a CHORD's note set (used when the board
+ * is locked to a song: the degree set becomes the current chord's notes rather
+ * than the standalone pentatonic). Degrees beyond the chord's size wrap up
+ * octaves, so every note is a chord tone — always in key with the song.
+ * `chordNotes` are MIDI numbers; they are sorted ascending defensively.
+ */
+export function chordDegreeMidi(degree: number, chordNotes: readonly number[]): number {
+  const sorted = [...chordNotes].sort((a, b) => a - b);
+  const len = sorted.length;
+  if (len === 0) return 60;
+  const octave = Math.floor(degree / len);
+  const idx = ((degree % len) + len) % len;
+  return sorted[idx] + octave * 12;
+}
+
 /** Pitches to trigger at `step` (column): one per active cell in that column. */
 export function notesForStep(
   active: CellRef[],

@@ -28,6 +28,9 @@ import { BoardSequencerMode, type CellRef, type PieceColour } from '../../tracki
 import { RedColourRecognizer, RedBlackRecognizer } from '../../tracking/PieceRecognizer';
 import { rgbToHsv } from '../../tracking/ColorTracker';
 import { BoardSequencerEngine } from '../../songs/BoardSequencerEngine';
+import { SongPresetEngine } from '../../songs/SongPresetEngine';
+import { SONG_LIBRARY, type SongConfig } from '../../songs/songLibrary';
+import { getChordAtTime } from '../../songs/voices/chordLookup';
 import { computeHomography, applyHomography, UNIT_SQUARE, type Mat3 } from '../../utils/homography';
 import { stepIndexAt } from '../../songs/boardSequencerScale';
 import {
@@ -76,6 +79,13 @@ export default function BoardSequencerScreen() {
   const [muted, setMuted] = useState(false);
   const mutedRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Optional backing song (Song Preset engine) the board can lock to.
+  const songEngineRef = useRef<SongPresetEngine | null>(null);
+  const [selectedSongId, setSelectedSongId] = useState('');
+  const [songStatus, setSongStatus] = useState<'idle' | 'loading' | 'loaded' | 'error'>('idle');
+  const songStatusRef = useRef<'idle' | 'loading' | 'loaded' | 'error'>('idle');
+  songStatusRef.current = songStatus;
   const [stats, setStats] = useState<DetStats>({ red: 0, black: 0, settled: 0, maxRed: 0 });
 
   const update = useCallback((patch: Partial<BoardSequencerStored>) => {
@@ -178,6 +188,8 @@ export default function BoardSequencerScreen() {
     return () => {
       engineRef.current?.dispose();
       engineRef.current = null;
+      songEngineRef.current?.dispose();
+      songEngineRef.current = null;
       cam.stop();
     };
   }, []);
@@ -272,6 +284,7 @@ export default function BoardSequencerScreen() {
     engineRef.current?.dispose();
     engineRef.current = null;
     modeRef.current = null;
+    songEngineRef.current?.stopPlayback();
     setRunning(false);
   }, []);
 
@@ -280,8 +293,37 @@ export default function BoardSequencerScreen() {
       const next = !m;
       mutedRef.current = next;
       engineRef.current?.setMuted(next);
+      const se = songEngineRef.current;
+      if (se && songStatusRef.current === 'loaded') {
+        if (next) se.pause();
+        else se.resume();
+      }
       return next;
     });
+  }, []);
+
+  const handleSelectSong = useCallback(async (id: string) => {
+    setSelectedSongId(id);
+    if (!id) {
+      songEngineRef.current?.stopPlayback();
+      setSongStatus('idle');
+      return;
+    }
+    const song: SongConfig | undefined = SONG_LIBRARY.find((s) => s.id === id);
+    if (!song) {
+      setSongStatus('idle');
+      return;
+    }
+    if (!songEngineRef.current) songEngineRef.current = new SongPresetEngine();
+    setSongStatus('loading');
+    try {
+      await Tone.start();
+      await songEngineRef.current.loadSong(song);
+      setSongStatus('loaded');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Song failed to load');
+      setSongStatus('error');
+    }
   }, []);
 
   const start = useCallback(async () => {
@@ -310,6 +352,21 @@ export default function BoardSequencerScreen() {
     });
     await engine.init();
     engine.setMuted(mutedRef.current);
+    // Lock to the backing song (tempo/beat + chords) if one is loaded.
+    const songEngine = songEngineRef.current;
+    if (songEngine && songStatusRef.current === 'loaded') {
+      const loaded = songEngine.getSong();
+      const prog = loaded?.chordProgression ?? null;
+      engine.setSyncSource({
+        getTime: () => songEngine.getCurrentTime(),
+        beats: loaded?.beats ?? [],
+        chordAt: (tt) => (prog && prog.length ? getChordAtTime(prog, tt) : null),
+      });
+      songEngine.stopPlayback();
+      songEngine.play();
+    } else {
+      engine.setSyncSource(null);
+    }
     engine.start();
     engineRef.current = engine;
     startSecRef.current = Tone.now();
@@ -476,6 +533,23 @@ export default function BoardSequencerScreen() {
             />
             Confirmation tick
           </label>
+
+          <label>
+            Backing song
+            <select value={selectedSongId} disabled={running} onChange={(e) => void handleSelectSong(e.target.value)}>
+              <option value="">None (standalone)</option>
+              {SONG_LIBRARY.map((s) => (
+                <option key={s.id} value={s.id}>{s.title}</option>
+              ))}
+            </select>
+          </label>
+          {selectedSongId && (
+            <p style={{ fontSize: 11, opacity: 0.75, margin: 0 }}>
+              {songStatus === 'loading' && 'Loading song…'}
+              {songStatus === 'loaded' && 'Song ready — board will lock to its tempo + chords'}
+              {songStatus === 'error' && 'Song failed to load'}
+            </p>
+          )}
 
           <label>
             <input
