@@ -36,6 +36,7 @@ export interface BoardSequencerStored {
   velocity: number;
   tickEnabled: boolean;
   instrumentKey: string;
+  rowMode: 'pitched' | 'drumKit';
 }
 
 const ZERO_CORNERS: [BoardPoint, BoardPoint, BoardPoint, BoardPoint] = [
@@ -54,10 +55,10 @@ const DEFAULT_RED: TrackedColor = {
 export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   enabled: false,
   corners: ZERO_CORNERS,
-  rows: 4,
-  cols: 4,
+  rows: 6,
+  cols: 8,
   scaleRootMidi: 60,
-  scaleSemitones: [0, 2, 4, 7],
+  scaleSemitones: [0, 2, 4, 7, 9],
   bpm: 90,
   settleWindowMs: 600,
   velocityFloor: 0.0008,
@@ -70,6 +71,7 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   velocity: 0.7,
   tickEnabled: true,
   instrumentKey: 'electricPiano',
+  rowMode: 'pitched',
 };
 
 function isNum(v: unknown): v is number {
@@ -127,6 +129,7 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     velocity: num(o.velocity, d.velocity),
     tickEnabled: o.tickEnabled !== false,
     instrumentKey: typeof o.instrumentKey === 'string' ? o.instrumentKey : d.instrumentKey,
+    rowMode: o.rowMode === 'drumKit' ? 'drumKit' : 'pitched',
   };
 }
 

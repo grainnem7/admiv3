@@ -13,9 +13,11 @@
 
 import * as Tone from 'tone';
 import { BoardSequencerVoice } from './voices/BoardSequencerVoice';
-import { notesForStep } from './boardSequencerScale';
+import { notesForStep, drumsForStep, DEFAULT_DRUM_ROWS } from './boardSequencerScale';
 import type { CellRef } from '../tracking/BoardSequencerMode';
 import { getEffectChainManager } from '../effects';
+import { RoundRobinDrumKit } from '../audio/instruments/RoundRobinDrumKit';
+import type { HeadBopDrum } from './voices/HeadBopKit';
 
 export interface BoardEngineConfig {
   bpm: number;
@@ -27,6 +29,7 @@ export interface BoardEngineConfig {
   velocity: number;
   tickEnabled: boolean;
   instrumentKey: string;
+  rowMode: 'pitched' | 'drumKit';
 }
 
 const LOOKAHEAD_SEC = 0.1;
@@ -36,6 +39,7 @@ export class BoardSequencerEngine {
   private ctx: AudioContext;
   private cfg: BoardEngineConfig;
   private voices: BoardSequencerVoice[] = [];
+  private drumKit: RoundRobinDrumKit | null = null;
   private tick: Tone.MembraneSynth | null = null;
   private active: CellRef[] = [];
   private startSec = 0;
@@ -58,10 +62,16 @@ export class BoardSequencerEngine {
     // directly via the inherited connect(destination: AudioNode). The tick is
     // a Tone node and connects to the Tone.Gain directly.
     const dest = fx.getInput();
-    for (let r = 0; r < this.cfg.rows; r++) {
-      const v = new BoardSequencerVoice(this.ctx, this.cfg.instrumentKey);
-      if (dest) v.connect(dest.input);
-      this.voices.push(v);
+    if (this.cfg.rowMode === 'drumKit') {
+      this.drumKit = new RoundRobinDrumKit(this.ctx, 'studio-kit');
+      if (dest) this.drumKit.connect(dest.input);
+      await this.drumKit.whenReady();
+    } else {
+      for (let r = 0; r < this.cfg.rows; r++) {
+        const v = new BoardSequencerVoice(this.ctx, this.cfg.instrumentKey);
+        if (dest) v.connect(dest.input);
+        this.voices.push(v);
+      }
     }
     if (this.cfg.tickEnabled) {
       this.tick = new Tone.MembraneSynth({
@@ -98,14 +108,21 @@ export class BoardSequencerEngine {
     if (lookaheadStep === this.lastScheduledStep) return;
     this.lastScheduledStep = lookaheadStep;
     const stepTime = this.startSec + beatIdx * secPerBeat;
-    const pitches = notesForStep(
-      this.active, lookaheadStep, this.cfg.rows, this.cfg.scaleRootMidi, this.cfg.scaleSemitones,
-    );
-    const durSec = this.cfg.noteLengthBeats * secPerBeat;
-    pitches.forEach((midi, i) => {
-      const voice = this.voices[i % this.voices.length];
-      voice.play(midi, this.cfg.velocity, durSec, stepTime);
-    });
+    if (this.cfg.rowMode === 'drumKit') {
+      const drums = drumsForStep(this.active, lookaheadStep, this.cfg.rows, DEFAULT_DRUM_ROWS);
+      for (const drum of drums) {
+        this.drumKit?.play(drum as HeadBopDrum, this.cfg.velocity, stepTime);
+      }
+    } else {
+      const pitches = notesForStep(
+        this.active, lookaheadStep, this.cfg.rows, this.cfg.scaleRootMidi, this.cfg.scaleSemitones,
+      );
+      const durSec = this.cfg.noteLengthBeats * secPerBeat;
+      pitches.forEach((midi, i) => {
+        const voice = this.voices[i % this.voices.length];
+        voice.play(midi, this.cfg.velocity, durSec, stepTime);
+      });
+    }
   }
 
   stop(): void {
@@ -117,6 +134,8 @@ export class BoardSequencerEngine {
     this.stop();
     this.voices.forEach((v) => v.dispose());
     this.voices = [];
+    this.drumKit?.dispose();
+    this.drumKit = null;
     this.tick?.dispose();
     this.tick = null;
   }
