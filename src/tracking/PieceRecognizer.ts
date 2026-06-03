@@ -17,6 +17,8 @@ export interface CellSample {
   filledFraction: number;
   /** Fraction of sampled pixels matching the calibrated red band. */
   redFraction: number;
+  /** Fraction of sampled pixels matching the dark/achromatic "black" test. */
+  blackFraction?: number;
 }
 
 export interface CellClassification {
@@ -56,9 +58,25 @@ export class RedColourRecognizer implements PieceRecognizer {
 }
 
 /**
- * Colour → instrument palette key. Only 'red' is wired today; adding
- * `black: 'bassElectric'` later (with a black recognizer) is the seam for a
- * second colour selecting a second instrument.
+ * Level 2 (two-colour): red OR black. Each cell is classified as whichever
+ * colour dominates the sample (red wins ties). Used when both colours drive
+ * different roles (red → melodic instruments, black → percussion).
+ */
+export class RedBlackRecognizer implements PieceRecognizer {
+  readonly level: RecognitionLevel = 'colour';
+  constructor(private readonly minFilledFraction: number) {}
+  classify(sample: CellSample): CellClassification {
+    const r = sample.redFraction;
+    const b = sample.blackFraction ?? 0;
+    if (r >= this.minFilledFraction && r >= b) return { occupied: true, colour: 'red' };
+    if (b >= this.minFilledFraction) return { occupied: true, colour: 'black' };
+    return { occupied: false, colour: null };
+  }
+}
+
+/**
+ * Colour → default instrument palette key. The board's per-row mapping usually
+ * overrides this, but it documents the seam: a colour can select a sound.
  */
 export const COLOUR_INSTRUMENT: Partial<Record<'red' | 'black', string>> = {
   red: 'electricPiano',

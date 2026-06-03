@@ -180,6 +180,19 @@ export function matchesTrackedColor(
   return hueDiff <= color.hueTolerance;
 }
 
+/**
+ * Match an achromatic DARK pixel (a black draughts piece): low brightness and
+ * low saturation, so it is distinguished from coloured pieces and from light/
+ * mid-tone board squares. Hue is ignored (black has no meaningful hue).
+ */
+export function matchesBlack(
+  hsv: { h: number; s: number; v: number },
+  maxValue: number,
+  maxSaturation: number,
+): boolean {
+  return hsv.v <= maxValue && hsv.s <= maxSaturation;
+}
+
 // ============================================
 // ColorTracker Class
 // ============================================

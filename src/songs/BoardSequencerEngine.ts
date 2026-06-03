@@ -13,8 +13,10 @@
 
 import * as Tone from 'tone';
 import { BoardSequencerVoice } from './voices/BoardSequencerVoice';
-import { cellMidi, columnMidi, drumsForStep, DEFAULT_DRUM_ROWS } from './boardSequencerScale';
-import type { CellRef } from '../tracking/BoardSequencerMode';
+import {
+  cellMidi, columnMidi, drumsForStep, drumForRow, DEFAULT_DRUM_ROWS,
+} from './boardSequencerScale';
+import type { ActiveCell } from '../tracking/BoardSequencerMode';
 import { getEffectChainManager } from '../effects';
 import { RoundRobinDrumKit } from '../audio/instruments/RoundRobinDrumKit';
 import type { HeadBopDrum } from './voices/HeadBopKit';
@@ -29,8 +31,8 @@ export interface BoardEngineConfig {
   velocity: number;
   tickEnabled: boolean;
   instrumentKey: string;
-  rowMode: 'pitched' | 'drumKit' | 'instruments';
-  /** Per-row palette keys, used in 'instruments' mode (indexed by row, 0 = top). */
+  rowMode: 'pitched' | 'drumKit' | 'instruments' | 'redBlack';
+  /** Per-row palette keys, used in 'instruments' / 'redBlack' modes (indexed by row, 0 = top). */
   rowInstruments: string[];
 }
 
@@ -43,7 +45,7 @@ export class BoardSequencerEngine {
   private voices: BoardSequencerVoice[] = [];
   private drumKit: RoundRobinDrumKit | null = null;
   private tick: Tone.MembraneSynth | null = null;
-  private active: CellRef[] = [];
+  private active: ActiveCell[] = [];
   private startSec = 0;
   private lastScheduledStep = -1;
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -64,15 +66,19 @@ export class BoardSequencerEngine {
     // directly via the inherited connect(destination: AudioNode). The tick is
     // a Tone node and connects to the Tone.Gain directly.
     const dest = fx.getInput();
-    if (this.cfg.rowMode === 'drumKit') {
+    const needsDrums = this.cfg.rowMode === 'drumKit' || this.cfg.rowMode === 'redBlack';
+    const needsVoices = this.cfg.rowMode !== 'drumKit';
+    if (needsDrums) {
       this.drumKit = new RoundRobinDrumKit(this.ctx, 'studio-kit');
       if (dest) this.drumKit.connect(dest.input);
       await this.drumKit.whenReady();
-    } else {
-      // One sampled voice per row. 'instruments' mode gives each row its own
-      // instrument; 'pitched' mode uses the single chosen instrument for all.
+    }
+    if (needsVoices) {
+      // One sampled voice per row. 'instruments' / 'redBlack' give each row its
+      // own instrument; 'pitched' uses the single chosen instrument for all.
+      const perRow = this.cfg.rowMode === 'instruments' || this.cfg.rowMode === 'redBlack';
       for (let r = 0; r < this.cfg.rows; r++) {
-        const key = this.cfg.rowMode === 'instruments'
+        const key = perRow
           ? (this.cfg.rowInstruments[r] ?? this.cfg.instrumentKey)
           : this.cfg.instrumentKey;
         const v = new BoardSequencerVoice(this.ctx, key);
@@ -91,7 +97,7 @@ export class BoardSequencerEngine {
     }
   }
 
-  setActiveCells(cells: CellRef[]): void {
+  setActiveCells(cells: ActiveCell[]): void {
     this.active = cells;
   }
 
@@ -119,6 +125,20 @@ export class BoardSequencerEngine {
       const drums = drumsForStep(this.active, lookaheadStep, this.cfg.rows, DEFAULT_DRUM_ROWS);
       for (const drum of drums) {
         this.drumKit?.play(drum as HeadBopDrum, this.cfg.velocity, stepTime);
+      }
+    } else if (this.cfg.rowMode === 'redBlack') {
+      // Red → per-row instrument at the column's pentatonic pitch.
+      // Black → per-row drum. Both play on this beat.
+      const durSec = this.cfg.noteLengthBeats * secPerBeat;
+      for (const cell of this.active) {
+        if (cell.col !== lookaheadStep) continue;
+        if (cell.colour === 'black') {
+          const drum = drumForRow(cell.row, this.cfg.rows, DEFAULT_DRUM_ROWS);
+          if (drum) this.drumKit?.play(drum as HeadBopDrum, this.cfg.velocity, stepTime);
+        } else if (cell.row >= 0 && cell.row < this.voices.length) {
+          const midi = columnMidi(cell.col, this.cfg.scaleRootMidi, this.cfg.scaleSemitones);
+          this.voices[cell.row].play(midi, this.cfg.velocity, durSec, stepTime);
+        }
       }
     } else {
       // Pitched: row → pitch (bottom row lowest), one instrument for all.

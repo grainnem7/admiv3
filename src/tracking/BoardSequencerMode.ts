@@ -25,14 +25,18 @@ export interface Point {
   y: number;
 }
 
+export type PieceColour = 'red' | 'black';
+
 export interface CellReading {
   row: number;
   col: number;
   occupied: boolean;
-  colour: 'red' | 'black' | null;
+  colour: PieceColour | null;
   centroid: Point | null;
   /** Fraction of the sampled region matching the red band this frame (0..1). Diagnostic. */
   redFraction?: number;
+  /** Fraction matching the black test this frame (0..1). Diagnostic. */
+  blackFraction?: number;
 }
 
 export interface CellRef {
@@ -40,8 +44,13 @@ export interface CellRef {
   col: number;
 }
 
+/** A settled cell plus the colour of the piece occupying it. */
+export interface ActiveCell extends CellRef {
+  colour: PieceColour;
+}
+
 export interface BoardStepResult {
-  activeCells: CellRef[];
+  activeCells: ActiveCell[];
   justSettled: CellRef[];
   justDeactivated: CellRef[];
 }
@@ -65,6 +74,8 @@ interface CellState {
   movingMs: number;
   lostMs: number;
   phase: 'idle' | 'settled';
+  /** Colour of the piece currently occupying the cell (last seen). */
+  colour: PieceColour;
 }
 
 const keyOf = (row: number, col: number): string => `${row},${col}`;
@@ -93,13 +104,18 @@ export class BoardSequencerMode {
       const k = keyOf(r.row, r.col);
       let st = this.states.get(k);
       if (!st) {
-        st = { lastCentroid: null, velocity: 0, stillMs: 0, movingMs: 0, lostMs: 0, phase: 'idle' };
+        st = {
+          lastCentroid: null, velocity: 0, stillMs: 0, movingMs: 0, lostMs: 0, phase: 'idle',
+          colour: 'red',
+        };
         this.states.set(k, st);
       }
 
-      const isRed = r.occupied && r.colour === 'red' && r.centroid !== null;
+      const isPiece =
+        r.occupied && (r.colour === 'red' || r.colour === 'black') && r.centroid !== null;
 
-      if (isRed && r.centroid) {
+      if (isPiece && r.centroid && r.colour) {
+        st.colour = r.colour;
         st.lostMs = 0;
         if (st.lastCentroid) {
           const inst = dist(r.centroid, st.lastCentroid) / Math.max(dtMs, 1e-6);
@@ -133,7 +149,7 @@ export class BoardSequencerMode {
           justDeactivated.push({ row: r.row, col: r.col });
         }
       } else {
-        // Not occupied-red this frame (empty or occluded).
+        // Not occupied by a piece this frame (empty or occluded).
         st.lastCentroid = null;
         st.velocity = 0;
         st.movingMs = 0;
@@ -152,11 +168,11 @@ export class BoardSequencerMode {
       }
     }
 
-    const activeCells: CellRef[] = [];
+    const activeCells: ActiveCell[] = [];
     for (const [k, st] of this.states) {
       if (st.phase === 'settled') {
         const [row, col] = k.split(',').map(Number);
-        activeCells.push({ row, col });
+        activeCells.push({ row, col, colour: st.colour });
       }
     }
 

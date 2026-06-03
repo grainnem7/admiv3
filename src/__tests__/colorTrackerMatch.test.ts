@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { matchesTrackedColor, type TrackedColor } from '../tracking/ColorTracker';
+import { matchesTrackedColor, matchesBlack, type TrackedColor } from '../tracking/ColorTracker';
 
 const RED: TrackedColor = {
   id: 'r', hue: 5, hueTolerance: 16, minSaturation: 30, minValue: 20, minArea: 0,
@@ -26,5 +26,23 @@ describe('matchesTrackedColor skin-tone exclusion opt-out', () => {
   it('still enforces saturation/value floors when skipping skin exclusion', () => {
     expect(matchesTrackedColor({ h: 5, s: 10, v: 70 }, RED, true)).toBe(false);
     expect(matchesTrackedColor({ h: 5, s: 70, v: 10 }, RED, true)).toBe(false);
+  });
+});
+
+describe('matchesBlack', () => {
+  const MAX_V = 28;
+  const MAX_S = 40;
+
+  it('matches a dark, achromatic pixel (black piece)', () => {
+    expect(matchesBlack({ h: 0, s: 12, v: 14 }, MAX_V, MAX_S)).toBe(true);
+  });
+
+  it('rejects bright squares (cream/white) and mid-tone (brown)', () => {
+    expect(matchesBlack({ h: 40, s: 20, v: 90 }, MAX_V, MAX_S)).toBe(false); // cream
+    expect(matchesBlack({ h: 30, s: 50, v: 45 }, MAX_V, MAX_S)).toBe(false); // brown (too bright + saturated)
+  });
+
+  it('rejects a dark-but-saturated red (that is a red piece, not black)', () => {
+    expect(matchesBlack({ h: 2, s: 80, v: 22 }, MAX_V, MAX_S)).toBe(false);
   });
 });

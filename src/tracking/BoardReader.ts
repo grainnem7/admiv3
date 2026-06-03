@@ -11,7 +11,7 @@
 import type { Mat3 } from '../utils/homography';
 import { applyHomography } from '../utils/homography';
 import type { TrackedColor } from './ColorTracker';
-import { rgbToHsv, matchesTrackedColor } from './ColorTracker';
+import { rgbToHsv, matchesTrackedColor, matchesBlack } from './ColorTracker';
 import type { CellReading } from './BoardSequencerMode';
 import type { PieceRecognizer } from './PieceRecognizer';
 
@@ -24,9 +24,16 @@ export interface Rgb {
 /** Returns the RGB at integer image pixel (x, y). */
 export type RgbSampler = (x: number, y: number) => Rgb;
 
+export interface BlackBand {
+  maxValue: number;
+  maxSaturation: number;
+}
+
 export interface RegionSample {
   redFraction: number;
-  /** Mean position of matching pixels in unit-square coords, or null if none. */
+  /** Fraction matching the dark/achromatic black test (0 when no black band given). */
+  blackFraction: number;
+  /** Mean position of the DOMINANT colour's matching pixels (unit-square coords), or null. */
   centroid: { x: number; y: number } | null;
 }
 
@@ -49,6 +56,7 @@ export function sampleRegion(
   red: TrackedColor,
   samplesPerAxis: number,
   skipSkinExclusion = false,
+  black?: BlackBand,
 ): RegionSample {
   const cellW = 1 / cols;
   const cellH = 1 / rows;
@@ -57,10 +65,13 @@ export function sampleRegion(
   const stepX = (cellW * INSET) / Math.max(samplesPerAxis - 1, 1);
   const stepY = (cellH * INSET) / Math.max(samplesPerAxis - 1, 1);
 
-  let matches = 0;
+  let redMatches = 0;
+  let blackMatches = 0;
   let total = 0;
-  let sumX = 0;
-  let sumY = 0;
+  let rSumX = 0;
+  let rSumY = 0;
+  let bSumX = 0;
+  let bSumY = 0;
 
   for (let iy = 0; iy < samplesPerAxis; iy++) {
     for (let ix = 0; ix < samplesPerAxis; ix++) {
@@ -71,16 +82,27 @@ export function sampleRegion(
       const hsv = rgbToHsv(r, g, b);
       total++;
       if (matchesTrackedColor(hsv, red, skipSkinExclusion)) {
-        matches++;
-        sumX += ux;
-        sumY += uy;
+        redMatches++;
+        rSumX += ux;
+        rSumY += uy;
+      } else if (black && matchesBlack(hsv, black.maxValue, black.maxSaturation)) {
+        blackMatches++;
+        bSumX += ux;
+        bSumY += uy;
       }
     }
   }
 
-  const redFraction = total === 0 ? 0 : matches / total;
-  const centroid = matches > 0 ? { x: sumX / matches, y: sumY / matches } : null;
-  return { redFraction, centroid };
+  const redFraction = total === 0 ? 0 : redMatches / total;
+  const blackFraction = total === 0 ? 0 : blackMatches / total;
+  // Centroid of the dominant colour (used for slide-and-settle velocity).
+  let centroid: { x: number; y: number } | null = null;
+  if (redMatches >= blackMatches && redMatches > 0) {
+    centroid = { x: rSumX / redMatches, y: rSumY / redMatches };
+  } else if (blackMatches > 0) {
+    centroid = { x: bSumX / blackMatches, y: bSumY / blackMatches };
+  }
+  return { redFraction, blackFraction, centroid };
 }
 
 export interface BoardReaderOptions {
@@ -107,6 +129,8 @@ export interface BoardReaderOptions {
    * counter-productive here. Defaults to true for the board.
    */
   skipSkinExclusion?: boolean;
+  /** When set, also detect dark "black" pieces (low value + low saturation). */
+  black?: BlackBand;
 }
 
 /**
@@ -149,11 +173,17 @@ export class BoardReader {
     const readings: CellReading[] = [];
     for (let row = 0; row < opts.rows; row++) {
       for (let col = 0; col < opts.cols; col++) {
-        const { redFraction, centroid } = sampleRegion(
-          sampler, opts.homography, row, col, opts.rows, opts.cols, opts.red, samples, skipSkin,
+        const { redFraction, blackFraction, centroid } = sampleRegion(
+          sampler, opts.homography, row, col, opts.rows, opts.cols, opts.red, samples, skipSkin, opts.black,
         );
-        const cls = opts.recognizer.classify({ filledFraction: redFraction, redFraction });
-        readings.push({ row, col, occupied: cls.occupied, colour: cls.colour, centroid, redFraction });
+        const cls = opts.recognizer.classify({
+          filledFraction: Math.max(redFraction, blackFraction),
+          redFraction,
+          blackFraction,
+        });
+        readings.push({
+          row, col, occupied: cls.occupied, colour: cls.colour, centroid, redFraction, blackFraction,
+        });
       }
     }
     return readings;

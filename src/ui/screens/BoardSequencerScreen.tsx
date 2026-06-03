@@ -24,8 +24,8 @@ import * as Tone from 'tone';
 import { useAppStore } from '../../state/store';
 import { CameraManager } from '../../tracking/CameraManager';
 import { BoardReader } from '../../tracking/BoardReader';
-import { BoardSequencerMode, type CellRef } from '../../tracking/BoardSequencerMode';
-import { RedColourRecognizer } from '../../tracking/PieceRecognizer';
+import { BoardSequencerMode, type CellRef, type PieceColour } from '../../tracking/BoardSequencerMode';
+import { RedColourRecognizer, RedBlackRecognizer } from '../../tracking/PieceRecognizer';
 import { rgbToHsv } from '../../tracking/ColorTracker';
 import { BoardSequencerEngine } from '../../songs/BoardSequencerEngine';
 import { computeHomography, applyHomography, UNIT_SQUARE, type Mat3 } from '../../utils/homography';
@@ -39,7 +39,8 @@ import WarpedBoardView from '../components/board/WarpedBoardView';
 import { INSTRUMENT_PALETTE_LIST } from '../../songs/voices/presets/instrumentPalette';
 
 interface DetStats {
-  occupied: number;
+  red: number;
+  black: number;
   settled: number;
   maxRed: number;
 }
@@ -68,11 +69,12 @@ export default function BoardSequencerScreen() {
   const [calibrated, setCalibrated] = useState<boolean>(storedRef.current !== null);
   const [calibrating, setCalibrating] = useState(false);
   const [calibratingRed, setCalibratingRed] = useState(false);
+  const [calibratingBlack, setCalibratingBlack] = useState(false);
   const [active, setActive] = useState<CellRef[]>([]);
   const [playheadCol, setPlayheadCol] = useState(0);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [stats, setStats] = useState<DetStats>({ occupied: 0, settled: 0, maxRed: 0 });
+  const [stats, setStats] = useState<DetStats>({ red: 0, black: 0, settled: 0, maxRed: 0 });
 
   const update = useCallback((patch: Partial<BoardSequencerStored>) => {
     setConfig((prev) => {
@@ -100,9 +102,15 @@ export default function BoardSequencerScreen() {
     return computeHomography(UNIT_SQUARE, dst);
   }, []);
 
-  // Draw our sampling grid onto the camera, tinting cells by detection state.
+  // Draw our sampling grid onto the camera, tinting cells by detection state +
+  // colour (red vs black).
   const drawOverlay = useCallback(
-    (occupied: Set<string>, activeSet: Set<string>, cfg: BoardSequencerStored, playCol: number) => {
+    (
+      occupied: Map<string, PieceColour>,
+      activeMap: Map<string, PieceColour>,
+      cfg: BoardSequencerStored,
+      playCol: number,
+    ) => {
       const cv = overlayRef.current;
       const video = videoRef.current;
       if (!cv || !video) return;
@@ -137,8 +145,12 @@ export default function BoardSequencerScreen() {
           ctx.lineTo(e.x, e.y);
           ctx.closePath();
           const key = `${r},${c}`;
-          if (activeSet.has(key)) ctx.fillStyle = 'rgba(255,40,40,0.5)';
-          else if (occupied.has(key)) ctx.fillStyle = 'rgba(255,170,40,0.32)';
+          const activeColour = activeMap.get(key);
+          const occColour = occupied.get(key);
+          if (activeColour === 'black') ctx.fillStyle = 'rgba(120,170,255,0.55)';
+          else if (activeColour === 'red') ctx.fillStyle = 'rgba(255,40,40,0.5)';
+          else if (occColour === 'black') ctx.fillStyle = 'rgba(120,170,255,0.28)';
+          else if (occColour === 'red') ctx.fillStyle = 'rgba(255,170,40,0.32)';
           else ctx.fillStyle = 'rgba(0,0,0,0)';
           ctx.fill();
           ctx.lineWidth = c === playCol && runningRef.current ? 3 : 1;
@@ -191,34 +203,47 @@ export default function BoardSequencerScreen() {
         }
         const h = homographyRef.current;
         if (h) {
-          const recognizer = new RedColourRecognizer(cfg.minFilledFraction);
+          const twoColour = cfg.rowMode === 'redBlack';
+          const recognizer = twoColour
+            ? new RedBlackRecognizer(cfg.minFilledFraction)
+            : new RedColourRecognizer(cfg.minFilledFraction);
           const readings = reader.read(video, {
             homography: h, rows: cfg.rows, cols: cfg.cols, red: cfg.redColour, recognizer,
             mirrorX: cfg.mirrorX, mirrorY: cfg.mirrorY,
+            black: twoColour
+              ? { maxValue: cfg.blackMaxValue, maxSaturation: cfg.blackMaxSaturation }
+              : undefined,
           });
-          const occupied = new Set<string>();
+          const occupied = new Map<string, PieceColour>();
           let maxRed = 0;
+          let redCount = 0;
+          let blackCount = 0;
           for (const rd of readings) {
-            if (rd.occupied) occupied.add(`${rd.row},${rd.col}`);
+            if (rd.occupied && rd.colour) {
+              occupied.set(`${rd.row},${rd.col}`, rd.colour);
+              if (rd.colour === 'red') redCount++;
+              else blackCount++;
+            }
             const rf = rd.redFraction ?? 0;
             if (rf > maxRed) maxRed = rf;
           }
           let activeArr: CellRef[] = [];
+          const activeMap = new Map<string, PieceColour>();
           let playCol = 0;
           if (runningRef.current && modeRef.current && engineRef.current) {
             const res = modeRef.current.step(readings, dt, now);
             engineRef.current.setActiveCells(res.activeCells);
             if (res.justSettled.length > 0) engineRef.current.fireTick();
             activeArr = res.activeCells;
+            for (const c of res.activeCells) activeMap.set(`${c.row},${c.col}`, c.colour);
             playCol = stepIndexAt(Tone.now(), startSecRef.current, 60 / cfg.bpm, cfg.cols);
           }
-          const activeSet = new Set(activeArr.map((c) => `${c.row},${c.col}`));
-          drawOverlay(occupied, activeSet, cfg, playCol);
+          drawOverlay(occupied, activeMap, cfg, playCol);
           if (now - lastStateMs > 100) {
             lastStateMs = now;
             setActive(activeArr);
             setPlayheadCol(playCol);
-            setStats({ occupied: occupied.size, settled: activeSet.size, maxRed });
+            setStats({ red: redCount, black: blackCount, settled: activeMap.size, maxRed });
           }
         }
       }
@@ -297,12 +322,12 @@ export default function BoardSequencerScreen() {
     setCalibrating(true);
   }, []);
 
-  // Sample the colour under a click (in displayed space) and set the red band
-  // from it — so detection matches the actual pieces under the actual lighting,
-  // including a piece sitting on a dark square.
-  const sampleRedAt = useCallback((nx: number, ny: number) => {
+  // Average HSV under a click (in displayed space). Draws the frame with the
+  // same mirror transforms so a click on the displayed video samples the right
+  // pixels.
+  const sampleAvgHsvAt = useCallback((nx: number, ny: number): { h: number; s: number; v: number } | null => {
     const video = videoRef.current;
-    if (!video || video.videoWidth <= 0) return;
+    if (!video || video.videoWidth <= 0) return null;
     const cfg = configRef.current;
     const w = video.videoWidth;
     const h = video.videoHeight;
@@ -310,7 +335,7 @@ export default function BoardSequencerScreen() {
     cv.width = w;
     cv.height = h;
     const ctx = cv.getContext('2d', { willReadFrequently: true });
-    if (!ctx) return;
+    if (!ctx) return null;
     ctx.save();
     ctx.translate(cfg.mirrorX ? w : 0, cfg.mirrorY ? h : 0);
     ctx.scale(cfg.mirrorX ? -1 : 1, cfg.mirrorY ? -1 : 1);
@@ -334,8 +359,15 @@ export default function BoardSequencerScreen() {
       sb += data[i + 2];
       n++;
     }
-    if (n === 0) return;
-    const hsv = rgbToHsv(sr / n, sg / n, sb / n);
+    if (n === 0) return null;
+    return rgbToHsv(sr / n, sg / n, sb / n);
+  }, []);
+
+  // Set the red band from a clicked piece (matches actual pieces + lighting,
+  // including on a dark square).
+  const sampleRedAt = useCallback((nx: number, ny: number) => {
+    const hsv = sampleAvgHsvAt(nx, ny);
+    if (!hsv) return;
     update({
       redColour: {
         id: 'board-red',
@@ -347,7 +379,19 @@ export default function BoardSequencerScreen() {
       },
     });
     setCalibratingRed(false);
-  }, [update]);
+  }, [sampleAvgHsvAt, update]);
+
+  // Set the black band from a clicked black piece: thresholds a little above the
+  // sampled (dark) value/saturation so that piece and similar ones register.
+  const sampleBlackAt = useCallback((nx: number, ny: number) => {
+    const hsv = sampleAvgHsvAt(nx, ny);
+    if (!hsv) return;
+    update({
+      blackMaxValue: Math.min(60, Math.max(18, hsv.v * 1.6 + 6)),
+      blackMaxSaturation: Math.min(70, Math.max(30, hsv.s + 18)),
+    });
+    setCalibratingBlack(false);
+  }, [sampleAvgHsvAt, update]);
 
   const transform = `scaleX(${config.mirrorX ? -1 : 1}) scaleY(${config.mirrorY ? -1 : 1})`;
 
@@ -367,16 +411,23 @@ export default function BoardSequencerScreen() {
           <button type="button" onClick={() => setCalibrating(true)}>
             {calibrated ? 'Recalibrate corners' : 'Calibrate corners'}
           </button>
-          <button type="button" onClick={() => setCalibratingRed((v) => !v)}>
+          <button type="button" onClick={() => { setCalibratingRed((v) => !v); setCalibratingBlack(false); }}>
             {calibratingRed ? 'Cancel red calibration' : 'Calibrate red (click a piece)'}
           </button>
+          {config.rowMode === 'redBlack' && (
+            <button type="button" onClick={() => { setCalibratingBlack((v) => !v); setCalibratingRed(false); }}>
+              {calibratingBlack ? 'Cancel black calibration' : 'Calibrate black (click a piece)'}
+            </button>
+          )}
           <button type="button" disabled={!calibrated || running} onClick={() => void start()}>
             Start
           </button>
           <button type="button" disabled={!running} onClick={stop}>Stop</button>
 
           <p style={{ fontSize: 12, opacity: 0.85, margin: '4px 0' }}>
-            Detected: <strong>{stats.occupied}</strong> · Settled: <strong>{stats.settled}</strong> · max red {Math.round(stats.maxRed * 100)}%
+            Red: <strong>{stats.red}</strong>
+            {config.rowMode === 'redBlack' && <> · Black: <strong>{stats.black}</strong></>}
+            {' '}· Settled: <strong>{stats.settled}</strong> · max red {Math.round(stats.maxRed * 100)}%
           </p>
 
           <label>
@@ -426,6 +477,7 @@ export default function BoardSequencerScreen() {
               <option value="pitched">Pitched (melody)</option>
               <option value="instruments">Per-row instruments</option>
               <option value="drumKit">Drum kit</option>
+              <option value="redBlack">Red instruments + Black drums</option>
             </select>
           </label>
           {config.rowMode === 'pitched' && (
@@ -441,9 +493,13 @@ export default function BoardSequencerScreen() {
               </select>
             </label>
           )}
-          {config.rowMode === 'instruments' && (
+          {(config.rowMode === 'instruments' || config.rowMode === 'redBlack') && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <span style={{ fontSize: 12, opacity: 0.8 }}>Instrument per row (pitch auto-pentatonic)</span>
+              <span style={{ fontSize: 12, opacity: 0.8 }}>
+                {config.rowMode === 'redBlack'
+                  ? 'Instrument per row for RED pieces (black = drums; pitch auto-pentatonic)'
+                  : 'Instrument per row (pitch auto-pentatonic)'}
+              </span>
               {Array.from({ length: config.rows }, (_, r) => (
                 <label key={r} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
                   <span style={{ width: 64 }}>
@@ -508,6 +564,22 @@ export default function BoardSequencerScreen() {
               >
                 <div style={{ position: 'absolute', top: 8, left: 8, color: '#fff', background: '#000a', padding: '4px 8px' }}>
                   Click a red piece (ideally on a dark square)
+                </div>
+              </div>
+            )}
+            {calibratingBlack && (
+              <div
+                onClick={(e) => {
+                  const r = e.currentTarget.getBoundingClientRect();
+                  sampleBlackAt((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
+                }}
+                style={{ position: 'absolute', inset: 0, cursor: 'crosshair' }}
+                role="button"
+                tabIndex={0}
+                aria-label="Click a black piece to calibrate its darkness"
+              >
+                <div style={{ position: 'absolute', top: 8, left: 8, color: '#fff', background: '#000a', padding: '4px 8px' }}>
+                  Click a black piece
                 </div>
               </div>
             )}
