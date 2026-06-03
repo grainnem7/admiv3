@@ -39,11 +39,19 @@ import {
 } from '../../profiles/BoardSequencerConfig';
 import BoardCalibrationOverlay from '../components/board/BoardCalibrationOverlay';
 import WarpedBoardView from '../components/board/WarpedBoardView';
-import { INSTRUMENT_PALETTE_LIST } from '../../songs/voices/presets/instrumentPalette';
 
-// Per-row sound options: the curated palette plus a board-local sustained pad.
+// Sound options — real sample sets (mapped straight to SAMPLE_CONFIGS) plus the
+// sustained pad. These are the better-quality instruments available to us.
 const INSTRUMENT_OPTIONS: { key: string; name: string }[] = [
-  ...INSTRUMENT_PALETTE_LIST,
+  { key: 'piano', name: 'Piano' },
+  { key: 'electricPiano', name: 'Electric piano' },
+  { key: 'harp', name: 'Harp' },
+  { key: 'organ', name: 'Organ' },
+  { key: 'clarinet', name: 'Clarinet' },
+  { key: 'frenchHorn', name: 'French horn' },
+  { key: 'cello', name: 'Cello' },
+  { key: 'guitarNylon', name: 'Nylon guitar' },
+  { key: 'bassElectric', name: 'Electric bass' },
   { key: 'pad', name: 'Pad (sustained)' },
 ];
 

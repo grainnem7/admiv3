@@ -69,14 +69,14 @@ export class ColourRecognizer implements PieceRecognizer {
   readonly level: RecognitionLevel = 'colour';
   constructor(private readonly minFilledFraction: number) {}
   classify(sample: CellSample): CellClassification {
-    const r = sample.redFraction;
-    const bl = sample.blueFraction ?? 0;
-    const k = sample.blackFraction ?? 0;
-    const max = Math.max(r, bl, k);
-    if (max < this.minFilledFraction) return { occupied: false, colour: null };
-    if (r === max) return { occupied: true, colour: 'red' };
-    if (bl === max) return { occupied: true, colour: 'blue' };
-    return { occupied: true, colour: 'black' };
+    const min = this.minFilledFraction;
+    // Vivid hues (red, blue) take PRECEDENCE over "black": on a board with dark
+    // squares the darkness test fires on the background, so a blue/red piece
+    // must win even when more of the cell is dark. Black is the fallback.
+    if (sample.redFraction >= min) return { occupied: true, colour: 'red' };
+    if ((sample.blueFraction ?? 0) >= min) return { occupied: true, colour: 'blue' };
+    if ((sample.blackFraction ?? 0) >= min) return { occupied: true, colour: 'black' };
+    return { occupied: false, colour: null };
   }
 }
 

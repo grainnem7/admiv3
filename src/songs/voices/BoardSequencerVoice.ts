@@ -22,11 +22,14 @@ export class BoardSequencerVoice extends ToneVoiceBase {
     this.bypassFade = true;
     this.active = true;
     this.outputGain.gain.value = 1;
-    // 'pad' is a board-local sound: the soft choir-pad sample, played with a
-    // long sustain by the engine to act as a held harmonic bed.
+    // 'pad' is a board-local alias for the soft choir-pad sample (sustained by
+    // the engine). Otherwise prefer a DIRECT SAMPLE_CONFIGS key (the real, good
+    // instrument samples); fall back to the curated palette for legacy keys.
     const sampleConfig = instrumentKey === 'pad'
       ? SAMPLE_CONFIGS.padChoir
-      : SAMPLE_CONFIGS[getInstrumentEntry(instrumentKey).sampleKey];
+      : instrumentKey in SAMPLE_CONFIGS
+        ? SAMPLE_CONFIGS[instrumentKey as keyof typeof SAMPLE_CONFIGS]
+        : SAMPLE_CONFIGS[getInstrumentEntry(instrumentKey).sampleKey];
     this.player = new SamplerPlayer(sampleConfig, this.filterNode);
   }
 

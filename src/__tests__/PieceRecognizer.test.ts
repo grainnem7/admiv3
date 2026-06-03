@@ -36,6 +36,13 @@ describe('PieceRecognizer', () => {
       .toEqual({ occupied: true, colour: 'red' }); // tie → red
   });
 
+  it('ColourRecognizer: vivid colours win over black even when black has more pixels', () => {
+    const r = new ColourRecognizer(0.2);
+    // a blue piece on a dark square: black fraction higher, but blue must win
+    expect(r.classify({ filledFraction: 0, redFraction: 0, blackFraction: 0.6, blueFraction: 0.25 }))
+      .toEqual({ occupied: true, colour: 'blue' });
+  });
+
   it('exposes a red→instrument hook', () => {
     expect(COLOUR_INSTRUMENT.red).toBe('electricPiano');
   });

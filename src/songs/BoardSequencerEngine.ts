@@ -85,6 +85,8 @@ export class BoardSequencerEngine {
   private bassVoice: BoardSequencerVoice | null = null;
   private drumKit: RoundRobinDrumKit | null = null;
   private tick: Tone.MembraneSynth | null = null;
+  private master: GainNode | null = null;
+  private limiter: Tone.Limiter | null = null;
   private active: ActiveCell[] = [];
   private startSec = 0;
   private lastScheduledStep = -1;
@@ -109,11 +111,21 @@ export class BoardSequencerEngine {
     // directly via the inherited connect(destination: AudioNode). The tick is
     // a Tone node and connects to the Tone.Gain directly.
     const dest = fx.getInput();
+    // Board sub-mix: headroom gain → limiter → shared effects bus, so stacking
+    // many voices (and sustained pads) can't clip/crackle the output.
+    const master = this.ctx.createGain();
+    master.gain.value = 0.55;
+    const limiter = new Tone.Limiter(-2);
+    Tone.connect(master, limiter);
+    if (dest) limiter.connect(dest);
+    this.master = master;
+    this.limiter = limiter;
+
     const needsDrums = this.cfg.rowMode === 'drumKit' || this.cfg.blackDrums;
     const needsVoices = this.cfg.rowMode !== 'drumKit';
     if (needsDrums) {
       this.drumKit = new RoundRobinDrumKit(this.ctx, 'studio-kit');
-      if (dest) this.drumKit.connect(dest.input);
+      this.drumKit.connect(master);
       await this.drumKit.whenReady();
     }
     if (needsVoices) {
@@ -121,13 +133,13 @@ export class BoardSequencerEngine {
       // or the default). Works the same for pitched and per-row modes.
       for (let r = 0; r < this.cfg.rows; r++) {
         const v = new BoardSequencerVoice(this.ctx, this.instrumentForRow(r));
-        if (dest) v.connect(dest.input);
+        v.connect(master);
         this.voices.push(v);
       }
     }
     if (this.cfg.blueBass) {
-      this.bassVoice = new BoardSequencerVoice(this.ctx, 'bass');
-      if (dest) this.bassVoice.connect(dest.input);
+      this.bassVoice = new BoardSequencerVoice(this.ctx, 'bassElectric');
+      this.bassVoice.connect(master);
     }
     if (this.cfg.tickEnabled) {
       this.tick = new Tone.MembraneSynth({
@@ -136,7 +148,7 @@ export class BoardSequencerEngine {
         envelope: { attack: 0.001, decay: 0.08, sustain: 0, release: 0.02 },
         volume: -14,
       });
-      if (dest) this.tick.connect(dest);
+      this.tick.connect(master);
     }
   }
 
@@ -285,6 +297,10 @@ export class BoardSequencerEngine {
     this.voices = [];
     this.bassVoice?.dispose();
     this.bassVoice = null;
+    this.limiter?.dispose();
+    this.limiter = null;
+    this.master?.disconnect();
+    this.master = null;
     this.drumKit?.dispose();
     this.drumKit = null;
     this.tick?.dispose();
