@@ -44,50 +44,50 @@ describe('boardSequencerScale pentatonic generators', () => {
     expect(chordDegreeMidi(0, [])).toBe(60); // empty → safe fallback
   });
 
-  it('voicingForCells ranks ACTIVE ROWS by height → ascending pentatonic (bottom lowest)', () => {
+  it('voicingForCells axis row: ABSOLUTE height → degree (rows-1-row), full grid range', () => {
+    const rows = 4;
     const cells = [
-      { row: 3, col: 2 }, // bottom row → rank 0
-      { row: 1, col: 0 }, // → rank 1
-      { row: 0, col: 3 }, // top row → rank 2
+      { row: 3, col: 2 }, // bottom → degree 0
+      { row: 1, col: 0 }, // → degree 2
+      { row: 0, col: 3 }, // top → degree 3
     ];
-    const v = voicingForCells(cells, 60, penta5, null);
+    const v = voicingForCells(cells, 60, penta5, null, 'row', rows);
     expect(v.get('3,2')).toBe(degreeMidi(0, 60, penta5));
-    expect(v.get('1,0')).toBe(degreeMidi(1, 60, penta5));
-    expect(v.get('0,3')).toBe(degreeMidi(2, 60, penta5));
+    expect(v.get('1,0')).toBe(degreeMidi(2, 60, penta5));
+    expect(v.get('0,3')).toBe(degreeMidi(3, 60, penta5));
   });
 
-  it('voicingForCells: same-row cells share a pitch regardless of column (no per-column pitch)', () => {
-    const v = voicingForCells([{ row: 3, col: 0 }, { row: 3, col: 5 }], 60, penta5, null);
+  it('voicingForCells: same-row cells share a pitch regardless of column', () => {
+    const v = voicingForCells([{ row: 3, col: 0 }, { row: 3, col: 5 }], 60, penta5, null, 'row', 4);
     expect(v.get('3,0')).toBe(v.get('3,5'));
-    expect(v.get('3,0')).toBe(degreeMidi(0, 60, penta5)); // only one active row → lowest degree
+    expect(v.get('3,0')).toBe(degreeMidi(0, 60, penta5)); // bottom row of 4 → degree 0
   });
 
-  it('voicingForCells re-voices when the set of rows changes', () => {
+  it('voicingForCells: a row keeps its pitch no matter what else is placed (position-fixed)', () => {
     const top = { row: 0, col: 0 };
-    const aloneTop = voicingForCells([top], 60, penta5, null).get('0,0');
-    const withLower = voicingForCells([{ row: 3, col: 0 }, top], 60, penta5, null).get('0,0');
-    expect(aloneTop).toBe(degreeMidi(0, 60, penta5)); // only row in play → lowest
-    expect(withLower).toBe(degreeMidi(1, 60, penta5)); // adding a lower row pushes it up
+    const aloneTop = voicingForCells([top], 60, penta5, null, 'row', 4).get('0,0');
+    const withLower = voicingForCells([{ row: 3, col: 0 }, top], 60, penta5, null, 'row', 4).get('0,0');
+    expect(aloneTop).toBe(degreeMidi(3, 60, penta5)); // top row of 4 → degree 3, always
+    expect(withLower).toBe(aloneTop); // unchanged when a lower piece is added
   });
 
   it('voicingForCells uses chord tones when a chord is supplied', () => {
-    const v = voicingForCells([{ row: 3, col: 0 }, { row: 0, col: 0 }], 60, penta5, [62, 66, 69]);
-    expect(v.get('3,0')).toBe(62); // bottom row → first chord tone
-    expect(v.get('0,0')).toBe(66); // top row → second chord tone
+    const v = voicingForCells([{ row: 3, col: 0 }, { row: 0, col: 0 }], 60, penta5, [62, 66, 69], 'row', 4);
+    expect(v.get('3,0')).toBe(chordDegreeMidi(0, [62, 66, 69])); // bottom → first chord tone
+    expect(v.get('0,0')).toBe(chordDegreeMidi(3, [62, 66, 69])); // top of 4 → degree 3 (wraps)
   });
 
-  it("voicingForCells axis 'col': a row's pieces ascend across columns (per-instrument melody)", () => {
-    // one row (one instrument), three columns → an ascending melody by column
+  it("voicingForCells axis 'col': pitch = absolute column (per-instrument melody)", () => {
     const v = voicingForCells(
-      [{ row: 2, col: 0 }, { row: 2, col: 1 }, { row: 2, col: 3 }], 60, penta5, null, 'col',
+      [{ row: 2, col: 0 }, { row: 2, col: 1 }, { row: 2, col: 3 }], 60, penta5, null, 'col', 4,
     );
     expect(v.get('2,0')).toBe(degreeMidi(0, 60, penta5)); // leftmost → lowest
     expect(v.get('2,1')).toBe(degreeMidi(1, 60, penta5));
-    expect(v.get('2,3')).toBe(degreeMidi(2, 60, penta5)); // rank by used columns
+    expect(v.get('2,3')).toBe(degreeMidi(3, 60, penta5)); // absolute column index
   });
 
   it("voicingForCells axis 'col': cells in the same column share a note (layered instruments)", () => {
-    const v = voicingForCells([{ row: 0, col: 1 }, { row: 3, col: 1 }], 60, penta5, null, 'col');
+    const v = voicingForCells([{ row: 0, col: 1 }, { row: 3, col: 1 }], 60, penta5, null, 'col', 4);
     expect(v.get('0,1')).toBe(v.get('3,1'));
   });
 });

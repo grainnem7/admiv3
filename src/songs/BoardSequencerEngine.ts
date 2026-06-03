@@ -259,7 +259,7 @@ export class BoardSequencerEngine {
     const axis = this.cfg.rowMode === 'instruments' ? 'col' : 'row';
     const voicing = voicingForCells(
       melodic, this.cfg.scaleRootMidi, this.cfg.scaleSemitones,
-      chord && chord.notes.length > 0 ? chord.notes : null, axis,
+      chord && chord.notes.length > 0 ? chord.notes : null, axis, this.cfg.rows,
     );
     // Bass note: the chord's lowest tone (or the scale root), an octave down.
     const bassMidi = (chord && chord.notes.length > 0
