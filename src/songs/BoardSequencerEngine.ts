@@ -46,6 +46,7 @@ export interface BoardEngineConfig {
   scaleRootMidi: number;
   scaleSemitones: number[];
   swing: number;
+  humanize: number;
   noteLengthBeats: number;
   velocity: number;
   tickEnabled: boolean;
@@ -252,6 +253,10 @@ export class BoardSequencerEngine {
     this.cfg.swing = swing;
   }
 
+  setHumanize(h: number): void {
+    this.cfg.humanize = h;
+  }
+
   /** Attach (or clear) a backing song to lock tempo/beat + chords to. */
   setSyncSource(src: BoardSyncSource | null): void {
     this.syncSource = src;
@@ -359,13 +364,17 @@ export class BoardSequencerEngine {
     const bassMidi = (chord && chord.notes.length > 0
       ? Math.min(...chord.notes)
       : this.cfg.scaleRootMidi) - 12 + oct;
+    const h = this.cfg.humanize;
     for (const cell of this.active) {
       if (cell.col !== step) continue;
+      // Humanize: occasionally skip a step + vary velocity, so loops breathe.
+      if (h > 0 && Math.random() < h * 0.5) continue;
+      const vel = h > 0 ? this.cfg.velocity * (1 - Math.random() * h * 0.4) : this.cfg.velocity;
       if (this.isDrumCell(cell)) {
         const drum = drumForRow(cell.row, this.cfg.rows, DEFAULT_DRUM_ROWS);
-        if (drum) this.drumKit?.play(drum as HeadBopDrum, this.cfg.velocity, stepTime);
+        if (drum) this.drumKit?.play(drum as HeadBopDrum, vel, stepTime);
       } else if (this.isBassCell(cell)) {
-        this.bassVoice?.play(bassMidi, this.cfg.velocity, durSec, stepTime);
+        this.bassVoice?.play(bassMidi, vel, durSec, stepTime);
       } else {
         const midi = voicing.get(`${cell.row},${cell.col}`);
         if (midi !== undefined) {
@@ -374,7 +383,7 @@ export class BoardSequencerEngine {
           const dur = this.instrumentForRow(cell.row) === 'pad'
             ? secPerBeat * this.cfg.cols
             : durSec;
-          this.voices[cell.row].play(midi + oct, this.cfg.velocity, dur, stepTime);
+          this.voices[cell.row].play(midi + oct, vel, dur, stepTime);
         }
       }
     }

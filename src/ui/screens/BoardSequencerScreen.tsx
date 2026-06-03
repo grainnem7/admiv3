@@ -386,6 +386,7 @@ export default function BoardSequencerScreen() {
     const engine = new BoardSequencerEngine({
       bpm: cfg.bpm, rows: cfg.rows, cols: cfg.cols,
       scaleRootMidi: cfg.scaleRootMidi, scaleSemitones: cfg.scaleSemitones, swing: cfg.swing,
+      humanize: cfg.humanize,
       noteLengthBeats: cfg.noteLengthBeats, velocity: cfg.velocity,
       tickEnabled: cfg.tickEnabled, instrumentKey: cfg.instrumentKey,
       rowMode: cfg.rowMode, blackDrums: cfg.blackDrums, blueBass: cfg.blueBass,
@@ -601,6 +602,17 @@ export default function BoardSequencerScreen() {
                 const v = Number(e.target.value) / 100;
                 update({ swing: v });
                 engineRef.current?.setSwing(v);
+              }}
+            />
+          </label>
+          <label>
+            Humanize {Math.round(config.humanize * 100)}%
+            <input
+              type="range" min={0} max={100} value={Math.round(config.humanize * 100)}
+              onChange={(e) => {
+                const v = Number(e.target.value) / 100;
+                update({ humanize: v });
+                engineRef.current?.setHumanize(v);
               }}
             />
           </label>
