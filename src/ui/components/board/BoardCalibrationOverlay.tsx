@@ -4,13 +4,15 @@ import type { BoardPoint } from '../../../profiles/BoardSequencerConfig';
 const ORDER = ['top-left', 'top-right', 'bottom-right', 'bottom-left'] as const;
 
 interface Props {
-  width: number;
-  height: number;
   onComplete: (corners: [BoardPoint, BoardPoint, BoardPoint, BoardPoint]) => void;
 }
 
-/** Click the four board corners in TL, TR, BR, BL order; stores normalised coords. */
-export default function BoardCalibrationOverlay({ width, height, onComplete }: Props) {
+/**
+ * Click the four board corners in TL, TR, BR, BL order; stores normalised coords.
+ * Fills its positioned parent (the video wrapper), so clicks map directly to the
+ * displayed video regardless of its rendered size.
+ */
+export default function BoardCalibrationOverlay({ onComplete }: Props) {
   const [pts, setPts] = useState<BoardPoint[]>([]);
 
   const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -27,7 +29,7 @@ export default function BoardCalibrationOverlay({ width, height, onComplete }: P
   return (
     <div
       onClick={handleClick}
-      style={{ position: 'absolute', inset: 0, width, height, cursor: 'crosshair' }}
+      style={{ position: 'absolute', inset: 0, cursor: 'crosshair' }}
       role="button"
       tabIndex={0}
       aria-label={`Click the ${ORDER[pts.length] ?? 'four'} board corner`}

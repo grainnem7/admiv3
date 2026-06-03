@@ -161,22 +161,18 @@ export default function BoardSequencerScreen() {
   }, [config, buildHomography]);
 
   return (
-    <div className="board-sequencer-screen" style={{ padding: 16 }}>
-      <header style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+    <div
+      className="board-sequencer-screen"
+      style={{ display: 'flex', flexDirection: 'column', height: '100vh', padding: 16, boxSizing: 'border-box', gap: 12 }}
+    >
+      <header style={{ display: 'flex', gap: 12, alignItems: 'center', flexShrink: 0 }}>
         <button type="button" onClick={() => setCurrentScreen('welcome')}>&larr; Back</button>
-        <h1 style={{ fontSize: 18 }}>Board Sequencer</h1>
+        <h1 style={{ fontSize: 18, margin: 0 }}>Board Sequencer</h1>
       </header>
 
-      <div style={{ position: 'relative', width: 640, maxWidth: '100%' }}>
-        <video ref={videoRef} autoPlay playsInline muted style={{ width: '100%', transform: 'scaleX(-1)' }} />
-        {calibrating && (
-          <BoardCalibrationOverlay width={640} height={480} onComplete={handleCalibrated} />
-        )}
-        {error && <div style={{ position: 'absolute', top: 8, left: 8, color: '#ff8080' }}>{error}</div>}
-      </div>
-
-      <div style={{ display: 'flex', gap: 16, marginTop: 12, alignItems: 'flex-start' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ display: 'flex', gap: 16, flex: 1, minHeight: 0 }}>
+        {/* Controls rail */}
+        <div style={{ width: 230, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8, overflowY: 'auto' }}>
           <button type="button" onClick={() => setCalibrating(true)}>
             {calibrated ? 'Recalibrate corners' : 'Calibrate corners'}
           </button>
@@ -242,7 +238,24 @@ export default function BoardSequencerScreen() {
           </label>
           <p style={{ fontSize: 11, opacity: 0.7, margin: 0 }}>Stop to change grid/mode/instrument</p>
         </div>
-        <WarpedBoardView rows={config.rows} cols={config.cols} active={active} playheadCol={playheadCol} />
+
+        {/* Camera + calibration */}
+        <div style={{ flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ position: 'relative', width: '100%' }}>
+            <video
+              ref={videoRef}
+              autoPlay playsInline muted
+              style={{ width: '100%', display: 'block', transform: 'scaleX(-1)', borderRadius: 6 }}
+            />
+            {calibrating && <BoardCalibrationOverlay onComplete={handleCalibrated} />}
+            {error && <div style={{ position: 'absolute', top: 8, left: 8, color: '#ff8080' }}>{error}</div>}
+          </div>
+        </div>
+
+        {/* Warped board (facilitator feedback) */}
+        <div style={{ flex: '1 1 0', minWidth: 0, minHeight: 0 }}>
+          <WarpedBoardView rows={config.rows} cols={config.cols} active={active} playheadCol={playheadCol} />
+        </div>
       </div>
     </div>
   );
