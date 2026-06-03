@@ -13,7 +13,7 @@
 
 import * as Tone from 'tone';
 import { BoardSequencerVoice } from './voices/BoardSequencerVoice';
-import { notesForStep, stepIndexAt } from './boardSequencerScale';
+import { notesForStep } from './boardSequencerScale';
 import type { CellRef } from '../tracking/BoardSequencerMode';
 import { getEffectChainManager } from '../effects';
 
@@ -93,11 +93,11 @@ export class BoardSequencerEngine {
   private scheduleTick(): void {
     const secPerBeat = 60 / this.cfg.bpm;
     const now = Tone.now();
-    const lookaheadStep = stepIndexAt(now + LOOKAHEAD_SEC, this.startSec, secPerBeat, this.cfg.cols);
+    const beatIdx = Math.floor((now + LOOKAHEAD_SEC - this.startSec) / secPerBeat);
+    const lookaheadStep = ((beatIdx % this.cfg.cols) + this.cfg.cols) % this.cfg.cols;
     if (lookaheadStep === this.lastScheduledStep) return;
     this.lastScheduledStep = lookaheadStep;
-    const beatsSinceStart = Math.round((now + LOOKAHEAD_SEC - this.startSec) / secPerBeat);
-    const stepTime = this.startSec + beatsSinceStart * secPerBeat;
+    const stepTime = this.startSec + beatIdx * secPerBeat;
     const pitches = notesForStep(
       this.active, lookaheadStep, this.cfg.rows, this.cfg.scaleRootMidi, this.cfg.scaleSemitones,
     );
