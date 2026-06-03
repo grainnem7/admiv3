@@ -43,6 +43,30 @@ export function notesForStep(
     .map((c) => cellMidi(c.row, rows, rootMidi, semitones));
 }
 
+/** Default drum-kit row order, bottom row → top row. */
+export const DEFAULT_DRUM_ROWS = ['kick', 'snare', 'hat', 'crash'] as const;
+
+/** The drum name for a grid row, or null if the row is above the kit size. */
+export function drumForRow(row: number, rows: number, drumNames: readonly string[]): string | null {
+  const levelFromBottom = rows - 1 - row;
+  return levelFromBottom >= 0 && levelFromBottom < drumNames.length
+    ? drumNames[levelFromBottom]
+    : null;
+}
+
+/** Drum names to trigger at `step` (column): one per active cell whose row maps to a drum. */
+export function drumsForStep(
+  active: { row: number; col: number }[],
+  step: number,
+  rows: number,
+  drumNames: readonly string[],
+): string[] {
+  return active
+    .filter((c) => c.col === step)
+    .map((c) => drumForRow(c.row, rows, drumNames))
+    .filter((d): d is string => d !== null);
+}
+
 /** Which step the playhead is on at `nowSec`, given loop start, beat length, and step count. */
 export function stepIndexAt(
   nowSec: number,

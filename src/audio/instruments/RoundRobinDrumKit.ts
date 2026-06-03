@@ -45,16 +45,24 @@ export class RoundRobinDrumKit {
     }
   }
 
-  /** Play a (possibly compound) drum at velocity 0–1. No-op until ready. */
-  play(drum: HeadBopDrum, velocity: number): void {
+  /**
+   * Play a (possibly compound) drum at velocity 0–1. No-op until ready.
+   * @param drum   The drum voice to trigger (may be a compound like 'kickCrash').
+   * @param velocity  Linear gain 0–1.
+   * @param time   Optional audio-context time (seconds) at which to schedule the
+   *               hit. When omitted (or undefined) the hit plays immediately —
+   *               identical behaviour to the pre-scheduling API. Callers that do
+   *               not pass `time` are entirely unaffected.
+   */
+  play(drum: HeadBopDrum, velocity: number, time?: number): void {
     if (!this.ready) return;
     const gainDb = velToDb(Math.max(0, Math.min(1, velocity)));
     if (drum === 'kickCrash') {
-      this.fire('kick', gainDb);
-      this.fire('crash', gainDb);
+      this.fire('kick', gainDb, time);
+      this.fire('crash', gainDb, time);
       return;
     }
-    this.fire(drum, gainDb);
+    this.fire(drum, gainDb, time);
   }
 
   dispose(): void {
@@ -115,7 +123,7 @@ export class RoundRobinDrumKit {
     this.ready = this.samples.size > 0;
   }
 
-  private fire(name: DrumName, gainDb: number): void {
+  private fire(name: DrumName, gainDb: number, time?: number): void {
     // Fall back to the kick if the requested drum didn't load (e.g. its sample
     // 404'd), so every hit makes a sound instead of an intermittent silence.
     let key = name;
@@ -129,7 +137,7 @@ export class RoundRobinDrumKit {
     const p = players[i];
     this.rrIndex.set(key, (i + 1) % players.length);
     p.volume.value = gainDb;
-    p.start();
+    p.start(time); // start(undefined) === start-now in Tone.js; safe for existing callers
   }
 }
 

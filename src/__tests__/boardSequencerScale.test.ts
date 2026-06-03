@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { cellMidi, notesForStep, stepIndexAt } from '../songs/boardSequencerScale';
+import { drumForRow, drumsForStep, DEFAULT_DRUM_ROWS } from '../songs/boardSequencerScale';
 import type { CellRef } from '../tracking/BoardSequencerMode';
 
 const ROWS = 4;
@@ -42,5 +43,38 @@ describe('boardSequencerScale', () => {
     expect(cellMidi(4, 6, 60, penta)).toBe(62); // D4 (level 1)
     expect(cellMidi(1, 6, 60, penta)).toBe(69); // A4 (level 4)
     expect(cellMidi(0, 6, 60, penta)).toBe(72); // C5 (level 5 → octave wrap)
+  });
+});
+
+describe('boardSequencerScale drum mapping', () => {
+  it('DEFAULT_DRUM_ROWS is bottom-to-top kick, snare, hat, crash', () => {
+    expect(DEFAULT_DRUM_ROWS).toEqual(['kick', 'snare', 'hat', 'crash']);
+  });
+
+  it('drumForRow maps the BOTTOM row to the first drum and wraps to null beyond the kit', () => {
+    const rows = 4;
+    expect(drumForRow(3, rows, DEFAULT_DRUM_ROWS)).toBe('kick');  // bottom row
+    expect(drumForRow(2, rows, DEFAULT_DRUM_ROWS)).toBe('snare');
+    expect(drumForRow(1, rows, DEFAULT_DRUM_ROWS)).toBe('hat');
+    expect(drumForRow(0, rows, DEFAULT_DRUM_ROWS)).toBe('crash'); // top row
+  });
+
+  it('drumForRow returns null for rows above the kit size (bigger grid than kit)', () => {
+    const rows = 6; // levels 0..5, only 4 drums
+    expect(drumForRow(5, rows, DEFAULT_DRUM_ROWS)).toBe('kick'); // level 0
+    expect(drumForRow(1, rows, DEFAULT_DRUM_ROWS)).toBeNull();   // level 4 → beyond kit
+    expect(drumForRow(0, rows, DEFAULT_DRUM_ROWS)).toBeNull();   // level 5 → null
+  });
+
+  it('drumsForStep returns drum names for active cells in that column (skipping null rows)', () => {
+    const rows = 4;
+    const active = [
+      { row: 3, col: 0 }, // kick
+      { row: 1, col: 0 }, // hat
+      { row: 0, col: 2 }, // crash (different column)
+    ];
+    expect(drumsForStep(active, 0, rows, DEFAULT_DRUM_ROWS).sort()).toEqual(['hat', 'kick']);
+    expect(drumsForStep(active, 2, rows, DEFAULT_DRUM_ROWS)).toEqual(['crash']);
+    expect(drumsForStep(active, 1, rows, DEFAULT_DRUM_ROWS)).toEqual([]);
   });
 });
