@@ -26,6 +26,7 @@ import { CameraManager } from '../../tracking/CameraManager';
 import { BoardReader } from '../../tracking/BoardReader';
 import { BoardSequencerMode, type CellRef } from '../../tracking/BoardSequencerMode';
 import { RedColourRecognizer } from '../../tracking/PieceRecognizer';
+import { rgbToHsv } from '../../tracking/ColorTracker';
 import { BoardSequencerEngine } from '../../songs/BoardSequencerEngine';
 import { computeHomography, applyHomography, UNIT_SQUARE, type Mat3 } from '../../utils/homography';
 import { stepIndexAt } from '../../songs/boardSequencerScale';
@@ -66,6 +67,7 @@ export default function BoardSequencerScreen() {
   // saved (loaded from storage or calibrated this session).
   const [calibrated, setCalibrated] = useState<boolean>(storedRef.current !== null);
   const [calibrating, setCalibrating] = useState(false);
+  const [calibratingRed, setCalibratingRed] = useState(false);
   const [active, setActive] = useState<CellRef[]>([]);
   const [playheadCol, setPlayheadCol] = useState(0);
   const [running, setRunning] = useState(false);
@@ -282,6 +284,58 @@ export default function BoardSequencerScreen() {
     setCalibrating(true);
   }, []);
 
+  // Sample the colour under a click (in displayed space) and set the red band
+  // from it — so detection matches the actual pieces under the actual lighting,
+  // including a piece sitting on a dark square.
+  const sampleRedAt = useCallback((nx: number, ny: number) => {
+    const video = videoRef.current;
+    if (!video || video.videoWidth <= 0) return;
+    const cfg = configRef.current;
+    const w = video.videoWidth;
+    const h = video.videoHeight;
+    const cv = document.createElement('canvas');
+    cv.width = w;
+    cv.height = h;
+    const ctx = cv.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return;
+    ctx.save();
+    ctx.translate(cfg.mirrorX ? w : 0, cfg.mirrorY ? h : 0);
+    ctx.scale(cfg.mirrorX ? -1 : 1, cfg.mirrorY ? -1 : 1);
+    ctx.drawImage(video, 0, 0, w, h);
+    ctx.restore();
+    const px = Math.min(w - 1, Math.max(0, Math.round(nx * w)));
+    const py = Math.min(h - 1, Math.max(0, Math.round(ny * h)));
+    const R = 8;
+    const x0 = Math.max(0, px - R);
+    const y0 = Math.max(0, py - R);
+    const sw = Math.min(2 * R, w - x0);
+    const sh = Math.min(2 * R, h - y0);
+    const { data } = ctx.getImageData(x0, y0, sw, sh);
+    let sr = 0;
+    let sg = 0;
+    let sb = 0;
+    let n = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      sr += data[i];
+      sg += data[i + 1];
+      sb += data[i + 2];
+      n++;
+    }
+    if (n === 0) return;
+    const hsv = rgbToHsv(sr / n, sg / n, sb / n);
+    update({
+      redColour: {
+        id: 'board-red',
+        hue: hsv.h,
+        hueTolerance: 16,
+        minSaturation: Math.max(28, hsv.s * 0.55),
+        minValue: Math.max(18, hsv.v * 0.45),
+        minArea: 0.0005,
+      },
+    });
+    setCalibratingRed(false);
+  }, [update]);
+
   const transform = `scaleX(${config.mirrorX ? -1 : 1}) scaleY(${config.mirrorY ? -1 : 1})`;
 
   return (
@@ -299,6 +353,9 @@ export default function BoardSequencerScreen() {
         <div style={{ width: 230, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8, overflowY: 'auto' }}>
           <button type="button" onClick={() => setCalibrating(true)}>
             {calibrated ? 'Recalibrate corners' : 'Calibrate corners'}
+          </button>
+          <button type="button" onClick={() => setCalibratingRed((v) => !v)}>
+            {calibratingRed ? 'Cancel red calibration' : 'Calibrate red (click a piece)'}
           </button>
           <button type="button" disabled={!calibrated || running} onClick={() => void start()}>
             Start
@@ -404,6 +461,22 @@ export default function BoardSequencerScreen() {
               style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
             />
             {calibrating && <BoardCalibrationOverlay onComplete={handleCalibrated} />}
+            {calibratingRed && (
+              <div
+                onClick={(e) => {
+                  const r = e.currentTarget.getBoundingClientRect();
+                  sampleRedAt((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
+                }}
+                style={{ position: 'absolute', inset: 0, cursor: 'crosshair' }}
+                role="button"
+                tabIndex={0}
+                aria-label="Click a red piece to calibrate its colour"
+              >
+                <div style={{ position: 'absolute', top: 8, left: 8, color: '#fff', background: '#000a', padding: '4px 8px' }}>
+                  Click a red piece (ideally on a dark square)
+                </div>
+              </div>
+            )}
             {error && <div style={{ position: 'absolute', top: 8, left: 8, color: '#ff8080' }}>{error}</div>}
           </div>
         </div>

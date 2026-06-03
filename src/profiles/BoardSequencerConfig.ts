@@ -49,9 +49,9 @@ const ZERO_CORNERS: [BoardPoint, BoardPoint, BoardPoint, BoardPoint] = [
 const DEFAULT_RED: TrackedColor = {
   id: 'board-red',
   hue: 0,
-  hueTolerance: 12,
-  minSaturation: 62,
-  minValue: 40,
+  hueTolerance: 16,
+  minSaturation: 35,
+  minValue: 25,
   minArea: 0.0005,
 };
 

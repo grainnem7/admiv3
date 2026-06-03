@@ -48,6 +48,7 @@ export function sampleRegion(
   cols: number,
   red: TrackedColor,
   samplesPerAxis: number,
+  skipSkinExclusion = false,
 ): RegionSample {
   const cellW = 1 / cols;
   const cellH = 1 / rows;
@@ -69,7 +70,7 @@ export function sampleRegion(
       const { r, g, b } = sampler(Math.round(img.x), Math.round(img.y));
       const hsv = rgbToHsv(r, g, b);
       total++;
-      if (matchesTrackedColor(hsv, red)) {
+      if (matchesTrackedColor(hsv, red, skipSkinExclusion)) {
         matches++;
         sumX += ux;
         sumY += uy;
@@ -99,6 +100,13 @@ export interface BoardReaderOptions {
    */
   mirrorX?: boolean;
   mirrorY?: boolean;
+  /**
+   * Skip ColorTracker's skin-tone exclusion when matching red. The board uses a
+   * tight hue band + slide-and-settle to reject the arm, so the skin rule (which
+   * discards shadowed/desaturated red — e.g. a piece on a dark square) is
+   * counter-productive here. Defaults to true for the board.
+   */
+  skipSkinExclusion?: boolean;
 }
 
 /**
@@ -137,11 +145,12 @@ export class BoardReader {
       return { r: data[i], g: data[i + 1], b: data[i + 2] };
     };
 
+    const skipSkin = opts.skipSkinExclusion ?? true;
     const readings: CellReading[] = [];
     for (let row = 0; row < opts.rows; row++) {
       for (let col = 0; col < opts.cols; col++) {
         const { redFraction, centroid } = sampleRegion(
-          sampler, opts.homography, row, col, opts.rows, opts.cols, opts.red, samples,
+          sampler, opts.homography, row, col, opts.rows, opts.cols, opts.red, samples, skipSkin,
         );
         const cls = opts.recognizer.classify({ filledFraction: redFraction, redFraction });
         readings.push({ row, col, occupied: cls.occupied, colour: cls.colour, centroid, redFraction });

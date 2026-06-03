@@ -148,6 +148,7 @@ export function rgbToHsv(r: number, g: number, b: number): { h: number; s: numbe
 export function matchesTrackedColor(
   hsv: { h: number; s: number; v: number },
   color: TrackedColor,
+  skipSkinExclusion = false,
 ): boolean {
   // Check saturation and value thresholds
   if (hsv.s < color.minSaturation || hsv.v < color.minValue) {
@@ -159,7 +160,13 @@ export function matchesTrackedColor(
   // pixel whose hue lands in the skin-tone band AND whose saturation is
   // below 60 — vivid orange objects stay well above this even under
   // bright overhead lighting; skin does not.
-  if (color.hue <= 40 || color.hue >= 340) {
+  //
+  // Callers that distinguish the target from skin by other means (e.g. the
+  // board sequencer, where a tight hue band plus slide-and-settle reject the
+  // moving/resting arm, and where shadowed red on dark squares legitimately
+  // falls below saturation 60) can opt out — otherwise this rule discards
+  // valid darker/desaturated reds.
+  if (!skipSkinExclusion && (color.hue <= 40 || color.hue >= 340)) {
     const ph = hsv.h;
     if ((ph <= 32 || ph >= 345) && hsv.s < 60) return false;
   }
