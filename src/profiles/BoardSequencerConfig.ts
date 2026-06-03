@@ -24,7 +24,11 @@ export interface BoardSequencerStored {
   cols: number;
   scaleRootMidi: number;
   scaleSemitones: number[];
+  /** Display name of the selected scale (drives scaleSemitones in the UI). */
+  scaleName: string;
   bpm: number;
+  /** Swing amount 0..1 — pushes off-beats late for groove. */
+  swing: number;
   settleWindowMs: number;
   velocityFloor: number;
   velocitySmoothing: number;
@@ -89,7 +93,9 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   cols: 8,
   scaleRootMidi: 60,
   scaleSemitones: [0, 2, 4, 7, 9],
+  scaleName: 'Major pentatonic',
   bpm: 90,
+  swing: 0,
   settleWindowMs: 600,
   velocityFloor: 0.0008,
   velocitySmoothing: 0.5,
@@ -159,7 +165,9 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     cols: num(o.cols, d.cols),
     scaleRootMidi: num(o.scaleRootMidi, d.scaleRootMidi),
     scaleSemitones: semis,
+    scaleName: typeof o.scaleName === 'string' ? o.scaleName : d.scaleName,
     bpm: num(o.bpm, d.bpm),
+    swing: num(o.swing, d.swing),
     settleWindowMs: num(o.settleWindowMs, d.settleWindowMs),
     velocityFloor: num(o.velocityFloor, d.velocityFloor),
     velocitySmoothing: num(o.velocitySmoothing, d.velocitySmoothing),

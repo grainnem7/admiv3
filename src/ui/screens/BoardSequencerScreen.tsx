@@ -32,7 +32,7 @@ import { SongPresetEngine } from '../../songs/SongPresetEngine';
 import { SONG_LIBRARY, type SongConfig } from '../../songs/songLibrary';
 import { getChordAtTime } from '../../songs/voices/chordLookup';
 import { computeHomography, applyHomography, UNIT_SQUARE, type Mat3 } from '../../utils/homography';
-import { stepIndexAt } from '../../songs/boardSequencerScale';
+import { stepIndexAt, SCALE_PRESETS, NOTE_NAMES } from '../../songs/boardSequencerScale';
 import {
   loadBoardSequencerConfig, saveBoardSequencerConfig, DEFAULT_BOARD_SEQUENCER_CONFIG,
   type BoardSequencerStored, type BoardPoint,
@@ -365,7 +365,7 @@ export default function BoardSequencerScreen() {
     });
     const engine = new BoardSequencerEngine({
       bpm: cfg.bpm, rows: cfg.rows, cols: cfg.cols,
-      scaleRootMidi: cfg.scaleRootMidi, scaleSemitones: cfg.scaleSemitones,
+      scaleRootMidi: cfg.scaleRootMidi, scaleSemitones: cfg.scaleSemitones, swing: cfg.swing,
       noteLengthBeats: cfg.noteLengthBeats, velocity: cfg.velocity,
       tickEnabled: cfg.tickEnabled, instrumentKey: cfg.instrumentKey,
       rowMode: cfg.rowMode, blackDrums: cfg.blackDrums, blueBass: cfg.blueBass,
@@ -570,6 +570,47 @@ export default function BoardSequencerScreen() {
               type="range" min={50} max={300} value={config.bpm}
               onChange={(e) => update({ bpm: Number(e.target.value) })}
             />
+          </label>
+          <label>
+            Swing {Math.round(config.swing * 100)}%
+            <input
+              type="range" min={0} max={60} value={Math.round(config.swing * 100)}
+              onChange={(e) => {
+                const v = Number(e.target.value) / 100;
+                update({ swing: v });
+                engineRef.current?.setSwing(v);
+              }}
+            />
+          </label>
+          <label>
+            Key
+            <select
+              value={config.scaleRootMidi}
+              onChange={(e) => {
+                const root = Number(e.target.value);
+                update({ scaleRootMidi: root });
+                engineRef.current?.setScale(root, configRef.current.scaleSemitones);
+              }}
+            >
+              {NOTE_NAMES.map((n, i) => (
+                <option key={n} value={60 + i}>{n}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Scale
+            <select
+              value={config.scaleName}
+              onChange={(e) => {
+                const preset = SCALE_PRESETS.find((s) => s.name === e.target.value) ?? SCALE_PRESETS[0];
+                update({ scaleName: preset.name, scaleSemitones: preset.semitones });
+                engineRef.current?.setScale(configRef.current.scaleRootMidi, preset.semitones);
+              }}
+            >
+              {SCALE_PRESETS.map((s) => (
+                <option key={s.name} value={s.name}>{s.name}</option>
+              ))}
+            </select>
           </label>
           <label>
             Octave {config.octaveShift > 0 ? `+${config.octaveShift}` : config.octaveShift}

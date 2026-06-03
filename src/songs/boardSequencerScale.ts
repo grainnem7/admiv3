@@ -11,6 +11,20 @@
 
 import type { CellRef } from '../tracking/BoardSequencerMode';
 
+/** Selectable scales (semitone offsets within an octave, ascending from root). */
+export const SCALE_PRESETS: { name: string; semitones: number[] }[] = [
+  { name: 'Major pentatonic', semitones: [0, 2, 4, 7, 9] },
+  { name: 'Minor pentatonic', semitones: [0, 3, 5, 7, 10] },
+  { name: 'Suspended', semitones: [0, 2, 5, 7, 10] },
+  { name: 'Blues', semitones: [0, 3, 5, 6, 7, 10] },
+  { name: 'Major', semitones: [0, 2, 4, 5, 7, 9, 11] },
+  { name: 'Minor', semitones: [0, 2, 3, 5, 7, 8, 10] },
+  { name: 'Dorian', semitones: [0, 2, 3, 5, 7, 9, 10] },
+];
+
+/** Note names for the 12 semitones from C, for the key picker. */
+export const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+
 /**
  * MIDI for an ascending scale "degree" (0 = root). `semitones` is the
  * within-octave pentatonic pattern; degrees beyond its length wrap up octaves

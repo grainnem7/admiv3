@@ -45,6 +45,7 @@ export interface BoardEngineConfig {
   cols: number;
   scaleRootMidi: number;
   scaleSemitones: number[];
+  swing: number;
   noteLengthBeats: number;
   velocity: number;
   tickEnabled: boolean;
@@ -188,6 +189,15 @@ export class BoardSequencerEngine {
     this.cfg.noteLengthBeats = beats;
   }
 
+  setScale(rootMidi: number, semitones: number[]): void {
+    this.cfg.scaleRootMidi = rootMidi;
+    this.cfg.scaleSemitones = semitones;
+  }
+
+  setSwing(swing: number): void {
+    this.cfg.swing = swing;
+  }
+
   /** Attach (or clear) a backing song to lock tempo/beat + chords to. */
   setSyncSource(src: BoardSyncSource | null): void {
     this.syncSource = src;
@@ -224,7 +234,8 @@ export class BoardSequencerEngine {
     const step = ((beatIdx % this.cfg.cols) + this.cfg.cols) % this.cfg.cols;
     if (step === this.lastScheduledStep) return;
     this.lastScheduledStep = step;
-    const stepTime = this.startSec + beatIdx * secPerBeat;
+    let stepTime = this.startSec + beatIdx * secPerBeat;
+    if (beatIdx % 2 === 1) stepTime += this.cfg.swing * secPerBeat * 0.5; // groove off-beats
     this.fireStep(step, stepTime, secPerBeat, null);
   }
 
@@ -245,11 +256,12 @@ export class BoardSequencerEngine {
     let i = this.lastBeatIndex + 1;
     while (i < beats.length && beats[i] <= horizon) {
       const beatTime = beats[i];
-      const audioTime = now + Math.max(0, beatTime - t);
       const step = ((i % this.cfg.cols) + this.cfg.cols) % this.cfg.cols;
       const spacing = i + 1 < beats.length
         ? Math.max(0.05, beats[i + 1] - beatTime)
         : (i > 0 ? Math.max(0.05, beatTime - beats[i - 1]) : 0.5);
+      let audioTime = now + Math.max(0, beatTime - t);
+      if (i % 2 === 1) audioTime += this.cfg.swing * spacing * 0.5; // groove off-beats
       this.fireStep(step, audioTime, spacing, src.chordAt(beatTime));
       this.lastBeatIndex = i;
       i++;
