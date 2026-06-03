@@ -49,8 +49,10 @@ export interface BoardEngineConfig {
   velocity: number;
   tickEnabled: boolean;
   instrumentKey: string;
-  rowMode: 'pitched' | 'drumKit' | 'instruments' | 'redBlack';
-  /** Per-row palette keys, used in 'instruments' / 'redBlack' modes (indexed by row, 0 = top). */
+  rowMode: 'pitched' | 'drumKit' | 'instruments';
+  /** Layer black pieces as drums on top of a melodic mode (ignored in drumKit). */
+  blackDrums: boolean;
+  /** Per-row palette keys, used in 'instruments' mode (indexed by row, 0 = top). */
   rowInstruments: string[];
 }
 
@@ -104,7 +106,7 @@ export class BoardSequencerEngine {
     // directly via the inherited connect(destination: AudioNode). The tick is
     // a Tone node and connects to the Tone.Gain directly.
     const dest = fx.getInput();
-    const needsDrums = this.cfg.rowMode === 'drumKit' || this.cfg.rowMode === 'redBlack';
+    const needsDrums = this.cfg.rowMode === 'drumKit' || this.cfg.blackDrums;
     const needsVoices = this.cfg.rowMode !== 'drumKit';
     if (needsDrums) {
       this.drumKit = new RoundRobinDrumKit(this.ctx, 'studio-kit');
@@ -112,9 +114,9 @@ export class BoardSequencerEngine {
       await this.drumKit.whenReady();
     }
     if (needsVoices) {
-      // One sampled voice per row. 'instruments' / 'redBlack' give each row its
-      // own instrument; 'pitched' uses the single chosen instrument for all.
-      const perRow = this.cfg.rowMode === 'instruments' || this.cfg.rowMode === 'redBlack';
+      // One sampled voice per row. 'instruments' gives each row its own
+      // instrument; 'pitched' uses the single chosen instrument for all.
+      const perRow = this.cfg.rowMode === 'instruments';
       for (let r = 0; r < this.cfg.rows; r++) {
         const key = perRow
           ? (this.cfg.rowInstruments[r] ?? this.cfg.instrumentKey)
@@ -214,7 +216,7 @@ export class BoardSequencerEngine {
 
   private isDrumCell(cell: ActiveCell): boolean {
     return this.cfg.rowMode === 'drumKit'
-      || (this.cfg.rowMode === 'redBlack' && cell.colour === 'black');
+      || (this.cfg.blackDrums && cell.colour === 'black');
   }
 
   /** Play every active cell in `step` at `stepTime`. chord locks melodic pitch. */

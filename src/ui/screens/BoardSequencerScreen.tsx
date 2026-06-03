@@ -217,7 +217,7 @@ export default function BoardSequencerScreen() {
         }
         const h = homographyRef.current;
         if (h) {
-          const twoColour = cfg.rowMode === 'redBlack';
+          const twoColour = cfg.blackDrums;
           const recognizer = twoColour
             ? new RedBlackRecognizer(cfg.minFilledFraction)
             : new RedColourRecognizer(cfg.minFilledFraction);
@@ -348,7 +348,7 @@ export default function BoardSequencerScreen() {
       scaleRootMidi: cfg.scaleRootMidi, scaleSemitones: cfg.scaleSemitones,
       noteLengthBeats: cfg.noteLengthBeats, velocity: cfg.velocity,
       tickEnabled: cfg.tickEnabled, instrumentKey: cfg.instrumentKey,
-      rowMode: cfg.rowMode, rowInstruments: cfg.rowInstruments,
+      rowMode: cfg.rowMode, blackDrums: cfg.blackDrums, rowInstruments: cfg.rowInstruments,
     });
     await engine.init();
     engine.setMuted(mutedRef.current);
@@ -483,7 +483,7 @@ export default function BoardSequencerScreen() {
           <button type="button" onClick={() => { setCalibratingRed((v) => !v); setCalibratingBlack(false); }}>
             {calibratingRed ? 'Cancel red calibration' : 'Calibrate red (click a piece)'}
           </button>
-          {config.rowMode === 'redBlack' && (
+          {config.blackDrums && (
             <button type="button" onClick={() => { setCalibratingBlack((v) => !v); setCalibratingRed(false); }}>
               {calibratingBlack ? 'Cancel black calibration' : 'Calibrate black (click a piece)'}
             </button>
@@ -498,7 +498,7 @@ export default function BoardSequencerScreen() {
 
           <p style={{ fontSize: 12, opacity: 0.85, margin: '4px 0' }}>
             Red: <strong>{stats.red}</strong>
-            {config.rowMode === 'redBlack' && <> · Black: <strong>{stats.black}</strong></>}
+            {config.blackDrums && <> · Black: <strong>{stats.black}</strong></>}
             {' '}· Settled: <strong>{stats.settled}</strong> · max red {Math.round(stats.maxRed * 100)}%
           </p>
 
@@ -509,7 +509,7 @@ export default function BoardSequencerScreen() {
               onChange={(e) => update({ minFilledFraction: Number(e.target.value) / 100 })}
             />
           </label>
-          {config.rowMode === 'redBlack' && (
+          {config.blackDrums && (
             <label>
               Black darkness ≤ {config.blackMaxValue}%
               <input
@@ -573,19 +573,24 @@ export default function BoardSequencerScreen() {
               onChange={(e) => {
                 const v = e.target.value;
                 const rowMode: BoardSequencerStored['rowMode'] =
-                  v === 'drumKit' ? 'drumKit'
-                    : v === 'instruments' ? 'instruments'
-                      : v === 'redBlack' ? 'redBlack'
-                        : 'pitched';
+                  v === 'drumKit' ? 'drumKit' : v === 'instruments' ? 'instruments' : 'pitched';
                 update({ rowMode });
               }}
             >
               <option value="pitched">Pitched (melody)</option>
               <option value="instruments">Per-row instruments</option>
               <option value="drumKit">Drum kit</option>
-              <option value="redBlack">Red instruments + Black drums</option>
             </select>
           </label>
+          {config.rowMode !== 'drumKit' && (
+            <label>
+              <input
+                type="checkbox" checked={config.blackDrums} disabled={running}
+                onChange={(e) => update({ blackDrums: e.target.checked })}
+              />
+              Black pieces = drums
+            </label>
+          )}
           {config.rowMode === 'pitched' && (
             <label>
               Instrument
@@ -599,12 +604,12 @@ export default function BoardSequencerScreen() {
               </select>
             </label>
           )}
-          {(config.rowMode === 'instruments' || config.rowMode === 'redBlack') && (
+          {config.rowMode === 'instruments' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               <span style={{ fontSize: 12, opacity: 0.8 }}>
-                {config.rowMode === 'redBlack'
-                  ? 'Instrument per row for RED pieces (black = drums; pitch auto-pentatonic)'
-                  : 'Instrument per row (pitch auto-pentatonic)'}
+                {config.blackDrums
+                  ? 'Instrument per row for RED pieces (black = drums; pitch auto-voiced)'
+                  : 'Instrument per row (pitch auto-voiced)'}
               </span>
               {Array.from({ length: config.rows }, (_, r) => (
                 <label key={r} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>

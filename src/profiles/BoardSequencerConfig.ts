@@ -36,8 +36,11 @@ export interface BoardSequencerStored {
   velocity: number;
   tickEnabled: boolean;
   instrumentKey: string;
-  rowMode: 'pitched' | 'drumKit' | 'instruments' | 'redBlack';
-  /** Per-row palette keys for 'instruments' / 'redBlack' modes (indexed by row, 0 = top). */
+  /** Melodic behaviour: single instrument ('pitched'), per-row instruments, or pure drum kit. */
+  rowMode: 'pitched' | 'drumKit' | 'instruments';
+  /** Layer black pieces as drums on top of a melodic mode (ignored in drumKit). */
+  blackDrums: boolean;
+  /** Per-row palette keys for 'instruments' mode (indexed by row, 0 = top). */
   rowInstruments: string[];
   /** Black-piece detection: a pixel is "black" if value ≤ blackMaxValue and saturation ≤ blackMaxSaturation. */
   blackMaxValue: number;
@@ -80,6 +83,7 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   tickEnabled: true,
   instrumentKey: 'electricPiano',
   rowMode: 'pitched',
+  blackDrums: false,
   rowInstruments: ['piano', 'electricPiano', 'strings', 'bass', 'percussion', 'piano', 'electricPiano', 'strings'],
   blackMaxValue: 34,
   blackMaxSaturation: 45,
@@ -142,11 +146,12 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     velocity: num(o.velocity, d.velocity),
     tickEnabled: o.tickEnabled !== false,
     instrumentKey: typeof o.instrumentKey === 'string' ? o.instrumentKey : d.instrumentKey,
+    // Migrate the old combined 'redBlack' mode → 'instruments' + blackDrums on.
     rowMode:
       o.rowMode === 'drumKit' ? 'drumKit'
-        : o.rowMode === 'instruments' ? 'instruments'
-          : o.rowMode === 'redBlack' ? 'redBlack'
-            : 'pitched',
+        : (o.rowMode === 'instruments' || o.rowMode === 'redBlack') ? 'instruments'
+          : 'pitched',
+    blackDrums: o.blackDrums === true || o.rowMode === 'redBlack',
     rowInstruments:
       Array.isArray(o.rowInstruments) && o.rowInstruments.every((k) => typeof k === 'string')
         ? (o.rowInstruments as string[])
