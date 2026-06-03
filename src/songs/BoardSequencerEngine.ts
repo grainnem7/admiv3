@@ -49,6 +49,7 @@ export class BoardSequencerEngine {
   private startSec = 0;
   private lastScheduledStep = -1;
   private timer: ReturnType<typeof setInterval> | null = null;
+  private muted = false;
 
   constructor(cfg: BoardEngineConfig) {
     this.cfg = cfg;
@@ -101,8 +102,14 @@ export class BoardSequencerEngine {
     this.active = cells;
   }
 
+  /** Pause/resume all sound (the clock + detection keep running; output is silent). */
+  setMuted(muted: boolean): void {
+    this.muted = muted;
+  }
+
   /** Fire the confirmation tick immediately (distinct from a sequenced note). */
   fireTick(): void {
+    if (this.muted) return;
     if (this.tick) this.tick.triggerAttackRelease('C2', 0.05, Tone.now());
   }
 
@@ -120,6 +127,8 @@ export class BoardSequencerEngine {
     const lookaheadStep = ((beatIdx % this.cfg.cols) + this.cfg.cols) % this.cfg.cols;
     if (lookaheadStep === this.lastScheduledStep) return;
     this.lastScheduledStep = lookaheadStep;
+    // Advance the step silently while muted (so unmuting doesn't dump a burst).
+    if (this.muted) return;
     const stepTime = this.startSec + beatIdx * secPerBeat;
     if (this.cfg.rowMode === 'drumKit') {
       const drums = drumsForStep(this.active, lookaheadStep, this.cfg.rows, DEFAULT_DRUM_ROWS);

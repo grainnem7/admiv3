@@ -73,6 +73,8 @@ export default function BoardSequencerScreen() {
   const [active, setActive] = useState<CellRef[]>([]);
   const [playheadCol, setPlayheadCol] = useState(0);
   const [running, setRunning] = useState(false);
+  const [muted, setMuted] = useState(false);
+  const mutedRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState<DetStats>({ red: 0, black: 0, settled: 0, maxRed: 0 });
 
@@ -273,6 +275,15 @@ export default function BoardSequencerScreen() {
     setRunning(false);
   }, []);
 
+  const toggleMuted = useCallback(() => {
+    setMuted((m) => {
+      const next = !m;
+      mutedRef.current = next;
+      engineRef.current?.setMuted(next);
+      return next;
+    });
+  }, []);
+
   const start = useCallback(async () => {
     await Tone.start();
     if (engineRef.current) {
@@ -298,6 +309,7 @@ export default function BoardSequencerScreen() {
       rowMode: cfg.rowMode, rowInstruments: cfg.rowInstruments,
     });
     await engine.init();
+    engine.setMuted(mutedRef.current);
     engine.start();
     engineRef.current = engine;
     startSecRef.current = Tone.now();
@@ -423,6 +435,9 @@ export default function BoardSequencerScreen() {
             Start
           </button>
           <button type="button" disabled={!running} onClick={stop}>Stop</button>
+          <button type="button" onClick={toggleMuted}>
+            {muted ? 'Resume sound' : 'Pause sound'}
+          </button>
 
           <p style={{ fontSize: 12, opacity: 0.85, margin: '4px 0' }}>
             Red: <strong>{stats.red}</strong>
