@@ -310,6 +310,14 @@ export default function BoardSequencerScreen() {
           </p>
 
           <label>
+            Min red fill {Math.round(config.minFilledFraction * 100)}%
+            <input
+              type="range" min={5} max={50} value={Math.round(config.minFilledFraction * 100)}
+              onChange={(e) => update({ minFilledFraction: Number(e.target.value) / 100 })}
+            />
+          </label>
+
+          <label>
             Tempo {config.bpm} BPM
             <input
               type="range" min={50} max={140} value={config.bpm}

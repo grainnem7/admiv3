@@ -69,7 +69,7 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   occupancyGraceMs: 150,
   motionConfirmMs: 80,
   redColour: DEFAULT_RED,
-  minFilledFraction: 0.25,
+  minFilledFraction: 0.15,
   noteLengthBeats: 0.9,
   velocity: 0.7,
   tickEnabled: true,

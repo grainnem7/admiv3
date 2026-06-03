@@ -30,7 +30,10 @@ export interface RegionSample {
   centroid: { x: number; y: number } | null;
 }
 
-const INSET = 0.5; // sample the central 50% of each cell
+// Sample most of each cell (not just the centre) so a piece anywhere within a
+// cell registers — important when the grid is coarser than the physical squares
+// (e.g. a 4x4 grid over an 8x8 board). Tolerance over precision.
+const INSET = 0.8;
 
 /**
  * Sample the central region of cell (row, col) and return the red fraction +
