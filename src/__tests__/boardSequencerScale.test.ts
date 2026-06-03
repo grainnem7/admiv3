@@ -1,11 +1,33 @@
 import { describe, it, expect } from 'vitest';
-import { cellMidi, notesForStep, stepIndexAt } from '../songs/boardSequencerScale';
+import { cellMidi, columnMidi, degreeMidi, notesForStep, stepIndexAt } from '../songs/boardSequencerScale';
 import { drumForRow, drumsForStep, DEFAULT_DRUM_ROWS } from '../songs/boardSequencerScale';
 import type { CellRef } from '../tracking/BoardSequencerMode';
 
 const ROWS = 4;
 const ROOT = 60;
 const PENTA = [0, 2, 4, 7];
+
+describe('boardSequencerScale pentatonic generators', () => {
+  const penta5 = [0, 2, 4, 7, 9]; // C D E G A
+
+  it('degreeMidi ascends the pentatonic and wraps octaves', () => {
+    expect(degreeMidi(0, 60, penta5)).toBe(60); // C4
+    expect(degreeMidi(4, 60, penta5)).toBe(69); // A4
+    expect(degreeMidi(5, 60, penta5)).toBe(72); // C5 (octave wrap)
+    expect(degreeMidi(6, 60, penta5)).toBe(74); // D5
+  });
+
+  it('columnMidi: col 0 lowest, ascending left→right (row-independent pitch)', () => {
+    expect(columnMidi(0, 60, penta5)).toBe(60);
+    expect(columnMidi(1, 60, penta5)).toBe(62);
+    expect(columnMidi(5, 60, penta5)).toBe(72);
+  });
+
+  it('cellMidi is degreeMidi of the level from the bottom row', () => {
+    expect(cellMidi(3, 4, 60, penta5)).toBe(degreeMidi(0, 60, penta5));
+    expect(cellMidi(0, 4, 60, penta5)).toBe(degreeMidi(3, 60, penta5));
+  });
+});
 
 describe('boardSequencerScale', () => {
   it('bottom row is lowest pitch, top row highest', () => {

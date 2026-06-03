@@ -13,7 +13,7 @@
 
 import * as Tone from 'tone';
 import { BoardSequencerVoice } from './voices/BoardSequencerVoice';
-import { notesForStep, drumsForStep, DEFAULT_DRUM_ROWS } from './boardSequencerScale';
+import { cellMidi, columnMidi, drumsForStep, DEFAULT_DRUM_ROWS } from './boardSequencerScale';
 import type { CellRef } from '../tracking/BoardSequencerMode';
 import { getEffectChainManager } from '../effects';
 import { RoundRobinDrumKit } from '../audio/instruments/RoundRobinDrumKit';
@@ -29,7 +29,9 @@ export interface BoardEngineConfig {
   velocity: number;
   tickEnabled: boolean;
   instrumentKey: string;
-  rowMode: 'pitched' | 'drumKit';
+  rowMode: 'pitched' | 'drumKit' | 'instruments';
+  /** Per-row palette keys, used in 'instruments' mode (indexed by row, 0 = top). */
+  rowInstruments: string[];
 }
 
 const LOOKAHEAD_SEC = 0.1;
@@ -67,8 +69,13 @@ export class BoardSequencerEngine {
       if (dest) this.drumKit.connect(dest.input);
       await this.drumKit.whenReady();
     } else {
+      // One sampled voice per row. 'instruments' mode gives each row its own
+      // instrument; 'pitched' mode uses the single chosen instrument for all.
       for (let r = 0; r < this.cfg.rows; r++) {
-        const v = new BoardSequencerVoice(this.ctx, this.cfg.instrumentKey);
+        const key = this.cfg.rowMode === 'instruments'
+          ? (this.cfg.rowInstruments[r] ?? this.cfg.instrumentKey)
+          : this.cfg.instrumentKey;
+        const v = new BoardSequencerVoice(this.ctx, key);
         if (dest) v.connect(dest.input);
         this.voices.push(v);
       }
@@ -114,14 +121,20 @@ export class BoardSequencerEngine {
         this.drumKit?.play(drum as HeadBopDrum, this.cfg.velocity, stepTime);
       }
     } else {
-      const pitches = notesForStep(
-        this.active, lookaheadStep, this.cfg.rows, this.cfg.scaleRootMidi, this.cfg.scaleSemitones,
-      );
+      // Pitched: row → pitch (bottom row lowest), one instrument for all.
+      // Instruments: row → instrument, pitch generated from the COLUMN so it is
+      // always pentatonic. Either way every active cell in this column plays on
+      // its row's voice.
+      const instruments = this.cfg.rowMode === 'instruments';
       const durSec = this.cfg.noteLengthBeats * secPerBeat;
-      pitches.forEach((midi, i) => {
-        const voice = this.voices[i % this.voices.length];
-        voice.play(midi, this.cfg.velocity, durSec, stepTime);
-      });
+      for (const cell of this.active) {
+        if (cell.col !== lookaheadStep) continue;
+        if (cell.row < 0 || cell.row >= this.voices.length) continue;
+        const midi = instruments
+          ? columnMidi(cell.col, this.cfg.scaleRootMidi, this.cfg.scaleSemitones)
+          : cellMidi(cell.row, this.cfg.rows, this.cfg.scaleRootMidi, this.cfg.scaleSemitones);
+        this.voices[cell.row].play(midi, this.cfg.velocity, durSec, stepTime);
+      }
     }
   }
 

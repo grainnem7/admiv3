@@ -12,10 +12,22 @@
 import type { CellRef } from '../tracking/BoardSequencerMode';
 
 /**
- * MIDI for a cell. row 0 = top (highest), row (rows-1) = bottom (lowest).
- * `semitones` is the within-octave pattern, ascending from the bottom row.
- * When there are more rows than scale degrees, levels wrap into higher
- * octaves (level N → octave floor(N/len), degree N mod len).
+ * MIDI for an ascending scale "degree" (0 = root). `semitones` is the
+ * within-octave pentatonic pattern; degrees beyond its length wrap up octaves
+ * (degree N → octave floor(N/len), step N mod len). This is the single
+ * algorithmic pentatonic generator — every pitch the board plays comes from
+ * here, so the result is always in-key.
+ */
+export function degreeMidi(level: number, rootMidi: number, semitones: number[]): number {
+  const len = semitones.length;
+  const octave = Math.floor(level / len);
+  const idx = ((level % len) + len) % len;
+  return rootMidi + octave * 12 + semitones[idx];
+}
+
+/**
+ * MIDI for a cell in PITCHED mode. row 0 = top (highest), row (rows-1) =
+ * bottom (lowest), ascending from the bottom row.
  */
 export function cellMidi(
   row: number,
@@ -23,11 +35,16 @@ export function cellMidi(
   rootMidi: number,
   semitones: number[],
 ): number {
-  const levelFromBottom = rows - 1 - row;
-  const len = semitones.length;
-  const octave = Math.floor(levelFromBottom / len);
-  const idx = ((levelFromBottom % len) + len) % len;
-  return rootMidi + octave * 12 + semitones[idx];
+  return degreeMidi(rows - 1 - row, rootMidi, semitones);
+}
+
+/**
+ * MIDI for a cell in PER-ROW-INSTRUMENT mode: pitch is generated from the
+ * COLUMN (left → right ascends the pentatonic), independent of the row — the
+ * row only selects the instrument. col 0 = lowest.
+ */
+export function columnMidi(col: number, rootMidi: number, semitones: number[]): number {
+  return degreeMidi(col, rootMidi, semitones);
 }
 
 /** Pitches to trigger at `step` (column): one per active cell in that column. */

@@ -36,7 +36,9 @@ export interface BoardSequencerStored {
   velocity: number;
   tickEnabled: boolean;
   instrumentKey: string;
-  rowMode: 'pitched' | 'drumKit';
+  rowMode: 'pitched' | 'drumKit' | 'instruments';
+  /** Per-row palette keys for 'instruments' mode (indexed by row, 0 = top). */
+  rowInstruments: string[];
   /** Display + sampling orientation. Calibration is captured in this same space. */
   mirrorX: boolean;
   mirrorY: boolean;
@@ -75,6 +77,7 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   tickEnabled: true,
   instrumentKey: 'electricPiano',
   rowMode: 'pitched',
+  rowInstruments: ['piano', 'electricPiano', 'strings', 'bass', 'percussion', 'piano', 'electricPiano', 'strings'],
   mirrorX: true,
   mirrorY: false,
 };
@@ -134,7 +137,12 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     velocity: num(o.velocity, d.velocity),
     tickEnabled: o.tickEnabled !== false,
     instrumentKey: typeof o.instrumentKey === 'string' ? o.instrumentKey : d.instrumentKey,
-    rowMode: o.rowMode === 'drumKit' ? 'drumKit' : 'pitched',
+    rowMode:
+      o.rowMode === 'drumKit' ? 'drumKit' : o.rowMode === 'instruments' ? 'instruments' : 'pitched',
+    rowInstruments:
+      Array.isArray(o.rowInstruments) && o.rowInstruments.every((k) => typeof k === 'string')
+        ? (o.rowInstruments as string[])
+        : d.rowInstruments,
     mirrorX: o.mirrorX !== false,
     mirrorY: o.mirrorY === true,
   };

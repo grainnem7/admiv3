@@ -82,6 +82,19 @@ export default function BoardSequencerScreen() {
     });
   }, []);
 
+  // Set the instrument for one row (per-row-instrument mode), growing the array
+  // to cover the current row count.
+  const setRowInstrument = useCallback((row: number, key: string) => {
+    setConfig((prev) => {
+      const arr = [...prev.rowInstruments];
+      while (arr.length <= row) arr.push(arr[arr.length - 1] ?? 'piano');
+      arr[row] = key;
+      const next = { ...prev, rowInstruments: arr };
+      saveBoardSequencerConfig(next);
+      return next;
+    });
+  }, []);
+
   const buildHomography = useCallback((corners: BoardPoint[], video: HTMLVideoElement): Mat3 => {
     const dst = corners.map((c) => ({ x: c.x * video.videoWidth, y: c.y * video.videoHeight }));
     return computeHomography(UNIT_SQUARE, dst);
@@ -257,7 +270,7 @@ export default function BoardSequencerScreen() {
       scaleRootMidi: cfg.scaleRootMidi, scaleSemitones: cfg.scaleSemitones,
       noteLengthBeats: cfg.noteLengthBeats, velocity: cfg.velocity,
       tickEnabled: cfg.tickEnabled, instrumentKey: cfg.instrumentKey,
-      rowMode: cfg.rowMode,
+      rowMode: cfg.rowMode, rowInstruments: cfg.rowInstruments,
     });
     await engine.init();
     engine.start();
@@ -411,6 +424,7 @@ export default function BoardSequencerScreen() {
               onChange={(e) => update({ rowMode: e.target.value === 'drumKit' ? 'drumKit' : 'pitched' })}
             >
               <option value="pitched">Pitched (melody)</option>
+              <option value="instruments">Per-row instruments</option>
               <option value="drumKit">Drum kit</option>
             </select>
           </label>
@@ -426,6 +440,26 @@ export default function BoardSequencerScreen() {
                 ))}
               </select>
             </label>
+          )}
+          {config.rowMode === 'instruments' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <span style={{ fontSize: 12, opacity: 0.8 }}>Instrument per row (pitch auto-pentatonic)</span>
+              {Array.from({ length: config.rows }, (_, r) => (
+                <label key={r} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+                  <span style={{ width: 64 }}>
+                    Row {r + 1}{r === 0 ? ' (top)' : r === config.rows - 1 ? ' (bottom)' : ''}
+                  </span>
+                  <select
+                    value={config.rowInstruments[r] ?? config.instrumentKey} disabled={running}
+                    onChange={(e) => setRowInstrument(r, e.target.value)}
+                  >
+                    {INSTRUMENT_PALETTE_LIST.map((i) => (
+                      <option key={i.key} value={i.key}>{i.name}</option>
+                    ))}
+                  </select>
+                </label>
+              ))}
+            </div>
           )}
           <label>
             Rows
