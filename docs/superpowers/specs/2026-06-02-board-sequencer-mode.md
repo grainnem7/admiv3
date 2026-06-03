@@ -331,3 +331,42 @@ After the first end-to-end build, the following were added (all opt-in, still re
 
 ### Colour-as-sound decision (supersedes part of §14 guidance)
 The idea of **black pieces = percussion** was considered and rejected for vision reasons: a black piece on a dark square is near-zero contrast to a single camera and would drop out across roughly half the board. The colour→instrument axis (`COLOUR_INSTRUMENT`) remains the intended future path for "different items = different sounds", but the second colour should be a **second vivid colour** (e.g. blue/green), which reads on light *and* dark squares like red — **not black**. Drums in this iteration are reached via the `rowMode` switch (red pieces), not a second colour. Still deferred until red is validated with Tim.
+
+---
+
+## 16. Iteration 3 (built — multi-colour, song-synced, fully customisable)
+
+Driven by hands-on sessions, the mode grew well past the standalone red-only MVP. Tim acquired a **second board with black pieces** and added **blue** counters, so the multi-colour path (§14) was brought forward. Everything below is opt-in and persisted (`admi-board-sequencer`).
+
+### Recognition — three colours (Levels 1 + 2 delivered for red/black/blue)
+- `PieceColour = 'red' | 'black' | 'blue'`. `BoardReader.sampleRegion` counts red/blue/black fractions per cell with a dominant-colour centroid; `ColourRecognizer.classify` is **priority-based** (vivid red, then vivid blue, then black) so a calibrated colour wins over "dark wood square" false-positives.
+- Black detection is value/saturation-thresholded (`blackMaxValue` / `blackMaxSaturation`), calibratable; it stays inherently fragile on dark boards (advise: calibrate low or untick when unused).
+- `skipSkinExclusion` is set for board sampling (the board is not skin).
+
+### Pitch — absolute board position (supersedes earlier "per-column" voicing)
+`voicingForCells` voices **every** melodic cell by ABSOLUTE position so the whole grid is the pitch range and a cell's pitch never shifts as others are placed:
+- *Pitched* (axis `row`): bottom row = lowest degree → top row highest (piano-roll); column = time.
+- *Per-row instruments* (axis `col`): pitch = column; the row only selects the instrument.
+Degrees map through the ascending scale (or the locked chord's tones), wrapping up octaves — always in key.
+
+### Play along with a Song Preset (tempo/beat + chord lock)
+`BoardSyncSource` lets the board attach to a backing song: it stops its internal clock and **fires a step on each song beat** (tempo + phase lock, re-aligning on seek/loop), and melodic pitch is taken from the song's **current chord** (`chordAt`) instead of the standalone pentatonic. Both engines mix at the destination; the board never touches `Tone.Transport` (the song owns it). Selectable on the Board screen via a backing-song picker.
+
+### Roles & layers
+- `rowMode`: **Pitched** (one instrument, pitch by row) · **Per-row instruments** (a sound per row, pitch by column) · **Drum kit** (every row a drum). The legacy combined `redBlack` mode migrates → `instruments` + `blackDrums`.
+- **Black = drums** and **Blue = bass** are independent toggles that *layer* percussion / a bass voice on top of any melodic mode (bass = the chord's lowest tone, or scale root, an octave down).
+- Per-row instrument overrides ("Default" = the global instrument); a **Pad** sound sustains a whole loop as a harmonic bed; a **Chord stab** sound plays a stacked chord per hit (the locked song chord, else a scale triad).
+
+### Sound design & variety controls
+- **Octaves, note length, volume**; **Key & scale** (`SCALE_PRESETS`: pentatonics, suspended, blues, major/minor/dorian) with a root-note picker.
+- **Swing** (push off-beats late) and **Humanize** (per-step skip chance + velocity jitter so loops breathe).
+- **Per-row mixer** (collapsible): per-row **Volume / Tone (brightness) / Reverb-send / Delay-send**. Sends feed shared `Tone.Reverb` + `Tone.FeedbackDelay` buses (one each, for CPU) → mix → `Tone.Limiter(-2)` → effects input. The limiter + headroom gain fixed crackle as piece count grew.
+- **Per-row drum choice + bigger kit:** any row can be assigned kick / snare / hat / crash / kick+crash / **tom / clap / rim** (new one-shots added to `studio-kit`); `drumForRowChoice` resolves an override else the default bottom→top mapping. `RoundRobinDrumKit` widened (`KitDrum`, `DRUM_NAMES`) to round-robin the new pieces.
+- **Polyrhythm:** melody / drums / bass can each loop at their own step length (Off = full grid width), wrapping independently so the roles drift. `fireStep` works off the global beat index; `loopLen` / `roleStep` are pure + unit-tested.
+
+### Audio routing note
+All board audio (per-row voices → per-row gain + FX sends → shared reverb/delay buses → mix → limiter) terminates at `EffectChainManager.getInput()`. `BoardSequencerVoice` maps `SAMPLE_CONFIGS` keys directly (the real sample sets), with `'pad'` → choir pad and `'chord'` → electric piano aliases.
+
+### Still deferred (seams intact)
+- **Level 3** (black-on-dark robustness, Scrabble-tile / numeric identities via `identity`).
+- Validation of the whole mode with Tim remains the gate before any of this is considered "done" for him.
