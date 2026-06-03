@@ -107,7 +107,7 @@ export default function BoardSequencerScreen() {
   const setRowInstrument = useCallback((row: number, key: string) => {
     setConfig((prev) => {
       const arr = [...prev.rowInstruments];
-      while (arr.length <= row) arr.push(arr[arr.length - 1] ?? 'piano');
+      while (arr.length <= row) arr.push('');
       arr[row] = key;
       const next = { ...prev, rowInstruments: arr };
       saveBoardSequencerConfig(next);
@@ -597,42 +597,41 @@ export default function BoardSequencerScreen() {
               Black pieces = drums
             </label>
           )}
-          {config.rowMode === 'pitched' && (
-            <label>
-              Instrument
-              <select
-                value={config.instrumentKey} disabled={running}
-                onChange={(e) => update({ instrumentKey: e.target.value })}
-              >
-                {INSTRUMENT_OPTIONS.map((i) => (
-                  <option key={i.key} value={i.key}>{i.name}</option>
+          {config.rowMode !== 'drumKit' && (
+            <>
+              <label>
+                Default instrument
+                <select
+                  value={config.instrumentKey} disabled={running}
+                  onChange={(e) => update({ instrumentKey: e.target.value })}
+                >
+                  {INSTRUMENT_OPTIONS.map((i) => (
+                    <option key={i.key} value={i.key}>{i.name}</option>
+                  ))}
+                </select>
+              </label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <span style={{ fontSize: 12, opacity: 0.8 }}>
+                  Per-row sound{config.blackDrums ? ' (red pieces; black = drums)' : ''} — “Default” uses the instrument above
+                </span>
+                {Array.from({ length: config.rows }, (_, r) => (
+                  <label key={r} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+                    <span style={{ width: 64 }}>
+                      Row {r + 1}{r === 0 ? ' (top)' : r === config.rows - 1 ? ' (bottom)' : ''}
+                    </span>
+                    <select
+                      value={config.rowInstruments[r] ?? ''} disabled={running}
+                      onChange={(e) => setRowInstrument(r, e.target.value)}
+                    >
+                      <option value="">Default</option>
+                      {INSTRUMENT_OPTIONS.map((i) => (
+                        <option key={i.key} value={i.key}>{i.name}</option>
+                      ))}
+                    </select>
+                  </label>
                 ))}
-              </select>
-            </label>
-          )}
-          {config.rowMode === 'instruments' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <span style={{ fontSize: 12, opacity: 0.8 }}>
-                {config.blackDrums
-                  ? 'Instrument per row for RED pieces (black = drums; pitch auto-voiced)'
-                  : 'Instrument per row (pitch auto-voiced)'}
-              </span>
-              {Array.from({ length: config.rows }, (_, r) => (
-                <label key={r} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
-                  <span style={{ width: 64 }}>
-                    Row {r + 1}{r === 0 ? ' (top)' : r === config.rows - 1 ? ' (bottom)' : ''}
-                  </span>
-                  <select
-                    value={config.rowInstruments[r] ?? config.instrumentKey} disabled={running}
-                    onChange={(e) => setRowInstrument(r, e.target.value)}
-                  >
-                    {INSTRUMENT_OPTIONS.map((i) => (
-                      <option key={i.key} value={i.key}>{i.name}</option>
-                    ))}
-                  </select>
-                </label>
-              ))}
-            </div>
+              </div>
+            </>
           )}
           <label>
             Rows

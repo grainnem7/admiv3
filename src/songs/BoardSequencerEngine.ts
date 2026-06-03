@@ -114,14 +114,10 @@ export class BoardSequencerEngine {
       await this.drumKit.whenReady();
     }
     if (needsVoices) {
-      // One sampled voice per row. 'instruments' gives each row its own
-      // instrument; 'pitched' uses the single chosen instrument for all.
-      const perRow = this.cfg.rowMode === 'instruments';
+      // One sampled voice per row, using that row's instrument (per-row override
+      // or the default). Works the same for pitched and per-row modes.
       for (let r = 0; r < this.cfg.rows; r++) {
-        const key = perRow
-          ? (this.cfg.rowInstruments[r] ?? this.cfg.instrumentKey)
-          : this.cfg.instrumentKey;
-        const v = new BoardSequencerVoice(this.ctx, key);
+        const v = new BoardSequencerVoice(this.ctx, this.instrumentForRow(r));
         if (dest) v.connect(dest.input);
         this.voices.push(v);
       }
@@ -219,11 +215,10 @@ export class BoardSequencerEngine {
       || (this.cfg.blackDrums && cell.colour === 'black');
   }
 
-  /** The instrument key a melodic row plays (per-row in 'instruments', else the single one). */
+  /** The instrument a row plays: its per-row override if set, else the default. */
   private instrumentForRow(row: number): string {
-    return this.cfg.rowMode === 'instruments'
-      ? (this.cfg.rowInstruments[row] ?? this.cfg.instrumentKey)
-      : this.cfg.instrumentKey;
+    const k = this.cfg.rowInstruments[row];
+    return k && k.length > 0 ? k : this.cfg.instrumentKey;
   }
 
   /** Play every active cell in `step` at `stepTime`. chord locks melodic pitch. */

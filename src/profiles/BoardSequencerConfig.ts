@@ -84,7 +84,8 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   instrumentKey: 'electricPiano',
   rowMode: 'pitched',
   blackDrums: false,
-  rowInstruments: ['piano', 'electricPiano', 'strings', 'bass', 'percussion', 'piano', 'electricPiano', 'strings'],
+  // Empty = "use the default instrument" for that row; override per row in the UI.
+  rowInstruments: ['', '', '', '', '', '', '', ''],
   blackMaxValue: 34,
   blackMaxSaturation: 45,
   mirrorX: true,
