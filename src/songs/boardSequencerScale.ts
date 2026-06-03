@@ -63,6 +63,37 @@ export function chordDegreeMidi(degree: number, chordNotes: readonly number[]): 
   return sorted[idx] + octave * 12;
 }
 
+/**
+ * Context-aware voicing: spread a SET of melodic cells into an ascending,
+ * complementary voicing — ordered by board height (bottom row lowest) then
+ * column — and assign each the next degree of the pentatonic (or, when a chord
+ * is given, that chord's tones). Because each cell's pitch is its RANK within
+ * the whole set, the voicing depends on everything currently on the board: the
+ * range widens as more pieces are placed, and adding/removing a piece re-voices
+ * the others. Returns a map keyed by `${row},${col}` → MIDI.
+ */
+export function voicingForCells(
+  cells: CellRef[],
+  rows: number,
+  rootMidi: number,
+  semitones: number[],
+  chordNotes: readonly number[] | null,
+): Map<string, number> {
+  const sorted = [...cells].sort((a, b) => {
+    const la = rows - 1 - a.row;
+    const lb = rows - 1 - b.row;
+    return la - lb || a.col - b.col;
+  });
+  const map = new Map<string, number>();
+  sorted.forEach((c, rank) => {
+    const midi = chordNotes && chordNotes.length > 0
+      ? chordDegreeMidi(rank, chordNotes)
+      : degreeMidi(rank, rootMidi, semitones);
+    map.set(`${c.row},${c.col}`, midi);
+  });
+  return map;
+}
+
 /** Pitches to trigger at `step` (column): one per active cell in that column. */
 export function notesForStep(
   active: CellRef[],

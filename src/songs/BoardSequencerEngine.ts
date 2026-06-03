@@ -13,9 +13,7 @@
 
 import * as Tone from 'tone';
 import { BoardSequencerVoice } from './voices/BoardSequencerVoice';
-import {
-  degreeMidi, chordDegreeMidi, drumForRow, DEFAULT_DRUM_ROWS,
-} from './boardSequencerScale';
+import { voicingForCells, drumForRow, DEFAULT_DRUM_ROWS } from './boardSequencerScale';
 import type { ActiveCell } from '../tracking/BoardSequencerMode';
 import { getEffectChainManager } from '../effects';
 import { RoundRobinDrumKit } from '../audio/instruments/RoundRobinDrumKit';
@@ -214,33 +212,37 @@ export class BoardSequencerEngine {
     }
   }
 
+  private isDrumCell(cell: ActiveCell): boolean {
+    return this.cfg.rowMode === 'drumKit'
+      || (this.cfg.rowMode === 'redBlack' && cell.colour === 'black');
+  }
+
   /** Play every active cell in `step` at `stepTime`. chord locks melodic pitch. */
   private fireStep(step: number, stepTime: number, secPerBeat: number, chord: BoardChord | null): void {
     if (this.muted) return;
-    const mode = this.cfg.rowMode;
     const durSec = this.cfg.noteLengthBeats * secPerBeat;
+    // Voice ALL active melodic cells together so pitch is a complementary
+    // spread that depends on the whole board (re-voices as pieces change /
+    // follows the chord when locked); then play only this column's cells.
+    const melodic = this.active.filter(
+      (c) => !this.isDrumCell(c) && c.row >= 0 && c.row < this.voices.length,
+    );
+    const voicing = voicingForCells(
+      melodic, this.cfg.rows, this.cfg.scaleRootMidi, this.cfg.scaleSemitones,
+      chord && chord.notes.length > 0 ? chord.notes : null,
+    );
     for (const cell of this.active) {
       if (cell.col !== step) continue;
-      const asDrum = mode === 'drumKit' || (mode === 'redBlack' && cell.colour === 'black');
-      if (asDrum) {
+      if (this.isDrumCell(cell)) {
         const drum = drumForRow(cell.row, this.cfg.rows, DEFAULT_DRUM_ROWS);
         if (drum) this.drumKit?.play(drum as HeadBopDrum, this.cfg.velocity, stepTime);
-      } else if (cell.row >= 0 && cell.row < this.voices.length) {
-        this.voices[cell.row].play(this.pitchFor(cell, chord), this.cfg.velocity, durSec, stepTime);
+      } else {
+        const midi = voicing.get(`${cell.row},${cell.col}`);
+        if (midi !== undefined) {
+          this.voices[cell.row].play(midi, this.cfg.velocity, durSec, stepTime);
+        }
       }
     }
-  }
-
-  /**
-   * Melodic pitch for a cell. 'pitched' uses the row (bottom = lowest); the
-   * other modes use the column. The degree indexes the song's CURRENT chord
-   * when locked, otherwise the standalone pentatonic — so it is always in key.
-   */
-  private pitchFor(cell: ActiveCell, chord: BoardChord | null): number {
-    const degree = this.cfg.rowMode === 'pitched' ? this.cfg.rows - 1 - cell.row : cell.col;
-    return chord && chord.notes.length > 0
-      ? chordDegreeMidi(degree, chord.notes)
-      : degreeMidi(degree, this.cfg.scaleRootMidi, this.cfg.scaleSemitones);
   }
 
   stop(): void {

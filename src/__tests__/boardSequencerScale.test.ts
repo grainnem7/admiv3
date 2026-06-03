@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  cellMidi, columnMidi, degreeMidi, chordDegreeMidi, notesForStep, stepIndexAt,
+  cellMidi, columnMidi, degreeMidi, chordDegreeMidi, voicingForCells, notesForStep, stepIndexAt,
 } from '../songs/boardSequencerScale';
 import { drumForRow, drumsForStep, DEFAULT_DRUM_ROWS } from '../songs/boardSequencerScale';
 import type { CellRef } from '../tracking/BoardSequencerMode';
@@ -42,6 +42,35 @@ describe('boardSequencerScale pentatonic generators', () => {
   it('chordDegreeMidi sorts notes defensively and is safe for empty chords', () => {
     expect(chordDegreeMidi(1, [69, 62, 66])).toBe(66); // unsorted → F#
     expect(chordDegreeMidi(0, [])).toBe(60); // empty → safe fallback
+  });
+
+  it('voicingForCells spreads the set by board height → ascending pentatonic ranks', () => {
+    const rows = 4;
+    // bottom-left, then a higher cell, then top — ranks 0,1,2 regardless of column
+    const cells = [
+      { row: 3, col: 2 }, // bottom (level 0) → rank 0
+      { row: 1, col: 0 }, // level 2 → rank 1
+      { row: 0, col: 3 }, // top (level 3) → rank 2
+    ];
+    const v = voicingForCells(cells, rows, 60, penta5, null);
+    expect(v.get('3,2')).toBe(degreeMidi(0, 60, penta5));
+    expect(v.get('1,0')).toBe(degreeMidi(1, 60, penta5));
+    expect(v.get('0,3')).toBe(degreeMidi(2, 60, penta5));
+  });
+
+  it('voicingForCells re-voices when the set changes (rank depends on the whole board)', () => {
+    const rows = 4;
+    const top = { row: 0, col: 0 };
+    const aloneTop = voicingForCells([top], rows, 60, penta5, null).get('0,0');
+    const withLower = voicingForCells([{ row: 3, col: 0 }, top], rows, 60, penta5, null).get('0,0');
+    expect(aloneTop).toBe(degreeMidi(0, 60, penta5)); // alone → lowest degree
+    expect(withLower).toBe(degreeMidi(1, 60, penta5)); // a lower piece pushes it up
+  });
+
+  it('voicingForCells uses chord tones when a chord is supplied', () => {
+    const v = voicingForCells([{ row: 3, col: 0 }, { row: 0, col: 0 }], 4, 60, penta5, [62, 66, 69]);
+    expect(v.get('3,0')).toBe(62); // rank 0 → first chord tone
+    expect(v.get('0,0')).toBe(66); // rank 1 → second chord tone
   });
 });
 
