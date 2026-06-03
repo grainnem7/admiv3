@@ -59,6 +59,14 @@ export interface BoardSequencerStored {
   rowInstruments: string[];
   /** Per-row drum override (indexed by row, 0 = top); '' = default kit mapping. */
   rowDrums: string[];
+  /**
+   * Polyrhythm: loop length (in steps/columns) per role. 0 = use the full grid
+   * width (no polyrhythm). When > 0, that role wraps at its own length, so the
+   * roles drift against each other. red = melody, black = drums, blue = bass.
+   */
+  loopStepsRed: number;
+  loopStepsBlack: number;
+  loopStepsBlue: number;
   /** Black-piece detection: a pixel is "black" if value ≤ blackMaxValue and saturation ≤ blackMaxSaturation. */
   blackMaxValue: number;
   blackMaxSaturation: number;
@@ -127,6 +135,9 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   rowInstruments: ['', '', '', '', '', '', '', ''],
   // Empty = "use the default kit mapping" for that row; override per row in the UI.
   rowDrums: ['', '', '', '', '', '', '', ''],
+  loopStepsRed: 0,
+  loopStepsBlack: 0,
+  loopStepsBlue: 0,
   blackMaxValue: 34,
   blackMaxSaturation: 45,
   blueBass: false,
@@ -217,6 +228,9 @@ function sanitize(input: unknown): BoardSequencerStored | null {
       Array.isArray(o.rowDrums) && o.rowDrums.every((k) => typeof k === 'string')
         ? (o.rowDrums as string[])
         : d.rowDrums,
+    loopStepsRed: num(o.loopStepsRed, d.loopStepsRed),
+    loopStepsBlack: num(o.loopStepsBlack, d.loopStepsBlack),
+    loopStepsBlue: num(o.loopStepsBlue, d.loopStepsBlue),
     blackMaxValue: num(o.blackMaxValue, d.blackMaxValue),
     blackMaxSaturation: num(o.blackMaxSaturation, d.blackMaxSaturation),
     blueBass: o.blueBass === true,

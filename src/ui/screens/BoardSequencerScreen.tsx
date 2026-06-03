@@ -69,6 +69,17 @@ const DRUM_OPTIONS: { key: string; name: string }[] = [
   { key: 'rim', name: 'Rim' },
 ];
 
+// Polyrhythm roles: each colour/role can loop at its own length (0 = full grid).
+const POLY_ROLES: {
+  role: 'red' | 'black' | 'blue';
+  field: 'loopStepsRed' | 'loopStepsBlack' | 'loopStepsBlue';
+  label: string;
+}[] = [
+  { role: 'red', field: 'loopStepsRed', label: 'Melody' },
+  { role: 'black', field: 'loopStepsBlack', label: 'Drums' },
+  { role: 'blue', field: 'loopStepsBlue', label: 'Bass' },
+];
+
 interface DetStats {
   red: number;
   black: number;
@@ -418,6 +429,8 @@ export default function BoardSequencerScreen() {
       tickEnabled: cfg.tickEnabled, instrumentKey: cfg.instrumentKey,
       rowMode: cfg.rowMode, blackDrums: cfg.blackDrums, blueBass: cfg.blueBass,
       rowInstruments: cfg.rowInstruments, rowDrums: cfg.rowDrums,
+      loopStepsRed: cfg.loopStepsRed, loopStepsBlack: cfg.loopStepsBlack,
+      loopStepsBlue: cfg.loopStepsBlue,
       octaveShift: cfg.octaveShift, volume: cfg.volume,
       rowVolume: cfg.rowVolume, rowTone: cfg.rowTone,
       rowReverbSend: cfg.rowReverbSend, rowDelaySend: cfg.rowDelaySend,
@@ -857,6 +870,29 @@ export default function BoardSequencerScreen() {
               {[4, 8, 16].map((n) => <option key={n} value={n}>{n}</option>)}
             </select>
           </label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <span style={{ fontSize: 12, opacity: 0.8 }}>
+              Polyrhythm — loop length per role (Off = full {config.cols} steps; shorter values drift against each other)
+            </span>
+            {POLY_ROLES.map(({ role, field, label }) => (
+              <label key={role} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+                <span style={{ width: 64 }}>{label}</span>
+                <select
+                  value={config[field]}
+                  onChange={(e) => {
+                    const n = Number(e.target.value);
+                    update({ [field]: n } as Partial<BoardSequencerStored>);
+                    engineRef.current?.setLoopSteps(role, n);
+                  }}
+                >
+                  <option value={0}>Off</option>
+                  {[2, 3, 4, 5, 6, 7, 8].filter((n) => n <= config.cols).map((n) => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+              </label>
+            ))}
+          </div>
           {config.rowMode !== 'drumKit' && (
             <div>
               <button type="button" style={{ fontSize: 12 }} onClick={() => setShowMixer((v) => !v)}>

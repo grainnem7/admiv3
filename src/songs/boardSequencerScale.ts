@@ -171,6 +171,25 @@ export function drumsForStep(
     .filter((d): d is string => d !== null);
 }
 
+/**
+ * A role's effective loop length given its polyrhythm setting and the grid width.
+ * `loopSteps` 0 (or < 1) means "no polyrhythm" → the full grid width `cols`.
+ * Loops longer than the grid are clamped to the grid.
+ */
+export function loopLen(loopSteps: number, cols: number): number {
+  return !loopSteps || loopSteps < 1 ? cols : Math.min(Math.floor(loopSteps), cols);
+}
+
+/**
+ * The step (column) a role plays on a given GLOBAL beat index. Each role wraps
+ * the beat at its own loop length, so roles with different lengths drift against
+ * each other (polyrhythm). Handles negative beats defensively.
+ */
+export function roleStep(beat: number, loopSteps: number, cols: number): number {
+  const len = loopLen(loopSteps, cols);
+  return ((beat % len) + len) % len;
+}
+
 /** Which step the playhead is on at `nowSec`, given loop start, beat length, and step count. */
 export function stepIndexAt(
   nowSec: number,

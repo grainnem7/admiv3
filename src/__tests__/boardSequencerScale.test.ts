@@ -2,7 +2,10 @@ import { describe, it, expect } from 'vitest';
 import {
   cellMidi, columnMidi, degreeMidi, chordDegreeMidi, voicingForCells, notesForStep, stepIndexAt,
 } from '../songs/boardSequencerScale';
-import { drumForRow, drumForRowChoice, drumsForStep, DEFAULT_DRUM_ROWS } from '../songs/boardSequencerScale';
+import {
+  drumForRow, drumForRowChoice, drumsForStep, DEFAULT_DRUM_ROWS,
+  loopLen, roleStep,
+} from '../songs/boardSequencerScale';
 import type { CellRef } from '../tracking/BoardSequencerMode';
 
 const ROWS = 4;
@@ -184,5 +187,38 @@ describe('boardSequencerScale drum mapping', () => {
     expect(drumForRowChoice(0, rows, rowDrums)).toBe('rim');  // top row would be null by default
     expect(drumForRowChoice(1, rows, rowDrums)).toBe('clap');
     expect(drumForRow(1, rows, DEFAULT_DRUM_ROWS)).toBeNull(); // confirms default would be null
+  });
+});
+
+describe('polyrhythm loop length', () => {
+  it('loopLen falls back to the full grid width when polyrhythm is off (0/invalid)', () => {
+    expect(loopLen(0, 8)).toBe(8);
+    expect(loopLen(-3, 8)).toBe(8);
+    expect(loopLen(0.5, 8)).toBe(8);
+  });
+
+  it('loopLen uses the configured length and clamps it to the grid width', () => {
+    expect(loopLen(3, 8)).toBe(3);
+    expect(loopLen(8, 8)).toBe(8);
+    expect(loopLen(12, 8)).toBe(8); // longer than grid → clamp
+    expect(loopLen(3.9, 8)).toBe(3); // floored
+  });
+
+  it('roleStep with polyrhythm off matches the plain beat-mod-cols playhead', () => {
+    const cols = 8;
+    for (let beat = 0; beat < 20; beat++) {
+      expect(roleStep(beat, 0, cols)).toBe(beat % cols);
+    }
+  });
+
+  it('roleStep wraps a role at its own loop length so roles drift apart', () => {
+    // Drums looping every 3 against an 8-wide grid: 0,1,2,0,1,2,...
+    expect([0, 1, 2, 3, 4, 5, 6].map((b) => roleStep(b, 3, 8)))
+      .toEqual([0, 1, 2, 0, 1, 2, 0]);
+  });
+
+  it('roleStep handles negative beats defensively', () => {
+    expect(roleStep(-1, 3, 8)).toBe(2);
+    expect(roleStep(-3, 3, 8)).toBe(0);
   });
 });

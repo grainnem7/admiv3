@@ -13,7 +13,7 @@
 
 import * as Tone from 'tone';
 import { BoardSequencerVoice } from './voices/BoardSequencerVoice';
-import { voicingForCells, degreeMidi, drumForRowChoice } from './boardSequencerScale';
+import { voicingForCells, degreeMidi, drumForRowChoice, loopLen, roleStep } from './boardSequencerScale';
 import type { ActiveCell } from '../tracking/BoardSequencerMode';
 import { getEffectChainManager } from '../effects';
 import { RoundRobinDrumKit } from '../audio/instruments/RoundRobinDrumKit';
@@ -62,6 +62,10 @@ export interface BoardEngineConfig {
   rowInstruments: string[];
   /** Per-row drum override (indexed by row, 0 = top); '' = default kit mapping. */
   rowDrums: string[];
+  /** Polyrhythm: per-role loop length in steps (0 = full grid width). */
+  loopStepsRed: number;
+  loopStepsBlack: number;
+  loopStepsBlue: number;
   /** Per-row mixer (indexed by row): volume, tone/brightness, reverb-send, delay-send (0..1). */
   rowVolume: number[];
   rowTone: number[];
@@ -108,7 +112,7 @@ export class BoardSequencerEngine {
   private rowDlySends: GainNode[] = [];
   private active: ActiveCell[] = [];
   private startSec = 0;
-  private lastScheduledStep = -1;
+  private lastInternalBeat = -1;
   private timer: ReturnType<typeof setInterval> | null = null;
   private muted = false;
   private syncSource: BoardSyncSource | null = null;
@@ -259,6 +263,13 @@ export class BoardSequencerEngine {
     this.cfg.humanize = h;
   }
 
+  /** Set a role's polyrhythm loop length live (0 = full grid width). */
+  setLoopSteps(role: 'red' | 'black' | 'blue', steps: number): void {
+    if (role === 'red') this.cfg.loopStepsRed = steps;
+    else if (role === 'black') this.cfg.loopStepsBlack = steps;
+    else this.cfg.loopStepsBlue = steps;
+  }
+
   /** Attach (or clear) a backing song to lock tempo/beat + chords to. */
   setSyncSource(src: BoardSyncSource | null): void {
     this.syncSource = src;
@@ -273,7 +284,7 @@ export class BoardSequencerEngine {
 
   start(): void {
     this.startSec = Tone.now();
-    this.lastScheduledStep = -1;
+    this.lastInternalBeat = -1;
     this.lastBeatIndex = -1;
     if (this.timer) clearInterval(this.timer);
     this.timer = setInterval(() => this.scheduleTick(), TICK_INTERVAL_MS);
@@ -292,12 +303,11 @@ export class BoardSequencerEngine {
     const secPerBeat = 60 / this.cfg.bpm;
     const now = Tone.now();
     const beatIdx = Math.floor((now + LOOKAHEAD_SEC - this.startSec) / secPerBeat);
-    const step = ((beatIdx % this.cfg.cols) + this.cfg.cols) % this.cfg.cols;
-    if (step === this.lastScheduledStep) return;
-    this.lastScheduledStep = step;
+    if (beatIdx === this.lastInternalBeat) return;
+    this.lastInternalBeat = beatIdx;
     let stepTime = this.startSec + beatIdx * secPerBeat;
     if (beatIdx % 2 === 1) stepTime += this.cfg.swing * secPerBeat * 0.5; // groove off-beats
-    this.fireStep(step, stepTime, secPerBeat, null);
+    this.fireStep(beatIdx, stepTime, secPerBeat, null);
   }
 
   /** Locked to a song: fire a step on each of the song's beats, chord-locked. */
@@ -317,13 +327,12 @@ export class BoardSequencerEngine {
     let i = this.lastBeatIndex + 1;
     while (i < beats.length && beats[i] <= horizon) {
       const beatTime = beats[i];
-      const step = ((i % this.cfg.cols) + this.cfg.cols) % this.cfg.cols;
       const spacing = i + 1 < beats.length
         ? Math.max(0.05, beats[i + 1] - beatTime)
         : (i > 0 ? Math.max(0.05, beatTime - beats[i - 1]) : 0.5);
       let audioTime = now + Math.max(0, beatTime - t);
       if (i % 2 === 1) audioTime += this.cfg.swing * spacing * 0.5; // groove off-beats
-      this.fireStep(step, audioTime, spacing, src.chordAt(beatTime));
+      this.fireStep(i, audioTime, spacing, src.chordAt(beatTime));
       this.lastBeatIndex = i;
       i++;
     }
@@ -357,10 +366,23 @@ export class BoardSequencerEngine {
     return k && k.length > 0 ? k : this.cfg.instrumentKey;
   }
 
-  /** Play every active cell in `step` at `stepTime`. chord locks melodic pitch. */
-  private fireStep(step: number, stepTime: number, secPerBeat: number, chord: BoardChord | null): void {
+  /** A role's configured polyrhythm loop-length setting (0 = full grid width). */
+  private rawLoop(role: 'melodic' | 'drum' | 'bass'): number {
+    return role === 'drum' ? this.cfg.loopStepsBlack
+      : role === 'bass' ? this.cfg.loopStepsBlue
+        : this.cfg.loopStepsRed;
+  }
+
+  /**
+   * Play every active cell whose role-step matches `beat` at `stepTime`.
+   * `beat` is the GLOBAL beat index; each role wraps it at its own loop length
+   * (polyrhythm), so a cell fires when cell.col === (beat mod roleLength).
+   * chord locks melodic pitch.
+   */
+  private fireStep(beat: number, stepTime: number, secPerBeat: number, chord: BoardChord | null): void {
     if (this.muted) return;
     const durSec = this.cfg.noteLengthBeats * secPerBeat;
+    const melodicLoop = loopLen(this.rawLoop('melodic'), this.cfg.cols);
     // Voice ALL active melodic cells together so pitch is a complementary
     // spread that depends on the whole board (re-voices as pieces change /
     // follows the chord when locked); then play only this column's cells.
@@ -381,14 +403,17 @@ export class BoardSequencerEngine {
       : this.cfg.scaleRootMidi) - 12 + oct;
     const h = this.cfg.humanize;
     for (const cell of this.active) {
-      if (cell.col !== step) continue;
+      // Per-role polyrhythm: a cell fires when its column matches the role's
+      // own playhead (beat wrapped at that role's loop length).
+      const role = this.isDrumCell(cell) ? 'drum' : this.isBassCell(cell) ? 'bass' : 'melodic';
+      if (cell.col !== roleStep(beat, this.rawLoop(role), this.cfg.cols)) continue;
       // Humanize: occasionally skip a step + vary velocity, so loops breathe.
       if (h > 0 && Math.random() < h * 0.5) continue;
       const vel = h > 0 ? this.cfg.velocity * (1 - Math.random() * h * 0.4) : this.cfg.velocity;
-      if (this.isDrumCell(cell)) {
+      if (role === 'drum') {
         const drum = drumForRowChoice(cell.row, this.cfg.rows, this.cfg.rowDrums);
         if (drum) this.drumKit?.play(drum as KitDrum, vel, stepTime);
-      } else if (this.isBassCell(cell)) {
+      } else if (role === 'bass') {
         this.bassVoice?.play(bassMidi, vel, durSec, stepTime);
       } else {
         const voice = this.voices[cell.row];
@@ -404,7 +429,7 @@ export class BoardSequencerEngine {
           if (midi !== undefined) {
             // Pad rows sustain for a whole loop (re-triggered each pass) so they
             // act as a held harmonic bed; other rows play the short note length.
-            const dur = inst === 'pad' ? secPerBeat * this.cfg.cols : durSec;
+            const dur = inst === 'pad' ? secPerBeat * melodicLoop : durSec;
             voice.play(midi + oct, vel, dur, stepTime);
           }
         }
