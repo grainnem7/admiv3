@@ -33,6 +33,8 @@ export interface RegionSample {
   redFraction: number;
   /** Fraction matching the dark/achromatic black test (0 when no black band given). */
   blackFraction: number;
+  /** Fraction matching the blue band (0 when no blue band given). */
+  blueFraction: number;
   /** Mean position of the DOMINANT colour's matching pixels (unit-square coords), or null. */
   centroid: { x: number; y: number } | null;
 }
@@ -57,6 +59,7 @@ export function sampleRegion(
   samplesPerAxis: number,
   skipSkinExclusion = false,
   black?: BlackBand,
+  blue?: TrackedColor,
 ): RegionSample {
   const cellW = 1 / cols;
   const cellH = 1 / rows;
@@ -66,12 +69,15 @@ export function sampleRegion(
   const stepY = (cellH * INSET) / Math.max(samplesPerAxis - 1, 1);
 
   let redMatches = 0;
+  let blueMatches = 0;
   let blackMatches = 0;
   let total = 0;
   let rSumX = 0;
   let rSumY = 0;
-  let bSumX = 0;
-  let bSumY = 0;
+  let lSumX = 0;
+  let lSumY = 0;
+  let kSumX = 0;
+  let kSumY = 0;
 
   for (let iy = 0; iy < samplesPerAxis; iy++) {
     for (let ix = 0; ix < samplesPerAxis; ix++) {
@@ -85,24 +91,30 @@ export function sampleRegion(
         redMatches++;
         rSumX += ux;
         rSumY += uy;
+      } else if (blue && matchesTrackedColor(hsv, blue, true)) {
+        blueMatches++;
+        lSumX += ux;
+        lSumY += uy;
       } else if (black && matchesBlack(hsv, black.maxValue, black.maxSaturation)) {
         blackMatches++;
-        bSumX += ux;
-        bSumY += uy;
+        kSumX += ux;
+        kSumY += uy;
       }
     }
   }
 
   const redFraction = total === 0 ? 0 : redMatches / total;
+  const blueFraction = total === 0 ? 0 : blueMatches / total;
   const blackFraction = total === 0 ? 0 : blackMatches / total;
   // Centroid of the dominant colour (used for slide-and-settle velocity).
   let centroid: { x: number; y: number } | null = null;
-  if (redMatches >= blackMatches && redMatches > 0) {
-    centroid = { x: rSumX / redMatches, y: rSumY / redMatches };
-  } else if (blackMatches > 0) {
-    centroid = { x: bSumX / blackMatches, y: bSumY / blackMatches };
+  const maxM = Math.max(redMatches, blueMatches, blackMatches);
+  if (maxM > 0) {
+    if (redMatches === maxM) centroid = { x: rSumX / redMatches, y: rSumY / redMatches };
+    else if (blueMatches === maxM) centroid = { x: lSumX / blueMatches, y: lSumY / blueMatches };
+    else centroid = { x: kSumX / blackMatches, y: kSumY / blackMatches };
   }
-  return { redFraction, blackFraction, centroid };
+  return { redFraction, blackFraction, blueFraction, centroid };
 }
 
 export interface BoardReaderOptions {
@@ -131,6 +143,8 @@ export interface BoardReaderOptions {
   skipSkinExclusion?: boolean;
   /** When set, also detect dark "black" pieces (low value + low saturation). */
   black?: BlackBand;
+  /** When set, also detect blue pieces (calibrated blue hue band). */
+  blue?: TrackedColor;
 }
 
 /**
@@ -173,16 +187,19 @@ export class BoardReader {
     const readings: CellReading[] = [];
     for (let row = 0; row < opts.rows; row++) {
       for (let col = 0; col < opts.cols; col++) {
-        const { redFraction, blackFraction, centroid } = sampleRegion(
-          sampler, opts.homography, row, col, opts.rows, opts.cols, opts.red, samples, skipSkin, opts.black,
+        const { redFraction, blackFraction, blueFraction, centroid } = sampleRegion(
+          sampler, opts.homography, row, col, opts.rows, opts.cols, opts.red, samples, skipSkin,
+          opts.black, opts.blue,
         );
         const cls = opts.recognizer.classify({
-          filledFraction: Math.max(redFraction, blackFraction),
+          filledFraction: Math.max(redFraction, blackFraction, blueFraction),
           redFraction,
           blackFraction,
+          blueFraction,
         });
         readings.push({
-          row, col, occupied: cls.occupied, colour: cls.colour, centroid, redFraction, blackFraction,
+          row, col, occupied: cls.occupied, colour: cls.colour, centroid,
+          redFraction, blackFraction, blueFraction,
         });
       }
     }

@@ -45,6 +45,10 @@ export interface BoardSequencerStored {
   /** Black-piece detection: a pixel is "black" if value ≤ blackMaxValue and saturation ≤ blackMaxSaturation. */
   blackMaxValue: number;
   blackMaxSaturation: number;
+  /** Layer blue pieces as a bass voice on top of a melodic mode (ignored in drumKit). */
+  blueBass: boolean;
+  /** Calibrated blue band used to detect blue pieces. */
+  blueColour: TrackedColor;
   /** Display + sampling orientation. Calibration is captured in this same space. */
   mirrorX: boolean;
   mirrorY: boolean;
@@ -58,6 +62,15 @@ const DEFAULT_RED: TrackedColor = {
   id: 'board-red',
   hue: 0,
   hueTolerance: 16,
+  minSaturation: 35,
+  minValue: 25,
+  minArea: 0.0005,
+};
+
+const DEFAULT_BLUE: TrackedColor = {
+  id: 'board-blue',
+  hue: 215,
+  hueTolerance: 26,
   minSaturation: 35,
   minValue: 25,
   minArea: 0.0005,
@@ -88,6 +101,8 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   rowInstruments: ['', '', '', '', '', '', '', ''],
   blackMaxValue: 34,
   blackMaxSaturation: 45,
+  blueBass: false,
+  blueColour: DEFAULT_BLUE,
   mirrorX: true,
   mirrorY: false,
 };
@@ -109,15 +124,15 @@ function sanitizeCorners(v: unknown): [BoardPoint, BoardPoint, BoardPoint, Board
   return [pts[0], pts[1], pts[2], pts[3]];
 }
 
-function sanitizeColour(v: unknown): TrackedColor {
+function sanitizeColour(v: unknown, fallback: TrackedColor): TrackedColor {
   const o = (typeof v === 'object' && v !== null ? v : {}) as Record<string, unknown>;
   return {
-    id: typeof o.id === 'string' ? o.id : DEFAULT_RED.id,
-    hue: num(o.hue, DEFAULT_RED.hue),
-    hueTolerance: num(o.hueTolerance, DEFAULT_RED.hueTolerance),
-    minSaturation: num(o.minSaturation, DEFAULT_RED.minSaturation),
-    minValue: num(o.minValue, DEFAULT_RED.minValue),
-    minArea: num(o.minArea, DEFAULT_RED.minArea),
+    id: typeof o.id === 'string' ? o.id : fallback.id,
+    hue: num(o.hue, fallback.hue),
+    hueTolerance: num(o.hueTolerance, fallback.hueTolerance),
+    minSaturation: num(o.minSaturation, fallback.minSaturation),
+    minValue: num(o.minValue, fallback.minValue),
+    minArea: num(o.minArea, fallback.minArea),
   };
 }
 
@@ -141,7 +156,7 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     velocitySmoothing: num(o.velocitySmoothing, d.velocitySmoothing),
     occupancyGraceMs: num(o.occupancyGraceMs, d.occupancyGraceMs),
     motionConfirmMs: num(o.motionConfirmMs, d.motionConfirmMs),
-    redColour: sanitizeColour(o.redColour),
+    redColour: sanitizeColour(o.redColour, DEFAULT_RED),
     minFilledFraction: num(o.minFilledFraction, d.minFilledFraction),
     noteLengthBeats: num(o.noteLengthBeats, d.noteLengthBeats),
     velocity: num(o.velocity, d.velocity),
@@ -159,6 +174,8 @@ function sanitize(input: unknown): BoardSequencerStored | null {
         : d.rowInstruments,
     blackMaxValue: num(o.blackMaxValue, d.blackMaxValue),
     blackMaxSaturation: num(o.blackMaxSaturation, d.blackMaxSaturation),
+    blueBass: o.blueBass === true,
+    blueColour: sanitizeColour(o.blueColour, DEFAULT_BLUE),
     mirrorX: o.mirrorX !== false,
     mirrorY: o.mirrorY === true,
   };

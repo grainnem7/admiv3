@@ -19,11 +19,13 @@ export interface CellSample {
   redFraction: number;
   /** Fraction of sampled pixels matching the dark/achromatic "black" test. */
   blackFraction?: number;
+  /** Fraction of sampled pixels matching the calibrated blue band. */
+  blueFraction?: number;
 }
 
 export interface CellClassification {
   occupied: boolean;
-  colour: 'red' | 'black' | null;
+  colour: 'red' | 'black' | 'blue' | null;
   /** LEVEL 3 (future): Scrabble-letter identity. Never set today. */
   identity?: string;
 }
@@ -58,19 +60,23 @@ export class RedColourRecognizer implements PieceRecognizer {
 }
 
 /**
- * Level 2 (two-colour): red OR black. Each cell is classified as whichever
- * colour dominates the sample (red wins ties). Used when both colours drive
- * different roles (red → melodic instruments, black → percussion).
+ * Level 2 (multi-colour): classify a cell as whichever of red / blue / black
+ * dominates the sample, provided it clears the threshold. Ties resolve red →
+ * blue → black. Colours that aren't being detected arrive as 0 and are ignored.
+ * Drives the colour→role mapping (red = melody, blue = bass, black = drums).
  */
-export class RedBlackRecognizer implements PieceRecognizer {
+export class ColourRecognizer implements PieceRecognizer {
   readonly level: RecognitionLevel = 'colour';
   constructor(private readonly minFilledFraction: number) {}
   classify(sample: CellSample): CellClassification {
     const r = sample.redFraction;
-    const b = sample.blackFraction ?? 0;
-    if (r >= this.minFilledFraction && r >= b) return { occupied: true, colour: 'red' };
-    if (b >= this.minFilledFraction) return { occupied: true, colour: 'black' };
-    return { occupied: false, colour: null };
+    const bl = sample.blueFraction ?? 0;
+    const k = sample.blackFraction ?? 0;
+    const max = Math.max(r, bl, k);
+    if (max < this.minFilledFraction) return { occupied: false, colour: null };
+    if (r === max) return { occupied: true, colour: 'red' };
+    if (bl === max) return { occupied: true, colour: 'blue' };
+    return { occupied: true, colour: 'black' };
   }
 }
 

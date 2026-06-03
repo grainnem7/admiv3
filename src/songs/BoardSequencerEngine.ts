@@ -52,6 +52,8 @@ export interface BoardEngineConfig {
   rowMode: 'pitched' | 'drumKit' | 'instruments';
   /** Layer black pieces as drums on top of a melodic mode (ignored in drumKit). */
   blackDrums: boolean;
+  /** Layer blue pieces as a bass voice on top of a melodic mode (ignored in drumKit). */
+  blueBass: boolean;
   /** Per-row palette keys, used in 'instruments' mode (indexed by row, 0 = top). */
   rowInstruments: string[];
 }
@@ -80,6 +82,7 @@ export class BoardSequencerEngine {
   private ctx: AudioContext;
   private cfg: BoardEngineConfig;
   private voices: BoardSequencerVoice[] = [];
+  private bassVoice: BoardSequencerVoice | null = null;
   private drumKit: RoundRobinDrumKit | null = null;
   private tick: Tone.MembraneSynth | null = null;
   private active: ActiveCell[] = [];
@@ -121,6 +124,10 @@ export class BoardSequencerEngine {
         if (dest) v.connect(dest.input);
         this.voices.push(v);
       }
+    }
+    if (this.cfg.blueBass) {
+      this.bassVoice = new BoardSequencerVoice(this.ctx, 'bass');
+      if (dest) this.bassVoice.connect(dest.input);
     }
     if (this.cfg.tickEnabled) {
       this.tick = new Tone.MembraneSynth({
@@ -215,6 +222,10 @@ export class BoardSequencerEngine {
       || (this.cfg.blackDrums && cell.colour === 'black');
   }
 
+  private isBassCell(cell: ActiveCell): boolean {
+    return this.cfg.blueBass && cell.colour === 'blue';
+  }
+
   /** The instrument a row plays: its per-row override if set, else the default. */
   private instrumentForRow(row: number): string {
     const k = this.cfg.rowInstruments[row];
@@ -229,7 +240,7 @@ export class BoardSequencerEngine {
     // spread that depends on the whole board (re-voices as pieces change /
     // follows the chord when locked); then play only this column's cells.
     const melodic = this.active.filter(
-      (c) => !this.isDrumCell(c) && c.row >= 0 && c.row < this.voices.length,
+      (c) => !this.isDrumCell(c) && !this.isBassCell(c) && c.row >= 0 && c.row < this.voices.length,
     );
     // Per-row instruments: each instrument (row) plays a melody across columns
     // → pitch by column. Pitched (single instrument): piano roll → pitch by row.
@@ -238,11 +249,17 @@ export class BoardSequencerEngine {
       melodic, this.cfg.scaleRootMidi, this.cfg.scaleSemitones,
       chord && chord.notes.length > 0 ? chord.notes : null, axis,
     );
+    // Bass note: the chord's lowest tone (or the scale root), an octave down.
+    const bassMidi = (chord && chord.notes.length > 0
+      ? Math.min(...chord.notes)
+      : this.cfg.scaleRootMidi) - 12;
     for (const cell of this.active) {
       if (cell.col !== step) continue;
       if (this.isDrumCell(cell)) {
         const drum = drumForRow(cell.row, this.cfg.rows, DEFAULT_DRUM_ROWS);
         if (drum) this.drumKit?.play(drum as HeadBopDrum, this.cfg.velocity, stepTime);
+      } else if (this.isBassCell(cell)) {
+        this.bassVoice?.play(bassMidi, this.cfg.velocity, durSec, stepTime);
       } else {
         const midi = voicing.get(`${cell.row},${cell.col}`);
         if (midi !== undefined) {
@@ -266,6 +283,8 @@ export class BoardSequencerEngine {
     this.stop();
     this.voices.forEach((v) => v.dispose());
     this.voices = [];
+    this.bassVoice?.dispose();
+    this.bassVoice = null;
     this.drumKit?.dispose();
     this.drumKit = null;
     this.tick?.dispose();

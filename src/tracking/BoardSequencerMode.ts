@@ -25,7 +25,7 @@ export interface Point {
   y: number;
 }
 
-export type PieceColour = 'red' | 'black';
+export type PieceColour = 'red' | 'black' | 'blue';
 
 export interface CellReading {
   row: number;
@@ -37,6 +37,8 @@ export interface CellReading {
   redFraction?: number;
   /** Fraction matching the black test this frame (0..1). Diagnostic. */
   blackFraction?: number;
+  /** Fraction matching the blue band this frame (0..1). Diagnostic. */
+  blueFraction?: number;
 }
 
 export interface CellRef {
@@ -111,8 +113,7 @@ export class BoardSequencerMode {
         this.states.set(k, st);
       }
 
-      const isPiece =
-        r.occupied && (r.colour === 'red' || r.colour === 'black') && r.centroid !== null;
+      const isPiece = r.occupied && r.colour !== null && r.centroid !== null;
 
       if (isPiece && r.centroid && r.colour) {
         st.colour = r.colour;
