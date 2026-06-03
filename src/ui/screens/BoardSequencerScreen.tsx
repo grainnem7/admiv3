@@ -370,6 +370,7 @@ export default function BoardSequencerScreen() {
       tickEnabled: cfg.tickEnabled, instrumentKey: cfg.instrumentKey,
       rowMode: cfg.rowMode, blackDrums: cfg.blackDrums, blueBass: cfg.blueBass,
       rowInstruments: cfg.rowInstruments,
+      octaveShift: cfg.octaveShift, reverbWet: cfg.reverbWet, volume: cfg.volume,
     });
     await engine.init();
     engine.setMuted(mutedRef.current);
@@ -568,6 +569,50 @@ export default function BoardSequencerScreen() {
             <input
               type="range" min={50} max={300} value={config.bpm}
               onChange={(e) => update({ bpm: Number(e.target.value) })}
+            />
+          </label>
+          <label>
+            Octave {config.octaveShift > 0 ? `+${config.octaveShift}` : config.octaveShift}
+            <input
+              type="range" min={-2} max={2} step={1} value={config.octaveShift}
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                update({ octaveShift: v });
+                engineRef.current?.setOctaveShift(v);
+              }}
+            />
+          </label>
+          <label>
+            Note length {config.noteLengthBeats.toFixed(1)} beats
+            <input
+              type="range" min={1} max={40} value={Math.round(config.noteLengthBeats * 10)}
+              onChange={(e) => {
+                const v = Number(e.target.value) / 10;
+                update({ noteLengthBeats: v });
+                engineRef.current?.setNoteLength(v);
+              }}
+            />
+          </label>
+          <label>
+            Reverb {Math.round(config.reverbWet * 100)}%
+            <input
+              type="range" min={0} max={100} value={Math.round(config.reverbWet * 100)}
+              onChange={(e) => {
+                const v = Number(e.target.value) / 100;
+                update({ reverbWet: v });
+                engineRef.current?.setReverb(v);
+              }}
+            />
+          </label>
+          <label>
+            Volume {Math.round(config.volume * 100)}%
+            <input
+              type="range" min={0} max={100} value={Math.round(config.volume * 100)}
+              onChange={(e) => {
+                const v = Number(e.target.value) / 100;
+                update({ volume: v });
+                engineRef.current?.setVolume(v);
+              }}
             />
           </label>
           <label>

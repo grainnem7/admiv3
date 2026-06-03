@@ -49,6 +49,9 @@ export interface BoardEngineConfig {
   velocity: number;
   tickEnabled: boolean;
   instrumentKey: string;
+  octaveShift: number;
+  reverbWet: number;
+  volume: number;
   rowMode: 'pitched' | 'drumKit' | 'instruments';
   /** Layer black pieces as drums on top of a melodic mode (ignored in drumKit). */
   blackDrums: boolean;
@@ -86,6 +89,7 @@ export class BoardSequencerEngine {
   private drumKit: RoundRobinDrumKit | null = null;
   private tick: Tone.MembraneSynth | null = null;
   private master: GainNode | null = null;
+  private reverb: Tone.Reverb | null = null;
   private limiter: Tone.Limiter | null = null;
   private active: ActiveCell[] = [];
   private startSec = 0;
@@ -111,14 +115,18 @@ export class BoardSequencerEngine {
     // directly via the inherited connect(destination: AudioNode). The tick is
     // a Tone node and connects to the Tone.Gain directly.
     const dest = fx.getInput();
-    // Board sub-mix: headroom gain → limiter → shared effects bus, so stacking
-    // many voices (and sustained pads) can't clip/crackle the output.
+    // Board sub-mix: volume gain → reverb → limiter → shared effects bus, so
+    // stacking many voices (and sustained pads) can't clip/crackle the output.
     const master = this.ctx.createGain();
-    master.gain.value = 0.55;
+    master.gain.value = this.cfg.volume;
+    const reverb = new Tone.Reverb({ decay: 2.5, wet: this.cfg.reverbWet });
+    await reverb.ready;
     const limiter = new Tone.Limiter(-2);
-    Tone.connect(master, limiter);
+    Tone.connect(master, reverb);
+    reverb.connect(limiter);
     if (dest) limiter.connect(dest);
     this.master = master;
+    this.reverb = reverb;
     this.limiter = limiter;
 
     const needsDrums = this.cfg.rowMode === 'drumKit' || this.cfg.blackDrums;
@@ -159,6 +167,25 @@ export class BoardSequencerEngine {
   /** Pause/resume all sound (the clock + detection keep running; output is silent). */
   setMuted(muted: boolean): void {
     this.muted = muted;
+  }
+
+  /** Live sound controls (safe to call while running). */
+  setVolume(v: number): void {
+    this.cfg.volume = v;
+    if (this.master) this.master.gain.setTargetAtTime(v, Tone.now(), 0.02);
+  }
+
+  setReverb(wet: number): void {
+    this.cfg.reverbWet = wet;
+    if (this.reverb) this.reverb.wet.setTargetAtTime(wet, Tone.now(), 0.05);
+  }
+
+  setOctaveShift(octaves: number): void {
+    this.cfg.octaveShift = octaves;
+  }
+
+  setNoteLength(beats: number): void {
+    this.cfg.noteLengthBeats = beats;
   }
 
   /** Attach (or clear) a backing song to lock tempo/beat + chords to. */
@@ -261,10 +288,11 @@ export class BoardSequencerEngine {
       melodic, this.cfg.scaleRootMidi, this.cfg.scaleSemitones,
       chord && chord.notes.length > 0 ? chord.notes : null, axis, this.cfg.rows,
     );
+    const oct = this.cfg.octaveShift * 12;
     // Bass note: the chord's lowest tone (or the scale root), an octave down.
     const bassMidi = (chord && chord.notes.length > 0
       ? Math.min(...chord.notes)
-      : this.cfg.scaleRootMidi) - 12;
+      : this.cfg.scaleRootMidi) - 12 + oct;
     for (const cell of this.active) {
       if (cell.col !== step) continue;
       if (this.isDrumCell(cell)) {
@@ -280,7 +308,7 @@ export class BoardSequencerEngine {
           const dur = this.instrumentForRow(cell.row) === 'pad'
             ? secPerBeat * this.cfg.cols
             : durSec;
-          this.voices[cell.row].play(midi, this.cfg.velocity, dur, stepTime);
+          this.voices[cell.row].play(midi + oct, this.cfg.velocity, dur, stepTime);
         }
       }
     }
@@ -299,6 +327,8 @@ export class BoardSequencerEngine {
     this.bassVoice = null;
     this.limiter?.dispose();
     this.limiter = null;
+    this.reverb?.dispose();
+    this.reverb = null;
     this.master?.disconnect();
     this.master = null;
     this.drumKit?.dispose();
