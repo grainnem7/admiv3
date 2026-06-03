@@ -237,7 +237,7 @@ export class BoardSequencerEngine {
       (c) => !this.isDrumCell(c) && c.row >= 0 && c.row < this.voices.length,
     );
     const voicing = voicingForCells(
-      melodic, this.cfg.rows, this.cfg.scaleRootMidi, this.cfg.scaleSemitones,
+      melodic, this.cfg.scaleRootMidi, this.cfg.scaleSemitones,
       chord && chord.notes.length > 0 ? chord.notes : null,
     );
     for (const cell of this.active) {

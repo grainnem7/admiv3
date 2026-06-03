@@ -44,33 +44,36 @@ describe('boardSequencerScale pentatonic generators', () => {
     expect(chordDegreeMidi(0, [])).toBe(60); // empty → safe fallback
   });
 
-  it('voicingForCells spreads the set by board height → ascending pentatonic ranks', () => {
-    const rows = 4;
-    // bottom-left, then a higher cell, then top — ranks 0,1,2 regardless of column
+  it('voicingForCells ranks ACTIVE ROWS by height → ascending pentatonic (bottom lowest)', () => {
     const cells = [
-      { row: 3, col: 2 }, // bottom (level 0) → rank 0
-      { row: 1, col: 0 }, // level 2 → rank 1
-      { row: 0, col: 3 }, // top (level 3) → rank 2
+      { row: 3, col: 2 }, // bottom row → rank 0
+      { row: 1, col: 0 }, // → rank 1
+      { row: 0, col: 3 }, // top row → rank 2
     ];
-    const v = voicingForCells(cells, rows, 60, penta5, null);
+    const v = voicingForCells(cells, 60, penta5, null);
     expect(v.get('3,2')).toBe(degreeMidi(0, 60, penta5));
     expect(v.get('1,0')).toBe(degreeMidi(1, 60, penta5));
     expect(v.get('0,3')).toBe(degreeMidi(2, 60, penta5));
   });
 
-  it('voicingForCells re-voices when the set changes (rank depends on the whole board)', () => {
-    const rows = 4;
+  it('voicingForCells: same-row cells share a pitch regardless of column (no per-column pitch)', () => {
+    const v = voicingForCells([{ row: 3, col: 0 }, { row: 3, col: 5 }], 60, penta5, null);
+    expect(v.get('3,0')).toBe(v.get('3,5'));
+    expect(v.get('3,0')).toBe(degreeMidi(0, 60, penta5)); // only one active row → lowest degree
+  });
+
+  it('voicingForCells re-voices when the set of rows changes', () => {
     const top = { row: 0, col: 0 };
-    const aloneTop = voicingForCells([top], rows, 60, penta5, null).get('0,0');
-    const withLower = voicingForCells([{ row: 3, col: 0 }, top], rows, 60, penta5, null).get('0,0');
-    expect(aloneTop).toBe(degreeMidi(0, 60, penta5)); // alone → lowest degree
-    expect(withLower).toBe(degreeMidi(1, 60, penta5)); // a lower piece pushes it up
+    const aloneTop = voicingForCells([top], 60, penta5, null).get('0,0');
+    const withLower = voicingForCells([{ row: 3, col: 0 }, top], 60, penta5, null).get('0,0');
+    expect(aloneTop).toBe(degreeMidi(0, 60, penta5)); // only row in play → lowest
+    expect(withLower).toBe(degreeMidi(1, 60, penta5)); // adding a lower row pushes it up
   });
 
   it('voicingForCells uses chord tones when a chord is supplied', () => {
-    const v = voicingForCells([{ row: 3, col: 0 }, { row: 0, col: 0 }], 4, 60, penta5, [62, 66, 69]);
-    expect(v.get('3,0')).toBe(62); // rank 0 → first chord tone
-    expect(v.get('0,0')).toBe(66); // rank 1 → second chord tone
+    const v = voicingForCells([{ row: 3, col: 0 }, { row: 0, col: 0 }], 60, penta5, [62, 66, 69]);
+    expect(v.get('3,0')).toBe(62); // bottom row → first chord tone
+    expect(v.get('0,0')).toBe(66); // top row → second chord tone
   });
 });
 
