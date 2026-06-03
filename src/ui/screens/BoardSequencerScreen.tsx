@@ -437,6 +437,15 @@ export default function BoardSequencerScreen() {
               onChange={(e) => update({ minFilledFraction: Number(e.target.value) / 100 })}
             />
           </label>
+          {config.rowMode === 'redBlack' && (
+            <label>
+              Black darkness ≤ {config.blackMaxValue}%
+              <input
+                type="range" min={10} max={70} value={Math.round(config.blackMaxValue)}
+                onChange={(e) => update({ blackMaxValue: Number(e.target.value) })}
+              />
+            </label>
+          )}
 
           <label>
             Tempo {config.bpm} BPM
@@ -472,7 +481,15 @@ export default function BoardSequencerScreen() {
             Row mode
             <select
               value={config.rowMode} disabled={running}
-              onChange={(e) => update({ rowMode: e.target.value === 'drumKit' ? 'drumKit' : 'pitched' })}
+              onChange={(e) => {
+                const v = e.target.value;
+                const rowMode: BoardSequencerStored['rowMode'] =
+                  v === 'drumKit' ? 'drumKit'
+                    : v === 'instruments' ? 'instruments'
+                      : v === 'redBlack' ? 'redBlack'
+                        : 'pitched';
+                update({ rowMode });
+              }}
             >
               <option value="pitched">Pitched (melody)</option>
               <option value="instruments">Per-row instruments</option>

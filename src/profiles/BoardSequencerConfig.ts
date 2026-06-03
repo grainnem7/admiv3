@@ -81,8 +81,8 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   instrumentKey: 'electricPiano',
   rowMode: 'pitched',
   rowInstruments: ['piano', 'electricPiano', 'strings', 'bass', 'percussion', 'piano', 'electricPiano', 'strings'],
-  blackMaxValue: 28,
-  blackMaxSaturation: 40,
+  blackMaxValue: 34,
+  blackMaxSaturation: 45,
   mirrorX: true,
   mirrorY: false,
 };
