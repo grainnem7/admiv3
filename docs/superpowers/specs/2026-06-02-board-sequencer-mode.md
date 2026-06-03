@@ -314,3 +314,20 @@ Plus: `npm run lint` (`tsc --noEmit`) and `npm run test:run` must pass, and a ma
 - Second colour → second instrument — `COLOUR_INSTRUMENT` map is the hook; only `red → electricPiano` is wired.
 
 These will not be implemented until the red slide-and-settle mode is confirmed working with Tim.
+
+---
+
+## 15. Iteration 2 (built — post-initial-review enhancements)
+
+After the first end-to-end build, the following were added (all opt-in, still red-only, still standalone):
+
+1. **Mirrored ("selfie") camera view.** The first build dropped the mirror to keep coordinates consistent; that was confusing. The view is now mirrored *correctly*: the `<video>` is displayed with `transform: scaleX(-1)` **and** `BoardReader` mirrors the sampled canvas (`mirror: true`), so the displayed view, the four-corner calibration clicks, and the per-cell sampling all live in **one coordinate space** — no per-axis flip in the homography. `mirror` defaults off, so other callers are unaffected.
+2. **Bigger grid + size control.** Default grid is now **6 rows × 8 steps** (was 4×4). The screen exposes simple `Rows` (4/5/6/8) and `Steps` (4/8/16) selects (persisted, disabled while running). Pitched rows beyond the pentatonic **wrap into higher octaves** (`cellMidi` octave wrap); default scale is the 5-note major pentatonic `[0, 2, 4, 7, 9]`.
+3. **Row-mode switch (`rowMode`): Pitched ↔ Drum kit.**
+   - *Pitched* (default): rows = pentatonic pitches of a chosen sampled instrument.
+   - *Drum kit*: each row = a distinct drum from the existing sampled **`studio-kit`** (`RoundRobinDrumKit`): bottom→top = kick, snare, hat, crash (`DEFAULT_DRUM_ROWS`). Rows above the kit size map to nothing (silent). The kit routes into the same shared effects bus; `RoundRobinDrumKit.play` gained an optional scheduled `time` so drum hits align to the beat grid (non-breaking for remix/percussion callers).
+   - The drum/pitch mapping helpers (`drumForRow`, `drumsForStep`) are pure and unit-tested.
+4. **Instrument picker** (pitched mode only): selects from `INSTRUMENT_PALETTE_LIST` (piano, electric piano, bass, strings, percussion) — reuses the app's existing samples. Default `electricPiano`.
+
+### Colour-as-sound decision (supersedes part of §14 guidance)
+The idea of **black pieces = percussion** was considered and rejected for vision reasons: a black piece on a dark square is near-zero contrast to a single camera and would drop out across roughly half the board. The colour→instrument axis (`COLOUR_INSTRUMENT`) remains the intended future path for "different items = different sounds", but the second colour should be a **second vivid colour** (e.g. blue/green), which reads on light *and* dark squares like red — **not black**. Drums in this iteration are reached via the `rowMode` switch (red pieces), not a second colour. Still deferred until red is validated with Tim.
