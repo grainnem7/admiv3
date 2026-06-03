@@ -90,8 +90,18 @@ export default function BoardSequencerScreen() {
     [config, buildHomography],
   );
 
+  const stop = useCallback(() => {
+    cancelAnimationFrame(rafRef.current);
+    engineRef.current?.dispose();
+    engineRef.current = null;
+    modeRef.current = null;
+    setRunning(false);
+  }, []);
+
   const start = useCallback(async () => {
     await Tone.start();
+    if (engineRef.current) { engineRef.current.dispose(); engineRef.current = null; }
+    cancelAnimationFrame(rafRef.current);
     if (videoRef.current && !homographyRef.current) {
       homographyRef.current = buildHomography(config.corners, videoRef.current);
     }
@@ -162,6 +172,7 @@ export default function BoardSequencerScreen() {
           <button type="button" disabled={!calibrated || running} onClick={() => void start()}>
             Start
           </button>
+          <button type="button" disabled={!running} onClick={stop}>Stop</button>
           <label>
             Tempo {config.bpm} BPM
             <input

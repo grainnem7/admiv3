@@ -50,7 +50,7 @@ Everything else follows the commission: manual four-corner homography (no OpenCV
 1. Facilitator opens the Board screen and runs **Board Calibration** (once per session, or reuse a saved calibration).
 2. Tim slides red pieces onto the 4×4 cell block.
 3. While a piece is moving, nothing fires. When a piece **stops for the settle window (default 600 ms)**, its cell becomes **active**: a confirmation tick sounds immediately, and the cell's note joins the loop on the **next pass** at its column's beat.
-4. Starting to move a piece **immediately deactivates** its old cell (its note drops out of the loop); the destination cell activates when the piece settles there.
+4. Moving a piece deactivates its old cell (its note drops out of the loop) once sustained motion is detected — after the `motionConfirmMs` confirmation window, or sooner if occupancy is lost beyond the grace window (see §5); the destination cell activates when the piece settles there.
 5. The loop runs continuously at the internal tempo; the facilitator screen shows the warped board with active cells highlighted and a moving playhead.
 
 ---
