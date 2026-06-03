@@ -22,8 +22,12 @@ export class BoardSequencerVoice extends ToneVoiceBase {
     this.bypassFade = true;
     this.active = true;
     this.outputGain.gain.value = 1;
-    const entry = getInstrumentEntry(instrumentKey);
-    this.player = new SamplerPlayer(SAMPLE_CONFIGS[entry.sampleKey], this.filterNode);
+    // 'pad' is a board-local sound: the soft choir-pad sample, played with a
+    // long sustain by the engine to act as a held harmonic bed.
+    const sampleConfig = instrumentKey === 'pad'
+      ? SAMPLE_CONFIGS.padChoir
+      : SAMPLE_CONFIGS[getInstrumentEntry(instrumentKey).sampleKey];
+    this.player = new SamplerPlayer(sampleConfig, this.filterNode);
   }
 
   /** Trigger one sequenced note. `time` is an audio-context time (Tone seconds). */

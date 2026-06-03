@@ -41,6 +41,12 @@ import BoardCalibrationOverlay from '../components/board/BoardCalibrationOverlay
 import WarpedBoardView from '../components/board/WarpedBoardView';
 import { INSTRUMENT_PALETTE_LIST } from '../../songs/voices/presets/instrumentPalette';
 
+// Per-row sound options: the curated palette plus a board-local sustained pad.
+const INSTRUMENT_OPTIONS: { key: string; name: string }[] = [
+  ...INSTRUMENT_PALETTE_LIST,
+  { key: 'pad', name: 'Pad (sustained)' },
+];
+
 interface DetStats {
   red: number;
   black: number;
@@ -598,7 +604,7 @@ export default function BoardSequencerScreen() {
                 value={config.instrumentKey} disabled={running}
                 onChange={(e) => update({ instrumentKey: e.target.value })}
               >
-                {INSTRUMENT_PALETTE_LIST.map((i) => (
+                {INSTRUMENT_OPTIONS.map((i) => (
                   <option key={i.key} value={i.key}>{i.name}</option>
                 ))}
               </select>
@@ -620,7 +626,7 @@ export default function BoardSequencerScreen() {
                     value={config.rowInstruments[r] ?? config.instrumentKey} disabled={running}
                     onChange={(e) => setRowInstrument(r, e.target.value)}
                   >
-                    {INSTRUMENT_PALETTE_LIST.map((i) => (
+                    {INSTRUMENT_OPTIONS.map((i) => (
                       <option key={i.key} value={i.key}>{i.name}</option>
                     ))}
                   </select>

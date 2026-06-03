@@ -219,6 +219,13 @@ export class BoardSequencerEngine {
       || (this.cfg.blackDrums && cell.colour === 'black');
   }
 
+  /** The instrument key a melodic row plays (per-row in 'instruments', else the single one). */
+  private instrumentForRow(row: number): string {
+    return this.cfg.rowMode === 'instruments'
+      ? (this.cfg.rowInstruments[row] ?? this.cfg.instrumentKey)
+      : this.cfg.instrumentKey;
+  }
+
   /** Play every active cell in `step` at `stepTime`. chord locks melodic pitch. */
   private fireStep(step: number, stepTime: number, secPerBeat: number, chord: BoardChord | null): void {
     if (this.muted) return;
@@ -241,7 +248,12 @@ export class BoardSequencerEngine {
       } else {
         const midi = voicing.get(`${cell.row},${cell.col}`);
         if (midi !== undefined) {
-          this.voices[cell.row].play(midi, this.cfg.velocity, durSec, stepTime);
+          // Pad rows sustain for a whole loop (re-triggered each pass) so they
+          // act as a held harmonic bed; other rows play the short note length.
+          const dur = this.instrumentForRow(cell.row) === 'pad'
+            ? secPerBeat * this.cfg.cols
+            : durSec;
+          this.voices[cell.row].play(midi, this.cfg.velocity, dur, stepTime);
         }
       }
     }
