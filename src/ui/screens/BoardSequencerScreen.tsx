@@ -450,7 +450,7 @@ export default function BoardSequencerScreen() {
           <label>
             Tempo {config.bpm} BPM
             <input
-              type="range" min={50} max={140} value={config.bpm}
+              type="range" min={50} max={200} value={config.bpm}
               onChange={(e) => update({ bpm: Number(e.target.value) })}
             />
           </label>
