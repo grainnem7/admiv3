@@ -157,7 +157,7 @@ export default function BoardSequencerScreen() {
       </header>
 
       <div style={{ position: 'relative', width: 640, maxWidth: '100%' }}>
-        <video ref={videoRef} autoPlay playsInline muted style={{ width: '100%', transform: 'scaleX(-1)' }} />
+        <video ref={videoRef} autoPlay playsInline muted style={{ width: '100%' }} />
         {calibrating && (
           <BoardCalibrationOverlay width={640} height={480} onComplete={handleCalibrated} />
         )}
