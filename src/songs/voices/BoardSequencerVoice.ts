@@ -33,6 +33,14 @@ export class BoardSequencerVoice extends ToneVoiceBase {
     this.player = new SamplerPlayer(sampleConfig, this.filterNode);
   }
 
+  /** Set tone/brightness: the voice's low-pass cutoff, t in 0..1 (dark→bright). */
+  setBrightness(t: number): void {
+    const clamped = Math.max(0, Math.min(1, t));
+    // Log map ~300 Hz (dark) → ~12 kHz (bright).
+    const hz = 300 * Math.pow(12000 / 300, clamped);
+    this.filterNode.frequency.value = hz;
+  }
+
   /** Trigger one sequenced note. `time` is an audio-context time (Tone seconds). */
   play(midi: number, velocity: number, durationSec: number, time: number): void {
     if (!this.player.isReady()) return;

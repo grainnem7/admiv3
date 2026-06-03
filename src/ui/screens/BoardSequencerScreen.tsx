@@ -103,6 +103,26 @@ export default function BoardSequencerScreen() {
   songStatusRef.current = songStatus;
   const [stats, setStats] = useState<DetStats>({ red: 0, black: 0, blue: 0, settled: 0, maxRed: 0 });
   const [calibratingBlue, setCalibratingBlue] = useState(false);
+  const [showMixer, setShowMixer] = useState(false);
+
+  type RowMixField = 'rowVolume' | 'rowTone' | 'rowReverbSend' | 'rowDelaySend';
+  const setRowMix = useCallback((field: RowMixField, row: number, value: number) => {
+    setConfig((prev) => {
+      const arr = [...prev[field]];
+      const pad = field === 'rowVolume' || field === 'rowTone' ? 1 : 0;
+      while (arr.length <= row) arr.push(pad);
+      arr[row] = value;
+      const next = { ...prev, [field]: arr };
+      saveBoardSequencerConfig(next);
+      return next;
+    });
+    const eng = engineRef.current;
+    if (!eng) return;
+    if (field === 'rowVolume') eng.setRowVolume(row, value);
+    else if (field === 'rowTone') eng.setRowTone(row, value);
+    else if (field === 'rowReverbSend') eng.setRowReverbSend(row, value);
+    else eng.setRowDelaySend(row, value);
+  }, []);
 
   const update = useCallback((patch: Partial<BoardSequencerStored>) => {
     setConfig((prev) => {
@@ -370,7 +390,9 @@ export default function BoardSequencerScreen() {
       tickEnabled: cfg.tickEnabled, instrumentKey: cfg.instrumentKey,
       rowMode: cfg.rowMode, blackDrums: cfg.blackDrums, blueBass: cfg.blueBass,
       rowInstruments: cfg.rowInstruments,
-      octaveShift: cfg.octaveShift, reverbWet: cfg.reverbWet, volume: cfg.volume,
+      octaveShift: cfg.octaveShift, volume: cfg.volume,
+      rowVolume: cfg.rowVolume, rowTone: cfg.rowTone,
+      rowReverbSend: cfg.rowReverbSend, rowDelaySend: cfg.rowDelaySend,
     });
     await engine.init();
     engine.setMuted(mutedRef.current);
@@ -635,17 +657,6 @@ export default function BoardSequencerScreen() {
             />
           </label>
           <label>
-            Reverb {Math.round(config.reverbWet * 100)}%
-            <input
-              type="range" min={0} max={100} value={Math.round(config.reverbWet * 100)}
-              onChange={(e) => {
-                const v = Number(e.target.value) / 100;
-                update({ reverbWet: v });
-                engineRef.current?.setReverb(v);
-              }}
-            />
-          </label>
-          <label>
             Volume {Math.round(config.volume * 100)}%
             <input
               type="range" min={0} max={100} value={Math.round(config.volume * 100)}
@@ -784,6 +795,39 @@ export default function BoardSequencerScreen() {
               {[4, 8, 16].map((n) => <option key={n} value={n}>{n}</option>)}
             </select>
           </label>
+          {config.rowMode !== 'drumKit' && (
+            <div>
+              <button type="button" style={{ fontSize: 12 }} onClick={() => setShowMixer((v) => !v)}>
+                {showMixer ? '▾ Per-row mixer' : '▸ Per-row mixer'}
+              </button>
+              {showMixer && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
+                  <div style={{ display: 'flex', gap: 4, fontSize: 10, opacity: 0.7 }}>
+                    <span style={{ width: 44 }} />
+                    <span style={{ width: 50, textAlign: 'center' }}>Vol</span>
+                    <span style={{ width: 50, textAlign: 'center' }}>Tone</span>
+                    <span style={{ width: 50, textAlign: 'center' }}>Rev</span>
+                    <span style={{ width: 50, textAlign: 'center' }}>Dly</span>
+                  </div>
+                  {Array.from({ length: config.rows }, (_, r) => (
+                    <div key={r} style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                      <span style={{ width: 44, fontSize: 11 }}>Row {r + 1}</span>
+                      {(['rowVolume', 'rowTone', 'rowReverbSend', 'rowDelaySend'] as RowMixField[]).map((f) => {
+                        const fallback = f === 'rowVolume' || f === 'rowTone' ? 1 : 0;
+                        return (
+                          <input
+                            key={f} type="range" min={0} max={100} style={{ width: 50 }}
+                            value={Math.round((config[f][r] ?? fallback) * 100)}
+                            onChange={(e) => setRowMix(f, r, Number(e.target.value) / 100)}
+                          />
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           <p style={{ fontSize: 11, opacity: 0.7, margin: 0 }}>Stop to change grid/mode/orientation</p>
         </div>
 

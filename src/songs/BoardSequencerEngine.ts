@@ -51,7 +51,6 @@ export interface BoardEngineConfig {
   tickEnabled: boolean;
   instrumentKey: string;
   octaveShift: number;
-  reverbWet: number;
   volume: number;
   rowMode: 'pitched' | 'drumKit' | 'instruments';
   /** Layer black pieces as drums on top of a melodic mode (ignored in drumKit). */
@@ -60,6 +59,11 @@ export interface BoardEngineConfig {
   blueBass: boolean;
   /** Per-row palette keys, used in 'instruments' mode (indexed by row, 0 = top). */
   rowInstruments: string[];
+  /** Per-row mixer (indexed by row): volume, tone/brightness, reverb-send, delay-send (0..1). */
+  rowVolume: number[];
+  rowTone: number[];
+  rowReverbSend: number[];
+  rowDelaySend: number[];
 }
 
 const LOOKAHEAD_SEC = 0.1;
@@ -89,9 +93,16 @@ export class BoardSequencerEngine {
   private bassVoice: BoardSequencerVoice | null = null;
   private drumKit: RoundRobinDrumKit | null = null;
   private tick: Tone.MembraneSynth | null = null;
-  private master: GainNode | null = null;
+  private mix: GainNode | null = null;
   private reverb: Tone.Reverb | null = null;
+  private reverbBus: GainNode | null = null;
+  private delay: Tone.FeedbackDelay | null = null;
+  private delayBus: GainNode | null = null;
   private limiter: Tone.Limiter | null = null;
+  // Per-row mixer nodes (parallel to `voices`).
+  private rowGains: GainNode[] = [];
+  private rowRevSends: GainNode[] = [];
+  private rowDlySends: GainNode[] = [];
   private active: ActiveCell[] = [];
   private startSec = 0;
   private lastScheduledStep = -1;
@@ -116,39 +127,68 @@ export class BoardSequencerEngine {
     // directly via the inherited connect(destination: AudioNode). The tick is
     // a Tone node and connects to the Tone.Gain directly.
     const dest = fx.getInput();
-    // Board sub-mix: volume gain → reverb → limiter → shared effects bus, so
-    // stacking many voices (and sustained pads) can't clip/crackle the output.
-    const master = this.ctx.createGain();
-    master.gain.value = this.cfg.volume;
-    const reverb = new Tone.Reverb({ decay: 2.5, wet: this.cfg.reverbWet });
-    await reverb.ready;
+    const ctx = this.ctx;
+    // Mix bus → limiter → shared effects bus. Shared reverb + delay buses return
+    // into the mix; per-row sends feed them. Limiter stops stacked voices clipping.
+    const mix = ctx.createGain();
+    mix.gain.value = this.cfg.volume;
     const limiter = new Tone.Limiter(-2);
-    Tone.connect(master, reverb);
-    reverb.connect(limiter);
+    Tone.connect(mix, limiter);
     if (dest) limiter.connect(dest);
-    this.master = master;
-    this.reverb = reverb;
+
+    const reverb = new Tone.Reverb({ decay: 2.5, wet: 1 });
+    await reverb.ready;
+    const reverbBus = ctx.createGain();
+    Tone.connect(reverbBus, reverb);
+    reverb.connect(mix);
+
+    const delay = new Tone.FeedbackDelay({ delayTime: 0.25, feedback: 0.32, wet: 1 });
+    const delayBus = ctx.createGain();
+    Tone.connect(delayBus, delay);
+    delay.connect(mix);
+
+    this.mix = mix;
     this.limiter = limiter;
+    this.reverb = reverb;
+    this.reverbBus = reverbBus;
+    this.delay = delay;
+    this.delayBus = delayBus;
 
     const needsDrums = this.cfg.rowMode === 'drumKit' || this.cfg.blackDrums;
     const needsVoices = this.cfg.rowMode !== 'drumKit';
     if (needsDrums) {
       this.drumKit = new RoundRobinDrumKit(this.ctx, 'studio-kit');
-      this.drumKit.connect(master);
+      this.drumKit.connect(mix);
       await this.drumKit.whenReady();
     }
     if (needsVoices) {
-      // One sampled voice per row, using that row's instrument (per-row override
-      // or the default). Works the same for pitched and per-row modes.
+      // One sampled voice per row + a per-row mixer strip: voice → rowGain
+      // (volume) → mix (dry), with reverb/delay send taps off rowGain. Tone is
+      // the voice's own low-pass cutoff.
       for (let r = 0; r < this.cfg.rows; r++) {
         const v = new BoardSequencerVoice(this.ctx, this.instrumentForRow(r));
-        v.connect(master);
+        v.setBrightness(this.cfg.rowTone[r] ?? 1);
+        const rg = ctx.createGain();
+        rg.gain.value = this.cfg.rowVolume[r] ?? 1;
+        v.connect(rg);
+        rg.connect(mix);
+        const rs = ctx.createGain();
+        rs.gain.value = this.cfg.rowReverbSend[r] ?? 0;
+        rg.connect(rs);
+        rs.connect(reverbBus);
+        const ds = ctx.createGain();
+        ds.gain.value = this.cfg.rowDelaySend[r] ?? 0;
+        rg.connect(ds);
+        ds.connect(delayBus);
         this.voices.push(v);
+        this.rowGains.push(rg);
+        this.rowRevSends.push(rs);
+        this.rowDlySends.push(ds);
       }
     }
     if (this.cfg.blueBass) {
       this.bassVoice = new BoardSequencerVoice(this.ctx, 'bassElectric');
-      this.bassVoice.connect(master);
+      this.bassVoice.connect(mix);
     }
     if (this.cfg.tickEnabled) {
       this.tick = new Tone.MembraneSynth({
@@ -157,7 +197,7 @@ export class BoardSequencerEngine {
         envelope: { attack: 0.001, decay: 0.08, sustain: 0, release: 0.02 },
         volume: -14,
       });
-      this.tick.connect(master);
+      this.tick.connect(mix);
     }
   }
 
@@ -173,12 +213,26 @@ export class BoardSequencerEngine {
   /** Live sound controls (safe to call while running). */
   setVolume(v: number): void {
     this.cfg.volume = v;
-    if (this.master) this.master.gain.setTargetAtTime(v, Tone.now(), 0.02);
+    if (this.mix) this.mix.gain.setTargetAtTime(v, Tone.now(), 0.02);
   }
 
-  setReverb(wet: number): void {
-    this.cfg.reverbWet = wet;
-    if (this.reverb) this.reverb.wet.setTargetAtTime(wet, Tone.now(), 0.05);
+  setRowVolume(row: number, v: number): void {
+    const g = this.rowGains[row];
+    if (g) g.gain.setTargetAtTime(v, Tone.now(), 0.02);
+  }
+
+  setRowTone(row: number, t: number): void {
+    this.voices[row]?.setBrightness(t);
+  }
+
+  setRowReverbSend(row: number, s: number): void {
+    const g = this.rowRevSends[row];
+    if (g) g.gain.setTargetAtTime(s, Tone.now(), 0.03);
+  }
+
+  setRowDelaySend(row: number, s: number): void {
+    const g = this.rowDlySends[row];
+    if (g) g.gain.setTargetAtTime(s, Tone.now(), 0.03);
   }
 
   setOctaveShift(octaves: number): void {
@@ -335,14 +389,24 @@ export class BoardSequencerEngine {
     this.stop();
     this.voices.forEach((v) => v.dispose());
     this.voices = [];
+    [...this.rowGains, ...this.rowRevSends, ...this.rowDlySends].forEach((g) => g.disconnect());
+    this.rowGains = [];
+    this.rowRevSends = [];
+    this.rowDlySends = [];
     this.bassVoice?.dispose();
     this.bassVoice = null;
     this.limiter?.dispose();
     this.limiter = null;
     this.reverb?.dispose();
     this.reverb = null;
-    this.master?.disconnect();
-    this.master = null;
+    this.reverbBus?.disconnect();
+    this.reverbBus = null;
+    this.delay?.dispose();
+    this.delay = null;
+    this.delayBus?.disconnect();
+    this.delayBus = null;
+    this.mix?.disconnect();
+    this.mix = null;
     this.drumKit?.dispose();
     this.drumKit = null;
     this.tick?.dispose();

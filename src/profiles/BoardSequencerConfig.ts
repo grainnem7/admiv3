@@ -42,10 +42,13 @@ export interface BoardSequencerStored {
   instrumentKey: string;
   /** Global transpose in octaves (applied to all melodic + bass notes). */
   octaveShift: number;
-  /** Reverb wet amount (0..1) on the board mix. */
-  reverbWet: number;
   /** Board output volume (0..1). */
   volume: number;
+  /** Per-row mixer (indexed by row, 0 = top): volume, tone/brightness, and FX sends (all 0..1). */
+  rowVolume: number[];
+  rowTone: number[];
+  rowReverbSend: number[];
+  rowDelaySend: number[];
   /** Melodic behaviour: single instrument ('pitched'), per-row instruments, or pure drum kit. */
   rowMode: 'pitched' | 'drumKit' | 'instruments';
   /** Layer black pieces as drums on top of a melodic mode (ignored in drumKit). */
@@ -106,8 +109,11 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   noteLengthBeats: 0.9,
   velocity: 0.7,
   octaveShift: 0,
-  reverbWet: 0.18,
   volume: 0.6,
+  rowVolume: [1, 1, 1, 1, 1, 1, 1, 1],
+  rowTone: [1, 1, 1, 1, 1, 1, 1, 1],
+  rowReverbSend: [0.18, 0.18, 0.18, 0.18, 0.18, 0.18, 0.18, 0.18],
+  rowDelaySend: [0, 0, 0, 0, 0, 0, 0, 0],
   tickEnabled: true,
   instrumentKey: 'electricPiano',
   rowMode: 'pitched',
@@ -128,6 +134,10 @@ function isNum(v: unknown): v is number {
 
 function num(v: unknown, fallback: number): number {
   return isNum(v) ? v : fallback;
+}
+
+function numArray(v: unknown, fallback: number[]): number[] {
+  return Array.isArray(v) && v.every(isNum) ? (v as number[]) : fallback;
 }
 
 function sanitizeCorners(v: unknown): [BoardPoint, BoardPoint, BoardPoint, BoardPoint] {
@@ -178,8 +188,11 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     noteLengthBeats: num(o.noteLengthBeats, d.noteLengthBeats),
     velocity: num(o.velocity, d.velocity),
     octaveShift: num(o.octaveShift, d.octaveShift),
-    reverbWet: num(o.reverbWet, d.reverbWet),
     volume: num(o.volume, d.volume),
+    rowVolume: numArray(o.rowVolume, d.rowVolume),
+    rowTone: numArray(o.rowTone, d.rowTone),
+    rowReverbSend: numArray(o.rowReverbSend, d.rowReverbSend),
+    rowDelaySend: numArray(o.rowDelaySend, d.rowDelaySend),
     tickEnabled: o.tickEnabled !== false,
     instrumentKey: typeof o.instrumentKey === 'string' ? o.instrumentKey : d.instrumentKey,
     // Migrate the old combined 'redBlack' mode → 'instruments' + blackDrums on.
