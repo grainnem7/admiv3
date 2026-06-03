@@ -87,6 +87,13 @@ export interface BoardReaderOptions {
   recognizer: PieceRecognizer;
   samplesPerAxis?: number;
   downscale?: number;
+  /**
+   * Mirror the video horizontally when drawing to the sampling canvas. Use when
+   * the on-screen <video> is displayed mirrored (selfie view) so the sampled
+   * pixels share one coordinate space with the displayed view — corner clicks in
+   * displayed space then map directly through the homography with no per-axis flip.
+   */
+  mirror?: boolean;
 }
 
 /**
@@ -111,7 +118,10 @@ export class BoardReader {
     const h = Math.max(1, Math.floor(video.videoHeight / downscale));
     this.canvas.width = w;
     this.canvas.height = h;
+    this.ctx.save();
+    if (opts.mirror) { this.ctx.translate(w, 0); this.ctx.scale(-1, 1); }
     this.ctx.drawImage(video, 0, 0, w, h);
+    this.ctx.restore();
     const data = this.ctx.getImageData(0, 0, w, h).data;
 
     const sampler: RgbSampler = (x, y) => {

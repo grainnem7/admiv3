@@ -29,6 +29,7 @@ import {
 } from '../../profiles/BoardSequencerConfig';
 import BoardCalibrationOverlay from '../components/board/BoardCalibrationOverlay';
 import WarpedBoardView from '../components/board/WarpedBoardView';
+import { INSTRUMENT_PALETTE_LIST } from '../../songs/voices/presets/instrumentPalette';
 
 export default function BoardSequencerScreen() {
   const setCurrentScreen = useAppStore((s) => s.setCurrentScreen);
@@ -54,6 +55,14 @@ export default function BoardSequencerScreen() {
   const [playheadCol, setPlayheadCol] = useState(0);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const update = useCallback((patch: Partial<BoardSequencerStored>) => {
+    setConfig((prev) => {
+      const next = { ...prev, ...patch };
+      saveBoardSequencerConfig(next);
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     const cam = new CameraManager();
@@ -117,6 +126,7 @@ export default function BoardSequencerScreen() {
       scaleRootMidi: config.scaleRootMidi, scaleSemitones: config.scaleSemitones,
       noteLengthBeats: config.noteLengthBeats, velocity: config.velocity,
       tickEnabled: config.tickEnabled, instrumentKey: config.instrumentKey,
+      rowMode: config.rowMode,
     });
     await engine.init();
     engine.start();
@@ -137,6 +147,7 @@ export default function BoardSequencerScreen() {
       if (video && reader && mode && h && video.videoWidth > 0) {
         const readings = reader.read(video, {
           homography: h, rows: config.rows, cols: config.cols, red: config.redColour, recognizer,
+          mirror: true,
         });
         const res = mode.step(readings, dt, now);
         engine.setActiveCells(res.activeCells);
@@ -157,7 +168,7 @@ export default function BoardSequencerScreen() {
       </header>
 
       <div style={{ position: 'relative', width: 640, maxWidth: '100%' }}>
-        <video ref={videoRef} autoPlay playsInline muted style={{ width: '100%' }} />
+        <video ref={videoRef} autoPlay playsInline muted style={{ width: '100%', transform: 'scaleX(-1)' }} />
         {calibrating && (
           <BoardCalibrationOverlay width={640} height={480} onComplete={handleCalibrated} />
         )}
@@ -177,22 +188,59 @@ export default function BoardSequencerScreen() {
             Tempo {config.bpm} BPM
             <input
               type="range" min={50} max={140} value={config.bpm}
-              onChange={(e) => {
-                const next = { ...config, bpm: Number(e.target.value) };
-                setConfig(next); saveBoardSequencerConfig(next);
-              }}
+              onChange={(e) => update({ bpm: Number(e.target.value) })}
             />
           </label>
           <label>
             <input
               type="checkbox" checked={config.tickEnabled}
-              onChange={(e) => {
-                const next = { ...config, tickEnabled: e.target.checked };
-                setConfig(next); saveBoardSequencerConfig(next);
-              }}
+              onChange={(e) => update({ tickEnabled: e.target.checked })}
             />
             Confirmation tick
           </label>
+
+          <label>
+            Row mode
+            <select
+              value={config.rowMode} disabled={running}
+              onChange={(e) => update({ rowMode: e.target.value === 'drumKit' ? 'drumKit' : 'pitched' })}
+            >
+              <option value="pitched">Pitched (melody)</option>
+              <option value="drumKit">Drum kit</option>
+            </select>
+          </label>
+          {config.rowMode === 'pitched' && (
+            <label>
+              Instrument
+              <select
+                value={config.instrumentKey} disabled={running}
+                onChange={(e) => update({ instrumentKey: e.target.value })}
+              >
+                {INSTRUMENT_PALETTE_LIST.map((i) => (
+                  <option key={i.key} value={i.key}>{i.name}</option>
+                ))}
+              </select>
+            </label>
+          )}
+          <label>
+            Rows
+            <select
+              value={config.rows} disabled={running}
+              onChange={(e) => update({ rows: Number(e.target.value) })}
+            >
+              {[4, 5, 6, 8].map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </label>
+          <label>
+            Steps
+            <select
+              value={config.cols} disabled={running}
+              onChange={(e) => update({ cols: Number(e.target.value) })}
+            >
+              {[4, 8, 16].map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </label>
+          <p style={{ fontSize: 11, opacity: 0.7, margin: 0 }}>Stop to change grid/mode/instrument</p>
         </div>
         <WarpedBoardView rows={config.rows} cols={config.cols} active={active} playheadCol={playheadCol} />
       </div>
