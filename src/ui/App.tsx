@@ -22,6 +22,7 @@ import HarmonicBlendingScreen from './screens/HarmonicBlendingScreen';
 import SongPresetScreen from './screens/SongPresetScreen';
 import RemixScreen from './screens/RemixScreen';
 import SurfaceKeyboardScreen from './screens/SurfaceKeyboardScreen';
+import BoardSequencerScreen from './screens/BoardSequencerScreen';
 import InfoScreen from './screens/InfoScreen';
 
 // Components
@@ -110,6 +111,8 @@ function App() {
         return <RemixScreen />;
       case 'surfaceKeyboard':
         return <SurfaceKeyboardScreen />;
+      case 'boardSequencer':
+        return <BoardSequencerScreen />;
       case 'info':
         return <InfoScreen />;
       default:

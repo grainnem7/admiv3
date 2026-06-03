@@ -124,6 +124,12 @@ function WelcomeScreen() {
         )}
         <button
           className="btn btn--ghost"
+          onClick={() => setCurrentScreen('boardSequencer')}
+        >
+          <IconMusic size={16} /> Board Sequencer
+        </button>
+        <button
+          className="btn btn--ghost"
           onClick={() => setCurrentScreen('info')}
         >
           <IconInfo size={16} /> How It Works
