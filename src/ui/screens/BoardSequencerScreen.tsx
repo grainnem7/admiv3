@@ -28,9 +28,9 @@ import { BoardSequencerMode, type CellRef, type PieceColour, type ActiveCell } f
 import { ColourRecognizer } from '../../tracking/PieceRecognizer';
 import { rgbToHsv } from '../../tracking/ColorTracker';
 import {
-  BOARD_COLOURS, BOARD_COLOUR_BY_ID, buildMatchers,
-  ROLE_LABELS, isFaderRole,
-  type ColourId, type ColourRole, type ColourCalibration,
+  buildChannelMatchers, channelPriority, calibrationFromHsv,
+  describeChannel, freshChannelId, isFaderRole, ROLE_LABELS,
+  type ColourChannel, type ColourId, type ColourRole,
 } from '../../tracking/boardColours';
 import { BoardSequencerEngine } from '../../songs/BoardSequencerEngine';
 import { SongPresetEngine } from '../../songs/SongPresetEngine';
@@ -89,18 +89,6 @@ const POLY_ROLES: {
 const ROLE_OPTIONS: { value: ColourRole; label: string }[] =
   (Object.keys(ROLE_LABELS) as ColourRole[]).map((r) => ({ value: r, label: ROLE_LABELS[r] }));
 
-/** The colours currently assigned a role (≠ off), in detection priority order. */
-function inUseColours(cfg: BoardSequencerStored): ColourId[] {
-  return BOARD_COLOURS
-    .map((c) => c.id)
-    .filter((id) => (cfg.colourRoles[id] ?? 'off') !== 'off');
-}
-
-/** Assemble the calibration bundle the matcher builder needs from config. */
-function colourCalibration(cfg: BoardSequencerStored): ColourCalibration {
-  return { hueBands: cfg.hueBands, black: cfg.blackBand, white: cfg.whiteBand };
-}
-
 /** Collapsible, titled group for the controls rail (keeps the rail uncluttered). */
 function Section({ title, hint, open, onToggle, children }: {
   title: string;
@@ -132,20 +120,29 @@ function Section({ title, hint, open, onToggle, children }: {
   );
 }
 
-/** Overlay tint for a detected colour: its palette swatch at a strong/weak alpha. */
-function colourTint(colour: ColourId, strong: boolean): string {
-  const hex = BOARD_COLOUR_BY_ID[colour]?.swatch ?? '#ffffff';
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
+/** Overlay tint from a channel swatch hex at a strong/weak alpha. */
+function colourTint(hex: string, strong: boolean): string {
+  const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex.trim());
+  const r = m ? parseInt(m[1], 16) : 200;
+  const g = m ? parseInt(m[2], 16) : 200;
+  const b = m ? parseInt(m[3], 16) : 200;
   return `rgba(${r},${g},${b},${strong ? 0.6 : 0.32})`;
 }
 
+/** Average RGB → CSS hex (for a channel swatch). */
+function rgbToHex(r: number, g: number, b: number): string {
+  const h = (n: number) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, '0');
+  return `#${h(r)}${h(g)}${h(b)}`;
+}
+
 interface DetStats {
-  /** Live count of settled pieces per colour. */
+  /** Live count of settled pieces per colour channel id. */
   byColour: Partial<Record<ColourId, number>>;
   settled: number;
 }
+
+/** What the next camera click calibrates: a brand-new channel, or an existing one. */
+type ColourCalibTarget = { mode: 'new' } | { mode: 'recal'; id: ColourId };
 
 export default function BoardSequencerScreen() {
   const setCurrentScreen = useAppStore((s) => s.setCurrentScreen);
@@ -172,10 +169,11 @@ export default function BoardSequencerScreen() {
   // saved (loaded from storage or calibrated this session).
   const [calibrated, setCalibrated] = useState<boolean>(storedRef.current !== null);
   const [calibrating, setCalibrating] = useState(false);
-  // Which colour's band we're calibrating from the next click (null = none).
-  const [calibratingColour, setCalibratingColour] = useState<ColourId | null>(null);
-  const calibratingColourRef = useRef<ColourId | null>(null);
-  calibratingColourRef.current = calibratingColour;
+  // Colour calibration armed for the next camera click: add a new channel, or
+  // recalibrate an existing one (null = not calibrating).
+  const [colourCalib, setColourCalib] = useState<ColourCalibTarget | null>(null);
+  const colourCalibRef = useRef<ColourCalibTarget | null>(null);
+  colourCalibRef.current = colourCalib;
   const [active, setActive] = useState<CellRef[]>([]);
   const [playheadCol, setPlayheadCol] = useState(0);
   // Pattern chaining: which page the live camera edits, and which is playing now.
@@ -309,6 +307,7 @@ export default function BoardSequencerScreen() {
       activeMap: Map<string, PieceColour>,
       cfg: BoardSequencerStored,
       playCol: number,
+      swatchById: Map<ColourId, string>,
     ) => {
       const cv = overlayRef.current;
       const video = videoRef.current;
@@ -348,7 +347,8 @@ export default function BoardSequencerScreen() {
           const occColour = occupied.get(key);
           const colour = activeColour ?? occColour;
           const strong = activeColour !== undefined;
-          ctx.fillStyle = colour ? colourTint(colour, strong) : 'rgba(0,0,0,0)';
+          const hex = colour ? swatchById.get(colour) : undefined;
+          ctx.fillStyle = hex ? colourTint(hex, strong) : 'rgba(0,0,0,0)';
           ctx.fill();
           ctx.lineWidth = c === playCol && runningRef.current ? 3 : 1;
           ctx.strokeStyle = c === playCol && runningRef.current ? 'rgba(80,200,255,0.95)' : 'rgba(80,200,255,0.4)';
@@ -402,12 +402,12 @@ export default function BoardSequencerScreen() {
         }
         const h = homographyRef.current;
         if (h) {
-          // Build matchers + recognizer from the colours currently in use (any
-          // colour with a role ≠ off), in detection priority order.
-          const inUse = inUseColours(cfg);
-          const priority = inUse.length > 0 ? inUse : (['red'] as ColourId[]);
-          const matchers = buildMatchers(priority, colourCalibration(cfg));
+          // Build matchers + recognizer from the user's calibrated channels, in
+          // detection priority order (vivid hues before black/white).
+          const matchers = buildChannelMatchers(cfg.channels);
+          const priority = channelPriority(cfg.channels);
           const recognizer = new ColourRecognizer(cfg.minFilledFraction, priority);
+          const swatchById = new Map(cfg.channels.map((c) => [c.id, c.swatch]));
           const readings = reader.read(video, {
             homography: h, rows: cfg.rows, cols: cfg.cols, colours: matchers, recognizer,
             mirrorX: cfg.mirrorX, mirrorY: cfg.mirrorY,
@@ -432,7 +432,7 @@ export default function BoardSequencerScreen() {
             for (const c of res.activeCells) activeMap.set(`${c.row},${c.col}`, c.colour);
             playCol = stepIndexAt(Tone.now(), startSecRef.current, 60 / cfg.bpm, cfg.cols);
           }
-          drawOverlay(occupied, activeMap, cfg, playCol);
+          drawOverlay(occupied, activeMap, cfg, playCol, swatchById);
           if (now - lastStateMs > 100) {
             lastStateMs = now;
             setActive(activeArr);
@@ -532,7 +532,9 @@ export default function BoardSequencerScreen() {
       humanize: cfg.humanize,
       noteLengthBeats: cfg.noteLengthBeats, velocity: cfg.velocity,
       tickEnabled: cfg.tickEnabled, instrumentKey: cfg.instrumentKey,
-      rowMode: cfg.rowMode, colourRoles: cfg.colourRoles, faderAxis: cfg.faderAxis,
+      rowMode: cfg.rowMode,
+      colourRoles: Object.fromEntries(cfg.channels.map((c) => [c.id, c.role])),
+      faderAxis: cfg.faderAxis,
       rowInstruments: cfg.rowInstruments, rowDrums: cfg.rowDrums,
       loopStepsRed: cfg.loopStepsRed, loopStepsBlack: cfg.loopStepsBlack,
       loopStepsBlue: cfg.loopStepsBlue, numPages: cfg.numPages,
@@ -587,7 +589,7 @@ export default function BoardSequencerScreen() {
   // Average HSV under a click (in displayed space). Draws the frame with the
   // same mirror transforms so a click on the displayed video samples the right
   // pixels.
-  const sampleAvgHsvAt = useCallback((nx: number, ny: number): { h: number; s: number; v: number } | null => {
+  const sampleAvgHsvAt = useCallback((nx: number, ny: number): { h: number; s: number; v: number; hex: string } | null => {
     const video = videoRef.current;
     if (!video || video.videoWidth <= 0) return null;
     const cfg = configRef.current;
@@ -622,57 +624,91 @@ export default function BoardSequencerScreen() {
       n++;
     }
     if (n === 0) return null;
-    return rgbToHsv(sr / n, sg / n, sb / n);
+    const ar = sr / n;
+    const ag = sg / n;
+    const ab = sb / n;
+    return { ...rgbToHsv(ar, ag, ab), hex: rgbToHex(ar, ag, ab) };
   }, []);
 
-  // Calibrate the colour currently armed (calibratingColour) from a click: hue
-  // colours set their band's hue + thresholds; black/white set their achromatic
-  // band a little outside the sampled value/saturation so similar pieces register.
-  const sampleColourAt = useCallback((nx: number, ny: number) => {
-    const colour = calibratingColourRef.current;
-    if (!colour) return;
-    const hsv = sampleAvgHsvAt(nx, ny);
-    if (!hsv) return;
-    const def = BOARD_COLOUR_BY_ID[colour];
-    if (def.kind === 'hue') {
-      update({
-        hueBands: {
-          ...configRef.current.hueBands,
-          [colour]: {
-            id: `board-${colour}`,
-            hue: hsv.h,
-            hueTolerance: 22,
-            minSaturation: Math.max(25, hsv.s * 0.5),
-            minValue: Math.max(18, hsv.v * 0.45),
-            minArea: 0.0005,
-          },
-        },
-      });
-    } else if (def.kind === 'black') {
-      update({
-        blackBand: {
-          maxValue: Math.min(60, Math.max(18, hsv.v * 1.6 + 6)),
-          maxSaturation: Math.min(70, Math.max(30, hsv.s + 18)),
-        },
-      });
-    } else {
-      update({
-        whiteBand: {
-          minValue: Math.min(95, Math.max(55, hsv.v * 0.85)),
-          maxSaturation: Math.min(40, Math.max(10, hsv.s + 12)),
-        },
-      });
-    }
-    setCalibratingColour(null);
-  }, [sampleAvgHsvAt, update]);
+  // A camera click while calibrating: sample the piece's colour, then either add
+  // a new channel or update the one being recalibrated. The kind (hue/black/
+  // white) is inferred from the sample, and the swatch shows the real colour.
+  const sampleColourClick = useCallback((nx: number, ny: number) => {
+    const target = colourCalibRef.current;
+    if (!target) return;
+    const s = sampleAvgHsvAt(nx, ny);
+    if (!s) return;
+    const cal = calibrationFromHsv({ h: s.h, s: s.s, v: s.v });
+    setConfig((prev) => {
+      let channels: ColourChannel[];
+      if (target.mode === 'new') {
+        const id = freshChannelId(prev.channels.map((c) => c.id));
+        channels = [...prev.channels, {
+          id, kind: cal.kind, role: 'melody', swatch: s.hex,
+          band: cal.band, blackBand: cal.blackBand, whiteBand: cal.whiteBand,
+        }];
+      } else {
+        channels = prev.channels.map((c) => (c.id === target.id
+          ? {
+            id: c.id, role: c.role, kind: cal.kind, swatch: s.hex,
+            band: cal.band, blackBand: cal.blackBand, whiteBand: cal.whiteBand,
+          }
+          : c));
+      }
+      const next = { ...prev, channels };
+      saveBoardSequencerConfig(next);
+      return next;
+    });
+    setColourCalib(null);
+  }, [sampleAvgHsvAt]);
+
+  const addColour = useCallback(() => setColourCalib({ mode: 'new' }), []);
+  const recalibrateChannel = useCallback(
+    (id: ColourId) => setColourCalib((t) => (t && t.mode === 'recal' && t.id === id ? null : { mode: 'recal', id })),
+    [],
+  );
+  const setChannelRole = useCallback((id: ColourId, role: ColourRole) => {
+    setConfig((prev) => {
+      const next = { ...prev, channels: prev.channels.map((c) => (c.id === id ? { ...c, role } : c)) };
+      saveBoardSequencerConfig(next);
+      return next;
+    });
+  }, []);
+  const setChannelBlackDarkness = useCallback((id: ColourId, maxValue: number) => {
+    setConfig((prev) => {
+      const next = {
+        ...prev,
+        channels: prev.channels.map((c) => (c.id === id
+          ? { ...c, blackBand: { maxValue, maxSaturation: c.blackBand?.maxSaturation ?? 45 } }
+          : c)),
+      };
+      saveBoardSequencerConfig(next);
+      return next;
+    });
+  }, []);
+  const removeChannel = useCallback((id: ColourId) => {
+    setColourCalib((t) => (t && t.mode === 'recal' && t.id === id ? null : t));
+    setConfig((prev) => {
+      const next = { ...prev, channels: prev.channels.filter((c) => c.id !== id) };
+      saveBoardSequencerConfig(next);
+      return next;
+    });
+  }, []);
 
   const transform = `scaleX(${config.mirrorX ? -1 : 1}) scaleY(${config.mirrorY ? -1 : 1})`;
-  // Colours currently in use (role ≠ off) + whether any colour drums (drives the
-  // per-row drum picker), computed once per render for the controls rail.
-  const inUseList = inUseColours(config);
-  const anyDrums = config.rowMode === 'drumKit'
-    || inUseList.some((id) => config.colourRoles[id] === 'drums');
-  const colourLabel = (id: ColourId) => BOARD_COLOUR_BY_ID[id].name;
+  // Per-render derived: the calibrated channels, whether any drums (drives the
+  // per-row drum picker), and a colour-id → channel lookup for labels/swatches.
+  const channels = config.channels;
+  const anyDrums = config.rowMode === 'drumKit' || channels.some((c) => c.role === 'drums');
+  const anyFader = channels.some((c) => isFaderRole(c.role));
+  const channelById = new Map(channels.map((c) => [c.id, c]));
+  const labelForId = (id: ColourId) => {
+    const c = channelById.get(id);
+    return c ? describeChannel(c) : id;
+  };
+  const calibLabel = colourCalib === null ? ''
+    : colourCalib.mode === 'new' ? 'a new colour'
+      : labelForId(colourCalib.id);
 
   return (
     <div
@@ -698,12 +734,18 @@ export default function BoardSequencerScreen() {
             <button type="button" disabled={!running} onClick={toggleMuted}>
               {muted ? 'Resume sound' : 'Pause sound'}
             </button>
-            <p style={{ fontSize: 12, opacity: 0.85, margin: 0 }}>
-              {inUseList.map((id) => (
-                <span key={id}>{colourLabel(id)}: <strong>{stats.byColour[id] ?? 0}</strong>{' · '}</span>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', fontSize: 12, opacity: 0.9 }}>
+              {channels.map((c) => (
+                <span key={c.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }} title={describeChannel(c)}>
+                  <span style={{
+                    width: 10, height: 10, borderRadius: '50%', background: c.swatch, border: '1px solid #0006',
+                  }}
+                  />
+                  <strong>{stats.byColour[c.id] ?? 0}</strong>
+                </span>
               ))}
-              Settled: <strong>{stats.settled}</strong>
-            </p>
+              <span style={{ opacity: 0.7 }}>· Settled <strong>{stats.settled}</strong></span>
+            </div>
             {!calibrated && (
               <p style={{ fontSize: 11, opacity: 0.75, margin: 0 }}>
                 Open <strong>Camera &amp; board</strong> below and calibrate the corners to begin.
@@ -740,42 +782,71 @@ export default function BoardSequencerScreen() {
             hint="Give each piece colour a job, then calibrate the colours you switch on."
             open={!!openSection.colours} onToggle={() => toggleSection('colours')}
           >
-            {BOARD_COLOURS.map((def) => (
-              <label key={def.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
-                <span style={{
-                  width: 12, height: 12, borderRadius: '50%', flexShrink: 0,
-                  background: def.swatch, border: '1px solid #0006',
-                }}
-                />
-                <span style={{ width: 52 }}>{def.name}</span>
-                <select
-                  value={config.colourRoles[def.id] ?? 'off'} disabled={running}
-                  onChange={(e) => update({
-                    colourRoles: { ...config.colourRoles, [def.id]: e.target.value as ColourRole },
-                  })}
+            {channels.length === 0 && (
+              <span style={{ fontSize: 11, opacity: 0.6 }}>
+                No colours yet. Add one, then click a piece on the camera to calibrate it.
+              </span>
+            )}
+            {channels.map((c) => {
+              const isCalib = colourCalib?.mode === 'recal' && colourCalib.id === c.id;
+              return (
+                <div
+                  key={c.id}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6, fontSize: 12,
+                    padding: '4px 6px', borderRadius: 6,
+                    border: isCalib ? '1px solid #4caf50' : '1px solid #ffffff14',
+                    background: '#ffffff08',
+                  }}
                 >
-                  {ROLE_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
-                </select>
+                  <span
+                    title={`${describeChannel(c)} — click ⟳ then a piece to recalibrate`}
+                    style={{
+                      width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
+                      background: c.swatch, border: '1px solid #0008',
+                    }}
+                  />
+                  <select
+                    style={{ flex: 1, minWidth: 0 }}
+                    value={c.role}
+                    onChange={(e) => setChannelRole(c.id, e.target.value as ColourRole)}
+                  >
+                    {ROLE_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button" title="Recalibrate (then click a piece)"
+                    aria-label={`Recalibrate ${describeChannel(c)}`}
+                    onClick={() => recalibrateChannel(c.id)}
+                    style={{ padding: '2px 6px' }}
+                  >
+                    {isCalib ? '◉' : '⟳'}
+                  </button>
+                  <button
+                    type="button" title="Remove colour"
+                    aria-label={`Remove ${describeChannel(c)}`}
+                    onClick={() => removeChannel(c.id)}
+                    style={{ padding: '2px 6px' }}
+                  >
+                    ×
+                  </button>
+                </div>
+              );
+            })}
+            {channels.some((c) => c.kind === 'black') && channels.filter((c) => c.kind === 'black').map((c) => (
+              <label key={`dk-${c.id}`} style={{ fontSize: 11 }}>
+                Black darkness ≤ {c.blackBand?.maxValue ?? 34}%
+                <input
+                  type="range" min={10} max={70} value={Math.round(c.blackBand?.maxValue ?? 34)}
+                  onChange={(e) => setChannelBlackDarkness(c.id, Number(e.target.value))}
+                />
               </label>
             ))}
-            {inUseList.length > 0 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
-                <span style={{ fontSize: 11, opacity: 0.65 }}>Calibrate (click a piece on the camera):</span>
-                {inUseList.map((id) => (
-                  <button
-                    key={id} type="button"
-                    onClick={() => setCalibratingColour((c) => (c === id ? null : id))}
-                  >
-                    {calibratingColour === id
-                      ? `Cancel ${colourLabel(id)} calibration`
-                      : `Calibrate ${colourLabel(id)}`}
-                  </button>
-                ))}
-              </div>
-            )}
-            {inUseList.some((id) => isFaderRole(config.colourRoles[id] ?? 'off')) && (
+            <button type="button" disabled={running} onClick={addColour}>
+              {colourCalib?.mode === 'new' ? 'Click a piece on the camera…' : '+ Add colour'}
+            </button>
+            {anyFader && (
               <label>
                 Fader reads
                 <select
@@ -794,15 +865,6 @@ export default function BoardSequencerScreen() {
                 onChange={(e) => update({ minFilledFraction: Number(e.target.value) / 100 })}
               />
             </label>
-            {inUseList.includes('black') && (
-              <label>
-                Black darkness ≤ {config.blackBand.maxValue}%
-                <input
-                  type="range" min={10} max={70} value={Math.round(config.blackBand.maxValue)}
-                  onChange={(e) => update({ blackBand: { ...config.blackBand, maxValue: Number(e.target.value) } })}
-                />
-              </label>
-            )}
           </Section>
 
           <Section
@@ -1150,19 +1212,19 @@ export default function BoardSequencerScreen() {
               style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
             />
             {calibrating && <BoardCalibrationOverlay onComplete={handleCalibrated} />}
-            {calibratingColour && (
+            {colourCalib && (
               <div
                 onClick={(e) => {
                   const r = e.currentTarget.getBoundingClientRect();
-                  sampleColourAt((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
+                  sampleColourClick((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
                 }}
                 style={{ position: 'absolute', inset: 0, cursor: 'crosshair' }}
                 role="button"
                 tabIndex={0}
-                aria-label={`Click a ${colourLabel(calibratingColour)} piece to calibrate it`}
+                aria-label={`Click a piece to calibrate ${calibLabel}`}
               >
                 <div style={{ position: 'absolute', top: 8, left: 8, color: '#fff', background: '#000a', padding: '4px 8px' }}>
-                  Click a {colourLabel(calibratingColour)} piece{calibratingColour === 'red' ? ' (ideally on a dark square)' : ''}
+                  Click a piece to set {calibLabel}
                 </div>
               </div>
             )}

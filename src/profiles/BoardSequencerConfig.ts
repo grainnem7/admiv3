@@ -8,12 +8,10 @@
  */
 
 import type { TrackedColor } from '../tracking/ColorTracker';
-import type { ColourId, ColourRole } from '../tracking/boardColours';
-import {
-  BOARD_COLOURS, BOARD_COLOUR_BY_ID, defaultHueBand,
-  DEFAULT_BLACK_BAND, DEFAULT_WHITE_BAND, ROLE_LABELS,
-  type BlackBand, type WhiteBand,
+import type {
+  ColourChannel, ColourId, ColourKind, ColourRole, BlackBand, WhiteBand,
 } from '../tracking/boardColours';
+import { ROLE_LABELS, DEFAULT_BLACK_BAND, DEFAULT_WHITE_BAND } from '../tracking/boardColours';
 
 const STORAGE_KEY = 'admi-board-sequencer';
 
@@ -49,14 +47,8 @@ export interface BoardSequencerStored {
   velocitySmoothing: number;
   occupancyGraceMs: number;
   motionConfirmMs: number;
-  /** Calibrated hue bands per hue colour (red…purple). Missing → palette default. */
-  hueBands: Partial<Record<ColourId, TrackedColor>>;
-  /** Achromatic dark-piece ("black") detection band. */
-  blackBand: BlackBand;
-  /** Achromatic bright-piece ("white") detection band. */
-  whiteBand: WhiteBand;
-  /** What each colour does (sequenced voice or live control). Missing → 'off'. */
-  colourRoles: Partial<Record<ColourId, ColourRole>>;
+  /** User-calibrated colour channels (click a piece to add one); each has a role. */
+  channels: ColourChannel[];
   /** Axis a control-colour piece's position maps to its value ('row' = vertical). */
   faderAxis: 'row' | 'col';
   minFilledFraction: number;
@@ -104,7 +96,26 @@ const ZERO_CORNERS: [BoardPoint, BoardPoint, BoardPoint, BoardPoint] = [
   { x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 },
 ];
 
-const DEFAULT_RED: TrackedColor = defaultHueBand(BOARD_COLOUR_BY_ID.red);
+const DEFAULT_RED: TrackedColor = {
+  id: 'board-red', hue: 0, hueTolerance: 22, minSaturation: 35, minValue: 25, minArea: 0.0005,
+};
+
+/** A fresh board starts with one red→melody channel so it plays out of the box. */
+const DEFAULT_RED_CHANNEL: ColourChannel = {
+  id: 'c1', kind: 'hue', role: 'melody', swatch: '#e53935', band: DEFAULT_RED,
+};
+
+/** Legacy fixed-palette metadata, used only to migrate pre-channels configs. */
+const LEGACY_COLOUR_META: Record<string, { kind: ColourKind; hue?: number; swatch: string }> = {
+  red: { kind: 'hue', hue: 0, swatch: '#e53935' },
+  orange: { kind: 'hue', hue: 25, swatch: '#fb8c00' },
+  yellow: { kind: 'hue', hue: 52, swatch: '#fdd835' },
+  green: { kind: 'hue', hue: 120, swatch: '#43a047' },
+  blue: { kind: 'hue', hue: 215, swatch: '#1e88e5' },
+  purple: { kind: 'hue', hue: 280, swatch: '#8e24aa' },
+  white: { kind: 'white', swatch: '#fafafa' },
+  black: { kind: 'black', swatch: '#212121' },
+};
 
 export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   enabled: false,
@@ -122,11 +133,8 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   velocitySmoothing: 0.5,
   occupancyGraceMs: 150,
   motionConfirmMs: 80,
-  hueBands: { red: DEFAULT_RED },
-  blackBand: DEFAULT_BLACK_BAND,
-  whiteBand: DEFAULT_WHITE_BAND,
-  // Fresh boards play red as melody; everything else is off until assigned.
-  colourRoles: { red: 'melody' },
+  // Fresh boards start with a single red→melody channel; add more by calibrating.
+  channels: [DEFAULT_RED_CHANNEL],
   faderAxis: 'row',
   minFilledFraction: 0.15,
   noteLengthBeats: 0.9,
@@ -174,57 +182,96 @@ function sanitizeCorners(v: unknown): [BoardPoint, BoardPoint, BoardPoint, Board
   return [pts[0], pts[1], pts[2], pts[3]];
 }
 
-function isColourId(v: unknown): v is ColourId {
-  return typeof v === 'string' && v in BOARD_COLOUR_BY_ID;
-}
-
 function sanitizePages(v: unknown): StoredBoardCell[][] {
   if (!Array.isArray(v)) return [];
   return v.map((page) => {
     if (!Array.isArray(page)) return [];
     return page.flatMap((c) => {
       const o = (typeof c === 'object' && c !== null ? c : {}) as Record<string, unknown>;
-      if (!isNum(o.row) || !isNum(o.col) || !isColourId(o.colour)) return [];
+      if (!isNum(o.row) || !isNum(o.col) || typeof o.colour !== 'string' || !o.colour) return [];
       return [{ row: o.row, col: o.col, colour: o.colour }];
     });
   });
 }
 
-function sanitizeHueBands(
-  v: unknown,
-  legacyRed: unknown,
-  legacyBlue: unknown,
-): Partial<Record<ColourId, TrackedColor>> {
-  const out: Partial<Record<ColourId, TrackedColor>> = {};
-  const src = (typeof v === 'object' && v !== null ? v : {}) as Record<string, unknown>;
-  for (const def of BOARD_COLOURS) {
-    if (def.kind !== 'hue') continue;
-    if (src[def.id]) out[def.id] = sanitizeColour(src[def.id], defaultHueBand(def));
-  }
-  // Migrate legacy single redColour / blueColour into the band map.
-  if (!out.red) out.red = sanitizeColour(legacyRed, defaultHueBand(BOARD_COLOUR_BY_ID.red));
-  if (!out.blue && legacyBlue) out.blue = sanitizeColour(legacyBlue, defaultHueBand(BOARD_COLOUR_BY_ID.blue));
-  return out;
+function sanitizeBlackBand(v: unknown): BlackBand {
+  const o = (typeof v === 'object' && v !== null ? v : {}) as Record<string, unknown>;
+  return {
+    maxValue: num(o.maxValue, DEFAULT_BLACK_BAND.maxValue),
+    maxSaturation: num(o.maxSaturation, DEFAULT_BLACK_BAND.maxSaturation),
+  };
 }
 
-function sanitizeColourRoles(
-  v: unknown,
-  legacy: { blackDrums: boolean; blueBass: boolean; redBlack: boolean },
-): Partial<Record<ColourId, ColourRole>> {
-  const src = (typeof v === 'object' && v !== null ? v : {}) as Record<string, unknown>;
-  if (Object.keys(src).length > 0) {
-    const out: Partial<Record<ColourId, ColourRole>> = {};
-    for (const def of BOARD_COLOURS) {
-      const r = src[def.id];
-      if (typeof r === 'string' && r in ROLE_LABELS) out[def.id] = r as ColourRole;
-    }
-    return out;
+function sanitizeWhiteBand(v: unknown): WhiteBand {
+  const o = (typeof v === 'object' && v !== null ? v : {}) as Record<string, unknown>;
+  return {
+    minValue: num(o.minValue, DEFAULT_WHITE_BAND.minValue),
+    maxSaturation: num(o.maxSaturation, DEFAULT_WHITE_BAND.maxSaturation),
+  };
+}
+
+/** Validate a stored channel object; null if unusable. */
+function sanitizeChannel(v: unknown): ColourChannel | null {
+  const o = (typeof v === 'object' && v !== null ? v : {}) as Record<string, unknown>;
+  if (typeof o.id !== 'string' || !o.id) return null;
+  const kind: ColourKind = o.kind === 'black' ? 'black' : o.kind === 'white' ? 'white' : 'hue';
+  const role: ColourRole = typeof o.role === 'string' && o.role in ROLE_LABELS ? (o.role as ColourRole) : 'off';
+  const swatch = typeof o.swatch === 'string' ? o.swatch : '#888888';
+  const ch: ColourChannel = { id: o.id, kind, role, swatch };
+  if (kind === 'hue') ch.band = sanitizeColour(o.band, DEFAULT_RED);
+  else if (kind === 'black') ch.blackBand = sanitizeBlackBand(o.blackBand);
+  else ch.whiteBand = sanitizeWhiteBand(o.whiteBand);
+  return ch;
+}
+
+/**
+ * Build the channel list: prefer the new `channels` array; otherwise migrate from
+ * the previous shape (`colourRoles` + `hueBands` + black/white bands) or the
+ * oldest flags (`blackDrums`/`blueBass`/`redColour`/`blueColour`).
+ */
+function sanitizeChannels(o: Record<string, unknown>): ColourChannel[] {
+  if (Array.isArray(o.channels)) {
+    const out = o.channels.map(sanitizeChannel).filter((c): c is ColourChannel => c !== null);
+    return out.length > 0 ? out : [DEFAULT_RED_CHANNEL];
   }
-  // No new-style roles → migrate from the legacy red=melody / black=drums / blue=bass flags.
-  const out: Partial<Record<ColourId, ColourRole>> = { red: 'melody' };
-  if (legacy.blackDrums || legacy.redBlack) out.black = 'drums';
-  if (legacy.blueBass) out.blue = 'bass';
-  return out;
+  // ---- migrate from the pre-channels (fixed-palette) shape ----
+  const roles = (typeof o.colourRoles === 'object' && o.colourRoles !== null
+    ? o.colourRoles : {}) as Record<string, unknown>;
+  const hueBands = (typeof o.hueBands === 'object' && o.hueBands !== null
+    ? o.hueBands : {}) as Record<string, unknown>;
+  const blackBand = sanitizeBlackBand(o.blackBand ?? {
+    maxValue: o.blackMaxValue, maxSaturation: o.blackMaxSaturation,
+  });
+  const whiteBand = sanitizeWhiteBand(o.whiteBand);
+
+  // Resolve a role per legacy colour id (new-style roles, else oldest flags).
+  const roleFor: Record<string, ColourRole> = {};
+  if (Object.keys(roles).length > 0) {
+    for (const [id, r] of Object.entries(roles)) {
+      if (typeof r === 'string' && r in ROLE_LABELS) roleFor[id] = r as ColourRole;
+    }
+  } else {
+    roleFor.red = 'melody';
+    if (o.blackDrums === true || o.rowMode === 'redBlack') roleFor.black = 'drums';
+    if (o.blueBass === true) roleFor.blue = 'bass';
+  }
+
+  const channels: ColourChannel[] = [];
+  let n = 0;
+  for (const [id, role] of Object.entries(roleFor)) {
+    if (role === 'off') continue;
+    const meta = LEGACY_COLOUR_META[id] ?? { kind: 'hue' as ColourKind, hue: 0, swatch: '#888888' };
+    const ch: ColourChannel = { id: `c${++n}`, kind: meta.kind, role, swatch: meta.swatch };
+    if (meta.kind === 'hue') {
+      const legacy = id === 'red' ? o.redColour : id === 'blue' ? o.blueColour : undefined;
+      ch.band = sanitizeColour(hueBands[id] ?? legacy, {
+        id: `board-${id}`, hue: meta.hue ?? 0, hueTolerance: 22, minSaturation: 35, minValue: 25, minArea: 0.0005,
+      });
+    } else if (meta.kind === 'black') ch.blackBand = blackBand;
+    else ch.whiteBand = whiteBand;
+    channels.push(ch);
+  }
+  return channels.length > 0 ? channels : [DEFAULT_RED_CHANNEL];
 }
 
 function sanitizeColour(v: unknown, fallback: TrackedColor): TrackedColor {
@@ -262,20 +309,7 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     velocitySmoothing: num(o.velocitySmoothing, d.velocitySmoothing),
     occupancyGraceMs: num(o.occupancyGraceMs, d.occupancyGraceMs),
     motionConfirmMs: num(o.motionConfirmMs, d.motionConfirmMs),
-    hueBands: sanitizeHueBands(o.hueBands, o.redColour, o.blueColour),
-    blackBand: {
-      maxValue: num((o.blackBand as Record<string, unknown>)?.maxValue ?? o.blackMaxValue, d.blackBand.maxValue),
-      maxSaturation: num((o.blackBand as Record<string, unknown>)?.maxSaturation ?? o.blackMaxSaturation, d.blackBand.maxSaturation),
-    },
-    whiteBand: {
-      minValue: num((o.whiteBand as Record<string, unknown>)?.minValue, d.whiteBand.minValue),
-      maxSaturation: num((o.whiteBand as Record<string, unknown>)?.maxSaturation, d.whiteBand.maxSaturation),
-    },
-    colourRoles: sanitizeColourRoles(o.colourRoles, {
-      blackDrums: o.blackDrums === true,
-      blueBass: o.blueBass === true,
-      redBlack: o.rowMode === 'redBlack',
-    }),
+    channels: sanitizeChannels(o),
     faderAxis: o.faderAxis === 'col' ? 'col' : 'row',
     minFilledFraction: num(o.minFilledFraction, d.minFilledFraction),
     noteLengthBeats: num(o.noteLengthBeats, d.noteLengthBeats),

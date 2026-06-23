@@ -1,16 +1,23 @@
 import { describe, it, expect } from 'vitest';
 import { sampleRegion, type RgbSampler } from '../tracking/BoardReader';
 import type { TrackedColor } from '../tracking/ColorTracker';
-import { buildMatchers, DEFAULT_BLACK_BAND, DEFAULT_WHITE_BAND } from '../tracking/boardColours';
+import {
+  buildChannelMatchers, DEFAULT_BLACK_BAND, DEFAULT_WHITE_BAND, type ColourChannel,
+} from '../tracking/boardColours';
 import { UNIT_SQUARE, computeHomography } from '../utils/homography';
 
 const RED: TrackedColor = {
   id: 'red', hue: 0, hueTolerance: 12, minSaturation: 50, minValue: 30, minArea: 0,
 };
 
-// Matcher list: red (calibrated tight band) + black + white, in priority order.
-const cal = { hueBands: { red: RED }, black: DEFAULT_BLACK_BAND, white: DEFAULT_WHITE_BAND };
-const COLOURS = buildMatchers(['red', 'white', 'black'], cal);
+// Channels: red (calibrated tight band) + white + black; matchers come out in
+// priority order (hue, white, black).
+const CHANNELS: ColourChannel[] = [
+  { id: 'red', kind: 'hue', role: 'melody', swatch: '#f00', band: RED },
+  { id: 'white', kind: 'white', role: 'off', swatch: '#fff', whiteBand: DEFAULT_WHITE_BAND },
+  { id: 'black', kind: 'black', role: 'off', swatch: '#000', blackBand: DEFAULT_BLACK_BAND },
+];
+const COLOURS = buildChannelMatchers(CHANNELS);
 
 describe('BoardReader.sampleRegion', () => {
   const h = computeHomography(UNIT_SQUARE, [

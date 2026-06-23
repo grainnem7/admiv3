@@ -171,7 +171,7 @@ export class BoardReader {
         const { fractions, centroid } = sampleRegion(
           sampler, opts.homography, row, col, opts.rows, opts.cols, opts.colours, samples,
         );
-        const filledFraction = Math.max(0, ...Object.values(fractions));
+        const filledFraction = Math.max(0, ...Object.values(fractions).filter((v): v is number => v !== undefined));
         const cls = opts.recognizer.classify({ filledFraction, fractions });
         readings.push({
           row, col, occupied: cls.occupied, colour: cls.colour, centroid, fractions,

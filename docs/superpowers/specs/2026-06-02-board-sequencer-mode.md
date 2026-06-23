@@ -382,21 +382,25 @@ The fixed red=melody / blue=bass / black=drums wiring is replaced by a general
 **colour-channel** system, so extra draught-piece colours can be new sounds *or*
 controls (e.g. one colour = a live volume fader; another = an effect on/off).
 
-### Palette + generalised detection
-`src/tracking/boardColours.ts` defines the palette (`ColourId`: red, orange,
-yellow, green, blue, purple, white, black) in detection PRIORITY order (vivid
-hues before the achromatic white/black fallbacks). Each colour is matched by an
-HSV test: hue colours via a calibrated `TrackedColor` band; black via low
-value+saturation (`matchesBlack`); white via high value + low saturation (new
-`matchesWhite`). `BoardReader.sampleRegion` now takes a priority-ordered
-`ColourMatcher[]` and returns per-colour `fractions` + the dominant colour
-(first matcher to win a pixel — no double counting). `ColourRecognizer` picks
-the first in-priority colour clearing `minFilledFraction`. `PieceColour`/
-`ActiveCell.colour` widen to `ColourId`. Detection is reliable for ~4–6 vivid,
-well-separated colours; each is calibrated by clicking a piece.
+### Dynamic colour channels (no fixed palette)
+There is NO predetermined colour list. The user calibrates their own colours
+Musikraken-style: **Add colour → click a piece on the camera**, which samples
+its colour into a **channel**. `src/tracking/boardColours.ts` defines
+`ColourChannel { id, kind, role, swatch, band/blackBand/whiteBand }` where
+`ColourId` is now an opaque string. `calibrationFromHsv()` infers the kind from
+the sample — very dark/desaturated → black, very bright/desaturated → white,
+else a hue band centred on the sample — so vivid pieces, black pieces and white
+pieces all work. Each channel stores a **swatch** (the sampled colour) shown in
+the UI so the user sees which piece maps to which role. Channels are matched in
+PRIORITY order (`orderedChannels`: hues, then white, then black) via
+`buildChannelMatchers`; `BoardReader.sampleRegion` takes the priority-ordered
+`ColourMatcher[]` and returns per-id `fractions` + dominant (first matcher to
+win a pixel). HSV tests: `matchesTrackedColor` (hue) / `matchesBlack` /
+`matchesWhite` (new). Detection stays reliable for ~4–6 vivid, well-separated
+colours. `freshChannelId` / `describeChannel` / `hueName` are pure + unit-tested.
 
-### Roles — `colourRoles: Record<ColourId, ColourRole>`
-Every colour is assigned one role:
+### Roles — `channel.role`
+Every channel is assigned one role:
 - **Sequenced** (play in the grid): `melody`, `bass`, `drums`, `chord`. Drum-kit
   mode still coerces all sequenced colours to drums.
 - **Faders** (position = value, NOT sequenced): `volume`, `reverb`, `delay`,
@@ -405,18 +409,27 @@ Every colour is assigned one role:
   the last value. Applied live in `engine.applyControls()` from the live board.
 - **Toggles** (presence = on/off): `reverbToggle`, `delayToggle` — a piece of
   that colour anywhere switches the effect on.
-Control-role cells are excluded from the sequencer. Legacy configs migrate:
-red→melody, plus black→drums / blue→bass when the old `blackDrums`/`blueBass`
-flags were set; old `redColour`/`blueColour` bands fold into `hueBands`.
+Control-role cells are excluded from the sequencer. Config stores
+`channels: ColourChannel[]`; the engine receives a derived id→role map. Legacy
+configs migrate into channels: the old fixed-palette roles (and the even older
+`blackDrums`/`blueBass`/`redColour`/`blueColour` flags) each become a channel
+with a stable id, sampled band, swatch and role.
 
-### UI
-A **colour-roles table** (swatch + role dropdown per colour) replaces the
-black=drums / blue=bass checkboxes; a per-colour **Calibrate** button appears for
-each colour in use; the live readout and overlay tints are per-colour (palette
-swatch). A **Fader reads** axis selector shows when a fader colour is active.
+### UI (Musikraken-style)
+The fixed 8-row palette is gone. The **Colours & detection** section is a list
+of channel rows — each a **sampled swatch chip + role dropdown + recalibrate (⟳)
++ remove (×)** — plus an **+ Add colour** button and an empty state. Adding or
+recalibrating arms the next camera click to sample a piece. Black channels get a
+contextual darkness slider. The live readout and overlay tints use each
+channel's actual swatch. A **Fader reads** axis selector shows when a fader
+channel exists. The whole controls rail is organised into a pinned transport
+header + collapsible sections (Camera & board, Colours & detection, Sound,
+Groove & tempo, Pattern length, Backing song, Per-row mixer).
 
 ### Pure + tested
-`faderValue` (position→value) and the priority/dominant logic in `sampleRegion`
-+ `ColourRecognizer` are unit-tested; config migration (legacy flags → roles,
-`redColour`→`hueBands.red`) is covered. `loopStepsRed/Black/Blue` now read as the
-melody/drums/bass loop categories.
+`faderValue` (position→value), `calibrationFromHsv`, `freshChannelId`,
+`orderedChannels`/`channelPriority`, `describeChannel`/`hueName`, and the
+priority/dominant logic in `sampleRegion` + `ColourRecognizer` are unit-tested;
+config migration (legacy flags/roles → channels, `redColour` hue → channel band)
+is covered. `loopStepsRed/Black/Blue` read as the melody/drums/bass loop
+categories.
