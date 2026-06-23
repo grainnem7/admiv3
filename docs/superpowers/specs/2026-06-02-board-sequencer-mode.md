@@ -373,3 +373,50 @@ All board audio (per-row voices → per-row gain + FX sends → shared reverb/de
 ### Still deferred (seams intact)
 - **Level 3** (black-on-dark robustness, Scrabble-tile / numeric identities via `identity`).
 - Validation of the whole mode with Tim remains the gate before any of this is considered "done" for him.
+
+---
+
+## 17. Iteration 4 (built — colour channels: any colour → a sound OR a live control)
+
+The fixed red=melody / blue=bass / black=drums wiring is replaced by a general
+**colour-channel** system, so extra draught-piece colours can be new sounds *or*
+controls (e.g. one colour = a live volume fader; another = an effect on/off).
+
+### Palette + generalised detection
+`src/tracking/boardColours.ts` defines the palette (`ColourId`: red, orange,
+yellow, green, blue, purple, white, black) in detection PRIORITY order (vivid
+hues before the achromatic white/black fallbacks). Each colour is matched by an
+HSV test: hue colours via a calibrated `TrackedColor` band; black via low
+value+saturation (`matchesBlack`); white via high value + low saturation (new
+`matchesWhite`). `BoardReader.sampleRegion` now takes a priority-ordered
+`ColourMatcher[]` and returns per-colour `fractions` + the dominant colour
+(first matcher to win a pixel — no double counting). `ColourRecognizer` picks
+the first in-priority colour clearing `minFilledFraction`. `PieceColour`/
+`ActiveCell.colour` widen to `ColourId`. Detection is reliable for ~4–6 vivid,
+well-separated colours; each is calibrated by clicking a piece.
+
+### Roles — `colourRoles: Record<ColourId, ColourRole>`
+Every colour is assigned one role:
+- **Sequenced** (play in the grid): `melody`, `bass`, `drums`, `chord`. Drum-kit
+  mode still coerces all sequenced colours to drums.
+- **Faders** (position = value, NOT sequenced): `volume`, `reverb`, `delay`,
+  `tone`. A piece's position along `faderAxis` (vertical low→high by default) maps
+  to 0..1 via pure `faderValue()`; the most extreme piece wins; no pieces → keep
+  the last value. Applied live in `engine.applyControls()` from the live board.
+- **Toggles** (presence = on/off): `reverbToggle`, `delayToggle` — a piece of
+  that colour anywhere switches the effect on.
+Control-role cells are excluded from the sequencer. Legacy configs migrate:
+red→melody, plus black→drums / blue→bass when the old `blackDrums`/`blueBass`
+flags were set; old `redColour`/`blueColour` bands fold into `hueBands`.
+
+### UI
+A **colour-roles table** (swatch + role dropdown per colour) replaces the
+black=drums / blue=bass checkboxes; a per-colour **Calibrate** button appears for
+each colour in use; the live readout and overlay tints are per-colour (palette
+swatch). A **Fader reads** axis selector shows when a fader colour is active.
+
+### Pure + tested
+`faderValue` (position→value) and the priority/dominant logic in `sampleRegion`
++ `ColourRecognizer` are unit-tested; config migration (legacy flags → roles,
+`redColour`→`hueBands.red`) is covered. `loopStepsRed/Black/Blue` now read as the
+melody/drums/bass loop categories.

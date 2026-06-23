@@ -10,8 +10,8 @@
 
 import type { Mat3 } from '../utils/homography';
 import { applyHomography } from '../utils/homography';
-import type { TrackedColor } from './ColorTracker';
-import { rgbToHsv, matchesTrackedColor, matchesBlack } from './ColorTracker';
+import { rgbToHsv } from './ColorTracker';
+import type { ColourId, ColourMatcher } from './boardColours';
 import type { CellReading } from './BoardSequencerMode';
 import type { PieceRecognizer } from './PieceRecognizer';
 
@@ -24,17 +24,11 @@ export interface Rgb {
 /** Returns the RGB at integer image pixel (x, y). */
 export type RgbSampler = (x: number, y: number) => Rgb;
 
-export interface BlackBand {
-  maxValue: number;
-  maxSaturation: number;
-}
-
 export interface RegionSample {
-  redFraction: number;
-  /** Fraction matching the dark/achromatic black test (0 when no black band given). */
-  blackFraction: number;
-  /** Fraction matching the blue band (0 when no blue band given). */
-  blueFraction: number;
+  /** Fraction of sampled pixels matching each colour id (priority-first match). */
+  fractions: Partial<Record<ColourId, number>>;
+  /** The colour id with the most matching pixels (ties → earliest in priority), or null. */
+  dominantId: ColourId | null;
   /** Mean position of the DOMINANT colour's matching pixels (unit-square coords), or null. */
   centroid: { x: number; y: number } | null;
 }
@@ -45,8 +39,11 @@ export interface RegionSample {
 const INSET = 0.8;
 
 /**
- * Sample the central region of cell (row, col) and return the red fraction +
- * unit-square centroid. `samplesPerAxis` dots are taken on each axis.
+ * Sample the central region of cell (row, col) and return, for each supplied
+ * colour matcher, the fraction of sampled pixels it matched, plus the dominant
+ * colour and its centroid. `colours` is in PRIORITY order: each pixel is counted
+ * for the FIRST matcher it satisfies, so vivid hues beat the achromatic
+ * fallbacks. `samplesPerAxis` dots are taken on each axis.
  */
 export function sampleRegion(
   sampler: RgbSampler,
@@ -55,11 +52,8 @@ export function sampleRegion(
   col: number,
   rows: number,
   cols: number,
-  red: TrackedColor,
+  colours: ColourMatcher[],
   samplesPerAxis: number,
-  skipSkinExclusion = false,
-  black?: BlackBand,
-  blue?: TrackedColor,
 ): RegionSample {
   const cellW = 1 / cols;
   const cellH = 1 / rows;
@@ -68,16 +62,10 @@ export function sampleRegion(
   const stepX = (cellW * INSET) / Math.max(samplesPerAxis - 1, 1);
   const stepY = (cellH * INSET) / Math.max(samplesPerAxis - 1, 1);
 
-  let redMatches = 0;
-  let blueMatches = 0;
-  let blackMatches = 0;
+  const counts = new Map<ColourId, number>();
+  const sumX = new Map<ColourId, number>();
+  const sumY = new Map<ColourId, number>();
   let total = 0;
-  let rSumX = 0;
-  let rSumY = 0;
-  let lSumX = 0;
-  let lSumY = 0;
-  let kSumX = 0;
-  let kSumY = 0;
 
   for (let iy = 0; iy < samplesPerAxis; iy++) {
     for (let ix = 0; ix < samplesPerAxis; ix++) {
@@ -87,41 +75,46 @@ export function sampleRegion(
       const { r, g, b } = sampler(Math.round(img.x), Math.round(img.y));
       const hsv = rgbToHsv(r, g, b);
       total++;
-      if (matchesTrackedColor(hsv, red, skipSkinExclusion)) {
-        redMatches++;
-        rSumX += ux;
-        rSumY += uy;
-      } else if (blue && matchesTrackedColor(hsv, blue, true)) {
-        blueMatches++;
-        lSumX += ux;
-        lSumY += uy;
-      } else if (black && matchesBlack(hsv, black.maxValue, black.maxSaturation)) {
-        blackMatches++;
-        kSumX += ux;
-        kSumY += uy;
+      for (const m of colours) {
+        if (m.test(hsv)) {
+          counts.set(m.id, (counts.get(m.id) ?? 0) + 1);
+          sumX.set(m.id, (sumX.get(m.id) ?? 0) + ux);
+          sumY.set(m.id, (sumY.get(m.id) ?? 0) + uy);
+          break; // priority: first matching colour wins this pixel
+        }
       }
     }
   }
 
-  const redFraction = total === 0 ? 0 : redMatches / total;
-  const blueFraction = total === 0 ? 0 : blueMatches / total;
-  const blackFraction = total === 0 ? 0 : blackMatches / total;
-  // Centroid of the dominant colour (used for slide-and-settle velocity).
-  let centroid: { x: number; y: number } | null = null;
-  const maxM = Math.max(redMatches, blueMatches, blackMatches);
-  if (maxM > 0) {
-    if (redMatches === maxM) centroid = { x: rSumX / redMatches, y: rSumY / redMatches };
-    else if (blueMatches === maxM) centroid = { x: lSumX / blueMatches, y: lSumY / blueMatches };
-    else centroid = { x: kSumX / blackMatches, y: kSumY / blackMatches };
+  const fractions: Partial<Record<ColourId, number>> = {};
+  let dominantId: ColourId | null = null;
+  let dominantCount = 0;
+  // Walk in priority order so ties resolve to the earlier (more vivid) colour.
+  for (const m of colours) {
+    const c = counts.get(m.id) ?? 0;
+    fractions[m.id] = total === 0 ? 0 : c / total;
+    if (c > dominantCount) {
+      dominantCount = c;
+      dominantId = m.id;
+    }
   }
-  return { redFraction, blackFraction, blueFraction, centroid };
+
+  let centroid: { x: number; y: number } | null = null;
+  if (dominantId && dominantCount > 0) {
+    centroid = {
+      x: (sumX.get(dominantId) ?? 0) / dominantCount,
+      y: (sumY.get(dominantId) ?? 0) / dominantCount,
+    };
+  }
+  return { fractions, dominantId, centroid };
 }
 
 export interface BoardReaderOptions {
   homography: Mat3;
   rows: number;
   cols: number;
-  red: TrackedColor;
+  /** Colour matchers in PRIORITY order (vivid hues first, black/white last). */
+  colours: ColourMatcher[];
   recognizer: PieceRecognizer;
   samplesPerAxis?: number;
   downscale?: number;
@@ -134,17 +127,6 @@ export interface BoardReaderOptions {
    */
   mirrorX?: boolean;
   mirrorY?: boolean;
-  /**
-   * Skip ColorTracker's skin-tone exclusion when matching red. The board uses a
-   * tight hue band + slide-and-settle to reject the arm, so the skin rule (which
-   * discards shadowed/desaturated red — e.g. a piece on a dark square) is
-   * counter-productive here. Defaults to true for the board.
-   */
-  skipSkinExclusion?: boolean;
-  /** When set, also detect dark "black" pieces (low value + low saturation). */
-  black?: BlackBand;
-  /** When set, also detect blue pieces (calibrated blue hue band). */
-  blue?: TrackedColor;
 }
 
 /**
@@ -183,23 +165,16 @@ export class BoardReader {
       return { r: data[i], g: data[i + 1], b: data[i + 2] };
     };
 
-    const skipSkin = opts.skipSkinExclusion ?? true;
     const readings: CellReading[] = [];
     for (let row = 0; row < opts.rows; row++) {
       for (let col = 0; col < opts.cols; col++) {
-        const { redFraction, blackFraction, blueFraction, centroid } = sampleRegion(
-          sampler, opts.homography, row, col, opts.rows, opts.cols, opts.red, samples, skipSkin,
-          opts.black, opts.blue,
+        const { fractions, centroid } = sampleRegion(
+          sampler, opts.homography, row, col, opts.rows, opts.cols, opts.colours, samples,
         );
-        const cls = opts.recognizer.classify({
-          filledFraction: Math.max(redFraction, blackFraction, blueFraction),
-          redFraction,
-          blackFraction,
-          blueFraction,
-        });
+        const filledFraction = Math.max(0, ...Object.values(fractions));
+        const cls = opts.recognizer.classify({ filledFraction, fractions });
         readings.push({
-          row, col, occupied: cls.occupied, colour: cls.colour, centroid,
-          redFraction, blackFraction, blueFraction,
+          row, col, occupied: cls.occupied, colour: cls.colour, centroid, fractions,
         });
       }
     }

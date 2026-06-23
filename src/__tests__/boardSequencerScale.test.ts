@@ -4,7 +4,7 @@ import {
 } from '../songs/boardSequencerScale';
 import {
   drumForRow, drumForRowChoice, drumsForStep, DEFAULT_DRUM_ROWS,
-  loopLen, roleStep, strictlyAfter, pageIndexAt,
+  loopLen, roleStep, strictlyAfter, pageIndexAt, faderValue,
 } from '../songs/boardSequencerScale';
 import type { CellRef } from '../tracking/BoardSequencerMode';
 
@@ -269,5 +269,31 @@ describe('pageIndexAt (multi-page pattern chaining)', () => {
     expect(pageIndexAt(-1, 8, 2)).toBe(1);
     expect(pageIndexAt(-8, 8, 2)).toBe(1);
     expect(pageIndexAt(-16, 8, 2)).toBe(0);
+  });
+});
+
+describe('faderValue (control-colour position → value)', () => {
+  it('returns null with no cells so the previous value is kept', () => {
+    expect(faderValue([], 'row', 6, 8)).toBeNull();
+  });
+
+  it('axis row: bottom row = 0, top row = 1', () => {
+    const rows = 6;
+    expect(faderValue([{ row: rows - 1, col: 0 }], 'row', rows, 8)).toBe(0);
+    expect(faderValue([{ row: 0, col: 0 }], 'row', rows, 8)).toBe(1);
+    expect(faderValue([{ row: 3, col: 0 }], 'row', rows, 8)).toBeCloseTo((rows - 1 - 3) / (rows - 1));
+  });
+
+  it('axis col: left = 0, right = 1', () => {
+    const cols = 8;
+    expect(faderValue([{ row: 0, col: 0 }], 'col', 6, cols)).toBe(0);
+    expect(faderValue([{ row: 0, col: cols - 1 }], 'col', 6, cols)).toBe(1);
+  });
+
+  it('uses the most extreme (highest) position among several cells', () => {
+    const rows = 6;
+    const cells = [{ row: 5, col: 0 }, { row: 1, col: 0 }, { row: 4, col: 0 }];
+    // highest piece is row 1 → (6-1-1)/(6-1) = 4/5
+    expect(faderValue(cells, 'row', rows, 8)).toBeCloseTo(0.8);
   });
 });

@@ -20,12 +20,14 @@
  * dropped frame nor a single jitter frame changes a settled cell.
  */
 
+import type { ColourId } from './boardColours';
+
 export interface Point {
   x: number;
   y: number;
 }
 
-export type PieceColour = 'red' | 'black' | 'blue';
+export type PieceColour = ColourId;
 
 export interface CellReading {
   row: number;
@@ -33,12 +35,8 @@ export interface CellReading {
   occupied: boolean;
   colour: PieceColour | null;
   centroid: Point | null;
-  /** Fraction of the sampled region matching the red band this frame (0..1). Diagnostic. */
-  redFraction?: number;
-  /** Fraction matching the black test this frame (0..1). Diagnostic. */
-  blackFraction?: number;
-  /** Fraction matching the blue band this frame (0..1). Diagnostic. */
-  blueFraction?: number;
+  /** Fraction of the sampled region matching each colour this frame (0..1). Diagnostic. */
+  fractions?: Partial<Record<ColourId, number>>;
 }
 
 export interface CellRef {

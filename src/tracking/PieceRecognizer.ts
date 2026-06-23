@@ -10,22 +10,20 @@
  * changes the recognition level without touching the slide-and-settle core.
  */
 
+import type { ColourId } from './boardColours';
+
 export type RecognitionLevel = 'occupancy' | 'colour' | 'identity';
 
 export interface CellSample {
-  /** Fraction of sampled pixels that are "occupied" (here: same as redFraction for red-only). */
+  /** Fraction of sampled pixels that are "occupied" (the max over all colours). */
   filledFraction: number;
-  /** Fraction of sampled pixels matching the calibrated red band. */
-  redFraction: number;
-  /** Fraction of sampled pixels matching the dark/achromatic "black" test. */
-  blackFraction?: number;
-  /** Fraction of sampled pixels matching the calibrated blue band. */
-  blueFraction?: number;
+  /** Fraction of sampled pixels matching each colour id. */
+  fractions: Partial<Record<ColourId, number>>;
 }
 
 export interface CellClassification {
   occupied: boolean;
-  colour: 'red' | 'black' | 'blue' | null;
+  colour: ColourId | null;
   /** LEVEL 3 (future): Scrabble-letter identity. Never set today. */
   identity?: string;
 }
@@ -44,46 +42,23 @@ export class OccupancyRecognizer implements PieceRecognizer {
   }
 }
 
-/** Level 2: red colour. */
-export class RedColourRecognizer implements PieceRecognizer {
-  readonly level: RecognitionLevel = 'colour';
-  constructor(private readonly minFilledFraction: number) {}
-  classify(sample: CellSample): CellClassification {
-    const occupied = sample.filledFraction >= this.minFilledFraction;
-    const colour: CellClassification['colour'] =
-      occupied && sample.redFraction >= this.minFilledFraction ? 'red' : null;
-    // LEVEL 2 (future, black): add a low-value/low-saturation test on a
-    // separate blackFraction → colour: 'black'. Out of scope now.
-    // LEVEL 3 (future, identity): OCR the cell crop → classification.identity.
-    return { occupied, colour };
-  }
-}
-
 /**
- * Level 2 (multi-colour): classify a cell as whichever of red / blue / black
- * dominates the sample, provided it clears the threshold. Ties resolve red →
- * blue → black. Colours that aren't being detected arrive as 0 and are ignored.
- * Drives the colour→role mapping (red = melody, blue = bass, black = drums).
+ * Level 2 (multi-colour): classify a cell as the first colour in `priority`
+ * whose fraction clears the threshold. Priority order means vivid hues win over
+ * the achromatic fallbacks (a blue piece on a dark square reads blue, not
+ * black). Colours not in use simply don't appear in `priority`/`fractions`.
  */
 export class ColourRecognizer implements PieceRecognizer {
   readonly level: RecognitionLevel = 'colour';
-  constructor(private readonly minFilledFraction: number) {}
+  constructor(
+    private readonly minFilledFraction: number,
+    private readonly priority: ColourId[],
+  ) {}
   classify(sample: CellSample): CellClassification {
     const min = this.minFilledFraction;
-    // Vivid hues (red, blue) take PRECEDENCE over "black": on a board with dark
-    // squares the darkness test fires on the background, so a blue/red piece
-    // must win even when more of the cell is dark. Black is the fallback.
-    if (sample.redFraction >= min) return { occupied: true, colour: 'red' };
-    if ((sample.blueFraction ?? 0) >= min) return { occupied: true, colour: 'blue' };
-    if ((sample.blackFraction ?? 0) >= min) return { occupied: true, colour: 'black' };
+    for (const id of this.priority) {
+      if ((sample.fractions[id] ?? 0) >= min) return { occupied: true, colour: id };
+    }
     return { occupied: false, colour: null };
   }
 }
-
-/**
- * Colour → default instrument palette key. The board's per-row mapping usually
- * overrides this, but it documents the seam: a colour can select a sound.
- */
-export const COLOUR_INSTRUMENT: Partial<Record<'red' | 'black', string>> = {
-  red: 'electricPiano',
-};

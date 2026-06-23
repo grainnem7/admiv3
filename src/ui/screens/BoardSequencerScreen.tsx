@@ -25,8 +25,13 @@ import { useAppStore } from '../../state/store';
 import { CameraManager } from '../../tracking/CameraManager';
 import { BoardReader } from '../../tracking/BoardReader';
 import { BoardSequencerMode, type CellRef, type PieceColour, type ActiveCell } from '../../tracking/BoardSequencerMode';
-import { RedColourRecognizer, ColourRecognizer } from '../../tracking/PieceRecognizer';
+import { ColourRecognizer } from '../../tracking/PieceRecognizer';
 import { rgbToHsv } from '../../tracking/ColorTracker';
+import {
+  BOARD_COLOURS, BOARD_COLOUR_BY_ID, buildMatchers,
+  ROLE_LABELS, isControlRole, isFaderRole,
+  type ColourId, type ColourRole, type ColourCalibration,
+} from '../../tracking/boardColours';
 import { BoardSequencerEngine } from '../../songs/BoardSequencerEngine';
 import { SongPresetEngine } from '../../songs/SongPresetEngine';
 import { SONG_LIBRARY, type SongConfig } from '../../songs/songLibrary';
@@ -80,12 +85,35 @@ const POLY_ROLES: {
   { role: 'blue', field: 'loopStepsBlue', label: 'Bass' },
 ];
 
+// Role options for the colour→role picker, grouped for the dropdown.
+const ROLE_OPTIONS: { value: ColourRole; label: string }[] =
+  (Object.keys(ROLE_LABELS) as ColourRole[]).map((r) => ({ value: r, label: ROLE_LABELS[r] }));
+
+/** The colours currently assigned a role (≠ off), in detection priority order. */
+function inUseColours(cfg: BoardSequencerStored): ColourId[] {
+  return BOARD_COLOURS
+    .map((c) => c.id)
+    .filter((id) => (cfg.colourRoles[id] ?? 'off') !== 'off');
+}
+
+/** Assemble the calibration bundle the matcher builder needs from config. */
+function colourCalibration(cfg: BoardSequencerStored): ColourCalibration {
+  return { hueBands: cfg.hueBands, black: cfg.blackBand, white: cfg.whiteBand };
+}
+
+/** Overlay tint for a detected colour: its palette swatch at a strong/weak alpha. */
+function colourTint(colour: ColourId, strong: boolean): string {
+  const hex = BOARD_COLOUR_BY_ID[colour]?.swatch ?? '#ffffff';
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r},${g},${b},${strong ? 0.6 : 0.32})`;
+}
+
 interface DetStats {
-  red: number;
-  black: number;
-  blue: number;
+  /** Live count of settled pieces per colour. */
+  byColour: Partial<Record<ColourId, number>>;
   settled: number;
-  maxRed: number;
 }
 
 export default function BoardSequencerScreen() {
@@ -113,8 +141,10 @@ export default function BoardSequencerScreen() {
   // saved (loaded from storage or calibrated this session).
   const [calibrated, setCalibrated] = useState<boolean>(storedRef.current !== null);
   const [calibrating, setCalibrating] = useState(false);
-  const [calibratingRed, setCalibratingRed] = useState(false);
-  const [calibratingBlack, setCalibratingBlack] = useState(false);
+  // Which colour's band we're calibrating from the next click (null = none).
+  const [calibratingColour, setCalibratingColour] = useState<ColourId | null>(null);
+  const calibratingColourRef = useRef<ColourId | null>(null);
+  calibratingColourRef.current = calibratingColour;
   const [active, setActive] = useState<CellRef[]>([]);
   const [playheadCol, setPlayheadCol] = useState(0);
   // Pattern chaining: which page the live camera edits, and which is playing now.
@@ -133,8 +163,7 @@ export default function BoardSequencerScreen() {
   const [songStatus, setSongStatus] = useState<'idle' | 'loading' | 'loaded' | 'error'>('idle');
   const songStatusRef = useRef<'idle' | 'loading' | 'loaded' | 'error'>('idle');
   songStatusRef.current = songStatus;
-  const [stats, setStats] = useState<DetStats>({ red: 0, black: 0, blue: 0, settled: 0, maxRed: 0 });
-  const [calibratingBlue, setCalibratingBlue] = useState(false);
+  const [stats, setStats] = useState<DetStats>({ byColour: {}, settled: 0 });
   const [showMixer, setShowMixer] = useState(false);
 
   type RowMixField = 'rowVolume' | 'rowTone' | 'rowReverbSend' | 'rowDelaySend';
@@ -279,10 +308,7 @@ export default function BoardSequencerScreen() {
           const occColour = occupied.get(key);
           const colour = activeColour ?? occColour;
           const strong = activeColour !== undefined;
-          if (colour === 'blue') ctx.fillStyle = strong ? 'rgba(70,120,255,0.55)' : 'rgba(70,120,255,0.3)';
-          else if (colour === 'black') ctx.fillStyle = strong ? 'rgba(170,170,185,0.55)' : 'rgba(170,170,185,0.3)';
-          else if (colour === 'red') ctx.fillStyle = strong ? 'rgba(255,40,40,0.5)' : 'rgba(255,170,40,0.32)';
-          else ctx.fillStyle = 'rgba(0,0,0,0)';
+          ctx.fillStyle = colour ? colourTint(colour, strong) : 'rgba(0,0,0,0)';
           ctx.fill();
           ctx.lineWidth = c === playCol && runningRef.current ? 3 : 1;
           ctx.strokeStyle = c === playCol && runningRef.current ? 'rgba(80,200,255,0.95)' : 'rgba(80,200,255,0.4)';
@@ -336,32 +362,23 @@ export default function BoardSequencerScreen() {
         }
         const h = homographyRef.current;
         if (h) {
-          const multi = cfg.blackDrums || cfg.blueBass;
-          const recognizer = multi
-            ? new ColourRecognizer(cfg.minFilledFraction)
-            : new RedColourRecognizer(cfg.minFilledFraction);
+          // Build matchers + recognizer from the colours currently in use (any
+          // colour with a role ≠ off), in detection priority order.
+          const inUse = inUseColours(cfg);
+          const priority = inUse.length > 0 ? inUse : (['red'] as ColourId[]);
+          const matchers = buildMatchers(priority, colourCalibration(cfg));
+          const recognizer = new ColourRecognizer(cfg.minFilledFraction, priority);
           const readings = reader.read(video, {
-            homography: h, rows: cfg.rows, cols: cfg.cols, red: cfg.redColour, recognizer,
+            homography: h, rows: cfg.rows, cols: cfg.cols, colours: matchers, recognizer,
             mirrorX: cfg.mirrorX, mirrorY: cfg.mirrorY,
-            black: cfg.blackDrums
-              ? { maxValue: cfg.blackMaxValue, maxSaturation: cfg.blackMaxSaturation }
-              : undefined,
-            blue: cfg.blueBass ? cfg.blueColour : undefined,
           });
           const occupied = new Map<string, PieceColour>();
-          let maxRed = 0;
-          let redCount = 0;
-          let blackCount = 0;
-          let blueCount = 0;
+          const byColour: Partial<Record<ColourId, number>> = {};
           for (const rd of readings) {
             if (rd.occupied && rd.colour) {
               occupied.set(`${rd.row},${rd.col}`, rd.colour);
-              if (rd.colour === 'red') redCount++;
-              else if (rd.colour === 'black') blackCount++;
-              else blueCount++;
+              byColour[rd.colour] = (byColour[rd.colour] ?? 0) + 1;
             }
-            const rf = rd.redFraction ?? 0;
-            if (rf > maxRed) maxRed = rf;
           }
           let activeArr: CellRef[] = [];
           const activeMap = new Map<string, PieceColour>();
@@ -383,7 +400,7 @@ export default function BoardSequencerScreen() {
             if (cfg.numPages > 1 && engineRef.current) {
               setPlayingPage(engineRef.current.getCurrentPage());
             }
-            setStats({ red: redCount, black: blackCount, blue: blueCount, settled: activeMap.size, maxRed });
+            setStats({ byColour, settled: activeMap.size });
           }
         }
       }
@@ -475,7 +492,7 @@ export default function BoardSequencerScreen() {
       humanize: cfg.humanize,
       noteLengthBeats: cfg.noteLengthBeats, velocity: cfg.velocity,
       tickEnabled: cfg.tickEnabled, instrumentKey: cfg.instrumentKey,
-      rowMode: cfg.rowMode, blackDrums: cfg.blackDrums, blueBass: cfg.blueBass,
+      rowMode: cfg.rowMode, colourRoles: cfg.colourRoles, faderAxis: cfg.faderAxis,
       rowInstruments: cfg.rowInstruments, rowDrums: cfg.rowDrums,
       loopStepsRed: cfg.loopStepsRed, loopStepsBlack: cfg.loopStepsBlack,
       loopStepsBlue: cfg.loopStepsBlue, numPages: cfg.numPages,
@@ -568,54 +585,54 @@ export default function BoardSequencerScreen() {
     return rgbToHsv(sr / n, sg / n, sb / n);
   }, []);
 
-  // Set the red band from a clicked piece (matches actual pieces + lighting,
-  // including on a dark square).
-  const sampleRedAt = useCallback((nx: number, ny: number) => {
+  // Calibrate the colour currently armed (calibratingColour) from a click: hue
+  // colours set their band's hue + thresholds; black/white set their achromatic
+  // band a little outside the sampled value/saturation so similar pieces register.
+  const sampleColourAt = useCallback((nx: number, ny: number) => {
+    const colour = calibratingColourRef.current;
+    if (!colour) return;
     const hsv = sampleAvgHsvAt(nx, ny);
     if (!hsv) return;
-    update({
-      redColour: {
-        id: 'board-red',
-        hue: hsv.h,
-        hueTolerance: 16,
-        minSaturation: Math.max(28, hsv.s * 0.55),
-        minValue: Math.max(18, hsv.v * 0.45),
-        minArea: 0.0005,
-      },
-    });
-    setCalibratingRed(false);
-  }, [sampleAvgHsvAt, update]);
-
-  // Set the black band from a clicked black piece: thresholds a little above the
-  // sampled (dark) value/saturation so that piece and similar ones register.
-  const sampleBlackAt = useCallback((nx: number, ny: number) => {
-    const hsv = sampleAvgHsvAt(nx, ny);
-    if (!hsv) return;
-    update({
-      blackMaxValue: Math.min(60, Math.max(18, hsv.v * 1.6 + 6)),
-      blackMaxSaturation: Math.min(70, Math.max(30, hsv.s + 18)),
-    });
-    setCalibratingBlack(false);
-  }, [sampleAvgHsvAt, update]);
-
-  // Set the blue band from a clicked blue piece.
-  const sampleBlueAt = useCallback((nx: number, ny: number) => {
-    const hsv = sampleAvgHsvAt(nx, ny);
-    if (!hsv) return;
-    update({
-      blueColour: {
-        id: 'board-blue',
-        hue: hsv.h,
-        hueTolerance: 26,
-        minSaturation: Math.max(25, hsv.s * 0.5),
-        minValue: Math.max(18, hsv.v * 0.45),
-        minArea: 0.0005,
-      },
-    });
-    setCalibratingBlue(false);
+    const def = BOARD_COLOUR_BY_ID[colour];
+    if (def.kind === 'hue') {
+      update({
+        hueBands: {
+          ...configRef.current.hueBands,
+          [colour]: {
+            id: `board-${colour}`,
+            hue: hsv.h,
+            hueTolerance: 22,
+            minSaturation: Math.max(25, hsv.s * 0.5),
+            minValue: Math.max(18, hsv.v * 0.45),
+            minArea: 0.0005,
+          },
+        },
+      });
+    } else if (def.kind === 'black') {
+      update({
+        blackBand: {
+          maxValue: Math.min(60, Math.max(18, hsv.v * 1.6 + 6)),
+          maxSaturation: Math.min(70, Math.max(30, hsv.s + 18)),
+        },
+      });
+    } else {
+      update({
+        whiteBand: {
+          minValue: Math.min(95, Math.max(55, hsv.v * 0.85)),
+          maxSaturation: Math.min(40, Math.max(10, hsv.s + 12)),
+        },
+      });
+    }
+    setCalibratingColour(null);
   }, [sampleAvgHsvAt, update]);
 
   const transform = `scaleX(${config.mirrorX ? -1 : 1}) scaleY(${config.mirrorY ? -1 : 1})`;
+  // Colours currently in use (role ≠ off) + whether any colour drums (drives the
+  // per-row drum picker), computed once per render for the controls rail.
+  const inUseList = inUseColours(config);
+  const anyDrums = config.rowMode === 'drumKit'
+    || inUseList.some((id) => config.colourRoles[id] === 'drums');
+  const colourLabel = (id: ColourId) => BOARD_COLOUR_BY_ID[id].name;
 
   return (
     <div
@@ -633,19 +650,16 @@ export default function BoardSequencerScreen() {
           <button type="button" onClick={() => setCalibrating(true)}>
             {calibrated ? 'Recalibrate corners' : 'Calibrate corners'}
           </button>
-          <button type="button" onClick={() => { setCalibratingRed((v) => !v); setCalibratingBlack(false); }}>
-            {calibratingRed ? 'Cancel red calibration' : 'Calibrate red (click a piece)'}
-          </button>
-          {config.blackDrums && (
-            <button type="button" onClick={() => { setCalibratingBlack((v) => !v); setCalibratingRed(false); setCalibratingBlue(false); }}>
-              {calibratingBlack ? 'Cancel black calibration' : 'Calibrate black (click a piece)'}
+          {inUseList.map((id) => (
+            <button
+              key={id} type="button"
+              onClick={() => setCalibratingColour((c) => (c === id ? null : id))}
+            >
+              {calibratingColour === id
+                ? `Cancel ${colourLabel(id)} calibration`
+                : `Calibrate ${colourLabel(id)} (click a piece)`}
             </button>
-          )}
-          {config.blueBass && (
-            <button type="button" onClick={() => { setCalibratingBlue((v) => !v); setCalibratingRed(false); setCalibratingBlack(false); }}>
-              {calibratingBlue ? 'Cancel blue calibration' : 'Calibrate blue (click a piece)'}
-            </button>
-          )}
+          ))}
           <button type="button" disabled={!calibrated || running} onClick={() => void start()}>
             Start
           </button>
@@ -655,25 +669,25 @@ export default function BoardSequencerScreen() {
           </button>
 
           <p style={{ fontSize: 12, opacity: 0.85, margin: '4px 0' }}>
-            Red: <strong>{stats.red}</strong>
-            {config.blackDrums && <> · Black: <strong>{stats.black}</strong></>}
-            {config.blueBass && <> · Blue: <strong>{stats.blue}</strong></>}
-            {' '}· Settled: <strong>{stats.settled}</strong> · max red {Math.round(stats.maxRed * 100)}%
+            {inUseList.map((id) => (
+              <span key={id}>{colourLabel(id)}: <strong>{stats.byColour[id] ?? 0}</strong>{' · '}</span>
+            ))}
+            Settled: <strong>{stats.settled}</strong>
           </p>
 
           <label>
-            Min red fill {Math.round(config.minFilledFraction * 100)}%
+            Min fill {Math.round(config.minFilledFraction * 100)}%
             <input
               type="range" min={5} max={50} value={Math.round(config.minFilledFraction * 100)}
               onChange={(e) => update({ minFilledFraction: Number(e.target.value) / 100 })}
             />
           </label>
-          {config.blackDrums && (
+          {inUseList.includes('black') && (
             <label>
-              Black darkness ≤ {config.blackMaxValue}%
+              Black darkness ≤ {config.blackBand.maxValue}%
               <input
-                type="range" min={10} max={70} value={Math.round(config.blackMaxValue)}
-                onChange={(e) => update({ blackMaxValue: Number(e.target.value) })}
+                type="range" min={10} max={70} value={Math.round(config.blackBand.maxValue)}
+                onChange={(e) => update({ blackBand: { ...config.blackBand, maxValue: Number(e.target.value) } })}
               />
             </label>
           )}
@@ -826,22 +840,42 @@ export default function BoardSequencerScreen() {
               <option value="drumKit">Drum kit</option>
             </select>
           </label>
-          {config.rowMode !== 'drumKit' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <span style={{ fontSize: 12, opacity: 0.8 }}>
+              Colour roles — give each piece colour a job (sequenced sound or live control). Calibrate each colour you switch on.
+            </span>
+            {BOARD_COLOURS.map((def) => (
+              <label key={def.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+                <span style={{
+                  width: 12, height: 12, borderRadius: '50%', flexShrink: 0,
+                  background: def.swatch, border: '1px solid #0006',
+                }}
+                />
+                <span style={{ width: 52 }}>{def.name}</span>
+                <select
+                  value={config.colourRoles[def.id] ?? 'off'} disabled={running}
+                  onChange={(e) => update({
+                    colourRoles: { ...config.colourRoles, [def.id]: e.target.value as ColourRole },
+                  })}
+                >
+                  {ROLE_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </label>
+            ))}
+          </div>
+          {inUseList.some((id) => isControlRole(config.colourRoles[id] ?? 'off')
+            && isFaderRole(config.colourRoles[id] ?? 'off')) && (
             <label>
-              <input
-                type="checkbox" checked={config.blackDrums} disabled={running}
-                onChange={(e) => update({ blackDrums: e.target.checked })}
-              />
-              Black pieces = drums
-            </label>
-          )}
-          {config.rowMode !== 'drumKit' && (
-            <label>
-              <input
-                type="checkbox" checked={config.blueBass} disabled={running}
-                onChange={(e) => update({ blueBass: e.target.checked })}
-              />
-              Blue pieces = bass
+              Fader reads
+              <select
+                value={config.faderAxis} disabled={running}
+                onChange={(e) => update({ faderAxis: e.target.value === 'col' ? 'col' : 'row' })}
+              >
+                <option value="row">Vertical (low → high)</option>
+                <option value="col">Horizontal (left → right)</option>
+              </select>
             </label>
           )}
           {config.rowMode !== 'drumKit' && (
@@ -859,7 +893,7 @@ export default function BoardSequencerScreen() {
               </label>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <span style={{ fontSize: 12, opacity: 0.8 }}>
-                  Per-row sound{config.blackDrums ? ' (red pieces; black = drums)' : ''} — “Default” uses the instrument above
+                  Per-row sound (melody/chord colours) — “Default” uses the instrument above
                 </span>
                 {Array.from({ length: config.rows }, (_, r) => (
                   <label key={r} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
@@ -880,10 +914,10 @@ export default function BoardSequencerScreen() {
               </div>
             </>
           )}
-          {(config.rowMode === 'drumKit' || config.blackDrums) && (
+          {anyDrums && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               <span style={{ fontSize: 12, opacity: 0.8 }}>
-                Per-row drum{config.rowMode !== 'drumKit' ? ' (black pieces)' : ''} — “Default” = kick/snare/hat/crash bottom→top
+                Per-row drum (drum colours) — “Default” = kick/snare/hat/crash bottom→top
               </span>
               {Array.from({ length: config.rows }, (_, r) => (
                 <label key={r} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
@@ -1035,51 +1069,19 @@ export default function BoardSequencerScreen() {
               style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
             />
             {calibrating && <BoardCalibrationOverlay onComplete={handleCalibrated} />}
-            {calibratingRed && (
+            {calibratingColour && (
               <div
                 onClick={(e) => {
                   const r = e.currentTarget.getBoundingClientRect();
-                  sampleRedAt((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
+                  sampleColourAt((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
                 }}
                 style={{ position: 'absolute', inset: 0, cursor: 'crosshair' }}
                 role="button"
                 tabIndex={0}
-                aria-label="Click a red piece to calibrate its colour"
+                aria-label={`Click a ${colourLabel(calibratingColour)} piece to calibrate it`}
               >
                 <div style={{ position: 'absolute', top: 8, left: 8, color: '#fff', background: '#000a', padding: '4px 8px' }}>
-                  Click a red piece (ideally on a dark square)
-                </div>
-              </div>
-            )}
-            {calibratingBlack && (
-              <div
-                onClick={(e) => {
-                  const r = e.currentTarget.getBoundingClientRect();
-                  sampleBlackAt((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
-                }}
-                style={{ position: 'absolute', inset: 0, cursor: 'crosshair' }}
-                role="button"
-                tabIndex={0}
-                aria-label="Click a black piece to calibrate its darkness"
-              >
-                <div style={{ position: 'absolute', top: 8, left: 8, color: '#fff', background: '#000a', padding: '4px 8px' }}>
-                  Click a black piece
-                </div>
-              </div>
-            )}
-            {calibratingBlue && (
-              <div
-                onClick={(e) => {
-                  const r = e.currentTarget.getBoundingClientRect();
-                  sampleBlueAt((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
-                }}
-                style={{ position: 'absolute', inset: 0, cursor: 'crosshair' }}
-                role="button"
-                tabIndex={0}
-                aria-label="Click a blue piece to calibrate its colour"
-              >
-                <div style={{ position: 'absolute', top: 8, left: 8, color: '#fff', background: '#000a', padding: '4px 8px' }}>
-                  Click a blue piece
+                  Click a {colourLabel(calibratingColour)} piece{calibratingColour === 'red' ? ' (ideally on a dark square)' : ''}
                 </div>
               </div>
             )}

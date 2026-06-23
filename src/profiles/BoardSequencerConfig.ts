@@ -8,6 +8,12 @@
  */
 
 import type { TrackedColor } from '../tracking/ColorTracker';
+import type { ColourId, ColourRole } from '../tracking/boardColours';
+import {
+  BOARD_COLOURS, BOARD_COLOUR_BY_ID, defaultHueBand,
+  DEFAULT_BLACK_BAND, DEFAULT_WHITE_BAND, ROLE_LABELS,
+  type BlackBand, type WhiteBand,
+} from '../tracking/boardColours';
 
 const STORAGE_KEY = 'admi-board-sequencer';
 
@@ -20,7 +26,7 @@ export interface BoardPoint {
 export interface StoredBoardCell {
   row: number;
   col: number;
-  colour: 'red' | 'black' | 'blue';
+  colour: ColourId;
 }
 
 export interface BoardSequencerStored {
@@ -43,7 +49,16 @@ export interface BoardSequencerStored {
   velocitySmoothing: number;
   occupancyGraceMs: number;
   motionConfirmMs: number;
-  redColour: TrackedColor;
+  /** Calibrated hue bands per hue colour (red…purple). Missing → palette default. */
+  hueBands: Partial<Record<ColourId, TrackedColor>>;
+  /** Achromatic dark-piece ("black") detection band. */
+  blackBand: BlackBand;
+  /** Achromatic bright-piece ("white") detection band. */
+  whiteBand: WhiteBand;
+  /** What each colour does (sequenced voice or live control). Missing → 'off'. */
+  colourRoles: Partial<Record<ColourId, ColourRole>>;
+  /** Axis a control-colour piece's position maps to its value ('row' = vertical). */
+  faderAxis: 'row' | 'col';
   minFilledFraction: number;
   noteLengthBeats: number;
   velocity: number;
@@ -60,8 +75,6 @@ export interface BoardSequencerStored {
   rowDelaySend: number[];
   /** Melodic behaviour: single instrument ('pitched'), per-row instruments, or pure drum kit. */
   rowMode: 'pitched' | 'drumKit' | 'instruments';
-  /** Layer black pieces as drums on top of a melodic mode (ignored in drumKit). */
-  blackDrums: boolean;
   /** Per-row palette keys for 'instruments' mode (indexed by row, 0 = top). */
   rowInstruments: string[];
   /** Per-row drum override (indexed by row, 0 = top); '' = default kit mapping. */
@@ -82,13 +95,6 @@ export interface BoardSequencerStored {
   numPages: number;
   /** Captured page snapshots (indexed by page); each is a list of settled cells. */
   pages: StoredBoardCell[][];
-  /** Black-piece detection: a pixel is "black" if value ≤ blackMaxValue and saturation ≤ blackMaxSaturation. */
-  blackMaxValue: number;
-  blackMaxSaturation: number;
-  /** Layer blue pieces as a bass voice on top of a melodic mode (ignored in drumKit). */
-  blueBass: boolean;
-  /** Calibrated blue band used to detect blue pieces. */
-  blueColour: TrackedColor;
   /** Display + sampling orientation. Calibration is captured in this same space. */
   mirrorX: boolean;
   mirrorY: boolean;
@@ -98,23 +104,7 @@ const ZERO_CORNERS: [BoardPoint, BoardPoint, BoardPoint, BoardPoint] = [
   { x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 },
 ];
 
-const DEFAULT_RED: TrackedColor = {
-  id: 'board-red',
-  hue: 0,
-  hueTolerance: 16,
-  minSaturation: 35,
-  minValue: 25,
-  minArea: 0.0005,
-};
-
-const DEFAULT_BLUE: TrackedColor = {
-  id: 'board-blue',
-  hue: 215,
-  hueTolerance: 26,
-  minSaturation: 35,
-  minValue: 25,
-  minArea: 0.0005,
-};
+const DEFAULT_RED: TrackedColor = defaultHueBand(BOARD_COLOUR_BY_ID.red);
 
 export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   enabled: false,
@@ -132,7 +122,12 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   velocitySmoothing: 0.5,
   occupancyGraceMs: 150,
   motionConfirmMs: 80,
-  redColour: DEFAULT_RED,
+  hueBands: { red: DEFAULT_RED },
+  blackBand: DEFAULT_BLACK_BAND,
+  whiteBand: DEFAULT_WHITE_BAND,
+  // Fresh boards play red as melody; everything else is off until assigned.
+  colourRoles: { red: 'melody' },
+  faderAxis: 'row',
   minFilledFraction: 0.15,
   noteLengthBeats: 0.9,
   velocity: 0.7,
@@ -145,7 +140,6 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   tickEnabled: true,
   instrumentKey: 'electricPiano',
   rowMode: 'pitched',
-  blackDrums: false,
   // Empty = "use the default instrument" for that row; override per row in the UI.
   rowInstruments: ['', '', '', '', '', '', '', ''],
   // Empty = "use the default kit mapping" for that row; override per row in the UI.
@@ -155,10 +149,6 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   loopStepsBlue: 0,
   numPages: 1,
   pages: [],
-  blackMaxValue: 34,
-  blackMaxSaturation: 45,
-  blueBass: false,
-  blueColour: DEFAULT_BLUE,
   mirrorX: true,
   mirrorY: false,
 };
@@ -184,19 +174,57 @@ function sanitizeCorners(v: unknown): [BoardPoint, BoardPoint, BoardPoint, Board
   return [pts[0], pts[1], pts[2], pts[3]];
 }
 
+function isColourId(v: unknown): v is ColourId {
+  return typeof v === 'string' && v in BOARD_COLOUR_BY_ID;
+}
+
 function sanitizePages(v: unknown): StoredBoardCell[][] {
   if (!Array.isArray(v)) return [];
   return v.map((page) => {
     if (!Array.isArray(page)) return [];
     return page.flatMap((c) => {
       const o = (typeof c === 'object' && c !== null ? c : {}) as Record<string, unknown>;
-      if (!isNum(o.row) || !isNum(o.col)) return [];
-      const colour = o.colour === 'red' || o.colour === 'black' || o.colour === 'blue'
-        ? o.colour : null;
-      if (!colour) return [];
-      return [{ row: o.row, col: o.col, colour }];
+      if (!isNum(o.row) || !isNum(o.col) || !isColourId(o.colour)) return [];
+      return [{ row: o.row, col: o.col, colour: o.colour }];
     });
   });
+}
+
+function sanitizeHueBands(
+  v: unknown,
+  legacyRed: unknown,
+  legacyBlue: unknown,
+): Partial<Record<ColourId, TrackedColor>> {
+  const out: Partial<Record<ColourId, TrackedColor>> = {};
+  const src = (typeof v === 'object' && v !== null ? v : {}) as Record<string, unknown>;
+  for (const def of BOARD_COLOURS) {
+    if (def.kind !== 'hue') continue;
+    if (src[def.id]) out[def.id] = sanitizeColour(src[def.id], defaultHueBand(def));
+  }
+  // Migrate legacy single redColour / blueColour into the band map.
+  if (!out.red) out.red = sanitizeColour(legacyRed, defaultHueBand(BOARD_COLOUR_BY_ID.red));
+  if (!out.blue && legacyBlue) out.blue = sanitizeColour(legacyBlue, defaultHueBand(BOARD_COLOUR_BY_ID.blue));
+  return out;
+}
+
+function sanitizeColourRoles(
+  v: unknown,
+  legacy: { blackDrums: boolean; blueBass: boolean; redBlack: boolean },
+): Partial<Record<ColourId, ColourRole>> {
+  const src = (typeof v === 'object' && v !== null ? v : {}) as Record<string, unknown>;
+  if (Object.keys(src).length > 0) {
+    const out: Partial<Record<ColourId, ColourRole>> = {};
+    for (const def of BOARD_COLOURS) {
+      const r = src[def.id];
+      if (typeof r === 'string' && r in ROLE_LABELS) out[def.id] = r as ColourRole;
+    }
+    return out;
+  }
+  // No new-style roles → migrate from the legacy red=melody / black=drums / blue=bass flags.
+  const out: Partial<Record<ColourId, ColourRole>> = { red: 'melody' };
+  if (legacy.blackDrums || legacy.redBlack) out.black = 'drums';
+  if (legacy.blueBass) out.blue = 'bass';
+  return out;
 }
 
 function sanitizeColour(v: unknown, fallback: TrackedColor): TrackedColor {
@@ -234,7 +262,21 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     velocitySmoothing: num(o.velocitySmoothing, d.velocitySmoothing),
     occupancyGraceMs: num(o.occupancyGraceMs, d.occupancyGraceMs),
     motionConfirmMs: num(o.motionConfirmMs, d.motionConfirmMs),
-    redColour: sanitizeColour(o.redColour, DEFAULT_RED),
+    hueBands: sanitizeHueBands(o.hueBands, o.redColour, o.blueColour),
+    blackBand: {
+      maxValue: num((o.blackBand as Record<string, unknown>)?.maxValue ?? o.blackMaxValue, d.blackBand.maxValue),
+      maxSaturation: num((o.blackBand as Record<string, unknown>)?.maxSaturation ?? o.blackMaxSaturation, d.blackBand.maxSaturation),
+    },
+    whiteBand: {
+      minValue: num((o.whiteBand as Record<string, unknown>)?.minValue, d.whiteBand.minValue),
+      maxSaturation: num((o.whiteBand as Record<string, unknown>)?.maxSaturation, d.whiteBand.maxSaturation),
+    },
+    colourRoles: sanitizeColourRoles(o.colourRoles, {
+      blackDrums: o.blackDrums === true,
+      blueBass: o.blueBass === true,
+      redBlack: o.rowMode === 'redBlack',
+    }),
+    faderAxis: o.faderAxis === 'col' ? 'col' : 'row',
     minFilledFraction: num(o.minFilledFraction, d.minFilledFraction),
     noteLengthBeats: num(o.noteLengthBeats, d.noteLengthBeats),
     velocity: num(o.velocity, d.velocity),
@@ -246,12 +288,12 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     rowDelaySend: numArray(o.rowDelaySend, d.rowDelaySend),
     tickEnabled: o.tickEnabled !== false,
     instrumentKey: typeof o.instrumentKey === 'string' ? o.instrumentKey : d.instrumentKey,
-    // Migrate the old combined 'redBlack' mode → 'instruments' + blackDrums on.
+    // Migrate the old combined 'redBlack' mode → 'instruments' (black=drums now
+    // lives in colourRoles).
     rowMode:
       o.rowMode === 'drumKit' ? 'drumKit'
         : (o.rowMode === 'instruments' || o.rowMode === 'redBlack') ? 'instruments'
           : 'pitched',
-    blackDrums: o.blackDrums === true || o.rowMode === 'redBlack',
     rowInstruments:
       Array.isArray(o.rowInstruments) && o.rowInstruments.every((k) => typeof k === 'string')
         ? (o.rowInstruments as string[])
@@ -265,10 +307,6 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     loopStepsBlue: num(o.loopStepsBlue, d.loopStepsBlue),
     numPages: num(o.numPages, d.numPages),
     pages: sanitizePages(o.pages),
-    blackMaxValue: num(o.blackMaxValue, d.blackMaxValue),
-    blackMaxSaturation: num(o.blackMaxSaturation, d.blackMaxSaturation),
-    blueBass: o.blueBass === true,
-    blueColour: sanitizeColour(o.blueColour, DEFAULT_BLUE),
     mirrorX: o.mirrorX !== false,
     mirrorY: o.mirrorY === true,
   };

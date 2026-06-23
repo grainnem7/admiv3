@@ -201,6 +201,30 @@ export function roleStep(beat: number, loopSteps: number, cols: number): number 
 }
 
 /**
+ * Map a set of control-colour cells to a 0..1 value by position, for the
+ * "position = value" fader. axis 'row': bottom row → 0, top row → 1. axis 'col':
+ * left → 0, right → 1. The MOST EXTREME (highest) position wins, so one clear
+ * placement sets the value (tolerance over precision). Returns null when there
+ * are no cells, so the caller keeps the previous value rather than snapping to 0.
+ */
+export function faderValue(
+  cells: { row: number; col: number }[],
+  axis: 'row' | 'col',
+  rows: number,
+  cols: number,
+): number | null {
+  if (cells.length === 0) return null;
+  let best = 0;
+  for (const c of cells) {
+    const v = axis === 'row'
+      ? (rows - 1 - c.row) / Math.max(1, rows - 1)
+      : c.col / Math.max(1, cols - 1);
+    if (v > best) best = v;
+  }
+  return Math.max(0, Math.min(1, best));
+}
+
+/**
  * Which page a given GLOBAL beat falls on when the sequence is chained across
  * `numPages` pages of `cols` columns each (so the master loop is numPages*cols
  * steps long). 1 page → always 0. Handles negative beats defensively.

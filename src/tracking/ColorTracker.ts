@@ -193,6 +193,19 @@ export function matchesBlack(
   return hsv.v <= maxValue && hsv.s <= maxSaturation;
 }
 
+/**
+ * Match an achromatic BRIGHT pixel (a white draughts piece): high brightness and
+ * low saturation, so it is distinguished from coloured pieces and from dark/
+ * mid-tone board squares. Hue is ignored (white has no meaningful hue).
+ */
+export function matchesWhite(
+  hsv: { h: number; s: number; v: number },
+  minValue: number,
+  maxSaturation: number,
+): boolean {
+  return hsv.v >= minValue && hsv.s <= maxSaturation;
+}
+
 // ============================================
 // ColorTracker Class
 // ============================================

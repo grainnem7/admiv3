@@ -13,8 +13,10 @@
 
 import * as Tone from 'tone';
 import { BoardSequencerVoice } from './voices/BoardSequencerVoice';
-import { voicingForCells, degreeMidi, drumForRowChoice, loopLen, roleStep, strictlyAfter, pageIndexAt } from './boardSequencerScale';
+import { voicingForCells, degreeMidi, drumForRowChoice, loopLen, roleStep, strictlyAfter, pageIndexAt, faderValue } from './boardSequencerScale';
 import type { ActiveCell } from '../tracking/BoardSequencerMode';
+import type { ColourId, ColourRole } from '../tracking/boardColours';
+import { isSequencedRole, isFaderRole, isControlRole } from '../tracking/boardColours';
 import { getEffectChainManager } from '../effects';
 import { RoundRobinDrumKit } from '../audio/instruments/RoundRobinDrumKit';
 import type { KitDrum } from '../audio/instruments/RoundRobinDrumKit';
@@ -54,10 +56,10 @@ export interface BoardEngineConfig {
   octaveShift: number;
   volume: number;
   rowMode: 'pitched' | 'drumKit' | 'instruments';
-  /** Layer black pieces as drums on top of a melodic mode (ignored in drumKit). */
-  blackDrums: boolean;
-  /** Layer blue pieces as a bass voice on top of a melodic mode (ignored in drumKit). */
-  blueBass: boolean;
+  /** What each colour does (sequenced voice or live control). Missing → 'off'. */
+  colourRoles: Partial<Record<ColourId, ColourRole>>;
+  /** Axis a control-colour piece's position maps to its value ('row' = vertical). */
+  faderAxis: 'row' | 'col';
   /** Per-row palette keys, used in 'instruments' mode (indexed by row, 0 = top). */
   rowInstruments: string[];
   /** Per-row drum override (indexed by row, 0 = top); '' = default kit mapping. */
@@ -169,7 +171,9 @@ export class BoardSequencerEngine {
     this.delay = delay;
     this.delayBus = delayBus;
 
-    const needsDrums = this.cfg.rowMode === 'drumKit' || this.cfg.blackDrums;
+    const roles = Object.values(this.cfg.colourRoles);
+    const needsDrums = this.cfg.rowMode === 'drumKit' || roles.includes('drums');
+    const needsBass = roles.includes('bass');
     const needsVoices = this.cfg.rowMode !== 'drumKit';
     if (needsDrums) {
       this.drumKit = new RoundRobinDrumKit(this.ctx, 'studio-kit');
@@ -201,7 +205,7 @@ export class BoardSequencerEngine {
         this.rowDlySends.push(ds);
       }
     }
-    if (this.cfg.blueBass) {
+    if (needsBass) {
       this.bassVoice = new BoardSequencerVoice(this.ctx, 'bassElectric');
       this.bassVoice.connect(mix);
     }
@@ -218,6 +222,46 @@ export class BoardSequencerEngine {
 
   setActiveCells(cells: ActiveCell[]): void {
     this.active = cells;
+    this.applyControls(cells);
+  }
+
+  /**
+   * Apply control-colour pieces live: fader colours map their pieces' position
+   * to a 0..1 value (volume / reverb / delay / tone); toggle colours switch an
+   * effect on while a piece of that colour is present. Reads the LIVE board only
+   * (controls are not paged). Cheap no-op when no colour has a control role.
+   */
+  private applyControls(active: ActiveCell[]): void {
+    const byColour = new Map<ColourId, ActiveCell[]>();
+    for (const c of active) {
+      const list = byColour.get(c.colour);
+      if (list) list.push(c); else byColour.set(c.colour, [c]);
+    }
+    for (const [colour, role] of Object.entries(this.cfg.colourRoles)) {
+      if (!role || !isControlRole(role)) continue;
+      const cells = byColour.get(colour as ColourId) ?? [];
+      if (isFaderRole(role)) {
+        const v = faderValue(cells, this.cfg.faderAxis, this.cfg.rows, this.cfg.cols);
+        if (v !== null) this.applyFader(role, v);
+      } else {
+        this.applyToggle(role, cells.length > 0);
+      }
+    }
+  }
+
+  private applyFader(role: ColourRole, v: number): void {
+    const t = Tone.now();
+    if (role === 'volume') this.setVolume(v);
+    else if (role === 'reverb') this.reverbBus?.gain.setTargetAtTime(v, t, 0.05);
+    else if (role === 'delay') this.delayBus?.gain.setTargetAtTime(v, t, 0.05);
+    else if (role === 'tone') this.voices.forEach((voice) => voice.setBrightness(v));
+  }
+
+  private applyToggle(role: ColourRole, on: boolean): void {
+    const t = Tone.now();
+    const amt = on ? 0.35 : 0;
+    if (role === 'reverbToggle') this.reverbBus?.gain.setTargetAtTime(amt, t, 0.05);
+    else if (role === 'delayToggle') this.delayBus?.gain.setTargetAtTime(amt, t, 0.05);
   }
 
   /** Pause/resume all sound (the clock + detection keep running; output is silent). */
@@ -380,13 +424,21 @@ export class BoardSequencerEngine {
     }
   }
 
-  private isDrumCell(cell: ActiveCell): boolean {
-    return this.cfg.rowMode === 'drumKit'
-      || (this.cfg.blackDrums && cell.colour === 'black');
+  /**
+   * The effective role a cell plays, from its colour. In Drum-kit mode every
+   * sequenced colour is coerced to drums (the mode means "no pitched voices").
+   */
+  private roleFor(colour: ColourId): ColourRole {
+    const r = this.cfg.colourRoles[colour] ?? 'off';
+    if (this.cfg.rowMode === 'drumKit' && isSequencedRole(r)) return 'drums';
+    return r;
   }
 
-  private isBassCell(cell: ActiveCell): boolean {
-    return this.cfg.blueBass && cell.colour === 'blue';
+  /** The polyrhythm-loop category for a role (melody/chord share the melody loop). */
+  private loopCategory(role: ColourRole): 'melodic' | 'drum' | 'bass' {
+    if (role === 'drums') return 'drum';
+    if (role === 'bass') return 'bass';
+    return 'melodic';
   }
 
   /** Notes for a chord-stab cell: the song chord (when locked) or a scale triad. */
@@ -432,10 +484,12 @@ export class BoardSequencerEngine {
     const cells = page === this.selectedPage ? this.active : (this.pages[page] ?? []);
     // Voice ALL active melodic cells together so pitch is a complementary
     // spread that depends on the whole board (re-voices as pieces change /
-    // follows the chord when locked); then play only this column's cells.
-    const melodic = cells.filter(
-      (c) => !this.isDrumCell(c) && !this.isBassCell(c) && c.row >= 0 && c.row < this.voices.length,
-    );
+    // follows the chord when locked); then play only this column's cells. A
+    // "melodic" cell is one whose colour role is melody or chord.
+    const melodic = cells.filter((c) => {
+      const r = this.roleFor(c.colour);
+      return (r === 'melody' || r === 'chord') && c.row >= 0 && c.row < this.voices.length;
+    });
     // Per-row instruments: each instrument (row) plays a melody across columns
     // → pitch by column. Pitched (single instrument): piano roll → pitch by row.
     const axis = this.cfg.rowMode === 'instruments' ? 'col' : 'row';
@@ -450,14 +504,17 @@ export class BoardSequencerEngine {
       : this.cfg.scaleRootMidi) - 12 + oct;
     const h = this.cfg.humanize;
     for (const cell of cells) {
+      const role = this.roleFor(cell.colour);
+      // Control roles (faders/toggles) and 'off' are not sequenced.
+      if (role !== 'melody' && role !== 'chord' && role !== 'drums' && role !== 'bass') continue;
       // Per-role polyrhythm: a cell fires when its column matches the role's
       // own playhead (beat wrapped at that role's loop length).
-      const role = this.isDrumCell(cell) ? 'drum' : this.isBassCell(cell) ? 'bass' : 'melodic';
-      if (cell.col !== roleStep(beat, this.rawLoop(role), this.cfg.cols)) continue;
+      const cat = this.loopCategory(role);
+      if (cell.col !== roleStep(beat, this.rawLoop(cat), this.cfg.cols)) continue;
       // Humanize: occasionally skip a step + vary velocity, so loops breathe.
       if (h > 0 && Math.random() < h * 0.5) continue;
       const vel = h > 0 ? this.cfg.velocity * (1 - Math.random() * h * 0.4) : this.cfg.velocity;
-      if (role === 'drum') {
+      if (role === 'drums') {
         const drum = drumForRowChoice(cell.row, this.cfg.rows, this.cfg.rowDrums);
         if (drum) this.drumKit?.play(drum as KitDrum, vel, stepTime);
       } else if (role === 'bass') {
@@ -466,8 +523,9 @@ export class BoardSequencerEngine {
         const voice = this.voices[cell.row];
         if (!voice) continue;
         const inst = this.instrumentForRow(cell.row);
-        if (inst === 'chord') {
-          // Chord stab: play a stack (the song chord, or a scale triad) at once.
+        // Chord stab when the colour role is 'chord' OR the row's instrument is the
+        // chord-stab sound: play a stack (the song chord, or a scale triad) at once.
+        if (role === 'chord' || inst === 'chord') {
           for (const n of this.chordStack(cell, chord, axis)) {
             voice.play(n + oct, vel, durSec, stepTime);
           }
