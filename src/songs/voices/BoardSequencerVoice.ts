@@ -43,6 +43,11 @@ export class BoardSequencerVoice extends ToneVoiceBase {
     this.filterNode.frequency.value = hz;
   }
 
+  /** Whether the underlying sampler has finished loading its samples. */
+  isReady(): boolean {
+    return this.player.isReady();
+  }
+
   /** Trigger one sequenced note. `time` is an audio-context time (Tone seconds). */
   play(midi: number, velocity: number, durationSec: number, time: number): void {
     if (!this.player.isReady()) return;

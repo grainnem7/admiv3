@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import type { CellRef } from '../../../tracking/BoardSequencerMode';
+import type { ActiveCell } from '../../../tracking/BoardSequencerMode';
 
 interface Props {
   rows: number;
   cols: number;
-  active: CellRef[];
+  active: ActiveCell[];
   playheadCol: number;
+  /** Maps a cell's colour id → its display swatch (so cells show their real colour). */
+  colourFor?: (colour: string) => string;
 }
 
 /**
@@ -13,7 +15,7 @@ interface Props {
  * Fills its parent, fitting a cols:rows rectangle inside the available space so
  * cells stay square.
  */
-export default function WarpedBoardView({ rows, cols, active, playheadCol }: Props) {
+export default function WarpedBoardView({ rows, cols, active, playheadCol, colourFor }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [dims, setDims] = useState({ w: 240, h: 240 });
@@ -46,7 +48,7 @@ export default function WarpedBoardView({ rows, cols, active, playheadCol }: Pro
     if (!cv) return;
     const ctx = cv.getContext('2d');
     if (!ctx) return;
-    const activeSet = new Set(active.map((c) => `${c.row},${c.col}`));
+    const activeColour = new Map(active.map((c) => [`${c.row},${c.col}`, c.colour]));
     const w = cv.width;
     const h = cv.height;
     ctx.clearRect(0, 0, w, h);
@@ -54,7 +56,10 @@ export default function WarpedBoardView({ rows, cols, active, playheadCol }: Pro
     const ch = h / rows;
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
-        ctx.fillStyle = activeSet.has(`${r},${c}`) ? '#e23' : '#1b1b22';
+        const colour = activeColour.get(`${r},${c}`);
+        ctx.fillStyle = colour
+          ? (colourFor?.(colour) ?? '#e23')
+          : '#1b1b22';
         ctx.fillRect(c * cw + 1, r * ch + 1, cw - 2, ch - 2);
       }
     }

@@ -24,7 +24,7 @@ import * as Tone from 'tone';
 import { useAppStore } from '../../state/store';
 import { CameraManager } from '../../tracking/CameraManager';
 import { BoardReader } from '../../tracking/BoardReader';
-import { BoardSequencerMode, type CellRef, type PieceColour, type ActiveCell } from '../../tracking/BoardSequencerMode';
+import { BoardSequencerMode, type PieceColour, type ActiveCell } from '../../tracking/BoardSequencerMode';
 import { ColourRecognizer } from '../../tracking/PieceRecognizer';
 import { rgbToHsv } from '../../tracking/ColorTracker';
 import {
@@ -174,7 +174,7 @@ export default function BoardSequencerScreen() {
   const [colourCalib, setColourCalib] = useState<ColourCalibTarget | null>(null);
   const colourCalibRef = useRef<ColourCalibTarget | null>(null);
   colourCalibRef.current = colourCalib;
-  const [active, setActive] = useState<CellRef[]>([]);
+  const [active, setActive] = useState<ActiveCell[]>([]);
   const [playheadCol, setPlayheadCol] = useState(0);
   // Pattern chaining: which page the live camera edits, and which is playing now.
   const [selectedPage, setSelectedPage] = useState(0);
@@ -396,7 +396,7 @@ export default function BoardSequencerScreen() {
               byColour[rd.colour] = (byColour[rd.colour] ?? 0) + 1;
             }
           }
-          let activeArr: CellRef[] = [];
+          let activeArr: ActiveCell[] = [];
           const activeMap = new Map<string, PieceColour>();
           let playCol = 0;
           if (runningRef.current && modeRef.current && engineRef.current) {
@@ -1184,7 +1184,10 @@ export default function BoardSequencerScreen() {
 
         {/* Warped board (abstract view) */}
         <div style={{ flex: '1 1 0', minWidth: 0, minHeight: 0 }}>
-          <WarpedBoardView rows={config.rows} cols={config.cols} active={active} playheadCol={playheadCol} />
+          <WarpedBoardView
+            rows={config.rows} cols={config.cols} active={active} playheadCol={playheadCol}
+            colourFor={(id) => channelById.get(id)?.swatch ?? '#e23'}
+          />
         </div>
       </div>
     </div>
