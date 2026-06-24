@@ -149,26 +149,33 @@ export function calibrationFromHsv(hsv: { h: number; s: number; v: number }): {
   blackBand?: BlackBand;
   whiteBand?: WhiteBand;
 } {
-  if (hsv.s <= 22 && hsv.v <= 45) {
+  // Only treat a sample as achromatic when it is REALLY greyscale. External
+  // webcams desaturate, so a slightly-washed coloured piece (e.g. s≈18) must
+  // still become a HUE channel — otherwise it reads as black/white and a white
+  // channel then matches all the pale board squares.
+  if (hsv.s <= 12 && hsv.v <= 38) {
     return {
       kind: 'black',
-      blackBand: { maxValue: clamp(hsv.v * 1.6 + 8, 18, 60), maxSaturation: clamp(hsv.s + 20, 30, 70) },
+      blackBand: { maxValue: clamp(hsv.v * 1.6 + 8, 18, 55), maxSaturation: clamp(hsv.s + 14, 20, 45) },
     };
   }
-  if (hsv.s <= 22 && hsv.v >= 60) {
+  if (hsv.s <= 12 && hsv.v >= 72) {
     return {
       kind: 'white',
-      whiteBand: { minValue: clamp(hsv.v * 0.85, 55, 95), maxSaturation: clamp(hsv.s + 12, 10, 40) },
+      whiteBand: { minValue: clamp(hsv.v * 0.85, 60, 95), maxSaturation: clamp(hsv.s + 10, 8, 30) },
     };
   }
+  // Hue band: discriminate mainly by HUE so washed-out (low-saturation) pieces
+  // from an external cam still register, while keeping the saturation floor just
+  // high enough to reject the near-grey board squares.
   return {
     kind: 'hue',
     band: {
       id: '',
       hue: hsv.h,
-      hueTolerance: 22,
-      minSaturation: Math.max(25, hsv.s * 0.5),
-      minValue: Math.max(18, hsv.v * 0.45),
+      hueTolerance: 24,
+      minSaturation: Math.max(14, hsv.s * 0.45),
+      minValue: Math.max(15, hsv.v * 0.4),
       minArea: 0.0005,
     },
   };

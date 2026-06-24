@@ -22,6 +22,21 @@ describe('calibrationFromHsv', () => {
     expect(cal.kind).toBe('hue');
     expect(cal.band?.hue).toBe(210);
   });
+
+  it('treats a washed-out (low-saturation) colour as hue, not white/black', () => {
+    // An external webcam desaturates: a teal piece at s≈18 must stay a hue band.
+    const teal = calibrationFromHsv({ h: 175, s: 18, v: 60 });
+    expect(teal.kind).toBe('hue');
+    expect(teal.band?.hue).toBe(175);
+    // A washed pink mid-brightness, too.
+    expect(calibrationFromHsv({ h: 340, s: 16, v: 55 }).kind).toBe('hue');
+  });
+
+  it('only goes achromatic when the sample is truly greyscale (s ≤ 12)', () => {
+    expect(calibrationFromHsv({ h: 0, s: 6, v: 20 }).kind).toBe('black');
+    expect(calibrationFromHsv({ h: 0, s: 6, v: 90 }).kind).toBe('white');
+    expect(calibrationFromHsv({ h: 0, s: 13, v: 90 }).kind).toBe('hue'); // just above the grey cutoff
+  });
 });
 
 describe('freshChannelId', () => {
