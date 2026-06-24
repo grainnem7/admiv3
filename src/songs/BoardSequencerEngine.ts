@@ -13,7 +13,7 @@
 
 import * as Tone from 'tone';
 import { BoardSequencerVoice } from './voices/BoardSequencerVoice';
-import { voicingForCells, degreeMidi, drumForRow, DEFAULT_DRUM_ROWS, loopLen, roleStep, strictlyAfter, pageIndexAt, faderValue } from './boardSequencerScale';
+import { voicingForCells, degreeMidi, chordDegreeMidi, drumForRow, DEFAULT_DRUM_ROWS, loopLen, roleStep, strictlyAfter, pageIndexAt, faderValue } from './boardSequencerScale';
 import type { ActiveCell } from '../tracking/BoardSequencerMode';
 import type { ColourChannel, ColourId, ColourRole } from '../tracking/boardColours';
 import { isFaderRole, isControlRole } from '../tracking/boardColours';
@@ -468,10 +468,6 @@ export class BoardSequencerEngine {
       chord && chord.notes.length > 0 ? chord.notes : null, 'row', this.cfg.rows,
     );
     const oct = this.cfg.octaveShift * 12;
-    // Bass note: the chord's lowest tone (or the scale root), an octave down.
-    const bassMidi = (chord && chord.notes.length > 0
-      ? Math.min(...chord.notes)
-      : this.cfg.scaleRootMidi) - 12 + oct;
     const h = this.cfg.humanize;
     for (const cell of cells) {
       const ch = this.channelById.get(cell.colour);
@@ -498,7 +494,12 @@ export class BoardSequencerEngine {
       const voice = this.voiceByChannel.get(ch.id)?.voice;
       if (!voice) continue;
       if (role === 'bass') {
-        voice.play(bassMidi, vel, durSec, stepTime);
+        // Bass pitch follows the row like melody (bottom = low), an octave down.
+        const degree = this.cfg.rows - 1 - cell.row;
+        const base = chord && chord.notes.length > 0
+          ? chordDegreeMidi(degree, chord.notes)
+          : degreeMidi(degree, this.cfg.scaleRootMidi, this.cfg.scaleSemitones);
+        voice.play(base - 12 + oct, vel, durSec, stepTime);
       } else if (role === 'chord' || ch.instrument === 'chord') {
         // Chord stab: play a stack (the song chord, or a scale triad) at once.
         for (const n of this.chordStack(cell, chord, 'row')) {
