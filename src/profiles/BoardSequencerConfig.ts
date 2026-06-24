@@ -15,6 +15,10 @@ import { ROLE_LABELS, DEFAULT_BLACK_BAND, DEFAULT_WHITE_BAND } from '../tracking
 
 const STORAGE_KEY = 'admi-board-sequencer';
 
+// Bump when a stored-shape change should reset colour channels. v2 dropped the
+// fixed palette + its migration: any pre-v2 colour data is wiped (start empty).
+const CONFIG_VERSION = 2;
+
 export interface BoardPoint {
   x: number;
   y: number;
@@ -28,6 +32,8 @@ export interface StoredBoardCell {
 }
 
 export interface BoardSequencerStored {
+  /** Stored-shape version (see CONFIG_VERSION); pre-v2 colour data is reset. */
+  version: number;
   enabled: boolean;
   /** Four board corners (normalised image coords) in TL, TR, BR, BL order. */
   corners: [BoardPoint, BoardPoint, BoardPoint, BoardPoint];
@@ -102,19 +108,8 @@ const FALLBACK_HUE_BAND: TrackedColor = {
   id: 'board-hue', hue: 0, hueTolerance: 22, minSaturation: 35, minValue: 25, minArea: 0.0005,
 };
 
-/** Legacy fixed-palette metadata, used only to migrate pre-channels configs. */
-const LEGACY_COLOUR_META: Record<string, { kind: ColourKind; hue?: number; swatch: string }> = {
-  red: { kind: 'hue', hue: 0, swatch: '#e53935' },
-  orange: { kind: 'hue', hue: 25, swatch: '#fb8c00' },
-  yellow: { kind: 'hue', hue: 52, swatch: '#fdd835' },
-  green: { kind: 'hue', hue: 120, swatch: '#43a047' },
-  blue: { kind: 'hue', hue: 215, swatch: '#1e88e5' },
-  purple: { kind: 'hue', hue: 280, swatch: '#8e24aa' },
-  white: { kind: 'white', swatch: '#fafafa' },
-  black: { kind: 'black', swatch: '#212121' },
-};
-
 export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
+  version: CONFIG_VERSION,
   enabled: false,
   corners: ZERO_CORNERS,
   rows: 6,
@@ -222,53 +217,13 @@ function sanitizeChannel(v: unknown): ColourChannel | null {
 }
 
 /**
- * Build the channel list: prefer the new `channels` array; otherwise migrate from
- * the previous shape (`colourRoles` + `hueBands` + black/white bands) or the
- * oldest flags (`blackDrums`/`blueBass`/`redColour`/`blueColour`).
+ * The user's colour channels — only ever from the stored `channels` array. There
+ * is NO migration from any fixed palette: colours exist solely because the user
+ * calibrated them. An empty board (no colours) is valid.
  */
-function sanitizeChannels(o: Record<string, unknown>): ColourChannel[] {
-  if (Array.isArray(o.channels)) {
-    // The user owns the list — an empty board (no colours) is valid.
-    return o.channels.map(sanitizeChannel).filter((c): c is ColourChannel => c !== null);
-  }
-  // ---- migrate from the pre-channels (fixed-palette) shape ----
-  const roles = (typeof o.colourRoles === 'object' && o.colourRoles !== null
-    ? o.colourRoles : {}) as Record<string, unknown>;
-  const hueBands = (typeof o.hueBands === 'object' && o.hueBands !== null
-    ? o.hueBands : {}) as Record<string, unknown>;
-  const blackBand = sanitizeBlackBand(o.blackBand ?? {
-    maxValue: o.blackMaxValue, maxSaturation: o.blackMaxSaturation,
-  });
-  const whiteBand = sanitizeWhiteBand(o.whiteBand);
-
-  // Resolve a role per legacy colour id (new-style roles, else oldest flags).
-  const roleFor: Record<string, ColourRole> = {};
-  if (Object.keys(roles).length > 0) {
-    for (const [id, r] of Object.entries(roles)) {
-      if (typeof r === 'string' && r in ROLE_LABELS) roleFor[id] = r as ColourRole;
-    }
-  } else {
-    roleFor.red = 'melody';
-    if (o.blackDrums === true || o.rowMode === 'redBlack') roleFor.black = 'drums';
-    if (o.blueBass === true) roleFor.blue = 'bass';
-  }
-
-  const channels: ColourChannel[] = [];
-  let n = 0;
-  for (const [id, role] of Object.entries(roleFor)) {
-    if (role === 'off') continue;
-    const meta = LEGACY_COLOUR_META[id] ?? { kind: 'hue' as ColourKind, hue: 0, swatch: '#888888' };
-    const ch: ColourChannel = { id: `c${++n}`, kind: meta.kind, role, swatch: meta.swatch };
-    if (meta.kind === 'hue') {
-      const legacy = id === 'red' ? o.redColour : id === 'blue' ? o.blueColour : undefined;
-      ch.band = sanitizeColour(hueBands[id] ?? legacy, {
-        id: `board-${id}`, hue: meta.hue ?? 0, hueTolerance: 22, minSaturation: 35, minValue: 25, minArea: 0.0005,
-      });
-    } else if (meta.kind === 'black') ch.blackBand = blackBand;
-    else ch.whiteBand = whiteBand;
-    channels.push(ch);
-  }
-  return channels;
+function sanitizeChannels(v: unknown): ColourChannel[] {
+  if (!Array.isArray(v)) return [];
+  return v.map(sanitizeChannel).filter((c): c is ColourChannel => c !== null);
 }
 
 function sanitizeColour(v: unknown, fallback: TrackedColor): TrackedColor {
@@ -291,6 +246,7 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     ? (o.scaleSemitones as number[])
     : d.scaleSemitones;
   return {
+    version: CONFIG_VERSION,
     enabled: o.enabled === true,
     corners: sanitizeCorners(o.corners),
     rows: num(o.rows, d.rows),
@@ -306,7 +262,9 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     velocitySmoothing: num(o.velocitySmoothing, d.velocitySmoothing),
     occupancyGraceMs: num(o.occupancyGraceMs, d.occupancyGraceMs),
     motionConfirmMs: num(o.motionConfirmMs, d.motionConfirmMs),
-    channels: sanitizeChannels(o),
+    // Pre-v2 colour data (the old fixed palette + its migration) is discarded so
+    // the board starts with no predefined colours.
+    channels: num(o.version, 1) >= CONFIG_VERSION ? sanitizeChannels(o.channels) : [],
     faderAxis: o.faderAxis === 'col' ? 'col' : 'row',
     minFilledFraction: num(o.minFilledFraction, d.minFilledFraction),
     noteLengthBeats: num(o.noteLengthBeats, d.noteLengthBeats),

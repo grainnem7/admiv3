@@ -47,38 +47,19 @@ describe('BoardSequencerConfig', () => {
     expect(loadBoardSequencerConfig()).toBeNull();
   });
 
-  it('migrates legacy blackDrums/blueBass flags into channels', () => {
+  it('wipes pre-v2 colour data (no fixed-palette migration)', () => {
+    // Old fixed-palette shape AND old channels without a version → start empty.
     localStorage.setItem('admi-board-sequencer', JSON.stringify({
       bpm: 90, blackDrums: true, blueBass: true,
+      colourRoles: { green: 'melody' },
+      channels: [{ id: 'c1', kind: 'hue', role: 'melody', swatch: '#e53935', band: { id: 'r', hue: 0, hueTolerance: 20, minSaturation: 40, minValue: 30, minArea: 0 } }],
     }));
-    const loaded = loadBoardSequencerConfig();
-    const roles = (loaded?.channels ?? []).map((c) => c.role).sort();
-    expect(roles).toEqual(['bass', 'drums', 'melody']);
-    expect((loaded?.channels ?? []).some((c) => c.kind === 'black' && c.role === 'drums')).toBe(true);
+    expect(loadBoardSequencerConfig()?.channels).toEqual([]);
   });
 
-  it('migrates a legacy redColour hue into a hue channel band', () => {
+  it('round-trips an explicit channels array on the current version', () => {
     localStorage.setItem('admi-board-sequencer', JSON.stringify({
-      bpm: 90, redColour: { id: 'r', hue: 5, hueTolerance: 10, minSaturation: 40, minValue: 30, minArea: 0 },
-    }));
-    const loaded = loadBoardSequencerConfig();
-    const melody = loaded?.channels.find((c) => c.role === 'melody');
-    expect(melody?.band?.hue).toBe(5);
-  });
-
-  it('migrates new-style colourRoles into channels (and defaults faderAxis to row)', () => {
-    localStorage.setItem('admi-board-sequencer', JSON.stringify({
-      bpm: 90, colourRoles: { green: 'melody', purple: 'volume' },
-    }));
-    const loaded = loadBoardSequencerConfig();
-    const roles = (loaded?.channels ?? []).map((c) => c.role).sort();
-    expect(roles).toEqual(['melody', 'volume']);
-    expect(loaded?.faderAxis).toBe('row');
-  });
-
-  it('round-trips an explicit channels array', () => {
-    localStorage.setItem('admi-board-sequencer', JSON.stringify({
-      bpm: 90,
+      bpm: 90, version: 2,
       channels: [
         { id: 'c1', kind: 'hue', role: 'melody', swatch: '#0f0', band: { id: 'b', hue: 120, hueTolerance: 20, minSaturation: 40, minValue: 30, minArea: 0 } },
         { id: 'c2', kind: 'black', role: 'drums', swatch: '#000', blackBand: { maxValue: 30, maxSaturation: 40 } },
@@ -88,6 +69,7 @@ describe('BoardSequencerConfig', () => {
     expect(loaded?.channels).toHaveLength(2);
     expect(loaded?.channels[0].band?.hue).toBe(120);
     expect(loaded?.channels[1].kind).toBe('black');
+    expect(loaded?.version).toBe(2);
   });
 
   it('sanitizes rowMode to pitched unless explicitly drumKit', () => {

@@ -410,10 +410,11 @@ Every channel is assigned one role:
 - **Toggles** (presence = on/off): `reverbToggle`, `delayToggle` — a piece of
   that colour anywhere switches the effect on.
 Control-role cells are excluded from the sequencer. Config stores
-`channels: ColourChannel[]`; the engine receives a derived id→role map. Legacy
-configs migrate into channels: the old fixed-palette roles (and the even older
-`blackDrums`/`blueBass`/`redColour`/`blueColour` flags) each become a channel
-with a stable id, sampled band, swatch and role.
+`channels: ColourChannel[]`; the engine receives a derived id→role map. There is
+NO predefined palette and NO migration from one: a fresh board has zero colours,
+and a `CONFIG_VERSION` bump wipes any pre-v2 colour data so existing installs
+also start empty. Colours exist only because the user calibrated them; a
+**Clear all** button removes them all.
 
 ### UI (Musikraken-style)
 The fixed 8-row palette is gone. The **Colours & detection** section is a list
