@@ -222,8 +222,10 @@ export class BoardSequencerEngine {
       if (!isControlRole(ch.role)) continue;
       const cells = byColour.get(ch.id) ?? [];
       if (isFaderRole(ch.role)) {
-        const v = faderValue(cells, this.cfg.faderAxis, this.cfg.rows, this.cfg.cols);
-        if (v !== null) this.applyFader(ch.role, v);
+        // No piece of this colour on the board → the fader sits at 0, so e.g. a
+        // missing volume counter stops the sound (and reverb/delay/tone go off).
+        const v = faderValue(cells, this.cfg.faderAxis, this.cfg.rows, this.cfg.cols) ?? 0;
+        this.applyFader(ch.role, v);
       } else {
         this.applyToggle(ch.role, cells.length > 0);
       }
