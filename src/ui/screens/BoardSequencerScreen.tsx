@@ -1105,7 +1105,7 @@ export default function BoardSequencerScreen() {
                 value={config.rows} disabled={running}
                 onChange={(e) => update({ rows: Number(e.target.value) })}
               >
-                {[4, 5, 6, 8].map((n) => <option key={n} value={n}>{n}</option>)}
+                {[2, 3, 4, 5, 6, 7, 8].map((n) => <option key={n} value={n}>{n}</option>)}
               </select>
             </label>
             <label>
@@ -1114,7 +1114,7 @@ export default function BoardSequencerScreen() {
                 value={config.cols} disabled={running}
                 onChange={(e) => update({ cols: Number(e.target.value) })}
               >
-                {[4, 8, 16].map((n) => <option key={n} value={n}>{n}</option>)}
+                {[2, 3, 4, 5, 6, 7, 8, 10, 12, 16].map((n) => <option key={n} value={n}>{n}</option>)}
               </select>
             </label>
             <label>
