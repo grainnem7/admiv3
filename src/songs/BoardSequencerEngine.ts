@@ -222,10 +222,14 @@ export class BoardSequencerEngine {
       if (!isControlRole(ch.role)) continue;
       const cells = byColour.get(ch.id) ?? [];
       if (isFaderRole(ch.role)) {
-        // No piece of this colour on the board → the fader sits at 0, so e.g. a
-        // missing volume counter stops the sound (and reverb/delay/tone go off).
-        const v = faderValue(cells, this.cfg.faderAxis, this.cfg.rows, this.cfg.cols) ?? 0;
-        this.applyFader(ch.role, v);
+        const fv = faderValue(cells, this.cfg.faderAxis, this.cfg.rows, this.cfg.cols);
+        if (fv !== null) {
+          this.applyFader(ch.role, fv);
+        } else if (ch.role !== 'tempo') {
+          // No piece → most faders fall to 0 (a missing volume counter = silence),
+          // but tempo KEEPS the current tempo rather than crawling to the minimum.
+          this.applyFader(ch.role, 0);
+        }
       } else {
         this.applyToggle(ch.role, cells.length > 0);
       }
@@ -238,7 +242,7 @@ export class BoardSequencerEngine {
     else if (role === 'reverb') this.reverbBus?.gain.setTargetAtTime(v, t, 0.05);
     else if (role === 'delay') this.delayBus?.gain.setTargetAtTime(v, t, 0.05);
     else if (role === 'tone') this.voiceByChannel.forEach((e) => e.voice.setBrightness(v));
-    else if (role === 'tempo') this.setTempo(50 + v * (300 - 50)); // 50…300 BPM
+    else if (role === 'tempo') this.setTempo(80 + v * (300 - 80)); // 80…300 BPM (low ≈ original)
   }
 
   /**
