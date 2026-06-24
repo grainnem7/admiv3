@@ -30,7 +30,6 @@ describe('BoardSequencerConfig', () => {
     expect(loaded?.bpm).toBe(110);
     expect(loaded?.rows).toBe(6);
     expect(loaded?.scaleSemitones).toEqual([0, 2, 4, 7, 9]);
-    expect(loaded?.rowMode).toBe('pitched');
   });
 
   it('falls back to defaults for missing/garbage numeric fields', () => {
@@ -70,12 +69,5 @@ describe('BoardSequencerConfig', () => {
     expect(loaded?.channels[0].band?.hue).toBe(120);
     expect(loaded?.channels[1].kind).toBe('black');
     expect(loaded?.version).toBe(2);
-  });
-
-  it('sanitizes rowMode to pitched unless explicitly drumKit', () => {
-    localStorage.setItem('admi-board-sequencer', JSON.stringify({ ...DEFAULT_BOARD_SEQUENCER_CONFIG, rowMode: 'drumKit' }));
-    expect(loadBoardSequencerConfig()?.rowMode).toBe('drumKit');
-    localStorage.setItem('admi-board-sequencer', JSON.stringify({ ...DEFAULT_BOARD_SEQUENCER_CONFIG, rowMode: 'nonsense' }));
-    expect(loadBoardSequencerConfig()?.rowMode).toBe('pitched');
   });
 });

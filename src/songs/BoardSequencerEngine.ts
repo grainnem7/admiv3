@@ -13,10 +13,10 @@
 
 import * as Tone from 'tone';
 import { BoardSequencerVoice } from './voices/BoardSequencerVoice';
-import { voicingForCells, degreeMidi, drumForRowChoice, loopLen, roleStep, strictlyAfter, pageIndexAt, faderValue } from './boardSequencerScale';
+import { voicingForCells, degreeMidi, drumForRow, DEFAULT_DRUM_ROWS, loopLen, roleStep, strictlyAfter, pageIndexAt, faderValue } from './boardSequencerScale';
 import type { ActiveCell } from '../tracking/BoardSequencerMode';
-import type { ColourId, ColourRole } from '../tracking/boardColours';
-import { isSequencedRole, isFaderRole, isControlRole } from '../tracking/boardColours';
+import type { ColourChannel, ColourId, ColourRole } from '../tracking/boardColours';
+import { isFaderRole, isControlRole } from '../tracking/boardColours';
 import { getEffectChainManager } from '../effects';
 import { RoundRobinDrumKit } from '../audio/instruments/RoundRobinDrumKit';
 import type { KitDrum } from '../audio/instruments/RoundRobinDrumKit';
@@ -52,29 +52,18 @@ export interface BoardEngineConfig {
   noteLengthBeats: number;
   velocity: number;
   tickEnabled: boolean;
-  instrumentKey: string;
   octaveShift: number;
   volume: number;
-  rowMode: 'pitched' | 'drumKit' | 'instruments';
-  /** What each colour does (sequenced voice or live control). Missing → 'off'. */
-  colourRoles: Partial<Record<ColourId, ColourRole>>;
+  /** The user's colour channels: each carries its role + (for sounds) instrument. */
+  channels: ColourChannel[];
   /** Axis a control-colour piece's position maps to its value ('row' = vertical). */
   faderAxis: 'row' | 'col';
-  /** Per-row palette keys, used in 'instruments' mode (indexed by row, 0 = top). */
-  rowInstruments: string[];
-  /** Per-row drum override (indexed by row, 0 = top); '' = default kit mapping. */
-  rowDrums: string[];
   /** Polyrhythm: per-role loop length in steps (0 = full grid width). */
   loopStepsRed: number;
   loopStepsBlack: number;
   loopStepsBlue: number;
   /** Pattern chaining: number of pages (master loop = numPages * cols steps). */
   numPages: number;
-  /** Per-row mixer (indexed by row): volume, tone/brightness, reverb-send, delay-send (0..1). */
-  rowVolume: number[];
-  rowTone: number[];
-  rowReverbSend: number[];
-  rowDelaySend: number[];
 }
 
 const LOOKAHEAD_SEC = 0.1;
@@ -100,8 +89,12 @@ function lastIndexLEQ(beats: number[], t: number): number {
 export class BoardSequencerEngine {
   private ctx: AudioContext;
   private cfg: BoardEngineConfig;
-  private voices: BoardSequencerVoice[] = [];
-  private bassVoice: BoardSequencerVoice | null = null;
+  // One sampled voice per melody/chord/bass channel (keyed by channel id), each
+  // with its own gain + reverb/delay sends into the shared buses.
+  private voiceByChannel = new Map<string, {
+    voice: BoardSequencerVoice; gain: GainNode; rev: GainNode; del: GainNode;
+  }>();
+  private channelById = new Map<string, ColourChannel>();
   private drumKit: RoundRobinDrumKit | null = null;
   private tick: Tone.MembraneSynth | null = null;
   private mix: GainNode | null = null;
@@ -110,10 +103,6 @@ export class BoardSequencerEngine {
   private delay: Tone.FeedbackDelay | null = null;
   private delayBus: GainNode | null = null;
   private limiter: Tone.Limiter | null = null;
-  // Per-row mixer nodes (parallel to `voices`).
-  private rowGains: GainNode[] = [];
-  private rowRevSends: GainNode[] = [];
-  private rowDlySends: GainNode[] = [];
   private active: ActiveCell[] = [];
   // Pattern chaining: captured page snapshots (the selected page plays live from
   // `active`; other pages play from their stored snapshot here).
@@ -171,43 +160,35 @@ export class BoardSequencerEngine {
     this.delay = delay;
     this.delayBus = delayBus;
 
-    const roles = Object.values(this.cfg.colourRoles);
-    const needsDrums = this.cfg.rowMode === 'drumKit' || roles.includes('drums');
-    const needsBass = roles.includes('bass');
-    const needsVoices = this.cfg.rowMode !== 'drumKit';
+    // Index channels for fast role/instrument lookup during scheduling.
+    this.channelById = new Map(this.cfg.channels.map((c) => [c.id, c]));
+    const needsDrums = this.cfg.channels.some((c) => c.role === 'drums');
     if (needsDrums) {
       this.drumKit = new RoundRobinDrumKit(this.ctx, 'studio-kit');
       this.drumKit.connect(mix);
       await this.drumKit.whenReady();
     }
-    if (needsVoices) {
-      // One sampled voice per row + a per-row mixer strip: voice → rowGain
-      // (volume) → mix (dry), with reverb/delay send taps off rowGain. Tone is
-      // the voice's own low-pass cutoff.
-      for (let r = 0; r < this.cfg.rows; r++) {
-        const v = new BoardSequencerVoice(this.ctx, this.instrumentForRow(r));
-        v.setBrightness(this.cfg.rowTone[r] ?? 1);
-        const rg = ctx.createGain();
-        rg.gain.value = this.cfg.rowVolume[r] ?? 1;
-        v.connect(rg);
-        rg.connect(mix);
-        const rs = ctx.createGain();
-        rs.gain.value = this.cfg.rowReverbSend[r] ?? 0;
-        rg.connect(rs);
-        rs.connect(reverbBus);
-        const ds = ctx.createGain();
-        ds.gain.value = this.cfg.rowDelaySend[r] ?? 0;
-        rg.connect(ds);
-        ds.connect(delayBus);
-        this.voices.push(v);
-        this.rowGains.push(rg);
-        this.rowRevSends.push(rs);
-        this.rowDlySends.push(ds);
-      }
-    }
-    if (needsBass) {
-      this.bassVoice = new BoardSequencerVoice(this.ctx, 'bassElectric');
-      this.bassVoice.connect(mix);
+    // One sampled voice per melody/chord/bass channel → its own gain + FX sends.
+    for (const ch of this.cfg.channels) {
+      if (ch.role !== 'melody' && ch.role !== 'chord' && ch.role !== 'bass') continue;
+      const inst = ch.instrument && ch.instrument.length > 0
+        ? ch.instrument
+        : (ch.role === 'bass' ? 'bassElectric' : 'electricPiano');
+      const v = new BoardSequencerVoice(this.ctx, inst);
+      v.setBrightness(ch.tone ?? 1);
+      const gain = ctx.createGain();
+      gain.gain.value = ch.volume ?? 1;
+      v.connect(gain);
+      gain.connect(mix);
+      const rev = ctx.createGain();
+      rev.gain.value = ch.reverbSend ?? 0.18;
+      gain.connect(rev);
+      rev.connect(reverbBus);
+      const del = ctx.createGain();
+      del.gain.value = ch.delaySend ?? 0;
+      gain.connect(del);
+      del.connect(delayBus);
+      this.voiceByChannel.set(ch.id, { voice: v, gain, rev, del });
     }
     if (this.cfg.tickEnabled) {
       this.tick = new Tone.MembraneSynth({
@@ -237,14 +218,14 @@ export class BoardSequencerEngine {
       const list = byColour.get(c.colour);
       if (list) list.push(c); else byColour.set(c.colour, [c]);
     }
-    for (const [colour, role] of Object.entries(this.cfg.colourRoles)) {
-      if (!role || !isControlRole(role)) continue;
-      const cells = byColour.get(colour as ColourId) ?? [];
-      if (isFaderRole(role)) {
+    for (const ch of this.cfg.channels) {
+      if (!isControlRole(ch.role)) continue;
+      const cells = byColour.get(ch.id) ?? [];
+      if (isFaderRole(ch.role)) {
         const v = faderValue(cells, this.cfg.faderAxis, this.cfg.rows, this.cfg.cols);
-        if (v !== null) this.applyFader(role, v);
+        if (v !== null) this.applyFader(ch.role, v);
       } else {
-        this.applyToggle(role, cells.length > 0);
+        this.applyToggle(ch.role, cells.length > 0);
       }
     }
   }
@@ -254,7 +235,7 @@ export class BoardSequencerEngine {
     if (role === 'volume') this.setVolume(v);
     else if (role === 'reverb') this.reverbBus?.gain.setTargetAtTime(v, t, 0.05);
     else if (role === 'delay') this.delayBus?.gain.setTargetAtTime(v, t, 0.05);
-    else if (role === 'tone') this.voices.forEach((voice) => voice.setBrightness(v));
+    else if (role === 'tone') this.voiceByChannel.forEach((e) => e.voice.setBrightness(v));
   }
 
   private applyToggle(role: ColourRole, on: boolean): void {
@@ -275,23 +256,24 @@ export class BoardSequencerEngine {
     if (this.mix) this.mix.gain.setTargetAtTime(v, Tone.now(), 0.02);
   }
 
-  setRowVolume(row: number, v: number): void {
-    const g = this.rowGains[row];
-    if (g) g.gain.setTargetAtTime(v, Tone.now(), 0.02);
+  /** Live per-channel mixer (no-op if that channel has no voice). */
+  setChannelVolume(id: string, v: number): void {
+    const e = this.voiceByChannel.get(id);
+    if (e) e.gain.gain.setTargetAtTime(v, Tone.now(), 0.02);
   }
 
-  setRowTone(row: number, t: number): void {
-    this.voices[row]?.setBrightness(t);
+  setChannelTone(id: string, t: number): void {
+    this.voiceByChannel.get(id)?.voice.setBrightness(t);
   }
 
-  setRowReverbSend(row: number, s: number): void {
-    const g = this.rowRevSends[row];
-    if (g) g.gain.setTargetAtTime(s, Tone.now(), 0.03);
+  setChannelReverbSend(id: string, s: number): void {
+    const e = this.voiceByChannel.get(id);
+    if (e) e.rev.gain.setTargetAtTime(s, Tone.now(), 0.03);
   }
 
-  setRowDelaySend(row: number, s: number): void {
-    const g = this.rowDlySends[row];
-    if (g) g.gain.setTargetAtTime(s, Tone.now(), 0.03);
+  setChannelDelaySend(id: string, s: number): void {
+    const e = this.voiceByChannel.get(id);
+    if (e) e.del.gain.setTargetAtTime(s, Tone.now(), 0.03);
   }
 
   setOctaveShift(octaves: number): void {
@@ -424,14 +406,9 @@ export class BoardSequencerEngine {
     }
   }
 
-  /**
-   * The effective role a cell plays, from its colour. In Drum-kit mode every
-   * sequenced colour is coerced to drums (the mode means "no pitched voices").
-   */
+  /** The role a cell plays, from its colour channel. */
   private roleFor(colour: ColourId): ColourRole {
-    const r = this.cfg.colourRoles[colour] ?? 'off';
-    if (this.cfg.rowMode === 'drumKit' && isSequencedRole(r)) return 'drums';
-    return r;
+    return this.channelById.get(colour)?.role ?? 'off';
   }
 
   /** The polyrhythm-loop category for a role (melody/chord share the melody loop). */
@@ -452,12 +429,6 @@ export class BoardSequencerEngine {
       degreeMidi(degree + 2, root, semis),
       degreeMidi(degree + 4, root, semis),
     ];
-  }
-
-  /** The instrument a row plays: its per-row override if set, else the default. */
-  private instrumentForRow(row: number): string {
-    const k = this.cfg.rowInstruments[row];
-    return k && k.length > 0 ? k : this.cfg.instrumentKey;
   }
 
   /** A role's configured polyrhythm loop-length setting (0 = full grid width). */
@@ -488,14 +459,13 @@ export class BoardSequencerEngine {
     // "melodic" cell is one whose colour role is melody or chord.
     const melodic = cells.filter((c) => {
       const r = this.roleFor(c.colour);
-      return (r === 'melody' || r === 'chord') && c.row >= 0 && c.row < this.voices.length;
+      return (r === 'melody' || r === 'chord') && this.voiceByChannel.has(c.colour);
     });
-    // Per-row instruments: each instrument (row) plays a melody across columns
-    // → pitch by column. Pitched (single instrument): piano roll → pitch by row.
-    const axis = this.cfg.rowMode === 'instruments' ? 'col' : 'row';
+    // Pitch is always by ABSOLUTE row position (bottom = low, top = high);
+    // column = time. The instrument/role come from the cell's colour channel.
     const voicing = voicingForCells(
       melodic, this.cfg.scaleRootMidi, this.cfg.scaleSemitones,
-      chord && chord.notes.length > 0 ? chord.notes : null, axis, this.cfg.rows,
+      chord && chord.notes.length > 0 ? chord.notes : null, 'row', this.cfg.rows,
     );
     const oct = this.cfg.octaveShift * 12;
     // Bass note: the chord's lowest tone (or the scale root), an octave down.
@@ -504,7 +474,9 @@ export class BoardSequencerEngine {
       : this.cfg.scaleRootMidi) - 12 + oct;
     const h = this.cfg.humanize;
     for (const cell of cells) {
-      const role = this.roleFor(cell.colour);
+      const ch = this.channelById.get(cell.colour);
+      if (!ch) continue;
+      const role = ch.role;
       // Control roles (faders/toggles) and 'off' are not sequenced.
       if (role !== 'melody' && role !== 'chord' && role !== 'drums' && role !== 'bass') continue;
       // Per-role polyrhythm: a cell fires when its column matches the role's
@@ -515,28 +487,30 @@ export class BoardSequencerEngine {
       if (h > 0 && Math.random() < h * 0.5) continue;
       const vel = h > 0 ? this.cfg.velocity * (1 - Math.random() * h * 0.4) : this.cfg.velocity;
       if (role === 'drums') {
-        const drum = drumForRowChoice(cell.row, this.cfg.rows, this.cfg.rowDrums);
+        // The drum varies by row (kick→…→crash bottom→top), unless the channel
+        // pins a specific kit piece.
+        const drum = ch.drum && ch.drum.length > 0
+          ? ch.drum
+          : drumForRow(cell.row, this.cfg.rows, DEFAULT_DRUM_ROWS);
         if (drum) this.drumKit?.play(drum as KitDrum, vel, stepTime);
-      } else if (role === 'bass') {
-        this.bassVoice?.play(bassMidi, vel, durSec, stepTime);
+        continue;
+      }
+      const voice = this.voiceByChannel.get(ch.id)?.voice;
+      if (!voice) continue;
+      if (role === 'bass') {
+        voice.play(bassMidi, vel, durSec, stepTime);
+      } else if (role === 'chord' || ch.instrument === 'chord') {
+        // Chord stab: play a stack (the song chord, or a scale triad) at once.
+        for (const n of this.chordStack(cell, chord, 'row')) {
+          voice.play(n + oct, vel, durSec, stepTime);
+        }
       } else {
-        const voice = this.voices[cell.row];
-        if (!voice) continue;
-        const inst = this.instrumentForRow(cell.row);
-        // Chord stab when the colour role is 'chord' OR the row's instrument is the
-        // chord-stab sound: play a stack (the song chord, or a scale triad) at once.
-        if (role === 'chord' || inst === 'chord') {
-          for (const n of this.chordStack(cell, chord, axis)) {
-            voice.play(n + oct, vel, durSec, stepTime);
-          }
-        } else {
-          const midi = voicing.get(`${cell.row},${cell.col}`);
-          if (midi !== undefined) {
-            // Pad rows sustain for a whole loop (re-triggered each pass) so they
-            // act as a held harmonic bed; other rows play the short note length.
-            const dur = inst === 'pad' ? secPerBeat * melodicLoop : durSec;
-            voice.play(midi + oct, vel, dur, stepTime);
-          }
+        const midi = voicing.get(`${cell.row},${cell.col}`);
+        if (midi !== undefined) {
+          // A 'pad' instrument sustains a whole loop (re-triggered each pass) as a
+          // held harmonic bed; others play the short note length.
+          const dur = ch.instrument === 'pad' ? secPerBeat * melodicLoop : durSec;
+          voice.play(midi + oct, vel, dur, stepTime);
         }
       }
     }
@@ -549,14 +523,14 @@ export class BoardSequencerEngine {
 
   dispose(): void {
     this.stop();
-    this.voices.forEach((v) => v.dispose());
-    this.voices = [];
-    [...this.rowGains, ...this.rowRevSends, ...this.rowDlySends].forEach((g) => g.disconnect());
-    this.rowGains = [];
-    this.rowRevSends = [];
-    this.rowDlySends = [];
-    this.bassVoice?.dispose();
-    this.bassVoice = null;
+    this.voiceByChannel.forEach((e) => {
+      e.voice.dispose();
+      e.gain.disconnect();
+      e.rev.disconnect();
+      e.del.disconnect();
+    });
+    this.voiceByChannel.clear();
+    this.channelById.clear();
     this.limiter?.dispose();
     this.limiter = null;
     this.reverb?.dispose();

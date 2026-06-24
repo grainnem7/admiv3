@@ -204,25 +204,6 @@ export default function BoardSequencerScreen() {
     [],
   );
 
-  type RowMixField = 'rowVolume' | 'rowTone' | 'rowReverbSend' | 'rowDelaySend';
-  const setRowMix = useCallback((field: RowMixField, row: number, value: number) => {
-    setConfig((prev) => {
-      const arr = [...prev[field]];
-      const pad = field === 'rowVolume' || field === 'rowTone' ? 1 : 0;
-      while (arr.length <= row) arr.push(pad);
-      arr[row] = value;
-      const next = { ...prev, [field]: arr };
-      saveBoardSequencerConfig(next);
-      return next;
-    });
-    const eng = engineRef.current;
-    if (!eng) return;
-    if (field === 'rowVolume') eng.setRowVolume(row, value);
-    else if (field === 'rowTone') eng.setRowTone(row, value);
-    else if (field === 'rowReverbSend') eng.setRowReverbSend(row, value);
-    else eng.setRowDelaySend(row, value);
-  }, []);
-
   const update = useCallback((patch: Partial<BoardSequencerStored>) => {
     setConfig((prev) => {
       const next = { ...prev, ...patch };
@@ -231,31 +212,26 @@ export default function BoardSequencerScreen() {
     });
   }, []);
 
-  // Set the instrument for one row (per-row-instrument mode), growing the array
-  // to cover the current row count.
-  const setRowInstrument = useCallback((row: number, key: string) => {
+  // Patch one field of a colour channel (instrument/drum/volume/tone/sends).
+  const patchChannel = useCallback((id: string, patch: Partial<ColourChannel>) => {
     setConfig((prev) => {
-      const arr = [...prev.rowInstruments];
-      while (arr.length <= row) arr.push('');
-      arr[row] = key;
-      const next = { ...prev, rowInstruments: arr };
+      const next = { ...prev, channels: prev.channels.map((c) => (c.id === id ? { ...c, ...patch } : c)) };
       saveBoardSequencerConfig(next);
       return next;
     });
   }, []);
 
-  // Set the drum for one row (per-row drum choice), growing the array to cover
-  // the current row count. '' = use the default kit mapping for that row.
-  const setRowDrum = useCallback((row: number, drum: string) => {
-    setConfig((prev) => {
-      const arr = [...prev.rowDrums];
-      while (arr.length <= row) arr.push('');
-      arr[row] = drum;
-      const next = { ...prev, rowDrums: arr };
-      saveBoardSequencerConfig(next);
-      return next;
-    });
-  }, []);
+  // Live per-channel mixer; persists + applies to the running engine.
+  type ChannelMixField = 'volume' | 'tone' | 'reverbSend' | 'delaySend';
+  const setChannelMix = useCallback((id: string, field: ChannelMixField, value: number) => {
+    patchChannel(id, { [field]: value });
+    const eng = engineRef.current;
+    if (!eng) return;
+    if (field === 'volume') eng.setChannelVolume(id, value);
+    else if (field === 'tone') eng.setChannelTone(id, value);
+    else if (field === 'reverbSend') eng.setChannelReverbSend(id, value);
+    else eng.setChannelDelaySend(id, value);
+  }, [patchChannel]);
 
   // Pattern chaining: select which page the live camera edits.
   const selectPage = useCallback((i: number) => {
@@ -531,16 +507,11 @@ export default function BoardSequencerScreen() {
       scaleRootMidi: cfg.scaleRootMidi, scaleSemitones: cfg.scaleSemitones, swing: cfg.swing,
       humanize: cfg.humanize,
       noteLengthBeats: cfg.noteLengthBeats, velocity: cfg.velocity,
-      tickEnabled: cfg.tickEnabled, instrumentKey: cfg.instrumentKey,
-      rowMode: cfg.rowMode,
-      colourRoles: Object.fromEntries(cfg.channels.map((c) => [c.id, c.role])),
-      faderAxis: cfg.faderAxis,
-      rowInstruments: cfg.rowInstruments, rowDrums: cfg.rowDrums,
+      tickEnabled: cfg.tickEnabled,
+      channels: cfg.channels, faderAxis: cfg.faderAxis,
       loopStepsRed: cfg.loopStepsRed, loopStepsBlack: cfg.loopStepsBlack,
       loopStepsBlue: cfg.loopStepsBlue, numPages: cfg.numPages,
       octaveShift: cfg.octaveShift, volume: cfg.volume,
-      rowVolume: cfg.rowVolume, rowTone: cfg.rowTone,
-      rowReverbSend: cfg.rowReverbSend, rowDelaySend: cfg.rowDelaySend,
     });
     await engine.init();
     engine.setMuted(mutedRef.current);
@@ -707,7 +678,6 @@ export default function BoardSequencerScreen() {
   // Per-render derived: the calibrated channels, whether any drums (drives the
   // per-row drum picker), and a colour-id → channel lookup for labels/swatches.
   const channels = config.channels;
-  const anyDrums = config.rowMode === 'drumKit' || channels.some((c) => c.role === 'drums');
   const anyFader = channels.some((c) => isFaderRole(c.role));
   const channelById = new Map(channels.map((c) => [c.id, c]));
   const labelForId = (id: ColourId) => {
@@ -797,60 +767,89 @@ export default function BoardSequencerScreen() {
             )}
             {channels.map((c) => {
               const isCalib = colourCalib?.mode === 'recal' && colourCalib.id === c.id;
+              const isMelodic = c.role === 'melody' || c.role === 'chord' || c.role === 'bass';
               return (
                 <div
                   key={c.id}
                   style={{
-                    display: 'flex', alignItems: 'center', gap: 6, fontSize: 12,
-                    padding: '4px 6px', borderRadius: 6,
+                    display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12,
+                    padding: '5px 6px', borderRadius: 6,
                     border: isCalib ? '1px solid #4caf50' : '1px solid #ffffff14',
                     background: '#ffffff08',
                   }}
                 >
-                  <span
-                    title={`${describeChannel(c)} — click ⟳ then a piece to recalibrate`}
-                    style={{
-                      width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
-                      background: c.swatch, border: '1px solid #0008',
-                    }}
-                  />
-                  <select
-                    style={{ flex: 1, minWidth: 0 }}
-                    value={c.role}
-                    onChange={(e) => setChannelRole(c.id, e.target.value as ColourRole)}
-                  >
-                    {ROLE_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </select>
-                  <button
-                    type="button" title="Recalibrate (then click a piece)"
-                    aria-label={`Recalibrate ${describeChannel(c)}`}
-                    onClick={() => recalibrateChannel(c.id)}
-                    style={{ padding: '2px 6px' }}
-                  >
-                    {isCalib ? '◉' : '⟳'}
-                  </button>
-                  <button
-                    type="button" title="Remove colour"
-                    aria-label={`Remove ${describeChannel(c)}`}
-                    onClick={() => removeChannel(c.id)}
-                    style={{ padding: '2px 6px' }}
-                  >
-                    ×
-                  </button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span
+                      title={`${describeChannel(c)} — click ⟳ then a piece to recalibrate`}
+                      style={{
+                        width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
+                        background: c.swatch, border: '1px solid #0008',
+                      }}
+                    />
+                    <select
+                      style={{ flex: 1, minWidth: 0 }}
+                      value={c.role}
+                      onChange={(e) => setChannelRole(c.id, e.target.value as ColourRole)}
+                    >
+                      {ROLE_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button" title="Recalibrate (then click a piece)"
+                      aria-label={`Recalibrate ${describeChannel(c)}`}
+                      onClick={() => recalibrateChannel(c.id)}
+                      style={{ padding: '2px 6px' }}
+                    >
+                      {isCalib ? '◉' : '⟳'}
+                    </button>
+                    <button
+                      type="button" title="Remove colour"
+                      aria-label={`Remove ${describeChannel(c)}`}
+                      onClick={() => removeChannel(c.id)}
+                      style={{ padding: '2px 6px' }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                  {isMelodic && (
+                    <select
+                      style={{ width: '100%' }}
+                      value={c.instrument ?? ''} disabled={running}
+                      onChange={(e) => patchChannel(c.id, { instrument: e.target.value })}
+                      title="Instrument for this colour"
+                    >
+                      <option value="">{c.role === 'bass' ? 'Default (electric bass)' : 'Default (electric piano)'}</option>
+                      {INSTRUMENT_OPTIONS.map((i) => (
+                        <option key={i.key} value={i.key}>{i.name}</option>
+                      ))}
+                    </select>
+                  )}
+                  {c.role === 'drums' && (
+                    <select
+                      style={{ width: '100%' }}
+                      value={c.drum ?? ''} disabled={running}
+                      onChange={(e) => patchChannel(c.id, { drum: e.target.value })}
+                      title="Drum for this colour"
+                    >
+                      <option value="">Vary by row (kick→crash)</option>
+                      {DRUM_OPTIONS.map((d) => (
+                        <option key={d.key} value={d.key}>{d.name}</option>
+                      ))}
+                    </select>
+                  )}
+                  {c.kind === 'black' && (
+                    <label style={{ fontSize: 11 }}>
+                      Darkness ≤ {c.blackBand?.maxValue ?? 34}%
+                      <input
+                        type="range" min={10} max={70} value={Math.round(c.blackBand?.maxValue ?? 34)}
+                        onChange={(e) => setChannelBlackDarkness(c.id, Number(e.target.value))}
+                      />
+                    </label>
+                  )}
                 </div>
               );
             })}
-            {channels.some((c) => c.kind === 'black') && channels.filter((c) => c.kind === 'black').map((c) => (
-              <label key={`dk-${c.id}`} style={{ fontSize: 11 }}>
-                Black darkness ≤ {c.blackBand?.maxValue ?? 34}%
-                <input
-                  type="range" min={10} max={70} value={Math.round(c.blackBand?.maxValue ?? 34)}
-                  onChange={(e) => setChannelBlackDarkness(c.id, Number(e.target.value))}
-                />
-              </label>
-            ))}
             <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
               <button type="button" style={{ flex: 1 }} disabled={running} onClick={addColour}>
                 {colourCalib?.mode === 'new' ? 'Click a piece on the camera…' : '+ Add colour'}
@@ -888,83 +887,9 @@ export default function BoardSequencerScreen() {
 
           <Section
             title="Sound"
+            hint="Pitch follows the piece's row (low at the bottom). Each colour's instrument/drum is set in Colours."
             open={!!openSection.sound} onToggle={() => toggleSection('sound')}
           >
-            <label>
-              Row mode
-              <select
-                value={config.rowMode} disabled={running}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  const rowMode: BoardSequencerStored['rowMode'] =
-                    v === 'drumKit' ? 'drumKit' : v === 'instruments' ? 'instruments' : 'pitched';
-                  update({ rowMode });
-                }}
-              >
-                <option value="pitched">Pitched (melody)</option>
-                <option value="instruments">Per-row instruments</option>
-                <option value="drumKit">Drum kit</option>
-              </select>
-            </label>
-            {config.rowMode !== 'drumKit' && (
-              <>
-                <label>
-                  Default instrument
-                  <select
-                    value={config.instrumentKey} disabled={running}
-                    onChange={(e) => update({ instrumentKey: e.target.value })}
-                  >
-                    {INSTRUMENT_OPTIONS.map((i) => (
-                      <option key={i.key} value={i.key}>{i.name}</option>
-                    ))}
-                  </select>
-                </label>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <span style={{ fontSize: 11, opacity: 0.65 }}>
-                    Per-row sound (melody/chord) — “Default” uses the instrument above
-                  </span>
-                  {Array.from({ length: config.rows }, (_, r) => (
-                    <label key={r} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
-                      <span style={{ width: 64 }}>
-                        Row {r + 1}{r === 0 ? ' (top)' : r === config.rows - 1 ? ' (bottom)' : ''}
-                      </span>
-                      <select
-                        value={config.rowInstruments[r] ?? ''} disabled={running}
-                        onChange={(e) => setRowInstrument(r, e.target.value)}
-                      >
-                        <option value="">Default</option>
-                        {INSTRUMENT_OPTIONS.map((i) => (
-                          <option key={i.key} value={i.key}>{i.name}</option>
-                        ))}
-                      </select>
-                    </label>
-                  ))}
-                </div>
-              </>
-            )}
-            {anyDrums && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <span style={{ fontSize: 11, opacity: 0.65 }}>
-                  Per-row drum — “Default” = kick/snare/hat/crash bottom→top
-                </span>
-                {Array.from({ length: config.rows }, (_, r) => (
-                  <label key={r} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
-                    <span style={{ width: 64 }}>
-                      Row {r + 1}{r === 0 ? ' (top)' : r === config.rows - 1 ? ' (bottom)' : ''}
-                    </span>
-                    <select
-                      value={config.rowDrums[r] ?? ''} disabled={running}
-                      onChange={(e) => setRowDrum(r, e.target.value)}
-                    >
-                      <option value="">Default</option>
-                      {DRUM_OPTIONS.map((d) => (
-                        <option key={d.key} value={d.key}>{d.name}</option>
-                      ))}
-                    </select>
-                  </label>
-                ))}
-              </div>
-            )}
             <label>
               Key
               <select
@@ -1184,33 +1109,39 @@ export default function BoardSequencerScreen() {
           </Section>
 
           <Section
-            title="Per-row mixer"
+            title="Per-colour mixer"
             open={!!openSection.mixer} onToggle={() => toggleSection('mixer')}
           >
-            {config.rowMode === 'drumKit' ? (
-              <span style={{ fontSize: 11, opacity: 0.6 }}>No melodic rows in Drum-kit mode.</span>
+            {channels.filter((c) => c.role === 'melody' || c.role === 'chord' || c.role === 'bass').length === 0 ? (
+              <span style={{ fontSize: 11, opacity: 0.6 }}>Add a melody/chord/bass colour to mix it.</span>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <div style={{ display: 'flex', gap: 4, fontSize: 10, opacity: 0.7 }}>
-                  <span style={{ width: 44 }} />
-                  <span style={{ width: 50, textAlign: 'center' }}>Vol</span>
-                  <span style={{ width: 50, textAlign: 'center' }}>Tone</span>
-                  <span style={{ width: 50, textAlign: 'center' }}>Rev</span>
-                  <span style={{ width: 50, textAlign: 'center' }}>Dly</span>
+                  <span style={{ width: 20 }} />
+                  <span style={{ width: 48, textAlign: 'center' }}>Vol</span>
+                  <span style={{ width: 48, textAlign: 'center' }}>Tone</span>
+                  <span style={{ width: 48, textAlign: 'center' }}>Rev</span>
+                  <span style={{ width: 48, textAlign: 'center' }}>Dly</span>
                 </div>
-                {Array.from({ length: config.rows }, (_, r) => (
-                  <div key={r} style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                    <span style={{ width: 44, fontSize: 11 }}>Row {r + 1}</span>
-                    {(['rowVolume', 'rowTone', 'rowReverbSend', 'rowDelaySend'] as RowMixField[]).map((f) => {
-                      const fallback = f === 'rowVolume' || f === 'rowTone' ? 1 : 0;
-                      return (
-                        <input
-                          key={f} type="range" min={0} max={100} style={{ width: 50 }}
-                          value={Math.round((config[f][r] ?? fallback) * 100)}
-                          onChange={(e) => setRowMix(f, r, Number(e.target.value) / 100)}
-                        />
-                      );
-                    })}
+                {channels.filter((c) => c.role === 'melody' || c.role === 'chord' || c.role === 'bass').map((c) => (
+                  <div key={c.id} style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                    <span style={{
+                      width: 14, height: 14, borderRadius: '50%', flexShrink: 0,
+                      background: c.swatch, border: '1px solid #0008',
+                    }}
+                    />
+                    {([
+                      ['volume', c.volume ?? 1],
+                      ['tone', c.tone ?? 1],
+                      ['reverbSend', c.reverbSend ?? 0.18],
+                      ['delaySend', c.delaySend ?? 0],
+                    ] as const).map(([field, val]) => (
+                      <input
+                        key={field} type="range" min={0} max={100} style={{ width: 48 }}
+                        value={Math.round(val * 100)}
+                        onChange={(e) => setChannelMix(c.id, field, Number(e.target.value) / 100)}
+                      />
+                    ))}
                   </div>
                 ))}
               </div>

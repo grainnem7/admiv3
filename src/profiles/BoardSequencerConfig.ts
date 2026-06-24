@@ -61,22 +61,10 @@ export interface BoardSequencerStored {
   noteLengthBeats: number;
   velocity: number;
   tickEnabled: boolean;
-  instrumentKey: string;
   /** Global transpose in octaves (applied to all melodic + bass notes). */
   octaveShift: number;
   /** Board output volume (0..1). */
   volume: number;
-  /** Per-row mixer (indexed by row, 0 = top): volume, tone/brightness, and FX sends (all 0..1). */
-  rowVolume: number[];
-  rowTone: number[];
-  rowReverbSend: number[];
-  rowDelaySend: number[];
-  /** Melodic behaviour: single instrument ('pitched'), per-row instruments, or pure drum kit. */
-  rowMode: 'pitched' | 'drumKit' | 'instruments';
-  /** Per-row palette keys for 'instruments' mode (indexed by row, 0 = top). */
-  rowInstruments: string[];
-  /** Per-row drum override (indexed by row, 0 = top); '' = default kit mapping. */
-  rowDrums: string[];
   /**
    * Polyrhythm: loop length (in steps/columns) per role. 0 = use the full grid
    * width (no polyrhythm). When > 0, that role wraps at its own length, so the
@@ -133,17 +121,7 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   velocity: 0.7,
   octaveShift: 0,
   volume: 0.6,
-  rowVolume: [1, 1, 1, 1, 1, 1, 1, 1],
-  rowTone: [1, 1, 1, 1, 1, 1, 1, 1],
-  rowReverbSend: [0.18, 0.18, 0.18, 0.18, 0.18, 0.18, 0.18, 0.18],
-  rowDelaySend: [0, 0, 0, 0, 0, 0, 0, 0],
   tickEnabled: true,
-  instrumentKey: 'electricPiano',
-  rowMode: 'pitched',
-  // Empty = "use the default instrument" for that row; override per row in the UI.
-  rowInstruments: ['', '', '', '', '', '', '', ''],
-  // Empty = "use the default kit mapping" for that row; override per row in the UI.
-  rowDrums: ['', '', '', '', '', '', '', ''],
   loopStepsRed: 0,
   loopStepsBlack: 0,
   loopStepsBlue: 0,
@@ -159,10 +137,6 @@ function isNum(v: unknown): v is number {
 
 function num(v: unknown, fallback: number): number {
   return isNum(v) ? v : fallback;
-}
-
-function numArray(v: unknown, fallback: number[]): number[] {
-  return Array.isArray(v) && v.every(isNum) ? (v as number[]) : fallback;
 }
 
 function sanitizeCorners(v: unknown): [BoardPoint, BoardPoint, BoardPoint, BoardPoint] {
@@ -213,6 +187,12 @@ function sanitizeChannel(v: unknown): ColourChannel | null {
   if (kind === 'hue') ch.band = sanitizeColour(o.band, FALLBACK_HUE_BAND);
   else if (kind === 'black') ch.blackBand = sanitizeBlackBand(o.blackBand);
   else ch.whiteBand = sanitizeWhiteBand(o.whiteBand);
+  if (typeof o.instrument === 'string') ch.instrument = o.instrument;
+  if (typeof o.drum === 'string') ch.drum = o.drum;
+  if (isNum(o.volume)) ch.volume = o.volume;
+  if (isNum(o.tone)) ch.tone = o.tone;
+  if (isNum(o.reverbSend)) ch.reverbSend = o.reverbSend;
+  if (isNum(o.delaySend)) ch.delaySend = o.delaySend;
   return ch;
 }
 
@@ -271,26 +251,7 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     velocity: num(o.velocity, d.velocity),
     octaveShift: num(o.octaveShift, d.octaveShift),
     volume: num(o.volume, d.volume),
-    rowVolume: numArray(o.rowVolume, d.rowVolume),
-    rowTone: numArray(o.rowTone, d.rowTone),
-    rowReverbSend: numArray(o.rowReverbSend, d.rowReverbSend),
-    rowDelaySend: numArray(o.rowDelaySend, d.rowDelaySend),
     tickEnabled: o.tickEnabled !== false,
-    instrumentKey: typeof o.instrumentKey === 'string' ? o.instrumentKey : d.instrumentKey,
-    // Migrate the old combined 'redBlack' mode → 'instruments' (black=drums now
-    // lives in colourRoles).
-    rowMode:
-      o.rowMode === 'drumKit' ? 'drumKit'
-        : (o.rowMode === 'instruments' || o.rowMode === 'redBlack') ? 'instruments'
-          : 'pitched',
-    rowInstruments:
-      Array.isArray(o.rowInstruments) && o.rowInstruments.every((k) => typeof k === 'string')
-        ? (o.rowInstruments as string[])
-        : d.rowInstruments,
-    rowDrums:
-      Array.isArray(o.rowDrums) && o.rowDrums.every((k) => typeof k === 'string')
-        ? (o.rowDrums as string[])
-        : d.rowDrums,
     loopStepsRed: num(o.loopStepsRed, d.loopStepsRed),
     loopStepsBlack: num(o.loopStepsBlack, d.loopStepsBlack),
     loopStepsBlue: num(o.loopStepsBlue, d.loopStepsBlue),

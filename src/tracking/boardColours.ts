@@ -75,7 +75,7 @@ export interface WhiteBand {
 export const DEFAULT_BLACK_BAND: BlackBand = { maxValue: 34, maxSaturation: 45 };
 export const DEFAULT_WHITE_BAND: WhiteBand = { minValue: 78, maxSaturation: 18 };
 
-/** A user-calibrated colour: its detection band, display swatch, and role. */
+/** A user-calibrated colour: its detection band, display swatch, role and sound. */
 export interface ColourChannel {
   id: ColourId;
   kind: ColourKind;
@@ -88,6 +88,15 @@ export interface ColourChannel {
   blackBand?: BlackBand;
   /** Calibrated band for `kind: 'white'`. */
   whiteBand?: WhiteBand;
+  /** Sampled instrument key for melody/chord/bass roles ('' = sensible default). */
+  instrument?: string;
+  /** Kit piece for the drums role ('' = vary by row, kick→crash bottom→top). */
+  drum?: string;
+  /** Per-channel mix (all 0..1): volume, tone/brightness, reverb-send, delay-send. */
+  volume?: number;
+  tone?: number;
+  reverbSend?: number;
+  delaySend?: number;
 }
 
 /** A colour reduced to "does this HSV pixel match?", tagged with its id. */

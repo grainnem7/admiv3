@@ -135,11 +135,12 @@ describe('boardSequencerScale', () => {
 });
 
 describe('boardSequencerScale drum mapping', () => {
-  it('DEFAULT_DRUM_ROWS is bottom-to-top kick, snare, hat, crash', () => {
-    expect(DEFAULT_DRUM_ROWS).toEqual(['kick', 'snare', 'hat', 'crash']);
+  it('DEFAULT_DRUM_ROWS starts kick, snare, hat, crash (bottom→top) and covers 8 rows', () => {
+    expect(DEFAULT_DRUM_ROWS.slice(0, 4)).toEqual(['kick', 'snare', 'hat', 'crash']);
+    expect(DEFAULT_DRUM_ROWS.length).toBe(8);
   });
 
-  it('drumForRow maps the BOTTOM row to the first drum and wraps to null beyond the kit', () => {
+  it('drumForRow maps the BOTTOM row to the first drum, climbing the kit upward', () => {
     const rows = 4;
     expect(drumForRow(3, rows, DEFAULT_DRUM_ROWS)).toBe('kick');  // bottom row
     expect(drumForRow(2, rows, DEFAULT_DRUM_ROWS)).toBe('snare');
@@ -147,11 +148,11 @@ describe('boardSequencerScale drum mapping', () => {
     expect(drumForRow(0, rows, DEFAULT_DRUM_ROWS)).toBe('crash'); // top row
   });
 
-  it('drumForRow returns null for rows above the kit size (bigger grid than kit)', () => {
-    const rows = 6; // levels 0..5, only 4 drums
+  it('drumForRow now covers larger grids (every row of a 6-row grid sounds)', () => {
+    const rows = 6; // levels 0..5
     expect(drumForRow(5, rows, DEFAULT_DRUM_ROWS)).toBe('kick'); // level 0
-    expect(drumForRow(1, rows, DEFAULT_DRUM_ROWS)).toBeNull();   // level 4 → beyond kit
-    expect(drumForRow(0, rows, DEFAULT_DRUM_ROWS)).toBeNull();   // level 5 → null
+    expect(drumForRow(1, rows, DEFAULT_DRUM_ROWS)).toBe('tom');  // level 4
+    expect(drumForRow(0, rows, DEFAULT_DRUM_ROWS)).toBe('clap'); // level 5
   });
 
   it('drumsForStep returns drum names for active cells in that column (skipping null rows)', () => {
@@ -181,12 +182,12 @@ describe('boardSequencerScale drum mapping', () => {
     expect(drumForRowChoice(2, rows, rowDrums)).toBe('tom');  // override
   });
 
-  it('drumForRowChoice lets overrides give drums to rows beyond the 4-piece kit', () => {
-    const rows = 6; // rows above the default kit normally fall to null
+  it('drumForRowChoice: an explicit override beats the default kit mapping', () => {
+    const rows = 6;
     const rowDrums = ['rim', 'clap', '', '', '', ''];
-    expect(drumForRowChoice(0, rows, rowDrums)).toBe('rim');  // top row would be null by default
-    expect(drumForRowChoice(1, rows, rowDrums)).toBe('clap');
-    expect(drumForRow(1, rows, DEFAULT_DRUM_ROWS)).toBeNull(); // confirms default would be null
+    expect(drumForRowChoice(0, rows, rowDrums)).toBe('rim');  // override (default would be 'clap')
+    expect(drumForRowChoice(1, rows, rowDrums)).toBe('clap'); // override (default would be 'tom')
+    expect(drumForRow(0, rows, DEFAULT_DRUM_ROWS)).toBe('clap'); // default now covers all rows
   });
 });
 

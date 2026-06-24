@@ -430,7 +430,29 @@ Groove & tempo, Pattern length, Backing song, Per-row mixer).
 ### Pure + tested
 `faderValue` (position→value), `calibrationFromHsv`, `freshChannelId`,
 `orderedChannels`/`channelPriority`, `describeChannel`/`hueName`, and the
-priority/dominant logic in `sampleRegion` + `ColourRecognizer` are unit-tested;
-config migration (legacy flags/roles → channels, `redColour` hue → channel band)
-is covered. `loopStepsRed/Black/Blue` read as the melody/drums/bass loop
-categories.
+priority/dominant logic in `sampleRegion` + `ColourRecognizer` are unit-tested.
+`loopStepsRed/Black/Blue` read as the melody/drums/bass loop categories.
+
+---
+
+## 18. Iteration 5 (built — colour-centric model: rowMode removed)
+
+The old `rowMode` (pitched / per-row-instruments / drum-kit) plus the per-row
+instrument & drum pickers were redundant and conflicting once colours own the
+role (drum-kit mode silently coerced melody colours to drums on rows that had no
+kit piece → no sound). They are removed. The model is now purely colour-centric:
+
+- **The colour decides the role; the position decides pitch.** Pitch is always
+  by ABSOLUTE row (bottom = low, top = high) via `voicingForCells(..., 'row')`;
+  column = time. No pitch-axis option.
+- **Each colour carries its own sound.** `ColourChannel` gains `instrument`
+  (melody/chord/bass), `drum` (drums; '' = vary by row), and per-channel mix
+  (`volume`/`tone`/`reverbSend`/`delaySend`). The engine builds **one voice per
+  melody/chord/bass channel** (keyed by id) with its own gain + FX sends; drums
+  share the kit and the kit piece **varies by row** (`DEFAULT_DRUM_ROWS` extended
+  to 8: kick, snare, hat, crash, tom, clap, rim, kick+crash) so every row sounds.
+- **UI:** the Colours rows gain an inline instrument (or drum) picker; the
+  per-row mixer becomes a **Per-colour mixer**. The Sound section keeps only the
+  global musical params (key/scale/octave/note-length/volume/tick). `rowMode`,
+  `instrumentKey`, `rowInstruments`, `rowDrums`, `rowVolume/Tone/ReverbSend/
+  DelaySend` are gone from config.

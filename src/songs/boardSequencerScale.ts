@@ -124,8 +124,8 @@ export function notesForStep(
     .map((c) => cellMidi(c.row, rows, rootMidi, semitones));
 }
 
-/** Default drum-kit row order, bottom row → top row. */
-export const DEFAULT_DRUM_ROWS = ['kick', 'snare', 'hat', 'crash'] as const;
+/** Default drum-kit row order, bottom row → top row (covers up to 8 rows). */
+export const DEFAULT_DRUM_ROWS = ['kick', 'snare', 'hat', 'crash', 'tom', 'clap', 'rim', 'kickCrash'] as const;
 
 /** Every drum a row can be assigned in the per-row drum picker. */
 export const DRUM_CHOICES = [
