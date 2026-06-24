@@ -14,6 +14,15 @@ describe('BoardSequencerConfig', () => {
     expect(loadBoardSequencerConfig()).toBeNull();
   });
 
+  it('has no predefined colours by default (empty channels)', () => {
+    expect(DEFAULT_BOARD_SEQUENCER_CONFIG.channels).toEqual([]);
+  });
+
+  it('keeps an empty channels array as empty (no red fallback)', () => {
+    localStorage.setItem('admi-board-sequencer', JSON.stringify({ bpm: 90, channels: [] }));
+    expect(loadBoardSequencerConfig()?.channels).toEqual([]);
+  });
+
   it('round-trips a valid config', () => {
     const cfg: BoardSequencerStored = { ...DEFAULT_BOARD_SEQUENCER_CONFIG, bpm: 110 };
     saveBoardSequencerConfig(cfg);

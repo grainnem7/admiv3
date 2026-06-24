@@ -694,6 +694,14 @@ export default function BoardSequencerScreen() {
       return next;
     });
   }, []);
+  const clearChannels = useCallback(() => {
+    setColourCalib(null);
+    setConfig((prev) => {
+      const next = { ...prev, channels: [] };
+      saveBoardSequencerConfig(next);
+      return next;
+    });
+  }, []);
 
   const transform = `scaleX(${config.mirrorX ? -1 : 1}) scaleY(${config.mirrorY ? -1 : 1})`;
   // Per-render derived: the calibrated channels, whether any drums (drives the
@@ -843,9 +851,20 @@ export default function BoardSequencerScreen() {
                 />
               </label>
             ))}
-            <button type="button" disabled={running} onClick={addColour}>
-              {colourCalib?.mode === 'new' ? 'Click a piece on the camera…' : '+ Add colour'}
-            </button>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <button type="button" style={{ flex: 1 }} disabled={running} onClick={addColour}>
+                {colourCalib?.mode === 'new' ? 'Click a piece on the camera…' : '+ Add colour'}
+              </button>
+              {channels.length > 0 && (
+                <button
+                  type="button" disabled={running} onClick={clearChannels}
+                  style={{ fontSize: 11, opacity: 0.8 }}
+                  title="Remove all colours"
+                >
+                  Clear all
+                </button>
+              )}
+            </div>
             {anyFader && (
               <label>
                 Fader reads

@@ -96,13 +96,10 @@ const ZERO_CORNERS: [BoardPoint, BoardPoint, BoardPoint, BoardPoint] = [
   { x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 },
 ];
 
-const DEFAULT_RED: TrackedColor = {
-  id: 'board-red', hue: 0, hueTolerance: 22, minSaturation: 35, minValue: 25, minArea: 0.0005,
-};
-
-/** A fresh board starts with one red→melody channel so it plays out of the box. */
-const DEFAULT_RED_CHANNEL: ColourChannel = {
-  id: 'c1', kind: 'hue', role: 'melody', swatch: '#e53935', band: DEFAULT_RED,
+// A neutral hue band used only as a sanitisation fallback for a stored channel
+// whose band is missing/corrupt — NOT a predefined colour (fresh boards have none).
+const FALLBACK_HUE_BAND: TrackedColor = {
+  id: 'board-hue', hue: 0, hueTolerance: 22, minSaturation: 35, minValue: 25, minArea: 0.0005,
 };
 
 /** Legacy fixed-palette metadata, used only to migrate pre-channels configs. */
@@ -133,8 +130,8 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   velocitySmoothing: 0.5,
   occupancyGraceMs: 150,
   motionConfirmMs: 80,
-  // Fresh boards start with a single red→melody channel; add more by calibrating.
-  channels: [DEFAULT_RED_CHANNEL],
+  // No predefined colours — the user calibrates their own by clicking a piece.
+  channels: [],
   faderAxis: 'row',
   minFilledFraction: 0.15,
   noteLengthBeats: 0.9,
@@ -218,7 +215,7 @@ function sanitizeChannel(v: unknown): ColourChannel | null {
   const role: ColourRole = typeof o.role === 'string' && o.role in ROLE_LABELS ? (o.role as ColourRole) : 'off';
   const swatch = typeof o.swatch === 'string' ? o.swatch : '#888888';
   const ch: ColourChannel = { id: o.id, kind, role, swatch };
-  if (kind === 'hue') ch.band = sanitizeColour(o.band, DEFAULT_RED);
+  if (kind === 'hue') ch.band = sanitizeColour(o.band, FALLBACK_HUE_BAND);
   else if (kind === 'black') ch.blackBand = sanitizeBlackBand(o.blackBand);
   else ch.whiteBand = sanitizeWhiteBand(o.whiteBand);
   return ch;
@@ -231,8 +228,8 @@ function sanitizeChannel(v: unknown): ColourChannel | null {
  */
 function sanitizeChannels(o: Record<string, unknown>): ColourChannel[] {
   if (Array.isArray(o.channels)) {
-    const out = o.channels.map(sanitizeChannel).filter((c): c is ColourChannel => c !== null);
-    return out.length > 0 ? out : [DEFAULT_RED_CHANNEL];
+    // The user owns the list — an empty board (no colours) is valid.
+    return o.channels.map(sanitizeChannel).filter((c): c is ColourChannel => c !== null);
   }
   // ---- migrate from the pre-channels (fixed-palette) shape ----
   const roles = (typeof o.colourRoles === 'object' && o.colourRoles !== null
@@ -271,7 +268,7 @@ function sanitizeChannels(o: Record<string, unknown>): ColourChannel[] {
     else ch.whiteBand = whiteBand;
     channels.push(ch);
   }
-  return channels.length > 0 ? channels : [DEFAULT_RED_CHANNEL];
+  return channels;
 }
 
 function sanitizeColour(v: unknown, fallback: TrackedColor): TrackedColor {
