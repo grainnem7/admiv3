@@ -37,7 +37,7 @@ import { SongPresetEngine } from '../../songs/SongPresetEngine';
 import { SONG_LIBRARY, type SongConfig } from '../../songs/songLibrary';
 import { getChordAtTime } from '../../songs/voices/chordLookup';
 import { computeHomography, applyHomography, UNIT_SQUARE, type Mat3 } from '../../utils/homography';
-import { stepIndexAt, SCALE_PRESETS, NOTE_NAMES } from '../../songs/boardSequencerScale';
+import { SCALE_PRESETS, NOTE_NAMES } from '../../songs/boardSequencerScale';
 import {
   loadBoardSequencerConfig, saveBoardSequencerConfig, DEFAULT_BOARD_SEQUENCER_CONFIG,
   type BoardSequencerStored, type BoardPoint,
@@ -406,7 +406,8 @@ export default function BoardSequencerScreen() {
             if (res.justSettled.length > 0) engineRef.current.fireTick();
             activeArr = res.activeCells;
             for (const c of res.activeCells) activeMap.set(`${c.row},${c.col}`, c.colour);
-            playCol = stepIndexAt(Tone.now(), startSecRef.current, 60 / cfg.bpm, cfg.cols);
+            // Ask the engine for the live playhead so it follows a tempo fader.
+            playCol = engineRef.current.getPlayheadCol(cfg.cols);
           }
           drawOverlay(occupied, activeMap, cfg, playCol, swatchById);
           if (now - lastStateMs > 100) {

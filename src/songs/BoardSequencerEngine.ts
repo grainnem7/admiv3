@@ -238,6 +238,30 @@ export class BoardSequencerEngine {
     else if (role === 'reverb') this.reverbBus?.gain.setTargetAtTime(v, t, 0.05);
     else if (role === 'delay') this.delayBus?.gain.setTargetAtTime(v, t, 0.05);
     else if (role === 'tone') this.voiceByChannel.forEach((e) => e.voice.setBrightness(v));
+    else if (role === 'tempo') this.setTempo(50 + v * (300 - 50)); // 50…300 BPM
+  }
+
+  /**
+   * Set the standalone BPM live, rebasing the clock so the beat position stays
+   * continuous across the change (no skipped/repeated beats). No effect while
+   * locked to a song (the song drives tempo).
+   */
+  private setTempo(bpm: number): void {
+    const clamped = Math.max(20, Math.min(400, bpm));
+    if (Math.abs(clamped - this.cfg.bpm) < 0.05) return;
+    const now = Tone.now();
+    const elapsedBeats = (now - this.startSec) / (60 / this.cfg.bpm);
+    this.startSec = now - elapsedBeats * (60 / clamped);
+    this.cfg.bpm = clamped;
+  }
+
+  /** The column the playhead is on right now (drives the visual playhead). */
+  getPlayheadCol(cols: number): number {
+    if (this.syncSource && this.syncSource.beats.length > 0) {
+      return ((this.lastBeatIndex % cols) + cols) % cols;
+    }
+    const beat = Math.floor((Tone.now() - this.startSec) / (60 / this.cfg.bpm));
+    return ((beat % cols) + cols) % cols;
   }
 
   private applyToggle(role: ColourRole, on: boolean): void {
