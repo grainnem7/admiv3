@@ -578,26 +578,37 @@ export default function BoardSequencerScreen() {
     ctx.restore();
     const px = Math.min(w - 1, Math.max(0, Math.round(nx * w)));
     const py = Math.min(h - 1, Math.max(0, Math.round(ny * h)));
-    const R = 8;
+    const R = 10;
     const x0 = Math.max(0, px - R);
     const y0 = Math.max(0, py - R);
     const sw = Math.min(2 * R, w - x0);
     const sh = Math.min(2 * R, h - y0);
     const { data } = ctx.getImageData(x0, y0, sw, sh);
+    // The click area usually includes some dull board around a small/distant
+    // piece. Average only the MOST SATURATED pixels (the piece itself), which
+    // also rejects specular glare (bright but desaturated), so the sampled colour
+    // reflects the counter, not the background.
+    const px3: { r: number; g: number; b: number; s: number }[] = [];
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      px3.push({ r, g, b, s: rgbToHsv(r, g, b).s });
+    }
+    if (px3.length === 0) return null;
+    px3.sort((a, b) => b.s - a.s);
+    const take = Math.max(1, Math.floor(px3.length * 0.35));
     let sr = 0;
     let sg = 0;
     let sb = 0;
-    let n = 0;
-    for (let i = 0; i < data.length; i += 4) {
-      sr += data[i];
-      sg += data[i + 1];
-      sb += data[i + 2];
-      n++;
+    for (let i = 0; i < take; i++) {
+      sr += px3[i].r;
+      sg += px3[i].g;
+      sb += px3[i].b;
     }
-    if (n === 0) return null;
-    const ar = sr / n;
-    const ag = sg / n;
-    const ab = sb / n;
+    const ar = sr / take;
+    const ag = sg / take;
+    const ab = sb / take;
     return { ...rgbToHsv(ar, ag, ab), hex: rgbToHex(ar, ag, ab) };
   }, []);
 
