@@ -584,31 +584,40 @@ export default function BoardSequencerScreen() {
     const sw = Math.min(2 * R, w - x0);
     const sh = Math.min(2 * R, h - y0);
     const { data } = ctx.getImageData(x0, y0, sw, sh);
-    // The click area usually includes some dull board around a small/distant
-    // piece. Average only the MOST SATURATED pixels (the piece itself), which
-    // also rejects specular glare (bright but desaturated), so the sampled colour
-    // reflects the counter, not the background.
-    const px3: { r: number; g: number; b: number; s: number }[] = [];
+    // The click area on an angled board mixes the counter with the tan wood (and
+    // any glare) next to it. Averaging RGB across those different hues cancels to
+    // GREY. So instead: find the most vivid pixel (the counter), then average
+    // only pixels of THAT hue — isolating the counter's true colour.
+    const pxs = [];
     for (let i = 0; i < data.length; i += 4) {
       const r = data[i];
       const g = data[i + 1];
       const b = data[i + 2];
-      px3.push({ r, g, b, s: rgbToHsv(r, g, b).s });
+      const hsv = rgbToHsv(r, g, b);
+      pxs.push({ r, g, b, h: hsv.h, s: hsv.s });
     }
-    if (px3.length === 0) return null;
-    px3.sort((a, b) => b.s - a.s);
-    const take = Math.max(1, Math.floor(px3.length * 0.35));
+    if (pxs.length === 0) return null;
+    // Seed = the most saturated pixel (the vivid counter, not wood/glare).
+    const seed = pxs.reduce((best, p) => (p.s > best.s ? p : best), pxs[0]);
+    const hueDist = (a: number, bb: number) => {
+      const d = Math.abs(a - bb) % 360;
+      return d > 180 ? 360 - d : d;
+    };
+    // Average pixels within ±28° of the seed hue with enough saturation — the
+    // counter's body — ignoring the wood/background and desaturated glare.
     let sr = 0;
     let sg = 0;
     let sb = 0;
-    for (let i = 0; i < take; i++) {
-      sr += px3[i].r;
-      sg += px3[i].g;
-      sb += px3[i].b;
+    let n = 0;
+    for (const p of pxs) {
+      if (p.s >= seed.s * 0.5 && hueDist(p.h, seed.h) <= 28) {
+        sr += p.r; sg += p.g; sb += p.b; n++;
+      }
     }
-    const ar = sr / take;
-    const ag = sg / take;
-    const ab = sb / take;
+    if (n === 0) { sr = seed.r; sg = seed.g; sb = seed.b; n = 1; }
+    const ar = sr / n;
+    const ag = sg / n;
+    const ab = sb / n;
     return { ...rgbToHsv(ar, ag, ab), hex: rgbToHex(ar, ag, ab) };
   }, []);
 
