@@ -37,7 +37,7 @@ import { SongPresetEngine } from '../../songs/SongPresetEngine';
 import { SONG_LIBRARY, type SongConfig } from '../../songs/songLibrary';
 import { getChordAtTime } from '../../songs/voices/chordLookup';
 import { computeHomography, applyHomography, UNIT_SQUARE, type Mat3 } from '../../utils/homography';
-import { SCALE_PRESETS, NOTE_NAMES } from '../../songs/boardSequencerScale';
+import { SCALE_PRESETS, NOTE_NAMES, conditionalFromOffset } from '../../songs/boardSequencerScale';
 import {
   loadBoardSequencerConfig, saveBoardSequencerConfig, DEFAULT_BOARD_SEQUENCER_CONFIG,
   type BoardSequencerStored, type BoardPoint,
@@ -284,6 +284,8 @@ export default function BoardSequencerScreen() {
       cfg: BoardSequencerStored,
       playCol: number,
       swatchById: Map<ColourId, string>,
+      conditional: Set<string>,
+      isVarLap: boolean,
     ) => {
       const cv = overlayRef.current;
       const video = videoRef.current;
@@ -329,7 +331,22 @@ export default function BoardSequencerScreen() {
           ctx.lineWidth = c === playCol && runningRef.current ? 3 : 1;
           ctx.strokeStyle = c === playCol && runningRef.current ? 'rgba(80,200,255,0.95)' : 'rgba(80,200,255,0.4)';
           ctx.stroke();
+          if (conditional.has(key)) {
+            ctx.save();
+            ctx.setLineDash([6, 4]);
+            ctx.lineWidth = 2.5;
+            ctx.strokeStyle = isVarLap ? 'rgba(255,210,80,0.95)' : 'rgba(255,210,80,0.5)';
+            ctx.stroke(); // re-stroke the current cell quad, dashed
+            ctx.restore();
+          }
         }
+      }
+      if (runningRef.current) {
+        ctx.save();
+        ctx.font = 'bold 22px sans-serif';
+        ctx.fillStyle = isVarLap ? 'rgba(255,210,80,0.95)' : 'rgba(80,200,255,0.85)';
+        ctx.fillText(isVarLap ? 'B' : 'A', 12, 30);
+        ctx.restore();
       }
     },
     [],
@@ -396,6 +413,20 @@ export default function BoardSequencerScreen() {
               byColour[rd.colour] = (byColour[rd.colour] ?? 0) + 1;
             }
           }
+          // Variation: keep the mode's calibration live, and mark off-centre
+          // pieces for the overlay (computed from the live readings so the ring
+          // shows the instant a piece is shoved, before it even settles).
+          modeRef.current?.setVariation(cfg.variationEnabled, cfg.variationOffsetThreshold);
+          const conditional = new Set<string>();
+          if (cfg.variationEnabled) {
+            for (const rd of readings) {
+              if (rd.occupied && conditionalFromOffset(
+                rd.offset ?? null, cfg.variationEnabled, cfg.variationOffsetThreshold,
+              )) {
+                conditional.add(`${rd.row},${rd.col}`);
+              }
+            }
+          }
           let activeArr: ActiveCell[] = [];
           const activeMap = new Map<string, PieceColour>();
           let playCol = 0;
@@ -409,7 +440,10 @@ export default function BoardSequencerScreen() {
             // Ask the engine for the live playhead so it follows a tempo fader.
             playCol = engineRef.current.getPlayheadCol(cfg.cols);
           }
-          drawOverlay(occupied, activeMap, cfg, playCol, swatchById);
+          const isVarLap = runningRef.current && engineRef.current
+            ? engineRef.current.isVariationLap()
+            : false;
+          drawOverlay(occupied, activeMap, cfg, playCol, swatchById, conditional, isVarLap);
           if (now - lastStateMs > 100) {
             lastStateMs = now;
             setActive(activeArr);
@@ -502,6 +536,8 @@ export default function BoardSequencerScreen() {
       velocitySmoothing: cfg.velocitySmoothing,
       occupancyGraceMs: cfg.occupancyGraceMs,
       motionConfirmMs: cfg.motionConfirmMs,
+      variationEnabled: cfg.variationEnabled,
+      variationOffsetThreshold: cfg.variationOffsetThreshold,
     });
     const engine = new BoardSequencerEngine({
       bpm: cfg.bpm, rows: cfg.rows, cols: cfg.cols,
@@ -904,6 +940,23 @@ export default function BoardSequencerScreen() {
                 onChange={(e) => update({ minFilledFraction: Number(e.target.value) / 100 })}
               />
             </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input
+                type="checkbox" checked={config.variationEnabled}
+                onChange={(e) => update({ variationEnabled: e.target.checked })}
+              />
+              Variation — shove a piece to its edge = every other pass
+            </label>
+            {config.variationEnabled && (
+              <label>
+                Shove needed {Math.round(config.variationOffsetThreshold * 100)}%
+                <input
+                  type="range" min={30} max={85}
+                  value={Math.round(config.variationOffsetThreshold * 100)}
+                  onChange={(e) => update({ variationOffsetThreshold: Number(e.target.value) / 100 })}
+                />
+              </label>
+            )}
           </Section>
 
           <Section
