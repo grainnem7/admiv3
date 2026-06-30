@@ -21,6 +21,7 @@
  */
 
 import type { ColourId } from './boardColours';
+import { conditionalFromOffset } from '../songs/boardSequencerScale';
 
 export interface Point {
   x: number;
@@ -52,6 +53,8 @@ export interface CellRef {
 /** A settled cell plus the colour of the piece occupying it. */
 export interface ActiveCell extends CellRef {
   colour: PieceColour;
+  /** True only when shoved off-centre → plays every other pass. Absent = every pass. */
+  conditional?: boolean;
 }
 
 export interface BoardStepResult {
@@ -70,6 +73,10 @@ export interface BoardSettleConfig {
   occupancyGraceMs: number;
   /** Sustained motion required before a settled cell deactivates (jitter tolerance). */
   motionConfirmMs: number;
+  /** Variation: when true, a piece shoved past the offset threshold plays every other pass. */
+  variationEnabled?: boolean;
+  /** Normalised centroid offset (0=centre, 1=edge) at/above which a piece is conditional. */
+  variationOffsetThreshold?: number;
 }
 
 interface CellState {
@@ -81,6 +88,8 @@ interface CellState {
   phase: 'idle' | 'settled';
   /** Colour of the piece currently occupying the cell (last seen). */
   colour: PieceColour;
+  /** Whether the occupying piece is currently off-centre past the threshold. */
+  conditional: boolean;
 }
 
 const keyOf = (row: number, col: number): string => `${row},${col}`;
@@ -92,7 +101,19 @@ function dist(a: Point, b: Point): number {
 export class BoardSequencerMode {
   private readonly states = new Map<string, CellState>();
 
-  constructor(private readonly cfg: BoardSettleConfig) {}
+  private variationEnabled: boolean;
+  private variationOffsetThreshold: number;
+
+  constructor(private readonly cfg: BoardSettleConfig) {
+    this.variationEnabled = cfg.variationEnabled ?? false;
+    this.variationOffsetThreshold = cfg.variationOffsetThreshold ?? 0.6;
+  }
+
+  /** Live-update the variation calibration (safe to call while running). */
+  setVariation(enabled: boolean, offsetThreshold: number): void {
+    this.variationEnabled = enabled;
+    this.variationOffsetThreshold = offsetThreshold;
+  }
 
   reset(): void {
     this.states.clear();
@@ -111,7 +132,7 @@ export class BoardSequencerMode {
       if (!st) {
         st = {
           lastCentroid: null, velocity: 0, stillMs: 0, movingMs: 0, lostMs: 0, phase: 'idle',
-          colour: 'red',
+          colour: 'red', conditional: false,
         };
         this.states.set(k, st);
       }
@@ -120,6 +141,9 @@ export class BoardSequencerMode {
 
       if (isPiece && r.centroid && r.colour) {
         st.colour = r.colour;
+        st.conditional = conditionalFromOffset(
+          r.offset ?? null, this.variationEnabled, this.variationOffsetThreshold,
+        );
         st.lostMs = 0;
         if (st.lastCentroid) {
           const inst = dist(r.centroid, st.lastCentroid) / Math.max(dtMs, 1e-6);
@@ -176,7 +200,9 @@ export class BoardSequencerMode {
     for (const [k, st] of this.states) {
       if (st.phase === 'settled') {
         const [row, col] = k.split(',').map(Number);
-        activeCells.push({ row, col, colour: st.colour });
+        const cell: ActiveCell = { row, col, colour: st.colour };
+        if (st.conditional) cell.conditional = true;
+        activeCells.push(cell);
       }
     }
 

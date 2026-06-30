@@ -115,3 +115,53 @@ describe('BoardSequencerMode slide-and-settle', () => {
     expect(res.activeCells).toEqual([{ row: 0, col: 0, colour: 'red' }]);
   });
 });
+
+const redAtOff = (
+  row: number, col: number, x: number, y: number, offset: number,
+): CellReading => ({ row, col, occupied: true, colour: 'red', centroid: { x, y }, offset });
+
+const settle = (
+  m: BoardSequencerMode, reading: CellReading,
+): ReturnType<BoardSequencerMode['step']> => {
+  let res = m.step([reading], 16, 0);
+  for (let t = 16; t <= 1000; t += 16) res = m.step([reading], 16, t);
+  return res;
+};
+
+describe('BoardSequencerMode variation (off-centre = conditional)', () => {
+  const varCfg = { ...cfg, variationEnabled: true, variationOffsetThreshold: 0.6 };
+
+  it('a settled off-centre piece is marked conditional', () => {
+    const m = new BoardSequencerMode(varCfg);
+    const res = settle(m, redAtOff(0, 0, 0.5, 0.5, 0.8));
+    expect(res.activeCells).toEqual([{ row: 0, col: 0, colour: 'red', conditional: true }]);
+  });
+
+  it('a centred piece carries no conditional flag', () => {
+    const m = new BoardSequencerMode(varCfg);
+    const res = settle(m, redAtOff(0, 0, 0.5, 0.5, 0.2));
+    expect(res.activeCells).toEqual([{ row: 0, col: 0, colour: 'red' }]);
+  });
+
+  it('variation disabled → an off-centre piece is not conditional', () => {
+    const m = new BoardSequencerMode({ ...cfg, variationEnabled: false });
+    const res = settle(m, redAtOff(0, 0, 0.5, 0.5, 0.9));
+    expect(res.activeCells).toEqual([{ row: 0, col: 0, colour: 'red' }]);
+  });
+
+  it('nudging a settled piece off-centre flips it conditional live (no re-settle)', () => {
+    const m = new BoardSequencerMode(varCfg);
+    let res = settle(m, redAtOff(0, 0, 0.5, 0.5, 0.1));
+    expect(res.activeCells).toEqual([{ row: 0, col: 0, colour: 'red' }]);
+    res = m.step([redAtOff(0, 0, 0.5, 0.5, 0.85)], 16, 1016);
+    expect(res.activeCells).toEqual([{ row: 0, col: 0, colour: 'red', conditional: true }]);
+  });
+
+  it('setVariation updates the calibration live', () => {
+    const m = new BoardSequencerMode({ ...cfg, variationEnabled: false });
+    settle(m, redAtOff(0, 0, 0.5, 0.5, 0.9));
+    m.setVariation(true, 0.6);
+    const res = m.step([redAtOff(0, 0, 0.5, 0.5, 0.9)], 16, 1016);
+    expect(res.activeCells).toEqual([{ row: 0, col: 0, colour: 'red', conditional: true }]);
+  });
+});
