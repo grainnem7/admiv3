@@ -5,6 +5,7 @@ import {
 import {
   drumForRow, drumForRowChoice, drumsForStep, DEFAULT_DRUM_ROWS,
   loopLen, roleStep, strictlyAfter, pageIndexAt, faderValue,
+  conditionalFromOffset, lapIndex, firesThisLap,
 } from '../songs/boardSequencerScale';
 import type { CellRef } from '../tracking/BoardSequencerMode';
 
@@ -296,5 +297,36 @@ describe('faderValue (control-colour position → value)', () => {
     const cells = [{ row: 5, col: 0 }, { row: 1, col: 0 }, { row: 4, col: 0 }];
     // highest piece is row 1 → (6-1-1)/(6-1) = 4/5
     expect(faderValue(cells, 'row', rows, 8)).toBeCloseTo(0.8);
+  });
+});
+
+describe('variation helpers', () => {
+  it('conditionalFromOffset: enabled + offset at/over threshold → true', () => {
+    expect(conditionalFromOffset(0.8, true, 0.6)).toBe(true);
+    expect(conditionalFromOffset(0.6, true, 0.6)).toBe(true);
+  });
+  it('conditionalFromOffset: small offset (imprecision) stays every-pass', () => {
+    expect(conditionalFromOffset(0.3, true, 0.6)).toBe(false);
+  });
+  it('conditionalFromOffset: disabled or empty cell → false', () => {
+    expect(conditionalFromOffset(0.9, false, 0.6)).toBe(false);
+    expect(conditionalFromOffset(null, true, 0.6)).toBe(false);
+  });
+
+  it('lapIndex: one lap = one full sweep of `cols` beats', () => {
+    expect(lapIndex(0, 8)).toBe(0);
+    expect(lapIndex(7, 8)).toBe(0);
+    expect(lapIndex(8, 8)).toBe(1);
+    expect(lapIndex(15, 8)).toBe(1);
+  });
+
+  it('firesThisLap: a non-conditional cell fires on every lap', () => {
+    expect(firesThisLap(false, 3, 8)).toBe(true);
+    expect(firesThisLap(false, 11, 8)).toBe(true);
+  });
+  it('firesThisLap: a conditional cell rests on lap A (even), fires on lap B (odd)', () => {
+    expect(firesThisLap(true, 3, 8)).toBe(false); // lap 0 (A)
+    expect(firesThisLap(true, 11, 8)).toBe(true); // lap 1 (B)
+    expect(firesThisLap(true, 18, 8)).toBe(false); // lap 2 (A)
   });
 });

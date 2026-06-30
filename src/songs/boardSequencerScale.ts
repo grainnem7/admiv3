@@ -245,3 +245,40 @@ export function stepIndexAt(
   const beats = Math.floor((nowSec - startSec) / secPerBeat);
   return ((beats % totalSteps) + totalSteps) % totalSteps;
 }
+
+/**
+ * Whether an off-centre piece counts as "conditional" (plays only every other
+ * pass). `offset` is BoardReader's normalised box-offset (0 = centre, 1 = edge),
+ * null when the cell is empty. The threshold's generous default keeps ordinary
+ * imprecision (small offsets) playing every pass — tolerance over precision.
+ */
+export function conditionalFromOffset(
+  offset: number | null,
+  enabled: boolean,
+  threshold: number,
+): boolean {
+  return enabled && offset !== null && offset >= threshold;
+}
+
+/** Variation laps are the ODD laps: lap 0 = full "A", lap 1 = variation "B". */
+export const VARIATION_PARITY = 1;
+
+/**
+ * The lap index at a GLOBAL beat — one lap is one full left-to-right sweep of
+ * the board (`cols` beats). Defensive on bad `cols`/negative beats.
+ */
+export function lapIndex(beat: number, cols: number): number {
+  if (cols < 1) return 0;
+  return Math.floor(beat / cols);
+}
+
+/**
+ * Whether a cell sounds on the lap containing `beat`. Non-conditional cells
+ * always sound; conditional (off-centre) cells sound only on variation laps, so
+ * the board alternates a full lap (A) and a full-plus-variations lap (B).
+ */
+export function firesThisLap(conditional: boolean, beat: number, cols: number): boolean {
+  if (!conditional) return true;
+  const lap = lapIndex(beat, cols);
+  return (((lap % 2) + 2) % 2) === VARIATION_PARITY;
+}
