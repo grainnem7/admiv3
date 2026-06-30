@@ -13,7 +13,7 @@
 
 import * as Tone from 'tone';
 import { BoardSequencerVoice } from './voices/BoardSequencerVoice';
-import { voicingForCells, degreeMidi, chordDegreeMidi, drumForRow, DEFAULT_DRUM_ROWS, loopLen, roleStep, strictlyAfter, pageIndexAt, faderValue } from './boardSequencerScale';
+import { voicingForCells, degreeMidi, chordDegreeMidi, drumForRow, DEFAULT_DRUM_ROWS, loopLen, roleStep, strictlyAfter, pageIndexAt, faderValue, firesThisLap } from './boardSequencerScale';
 import type { ActiveCell } from '../tracking/BoardSequencerMode';
 import type { ColourChannel, ColourId, ColourRole } from '../tracking/boardColours';
 import { isFaderRole, isControlRole } from '../tracking/boardColours';
@@ -268,6 +268,14 @@ export class BoardSequencerEngine {
     return ((beat % cols) + cols) % cols;
   }
 
+  /** Whether the current lap is a variation (B) lap — drives the overlay A/B cue. */
+  isVariationLap(): boolean {
+    const beat = this.syncSource && this.syncSource.beats.length > 0
+      ? this.lastBeatIndex
+      : Math.floor((Tone.now() - this.startSec) / (60 / this.cfg.bpm));
+    return firesThisLap(true, beat, this.cfg.cols);
+  }
+
   private applyToggle(role: ColourRole, on: boolean): void {
     const t = Tone.now();
     const amt = on ? 0.35 : 0;
@@ -509,6 +517,9 @@ export class BoardSequencerEngine {
       // own playhead (beat wrapped at that role's loop length).
       const cat = this.loopCategory(role);
       if (cell.col !== roleStep(beat, this.rawLoop(cat), this.cfg.cols)) continue;
+      // Variation: an off-centre ("conditional") cell plays only on variation laps,
+      // so the loop alternates a full pass and a full-plus-variations pass.
+      if (!firesThisLap(cell.conditional ?? false, beat, this.cfg.cols)) continue;
       // Humanize: occasionally skip a step + vary velocity, so loops breathe.
       if (h > 0 && Math.random() < h * 0.5) continue;
       const vel = h > 0 ? this.cfg.velocity * (1 - Math.random() * h * 0.4) : this.cfg.velocity;
