@@ -58,6 +58,10 @@ export interface BoardSequencerStored {
   /** Axis a control-colour piece's position maps to its value ('row' = vertical). */
   faderAxis: 'row' | 'col';
   minFilledFraction: number;
+  /** Variation: off-centre pieces play every other pass when enabled. */
+  variationEnabled: boolean;
+  /** Normalised offset (0=centre, 1=edge) at/above which a piece is conditional. */
+  variationOffsetThreshold: number;
   noteLengthBeats: number;
   velocity: number;
   tickEnabled: boolean;
@@ -117,6 +121,8 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   channels: [],
   faderAxis: 'row',
   minFilledFraction: 0.1,
+  variationEnabled: false,
+  variationOffsetThreshold: 0.6,
   noteLengthBeats: 0.9,
   velocity: 0.7,
   octaveShift: 0,
@@ -247,6 +253,8 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     channels: num(o.version, 1) >= CONFIG_VERSION ? sanitizeChannels(o.channels) : [],
     faderAxis: o.faderAxis === 'col' ? 'col' : 'row',
     minFilledFraction: num(o.minFilledFraction, d.minFilledFraction),
+    variationEnabled: o.variationEnabled === true,
+    variationOffsetThreshold: num(o.variationOffsetThreshold, d.variationOffsetThreshold),
     noteLengthBeats: num(o.noteLengthBeats, d.noteLengthBeats),
     velocity: num(o.velocity, d.velocity),
     octaveShift: num(o.octaveShift, d.octaveShift),

@@ -70,4 +70,21 @@ describe('BoardSequencerConfig', () => {
     expect(loaded?.channels[1].kind).toBe('black');
     expect(loaded?.version).toBe(2);
   });
+
+  it('round-trips the variation calibration', () => {
+    const cfg: BoardSequencerStored = {
+      ...DEFAULT_BOARD_SEQUENCER_CONFIG, variationEnabled: true, variationOffsetThreshold: 0.55,
+    };
+    saveBoardSequencerConfig(cfg);
+    const loaded = loadBoardSequencerConfig();
+    expect(loaded?.variationEnabled).toBe(true);
+    expect(loaded?.variationOffsetThreshold).toBeCloseTo(0.55);
+  });
+
+  it('defaults variation OFF and threshold to 0.6 when absent', () => {
+    localStorage.setItem('admi-board-sequencer', JSON.stringify({ bpm: 90, channels: [] }));
+    const loaded = loadBoardSequencerConfig();
+    expect(loaded?.variationEnabled).toBe(false);
+    expect(loaded?.variationOffsetThreshold).toBe(0.6);
+  });
 });
