@@ -900,7 +900,7 @@ export default function BoardSequencerScreen() {
             <label>
               Min fill {Math.round(config.minFilledFraction * 100)}%
               <input
-                type="range" min={5} max={50} value={Math.round(config.minFilledFraction * 100)}
+                type="range" min={3} max={50} value={Math.round(config.minFilledFraction * 100)}
                 onChange={(e) => update({ minFilledFraction: Number(e.target.value) / 100 })}
               />
             </label>

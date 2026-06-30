@@ -116,7 +116,7 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   // No predefined colours — the user calibrates their own by clicking a piece.
   channels: [],
   faderAxis: 'row',
-  minFilledFraction: 0.15,
+  minFilledFraction: 0.1,
   noteLengthBeats: 0.9,
   velocity: 0.7,
   octaveShift: 0,

@@ -1,8 +1,9 @@
 /**
  * BoardReader — turns the live video into a per-cell board matrix.
  *
- * For each cell we map a small inset central region (grid→image via the
- * homography), sample a NxN dot pattern from a downscaled canvas, and count
+ * For each cell we map a lightly-inset region covering almost the whole cell
+ * (grid→image via the homography), sample a NxN dot pattern from a downscaled
+ * canvas, and count
  * pixels matching the calibrated red band. Reuses ColorTracker's HSV maths and
  * red/skin-tone exclusion. The pure pixel maths lives in sampleRegion() so it
  * is unit-testable without a DOM.
@@ -33,10 +34,12 @@ export interface RegionSample {
   centroid: { x: number; y: number } | null;
 }
 
-// Sample most of each cell (not just the centre) so a piece anywhere within a
-// cell registers — important when the grid is coarser than the physical squares
-// (e.g. a 4x4 grid over an 8x8 board). Tolerance over precision.
-const INSET = 0.8;
+// Sample almost the whole cell (not just the centre) so a piece sitting
+// anywhere within a cell registers — not only when it's bang in the middle.
+// Important when the grid is coarser than the physical squares (e.g. a 4x4 grid
+// over an 8x8 board). The small remaining margin (~5% per side) is the only
+// guard against a piece bleeding into its neighbour cell. Tolerance over precision.
+const INSET = 0.9;
 
 /**
  * Sample the central region of cell (row, col) and return, for each supplied
