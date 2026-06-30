@@ -32,6 +32,13 @@ export interface RegionSample {
   dominantId: ColourId | null;
   /** Mean position of the DOMINANT colour's matching pixels (unit-square coords), or null. */
   centroid: { x: number; y: number } | null;
+  /**
+   * Normalised box-offset of the centroid from the cell centre: 0 = dead centre,
+   * 1 = at the cell edge (max over the two axes, so a shove toward any edge or
+   * corner counts). null when there is no centroid. The reachable max is bounded
+   * by INSET (sampling stops short of the true edge), so in practice ≲ 0.9.
+   */
+  offset: number | null;
 }
 
 // Sample almost the whole cell (not just the centre) so a piece sitting
@@ -103,13 +110,19 @@ export function sampleRegion(
   }
 
   let centroid: { x: number; y: number } | null = null;
+  let offset: number | null = null;
   if (dominantId && dominantCount > 0) {
     centroid = {
       x: (sumX.get(dominantId) ?? 0) / dominantCount,
       y: (sumY.get(dominantId) ?? 0) / dominantCount,
     };
+    const cx = (col + 0.5) / cols;
+    const cy = (row + 0.5) / rows;
+    const ox = Math.abs(centroid.x - cx) / (0.5 / cols);
+    const oy = Math.abs(centroid.y - cy) / (0.5 / rows);
+    offset = Math.min(1, Math.max(ox, oy));
   }
-  return { fractions, dominantId, centroid };
+  return { fractions, dominantId, centroid, offset };
 }
 
 export interface BoardReaderOptions {
@@ -171,13 +184,13 @@ export class BoardReader {
     const readings: CellReading[] = [];
     for (let row = 0; row < opts.rows; row++) {
       for (let col = 0; col < opts.cols; col++) {
-        const { fractions, centroid } = sampleRegion(
+        const { fractions, centroid, offset } = sampleRegion(
           sampler, opts.homography, row, col, opts.rows, opts.cols, opts.colours, samples,
         );
         const filledFraction = Math.max(0, ...Object.values(fractions).filter((v): v is number => v !== undefined));
         const cls = opts.recognizer.classify({ filledFraction, fractions });
         readings.push({
-          row, col, occupied: cls.occupied, colour: cls.colour, centroid, fractions,
+          row, col, occupied: cls.occupied, colour: cls.colour, centroid, fractions, offset,
         });
       }
     }

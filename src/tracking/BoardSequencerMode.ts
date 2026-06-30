@@ -37,6 +37,11 @@ export interface CellReading {
   centroid: Point | null;
   /** Fraction of the sampled region matching each colour this frame (0..1). Diagnostic. */
   fractions?: Partial<Record<ColourId, number>>;
+  /**
+   * Normalised offset of the piece from its cell centre (0 = centre, 1 = edge),
+   * or null when the cell is empty. Drives the "play every other pass" variation.
+   */
+  offset?: number | null;
 }
 
 export interface CellRef {

@@ -53,4 +53,21 @@ describe('BoardReader.sampleRegion', () => {
     expect(out.fractions.black ?? 0).toBe(0);
     expect(out.fractions.white ?? 0).toBe(0);
   });
+
+  it('a centred (uniform) red region has offset ≈ 0', () => {
+    const allRed: RgbSampler = () => ({ r: 220, g: 10, b: 10 });
+    const out = sampleRegion(allRed, h, 0, 0, 4, 4, COLOURS, 3);
+    expect(out.offset ?? 1).toBeLessThan(0.1);
+  });
+
+  it('a red piece shoved to one side has a clearly non-zero offset', () => {
+    // Cell (0,0) of a 4x4 grid spans image x∈[1.25,23.75] under `h`; sample
+    // points (3/axis) land at rounded image x ≈ 1, 13, 24. Red only on the
+    // right two → centroid pulled toward the edge.
+    const rightSide: RgbSampler = (x) => (x > 6
+      ? { r: 220, g: 10, b: 10 }
+      : { r: 240, g: 240, b: 240 });
+    const out = sampleRegion(rightSide, h, 0, 0, 4, 4, COLOURS, 3);
+    expect(out.offset ?? 0).toBeGreaterThan(0.3);
+  });
 });
