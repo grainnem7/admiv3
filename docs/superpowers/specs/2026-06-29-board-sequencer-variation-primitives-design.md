@@ -191,9 +191,15 @@ via `sanitize`, so older stored configs load cleanly (variation simply starts of
 
 ## Scope guards / out of scope (this slice)
 
-- **Pages & polyrhythm interaction deferred.** "Every other pass" counts against one
-  full single-board sweep (`cols`). How conditional gating composes with `numPages` and
-  per-role loop lengths is a slice-2/3 concern and intentionally not solved here.
+- **Pages & polyrhythm interaction deferred — and explicitly guarded.** "Every other
+  pass" counts against one full single-board sweep (`cols`). How conditional gating
+  composes with `numPages` and per-role loop lengths is a slice-2/3 concern and not
+  solved here. Because lap parity (`floor(beat/cols) % 2`) would phase-lock with page
+  parity (`floor(beat/cols) % numPages`) — making conditional cells never/always fire
+  for an even page count — variation is made **inert when `numPages > 1`**: conditional
+  cells play every pass, the screen suppresses the rings + A/B cue, and a hint tells the
+  user to set Pages to 1. This is a guarded no-op, not silent breakage. (Implemented via
+  the `firesThisLapPaged` helper.)
 - **Binary only.** No multi-band ("every 4th") and no probabilistic mode in v1. Both are
   documented future extensions, not built now.
 - **Global parity only.** No per-piece phase / immediate-play-on-placement in v1
