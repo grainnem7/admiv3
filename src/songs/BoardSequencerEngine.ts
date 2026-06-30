@@ -13,7 +13,7 @@
 
 import * as Tone from 'tone';
 import { BoardSequencerVoice } from './voices/BoardSequencerVoice';
-import { voicingForCells, degreeMidi, chordDegreeMidi, drumForRow, DEFAULT_DRUM_ROWS, loopLen, roleStep, strictlyAfter, pageIndexAt, faderValue, firesThisLap } from './boardSequencerScale';
+import { voicingForCells, degreeMidi, chordDegreeMidi, drumForRow, DEFAULT_DRUM_ROWS, loopLen, roleStep, strictlyAfter, pageIndexAt, faderValue, firesThisLap, firesThisLapPaged } from './boardSequencerScale';
 import type { ActiveCell } from '../tracking/BoardSequencerMode';
 import type { ColourChannel, ColourId, ColourRole } from '../tracking/boardColours';
 import { isFaderRole, isControlRole } from '../tracking/boardColours';
@@ -268,7 +268,9 @@ export class BoardSequencerEngine {
     return ((beat % cols) + cols) % cols;
   }
 
-  /** Whether the current lap is a variation (B) lap — drives the overlay A/B cue. */
+  /** Whether the current lap is a variation (B) lap — drives the overlay A/B cue.
+   * Reads Tone.now() at draw time while the gate fires from the look-ahead beat,
+   * so the cue is best-effort (can disagree by one lap near a boundary), not sample-accurate. */
   isVariationLap(): boolean {
     const beat = this.syncSource && this.syncSource.beats.length > 0
       ? this.lastBeatIndex
@@ -519,7 +521,7 @@ export class BoardSequencerEngine {
       if (cell.col !== roleStep(beat, this.rawLoop(cat), this.cfg.cols)) continue;
       // Variation: an off-centre ("conditional") cell plays only on variation laps,
       // so the loop alternates a full pass and a full-plus-variations pass.
-      if (!firesThisLap(cell.conditional ?? false, beat, this.cfg.cols)) continue;
+      if (!firesThisLapPaged(cell.conditional ?? false, beat, this.cfg.cols, this.cfg.numPages)) continue;
       // Humanize: occasionally skip a step + vary velocity, so loops breathe.
       if (h > 0 && Math.random() < h * 0.5) continue;
       const vel = h > 0 ? this.cfg.velocity * (1 - Math.random() * h * 0.4) : this.cfg.velocity;

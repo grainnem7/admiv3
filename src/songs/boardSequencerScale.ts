@@ -282,3 +282,21 @@ export function firesThisLap(conditional: boolean, beat: number, cols: number): 
   const lap = lapIndex(beat, cols);
   return (((lap % 2) + 2) % 2) === VARIATION_PARITY;
 }
+
+/**
+ * Variation gating with the v1 single-page guard. When the sequence is chained
+ * across multiple pages (numPages > 1), page parity (floor(beat/cols) % numPages)
+ * phase-locks with lap parity (floor(beat/cols) % 2), so an even page count makes
+ * conditional cells either never fire or always fire. Until pages × variation is
+ * designed (roadmap slice 2), variation is INERT with multiple pages: conditional
+ * cells play every pass. Single page → normal every-other-pass gating.
+ */
+export function firesThisLapPaged(
+  conditional: boolean,
+  beat: number,
+  cols: number,
+  numPages: number,
+): boolean {
+  if (numPages > 1) return true;
+  return firesThisLap(conditional, beat, cols);
+}

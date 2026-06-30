@@ -5,7 +5,7 @@ import {
 import {
   drumForRow, drumForRowChoice, drumsForStep, DEFAULT_DRUM_ROWS,
   loopLen, roleStep, strictlyAfter, pageIndexAt, faderValue,
-  conditionalFromOffset, lapIndex, firesThisLap,
+  conditionalFromOffset, lapIndex, firesThisLap, firesThisLapPaged,
 } from '../songs/boardSequencerScale';
 import type { CellRef } from '../tracking/BoardSequencerMode';
 
@@ -328,5 +328,16 @@ describe('variation helpers', () => {
     expect(firesThisLap(true, 3, 8)).toBe(false); // lap 0 (A)
     expect(firesThisLap(true, 11, 8)).toBe(true); // lap 1 (B)
     expect(firesThisLap(true, 18, 8)).toBe(false); // lap 2 (A)
+  });
+
+  it('firesThisLapPaged: single page delegates to firesThisLap (every-other for conditional)', () => {
+    expect(firesThisLapPaged(true, 3, 8, 1)).toBe(false); // lap 0 (A)
+    expect(firesThisLapPaged(true, 11, 8, 1)).toBe(true); // lap 1 (B)
+    expect(firesThisLapPaged(false, 3, 8, 1)).toBe(true); // non-conditional always fires
+  });
+  it('firesThisLapPaged: multiple pages → variation inert (conditional plays every pass)', () => {
+    expect(firesThisLapPaged(true, 3, 8, 2)).toBe(true);
+    expect(firesThisLapPaged(true, 11, 8, 2)).toBe(true);
+    expect(firesThisLapPaged(false, 3, 8, 2)).toBe(true);
   });
 });

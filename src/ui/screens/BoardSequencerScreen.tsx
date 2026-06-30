@@ -263,7 +263,7 @@ export default function BoardSequencerScreen() {
       saveBoardSequencerConfig(next);
       return next;
     });
-    engineRef.current?.setPageSnapshot(i, activeCellsRef.current);
+    engineRef.current?.setPageSnapshot(i, activeCellsRef.current.map(({ row, col, colour }) => ({ row, col, colour })));
     const n = Math.max(1, configRef.current.numPages);
     const nextPage = (i + 1) % n;
     setSelectedPage(nextPage);
@@ -418,7 +418,7 @@ export default function BoardSequencerScreen() {
           // shows the instant a piece is shoved, before it even settles).
           modeRef.current?.setVariation(cfg.variationEnabled, cfg.variationOffsetThreshold);
           const conditional = new Set<string>();
-          if (cfg.variationEnabled) {
+          if (cfg.variationEnabled && cfg.numPages <= 1) {
             for (const rd of readings) {
               if (rd.occupied && conditionalFromOffset(
                 rd.offset ?? null, cfg.variationEnabled, cfg.variationOffsetThreshold,
@@ -440,7 +440,7 @@ export default function BoardSequencerScreen() {
             // Ask the engine for the live playhead so it follows a tempo fader.
             playCol = engineRef.current.getPlayheadCol(cfg.cols);
           }
-          const isVarLap = runningRef.current && engineRef.current
+          const isVarLap = runningRef.current && engineRef.current && cfg.numPages <= 1
             ? engineRef.current.isVariationLap()
             : false;
           drawOverlay(occupied, activeMap, cfg, playCol, swatchById, conditional, isVarLap);
@@ -956,6 +956,11 @@ export default function BoardSequencerScreen() {
                   onChange={(e) => update({ variationOffsetThreshold: Number(e.target.value) / 100 })}
                 />
               </label>
+            )}
+            {config.variationEnabled && config.numPages > 1 && (
+              <span style={{ fontSize: 11, opacity: 0.7 }}>
+                Variation applies to a single page only (v1) — set Pages to 1 to use it.
+              </span>
             )}
           </Section>
 
