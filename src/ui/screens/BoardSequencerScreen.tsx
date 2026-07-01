@@ -38,6 +38,7 @@ import { SONG_LIBRARY, type SongConfig } from '../../songs/songLibrary';
 import { getChordAtTime } from '../../songs/voices/chordLookup';
 import { computeHomography, applyHomography, UNIT_SQUARE, type Mat3 } from '../../utils/homography';
 import { SCALE_PRESETS, NOTE_NAMES, conditionalFromOffset } from '../../songs/boardSequencerScale';
+import { emptyLoopBank, stepLoopBank, type LoopBankState } from '../../songs/loopBank';
 import {
   loadBoardSequencerConfig, saveBoardSequencerConfig, DEFAULT_BOARD_SEQUENCER_CONFIG,
   type BoardSequencerStored, type BoardPoint,
@@ -157,6 +158,8 @@ export default function BoardSequencerScreen() {
   const startSecRef = useRef(0);
   // Freshest live settled cells (with colour), for capturing page snapshots.
   const activeCellsRef = useRef<ActiveCell[]>([]);
+  // Loop bank state machine (slice 3): saved slots + presence, seeded on start.
+  const loopBankRef = useRef<LoopBankState>(emptyLoopBank(0));
 
   const storedRef = useRef<BoardSequencerStored | null>(loadBoardSequencerConfig());
   const [config, setConfig] = useState<BoardSequencerStored>(
@@ -268,6 +271,20 @@ export default function BoardSequencerScreen() {
     const nextPage = (i + 1) % n;
     setSelectedPage(nextPage);
     engineRef.current?.setSelectedPage(nextPage);
+  }, []);
+
+  // Persist the loop bank's saved slots into config (called when a slot captures or clears).
+  const persistLoopSlots = useCallback((saved: (ActiveCell[] | null)[]) => {
+    setConfig((prev) => {
+      const loopSlots = saved.map((s) => (s == null
+        ? null
+        : s.map((c) => (c.conditional
+          ? { row: c.row, col: c.col, colour: c.colour, conditional: true as const }
+          : { row: c.row, col: c.col, colour: c.colour }))));
+      const next = { ...prev, loopSlots };
+      saveBoardSequencerConfig(next);
+      return next;
+    });
   }, []);
 
   const buildHomography = useCallback((corners: BoardPoint[], video: HTMLVideoElement): Mat3 => {
@@ -441,11 +458,28 @@ export default function BoardSequencerScreen() {
           let playCol = 0;
           if (runningRef.current && modeRef.current && engineRef.current) {
             const res = modeRef.current.step(readings, dt, now);
-            engineRef.current.setActiveCells(res.activeCells);
-            activeCellsRef.current = res.activeCells;
+            if (cfg.loopBankEnabled) {
+              // Bottom row = bank slots (triggers, not notes); rows above = pattern.
+              const bankRow = cfg.rows - 1;
+              const patternCells = res.activeCells.filter((c) => c.row < bankRow);
+              const present = Array.from({ length: cfg.cols }, (_, i) =>
+                res.activeCells.some((c) => c.row === bankRow && c.col === i));
+              const stepped = stepLoopBank(loopBankRef.current, present, patternCells, cfg.cols);
+              loopBankRef.current = stepped.state;
+              if (stepped.captured.length > 0) persistLoopSlots(stepped.state.saved);
+              engineRef.current.setActiveCells(patternCells);
+              engineRef.current.setActiveLoops(stepped.active);
+              activeCellsRef.current = patternCells;
+              activeArr = patternCells;
+              for (const c of patternCells) activeMap.set(`${c.row},${c.col}`, c.colour);
+            } else {
+              engineRef.current.setActiveCells(res.activeCells);
+              engineRef.current.setActiveLoops([]);
+              activeCellsRef.current = res.activeCells;
+              activeArr = res.activeCells;
+              for (const c of res.activeCells) activeMap.set(`${c.row},${c.col}`, c.colour);
+            }
             if (res.justSettled.length > 0) engineRef.current.fireTick();
-            activeArr = res.activeCells;
-            for (const c of res.activeCells) activeMap.set(`${c.row},${c.col}`, c.colour);
             // Ask the engine for the live playhead so it follows a tempo fader.
             playCol = engineRef.current.getPlayheadCol(cfg.cols);
           }
@@ -585,6 +619,14 @@ export default function BoardSequencerScreen() {
     }
     engine.start();
     engineRef.current = engine;
+    loopBankRef.current = {
+      saved: Array.from({ length: cfg.cols }, (_, i) => {
+        const s = cfg.loopSlots[i];
+        return s == null ? null : s.map((c) => ({ ...c }));
+      }),
+      present: Array(cfg.cols).fill(false),
+    };
+    engine.setActiveLoops([]);
     startSecRef.current = Tone.now();
     runningRef.current = true;
     setRunning(true);
@@ -959,6 +1001,13 @@ export default function BoardSequencerScreen() {
                 onChange={(e) => update({ pingPong: e.target.checked })}
               />
               Ping-pong (sweep → then ←)
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input
+                type="checkbox" checked={config.loopBankEnabled}
+                onChange={(e) => update({ loopBankEnabled: e.target.checked })}
+              />
+              Loop bank (bottom row = save/recall slots)
             </label>
             <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <input
