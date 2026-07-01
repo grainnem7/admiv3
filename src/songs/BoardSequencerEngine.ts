@@ -13,7 +13,7 @@
 
 import * as Tone from 'tone';
 import { BoardSequencerVoice } from './voices/BoardSequencerVoice';
-import { voicingForCells, degreeMidi, chordDegreeMidi, drumForRow, DEFAULT_DRUM_ROWS, loopLen, roleStep, strictlyAfter, pageIndexAt, faderValue, firesThisLap, firesThisLapPaged } from './boardSequencerScale';
+import { voicingForCells, degreeMidi, chordDegreeMidi, drumForRow, DEFAULT_DRUM_ROWS, loopLen, playheadStep, lapIndex, strictlyAfter, pageIndexAt, faderValue, firesThisLap, firesThisLapPaged } from './boardSequencerScale';
 import type { ActiveCell } from '../tracking/BoardSequencerMode';
 import type { ColourChannel, ColourId, ColourRole } from '../tracking/boardColours';
 import { isFaderRole, isControlRole } from '../tracking/boardColours';
@@ -64,6 +64,8 @@ export interface BoardEngineConfig {
   loopStepsBlue: number;
   /** Pattern chaining: number of pages (master loop = numPages * cols steps). */
   numPages: number;
+  /** Ping-pong playhead: sweep → then ← (repeat-edge) instead of always left→right. */
+  pingPong?: boolean;
 }
 
 const LOOKAHEAD_SEC = 0.1;
@@ -261,11 +263,10 @@ export class BoardSequencerEngine {
 
   /** The column the playhead is on right now (drives the visual playhead). */
   getPlayheadCol(cols: number): number {
-    if (this.syncSource && this.syncSource.beats.length > 0) {
-      return ((this.lastBeatIndex % cols) + cols) % cols;
-    }
-    const beat = Math.floor((Tone.now() - this.startSec) / (60 / this.cfg.bpm));
-    return ((beat % cols) + cols) % cols;
+    const beat = this.syncSource && this.syncSource.beats.length > 0
+      ? this.lastBeatIndex
+      : Math.floor((Tone.now() - this.startSec) / (60 / this.cfg.bpm));
+    return playheadStep(beat, 0, cols, this.cfg.pingPong ?? false);
   }
 
   /** Whether the current lap is a variation (B) lap — drives the overlay A/B cue.
@@ -347,6 +348,20 @@ export class BoardSequencerEngine {
   /** Set the number of chained pages live (master loop = numPages * cols). */
   setNumPages(n: number): void {
     this.cfg.numPages = Math.max(1, Math.floor(n));
+  }
+
+  /** Toggle the ping-pong playhead live (safe while running). */
+  setPingPong(on: boolean): void {
+    this.cfg.pingPong = on;
+  }
+
+  /** Current sweep direction for the overlay arrow: +1 forward (→), -1 return (←). */
+  getPlayheadDirection(): 1 | -1 {
+    if (!this.cfg.pingPong) return 1;
+    const beat = this.syncSource && this.syncSource.beats.length > 0
+      ? this.lastBeatIndex
+      : Math.floor((Tone.now() - this.startSec) / (60 / this.cfg.bpm));
+    return lapIndex(beat, this.cfg.cols) % 2 === 0 ? 1 : -1;
   }
 
   /** Choose which page is bound to the live camera board (others play snapshots). */
@@ -518,7 +533,7 @@ export class BoardSequencerEngine {
       // Per-role polyrhythm: a cell fires when its column matches the role's
       // own playhead (beat wrapped at that role's loop length).
       const cat = this.loopCategory(role);
-      if (cell.col !== roleStep(beat, this.rawLoop(cat), this.cfg.cols)) continue;
+      if (cell.col !== playheadStep(beat, this.rawLoop(cat), this.cfg.cols, this.cfg.pingPong ?? false)) continue;
       // Variation: an off-centre ("conditional") cell plays only on variation laps,
       // so the loop alternates a full pass and a full-plus-variations pass.
       if (!firesThisLapPaged(cell.conditional ?? false, beat, this.cfg.cols, this.cfg.numPages)) continue;
