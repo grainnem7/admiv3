@@ -62,6 +62,8 @@ export interface BoardSequencerStored {
   variationEnabled: boolean;
   /** Normalised offset (0=centre, 1=edge) at/above which a piece is conditional. */
   variationOffsetThreshold: number;
+  /** Ping-pong playhead: sweep → then ← (repeat-edge) instead of always left→right. */
+  pingPong: boolean;
   noteLengthBeats: number;
   velocity: number;
   tickEnabled: boolean;
@@ -123,6 +125,7 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   minFilledFraction: 0.1,
   variationEnabled: false,
   variationOffsetThreshold: 0.6,
+  pingPong: false,
   noteLengthBeats: 0.9,
   velocity: 0.7,
   octaveShift: 0,
@@ -255,6 +258,7 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     minFilledFraction: num(o.minFilledFraction, d.minFilledFraction),
     variationEnabled: o.variationEnabled === true,
     variationOffsetThreshold: num(o.variationOffsetThreshold, d.variationOffsetThreshold),
+    pingPong: o.pingPong === true,
     noteLengthBeats: num(o.noteLengthBeats, d.noteLengthBeats),
     velocity: num(o.velocity, d.velocity),
     octaveShift: num(o.octaveShift, d.octaveShift),

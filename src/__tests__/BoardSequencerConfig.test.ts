@@ -87,4 +87,15 @@ describe('BoardSequencerConfig', () => {
     expect(loaded?.variationEnabled).toBe(false);
     expect(loaded?.variationOffsetThreshold).toBe(0.6);
   });
+
+  it('round-trips the ping-pong flag', () => {
+    const cfg: BoardSequencerStored = { ...DEFAULT_BOARD_SEQUENCER_CONFIG, pingPong: true };
+    saveBoardSequencerConfig(cfg);
+    expect(loadBoardSequencerConfig()?.pingPong).toBe(true);
+  });
+
+  it('defaults pingPong to false when absent', () => {
+    localStorage.setItem('admi-board-sequencer', JSON.stringify({ bpm: 90, channels: [] }));
+    expect(loadBoardSequencerConfig()?.pingPong).toBe(false);
+  });
 });
