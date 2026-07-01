@@ -356,7 +356,9 @@ export default function BoardSequencerScreen() {
           ctx.fill();
           ctx.lineWidth = c === playCol && runningRef.current ? 3 : 1;
           ctx.strokeStyle = c === playCol && runningRef.current ? 'rgba(80,200,255,0.95)' : 'rgba(80,200,255,0.4)';
-          if (bankSlots && r === cfg.rows - 1) {
+          const isBankCell = bankSlots && r === cfg.rows - 1;
+          if (isBankCell) {
+            ctx.save();
             const st = bankSlots[c];
             if (st === 'active') { ctx.fillStyle = 'rgba(80,200,255,0.5)'; ctx.fill(); }
             else if (st === 'paused') { ctx.fillStyle = 'rgba(80,200,255,0.18)'; ctx.fill(); }
@@ -365,6 +367,7 @@ export default function BoardSequencerScreen() {
             ctx.lineWidth = 2;
           }
           ctx.stroke();
+          if (isBankCell) ctx.restore();
           if (conditional.has(key)) {
             ctx.save();
             ctx.setLineDash([6, 4]);
