@@ -31,6 +31,14 @@ export interface StoredBoardCell {
   colour: ColourId;
 }
 
+/** A single cell of a saved loop (StoredBoardCell + the slice-1 variation flag). */
+export interface StoredLoopCell {
+  row: number;
+  col: number;
+  colour: ColourId;
+  conditional?: boolean;
+}
+
 export interface BoardSequencerStored {
   /** Stored-shape version (see CONFIG_VERSION); pre-v2 colour data is reset. */
   version: number;
@@ -64,6 +72,10 @@ export interface BoardSequencerStored {
   variationOffsetThreshold: number;
   /** Ping-pong playhead: sweep → then ← (repeat-edge) instead of always left→right. */
   pingPong: boolean;
+  /** Loop bank: the bottom row becomes save/recall slots for layered loops. */
+  loopBankEnabled: boolean;
+  /** Saved loops per slot (bottom-row column); null = empty slot. */
+  loopSlots: (StoredLoopCell[] | null)[];
   noteLengthBeats: number;
   velocity: number;
   tickEnabled: boolean;
@@ -126,6 +138,8 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   variationEnabled: false,
   variationOffsetThreshold: 0.6,
   pingPong: false,
+  loopBankEnabled: false,
+  loopSlots: [],
   noteLengthBeats: 0.9,
   velocity: 0.7,
   octaveShift: 0,
@@ -165,6 +179,20 @@ function sanitizePages(v: unknown): StoredBoardCell[][] {
       const o = (typeof c === 'object' && c !== null ? c : {}) as Record<string, unknown>;
       if (!isNum(o.row) || !isNum(o.col) || typeof o.colour !== 'string' || !o.colour) return [];
       return [{ row: o.row, col: o.col, colour: o.colour }];
+    });
+  });
+}
+
+function sanitizeLoopSlots(v: unknown): (StoredLoopCell[] | null)[] {
+  if (!Array.isArray(v)) return [];
+  return v.map((slot) => {
+    if (!Array.isArray(slot)) return null; // null = empty (never-saved) slot
+    return slot.flatMap((c) => {
+      const o = (typeof c === 'object' && c !== null ? c : {}) as Record<string, unknown>;
+      if (!isNum(o.row) || !isNum(o.col) || typeof o.colour !== 'string' || !o.colour) return [];
+      const cell: StoredLoopCell = { row: o.row, col: o.col, colour: o.colour };
+      if (o.conditional === true) cell.conditional = true;
+      return [cell];
     });
   });
 }
@@ -259,6 +287,8 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     variationEnabled: o.variationEnabled === true,
     variationOffsetThreshold: num(o.variationOffsetThreshold, d.variationOffsetThreshold),
     pingPong: o.pingPong === true,
+    loopBankEnabled: o.loopBankEnabled === true,
+    loopSlots: sanitizeLoopSlots(o.loopSlots),
     noteLengthBeats: num(o.noteLengthBeats, d.noteLengthBeats),
     velocity: num(o.velocity, d.velocity),
     octaveShift: num(o.octaveShift, d.octaveShift),

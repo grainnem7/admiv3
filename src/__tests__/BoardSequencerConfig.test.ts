@@ -98,4 +98,24 @@ describe('BoardSequencerConfig', () => {
     localStorage.setItem('admi-board-sequencer', JSON.stringify({ bpm: 90, channels: [] }));
     expect(loadBoardSequencerConfig()?.pingPong).toBe(false);
   });
+
+  it('round-trips loop bank enabled + slots (null slot + conditional preserved)', () => {
+    const cfg: BoardSequencerStored = {
+      ...DEFAULT_BOARD_SEQUENCER_CONFIG,
+      loopBankEnabled: true,
+      loopSlots: [[{ row: 1, col: 2, colour: 'red', conditional: true }], null],
+    };
+    saveBoardSequencerConfig(cfg);
+    const back = loadBoardSequencerConfig();
+    expect(back?.loopBankEnabled).toBe(true);
+    expect(back?.loopSlots[0]).toEqual([{ row: 1, col: 2, colour: 'red', conditional: true }]);
+    expect(back?.loopSlots[1]).toBeNull();
+  });
+
+  it('defaults loop bank off / empty when absent', () => {
+    localStorage.setItem('admi-board-sequencer', JSON.stringify({ bpm: 90, channels: [] }));
+    const back = loadBoardSequencerConfig();
+    expect(back?.loopBankEnabled).toBe(false);
+    expect(back?.loopSlots).toEqual([]);
+  });
 });
