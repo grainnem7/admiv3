@@ -140,6 +140,70 @@ export function rgbToHsv(r: number, g: number, b: number): { h: number; s: numbe
   return { h, s, v };
 }
 
+/** A colour sampled from a calibration-click region: HSV plus the averaged RGB. */
+export interface RegionColour {
+  h: number;
+  s: number;
+  v: number;
+  r: number;
+  g: number;
+  b: number;
+}
+
+/**
+ * Estimate the colour of the counter under a calibration click, from the RGBA
+ * pixels of a small square region centred on the click. The click lands ON the
+ * counter, so the seed — the pixel whose hue we trust — is the most-saturated
+ * pixel within a small CENTRAL disc, NOT the whole region. Otherwise vivid tan
+ * wood at the region's edges beats a darker/less-saturated counter (blue
+ * especially, and anything shot on a washed-out external webcam), and calibration
+ * captures the board instead of the piece. We then average the region's pixels
+ * that share the seed's hue for a clean representative colour. Null if empty.
+ */
+export function counterColourFromRegion(
+  data: Uint8ClampedArray | number[],
+  sw: number,
+  sh: number,
+): RegionColour | null {
+  if (sw <= 0 || sh <= 0 || data.length < 4) return null;
+  const cx = (sw - 1) / 2;
+  const cy = (sh - 1) / 2;
+  const centralR = Math.max(1, 0.2 * Math.min(sw, sh));
+  const centralR2 = centralR * centralR;
+
+  interface Px { r: number; g: number; b: number; h: number; s: number; }
+  const pxs: Px[] = [];
+  let seed: Px | null = null;
+  for (let y = 0; y < sh; y++) {
+    for (let x = 0; x < sw; x++) {
+      const i = (y * sw + x) * 4;
+      const r = data[i]; const g = data[i + 1]; const b = data[i + 2];
+      const hsv = rgbToHsv(r, g, b);
+      const p: Px = { r, g, b, h: hsv.h, s: hsv.s };
+      pxs.push(p);
+      const dx = x - cx; const dy = y - cy;
+      if (dx * dx + dy * dy <= centralR2 && (seed === null || p.s > seed.s)) seed = p;
+    }
+  }
+  // Fallback (region too tiny to have a central pixel): most saturated overall.
+  if (seed === null) seed = pxs.reduce((best, p) => (p.s > best.s ? p : best), pxs[0]);
+
+  const hueDist = (a: number, bb: number): number => {
+    const d = Math.abs(a - bb) % 360;
+    return d > 180 ? 360 - d : d;
+  };
+  let sr = 0; let sg = 0; let sb = 0; let n = 0;
+  for (const p of pxs) {
+    if (p.s >= seed.s * 0.5 && hueDist(p.h, seed.h) <= 28) {
+      sr += p.r; sg += p.g; sb += p.b; n += 1;
+    }
+  }
+  if (n === 0) { sr = seed.r; sg = seed.g; sb = seed.b; n = 1; }
+  const ar = sr / n; const ag = sg / n; const ab = sb / n;
+  const hsv = rgbToHsv(ar, ag, ab);
+  return { h: hsv.h, s: hsv.s, v: hsv.v, r: ar, g: ag, b: ab };
+}
+
 /**
  * Returns true when `hsv` falls within the calibrated band for `color`,
  * including skin-tone exclusion for orange/red-adjacent hues.

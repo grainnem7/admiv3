@@ -26,7 +26,7 @@ import { CameraManager } from '../../tracking/CameraManager';
 import { BoardReader } from '../../tracking/BoardReader';
 import { BoardSequencerMode, type PieceColour, type ActiveCell } from '../../tracking/BoardSequencerMode';
 import { ColourRecognizer } from '../../tracking/PieceRecognizer';
-import { rgbToHsv } from '../../tracking/ColorTracker';
+import { counterColourFromRegion } from '../../tracking/ColorTracker';
 import {
   buildChannelMatchers, channelPriority, calibrationFromHsv,
   describeChannel, freshChannelId, isFaderRole, ROLE_LABELS,
@@ -703,41 +703,12 @@ export default function BoardSequencerScreen() {
     const sw = Math.min(2 * R, w - x0);
     const sh = Math.min(2 * R, h - y0);
     const { data } = ctx.getImageData(x0, y0, sw, sh);
-    // The click area on an angled board mixes the counter with the tan wood (and
-    // any glare) next to it. Averaging RGB across those different hues cancels to
-    // GREY. So instead: find the most vivid pixel (the counter), then average
-    // only pixels of THAT hue — isolating the counter's true colour.
-    const pxs = [];
-    for (let i = 0; i < data.length; i += 4) {
-      const r = data[i];
-      const g = data[i + 1];
-      const b = data[i + 2];
-      const hsv = rgbToHsv(r, g, b);
-      pxs.push({ r, g, b, h: hsv.h, s: hsv.s });
-    }
-    if (pxs.length === 0) return null;
-    // Seed = the most saturated pixel (the vivid counter, not wood/glare).
-    const seed = pxs.reduce((best, p) => (p.s > best.s ? p : best), pxs[0]);
-    const hueDist = (a: number, bb: number) => {
-      const d = Math.abs(a - bb) % 360;
-      return d > 180 ? 360 - d : d;
-    };
-    // Average pixels within ±28° of the seed hue with enough saturation — the
-    // counter's body — ignoring the wood/background and desaturated glare.
-    let sr = 0;
-    let sg = 0;
-    let sb = 0;
-    let n = 0;
-    for (const p of pxs) {
-      if (p.s >= seed.s * 0.5 && hueDist(p.h, seed.h) <= 28) {
-        sr += p.r; sg += p.g; sb += p.b; n++;
-      }
-    }
-    if (n === 0) { sr = seed.r; sg = seed.g; sb = seed.b; n = 1; }
-    const ar = sr / n;
-    const ag = sg / n;
-    const ab = sb / n;
-    return { ...rgbToHsv(ar, ag, ab), hex: rgbToHex(ar, ag, ab) };
+    // Seed the sample from the CENTRAL patch (the click lands on the counter), so
+    // vivid tan wood at the region's edges — or a washed-out external webcam —
+    // can't hijack it. Then average the counter's hue for a clean swatch.
+    const c = counterColourFromRegion(data, sw, sh);
+    if (!c) return null;
+    return { h: c.h, s: c.s, v: c.v, hex: rgbToHex(c.r, c.g, c.b) };
   }, []);
 
   // A camera click while calibrating: sample the piece's colour, then either add
