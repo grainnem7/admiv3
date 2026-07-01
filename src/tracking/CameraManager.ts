@@ -16,42 +16,6 @@ const DEFAULT_CONFIG: Required<CameraConfig> = {
   frameRate: 30,
 };
 
-/**
- * Camera auto-adjust capabilities (Image-Capture extensions, not in lib.dom's
- * MediaTrackCapabilities). Each is the list of modes the camera supports.
- */
-interface AdjustCapabilities {
-  exposureMode?: string[];
-  whiteBalanceMode?: string[];
-  focusMode?: string[];
-}
-
-/** One advanced constraint that pins a camera auto-adjust mode to 'manual'. */
-export interface ManualLockConstraint {
-  exposureMode?: 'manual';
-  whiteBalanceMode?: 'manual';
-  focusMode?: 'manual';
-}
-
-/**
- * Build the "stop auto-adjusting" advanced constraints for a camera from its
- * reported capabilities — one entry per mode that offers 'manual'. Locking
- * exposure / white-balance / focus stops the image from flashing and hunting,
- * which is what makes hue/brightness colour detection stable. Best-effort:
- * cameras that don't report a mode (or don't offer 'manual') are simply skipped,
- * so the returned list may be empty.
- */
-export function manualLockConstraints(
-  caps: AdjustCapabilities | null | undefined,
-): ManualLockConstraint[] {
-  const out: ManualLockConstraint[] = [];
-  if (!caps) return out;
-  if (caps.exposureMode?.includes('manual')) out.push({ exposureMode: 'manual' });
-  if (caps.whiteBalanceMode?.includes('manual')) out.push({ whiteBalanceMode: 'manual' });
-  if (caps.focusMode?.includes('manual')) out.push({ focusMode: 'manual' });
-  return out;
-}
-
 export class CameraManager {
   private stream: MediaStream | null = null;
   private videoElement: HTMLVideoElement | null = null;
@@ -88,34 +52,9 @@ export class CameraManager {
         };
         videoElement.onerror = () => reject(new Error('Video element error'));
       });
-
-      // Stop the camera auto-adjusting once it's streaming, so the image stops
-      // flashing and colour detection stays stable. Best-effort; never fatal.
-      await this.lockAutoAdjust();
     } catch (error) {
       this.stop();
       throw this.handleCameraError(error);
-    }
-  }
-
-  /**
-   * Best-effort: stop the camera auto-adjusting (exposure / white-balance /
-   * focus) so the image doesn't flash and hunt — the thing that destabilises
-   * hue/brightness colour detection. Silently no-ops on cameras/browsers that
-   * don't support manual locks (Firefox, many built-in webcams). Calibrate
-   * colours AFTER this so the calibrated hue matches the now-stable image.
-   */
-  private async lockAutoAdjust(): Promise<void> {
-    const track = this.stream?.getVideoTracks()[0];
-    if (!track || typeof track.getCapabilities !== 'function') return;
-    try {
-      const caps = track.getCapabilities() as MediaTrackCapabilities & AdjustCapabilities;
-      const advanced = manualLockConstraints(caps);
-      if (advanced.length > 0) {
-        await track.applyConstraints({ advanced } as unknown as MediaTrackConstraints);
-      }
-    } catch {
-      /* best-effort — camera may not support manual locks */
     }
   }
 
