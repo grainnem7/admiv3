@@ -38,13 +38,14 @@ import { SONG_LIBRARY, type SongConfig } from '../../songs/songLibrary';
 import { getChordAtTime } from '../../songs/voices/chordLookup';
 import { computeHomography, applyHomography, UNIT_SQUARE, type Mat3 } from '../../utils/homography';
 import { SCALE_PRESETS, NOTE_NAMES, conditionalFromOffset } from '../../songs/boardSequencerScale';
-import { emptyLoopBank, stepLoopBank, type LoopBankState } from '../../songs/loopBank';
+import { emptyLoopBank, stepLoopBank, clearLoopSlot, type LoopBankState } from '../../songs/loopBank';
 import {
   loadBoardSequencerConfig, saveBoardSequencerConfig, DEFAULT_BOARD_SEQUENCER_CONFIG,
   type BoardSequencerStored, type BoardPoint,
 } from '../../profiles/BoardSequencerConfig';
 import BoardCalibrationOverlay from '../components/board/BoardCalibrationOverlay';
 import WarpedBoardView from '../components/board/WarpedBoardView';
+import LoopBankView from '../components/board/LoopBankView';
 
 // Sound options — real sample sets (mapped straight to SAMPLE_CONFIGS) plus the
 // sustained pad. These are the better-quality instruments available to us.
@@ -287,6 +288,12 @@ export default function BoardSequencerScreen() {
     });
   }, []);
 
+  // Clear a bank slot (screen "Clear" button on a mini-view).
+  const clearLoopSlotAt = useCallback((slot: number) => {
+    loopBankRef.current = clearLoopSlot(loopBankRef.current, slot);
+    persistLoopSlots(loopBankRef.current.saved);
+  }, [persistLoopSlots]);
+
   const buildHomography = useCallback((corners: BoardPoint[], video: HTMLVideoElement): Mat3 => {
     const dst = corners.map((c) => ({ x: c.x * video.videoWidth, y: c.y * video.videoHeight }));
     return computeHomography(UNIT_SQUARE, dst);
@@ -304,6 +311,7 @@ export default function BoardSequencerScreen() {
       conditional: Set<string>,
       isVarLap: boolean,
       pingDir: number,
+      bankSlots: (null | 'empty' | 'paused' | 'active')[] | null,
     ) => {
       const cv = overlayRef.current;
       const video = videoRef.current;
@@ -348,6 +356,14 @@ export default function BoardSequencerScreen() {
           ctx.fill();
           ctx.lineWidth = c === playCol && runningRef.current ? 3 : 1;
           ctx.strokeStyle = c === playCol && runningRef.current ? 'rgba(80,200,255,0.95)' : 'rgba(80,200,255,0.4)';
+          if (bankSlots && r === cfg.rows - 1) {
+            const st = bankSlots[c];
+            if (st === 'active') { ctx.fillStyle = 'rgba(80,200,255,0.5)'; ctx.fill(); }
+            else if (st === 'paused') { ctx.fillStyle = 'rgba(80,200,255,0.18)'; ctx.fill(); }
+            // 'empty' → leave as outline only
+            ctx.strokeStyle = 'rgba(80,200,255,0.8)';
+            ctx.lineWidth = 2;
+          }
           ctx.stroke();
           if (conditional.has(key)) {
             ctx.save();
@@ -489,7 +505,14 @@ export default function BoardSequencerScreen() {
           const pingDir = runningRef.current && engineRef.current && cfg.pingPong
             ? engineRef.current.getPlayheadDirection()
             : 0; // 0 = don't draw an arrow
-          drawOverlay(occupied, activeMap, cfg, playCol, swatchById, conditional, isVarLap, pingDir);
+          const bankSlots = cfg.loopBankEnabled
+            ? Array.from({ length: cfg.cols }, (_, i) => {
+                const saved = loopBankRef.current.saved[i];
+                if (saved == null) return 'empty' as const;
+                return loopBankRef.current.present[i] ? ('active' as const) : ('paused' as const);
+              })
+            : null;
+          drawOverlay(occupied, activeMap, cfg, playCol, swatchById, conditional, isVarLap, pingDir, bankSlots);
           if (now - lastStateMs > 100) {
             lastStateMs = now;
             setActive(activeArr);
@@ -1009,6 +1032,18 @@ export default function BoardSequencerScreen() {
               />
               Loop bank (bottom row = save/recall slots)
             </label>
+            {config.loopBankEnabled && (
+              <LoopBankView
+                rows={config.rows}
+                cols={config.cols}
+                swatchById={new Map(config.channels.map((c) => [c.id, c.swatch]))}
+                onClear={clearLoopSlotAt}
+                slots={Array.from({ length: config.cols }, (_, i) => ({
+                  cells: config.loopSlots[i] ?? null,
+                  active: loopBankRef.current.present[i] === true && (config.loopSlots[i] ?? null) != null,
+                }))}
+              />
+            )}
             <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <input
                 type="checkbox" checked={config.variationEnabled}
