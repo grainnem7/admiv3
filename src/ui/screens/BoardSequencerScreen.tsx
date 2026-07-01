@@ -46,6 +46,7 @@ import {
 import BoardCalibrationOverlay from '../components/board/BoardCalibrationOverlay';
 import WarpedBoardView from '../components/board/WarpedBoardView';
 import LoopBankView from '../components/board/LoopBankView';
+import BoardHelp from '../components/board/BoardHelp';
 
 // Sound options — real sample sets (mapped straight to SAMPLE_CONFIGS) plus the
 // sustained pad. These are the better-quality instruments available to us.
@@ -868,6 +869,13 @@ export default function BoardSequencerScreen() {
               </p>
             )}
           </div>
+
+          <Section
+            title="How to play"
+            open={!!openSection.help} onToggle={() => toggleSection('help')}
+          >
+            <BoardHelp />
+          </Section>
 
           <Section
             title="Camera & board"
