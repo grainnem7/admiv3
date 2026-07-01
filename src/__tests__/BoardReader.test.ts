@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sampleRegion, type RgbSampler } from '../tracking/BoardReader';
+import { sampleRegion, blendFractions, type RgbSampler } from '../tracking/BoardReader';
 import type { TrackedColor } from '../tracking/ColorTracker';
 import {
   buildChannelMatchers, DEFAULT_BLACK_BAND, DEFAULT_WHITE_BAND, type ColourChannel,
@@ -69,5 +69,34 @@ describe('BoardReader.sampleRegion', () => {
       : { r: 240, g: 240, b: 240 });
     const out = sampleRegion(rightSide, h, 0, 0, 4, 4, COLOURS, 3);
     expect(out.offset ?? 0).toBeGreaterThan(0.3);
+  });
+});
+
+describe('blendFractions (temporal smoothing)', () => {
+  it('first frame (no prev) returns the current fractions', () => {
+    expect(blendFractions(null, { red: 0.5 }, 0.4)).toEqual({ red: 0.5 });
+  });
+
+  it('EMA blends the previous value toward the current by alpha', () => {
+    // 0.2 + 0.5*(0.8-0.2) = 0.5
+    expect(blendFractions({ red: 0.2 }, { red: 0.8 }, 0.5)).toEqual({ red: 0.5 });
+  });
+
+  it('a colour missing from the current frame fades toward 0 (no instant drop)', () => {
+    // 0.6 + 0.5*(0-0.6) = 0.3 — a one-frame dropout does not flip the cell off
+    expect(blendFractions({ red: 0.6 }, {}, 0.5)).toEqual({ red: 0.3 });
+  });
+
+  it('a colour new this frame ramps up from 0 (no instant flash on)', () => {
+    // 0 + 0.5*(0.8-0) = 0.4
+    expect(blendFractions({}, { blue: 0.8 }, 0.5)).toEqual({ blue: 0.4 });
+  });
+
+  it('alpha 1 = no smoothing (tracks the current frame exactly)', () => {
+    expect(blendFractions({ red: 0.2 }, { red: 0.9 }, 1)).toEqual({ red: 0.9 });
+  });
+
+  it('drops fully-faded colours below epsilon so the map does not accumulate', () => {
+    expect(blendFractions({ red: 0.0004 }, {}, 0.5)).toEqual({});
   });
 });

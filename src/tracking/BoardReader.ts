@@ -125,6 +125,43 @@ export function sampleRegion(
   return { fractions, dominantId, centroid, offset };
 }
 
+/** Default per-cell temporal smoothing factor (EMA). Lower = steadier but laggier. */
+const FRACTION_SMOOTHING = 0.4;
+
+/**
+ * Per-cell temporal smoothing of colour fractions. Blends the previous frame's
+ * fractions toward the current frame by `alpha` (an EMA), so a single flickery
+ * frame — a light flash, a passing shadow, camera gain hunting — can't flip a
+ * cell's occupancy/colour on or off. `alpha` 1 = no smoothing (track the current
+ * frame exactly); lower = steadier but laggier. Colours that fade below epsilon
+ * are dropped so the map never accumulates stale keys. `prev` null/undefined
+ * (first sighting of a cell) returns the current fractions unchanged.
+ */
+export function blendFractions(
+  prev: Partial<Record<ColourId, number>> | null | undefined,
+  cur: Partial<Record<ColourId, number>>,
+  alpha: number,
+): Partial<Record<ColourId, number>> {
+  const EPS = 0.0005;
+  const out: Partial<Record<ColourId, number>> = {};
+  if (!prev) {
+    for (const [k, v] of Object.entries(cur)) {
+      if (typeof v === 'number' && v >= EPS) out[k as ColourId] = v;
+    }
+    return out;
+  }
+  const keys = new Set<string>([...Object.keys(prev), ...Object.keys(cur)]);
+  for (const k of keys) {
+    const p = prev[k as ColourId] ?? 0;
+    const c = cur[k as ColourId] ?? 0;
+    // alpha >= 1 is "no smoothing": pass the current value through exactly (the
+    // general EMA form would drift by a float epsilon).
+    const v = alpha >= 1 ? c : p + alpha * (c - p);
+    if (v >= EPS) out[k as ColourId] = v;
+  }
+  return out;
+}
+
 export interface BoardReaderOptions {
   homography: Mat3;
   rows: number;
@@ -134,6 +171,8 @@ export interface BoardReaderOptions {
   recognizer: PieceRecognizer;
   samplesPerAxis?: number;
   downscale?: number;
+  /** Per-cell temporal smoothing 0..1 (EMA; 1 = off). Default FRACTION_SMOOTHING. */
+  smoothing?: number;
   /**
    * Mirror the video on each axis when drawing to the sampling canvas, matching
    * the on-screen <video> display transform. Keeping the sampled pixels in the
@@ -152,6 +191,8 @@ export interface BoardReaderOptions {
 export class BoardReader {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
+  // Per-cell EMA of colour fractions (keyed "row,col") for temporal smoothing.
+  private prevFractions = new Map<string, Partial<Record<ColourId, number>>>();
 
   constructor() {
     this.canvas = document.createElement('canvas');
@@ -187,10 +228,17 @@ export class BoardReader {
         const { fractions, centroid, offset } = sampleRegion(
           sampler, opts.homography, row, col, opts.rows, opts.cols, opts.colours, samples,
         );
-        const filledFraction = Math.max(0, ...Object.values(fractions).filter((v): v is number => v !== undefined));
-        const cls = opts.recognizer.classify({ filledFraction, fractions });
+        // Temporal smoothing: blend this frame's fractions with the cell's history
+        // so a single flickery frame can't flip its occupancy/colour on or off.
+        const key = `${row},${col}`;
+        const smoothed = blendFractions(
+          this.prevFractions.get(key), fractions, opts.smoothing ?? FRACTION_SMOOTHING,
+        );
+        this.prevFractions.set(key, smoothed);
+        const filledFraction = Math.max(0, ...Object.values(smoothed).filter((v): v is number => v !== undefined));
+        const cls = opts.recognizer.classify({ filledFraction, fractions: smoothed });
         readings.push({
-          row, col, occupied: cls.occupied, colour: cls.colour, centroid, fractions, offset,
+          row, col, occupied: cls.occupied, colour: cls.colour, centroid, fractions: smoothed, offset,
         });
       }
     }
