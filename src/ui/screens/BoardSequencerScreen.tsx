@@ -286,6 +286,7 @@ export default function BoardSequencerScreen() {
       swatchById: Map<ColourId, string>,
       conditional: Set<string>,
       isVarLap: boolean,
+      pingDir: number,
     ) => {
       const cv = overlayRef.current;
       const video = videoRef.current;
@@ -346,6 +347,13 @@ export default function BoardSequencerScreen() {
         ctx.font = 'bold 22px sans-serif';
         ctx.fillStyle = isVarLap ? 'rgba(255,210,80,0.95)' : 'rgba(80,200,255,0.85)';
         ctx.fillText(isVarLap ? 'B' : 'A', 12, 30);
+        ctx.restore();
+      }
+      if (pingDir !== 0) {
+        ctx.save();
+        ctx.font = 'bold 22px sans-serif';
+        ctx.fillStyle = 'rgba(80,200,255,0.9)';
+        ctx.fillText(pingDir > 0 ? '→' : '←', 40, 30);
         ctx.restore();
       }
     },
@@ -417,6 +425,7 @@ export default function BoardSequencerScreen() {
           // pieces for the overlay (computed from the live readings so the ring
           // shows the instant a piece is shoved, before it even settles).
           modeRef.current?.setVariation(cfg.variationEnabled, cfg.variationOffsetThreshold);
+          engineRef.current?.setPingPong(cfg.pingPong);
           const conditional = new Set<string>();
           if (cfg.variationEnabled && cfg.numPages <= 1) {
             for (const rd of readings) {
@@ -443,7 +452,10 @@ export default function BoardSequencerScreen() {
           const isVarLap = runningRef.current && engineRef.current && cfg.numPages <= 1
             ? engineRef.current.isVariationLap()
             : false;
-          drawOverlay(occupied, activeMap, cfg, playCol, swatchById, conditional, isVarLap);
+          const pingDir = runningRef.current && engineRef.current && cfg.pingPong
+            ? engineRef.current.getPlayheadDirection()
+            : 0; // 0 = don't draw an arrow
+          drawOverlay(occupied, activeMap, cfg, playCol, swatchById, conditional, isVarLap, pingDir);
           if (now - lastStateMs > 100) {
             lastStateMs = now;
             setActive(activeArr);
@@ -549,6 +561,7 @@ export default function BoardSequencerScreen() {
       loopStepsRed: cfg.loopStepsRed, loopStepsBlack: cfg.loopStepsBlack,
       loopStepsBlue: cfg.loopStepsBlue, numPages: cfg.numPages,
       octaveShift: cfg.octaveShift, volume: cfg.volume,
+      pingPong: cfg.pingPong,
     });
     await engine.init();
     engine.setMuted(mutedRef.current);
@@ -939,6 +952,13 @@ export default function BoardSequencerScreen() {
                 type="range" min={3} max={50} value={Math.round(config.minFilledFraction * 100)}
                 onChange={(e) => update({ minFilledFraction: Number(e.target.value) / 100 })}
               />
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input
+                type="checkbox" checked={config.pingPong}
+                onChange={(e) => update({ pingPong: e.target.checked })}
+              />
+              Ping-pong (sweep → then ←)
             </label>
             <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <input
