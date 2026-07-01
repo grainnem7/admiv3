@@ -106,6 +106,8 @@ export class BoardSequencerEngine {
   private delayBus: GainNode | null = null;
   private limiter: Tone.Limiter | null = null;
   private active: ActiveCell[] = [];
+  // Layered loops from the loop bank; each plays on top of the live pattern.
+  private activeLoops: ActiveCell[][] = [];
   // Pattern chaining: captured page snapshots (the selected page plays live from
   // `active`; other pages play from their stored snapshot here).
   private pages: ActiveCell[][] = [];
@@ -206,6 +208,11 @@ export class BoardSequencerEngine {
   setActiveCells(cells: ActiveCell[]): void {
     this.active = cells;
     this.applyControls(cells);
+  }
+
+  /** Set the layered loops (from the loop bank) that play atop the live pattern. */
+  setActiveLoops(loops: ActiveCell[][]): void {
+    this.activeLoops = loops;
   }
 
   /**
@@ -508,11 +515,14 @@ export class BoardSequencerEngine {
     const page = pageIndexAt(beat, this.cfg.cols, this.cfg.numPages);
     this.lastFiredPage = page;
     const cells = page === this.selectedPage ? this.active : (this.pages[page] ?? []);
+    // Loop bank: active saved loops layer on top of the live/page cells. Pitch is
+    // per-row-absolute, so a plain concat never disturbs voicing.
+    const playCells = this.activeLoops.length > 0 ? [...cells, ...this.activeLoops.flat()] : cells;
     // Voice ALL active melodic cells together so pitch is a complementary
     // spread that depends on the whole board (re-voices as pieces change /
     // follows the chord when locked); then play only this column's cells. A
     // "melodic" cell is one whose colour role is melody or chord.
-    const melodic = cells.filter((c) => {
+    const melodic = playCells.filter((c) => {
       const r = this.roleFor(c.colour);
       return (r === 'melody' || r === 'chord') && this.voiceByChannel.has(c.colour);
     });
@@ -524,7 +534,7 @@ export class BoardSequencerEngine {
     );
     const oct = this.cfg.octaveShift * 12;
     const h = this.cfg.humanize;
-    for (const cell of cells) {
+    for (const cell of playCells) {
       const ch = this.channelById.get(cell.colour);
       if (!ch) continue;
       const role = ch.role;
