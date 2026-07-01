@@ -201,6 +201,30 @@ export function roleStep(beat: number, loopSteps: number, cols: number): number 
 }
 
 /**
+ * Repeat-edge triangle wave: the column the playhead visits at `beat` when it
+ * ping-pongs over a window of `len` steps. Period 2·len — forward 0…len-1, then
+ * len-1…0 — so each end column is visited on two consecutive beats (turnaround
+ * accent). Defensive on negative beats / len <= 1.
+ */
+export function pingPongStep(beat: number, len: number): number {
+  if (len <= 1) return 0;
+  const period = 2 * len;
+  const p = ((beat % period) + period) % period; // 0..period-1
+  return p < len ? p : period - 1 - p;
+}
+
+/**
+ * The step (column within a loop length derived from `loopSteps`/`cols`) the
+ * playhead visits at a GLOBAL beat. pingPong off → `beat mod len` (identical to
+ * roleStep); pingPong on → the repeat-edge triangle. Used by both the audio
+ * scheduler and the visual playhead so they always agree.
+ */
+export function playheadStep(beat: number, loopSteps: number, cols: number, pingPong: boolean): number {
+  const len = loopLen(loopSteps, cols);
+  return pingPong ? pingPongStep(beat, len) : (((beat % len) + len) % len);
+}
+
+/**
  * Map a set of control-colour cells to a 0..1 value by position, for the
  * "position = value" fader. axis 'row': bottom row → 0, top row → 1. axis 'col':
  * left → 0, right → 1. The MOST EXTREME (highest) position wins, so one clear

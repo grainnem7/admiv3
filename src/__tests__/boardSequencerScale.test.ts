@@ -6,6 +6,7 @@ import {
   drumForRow, drumForRowChoice, drumsForStep, DEFAULT_DRUM_ROWS,
   loopLen, roleStep, strictlyAfter, pageIndexAt, faderValue,
   conditionalFromOffset, lapIndex, firesThisLap, firesThisLapPaged,
+  pingPongStep, playheadStep,
 } from '../songs/boardSequencerScale';
 import type { CellRef } from '../tracking/BoardSequencerMode';
 
@@ -339,5 +340,46 @@ describe('variation helpers', () => {
     expect(firesThisLapPaged(true, 3, 8, 2)).toBe(true);
     expect(firesThisLapPaged(true, 11, 8, 2)).toBe(true);
     expect(firesThisLapPaged(false, 3, 8, 2)).toBe(true);
+  });
+});
+
+describe('ping-pong playhead', () => {
+  it('pingPongStep: forward half is identity (len 8, beats 0..7)', () => {
+    expect([0, 1, 2, 3, 4, 5, 6, 7].map((b) => pingPongStep(b, 8)))
+      .toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
+  });
+  it('pingPongStep: return half walks back (len 8, beats 8..15)', () => {
+    expect([8, 9, 10, 11, 12, 13, 14, 15].map((b) => pingPongStep(b, 8)))
+      .toEqual([7, 6, 5, 4, 3, 2, 1, 0]);
+  });
+  it('pingPongStep: repeat-edge at both ends (7 then 8 → 7; 15 then 16 → 0)', () => {
+    expect(pingPongStep(7, 8)).toBe(7);
+    expect(pingPongStep(8, 8)).toBe(7); // top edge visited twice
+    expect(pingPongStep(15, 8)).toBe(0);
+    expect(pingPongStep(16, 8)).toBe(0); // bottom edge visited twice (cycle restart)
+  });
+  it('pingPongStep: cycle length is 2*len', () => {
+    expect(pingPongStep(16, 8)).toBe(pingPongStep(0, 8));
+    expect(pingPongStep(21, 8)).toBe(pingPongStep(5, 8));
+  });
+  it('pingPongStep: defensive on negative beats', () => {
+    expect(pingPongStep(-1, 8)).toBe(0); // -1 mod 16 = 15 → 0
+    expect(pingPongStep(-8, 8)).toBe(7); // -8 mod 16 = 8 → 7
+  });
+  it('pingPongStep: len <= 1 → 0', () => {
+    expect(pingPongStep(5, 1)).toBe(0);
+    expect(pingPongStep(5, 0)).toBe(0);
+  });
+
+  it('playheadStep: pingPong off equals beat mod len (and matches roleStep)', () => {
+    for (const b of [0, 3, 7, 8, 15, 100]) {
+      expect(playheadStep(b, 0, 8, false)).toBe(roleStep(b, 0, 8));
+      expect(playheadStep(b, 6, 8, false)).toBe(roleStep(b, 6, 8));
+    }
+  });
+  it('playheadStep: pingPong on delegates to pingPongStep over the loop length', () => {
+    // loopSteps 0 → full width (8); loopSteps 6 → bounces within 6
+    expect(playheadStep(8, 0, 8, true)).toBe(pingPongStep(8, 8)); // 7
+    expect(playheadStep(7, 6, 8, true)).toBe(pingPongStep(7, 6)); // len 6
   });
 });
