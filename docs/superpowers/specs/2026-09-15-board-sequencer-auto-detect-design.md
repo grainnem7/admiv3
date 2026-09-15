@@ -3,7 +3,7 @@
 - **Date:** 2026-09-15
 - **Status:** Approved design (brainstorm, mockup `auto-detect.html`). Revised after an adversarial spec review. Awaiting user spec review.
 - **Branch:** `feat/board-sequencer-mode`
-- **Sub-project 2 of 2.** Depends on sub-project 1 (`2026-09-15-board-sequencer-redesign-design.md`), which provides:
+- **Project C** of the Board Sequencer roadmap (after projects 1, A and B; followed by D board tracking, which reuses these detectors). Depends on project 1 (`2026-09-15-board-sequencer-redesign-design.md`), which provides:
   - the Set up flow and the **Find board** / **Find colours** buttons
   - `BoardCornerEditor` (tap / review / adjust modes, props)
   - `CameraSurface` (single video)
@@ -91,11 +91,11 @@ Click calibration also builds colour bands that are **never checked against the 
      - Buttons: **Adjust corners** (primary) · **Try again**, plus the editor's own **Looks right** · **⟲ Turn** · **⇋ Flip** · **Tap corners again**.
      - After Adjust → Done, review keeps the warning outline and **Looks right** becomes primary.
    - **Part of the board is out of view** (`partial`):
-     - **review** with the off-screen corner highlighted and **Looks right disabled** while any corner lies outside the picture. After Adjust brings it in, the review is normal (sub-project 1's editor rule).
+     - **review** with the off-screen corner highlighted and **Looks right disabled** while any corner lies outside the picture. After Adjust brings it in, the review is normal (project 1's editor rule).
      - Message: "The bottom-right corner is outside the camera picture. Move the camera back."
      - Buttons: **Try again** · **Adjust**.
    - **Couldn't find a board** (`none`):
-     - The editor opens in **tap** mode (Cancel follows sub-project 1's rule).
+     - The editor opens in **tap** mode (Cancel follows project 1's rule).
      - Message: "Couldn't find the board. Try: take the counters off, more even light, whole board in view."
      - **Try again** stays available.
 5. **Snap** (only when `latticeNodes` exist).
@@ -126,7 +126,7 @@ Click calibration also builds colour bands that are **never checked against the 
    - **Cards.** One card per colour, **numbered 1…N**. Each shows its number badge, real swatch with contrast ring, name, "1 counter", "lights 1 square now", a **suggested job**, and a board-check badge ("Doesn't match the board ✓").
    - **Rings on the video.** Each found counter gets a ring labelled with its card's number; all counters of a colour share the number.
    - **Live preview.** Cells each colour would light on the current board are tinted **and** numbered, so it is never tint-only.
-   - **Buttons:** **Use these colours** (primary) · **Try again** · **Tap a missing counter**. That last one is sub-project 1's tap and **Pick a square** flow, now board-checked; the added counter's job is `suggestRole(currentCards, added)`.
+   - **Buttons:** **Use these colours** (primary) · **Try again** · **Tap a missing counter**. That last one is project 1's tap and **Pick a square** flow, now board-checked; the added counter's job is `suggestRole(currentCards, added)`.
 5. **Plain-language outcomes:**
    - **Unsafe colour.**
      - Trigger: it matches empty squares beyond `maxFp`, or fails the ±15% exposure drift test.
@@ -170,7 +170,7 @@ Click calibration also builds colour bands that are **never checked against the 
    - Nothing changes automatically.
 
 ### While playing
-- Sub-project 1's `colour-matches-board` nudge keeps its signature and trigger.
+- Project 1's `colour-matches-board` nudge keeps its signature and trigger.
 - With auto-detect its message becomes "<Name> is matching the board. Find colours again?", and its button **Find colours again** (confirm stop → Set up → Colours, which runs the saved-colour check on entry).
 - The `board-moved` nudge is unchanged. Detection never runs mid-play.
 
@@ -217,7 +217,7 @@ Click calibration also builds colour bands that are **never checked against the 
 | `extent.ts` | `resolveExtent(img, lattice, sizes = [8, 10])`: near-corner median sampling; window parity × in-view − outside-ring agreement. Returns best/second, offset, `lightDark`, `partial`, `offscreenCorner`. |
 | `detectBoard.ts` | `detectBoard(rgba, w, h, opts)` → `BoardDetection`. `opts.now` (default `performance.now`) and `opts.budgetMs` (default 150); over budget → `none` with a budget reason. |
 | `consensus.ts` | `consensus(detections)` (rules above) |
-| `orientation.ts` | Exists from sub-project 1 (`rotateCorners`, `flipCorners`). Adds `orderCornersByImage(pts)` and `matchSavedOrientation(detected, saved)`. |
+| `orientation.ts` | Exists from project 1 (`rotateCorners`, `flipCorners`). Adds `orderCornersByImage(pts)` and `matchSavedOrientation(detected, saved)`. |
 
 ```ts
 type DetectStatus = 'high' | 'low' | 'partial' | 'none';
@@ -244,9 +244,9 @@ interface BoardDetection {
 | `squareModel.ts` | `buildSquareModel(warped, squares)` → `SquareModel \| { error: 'board-too-covered' }`. Central-60% median Lab per square; per-parity 3×MAD outlier removal (twice); per-parity lighting plane; per-parity threshold max(10, 1.5·P97). Parity and plane are in the **confirmed** board orientation. |
 | `blobs.ts` | `findPieceBlobs(warped, model)` → `PieceBlob[] \| { error: 'large-object' \| 'no-pieces' }`. Deviation mask with Lab shadow rejection; 3×3 open; connected components; area 0.12–1.6 squares; glare-trimmed core colour. |
 | `cluster.ts` | `clusterPieceColours(blobs, { mergeDistance = 16, oneEach })`, `closePairs(clusters)` |
-| `fitBand.ts` | `fitChannelBand(cluster, model, warped, others, { maxFp })`. **Kind comes from `classifyCounterKind`** (sub-project 1), from the core colour converted to HSV 0–100; it has no thresholds of its own. See the search below. |
+| `fitBand.ts` | `fitChannelBand(cluster, model, warped, others, { maxFp })`. **Kind comes from `classifyCounterKind`** (project 1), from the core colour converted to HSV 0–100; it has no thresholds of its own. See the search below. |
 | `validate.ts` | `validateChannel(channel, model, warped)` → `{ worstSquareFp, driftFp, safe }`. The model only identifies empty-square pixels and parity. The FP fractions (including ±15% value shifts) are **measured on the fresh `warped` pixels**, never estimated from stored medians. |
-| `suggest.ts` | `suggestRoles(channels)`: unsafe → off; order the rest with the darkest achromatic first, then red-ish ahead of blue-ish; fold sub-project 1's `suggestRole` over that order. Also `matchSavedChannels(saved, detected)`. |
+| `suggest.ts` | `suggestRoles(channels)`: unsafe → off; order the rest with the darkest achromatic first, then red-ish ahead of blue-ish; fold project 1's `suggestRole` over that order. Also `matchSavedChannels(saved, detected)`. |
 | `detectColours.ts` | `detectColours(frames, H, squares, opts): Promise<ColourDetection>`. Yields between clusters, honours `opts.signal`, and returns cards plus structured warnings. |
 
 **Band search** (`fitChannelBand`):
@@ -276,9 +276,9 @@ interface BoardDetection {
 - **`pieceAreaSquares?: number`** (0.12–1.6). Set by accepting "Use suggested".
   - **Cleared** only when colours are replaced, or `boardSquares` or the camera changes. It is **not** cleared by re-finding corners, since piece size in squares doesn't depend on board position.
   - When it is cleared and `readSettingsCustom` is false, `suggestReadSettings` is re-applied in the same write.
-- **`boardSquares`** (sub-project 1): saved only on confirmation.
+- **`boardSquares`** (project 1): saved only on confirmation.
 
-### UI wiring (in sub-project 1's views)
+### UI wiring (in project 1's views)
 - **`BoardStep`.** **Find board** → `useFrameBurst(detectBoard)` → `consensus` → `matchSavedOrientation` → `BoardCornerEditor` with `proposal`, `latticeNodes`, `status`, `offscreenCorner`.
 - **`ColoursStep`.** **Find colours** → `useFrameBurst` → `detectColours` → results panel. The saved-colour check runs on entry.
 - **`CameraStep`.** The gated **Save test picture**.

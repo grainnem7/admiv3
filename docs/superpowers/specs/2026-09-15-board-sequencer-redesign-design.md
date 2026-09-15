@@ -1,9 +1,15 @@
 # Board Sequencer — Setup & Play Redesign (Calm theme)
 
 - **Date:** 2026-09-15
-- **Status:** Approved design (brainstorm + visual mockups). Revised after an adversarial spec review (61 confirmed findings folded in). Awaiting user spec review.
+- **Status:** Approved design (brainstorm + visual mockups), revised after an adversarial spec review and approved by the user. **Amended 2026-09-15 (second brainstorm):** added player profiles, handedness and seat edge, timing fixes, safe control counters, hand-guard logic fixes and detection clean-ups (see [Foundations added in the second brainstorm](#foundations-added-in-the-second-brainstorm)).
 - **Branch:** `feat/board-sequencer-mode`
-- **Sub-project 1 of 2.** Sub-project 2 is auto-detection (`2026-09-15-board-sequencer-auto-detect-design.md`), which plugs into the **Find board** / **Find colours** buttons created here. This spec ships the *manual* paths only.
+- **Roadmap.** This is **project 1**. Later projects, each with its own spec → plan, in this order:
+  - **A** Hand and knock guard
+  - **B** Zones and loop pads (per player)
+  - **C** Auto-detect (`2026-09-15-board-sequencer-auto-detect-design.md`), which plugs into the **Find board** / **Find colours** buttons created here
+  - **D** Board tracking
+  - **E** Box detail and two counters
+- **Manual paths.** This spec ships the *manual* setup paths only.
 - **Mockups** (git-ignored, for reference): `.superpowers/brainstorm/38-1789501876/content/`: `layout-approaches.html` (A), `visual-style-all.html` (Calm), `setup-flow-calm-v2.html`, `play-screen.html`, `auto-detect.html`. Where this spec and a mockup differ, **the spec wins**:
   - Drums have no mixer.
   - Prompts say "outside corners of the squares".
@@ -39,9 +45,12 @@ The Board Sequencer (`src/ui/screens/BoardSequencerScreen.tsx`, 1557 lines) is h
 2. **Visual style: Calm, dark and light.** Slate backgrounds, muted pastel UI accents, extra-rounded shapes, no glow. Counters and swatches always show their **real** sampled colours.
 3. **Token-driven, swappable theme.** Swiss minimal may replace Calm later as a token-block swap.
 4. **Every feature stays.** The backing song moves behind "More".
-5. **Build order.** This redesign first, delivered as **three implementation plans** (see [Delivery](#delivery-three-plans)). Then auto-detect.
-6. **Settle behaviour is unchanged.** `BoardSequencerMode` exists only while playing. Set up and stopped views show *detected* pieces (raw per-frame occupancy). Settling, settle flash, note pops and settled counts exist only while playing. Pieces already on the board need `settleWindowMs` after Play before they sound, as today.
+5. **Build order.** This redesign first, delivered as **four implementation plans** (see [Delivery](#delivery-four-plans)). Then projects A–E.
+6. **Settle behaviour is unchanged for notes.** `BoardSequencerMode` exists only while playing. Set up and stopped views show *detected* pieces (raw per-frame occupancy). Settling, settle flash, note pops and settled counts exist only while playing. Pieces already on the board need `settleWindowMs` after Play before they sound, as today. **Exception:** control-role counters read raw readings with a short stillness debounce (see [Safe control counters](#safe-control-counters)).
 7. **The grid defaults to the most recent setup.** Rows and steps are remembered and reused every session. They never change on their own: not on re-finding the board, changing camera or mirror, or switching Board size. Only a brand-new config (nothing saved yet) gets a **square** default of **4 × 4**, which divides an 8 × 8 board. The mockup's 4 × 8 example grid is superseded.
+8. **Player profiles.** Settings are split into **per player** and **per board + camera** ("rig"). See [Player profiles](#player-profiles).
+9. **Handedness and seat edge are per player.** The current player (Tim) is left-handed. A left-handed layout mirrors the *screen* (panels, transport and nudge controls on the left). It never flips the camera, the board, slider direction or focus order.
+10. **Foundations first.** The timing fixes, safe control counters, hand-guard logic fixes and detection clean-ups found in research are built into this project, before the new features that depend on them.
 
 ## Experience
 
@@ -57,6 +66,28 @@ The Board Sequencer (`src/ui/screens/BoardSequencerScreen.tsx`, 1557 lines) is h
   - On **Play** only: the status pill, **⚙ Set up** and **⤢ Big board**.
 - **Camera status** is always visible. A single `role="status"` region under the header shows the camera fallback/error notice on every step and on Play ("Using the browser's default camera, not <name>", with a **Change camera** link to the Camera step).
 - **Coordinate space.** Board corners, taps, handles, the tap-a-counter picker and the camera overlay are all fractions (0–1) of the **full camera frame** in displayed (mirrored) orientation, the same space `BoardReader` samples. Every camera surface takes its aspect ratio from the live stream (`aspect-ratio: videoWidth / videoHeight`, updated on `loadedmetadata`/`resize`), with no `object-fit` crop or letterbox. Pure helpers `videoContentRect` / `boxToFrame` / `frameToBox` in `cornerEditor.ts` are used for all pointer mapping.
+
+### Player profiles
+
+- **Who's playing?** When the screen opens and more than one player profile exists, a full-screen chooser appears first:
+  - One large card per player, showing the profile name (initials or a code are suggested, since names are personal data) and handedness.
+  - Plus **New player**.
+  - With exactly one profile, it is used silently.
+  - The header gains a **Player: <name>** button, disabled while playing, to switch.
+- **New player.** Asks for a name, **Handedness** (Left · Right) and **Seat** (which board edge they sit at, set on the Board step). Every other player setting starts from defaults. The rig (board, camera, counter colours) is shared, so a new player on the same board goes straight to Colours → jobs, then Ready.
+- **What is per player vs per rig:**
+
+| Per player (`BoardPlayerProfile`) | Per rig (`BoardRigConfig`, this device's board + camera) |
+|---|---|
+| name, handedness, seat edge | camera choice, mirror/flip |
+| grid (rows, cols), read settings (`minFilledFraction`, `samplesPerAxis`, `readSettingsCustom`), settle and hand settings | corners, `enabled`, `boardSquares` |
+| per-colour **job, instrument/drum, mix** (keyed by channel id) | counter **colours**: channel `id`, `kind`, `swatch`, bands |
+| key, scale, tempo, swing, humanize, note length, loop lengths, octave, volume, tick | (sub-project C) `squareModel` |
+| pages, loop slots, variation / ping-pong / loop-bank flags, fader direction and control ranges | |
+| theme mode, `boardNudgesEnabled` | |
+
+- **Colours shared by players.** A channel that one player hasn't given a job yet is shown as **Off** for that player until they choose one. Removing a colour removes it from the rig for every player, and the confirmation says so.
+- **Large UI** stays app-wide (store `uiSize`).
 
 ### Entry routing and camera status
 
@@ -89,7 +120,7 @@ The Board Sequencer (`src/ui/screens/BoardSequencerScreen.tsx`, 1557 lines) is h
 - **Camera picker.** A large list of camera names, with "Browser default" first. It uses the existing `CameraManager` picker, fallback and **Try again**.
 - **Live preview.**
 - **Mirror** and **Flip** switches.
-  - Changing them resets corners (`enabled: false`) and **clears `squareModel`** (sub-project 2).
+  - Changing them resets corners (`enabled: false`) and **clears `squareModel`** (project C (auto-detect)).
   - Colours are kept. The corner editor is **not** opened automatically; Board becomes to-do.
 - **Plain-language camera check.** "Picture has colour ✓" or the black-and-white warning. Camera name and resolution appear as secondary text. HSV numbers are in a collapsed **Details** disclosure.
 - **Continue.**
@@ -99,10 +130,10 @@ The Board Sequencer (`src/ui/screens/BoardSequencerScreen.tsx`, 1557 lines) is h
 
 **2 · Board**
 - **Heading:** "Put the board in view, empty." Helper text: "Corners are the **outside corners of the squares**, not the wooden edge." A small inline diagram shows a framed board with the correct corners marked.
-- **Board size.** Segmented: 8 × 8 · 10 × 10. With no open proposal it persists to `boardSquares` at once. Sub-project 2: while a detection proposal is open, it edits the proposal's size (unsaved), and the divisor options and hints follow it.
+- **Board size.** Segmented: 8 × 8 · 10 × 10. With no open proposal it persists to `boardSquares` at once. Project C (auto-detect): while a detection proposal is open, it edits the proposal's size (unsaved), and the divisor options and hints follow it.
 - **Find board** (primary).
   - In this sub-project it opens the corner editor in **tap** mode.
-  - Sub-project 2 replaces its action with detection.
+  - Project C (auto-detect) replaces its action with detection.
   - **Tap corners myself** (secondary).
 - **Corner editor.** See [Corner editor](#corner-editor). A returning user with saved corners enters Board in **review** mode.
 - **Rows** and **Steps.** Segmented controls offering only sizes that divide the board (8 × 8: 2 · 4 · 8; 10 × 10: 2 · 5 · 10).
@@ -111,6 +142,7 @@ The Board Sequencer (`src/ui/screens/BoardSequencerScreen.tsx`, 1557 lines) is h
   - Changing Board size never changes rows/cols; only the options and hints update.
   - Disabled while playing.
 - **Live grid preview** on the video, with orientation labels **start →** (along step 1) and **low** (beside the bottom row).
+- **Seat.** "Where does <player> sit?" Four large edge buttons are drawn on the live grid preview (the side with the start →, end, low and high labels), defaulting to the low-notes edge. The choice is saved to the player profile. It tells later features (zones, project B) which way is the player's left. Keyboard/switch: a radiogroup.
 - **"Show 'Board moved?' hint"** switch (`boardNudgesEnabled`, default on), under a Details disclosure.
 - **Skip, board hasn't moved.**
   - Enabled only when `config.enabled`.
@@ -120,7 +152,7 @@ The Board Sequencer (`src/ui/screens/BoardSequencerScreen.tsx`, 1557 lines) is h
 
 **3 · Colours**
 - **Heading:** "Put one of each counter on the board."
-- **Find colours** (primary). In this sub-project it arms tap-a-counter; sub-project 2 replaces it. **Tap a counter** (secondary).
+- **Find colours** (primary). In this sub-project it arms tap-a-counter; project C (auto-detect) replaces it. **Tap a counter** (secondary).
 - **Tap a counter.**
   - A banner "Tap a counter to add its colour" with **Cancel**.
   - After a tap, a pending card shows the sampled swatch, its name and **Add** / **Try again**. Nothing is saved without **Add**.
@@ -140,7 +172,7 @@ The Board Sequencer (`src/ui/screens/BoardSequencerScreen.tsx`, 1557 lines) is h
   - If `added.kind === 'black'` and Drums is free, Drums.
   - Otherwise the first free of Melody, Bass, Drums, Chords.
   - Otherwise Off.
-  - The user can always change it. Sub-project 2 reuses this function.
+  - The user can always change it. Project C (auto-detect) reuses this function.
 - **Detection sensitivity** disclosure:
   - **Piece coverage** (min fill, plain label). Moving it sets `readSettingsCustom = true`. **Reset to suggested** clears it and re-applies the suggestion.
   - **Black darkness** per black channel.
@@ -164,7 +196,7 @@ The Board Sequencer (`src/ui/screens/BoardSequencerScreen.tsx`, 1557 lines) is h
   - The [board view](#board-view).
   - The **camera picture-in-picture** sits inside the stage over the canvas only, never overlapping a focusable control. Its hide button meets `--bs-target`. Hiding it is visual only (see [Camera element ownership](#camera-element-ownership)).
   - **Legend** under the board: numbered colour chips with job name and live count ("3 playing"), and control pieces with their live value ("Reverb 40%").
-  - A visual **"Now:"** line, listing the notes whose fired-note records are currently sounding (`audioTime ≤ Tone.now() < audioTime + durSec`). These are the same records that drive the pop; the line is never derived from the playhead column.
+  - A visual **"Now:"** line, listing the notes whose fired-note records are currently sounding (`audioTime ≤ audibleNow() < audioTime + durSec`). These are the same records that drive the pop; the line is never derived from the playhead column.
   - **Describe board** button.
 - **Transport.** Big **▶ Play / ■ Stop** plus **Mute** (engine `setMuted`).
 - **Tabs** (`role="tablist"`, roving tabindex, arrows/Home/End):
@@ -247,7 +279,7 @@ function stepNudge(prev: NudgeState, readings: CellReading[], ctx: NudgeContext,
     - The real colour itself is never altered.
 - **Note pop.**
   - Driven **only** by the engine's fired-note log (`drainFiredNotes()`), never by the playhead column plus active cells.
-  - A `source: 'live'` note pops its cell (scale 1.06 plus outline) from `Tone.now() ≥ audioTime` until `audioTime + max(durSec, 0.12)`. A pop never appears before its sound.
+  - A `source: 'live'` note pops its cell (scale 1.06 plus outline) from `audibleNow() ≥ audioTime` until `audioTime + max(durSec, 0.12)`. A pop never appears before its sound.
   - `page` notes pulse the page label; `loop` notes flash that loop-bank slot.
   - **Reduced motion:** a static outline for the note's duration instead of scale and pulse.
 - **Playhead.** A column band while playing, with a direction arrow when ping-pong is on.
@@ -308,7 +340,7 @@ function stepNudge(prev: NudgeState, readings: CellReading[], ctx: NudgeContext,
 **Orientation.**
 - ⟲ Turn = `rotateCorners(c, 1)` → `[c[3], c[0], c[1], c[2]]` (start moves to the next edge).
 - ⇋ Flip = `flipCorners(c)` → `[c[1], c[0], c[3], c[2]]` (swap start and end, keep the low side).
-- Both live in `src/tracking/boardDetect/orientation.ts` (created here; sub-project 2 adds to it).
+- Both live in `src/tracking/boardDetect/orientation.ts` (created here; project C (auto-detect) adds to it).
 
 **Props:**
 
@@ -316,11 +348,11 @@ function stepNudge(prev: NudgeState, readings: CellReading[], ctx: NudgeContext,
 { corners?: Corners; mode: CornerEditorMode; rows; cols; boardSquares; mirrorX; mirrorY; onConfirm(corners): void; onCancel(): void }
 ```
 
-Sub-project 2 adds `proposal`, `latticeNodes`, `status`, `offscreenCorner`.
+Project C (auto-detect) adds `proposal`, `latticeNodes`, `status`, `offscreenCorner`.
 
 The editor owns its own buttons (Looks right, Adjust, Turn, Flip, Tap corners again, Done, Cancel, nudges). `BoardStep` owns Find board, **Try again**, Tap corners myself, Skip and Continue, and renders them next to the editor.
 
-Sub-project 2's `status` and `offscreenCorner` props apply **only to the first review of a proposal**:
+Project C (auto-detect)'s `status` and `offscreenCorner` props apply **only to the first review of a proposal**:
 - **After Adjust → Done, Turn or Flip,** the editor shows a normal review: the warning outline stays while status was `low`, and **Looks right** is enabled.
 - **Partial proposals:** Looks right stays disabled only while any corner lies outside [0, 1].
 - **`low`:** Looks right is shown as a secondary button on the first review.
@@ -381,6 +413,92 @@ The code moves into `src/ui/screens/boardSequencer/`. `src/ui/screens/BoardSeque
 
 `LoopBankView` and `BoardHelp` are restyled with tokens. `BoardHelp` and `docs/board-sequencer-cheat-sheet.md` are rewritten for the new flow.
 
+### Foundations added in the second brainstorm
+
+#### Handedness layout
+- **What it changes.** `data-bs-hand="left|right"` on `.bs-root`, from the active player. A pure `layoutFor(hand, width, uiSize)` returns the CSS grid areas, switched with `grid-template-areas`. **Never `dir="rtl"`.**
+
+| Surface | Right-handed | Left-handed |
+|---|---|---|
+| Play, side by side (≥ 1024 px) | stage left, panel right | **panel (with transport at top) left**, stage right |
+| Play, stacked / Large UI | sticky transport bar at the bottom | same bar, with **▶/■ and Mute at its left end** |
+| Big board always-visible controls | clustered on the right edge | clustered on the **left** edge |
+| Set up: camera vs step panel | camera left, panel right | **panel left**, camera right |
+| Step footer | Back · Skip · Continue, with Continue at the right | same DOM and focus order, **all left-aligned** |
+| Corner editor nudge pad, pick-a-square arrows | right of the camera surface | **left** of the camera surface |
+| Nudge banner button | right end | left end |
+| Camera PiP | bottom-left of the stage | **bottom-right** (away from the left-hand controls) |
+
+- **What it never changes:** the camera mirror/flip, board grid, start/low labels, playhead direction, slider direction (minimum stays left), text alignment, tab order or keyboard shortcuts.
+
+#### Timing: visuals follow the sound
+- **Audible time.** The engine adds `audibleNow()`:
+  - Base value: `rawContext.getOutputTimestamp()` → `contextTime + (performance.now() − performanceTime)/1000`.
+  - Fallback when unavailable: `rawContext.currentTime − outputLatency`.
+  - Unlike `Tone.now()`, this excludes Tone's 0.1 s look-ahead. The look-ahead itself stays untouched.
+- **What uses it:**
+  - playhead (`getPlayheadCol`)
+  - beat dot, Variation lap, note pop and the "Now:" line (`audioTime ≤ audibleNow() < audioTime + durSec`)
+  - `fireTick` and fader ramps start at `Tone.immediate()` instead of `Tone.now()`
+- **Supersedes** every `Tone.now()` comparison elsewhere in this spec. A pop never appears before its sound.
+
+#### Detection runs on camera frames
+- **Frame callback.** `useBoardRuntime` runs `BoardReader.read`, the settle step and control reads **once per new camera frame** via `video.requestVideoFrameCallback`, with `dt` from `metadata.mediaTime`.
+- **Fallback:** skip rAF ticks when `getVideoPlaybackQuality().totalVideoFrames` hasn't changed.
+- **Drawing** stays on rAF.
+- **Smoothing becomes time constants:**
+  - `blendFractions` alpha and the mode's velocity EMA use `alpha = 1 − exp(−dt/τ)`.
+  - τ is chosen to match today's behaviour at 30 fps.
+  - Effect: settings mean the same on a 60 Hz laptop, a 120 Hz screen or a projector.
+- **Loop tidy-up:**
+  - matchers and the recogniser are rebuilt only when channels or read settings change
+  - the reader canvas is resized only when the video size changes
+  - per-cell sample positions are precomputed once per homography
+
+#### Safe control counters
+Applies to today's colour-role controls. Project B later moves them into zones.
+- **Hold last value.** A missing fader piece keeps its last value, as tempo already does. A per-control option is **Hold** (default), **Drop to zero** or **Return to default after N s**.
+- **Raw readings, not settled.**
+  - Control-role cells are read from raw readings with a stillness debounce, `controlStillMs` (default 150 ms, calibratable), instead of the 600 ms settle.
+  - Changes glide via `setTargetAtTime` with `controlGlideSec` (default 0.3 s for volume).
+- **Continuous values.**
+  - A fader's value comes from its counter's **board position along the fader axis** (per-colour centroid, below), not the cell index.
+  - Snap end zones: the outermost 0.3 square reads exactly 0 or 1.
+  - Hysteresis ±0.05.
+  - On a 4 × 4 grid this gives about 20–30 levels instead of 4.
+- **Ranges per control, calibratable:**
+  - tempo 60–160 BPM (was 80–300)
+  - volume 0.2–1.0
+  - reverb and delay amount 0–0.6
+  - tone 0–1
+  - toggle amount (was a hard-coded 0.35)
+- **One writer per parameter.**
+  - While a control counter owns a parameter, the matching on-screen control is disabled with a reason, e.g. "Volume is set by the volume counter".
+  - Reverb/delay faders and toggles drive an **effect amount** that multiplies the per-channel sends, never the raw bus gain from two places.
+  - The tone fader scales, not overwrites, each channel's Tone.
+- **Legend.** Shows each control's live value, with a ‖ glyph while it is held.
+
+#### Hand-guard logic fixes (project A adds the camera "board watcher" on top)
+1. **Colour hold.** A settled cell does not change `colour` or `conditional` while its reading shows a different colour. The new colour must persist for `settleWindowMs`; then the cell goes lost → re-settle.
+2. **Conditional latched at settle.** `conditional` is fixed from the median offset over the settle window, not recomputed every frame while settled.
+3. **Loop-bank capture guard.**
+   - Capture only when the pattern above has been unchanged for `captureQuietMs` (default 500 ms, calibratable).
+   - Capture only cells whose role is sequenced (never control or Off colours).
+   - A slot is triggered only by non-control colours.
+   - Clear stays the undo.
+4. **Settle tick** fires only for genuinely new placements, not for re-settles after a hold or a colour hold.
+
+#### Detection clean-ups
+1. **Per-colour centroids.** `sampleRegion` returns a centroid for **every** colour it matched, not only the dominant one (the sums already exist). `CellReading` gains `centroids`. `offset` and Variation are measured on the **played** colour's centroid.
+2. **One counter, one box.**
+   - Rule: when adjacent cells both see colour *c* and the fused centroid of the two readings falls inside one of them, the other cell's reading of *c* is a spill and is cleared.
+   - Exception: the pair's combined coverage is ≥ 1.7 × a single counter's expected coverage, i.e. two real counters.
+   - Fixes: a counter on a line plays twice on 8 × 8 and zero or one times on 4 × 4.
+   - Pure `suppressSpill(readings, ctx)` in `boardFrame`.
+3. **Variation measured from the square.** On grids where rows and cols divide `boardSquares`, `offset` for Variation is the distance from the **nearest physical square centre**, in square units (0 = centre, 1 = edge). Otherwise it is from the cell centre, as today. Naturally placed counters on a 4 × 4 grid no longer read as shoved (research measured 28% false triggers).
+4. **Drum volume at play time.** `RoundRobinDrumKit.fire` sets volume with `setValueAtTime(gainDb, time)`, not immediately.
+5. **Nudges.** `board-moved` ignores control-role pieces.
+
 ### Camera element ownership
 - **One element, always mounted.** The screen owns exactly **one `<video>` and one overlay canvas**, rendered by `CameraSurface`. The container keeps it mounted for the screen's whole life: every Set up step, Play and Big board.
 - **Placement.** Views never render their own `<video>`. Each view provides a slot that `CameraSurface` is placed into, via a React portal or CSS placement.
@@ -390,6 +508,20 @@ The code moves into `src/ui/screens/boardSequencer/`. `src/ui/screens/BoardSeque
 
 ### Config (`src/profiles/BoardSequencerConfig.ts`)
 All additions are sanitised. There is no `CONFIG_VERSION` bump.
+- **Storage split (player profiles).**
+  - **Keys:**
+    - `admi-board-rig`: `BoardRigConfig`
+    - `admi-board-players`: `BoardPlayerProfile[]`, each with an `id`
+    - `admi-board-active-player`: the active player's id
+  - **Loading.** A pure `resolveBoardConfig(rig, player)` merges them into the `BoardSequencerStored` shape that the runtime already uses, so the engine and reader don't change. Writes are routed back to rig or player by field (the table in [Player profiles](#player-profiles)).
+  - **Per-channel player data** lives in `player.channelSettings[channelId] = { role, instrument, drum, volume, tone, reverbSend, delaySend }`. Missing entries mean role `off`.
+  - **Migration, one-time and tested.**
+    - If `admi-board-sequencer` exists and the new keys don't, split it into a rig plus one player named "Player 1", with handedness `right` and seat `low`. The user then sets Tim's handedness to Left.
+    - The old key is left in place, read-only, for one release as a backup.
+  - **Channel ids stay rig-wide.** The no-reuse rule checks pages/loop slots in **every** player profile.
+  - **Out of scope.** Export/import of profiles.
+  - **Relation to other code.** `InputProfileManager` / `UserProfile` are not reused; they model other screens.
+- **Player fields added here:** `handedness: 'left' | 'right'`, `seatEdge: 'start' | 'end' | 'low' | 'high'`, `controlStillMs`, `controlGlideSec`, `controlRanges`, `controlRemoval` per control role, `captureQuietMs`.
 - **New fields.**
   - `boardSquares: 8 | 10`, default 8
   - `themeMode: 'dark' | 'light'`, default `'dark'`
@@ -442,7 +574,7 @@ All additions are sanitised. There is no `CONFIG_VERSION` bump.
    - black if `(s ≤ 12 && v ≤ 38) || (v ≤ 32 && s ≤ 45)`
    - white if `s ≤ 12 && v ≥ 72`
    - else hue
-   - `calibrationFromHsv` uses it, and sub-project 2 uses it too.
+   - `calibrationFromHsv` uses it, and project C (auto-detect) uses it too.
    - `counterColourFromRegion` seeds from the **median** pixel when the central disc's median `v ≤ 32`.
    - Edge tests: s 12/13 at v 90; v 38/39 at s 10; v 32/33 at s 45; s 45/46 at v 30. Plus a noisy near-black patch → black.
 3. **Detection coverage.** `suggestReadSettings` plus migration, and `samplesPerAxis` passed to `BoardReader`.
@@ -470,24 +602,32 @@ All additions are sanitised. There is no `CONFIG_VERSION` bump.
 - **Everywhere.** Large UI, theme and help are reachable from every Set up step and from Play.
 - **User preferences.** Reduced motion and high contrast are honoured.
 
-## Delivery: three plans
+## Delivery: four plans
 
 Each plan ends with a working screen that passes lint and tests.
 1. **Plan 1a — Foundations, no visible change.**
-   - Characterisation tests, then extract `stepBoardFrame`.
-   - Move camera/rAF/engine into `useBoardRuntime` behind the old screen.
-   - Config fields and migration, `suggestReadSettings`, `samplesPerAxis`.
-   - Bug fixes 1, 2, 3, 6, and the **first part of 5**: the global Space early-return and hiding `MuteButton` on this screen.
-     - During 1a and 1b, Space does nothing on the Board Sequencer. That is not an audio regression: the global mute never controlled board audio.
-     - The Board Sequencer's own Space handler (play/stop in Play and Big board) lands in **Plan 1c**, with its component test.
-   - Engine `setBpm`/`getBpm`, `setTickEnabled`, fired-note log.
-   - `orientation.ts`, `cornerEditor.ts`, `boardSetupFlow.ts`, `playNudge.ts`, `roles.ts`, `gridOptions.ts`, all with tests.
-2. **Plan 1b — Theme, primitives and Set up.**
+   - **Refactor.** Characterisation tests, then extract `stepBoardFrame`. Move camera/rAF/engine into `useBoardRuntime` behind the old screen.
+   - **Timing.** Detection runs on camera frames (`requestVideoFrameCallback`, time-constant smoothing); the loop tidy-up.
+   - **Config.** Config fields and migration, `suggestReadSettings`, `samplesPerAxis`. **Player-profile storage split** (rig vs player) with migration; the old screen reads through `resolveBoardConfig` and still shows one player.
+   - **Bug fixes** 1, 2, 3, 6, and the **first part of 5**: the global Space early-return and hiding `MuteButton` on this screen.
+     - During 1a–1c, Space does nothing on the Board Sequencer. That is not an audio regression: the global mute never controlled board audio.
+     - The Board Sequencer's own Space handler (play/stop in Play and Big board) lands in **Plan 1d**, with its component test.
+   - **Engine.** `setBpm`/`getBpm`, `setTickEnabled`, fired-note log, `audibleNow()` and `Tone.immediate()` for tick and ramps.
+   - **Pure modules with tests.** `orientation.ts`, `cornerEditor.ts`, `boardSetupFlow.ts`, `playNudge.ts`, `roles.ts`, `gridOptions.ts`, `layoutFor`.
+2. **Plan 1b — Robustness: controls, hand-guard logic, detection clean-ups.** No new screens.
+   - Safe control counters: hold, raw-reading debounce, glide, continuous values, ranges, one writer.
+   - Colour hold, conditional latched at settle, loop-bank capture guard, settle tick for new placements only.
+   - Per-colour centroids, `suppressSpill`, Variation measured from the square, the drum-volume timing fix.
+   - The old screen's rail temporarily shows the new control ranges and removal options so they can be tried on the real board.
+3. **Plan 1c — Theme, primitives and Set up.**
    - Tokens with the contrast test, `ui/` primitives with component tests, `BoardHeader`, `CameraSurface`.
-   - The 4 steps, the corner editor, pick-a-square, colour cards.
+   - **Who's playing?** chooser and **New player**.
+   - The 4 steps (including Seat), the corner editor, pick-a-square, colour cards.
+   - The handedness layout for Set up.
    - Set up replaces the old rail for setup tasks.
-3. **Plan 1c — Play.**
-   - `BoardView`, PlayView and its tabs, nudges, Big board.
+4. **Plan 1d — Play.**
+   - `BoardView`, PlayView and its tabs, nudges, Big board, with the handedness layout.
+   - The Board Sequencer Space handler.
    - Remove the old rail and `WarpedBoardView`; help and cheat sheet.
 
 ## Testing
@@ -506,6 +646,30 @@ Each plan ends with a working screen that passes lint and tests.
   - recalibrate keeps fields
   - `swatchRingFor`: black and white swatches on **both** dark and light `raised`; inner ≥ 3:1 vs swatch, outer ≥ 3:1 vs surface
   - contrast contract over `boardTokens`
+  - **Player profiles:**
+    - `resolveBoardConfig` merge
+    - field routing (rig vs player)
+    - migration from `admi-board-sequencer` (one player, values preserved, old key untouched)
+    - a new player on an existing rig: all channels Off, grid 4 × 4
+    - channel-id no-reuse across players' pages and loops
+  - **`layoutFor`:** left vs right at ≥ 1024 px, < 1024 px, and Large UI; focus/DOM order is identical for both hands
+  - **`audibleNow`** (fake context and clock): excludes look-ahead; fallback path; a pop is never shown before `audioTime`
+  - **Frame-driven detection:**
+    - duplicate frames are skipped
+    - time-constant smoothing gives the same result at 60 and 144 Hz display rates for the same 30 fps input
+    - movement confirmation no longer depends on display rate (pins the research simulation)
+  - **Safe controls:**
+    - hold / zero / return-to-default on removal
+    - 150 ms debounce instead of settle
+    - continuous value with end snaps and hysteresis
+    - ranges applied
+    - screen control disabled while a counter owns the parameter
+    - reverb fader and toggle don't fight
+  - **Mode:** colour hold (a sleeve over a settled cell doesn't change its colour; a genuinely new colour takes over after `settleWindowMs`); conditional latched at settle; settle tick only for new placements
+  - **Loop bank:** no capture until the pattern is quiet for `captureQuietMs`; control and Off colours are never captured and never trigger a slot
+  - **`suppressSpill`:** a counter on a line gives exactly one cell on 8 × 8 and on 4 × 4; two real counters are kept
+  - **Variation from the square:** centred counters on a 4 × 4 grid are not conditional; a real shove is
+  - **Drum kit:** volume is scheduled at play time (two quick hits keep their own volumes)
 - **Component tests** (jsdom, `react-dom/client` + `act`; no new dependencies):
   - `Tabs` (arrows/Home/End, roving tabindex)
   - `SegmentedControl` (radiogroup arrows)
@@ -525,11 +689,23 @@ Each plan ends with a working screen that passes lint and tests.
     - Below 1024 px and in Large UI, Tab through all tabs and nothing focused is hidden.
     - Force a nudge on and off while playing and nothing moves.
   - **Space.** Space with nothing focused in Play and in Big board toggles once. Space in Set up never plays. On Performance, Space still mutes.
+  - **Players and handedness.**
+    - Create Tim (Left) and a second player (Right) on the same board: switching needs no Find board or Find colours.
+    - Left layout puts panel, transport and nudge pad on the left in Set up, Play and Big board.
+  - **Timing.** With a visible playhead and a clicky drum, the pop and playhead line up with the sound (no visible lead).
+  - **Controls.** Lift the volume counter: the volume holds. Slide it: the value follows within about 0.3 s with no silence.
   - **Accessibility passes.** A muted run (every sound has a visual cue). A screen reader pass (NVDA or Narrator). Reduced motion and high contrast on. A touchscreen pass of the whole flow.
 - `npm run lint` and `npm run test:run` must pass.
 
 ## Out of scope
-- Auto-detection (sub-project 2).
+- **Later projects (own specs):**
+  - **A** Hand and knock guard: board watcher mask, held cells, optional MediaPipe hand finder, Hold board, knock guard and Bring it back, ✋ indicator.
+  - **B** Zones and loop pads: per-player layouts (Classic / Loop row / Side-car), fader lanes, loop pads with Record/Play-only, Gate/Toggle and timing modes, printable side-car card.
+  - **C** Auto-detect (existing spec).
+  - **D** Board tracking: follow small nudges silently, "Board moved?" for big moves.
+  - **E** Box detail and two counters: Late/Accent per job (off by default), multiple colours per box, same-colour count meanings.
+- **Considered and declined for now:** hear-on-placement, count-in, recording, research log, MIDI out, facilitator window/clicker, player lock, shape symbols, moods, ghost patterns.
+- **Profile export/import.**
 - Swiss minimal theme (only the token seam).
 - Wiring `useSwitchAccess` / `useDwellClick` (the UI is fully keyboard-operable so they can drive it later).
 - Per-drum mixer; camera exposure lock; Camo/iPhone.
@@ -546,4 +722,4 @@ Each plan ends with a working screen that passes lint and tests.
 - **Large refactor.** Mitigated by Plan 1a: characterisation tests and pure extraction before any view work, with each plan ending in a working screen.
 - **Grid options that follow the board** may surprise existing 6 × 8 users. Saved values are kept, "More sizes…" opens pre-selected, and a one-tap suggestion is offered.
 - **The migration re-suggests read settings** for untuned configs. That is the intended fix for 4 × 4 misses, checked on real frames via the manual checklist.
-- **Synthetic-derived thresholds** (read settings, nudges) are named constants, flagged for tuning in sub-project 2's Phase 0.
+- **Synthetic-derived thresholds** (read settings, nudges) are named constants, flagged for tuning in project C (auto-detect)'s Phase 0.
