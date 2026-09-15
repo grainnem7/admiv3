@@ -23,13 +23,15 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import * as Tone from 'tone';
 import { useAppStore } from '../../state/store';
 import { CameraManager, type CameraTrackInfo } from '../../tracking/CameraManager';
-import { frameMeanSaturation, nextColourlessState } from '../../tracking/cameraCheck';
-import { BoardReader } from '../../tracking/BoardReader';
+import { nextColourlessState } from '../../tracking/cameraCheck';
+import {
+  useBoardRuntime, NOOP_RUNTIME_CALLBACKS, type BoardRuntimeCallbacks, type RuntimeFrame,
+} from './boardSequencer/useBoardRuntime';
+import { homographyForCorners } from './boardSequencer/homographyForCorners';
 import { BoardSequencerMode, type PieceColour, type ActiveCell } from '../../tracking/BoardSequencerMode';
-import { ColourRecognizer } from '../../tracking/PieceRecognizer';
 import { counterColourFromRegion } from '../../tracking/ColorTracker';
 import {
-  buildChannelMatchers, channelPriority, calibrationFromHsv,
+  calibrationFromHsv,
   describeChannel, freshChannelId, isFaderRole, hueName, ROLE_LABELS,
   type ColourChannel, type ColourId, type ColourKind, type ColourRole,
 } from '../../tracking/boardColours';
@@ -37,9 +39,9 @@ import { BoardSequencerEngine } from '../../songs/BoardSequencerEngine';
 import { SongPresetEngine } from '../../songs/SongPresetEngine';
 import { SONG_LIBRARY, type SongConfig } from '../../songs/songLibrary';
 import { getChordAtTime } from '../../songs/voices/chordLookup';
-import { computeHomography, applyHomography, UNIT_SQUARE, type Mat3 } from '../../utils/homography';
-import { SCALE_PRESETS, NOTE_NAMES, conditionalFromOffset } from '../../songs/boardSequencerScale';
-import { emptyLoopBank, stepLoopBank, clearLoopSlot, type LoopBankState } from '../../songs/loopBank';
+import { applyHomography, type Mat3 } from '../../utils/homography';
+import { SCALE_PRESETS, NOTE_NAMES } from '../../songs/boardSequencerScale';
+import { clearLoopSlot } from '../../songs/loopBank';
 import {
   loadBoardSequencerConfig, saveBoardSequencerConfig, DEFAULT_BOARD_SEQUENCER_CONFIG,
   type BoardSequencerStored, type BoardPoint,
@@ -163,24 +165,10 @@ interface CameraNotice {
   text: string;
 }
 
-/** How often the camera check re-reads the feed's name/settings and colourfulness. */
-const CAMERA_CHECK_MS = 1000;
-
 export default function BoardSequencerScreen() {
   const setCurrentScreen = useAppStore((s) => s.setCurrentScreen);
-  const videoRef = useRef<HTMLVideoElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
-  const cameraRef = useRef<CameraManager | null>(null);
-  const readerRef = useRef<BoardReader | null>(null);
-  const modeRef = useRef<BoardSequencerMode | null>(null);
-  const engineRef = useRef<BoardSequencerEngine | null>(null);
-  const homographyRef = useRef<Mat3 | null>(null);
-  const runningRef = useRef(false);
   const startSecRef = useRef(0);
-  // Freshest live settled cells (with colour), for capturing page snapshots.
-  const activeCellsRef = useRef<ActiveCell[]>([]);
-  // Loop bank state machine (slice 3): saved slots + presence, seeded on start.
-  const loopBankRef = useRef<LoopBankState>(emptyLoopBank(0));
 
   const storedRef = useRef<BoardSequencerStored | null>(loadBoardSequencerConfig());
   const [config, setConfig] = useState<BoardSequencerStored>(
@@ -189,10 +177,23 @@ export default function BoardSequencerScreen() {
   const configRef = useRef(config);
   configRef.current = config;
 
+  // True while the chosen camera couldn't be found and the default is standing in.
+  const fellBackRef = useRef(false);
+  // Bumped by "Try again" to reopen the saved camera without changing the choice
+  // (it's already selected, so the dropdown can't re-pick it).
+  const [cameraRetry, setCameraRetry] = useState(0);
+
   // Not-yet-calibrated is a first-class state: true only once a config has been
   // saved (loaded from storage or calibrated this session).
   const [calibrated, setCalibrated] = useState<boolean>(storedRef.current !== null);
   const [calibrating, setCalibrating] = useState(false);
+
+  // The runtime owns the camera, the per-camera-frame detection loop and the rAF draw
+  // loop; this screen supplies the callbacks below and drives start/stop through its refs.
+  const callbacksRef = useRef<BoardRuntimeCallbacks>(NOOP_RUNTIME_CALLBACKS);
+  const {
+    videoRef, cameraRef, homographyRef, modeRef, engineRef, runningRef, loopBankRef, activeCellsRef,
+  } = useBoardRuntime({ cameraDeviceId: config.cameraDeviceId, cameraRetry, calibrated, configRef, callbacksRef });
   // Colour calibration armed for the next camera click: add a new channel, or
   // recalibrate an existing one (null = not calibrating).
   const [colourCalib, setColourCalib] = useState<ColourCalibTarget | null>(null);
@@ -324,11 +325,6 @@ export default function BoardSequencerScreen() {
     persistLoopSlots(loopBankRef.current.saved);
   }, [persistLoopSlots]);
 
-  const buildHomography = useCallback((corners: BoardPoint[], video: HTMLVideoElement): Mat3 => {
-    const dst = corners.map((c) => ({ x: c.x * video.videoWidth, y: c.y * video.videoHeight }));
-    return computeHomography(UNIT_SQUARE, dst);
-  }, []);
-
   // Draw our sampling grid onto the camera, tinting cells by detection state +
   // colour (red vs black).
   const drawOverlay = useCallback(
@@ -356,14 +352,12 @@ export default function BoardSequencerScreen() {
       ctx.clearRect(0, 0, W, H);
       let hn: Mat3;
       try {
-        hn = computeHomography(UNIT_SQUARE, cfg.corners);
+        // Corners are normalised, so scaling by the element size draws in CSS pixels.
+        hn = homographyForCorners(cfg.corners, W, H);
       } catch {
         return;
       }
-      const toPx = (ux: number, uy: number) => {
-        const p = applyHomography(hn, { x: ux, y: uy });
-        return { x: p.x * W, y: p.y * H };
-      };
+      const toPx = (ux: number, uy: number) => applyHomography(hn, { x: ux, y: uy });
       for (let r = 0; r < cfg.rows; r++) {
         for (let c = 0; c < cfg.cols; c++) {
           const a = toPx(c / cfg.cols, r / cfg.rows);
@@ -455,193 +449,62 @@ export default function BoardSequencerScreen() {
     return () => md.removeEventListener('devicechange', handler);
   }, [refreshCameras]);
 
-  // True while the chosen camera couldn't be found and the default is standing in.
-  const fellBackRef = useRef(false);
-  // Bumped by "Try again" to reopen the saved camera without changing the choice
-  // (it's already selected, so the dropdown can't re-pick it).
-  const [cameraRetry, setCameraRetry] = useState(0);
-
-  // Camera lifecycle — (re)opens whenever the chosen camera changes.
-  const cameraDeviceId = config.cameraDeviceId;
+  // Reset the camera readout whenever the camera is (re)opened.
   useEffect(() => {
-    const cam = new CameraManager();
-    cameraRef.current = cam;
-    // Fresh reader (no temporal history from the old camera) + rebuild the
-    // homography from the new stream's resolution.
-    readerRef.current = new BoardReader();
-    homographyRef.current = null;
     setCamInfo(null);
     setError(null);
-    let cancelled = false;
-    const video = videoRef.current;
-    if (video) {
-      cam.start(video, cameraDeviceId || undefined).then(({ fellBack }) => {
-        if (cancelled) return;
-        setCamInfo(cam.getTrackInfo());
-        fellBackRef.current = fellBack;
-        if (fellBack) {
-          const name = configRef.current.cameraLabel || 'the chosen camera';
-          setCamNotice({
-            kind: 'fallback',
-            text: `Couldn't find "${name}", so the browser's default camera is being used. Connect it (or start its phone app), then press Try again.`,
-          });
-          setOpenSection((s) => ({ ...s, camera: true })); // show the dropdown + Try again
-        } else {
-          setCamNotice((n) => (n?.kind === 'fallback' ? null : n)); // keep a "camera changed" hint
-        }
-        void refreshCameras();
-      }).catch((err) => {
-        if (cancelled) return;
-        setError(err instanceof Error ? err.message : 'Camera failed');
-        // Permission may be granted even though this camera is busy/broken, so load
-        // the list — the user can then pick a different camera.
-        void refreshCameras();
-      });
-    }
-    return () => {
-      cancelled = true;
-      cam.stop();
-    };
-  }, [cameraDeviceId, cameraRetry, refreshCameras]);
+  }, [config.cameraDeviceId, cameraRetry]);
 
-  // Camera check: once a second, re-read the running camera's settings (virtual
-  // cameras can renegotiate resolution) and measure how colourful the frames the
-  // app actually READS are — a feed can look colourful on screen yet reach the
-  // canvas black-and-white, which silently ruins colour calibration.
-  useEffect(() => {
-    const cv = document.createElement('canvas');
-    cv.width = 64;
-    cv.height = 48;
-    const ctx = cv.getContext('2d', { willReadFrequently: true });
-    if (!ctx) return;
-    const id = window.setInterval(() => {
-      const video = videoRef.current;
-      if (!video || video.videoWidth <= 0) return;
-      ctx.drawImage(video, 0, 0, cv.width, cv.height);
-      const sat = frameMeanSaturation(ctx.getImageData(0, 0, cv.width, cv.height).data);
+  // Runtime callbacks, re-assigned on every render so they always see fresh state.
+  callbacksRef.current = {
+    onCameraStarted: (fellBack, trackInfo) => {
+      setCamInfo(trackInfo);
+      fellBackRef.current = fellBack;
+      if (fellBack) {
+        const name = configRef.current.cameraLabel || 'the chosen camera';
+        setCamNotice({
+          kind: 'fallback',
+          text: `Couldn't find "${name}", so the browser's default camera is being used. Connect it (or start its phone app), then press Try again.`,
+        });
+        setOpenSection((sec) => ({ ...sec, camera: true }));
+      } else {
+        setCamNotice((n) => (n?.kind === 'fallback' ? null : n));
+      }
+      void refreshCameras();
+    },
+    onCameraError: (message) => {
+      setError(message);
+      // Permission may be granted even though this camera is busy/broken, so load the
+      // list — the user can then pick a different camera.
+      void refreshCameras();
+    },
+    onCameraCheck: (sat, trackInfo) => {
       setFeedSaturation(sat);
       setFeedColourless((prev) => nextColourlessState(prev, sat));
-      setCamInfo(cameraRef.current?.getTrackInfo() ?? null);
-    }, CAMERA_CHECK_MS);
-    return () => window.clearInterval(id);
-  }, []);
-
-  // Single rAF loop while calibrated: read → draw overlay → (if running) step + audio.
-  useEffect(() => {
-    if (!calibrated) return;
-    let raf = 0;
-    let last = performance.now();
-    let lastStateMs = 0;
-    const loop = () => {
-      const now = performance.now();
-      const dt = now - last;
-      last = now;
-      const video = videoRef.current;
-      const reader = readerRef.current;
+      setCamInfo(trackInfo);
+    },
+    onLoopSlotsCaptured: (saved) => persistLoopSlots(saved),
+    draw: ({ frame }: RuntimeFrame) => {
       const cfg = configRef.current;
-      if (video && reader && video.videoWidth > 0) {
-        if (!homographyRef.current) {
-          try {
-            homographyRef.current = buildHomography(cfg.corners, video);
-          } catch {
-            /* degenerate corners — wait for recalibration */
-          }
-        }
-        const h = homographyRef.current;
-        if (h) {
-          // Build matchers + recognizer from the user's calibrated channels, in
-          // detection priority order (vivid hues before black/white).
-          const matchers = buildChannelMatchers(cfg.channels);
-          const priority = channelPriority(cfg.channels);
-          const recognizer = new ColourRecognizer(cfg.minFilledFraction, priority);
-          const swatchById = new Map(cfg.channels.map((c) => [c.id, c.swatch]));
-          const readings = reader.read(video, {
-            homography: h, rows: cfg.rows, cols: cfg.cols, colours: matchers, recognizer,
-            mirrorX: cfg.mirrorX, mirrorY: cfg.mirrorY,
-          });
-          const occupied = new Map<string, PieceColour>();
-          const byColour: Partial<Record<ColourId, number>> = {};
-          for (const rd of readings) {
-            if (rd.occupied && rd.colour) {
-              occupied.set(`${rd.row},${rd.col}`, rd.colour);
-              byColour[rd.colour] = (byColour[rd.colour] ?? 0) + 1;
-            }
-          }
-          // Variation: keep the mode's calibration live, and mark off-centre
-          // pieces for the overlay (computed from the live readings so the ring
-          // shows the instant a piece is shoved, before it even settles).
-          modeRef.current?.setVariation(cfg.variationEnabled, cfg.variationOffsetThreshold);
-          engineRef.current?.setPingPong(cfg.pingPong);
-          const conditional = new Set<string>();
-          if (cfg.variationEnabled && cfg.numPages <= 1) {
-            for (const rd of readings) {
-              if (rd.occupied && conditionalFromOffset(
-                rd.offset ?? null, cfg.variationEnabled, cfg.variationOffsetThreshold,
-              )) {
-                conditional.add(`${rd.row},${rd.col}`);
-              }
-            }
-          }
-          let activeArr: ActiveCell[] = [];
-          const activeMap = new Map<string, PieceColour>();
-          let playCol = 0;
-          if (runningRef.current && modeRef.current && engineRef.current) {
-            const res = modeRef.current.step(readings, dt, now);
-            if (cfg.loopBankEnabled) {
-              // Bottom row = bank slots (triggers, not notes); rows above = pattern.
-              const bankRow = cfg.rows - 1;
-              const patternCells = res.activeCells.filter((c) => c.row < bankRow);
-              const present = Array.from({ length: cfg.cols }, (_, i) =>
-                res.activeCells.some((c) => c.row === bankRow && c.col === i));
-              const stepped = stepLoopBank(loopBankRef.current, present, patternCells, cfg.cols);
-              loopBankRef.current = stepped.state;
-              if (stepped.captured.length > 0) persistLoopSlots(stepped.state.saved);
-              engineRef.current.setActiveCells(patternCells);
-              engineRef.current.setActiveLoops(stepped.active);
-              activeCellsRef.current = patternCells;
-              activeArr = patternCells;
-              for (const c of patternCells) activeMap.set(`${c.row},${c.col}`, c.colour);
-            } else {
-              engineRef.current.setActiveCells(res.activeCells);
-              engineRef.current.setActiveLoops([]);
-              activeCellsRef.current = res.activeCells;
-              activeArr = res.activeCells;
-              for (const c of res.activeCells) activeMap.set(`${c.row},${c.col}`, c.colour);
-            }
-            if (res.justSettled.length > 0) engineRef.current.fireTick();
-            // Ask the engine for the live playhead so it follows a tempo fader.
-            playCol = engineRef.current.getPlayheadCol(cfg.cols);
-          }
-          const isVarLap = runningRef.current && engineRef.current && cfg.numPages <= 1
-            ? engineRef.current.isVariationLap()
-            : false;
-          const pingDir = runningRef.current && engineRef.current && cfg.pingPong
-            ? engineRef.current.getPlayheadDirection()
-            : 0; // 0 = don't draw an arrow
-          const bankSlots = cfg.loopBankEnabled
-            ? Array.from({ length: cfg.cols }, (_, i) => {
-                const saved = loopBankRef.current.saved[i];
-                if (saved == null) return 'empty' as const;
-                return loopBankRef.current.present[i] ? ('active' as const) : ('paused' as const);
-              })
-            : null;
-          drawOverlay(occupied, activeMap, cfg, playCol, swatchById, conditional, isVarLap, pingDir, bankSlots);
-          if (now - lastStateMs > 100) {
-            lastStateMs = now;
-            setActive(activeArr);
-            setPlayheadCol(playCol);
-            if (cfg.numPages > 1 && engineRef.current) {
-              setPlayingPage(engineRef.current.getCurrentPage());
-            }
-            setStats({ byColour, settled: activeMap.size });
-          }
-        }
-      }
-      raf = requestAnimationFrame(loop);
-    };
-    raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
-  }, [calibrated, drawOverlay, buildHomography]);
+      const engine = engineRef.current;
+      const playing = runningRef.current && !!engine;
+      const playCol = playing && engine ? engine.getPlayheadCol(cfg.cols) : 0;
+      const isVarLap = playing && engine && cfg.numPages <= 1 ? engine.isVariationLap() : false;
+      const pingDir = playing && engine && cfg.pingPong ? engine.getPlayheadDirection() : 0;
+      const swatchById = new Map(cfg.channels.map((c) => [c.id, c.swatch]));
+      drawOverlay(
+        frame.occupied, frame.activeMap, cfg, playCol, swatchById, frame.conditional, isVarLap, pingDir, frame.bankSlots,
+      );
+    },
+    onThrottledState: ({ frame }: RuntimeFrame) => {
+      const cfg = configRef.current;
+      const engine = engineRef.current;
+      setActive(frame.patternCells);
+      setPlayheadCol(runningRef.current && engine ? engine.getPlayheadCol(cfg.cols) : 0);
+      if (cfg.numPages > 1 && engine) setPlayingPage(engine.getCurrentPage());
+      setStats({ byColour: frame.byColour, settled: frame.activeMap.size });
+    },
+  };
 
   const handleCalibrated = useCallback(
     (corners: [BoardPoint, BoardPoint, BoardPoint, BoardPoint]) => {
@@ -656,11 +519,12 @@ export default function BoardSequencerScreen() {
       }
       setConfig(next);
       saveBoardSequencerConfig(next);
-      if (videoRef.current) homographyRef.current = buildHomography(corners, videoRef.current);
+      const video = videoRef.current;
+      if (video) homographyRef.current = homographyForCorners(corners, video.videoWidth, video.videoHeight);
       setCalibrated(true);
       setCalibrating(false);
     },
-    [buildHomography],
+    [homographyRef, videoRef],
   );
 
   const stop = useCallback(() => {
@@ -717,8 +581,9 @@ export default function BoardSequencerScreen() {
       engineRef.current = null;
     }
     const cfg = configRef.current;
-    if (videoRef.current && !homographyRef.current) {
-      homographyRef.current = buildHomography(cfg.corners, videoRef.current);
+    const video = videoRef.current;
+    if (video && !homographyRef.current) {
+      homographyRef.current = homographyForCorners(cfg.corners, video.videoWidth, video.videoHeight);
     }
     modeRef.current = new BoardSequencerMode({
       settleWindowMs: cfg.settleWindowMs,
@@ -774,7 +639,7 @@ export default function BoardSequencerScreen() {
     startSecRef.current = Tone.now();
     runningRef.current = true;
     setRunning(true);
-  }, [buildHomography]);
+  }, [engineRef, homographyRef, loopBankRef, modeRef, runningRef, videoRef]);
 
   // Changing orientation or camera invalidates calibration (it was captured in the
   // old view), so force a fresh corner click in the new space.
