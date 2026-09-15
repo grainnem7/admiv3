@@ -37,6 +37,8 @@ export interface CellReading {
   occupied: boolean;
   colour: PieceColour | null;
   centroid: Point | null;
+  /** Centroid of EVERY colour matched in the cell, for spill checks and control reads. */
+  centroids?: Partial<Record<ColourId, Point>>;
   /** Fraction of the sampled region matching each colour this frame (0..1). Diagnostic. */
   fractions?: Partial<Record<ColourId, number>>;
   /**

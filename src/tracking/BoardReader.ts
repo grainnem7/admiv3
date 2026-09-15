@@ -34,6 +34,12 @@ export interface RegionSample {
   /** Mean position of the DOMINANT colour's matching pixels (unit-square coords), or null. */
   centroid: { x: number; y: number } | null;
   /**
+   * Mean position of EVERY colour that matched at least one pixel. The recogniser can
+   * play a colour that isn't the dominant one (priority, minimum fill), and offset and
+   * Variation must be measured on the colour actually played.
+   */
+  centroids: Partial<Record<ColourId, { x: number; y: number }>>;
+  /**
    * Normalised box-offset of the centroid from the cell centre: 0 = dead centre,
    * 1 = at the cell edge (max over the two axes, so a shove toward any edge or
    * corner counts). null when there is no centroid. The reachable max is bounded
@@ -127,20 +133,27 @@ export function sampleRegion(
     }
   }
 
+  const centroids: Partial<Record<ColourId, { x: number; y: number }>> = {};
+  for (const [id, c] of counts) {
+    if (c > 0) centroids[id] = { x: (sumX.get(id) ?? 0) / c, y: (sumY.get(id) ?? 0) / c };
+  }
+
   let centroid: { x: number; y: number } | null = null;
   let offset: number | null = null;
   if (dominantId && dominantCount > 0) {
-    centroid = {
-      x: (sumX.get(dominantId) ?? 0) / dominantCount,
-      y: (sumY.get(dominantId) ?? 0) / dominantCount,
-    };
-    const cx = (col + 0.5) / cols;
-    const cy = (row + 0.5) / rows;
-    const ox = Math.abs(centroid.x - cx) / (0.5 / cols);
-    const oy = Math.abs(centroid.y - cy) / (0.5 / rows);
-    offset = Math.min(1, Math.max(ox, oy));
+    centroid = centroids[dominantId] ?? null;
+    if (centroid) offset = offsetFromCellCentre(centroid, row, col, rows, cols);
   }
-  return { fractions, dominantId, centroid, offset };
+  return { fractions, dominantId, centroid, centroids, offset };
+}
+
+/** How far a centroid sits from its cell's centre: 0 = dead centre, 1 = at the cell edge. */
+export function offsetFromCellCentre(
+  centroid: { x: number; y: number }, row: number, col: number, rows: number, cols: number,
+): number {
+  const ox = Math.abs(centroid.x - (col + 0.5) / cols) / (0.5 / cols);
+  const oy = Math.abs(centroid.y - (row + 0.5) / rows) / (0.5 / rows);
+  return Math.min(1, Math.max(ox, oy));
 }
 
 /** Default per-cell temporal smoothing factor (EMA, per 60 Hz frame). Lower = steadier but laggier. */
@@ -266,7 +279,7 @@ export class BoardReader {
     const readings: CellReading[] = [];
     for (let row = 0; row < opts.rows; row++) {
       for (let col = 0; col < opts.cols; col++) {
-        const { fractions, centroid, offset } = sampleRegion(
+        const { fractions, centroid, centroids, offset } = sampleRegion(
           sampler, opts.homography, row, col, opts.rows, opts.cols, opts.colours, samples,
           this.lattices[row * opts.cols + col],
         );
@@ -279,8 +292,14 @@ export class BoardReader {
         this.prevFractions.set(key, smoothed);
         const filledFraction = Math.max(0, ...Object.values(smoothed).filter((v): v is number => v !== undefined));
         const cls = opts.recognizer.classify({ filledFraction, fractions: smoothed });
+        // Measure position on the colour actually played, which may not be the dominant one.
+        const playedCentroid = (cls.colour ? centroids[cls.colour] : null) ?? centroid;
+        const playedOffset = cls.colour && playedCentroid
+          ? offsetFromCellCentre(playedCentroid, row, col, opts.rows, opts.cols)
+          : offset;
         readings.push({
-          row, col, occupied: cls.occupied, colour: cls.colour, centroid, fractions: smoothed, offset,
+          row, col, occupied: cls.occupied, colour: cls.colour, centroid: playedCentroid,
+          centroids, fractions: smoothed, offset: playedOffset,
         });
       }
     }

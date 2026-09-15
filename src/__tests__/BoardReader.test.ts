@@ -110,3 +110,22 @@ describe('buildCellLattice', () => {
     expect(cached).toEqual(direct);
   });
 });
+
+describe('per-colour centroids', () => {
+  const h = computeHomography(UNIT_SQUARE, [
+    { x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }, { x: 0, y: 100 },
+  ]);
+
+  it('returns a centroid for every matched colour, not only the dominant one', () => {
+    // Left of the cell is red, right is white: both match, white covers more.
+    const split: RgbSampler = (x) => (x > 12
+      ? { r: 240, g: 240, b: 240 }
+      : { r: 220, g: 10, b: 10 });
+    const out = sampleRegion(split, h, 0, 0, 4, 4, COLOURS, 3);
+    expect(out.dominantId).toBe('white');
+    expect(out.centroids.red).toBeDefined();
+    expect(out.centroids.white).toBeDefined();
+    expect(out.centroids.red!.x).toBeLessThan(out.centroids.white!.x);
+    expect(out.centroid).toEqual(out.centroids.white);
+  });
+});
