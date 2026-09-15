@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git commit -q -m 'fix\\(board-sequencer\\): centre-anchor calibration sampling so wood/washed cams don'\\\\''t hijack the colour *)",
+      "Bash(grep -E \"^\\(tsx|vite-node|esbuild\\)$\")",
+      "WebSearch",
+      "WebFetch(domain:camo.com)",
+      "WebFetch(domain:groups.google.com)",
+      "WebFetch(domain:www.dell.com)",
+      "WebFetch(domain:issues.chromium.org)",
+      "Bash(npx vite-node *)",
+      "Read(//c/Users/DELLPR~1/AppData/Local/Temp/claude/c--Users-Dell-Precision-Repos-ADMIv3/ce8df2a0-d714-4eb6-9f6e-0f340ef2dd58/scratchpad/**)",
+      "Bash(sed -i \"s#'../../../../../../../Dell Precision/Repos/ADMIv3/#'C:/Users/Dell Precision/Repos/ADMIv3/#g\" h4sim.ts)",
+      "Bash(\"/c/Users/Dell Precision/Repos/ADMIv3/node_modules/.bin/esbuild\" h4sim.ts --bundle --platform=node --outfile=h4sim.cjs --log-level=warning)",
+      "Bash(node h4sim.cjs)",
+      "WebFetch(domain:betanews.com)",
+      "WebFetch(domain:chromium.googlesource.com)",
+      "Bash(sed -E 's/ band=.*//')",
+      "Bash(cd \"C:/Users/Dell Precision/.claude/projects/c--Users-Dell-Precision-Repos-ADMIv3/ce8df2a0-d714-4eb6-9f6e-0f340ef2dd58/subagents/workflows/wf_ac509f51-99e\" 2>/dev/null && ls -la && wc -c journal.jsonl 2>/dev/null; cat journal.jsonl 2>/dev/null | head -c 20000)",
+      "Read(//c/Users/Dell Precision/.claude/projects/c--Users-Dell-Precision-Repos-ADMIv3/ce8df2a0-d714-4eb6-9f6e-0f340ef2dd58/subagents/workflows/wf_ac509f51-99e/**)",
+      "Bash(npm run lint)",
+      "Bash(npm run test:run)"
+    ]
+  }
+}
