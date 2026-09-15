@@ -4,6 +4,7 @@ import {
   saveBoardSequencerConfig,
   clearBoardSequencerConfig,
   DEFAULT_BOARD_SEQUENCER_CONFIG,
+  referencedChannelIds,
   type BoardSequencerStored,
 } from '../profiles/BoardSequencerConfig';
 
@@ -51,7 +52,7 @@ describe('BoardSequencerConfig', () => {
     saveBoardSequencerConfig(cfg);
     const loaded = loadBoardSequencerConfig();
     expect(loaded?.bpm).toBe(110);
-    expect(loaded?.rows).toBe(6);
+    expect(loaded?.rows).toBe(4);
     expect(loaded?.scaleSemitones).toEqual([0, 2, 4, 7, 9]);
   });
 
@@ -140,5 +141,55 @@ describe('BoardSequencerConfig', () => {
     const back = loadBoardSequencerConfig();
     expect(back?.loopBankEnabled).toBe(false);
     expect(back?.loopSlots).toEqual([]);
+  });
+});
+
+describe('BoardSequencerConfig — redesign fields', () => {
+  beforeEach(() => localStorage.clear());
+
+  it('brand-new default grid is square 4 × 4 with suggested read settings', () => {
+    expect(DEFAULT_BOARD_SEQUENCER_CONFIG).toMatchObject({ rows: 4, cols: 4, boardSquares: 8, samplesPerAxis: 9, readSettingsCustom: false });
+    expect(DEFAULT_BOARD_SEQUENCER_CONFIG.minFilledFraction).toBeCloseTo(0.045, 6);
+    expect(DEFAULT_BOARD_SEQUENCER_CONFIG).toMatchObject({ themeMode: 'dark', boardNudgesEnabled: true, handedness: 'right', seatEdge: 'low' });
+  });
+
+  it('keeps saved rows/cols (most recent grid) and clamps them', () => {
+    localStorage.setItem('admi-board-sequencer', JSON.stringify({ rows: 6, cols: 8 }));
+    expect(loadBoardSequencerConfig()).toMatchObject({ rows: 6, cols: 8 });
+    localStorage.setItem('admi-board-sequencer', JSON.stringify({ rows: 40, cols: 1 }));
+    expect(loadBoardSequencerConfig()).toMatchObject({ rows: 10, cols: 2 });
+  });
+
+  it('migration: untuned legacy 4 × 4 gets suggested sampling and fill', () => {
+    localStorage.setItem('admi-board-sequencer', JSON.stringify({ rows: 4, cols: 4, minFilledFraction: 0.1 }));
+    const c = loadBoardSequencerConfig()!;
+    expect(c.readSettingsCustom).toBe(false);
+    expect(c.samplesPerAxis).toBe(9);
+    expect(c.minFilledFraction).toBeCloseTo(0.045, 6);
+  });
+
+  it('migration: a tuned legacy min fill is kept, sampling is still suggested', () => {
+    localStorage.setItem('admi-board-sequencer', JSON.stringify({ rows: 4, cols: 4, minFilledFraction: 0.2 }));
+    const c = loadBoardSequencerConfig()!;
+    expect(c.readSettingsCustom).toBe(true);
+    expect(c.minFilledFraction).toBeCloseTo(0.2, 6);
+    expect(c.samplesPerAxis).toBe(9);
+  });
+
+  it('once migrated, saved read settings are never re-suggested on load', () => {
+    saveBoardSequencerConfig({ ...DEFAULT_BOARD_SEQUENCER_CONFIG, samplesPerAxis: 12, minFilledFraction: 0.07, readSettingsCustom: false });
+    expect(loadBoardSequencerConfig()).toMatchObject({ samplesPerAxis: 12, minFilledFraction: 0.07 });
+  });
+
+  it('sanitises the new enum fields', () => {
+    localStorage.setItem('admi-board-sequencer', JSON.stringify({ boardSquares: 9, themeMode: 'pink', handedness: 'both', seatEdge: 'top', boardNudgesEnabled: 'yes' }));
+    expect(loadBoardSequencerConfig()).toMatchObject({ boardSquares: 8, themeMode: 'dark', handedness: 'right', seatEdge: 'low', boardNudgesEnabled: true });
+    localStorage.setItem('admi-board-sequencer', JSON.stringify({ boardSquares: 10, themeMode: 'light', handedness: 'left', seatEdge: 'start', boardNudgesEnabled: false }));
+    expect(loadBoardSequencerConfig()).toMatchObject({ boardSquares: 10, themeMode: 'light', handedness: 'left', seatEdge: 'start', boardNudgesEnabled: false });
+  });
+
+  it('referencedChannelIds collects ids used by pages and loop slots', () => {
+    const ids = referencedChannelIds({ pages: [[{ row: 0, col: 0, colour: 'c3' }]], loopSlots: [null, [{ row: 1, col: 1, colour: 'c5' }]] });
+    expect([...ids].sort()).toEqual(['c3', 'c5']);
   });
 });

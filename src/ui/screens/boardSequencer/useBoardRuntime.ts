@@ -146,7 +146,7 @@ export function useBoardRuntime(opts: {
       }
       const readings = reader.read(video, {
         homography: homographyRef.current, rows: cfg.rows, cols: cfg.cols, colours: matchers, recognizer,
-        mirrorX: cfg.mirrorX, mirrorY: cfg.mirrorY, samplesPerAxis: 5, dtMs,
+        mirrorX: cfg.mirrorX, mirrorY: cfg.mirrorY, samplesPerAxis: cfg.samplesPerAxis, dtMs,
       });
       modeRef.current?.setVariation(cfg.variationEnabled, cfg.variationOffsetThreshold);
       engineRef.current?.setPingPong(cfg.pingPong);

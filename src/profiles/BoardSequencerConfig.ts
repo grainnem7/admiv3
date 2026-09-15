@@ -12,6 +12,7 @@ import type {
   ColourChannel, ColourId, ColourKind, ColourRole, BlackBand, WhiteBand,
 } from '../tracking/boardColours';
 import { ROLE_LABELS, DEFAULT_BLACK_BAND, DEFAULT_WHITE_BAND } from '../tracking/boardColours';
+import { suggestReadSettings, type BoardSquares } from '../tracking/boardGrid';
 
 const STORAGE_KEY = 'admi-board-sequencer';
 
@@ -106,6 +107,20 @@ export interface BoardSequencerStored {
   cameraDeviceId: string;
   /** Chosen camera's name, to say which camera is missing when it can't be found. */
   cameraLabel: string;
+  /** Physical squares per side of the board (8 × 8 chess/draughts, 10 × 10 draughts). */
+  boardSquares: BoardSquares;
+  /** Calm theme mode for the redesigned screens. */
+  themeMode: 'dark' | 'light';
+  /** Samples per axis per cell (suggested from the grid; passed to BoardReader). */
+  samplesPerAxis: number;
+  /** True once the user tuned Piece coverage — freezes suggested read settings. */
+  readSettingsCustom: boolean;
+  /** Show the "Board moved?" / colour-matches-board hints while playing. */
+  boardNudgesEnabled: boolean;
+  /** The player's handedness (per player; mirrors the screen layout). */
+  handedness: 'left' | 'right';
+  /** Which board edge the player sits at (per player; defines "their left"). */
+  seatEdge: 'start' | 'end' | 'low' | 'high';
 }
 
 const ZERO_CORNERS: [BoardPoint, BoardPoint, BoardPoint, BoardPoint] = [
@@ -122,8 +137,8 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   version: CONFIG_VERSION,
   enabled: false,
   corners: ZERO_CORNERS,
-  rows: 6,
-  cols: 8,
+  rows: 4,
+  cols: 4,
   scaleRootMidi: 60,
   scaleSemitones: [0, 2, 4, 7, 9],
   scaleName: 'Major pentatonic',
@@ -138,7 +153,7 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   // No predefined colours — the user calibrates their own by clicking a piece.
   channels: [],
   faderAxis: 'row',
-  minFilledFraction: 0.1,
+  minFilledFraction: suggestReadSettings(8, 4, 4).minFilledFraction,
   variationEnabled: false,
   variationOffsetThreshold: 0.6,
   pingPong: false,
@@ -158,6 +173,13 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   mirrorY: false,
   cameraDeviceId: '',
   cameraLabel: '',
+  boardSquares: 8,
+  themeMode: 'dark',
+  samplesPerAxis: suggestReadSettings(8, 4, 4).samplesPerAxis,
+  readSettingsCustom: false,
+  boardNudgesEnabled: true,
+  handedness: 'right',
+  seatEdge: 'low',
 };
 
 function isNum(v: unknown): v is number {
@@ -268,12 +290,28 @@ function sanitize(input: unknown): BoardSequencerStored | null {
   const semis = Array.isArray(o.scaleSemitones) && o.scaleSemitones.every(isNum)
     ? (o.scaleSemitones as number[])
     : d.scaleSemitones;
+  const rows = Math.round(Math.min(10, Math.max(2, num(o.rows, d.rows))));
+  const cols = Math.round(Math.min(16, Math.max(2, num(o.cols, d.cols))));
+  const boardSquares: BoardSquares = o.boardSquares === 10 ? 10 : 8;
+  const storedFill = isNum(o.minFilledFraction) ? o.minFilledFraction : null;
+  // Legacy configs have no flag: a min fill left at the old 0.1 default counts as untuned.
+  const readSettingsCustom = typeof o.readSettingsCustom === 'boolean'
+    ? o.readSettingsCustom
+    : storedFill !== null && Math.abs(storedFill - 0.1) > 1e-9;
+  let samplesPerAxis = isNum(o.samplesPerAxis) ? Math.round(Math.min(15, Math.max(3, o.samplesPerAxis))) : NaN;
+  let minFilledFraction = storedFill ?? d.minFilledFraction;
+  if (!Number.isFinite(samplesPerAxis)) {
+    // Pre-redesign config: one-time suggestion (existing 4 × 4 boards get the coverage fix).
+    const s = suggestReadSettings(boardSquares, rows, cols);
+    samplesPerAxis = s.samplesPerAxis;
+    if (!readSettingsCustom) minFilledFraction = s.minFilledFraction;
+  }
   return {
     version: CONFIG_VERSION,
     enabled: o.enabled === true,
     corners: sanitizeCorners(o.corners),
-    rows: num(o.rows, d.rows),
-    cols: num(o.cols, d.cols),
+    rows,
+    cols,
     scaleRootMidi: num(o.scaleRootMidi, d.scaleRootMidi),
     scaleSemitones: semis,
     scaleName: typeof o.scaleName === 'string' ? o.scaleName : d.scaleName,
@@ -289,7 +327,7 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     // the board starts with no predefined colours.
     channels: num(o.version, 1) >= CONFIG_VERSION ? sanitizeChannels(o.channels) : [],
     faderAxis: o.faderAxis === 'col' ? 'col' : 'row',
-    minFilledFraction: num(o.minFilledFraction, d.minFilledFraction),
+    minFilledFraction,
     variationEnabled: o.variationEnabled === true,
     variationOffsetThreshold: num(o.variationOffsetThreshold, d.variationOffsetThreshold),
     pingPong: o.pingPong === true,
@@ -309,7 +347,27 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     mirrorY: o.mirrorY === true,
     cameraDeviceId: typeof o.cameraDeviceId === 'string' ? o.cameraDeviceId : d.cameraDeviceId,
     cameraLabel: typeof o.cameraLabel === 'string' ? o.cameraLabel : d.cameraLabel,
+    boardSquares,
+    themeMode: o.themeMode === 'light' ? 'light' : 'dark',
+    samplesPerAxis,
+    readSettingsCustom,
+    boardNudgesEnabled: o.boardNudgesEnabled !== false,
+    handedness: o.handedness === 'left' ? 'left' : 'right',
+    seatEdge: o.seatEdge === 'start' || o.seatEdge === 'end' || o.seatEdge === 'high' ? o.seatEdge : 'low',
   };
+}
+
+/** Sanitise any stored/merged object into a valid config (null if not an object). */
+export function sanitizeBoardSequencerConfig(input: unknown): BoardSequencerStored | null {
+  return sanitize(input);
+}
+
+/** Channel ids referenced by saved pages and loop slots (never reuse these for new colours). */
+export function referencedChannelIds(cfg: Pick<BoardSequencerStored, 'pages' | 'loopSlots'>): Set<string> {
+  const ids = new Set<string>();
+  for (const page of cfg.pages) for (const c of page) ids.add(c.colour);
+  for (const slot of cfg.loopSlots) if (slot) for (const c of slot) ids.add(c.colour);
+  return ids;
 }
 
 export function loadBoardSequencerConfig(): BoardSequencerStored | null {

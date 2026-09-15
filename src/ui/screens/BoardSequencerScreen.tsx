@@ -28,6 +28,7 @@ import {
   useBoardRuntime, NOOP_RUNTIME_CALLBACKS, type BoardRuntimeCallbacks, type RuntimeFrame,
 } from './boardSequencer/useBoardRuntime';
 import { homographyForCorners } from './boardSequencer/homographyForCorners';
+import { applyGridChange } from '../../tracking/boardGrid';
 import { BoardSequencerMode, type PieceColour, type ActiveCell } from '../../tracking/BoardSequencerMode';
 import { counterColourFromRegion } from '../../tracking/ColorTracker';
 import {
@@ -242,6 +243,15 @@ export default function BoardSequencerScreen() {
   const update = useCallback((patch: Partial<BoardSequencerStored>) => {
     setConfig((prev) => {
       const next = { ...prev, ...patch };
+      saveBoardSequencerConfig(next);
+      return next;
+    });
+  }, []);
+
+  // Grid changes re-suggest the read settings (unless the user has tuned them).
+  const updateGrid = useCallback((patch: Partial<Pick<BoardSequencerStored, 'rows' | 'cols' | 'boardSquares'>>) => {
+    setConfig((prev) => {
+      const next = applyGridChange(prev, patch);
       saveBoardSequencerConfig(next);
       return next;
     });
@@ -1023,7 +1033,7 @@ export default function BoardSequencerScreen() {
               Min fill {Math.round(config.minFilledFraction * 100)}%
               <input
                 type="range" min={3} max={50} value={Math.round(config.minFilledFraction * 100)}
-                onChange={(e) => update({ minFilledFraction: Number(e.target.value) / 100 })}
+                onChange={(e) => update({ minFilledFraction: Number(e.target.value) / 100, readSettingsCustom: true })}
               />
             </label>
             <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -1219,7 +1229,7 @@ export default function BoardSequencerScreen() {
               Rows
               <select
                 value={config.rows} disabled={running}
-                onChange={(e) => update({ rows: Number(e.target.value) })}
+                onChange={(e) => updateGrid({ rows: Number(e.target.value) })}
               >
                 {[2, 3, 4, 5, 6, 7, 8].map((n) => <option key={n} value={n}>{n}</option>)}
               </select>
@@ -1228,7 +1238,7 @@ export default function BoardSequencerScreen() {
               Steps
               <select
                 value={config.cols} disabled={running}
-                onChange={(e) => update({ cols: Number(e.target.value) })}
+                onChange={(e) => updateGrid({ cols: Number(e.target.value) })}
               >
                 {[2, 3, 4, 5, 6, 7, 8, 10, 12, 16].map((n) => <option key={n} value={n}>{n}</option>)}
               </select>
