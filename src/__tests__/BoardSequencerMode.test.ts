@@ -149,12 +149,12 @@ describe('BoardSequencerMode variation (off-centre = conditional)', () => {
     expect(res.activeCells).toEqual([{ row: 0, col: 0, colour: 'red' }]);
   });
 
-  it('nudging a settled piece off-centre flips it conditional live (no re-settle)', () => {
+  it('conditional is latched at settle: jitter under a settled piece does not flip it', () => {
     const m = new BoardSequencerMode(varCfg);
     let res = settle(m, redAtOff(0, 0, 0.5, 0.5, 0.1));
     expect(res.activeCells).toEqual([{ row: 0, col: 0, colour: 'red' }]);
     res = m.step([redAtOff(0, 0, 0.5, 0.5, 0.85)], 16, 1016);
-    expect(res.activeCells).toEqual([{ row: 0, col: 0, colour: 'red', conditional: true }]);
+    expect(res.activeCells).toEqual([{ row: 0, col: 0, colour: 'red' }]);
   });
 
   it('setVariation updates the calibration live', () => {

@@ -89,10 +89,28 @@ interface CellState {
   movingMs: number;
   lostMs: number;
   phase: 'idle' | 'settled';
-  /** Colour of the piece currently occupying the cell (last seen). */
-  colour: PieceColour;
-  /** Whether the occupying piece is currently off-centre past the threshold. */
+  /** Colour of the piece occupying the cell. Held steady while settled. */
+  colour: PieceColour | null;
+  /** A different colour seen over a settled cell, and how long it has persisted. */
+  pendingColour: PieceColour | null;
+  pendingColourMs: number;
+  /** Offsets seen during the current settle window; their median latches `conditional`. */
+  offsets: number[];
+  /** The median offset this piece was placed at, kept so recalibration can re-latch. */
+  settledOffset: number | null;
+  /** Latched at settle: this piece was placed off-centre, so it plays every other pass. */
   conditional: boolean;
+  /** The next settle continues an existing piece (colour take-over), so it must not tick. */
+  resettle: boolean;
+}
+
+/** Enough samples for a stable median over a settle window, without growing forever. */
+const MAX_OFFSET_SAMPLES = 128;
+
+function median(v: number[]): number {
+  const s = [...v].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 }
 
 const keyOf = (row: number, col: number): string => `${row},${col}`;
@@ -114,8 +132,17 @@ export class BoardSequencerMode {
 
   /** Live-update the variation calibration (safe to call while running). */
   setVariation(enabled: boolean, offsetThreshold: number): void {
+    if (enabled === this.variationEnabled && offsetThreshold === this.variationOffsetThreshold) return;
     this.variationEnabled = enabled;
     this.variationOffsetThreshold = offsetThreshold;
+    // Conditional is latched at settle, so re-latch the settled cells from the offset
+    // each piece was placed at — otherwise the calibration wouldn't take effect until
+    // every counter had been picked up and put down again.
+    for (const st of this.states.values()) {
+      if (st.phase === 'settled') {
+        st.conditional = conditionalFromOffset(st.settledOffset, enabled, offsetThreshold);
+      }
+    }
   }
 
   reset(): void {
@@ -135,7 +162,8 @@ export class BoardSequencerMode {
       if (!st) {
         st = {
           lastCentroid: null, velocity: 0, stillMs: 0, movingMs: 0, lostMs: 0, phase: 'idle',
-          colour: 'red', conditional: false,
+          colour: null, pendingColour: null, pendingColourMs: 0, offsets: [], settledOffset: null,
+          conditional: false, resettle: false,
         };
         this.states.set(k, st);
       }
@@ -143,10 +171,41 @@ export class BoardSequencerMode {
       const isPiece = r.occupied && r.colour !== null && r.centroid !== null;
 
       if (isPiece && r.centroid && r.colour) {
-        st.colour = r.colour;
-        st.conditional = conditionalFromOffset(
-          r.offset ?? null, this.variationEnabled, this.variationOffsetThreshold,
-        );
+        if (st.phase === 'settled') {
+          // Colour hold: a hand or sleeve crossing a settled cell must not change what
+          // it plays. A genuinely different colour has to persist for a whole settle
+          // window; then the cell goes lost and re-settles as the new colour.
+          if (r.colour === st.colour) {
+            st.pendingColour = null;
+            st.pendingColourMs = 0;
+          } else {
+            if (st.pendingColour === r.colour) st.pendingColourMs += dtMs;
+            else { st.pendingColour = r.colour; st.pendingColourMs = 0; }
+            if (st.pendingColourMs >= settleWindowMs) {
+              st.phase = 'idle';
+              st.stillMs = 0;
+              st.movingMs = 0;
+              st.offsets = [];
+              st.pendingColour = null;
+              st.pendingColourMs = 0;
+              st.colour = r.colour;
+              // A take-over continues one piece's turn: no fresh settle tick.
+              st.resettle = true;
+              justDeactivated.push({ row: r.row, col: r.col });
+            }
+          }
+        } else {
+          // Idle: a new colour is a different piece, so its settle window starts over.
+          if (st.colour !== r.colour) {
+            st.colour = r.colour;
+            st.stillMs = 0;
+            st.offsets = [];
+          }
+          if (r.offset != null) {
+            st.offsets.push(r.offset);
+            if (st.offsets.length > MAX_OFFSET_SAMPLES) st.offsets.shift();
+          }
+        }
         st.lostMs = 0;
         if (st.lastCentroid) {
           const inst = dist(r.centroid, st.lastCentroid) / Math.max(dtMs, 1e-6);
@@ -162,6 +221,7 @@ export class BoardSequencerMode {
         if (moving) {
           st.movingMs += dtMs;
           st.stillMs = 0;
+          if (st.phase === 'idle') st.offsets = [];
         } else {
           st.stillMs += dtMs;
           st.movingMs = 0;
@@ -171,7 +231,14 @@ export class BoardSequencerMode {
           if (st.stillMs >= settleWindowMs) {
             st.phase = 'settled';
             st.movingMs = 0;
-            justSettled.push({ row: r.row, col: r.col });
+            // Latch how far off centre the piece was placed, from the whole settle
+            // window, so later jitter can't flip it in and out of Variation.
+            st.settledOffset = st.offsets.length > 0 ? median(st.offsets) : null;
+            st.conditional = conditionalFromOffset(
+              st.settledOffset, this.variationEnabled, this.variationOffsetThreshold,
+            );
+            if (st.resettle) st.resettle = false;
+            else justSettled.push({ row: r.row, col: r.col });
           }
         } else if (st.movingMs >= motionConfirmMs) {
           st.phase = 'idle';
@@ -190,18 +257,22 @@ export class BoardSequencerMode {
             st.phase = 'idle';
             st.lostMs = 0;
             st.stillMs = 0;
+            st.offsets = [];
+            st.pendingColour = null;
+            st.pendingColourMs = 0;
             justDeactivated.push({ row: r.row, col: r.col });
           }
         } else {
           st.stillMs = 0;
           st.lostMs = 0;
+          st.offsets = [];
         }
       }
     }
 
     const activeCells: ActiveCell[] = [];
     for (const [k, st] of this.states) {
-      if (st.phase === 'settled') {
+      if (st.phase === 'settled' && st.colour !== null) {
         const [row, col] = k.split(',').map(Number);
         const cell: ActiveCell = { row, col, colour: st.colour };
         if (st.conditional) cell.conditional = true;
