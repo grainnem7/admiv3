@@ -29,6 +29,7 @@ import {
 } from './boardSequencer/useBoardRuntime';
 import { homographyForCorners } from './boardSequencer/homographyForCorners';
 import { applyGridChange } from '../../tracking/boardGrid';
+import { suggestRole } from './boardSequencer/roles';
 import { BoardSequencerMode, type PieceColour, type ActiveCell } from '../../tracking/BoardSequencerMode';
 import { counterColourFromRegion } from '../../tracking/ColorTracker';
 import {
@@ -740,7 +741,7 @@ export default function BoardSequencerScreen() {
         // would silently adopt the new colour.
         const id = freshChannelId(prev.channels.map((c) => c.id), allReferencedChannelIds());
         channels = [...prev.channels, {
-          id, kind: cal.kind, role: 'melody', swatch: s.hex,
+          id, kind: cal.kind, role: suggestRole(prev.channels, { kind: cal.kind }), swatch: s.hex,
           band: cal.band, blackBand: cal.blackBand, whiteBand: cal.whiteBand,
         }];
       } else {
