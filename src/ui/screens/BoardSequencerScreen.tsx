@@ -30,6 +30,18 @@ import {
 import { homographyForCorners } from './boardSequencer/homographyForCorners';
 import { applyGridChange } from '../../tracking/boardGrid';
 import { suggestRole } from './boardSequencer/roles';
+import { controlOwners, disabledReason, legendValue } from './boardSequencer/controlOwnership';
+import type { ControlsResult } from '../../tracking/controlCounters';
+import type { FaderRole, ControlRemoval } from '../../profiles/BoardSequencerConfig';
+
+/** Reserved space under a control, so a disabled reason never shifts the layout. */
+const REASON_STYLE = { display: 'block', minHeight: 14, fontSize: 11, opacity: 0.7 } as const;
+
+const REMOVAL_LABELS: { value: ControlRemoval; label: string }[] = [
+  { value: 'hold', label: 'Hold the last value' },
+  { value: 'zero', label: 'Drop to the lowest value' },
+  { value: 'default', label: 'Return to the saved value' },
+];
 import { BoardSequencerMode, type PieceColour, type ActiveCell } from '../../tracking/BoardSequencerMode';
 import { counterColourFromRegion } from '../../tracking/ColorTracker';
 import {
@@ -206,6 +218,8 @@ export default function BoardSequencerScreen() {
   const colourCalibRef = useRef<ColourCalibTarget | null>(null);
   colourCalibRef.current = colourCalib;
   const [active, setActive] = useState<ActiveCell[]>([]);
+  // Live control-counter values, for the legend (‖ = the counter is away, value held).
+  const [controlState, setControlState] = useState<ControlsResult | null>(null);
   const [playheadCol, setPlayheadCol] = useState(0);
   // Pattern chaining: which page the live camera edits, and which is playing now.
   const [selectedPage, setSelectedPage] = useState(0);
@@ -511,9 +525,10 @@ export default function BoardSequencerScreen() {
         frame.occupied, frame.activeMap, cfg, playCol, swatchById, frame.conditional, isVarLap, pingDir, frame.bankSlots,
       );
     },
-    onThrottledState: ({ frame }: RuntimeFrame) => {
+    onThrottledState: ({ frame, controls }: RuntimeFrame) => {
       const cfg = configRef.current;
       const engine = engineRef.current;
+      setControlState(controls);
       setActive(frame.patternCells);
       setPlayheadCol(runningRef.current && engine ? engine.getPlayheadCol(cfg.cols) : 0);
       if (cfg.numPages > 1 && engine) setPlayingPage(engine.getCurrentPage());
@@ -810,6 +825,12 @@ export default function BoardSequencerScreen() {
     : colourCalib.mode === 'new' ? 'a new colour'
       : labelForId(colourCalib.id);
 
+  // One writer per parameter: a control counter disables the matching screen control.
+  const owners = controlOwners(config.channels);
+  const volumeReason = disabledReason('volume', owners);
+  const tempoReason = disabledReason('tempo', owners);
+  const controlChannels = config.channels.filter((c) => isFaderRole(c.role));
+
   return (
     <div
       className="board-sequencer-screen"
@@ -1030,6 +1051,55 @@ export default function BoardSequencerScreen() {
                 </select>
               </label>
             )}
+            {controlChannels.map((c) => {
+              const role = c.role as FaderRole;
+              const range = config.controlRanges[role];
+              return (
+                <div key={`ctl-${c.id}`} style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span
+                      aria-hidden="true"
+                      style={{ width: 12, height: 12, borderRadius: '50%', background: c.swatch, border: '1px solid #0008' }}
+                    />
+                    <span style={{ flex: 1 }}>{describeChannel(c)}</span>
+                    <span aria-live="off">
+                      {legendValue(role, controlState?.values[role], controlState?.held ?? new Set())}
+                    </span>
+                  </div>
+                  <label>
+                    When it leaves the board
+                    <select
+                      value={config.controlRemoval[role]}
+                      onChange={(e) => update({
+                        controlRemoval: { ...config.controlRemoval, [role]: e.target.value as ControlRemoval },
+                      })}
+                    >
+                      {REMOVAL_LABELS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </label>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <label style={{ flex: 1 }}>
+                      Lowest
+                      <input
+                        type="number" step={role === 'tempo' ? 5 : 0.05} value={range.min}
+                        onChange={(e) => update({
+                          controlRanges: { ...config.controlRanges, [role]: { ...range, min: Number(e.target.value) } },
+                        })}
+                      />
+                    </label>
+                    <label style={{ flex: 1 }}>
+                      Highest
+                      <input
+                        type="number" step={role === 'tempo' ? 5 : 0.05} value={range.max}
+                        onChange={(e) => update({
+                          controlRanges: { ...config.controlRanges, [role]: { ...range, max: Number(e.target.value) } },
+                        })}
+                      />
+                    </label>
+                  </div>
+                </div>
+              );
+            })}
             <label>
               Min fill {Math.round(config.minFilledFraction * 100)}%
               <input
@@ -1148,12 +1218,14 @@ export default function BoardSequencerScreen() {
               Volume {Math.round(config.volume * 100)}%
               <input
                 type="range" min={0} max={100} value={Math.round(config.volume * 100)}
+                disabled={volumeReason !== null}
                 onChange={(e) => {
                   const v = Number(e.target.value) / 100;
                   update({ volume: v });
                   engineRef.current?.setVolume(v);
                 }}
               />
+              <span style={REASON_STYLE}>{volumeReason ?? ''}</span>
             </label>
             <label>
               <input
@@ -1172,8 +1244,14 @@ export default function BoardSequencerScreen() {
               Tempo {config.bpm} BPM
               <input
                 type="range" min={50} max={300} value={config.bpm}
-                onChange={(e) => update({ bpm: Number(e.target.value) })}
+                disabled={tempoReason !== null}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  update({ bpm: v });
+                  engineRef.current?.setBpm(v); // live, not only on the next start
+                }}
               />
+              <span style={REASON_STYLE}>{tempoReason ?? ''}</span>
             </label>
             <label>
               Swing {Math.round(config.swing * 100)}%
