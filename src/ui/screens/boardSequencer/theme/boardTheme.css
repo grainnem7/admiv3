@@ -1,0 +1,130 @@
+/*
+ * Board Sequencer theme. Mirrors src/ui/screens/boardSequencer/theme/boardTokens.ts,
+ * which is the source of truth and carries the contrast contract test.
+ *
+ * Colour tokens are per style + mode; everything else is per style, so a second style
+ * (Swiss minimal) is one more block, not a component rewrite.
+ */
+
+.bs-root {
+  --bs-radius-sm: 6px;
+  --bs-radius-md: 10px;
+  --bs-radius-lg: 14px;
+  --bs-radius-xl: 20px;
+  --bs-font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --bs-target: 44px;
+
+  font-family: var(--bs-font);
+  background: var(--bs-bg);
+  color: var(--bs-fg);
+}
+
+/* Large UI is app-wide (store uiSize), so it keys off the app root, not the board. */
+[data-ui-size='large'] .bs-root {
+  --bs-target: 52px;
+}
+
+.bs-root[data-bs-style='calm'][data-bs-mode='dark'] {
+  --bs-bg: #1f2430;
+  --bs-raised: #262c39;
+  --bs-elev: #2f3645;
+  --bs-hi: #353d4e;
+  --bs-warn-tint: #343536;
+  --bs-fg: #e7e9ee;
+  --bs-fg2: #c3c8d3;
+  --bs-fg3: #a3aab8;
+  --bs-accent: #9fd8c4;
+  --bs-accent-fg: #14201c;
+  --bs-accent-muted: rgba(159, 216, 196, 0.14);
+  --bs-ok: #9fd8c4;
+  --bs-ok-muted: rgba(159, 216, 196, 0.16);
+  --bs-warn: #e9cf8f;
+  --bs-warn-fg: #2a2413;
+  --bs-danger: #f0a598;
+  --bs-danger-fg: #2a1512;
+  --bs-border: #343c4d;
+  --bs-border-control: #7a8497;
+  --bs-focus: #9fd8c4;
+  --bs-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --bs-swatch-ring-light: #e7e9ee;
+  --bs-swatch-ring-dark: #14171f;
+}
+
+.bs-root[data-bs-style='calm'][data-bs-mode='light'] {
+  --bs-bg: #eef0f3;
+  --bs-raised: #ffffff;
+  --bs-elev: #e6eaf0;
+  --bs-hi: #dce1e8;
+  --bs-warn-tint: #f5efdf;
+  --bs-fg: #232833;
+  --bs-fg2: #434a58;
+  --bs-fg3: #555c6b;
+  --bs-accent: #23675a;
+  --bs-accent-fg: #ffffff;
+  --bs-accent-muted: rgba(35, 103, 90, 0.1);
+  --bs-ok: #23675a;
+  --bs-ok-muted: rgba(35, 103, 90, 0.12);
+  --bs-warn: #6e5410;
+  --bs-warn-fg: #ffffff;
+  --bs-danger: #a4231b;
+  --bs-danger-fg: #ffffff;
+  --bs-border: #e1e5eb;
+  --bs-border-control: #7b8494;
+  --bs-focus: #23675a;
+  --bs-shadow: 0 1px 2px rgba(20, 25, 35, 0.14);
+  --bs-swatch-ring-light: #ffffff;
+  --bs-swatch-ring-dark: #232833;
+}
+
+/* Focus is never only a colour change: a 2px outline with an offset, everywhere. */
+.bs-root :focus-visible {
+  outline: 2px solid var(--bs-focus);
+  outline-offset: 2px;
+  border-radius: var(--bs-radius-sm);
+}
+
+/* A surface difference alone never marks a boundary — controls always carry a border. */
+.bs-root button,
+.bs-root select,
+.bs-root input,
+.bs-root textarea {
+  font: inherit;
+  color: var(--bs-fg);
+  background: var(--bs-raised);
+  border: 1px solid var(--bs-border-control);
+  border-radius: var(--bs-radius-sm);
+}
+
+.bs-root button {
+  min-height: var(--bs-target);
+  min-width: var(--bs-target);
+  padding: 0 14px;
+  cursor: pointer;
+}
+
+.bs-root button[disabled] {
+  cursor: not-allowed;
+  color: var(--bs-fg3);
+}
+
+@media (prefers-contrast: more) {
+  .bs-root {
+    --bs-border: var(--bs-border-control);
+  }
+
+  .bs-root button,
+  .bs-root select,
+  .bs-root input {
+    border-width: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bs-root *,
+  .bs-root *::before,
+  .bs-root *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
