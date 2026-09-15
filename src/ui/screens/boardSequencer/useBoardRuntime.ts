@@ -148,7 +148,8 @@ export function useBoardRuntime(opts: {
       // spill is cleared before anything settles or plays.
       const readings = suppressSpill(reader.read(video, {
         homography: homographyRef.current, rows: cfg.rows, cols: cfg.cols, colours: matchers, recognizer,
-        mirrorX: cfg.mirrorX, mirrorY: cfg.mirrorY, samplesPerAxis: cfg.samplesPerAxis, dtMs,
+        mirrorX: cfg.mirrorX, mirrorY: cfg.mirrorY, samplesPerAxis: cfg.samplesPerAxis,
+        boardSquares: cfg.boardSquares, dtMs,
       }), cfg);
       modeRef.current?.setVariation(cfg.variationEnabled, cfg.variationOffsetThreshold);
       engineRef.current?.setPingPong(cfg.pingPong);

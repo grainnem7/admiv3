@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { suggestReadSettings, gridSizeOptions, applyGridChange, type GridFields } from '../tracking/boardGrid';
+import {
+  suggestReadSettings, gridSizeOptions, applyGridChange, offsetFromSquare, gridDividesBoard, type GridFields,
+} from '../tracking/boardGrid';
 
 describe('suggestReadSettings', () => {
   it.each([
@@ -58,5 +60,29 @@ describe('applyGridChange', () => {
   it('a board size change never changes rows/cols', () => {
     const next = applyGridChange(base, { boardSquares: 10 });
     expect(next).toMatchObject({ rows: 4, cols: 4, boardSquares: 10 });
+  });
+});
+
+describe('offsetFromSquare', () => {
+  it('a counter centred on its physical square reads as centred, even on a coarse grid', () => {
+    // 4 × 4 grid over 8 × 8: cell (0,0) spans squares 0–1. A counter centred on
+    // square (0,1) is half a cell from the cell centre but dead centre on its square.
+    expect(offsetFromSquare({ x: 3 / 16, y: 1 / 16 }, 8)).toBeCloseTo(0, 6);
+    expect(offsetFromSquare({ x: 1 / 16, y: 1 / 16 }, 8)).toBeCloseTo(0, 6);
+  });
+
+  it('a real shove off the square reads high', () => {
+    // A third of a square past the centre, on an 8 × 8 board.
+    expect(offsetFromSquare({ x: 1 / 16 + 0.4 / 8, y: 1 / 16 }, 8)).toBeCloseTo(0.8, 6);
+    expect(offsetFromSquare({ x: 0, y: 0 }, 8)).toBeCloseTo(1, 6);
+  });
+});
+
+describe('gridDividesBoard', () => {
+  it('is true only when both axes divide the square count', () => {
+    expect(gridDividesBoard(8, 4, 4)).toBe(true);
+    expect(gridDividesBoard(8, 4, 8)).toBe(true);
+    expect(gridDividesBoard(8, 3, 4)).toBe(false);
+    expect(gridDividesBoard(10, 4, 4)).toBe(false);
   });
 });

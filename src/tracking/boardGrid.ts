@@ -24,6 +24,23 @@ export function suggestReadSettings(
   };
 }
 
+/** True when each grid cell covers a whole number of physical squares on both axes. */
+export function gridDividesBoard(boardSquares: number, rows: number, cols: number): boolean {
+  return rows > 0 && cols > 0 && boardSquares % rows === 0 && boardSquares % cols === 0;
+}
+
+/**
+ * How far a point sits from the centre of its PHYSICAL square: 0 = dead centre,
+ * 1 = on the square's edge. Variation is a question about the counter's placement on
+ * the board, not about the app's grid, so on a 4 × 4 grid over an 8 × 8 board a
+ * naturally-placed counter reads as centred instead of shoved.
+ */
+export function offsetFromSquare(point: { x: number; y: number }, boardSquares: number): number {
+  const n = Math.max(1, boardSquares);
+  const frac = (v: number): number => Math.abs((v * n) - Math.floor(v * n) - 0.5) * 2;
+  return Math.min(1, Math.max(frac(point.x), frac(point.y)));
+}
+
 export interface GridSizeOptions {
   divisors: number[];
   moreRows: number[];

@@ -14,6 +14,7 @@ import { applyHomography } from '../utils/homography';
 import { rgbToHsv } from './ColorTracker';
 import { alphaForDt, REFERENCE_FRAME_MS } from '../utils/timeConstant';
 import type { ColourId, ColourMatcher } from './boardColours';
+import { gridDividesBoard, offsetFromSquare } from './boardGrid';
 import type { CellReading } from './BoardSequencerMode';
 import type { PieceRecognizer } from './PieceRecognizer';
 
@@ -200,6 +201,11 @@ export interface BoardReaderOptions {
   /** Colour matchers in PRIORITY order (vivid hues first, black/white last). */
   colours: ColourMatcher[];
   recognizer: PieceRecognizer;
+  /**
+   * Physical squares per side. When the grid divides it, Variation's offset is measured
+   * from the nearest square centre instead of the cell centre.
+   */
+  boardSquares?: number;
   samplesPerAxis?: number;
   downscale?: number;
   /** Per-cell temporal smoothing 0..1 (EMA per 60 Hz frame; 1 = off). Default FRACTION_SMOOTHING. */
@@ -268,6 +274,10 @@ export class BoardReader {
       this.latticeKey = latticeKey;
     }
     const alpha = alphaForDt(opts.smoothing ?? FRACTION_SMOOTHING, opts.dtMs ?? REFERENCE_FRAME_MS);
+    // "Shoved off centre" is about the physical square, not the app grid — but only when
+    // each cell covers whole squares, otherwise the cell centre is all there is.
+    const squareOffsets = opts.boardSquares !== undefined
+      && gridDividesBoard(opts.boardSquares, opts.rows, opts.cols);
 
     const sampler: RgbSampler = (x, y) => {
       const sx = Math.min(w - 1, Math.max(0, Math.round(x / downscale)));
@@ -295,7 +305,9 @@ export class BoardReader {
         // Measure position on the colour actually played, which may not be the dominant one.
         const playedCentroid = (cls.colour ? centroids[cls.colour] : null) ?? centroid;
         const playedOffset = cls.colour && playedCentroid
-          ? offsetFromCellCentre(playedCentroid, row, col, opts.rows, opts.cols)
+          ? (squareOffsets
+            ? offsetFromSquare(playedCentroid, opts.boardSquares ?? 8)
+            : offsetFromCellCentre(playedCentroid, row, col, opts.rows, opts.cols))
           : offset;
         readings.push({
           row, col, occupied: cls.occupied, colour: cls.colour, centroid: playedCentroid,
