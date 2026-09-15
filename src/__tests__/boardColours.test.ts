@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   calibrationFromHsv, freshChannelId, orderedChannels, channelPriority,
-  describeChannel, hueName, type ColourChannel,
+  describeChannel, hueName, classifyCounterKind, recalibratedChannel, type ColourChannel,
 } from '../tracking/boardColours';
 
 describe('calibrationFromHsv', () => {
@@ -67,5 +67,40 @@ describe('describeChannel / hueName', () => {
     expect(hueName(0)).toBe('Red');
     expect(hueName(120)).toBe('Green');
     expect(hueName(215)).toBe('Blue');
+  });
+});
+
+describe('classifyCounterKind', () => {
+  it.each([
+    [{ h: 0, s: 12, v: 90 }, 'white'], [{ h: 0, s: 13, v: 90 }, 'hue'],
+    [{ h: 0, s: 10, v: 38 }, 'black'], [{ h: 0, s: 10, v: 39 }, 'hue'],
+    [{ h: 0, s: 45, v: 32 }, 'black'], [{ h: 0, s: 45, v: 33 }, 'hue'],
+    [{ h: 0, s: 45, v: 30 }, 'black'], [{ h: 0, s: 46, v: 30 }, 'hue'],
+  ])('%o → %s', (hsv, kind) => {
+    expect(classifyCounterKind(hsv)).toBe(kind);
+  });
+
+  it('calibrationFromHsv agrees with it', () => {
+    expect(calibrationFromHsv({ h: 200, s: 40, v: 25 }).kind).toBe('black');
+  });
+});
+
+describe('recalibratedChannel', () => {
+  it('replaces only kind/swatch/bands and keeps id, job, instrument and mix', () => {
+    const c: ColourChannel = {
+      id: 'c1', kind: 'hue', role: 'bass', swatch: '#00f', instrument: 'cello', drum: '', volume: 0.4, tone: 0.3, reverbSend: 0.2, delaySend: 0.1,
+      band: { id: 'c1', hue: 220, hueTolerance: 20, minSaturation: 40, minValue: 30, minArea: 0 },
+    };
+    const next = recalibratedChannel(c, calibrationFromHsv({ h: 0, s: 5, v: 10 }), '#111');
+    expect(next).toMatchObject({ id: 'c1', role: 'bass', instrument: 'cello', volume: 0.4, tone: 0.3, reverbSend: 0.2, delaySend: 0.1, kind: 'black', swatch: '#111' });
+    expect(next.band).toBeUndefined();
+    expect(next.blackBand).toBeDefined();
+  });
+});
+
+describe('freshChannelId with referenced ids', () => {
+  it('never reuses an id still referenced by saved pages or loops', () => {
+    expect(freshChannelId([], ['c1', 'c2'])).toBe('c3');
+    expect(freshChannelId(['c1'], ['c2'])).toBe('c3');
   });
 });

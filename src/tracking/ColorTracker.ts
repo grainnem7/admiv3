@@ -185,6 +185,27 @@ export function counterColourFromRegion(
       if (dx * dx + dy * dy <= centralR2 && (seed === null || p.s > seed.s)) seed = p;
     }
   }
+  // Dark counters: saturation there is sensor noise, so the most-saturated seed picks a
+  // random hue. When the central disc is dark, use its per-channel median colour instead.
+  const central: Px[] = [];
+  for (let y = 0; y < sh; y++) {
+    for (let x = 0; x < sw; x++) {
+      const dx = x - cx; const dy = y - cy;
+      if (dx * dx + dy * dy <= centralR2) central.push(pxs[y * sw + x]);
+    }
+  }
+  if (central.length > 0) {
+    const med = (vals: number[]): number => {
+      const s = [...vals].sort((a, b) => a - b);
+      return s[Math.floor(s.length / 2)];
+    };
+    const mr = med(central.map((p) => p.r));
+    const mg = med(central.map((p) => p.g));
+    const mb = med(central.map((p) => p.b));
+    const mhsv = rgbToHsv(mr, mg, mb);
+    if (mhsv.v <= 32) return { h: mhsv.h, s: mhsv.s, v: mhsv.v, r: mr, g: mg, b: mb };
+  }
+
   // Fallback (region too tiny to have a central pixel): most saturated overall.
   if (seed === null) seed = pxs.reduce((best, p) => (p.s > best.s ? p : best), pxs[0]);
 

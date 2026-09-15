@@ -144,23 +144,42 @@ export function channelPriority(channels: ColourChannel[]): ColourId[] {
  * Turn a sampled HSV into a channel calibration: very dark/desaturated → black,
  * very bright/desaturated → white, otherwise a hue band centred on the sample.
  */
+/**
+ * The one black/white/hue decision (s, v on 0..100), shared by tap and auto calibration.
+ *
+ * Only treat a sample as achromatic when it is REALLY greyscale: external webcams
+ * desaturate, so a slightly-washed coloured piece (e.g. s ≈ 18) must still become a
+ * HUE channel — otherwise it reads as white and then matches all the pale squares.
+ * A dark sample is the exception: saturation there is mostly sensor noise, so a
+ * near-black counter is black even when it reads as fairly saturated.
+ */
+export function classifyCounterKind(hsv: { h: number; s: number; v: number }): ColourKind {
+  if ((hsv.s <= 12 && hsv.v <= 38) || (hsv.v <= 32 && hsv.s <= 45)) return 'black';
+  if (hsv.s <= 12 && hsv.v >= 72) return 'white';
+  return 'hue';
+}
+
+/** Recalibrate: new detection band + swatch; keep identity, job, instrument and mix. */
+export function recalibratedChannel(
+  c: ColourChannel, cal: ReturnType<typeof calibrationFromHsv>, swatch: string,
+): ColourChannel {
+  return { ...c, kind: cal.kind, swatch, band: cal.band, blackBand: cal.blackBand, whiteBand: cal.whiteBand };
+}
+
 export function calibrationFromHsv(hsv: { h: number; s: number; v: number }): {
   kind: ColourKind;
   band?: TrackedColor;
   blackBand?: BlackBand;
   whiteBand?: WhiteBand;
 } {
-  // Only treat a sample as achromatic when it is REALLY greyscale. External
-  // webcams desaturate, so a slightly-washed coloured piece (e.g. s≈18) must
-  // still become a HUE channel — otherwise it reads as black/white and a white
-  // channel then matches all the pale board squares.
-  if (hsv.s <= 12 && hsv.v <= 38) {
+  const kind = classifyCounterKind(hsv);
+  if (kind === 'black') {
     return {
       kind: 'black',
       blackBand: { maxValue: clamp(hsv.v * 1.6 + 8, 18, 55), maxSaturation: clamp(hsv.s + 14, 20, 45) },
     };
   }
-  if (hsv.s <= 12 && hsv.v >= 72) {
+  if (kind === 'white') {
     return {
       kind: 'white',
       whiteBand: { minValue: clamp(hsv.v * 0.85, 60, 95), maxSaturation: clamp(hsv.s + 10, 8, 30) },
@@ -202,12 +221,11 @@ export function describeChannel(ch: ColourChannel): string {
   return hueName(ch.band?.hue ?? 0);
 }
 
-/** Pick a fresh, readable channel id ('c1', 'c2', …) not already in `existing`. */
-export function freshChannelId(existing: ColourId[]): ColourId {
-  const used = new Set(existing);
-  for (let i = 1; i <= existing.length + 1; i++) {
+/** Pick a fresh id ('c1', 'c2', …) not in `existing` and not still referenced by saved loops/pages. */
+export function freshChannelId(existing: ColourId[], referenced: Iterable<ColourId> = []): ColourId {
+  const used = new Set<ColourId>([...existing, ...referenced]);
+  for (let i = 1; ; i++) {
     const id = `c${i}`;
     if (!used.has(id)) return id;
   }
-  return `c${existing.length + 1}`;
 }

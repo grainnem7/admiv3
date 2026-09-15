@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { counterColourFromRegion } from '../tracking/ColorTracker';
+import { calibrationFromHsv } from '../tracking/boardColours';
 
 /** Build an sw×sh RGBA region: `bg` everywhere, a centred `size`×`size` `fg` square. */
 function region(
@@ -48,5 +49,22 @@ describe('counterColourFromRegion', () => {
 
   it('returns null for an empty region', () => {
     expect(counterColourFromRegion(new Uint8ClampedArray(0), 0, 0)).toBeNull();
+  });
+});
+
+describe('counterColourFromRegion on dark counters', () => {
+  it('a noisy near-black counter is classified black, not a random hue', () => {
+    let seed = 7;
+    const rand = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+    for (const base of [8, 16, 24]) {
+      const sw = 20; const sh = 20;
+      const data = new Uint8ClampedArray(sw * sh * 4);
+      for (let i = 0; i < sw * sh; i++) {
+        for (let ch = 0; ch < 3; ch++) data[i * 4 + ch] = Math.max(0, Math.round(base + (rand() - 0.5) * 12));
+        data[i * 4 + 3] = 255;
+      }
+      const c = counterColourFromRegion(data, sw, sh)!;
+      expect(calibrationFromHsv({ h: c.h, s: c.s, v: c.v }).kind).toBe('black');
+    }
   });
 });

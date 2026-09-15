@@ -33,7 +33,7 @@ import { BoardSequencerMode, type PieceColour, type ActiveCell } from '../../tra
 import { counterColourFromRegion } from '../../tracking/ColorTracker';
 import {
   calibrationFromHsv,
-  describeChannel, freshChannelId, isFaderRole, hueName, ROLE_LABELS,
+  describeChannel, freshChannelId, recalibratedChannel, isFaderRole, hueName, ROLE_LABELS,
   type ColourChannel, type ColourId, type ColourKind, type ColourRole,
 } from '../../tracking/boardColours';
 import { BoardSequencerEngine } from '../../songs/BoardSequencerEngine';
@@ -48,6 +48,7 @@ import {
 } from '../../profiles/BoardSequencerConfig';
 import {
   loadActiveBoardConfig as loadBoardSequencerConfig, saveActiveBoardConfig as saveBoardSequencerConfig,
+  allReferencedChannelIds,
 } from '../../profiles/BoardProfiles';
 import BoardCalibrationOverlay from '../components/board/BoardCalibrationOverlay';
 import WarpedBoardView from '../components/board/WarpedBoardView';
@@ -736,18 +737,15 @@ export default function BoardSequencerScreen() {
     setConfig((prev) => {
       let channels: ColourChannel[];
       if (target.mode === 'new') {
-        const id = freshChannelId(prev.channels.map((c) => c.id));
+        // Skip ids still named by any player's saved pages/loops, or those cells
+        // would silently adopt the new colour.
+        const id = freshChannelId(prev.channels.map((c) => c.id), allReferencedChannelIds());
         channels = [...prev.channels, {
           id, kind: cal.kind, role: 'melody', swatch: s.hex,
           band: cal.band, blackBand: cal.blackBand, whiteBand: cal.whiteBand,
         }];
       } else {
-        channels = prev.channels.map((c) => (c.id === target.id
-          ? {
-            id: c.id, role: c.role, kind: cal.kind, swatch: s.hex,
-            band: cal.band, blackBand: cal.blackBand, whiteBand: cal.whiteBand,
-          }
-          : c));
+        channels = prev.channels.map((c) => (c.id === target.id ? recalibratedChannel(c, cal, s.hex) : c));
       }
       const next = { ...prev, channels };
       saveBoardSequencerConfig(next);
