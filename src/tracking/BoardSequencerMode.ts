@@ -22,6 +22,7 @@
 
 import type { ColourId } from './boardColours';
 import { conditionalFromOffset } from '../songs/boardSequencerScale';
+import { alphaForDt } from '../utils/timeConstant';
 
 export interface Point {
   x: number;
@@ -147,7 +148,7 @@ export class BoardSequencerMode {
         st.lostMs = 0;
         if (st.lastCentroid) {
           const inst = dist(r.centroid, st.lastCentroid) / Math.max(dtMs, 1e-6);
-          st.velocity = st.velocity + velocitySmoothing * (inst - st.velocity);
+          st.velocity = st.velocity + alphaForDt(velocitySmoothing, dtMs) * (inst - st.velocity);
         } else {
           // First sighting or recovery from occlusion: velocity unmeasurable →
           // treat as still so an occluded settled cell survives recovery.

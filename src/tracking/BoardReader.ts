@@ -12,6 +12,7 @@
 import type { Mat3 } from '../utils/homography';
 import { applyHomography } from '../utils/homography';
 import { rgbToHsv } from './ColorTracker';
+import { alphaForDt, REFERENCE_FRAME_MS } from '../utils/timeConstant';
 import type { ColourId, ColourMatcher } from './boardColours';
 import type { CellReading } from './BoardSequencerMode';
 import type { PieceRecognizer } from './PieceRecognizer';
@@ -48,6 +49,30 @@ export interface RegionSample {
 // guard against a piece bleeding into its neighbour cell. Tolerance over precision.
 const INSET = 0.9;
 
+/** Precompute a cell's sample lattice ([ux, uy, imgX, imgY] per sample), once per homography. */
+export function buildCellLattice(h: Mat3, row: number, col: number, rows: number, cols: number, samplesPerAxis: number): Float64Array {
+  const cellW = 1 / cols;
+  const cellH = 1 / rows;
+  const x0 = col * cellW + cellW * (1 - INSET) / 2;
+  const y0 = row * cellH + cellH * (1 - INSET) / 2;
+  const stepX = (cellW * INSET) / Math.max(samplesPerAxis - 1, 1);
+  const stepY = (cellH * INSET) / Math.max(samplesPerAxis - 1, 1);
+  const out = new Float64Array(samplesPerAxis * samplesPerAxis * 4);
+  let k = 0;
+  for (let iy = 0; iy < samplesPerAxis; iy++) {
+    for (let ix = 0; ix < samplesPerAxis; ix++) {
+      const ux = x0 + ix * stepX;
+      const uy = y0 + iy * stepY;
+      const img = applyHomography(h, { x: ux, y: uy });
+      out[k++] = ux;
+      out[k++] = uy;
+      out[k++] = Math.round(img.x);
+      out[k++] = Math.round(img.y);
+    }
+  }
+  return out;
+}
+
 /**
  * Sample the central region of cell (row, col) and return, for each supplied
  * colour matcher, the fraction of sampled pixels it matched, plus the dominant
@@ -64,34 +89,27 @@ export function sampleRegion(
   cols: number,
   colours: ColourMatcher[],
   samplesPerAxis: number,
+  lattice?: Float64Array,
 ): RegionSample {
-  const cellW = 1 / cols;
-  const cellH = 1 / rows;
-  const x0 = col * cellW + cellW * (1 - INSET) / 2;
-  const y0 = row * cellH + cellH * (1 - INSET) / 2;
-  const stepX = (cellW * INSET) / Math.max(samplesPerAxis - 1, 1);
-  const stepY = (cellH * INSET) / Math.max(samplesPerAxis - 1, 1);
+  const lat = lattice ?? buildCellLattice(h, row, col, rows, cols, samplesPerAxis);
 
   const counts = new Map<ColourId, number>();
   const sumX = new Map<ColourId, number>();
   const sumY = new Map<ColourId, number>();
   let total = 0;
 
-  for (let iy = 0; iy < samplesPerAxis; iy++) {
-    for (let ix = 0; ix < samplesPerAxis; ix++) {
-      const ux = x0 + ix * stepX;
-      const uy = y0 + iy * stepY;
-      const img = applyHomography(h, { x: ux, y: uy });
-      const { r, g, b } = sampler(Math.round(img.x), Math.round(img.y));
-      const hsv = rgbToHsv(r, g, b);
-      total++;
-      for (const m of colours) {
-        if (m.test(hsv)) {
-          counts.set(m.id, (counts.get(m.id) ?? 0) + 1);
-          sumX.set(m.id, (sumX.get(m.id) ?? 0) + ux);
-          sumY.set(m.id, (sumY.get(m.id) ?? 0) + uy);
-          break; // priority: first matching colour wins this pixel
-        }
+  for (let k = 0; k < lat.length; k += 4) {
+    const ux = lat[k];
+    const uy = lat[k + 1];
+    const { r, g, b } = sampler(lat[k + 2], lat[k + 3]);
+    const hsv = rgbToHsv(r, g, b);
+    total++;
+    for (const m of colours) {
+      if (m.test(hsv)) {
+        counts.set(m.id, (counts.get(m.id) ?? 0) + 1);
+        sumX.set(m.id, (sumX.get(m.id) ?? 0) + ux);
+        sumY.set(m.id, (sumY.get(m.id) ?? 0) + uy);
+        break; // priority: first matching colour wins this pixel
       }
     }
   }
@@ -125,7 +143,7 @@ export function sampleRegion(
   return { fractions, dominantId, centroid, offset };
 }
 
-/** Default per-cell temporal smoothing factor (EMA). Lower = steadier but laggier. */
+/** Default per-cell temporal smoothing factor (EMA, per 60 Hz frame). Lower = steadier but laggier. */
 const FRACTION_SMOOTHING = 0.4;
 
 /**
@@ -171,8 +189,10 @@ export interface BoardReaderOptions {
   recognizer: PieceRecognizer;
   samplesPerAxis?: number;
   downscale?: number;
-  /** Per-cell temporal smoothing 0..1 (EMA; 1 = off). Default FRACTION_SMOOTHING. */
+  /** Per-cell temporal smoothing 0..1 (EMA per 60 Hz frame; 1 = off). Default FRACTION_SMOOTHING. */
   smoothing?: number;
+  /** Milliseconds since the previous processed camera frame (smoothing is time-based). */
+  dtMs?: number;
   /**
    * Mirror the video on each axis when drawing to the sampling canvas, matching
    * the on-screen <video> display transform. Keeping the sampled pixels in the
@@ -193,6 +213,9 @@ export class BoardReader {
   private ctx: CanvasRenderingContext2D;
   // Per-cell EMA of colour fractions (keyed "row,col") for temporal smoothing.
   private prevFractions = new Map<string, Partial<Record<ColourId, number>>>();
+  private lattices: Float64Array[] = [];
+  private latticeKey = '';
+  private last: { data: Uint8ClampedArray; width: number; height: number; downscale: number } | null = null;
 
   constructor() {
     this.canvas = document.createElement('canvas');
@@ -201,19 +224,37 @@ export class BoardReader {
     this.ctx = ctx;
   }
 
+  /** The downscaled, orientation-corrected RGBA frame read last (for other per-frame guards). */
+  lastFrame(): { data: Uint8ClampedArray; width: number; height: number; downscale: number } | null {
+    return this.last;
+  }
+
   read(video: HTMLVideoElement, opts: BoardReaderOptions): CellReading[] {
     const downscale = opts.downscale ?? 4;
     const samples = opts.samplesPerAxis ?? 5;
     const w = Math.max(1, Math.floor(video.videoWidth / downscale));
     const h = Math.max(1, Math.floor(video.videoHeight / downscale));
-    this.canvas.width = w;
-    this.canvas.height = h;
+    if (this.canvas.width !== w) this.canvas.width = w;
+    if (this.canvas.height !== h) this.canvas.height = h;
     this.ctx.save();
     this.ctx.translate(opts.mirrorX ? w : 0, opts.mirrorY ? h : 0);
     this.ctx.scale(opts.mirrorX ? -1 : 1, opts.mirrorY ? -1 : 1);
     this.ctx.drawImage(video, 0, 0, w, h);
     this.ctx.restore();
     const data = this.ctx.getImageData(0, 0, w, h).data;
+    this.last = { data, width: w, height: h, downscale };
+
+    const latticeKey = `${opts.homography.join(',')}|${opts.rows}|${opts.cols}|${samples}`;
+    if (latticeKey !== this.latticeKey) {
+      this.lattices = [];
+      for (let row = 0; row < opts.rows; row++) {
+        for (let col = 0; col < opts.cols; col++) {
+          this.lattices.push(buildCellLattice(opts.homography, row, col, opts.rows, opts.cols, samples));
+        }
+      }
+      this.latticeKey = latticeKey;
+    }
+    const alpha = alphaForDt(opts.smoothing ?? FRACTION_SMOOTHING, opts.dtMs ?? REFERENCE_FRAME_MS);
 
     const sampler: RgbSampler = (x, y) => {
       const sx = Math.min(w - 1, Math.max(0, Math.round(x / downscale)));
@@ -227,12 +268,13 @@ export class BoardReader {
       for (let col = 0; col < opts.cols; col++) {
         const { fractions, centroid, offset } = sampleRegion(
           sampler, opts.homography, row, col, opts.rows, opts.cols, opts.colours, samples,
+          this.lattices[row * opts.cols + col],
         );
         // Temporal smoothing: blend this frame's fractions with the cell's history
         // so a single flickery frame can't flip its occupancy/colour on or off.
         const key = `${row},${col}`;
         const smoothed = blendFractions(
-          this.prevFractions.get(key), fractions, opts.smoothing ?? FRACTION_SMOOTHING,
+          this.prevFractions.get(key), fractions, alpha,
         );
         this.prevFractions.set(key, smoothed);
         const filledFraction = Math.max(0, ...Object.values(smoothed).filter((v): v is number => v !== undefined));

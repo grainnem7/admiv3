@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sampleRegion, blendFractions, type RgbSampler } from '../tracking/BoardReader';
+import { sampleRegion, blendFractions, buildCellLattice, type RgbSampler } from '../tracking/BoardReader';
 import type { TrackedColor } from '../tracking/ColorTracker';
 import {
   buildChannelMatchers, DEFAULT_BLACK_BAND, DEFAULT_WHITE_BAND, type ColourChannel,
@@ -98,5 +98,15 @@ describe('blendFractions (temporal smoothing)', () => {
 
   it('drops fully-faded colours below epsilon so the map does not accumulate', () => {
     expect(blendFractions({ red: 0.0004 }, {}, 0.5)).toEqual({});
+  });
+});
+
+describe('buildCellLattice', () => {
+  it('gives the same sample result as computing the homography per sample', () => {
+    const h = computeHomography(UNIT_SQUARE, [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }, { x: 0, y: 100 }]);
+    const half: RgbSampler = (x) => (x < 50 ? { r: 220, g: 10, b: 10 } : { r: 128, g: 128, b: 128 });
+    const direct = sampleRegion(half, h, 0, 0, 1, 1, COLOURS, 5);
+    const cached = sampleRegion(half, h, 0, 0, 1, 1, COLOURS, 5, buildCellLattice(h, 0, 0, 1, 1, 5));
+    expect(cached).toEqual(direct);
   });
 });
