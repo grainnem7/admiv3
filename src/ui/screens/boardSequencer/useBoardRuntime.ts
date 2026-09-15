@@ -12,7 +12,7 @@ import { ColourRecognizer } from '../../../tracking/PieceRecognizer';
 import { buildChannelMatchers, channelPriority, type ColourMatcher } from '../../../tracking/boardColours';
 import { frameMeanSaturation } from '../../../tracking/cameraCheck';
 import { startVideoFrameLoop } from '../../../tracking/videoFrameLoop';
-import { stepBoardFrame, type BoardFrameOutput } from '../../../tracking/boardFrame';
+import { stepBoardFrame, suppressSpill, type BoardFrameOutput } from '../../../tracking/boardFrame';
 import type { BoardSequencerEngine } from '../../../songs/BoardSequencerEngine';
 import { emptyLoopBank, type LoopBankState } from '../../../songs/loopBank';
 import type { Mat3 } from '../../../utils/homography';
@@ -144,10 +144,12 @@ export function useBoardRuntime(opts: {
         recognizer = new ColourRecognizer(cfg.minFilledFraction, channelPriority(cfg.channels));
         matchersFor = { channels: cfg.channels, minFill: cfg.minFilledFraction };
       }
-      const readings = reader.read(video, {
+      // One counter, one box: a counter on a grid line is seen by both cells, so the
+      // spill is cleared before anything settles or plays.
+      const readings = suppressSpill(reader.read(video, {
         homography: homographyRef.current, rows: cfg.rows, cols: cfg.cols, colours: matchers, recognizer,
         mirrorX: cfg.mirrorX, mirrorY: cfg.mirrorY, samplesPerAxis: cfg.samplesPerAxis, dtMs,
-      });
+      }), cfg);
       modeRef.current?.setVariation(cfg.variationEnabled, cfg.variationOffsetThreshold);
       engineRef.current?.setPingPong(cfg.pingPong);
       const running = runningRef.current && !!modeRef.current && !!engineRef.current;
