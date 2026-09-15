@@ -1,0 +1,88 @@
+import { useEffect, useRef, type ReactNode } from 'react';
+import { Button } from '../ui/Button';
+import {
+  SETUP_STEPS, canContinue, continueLabel, nextStep, prevStep,
+  type CameraStatus, type SetupConfigView, type SetupStep,
+} from '../boardSetupFlow';
+
+export const STEP_LABELS: Record<SetupStep, string> = {
+  camera: 'Camera', board: 'Board', colours: 'Colours', ready: 'Ready',
+};
+
+export interface SetupFlowProps {
+  step: SetupStep;
+  onStepChange(step: SetupStep): void;
+  cfg: SetupConfigView;
+  camera: CameraStatus;
+  hasStoredConfig: boolean;
+  /** Step content; the flow owns the heading, the footer and focus. */
+  children: ReactNode;
+  /** An extra action between Back and Continue, e.g. "Skip, board hasn't moved". */
+  skip?: { label: string; reason?: string | null; onClick(): void } | null;
+  announce(message: string): void;
+  /** Left-handed players get the footer aligned to their side; the order never changes. */
+  footerAlign?: 'start' | 'end';
+  heading: string;
+  hint?: ReactNode;
+}
+
+/**
+ * The guided Set up shell: one step at a time, always the same footer order, focus moved
+ * to the step heading on every change, and one announcement per step rather than
+ * a running commentary.
+ */
+export function SetupFlow({
+  step, onStepChange, cfg, camera, hasStoredConfig, children, skip = null, announce,
+  footerAlign = 'end', heading, hint,
+}: SetupFlowProps): JSX.Element {
+  const headingRef = useRef<HTMLHeadingElement | null>(null);
+  const index = SETUP_STEPS.indexOf(step);
+
+  useEffect(() => {
+    headingRef.current?.focus();
+    announce(`Step ${index + 1} of ${SETUP_STEPS.length}: ${STEP_LABELS[step]}`);
+  }, [step, index, announce]);
+
+  const back = prevStep(step);
+  const next = nextStep(step);
+  const canGo = canContinue(step, cfg, camera, hasStoredConfig);
+  const continueReason = canGo ? null : reasonFor(step, camera);
+
+  return (
+    <section
+      style={{ display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0, flex: 1 }}
+      aria-label={`Set up, step ${index + 1} of ${SETUP_STEPS.length}`}
+    >
+      <div>
+        <h2 ref={headingRef} tabIndex={-1} style={{ margin: 0, fontSize: 20 }}>{heading}</h2>
+        {hint && <p style={{ margin: '4px 0 0', color: 'var(--bs-fg2)', fontSize: 13 }}>{hint}</p>}
+      </div>
+
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {children}
+      </div>
+
+      {/* Same DOM and focus order for both hands; only the alignment moves. */}
+      <footer style={{ display: 'flex', gap: 8, justifyContent: footerAlign === 'start' ? 'flex-start' : 'flex-end', flexWrap: 'wrap' }}>
+        {back && <Button tone="quiet" onClick={() => onStepChange(back)}>← Back</Button>}
+        {skip && <Button tone="secondary" reason={skip.reason ?? null} onClick={skip.onClick}>{skip.label}</Button>}
+        {next && (
+          <Button tone="primary" reason={continueReason} onClick={() => onStepChange(next)}>
+            {continueLabel(step, camera)}
+          </Button>
+        )}
+      </footer>
+    </section>
+  );
+}
+
+/** Plain-language reason a step can't be left yet. */
+function reasonFor(step: SetupStep, camera: CameraStatus): string {
+  if (step === 'camera') {
+    if (camera.phase === 'starting') return 'Waiting for the camera to start…';
+    return "The camera isn't working yet. Pick another camera or press Try again.";
+  }
+  if (step === 'board') return 'Find the board and confirm its corners first.';
+  if (step === 'colours') return 'Add at least one colour and give it a job.';
+  return '';
+}
