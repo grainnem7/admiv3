@@ -121,7 +121,41 @@ export interface BoardSequencerStored {
   handedness: 'left' | 'right';
   /** Which board edge the player sits at (per player; defines "their left"). */
   seatEdge: 'start' | 'end' | 'low' | 'high';
+  /** Stillness a control counter needs before its new value is taken (ms). */
+  controlStillMs: number;
+  /** Glide time for a control change, so a slide never clicks or drops out (s). */
+  controlGlideSec: number;
+  /** How long 'default' removal waits before returning a control to its default (ms). */
+  controlReturnMs: number;
+  /** Usable range per fader control, so a counter can't reach silence or a runaway tempo. */
+  controlRanges: Record<FaderRole, ControlRange>;
+  /** What happens to each fader when its counter leaves the board. */
+  controlRemoval: Record<FaderRole, ControlRemoval>;
+  /** Effect amount a toggle colour switches in (was hard-coded 0.35). */
+  toggleAmount: number;
+  /** The pattern must be unchanged this long before a loop slot captures it (ms). */
+  captureQuietMs: number;
 }
+
+/** Fader-role controls, whose value comes from a counter's position. */
+export type FaderRole = 'volume' | 'reverb' | 'delay' | 'tone' | 'tempo';
+export interface ControlRange { min: number; max: number }
+/** What a fader does when its counter leaves: keep it, drop to zero, or drift back. */
+export type ControlRemoval = 'hold' | 'zero' | 'default';
+
+const FADER_ROLE_LIST: FaderRole[] = ['volume', 'reverb', 'delay', 'tone', 'tempo'];
+
+const DEFAULT_CONTROL_RANGES: Record<FaderRole, ControlRange> = {
+  volume: { min: 0.2, max: 1 },
+  reverb: { min: 0, max: 0.6 },
+  delay: { min: 0, max: 0.6 },
+  tone: { min: 0, max: 1 },
+  tempo: { min: 60, max: 160 },
+};
+
+const DEFAULT_CONTROL_REMOVAL: Record<FaderRole, ControlRemoval> = {
+  volume: 'hold', reverb: 'hold', delay: 'hold', tone: 'hold', tempo: 'hold',
+};
 
 const ZERO_CORNERS: [BoardPoint, BoardPoint, BoardPoint, BoardPoint] = [
   { x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 },
@@ -180,7 +214,35 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   boardNudgesEnabled: true,
   handedness: 'right',
   seatEdge: 'low',
+  controlStillMs: 150,
+  controlGlideSec: 0.3,
+  controlReturnMs: 3000,
+  controlRanges: DEFAULT_CONTROL_RANGES,
+  controlRemoval: DEFAULT_CONTROL_REMOVAL,
+  toggleAmount: 0.35,
+  captureQuietMs: 500,
 };
+
+function sanitizeControlRanges(v: unknown): Record<FaderRole, ControlRange> {
+  const o = (typeof v === 'object' && v !== null ? v : {}) as Record<string, unknown>;
+  const out = {} as Record<FaderRole, ControlRange>;
+  for (const role of FADER_ROLE_LIST) {
+    const d = DEFAULT_CONTROL_RANGES[role];
+    const r = (typeof o[role] === 'object' && o[role] !== null ? o[role] : {}) as Record<string, unknown>;
+    out[role] = { min: num(r.min, d.min), max: num(r.max, d.max) };
+  }
+  return out;
+}
+
+function sanitizeControlRemoval(v: unknown): Record<FaderRole, ControlRemoval> {
+  const o = (typeof v === 'object' && v !== null ? v : {}) as Record<string, unknown>;
+  const out = {} as Record<FaderRole, ControlRemoval>;
+  for (const role of FADER_ROLE_LIST) {
+    const r = o[role];
+    out[role] = r === 'zero' || r === 'default' ? r : 'hold';
+  }
+  return out;
+}
 
 function isNum(v: unknown): v is number {
   return typeof v === 'number' && Number.isFinite(v);
@@ -188,6 +250,10 @@ function isNum(v: unknown): v is number {
 
 function num(v: unknown, fallback: number): number {
   return isNum(v) ? v : fallback;
+}
+
+function clampNum(v: unknown, lo: number, hi: number, fallback: number): number {
+  return Math.max(lo, Math.min(hi, num(v, fallback)));
 }
 
 function sanitizeCorners(v: unknown): [BoardPoint, BoardPoint, BoardPoint, BoardPoint] {
@@ -354,6 +420,13 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     boardNudgesEnabled: o.boardNudgesEnabled !== false,
     handedness: o.handedness === 'left' ? 'left' : 'right',
     seatEdge: o.seatEdge === 'start' || o.seatEdge === 'end' || o.seatEdge === 'high' ? o.seatEdge : 'low',
+    controlStillMs: clampNum(o.controlStillMs, 0, 2000, d.controlStillMs),
+    controlGlideSec: clampNum(o.controlGlideSec, 0, 2, d.controlGlideSec),
+    controlReturnMs: clampNum(o.controlReturnMs, 0, 30000, d.controlReturnMs),
+    controlRanges: sanitizeControlRanges(o.controlRanges),
+    controlRemoval: sanitizeControlRemoval(o.controlRemoval),
+    toggleAmount: clampNum(o.toggleAmount, 0, 1, d.toggleAmount),
+    captureQuietMs: clampNum(o.captureQuietMs, 0, 5000, d.captureQuietMs),
   };
 }
 

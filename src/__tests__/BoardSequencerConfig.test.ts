@@ -193,3 +193,54 @@ describe('BoardSequencerConfig — redesign fields', () => {
     expect([...ids].sort()).toEqual(['c3', 'c5']);
   });
 });
+
+describe('BoardSequencerConfig — control counter settings', () => {
+  beforeEach(() => localStorage.clear());
+
+  it('defaults: hold on removal, 150 ms stillness, 0.3 s glide, per-role ranges', () => {
+    expect(DEFAULT_BOARD_SEQUENCER_CONFIG).toMatchObject({
+      controlStillMs: 150, controlGlideSec: 0.3, controlReturnMs: 3000, toggleAmount: 0.35, captureQuietMs: 500,
+    });
+    expect(DEFAULT_BOARD_SEQUENCER_CONFIG.controlRanges).toEqual({
+      volume: { min: 0.2, max: 1 },
+      reverb: { min: 0, max: 0.6 },
+      delay: { min: 0, max: 0.6 },
+      tone: { min: 0, max: 1 },
+      tempo: { min: 60, max: 160 },
+    });
+    expect(DEFAULT_BOARD_SEQUENCER_CONFIG.controlRemoval).toEqual({
+      volume: 'hold', reverb: 'hold', delay: 'hold', tone: 'hold', tempo: 'hold',
+    });
+  });
+
+  it('round-trips tuned control settings', () => {
+    saveBoardSequencerConfig({
+      ...DEFAULT_BOARD_SEQUENCER_CONFIG,
+      controlStillMs: 400,
+      controlRemoval: { ...DEFAULT_BOARD_SEQUENCER_CONFIG.controlRemoval, volume: 'zero' },
+      controlRanges: { ...DEFAULT_BOARD_SEQUENCER_CONFIG.controlRanges, tempo: { min: 50, max: 120 } },
+    });
+    const c = loadBoardSequencerConfig()!;
+    expect(c.controlStillMs).toBe(400);
+    expect(c.controlRemoval.volume).toBe('zero');
+    expect(c.controlRanges.tempo).toEqual({ min: 50, max: 120 });
+  });
+
+  it('sanitises garbage ranges, removals and clamps the timings', () => {
+    localStorage.setItem('admi-board-sequencer', JSON.stringify({
+      controlStillMs: -50, controlGlideSec: 99, controlReturnMs: 'soon', toggleAmount: 4, captureQuietMs: 99999,
+      controlRanges: { volume: { min: 'low', max: 0.8 }, tempo: 'fast' },
+      controlRemoval: { volume: 'explode', tone: 'default' },
+    }));
+    const c = loadBoardSequencerConfig()!;
+    expect(c.controlStillMs).toBe(0);
+    expect(c.controlGlideSec).toBe(2);
+    expect(c.controlReturnMs).toBe(3000);
+    expect(c.toggleAmount).toBe(1);
+    expect(c.captureQuietMs).toBe(5000);
+    expect(c.controlRanges.volume).toEqual({ min: 0.2, max: 0.8 });
+    expect(c.controlRanges.tempo).toEqual({ min: 60, max: 160 });
+    expect(c.controlRemoval.volume).toBe('hold');
+    expect(c.controlRemoval.tone).toBe('default');
+  });
+});
