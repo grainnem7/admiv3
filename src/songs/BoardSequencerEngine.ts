@@ -22,6 +22,19 @@ import { RoundRobinDrumKit } from '../audio/instruments/RoundRobinDrumKit';
 import { audibleTime } from './audibleTime';
 import type { KitDrum } from '../audio/instruments/RoundRobinDrumKit';
 
+/** A note the engine actually scheduled (drives note pops / "Now:" — never inferred from the playhead). */
+export interface FiredNote {
+  row: number;
+  col: number;
+  colour: ColourId;
+  role: ColourRole;
+  audioTime: number;
+  durSec: number;
+  source: 'live' | 'page' | 'loop';
+}
+
+export const FIRED_NOTE_CAP = 256;
+
 /** Minimal chord shape the board needs for chord-locked pitch. */
 export interface BoardChord {
   notes: number[];
@@ -121,6 +134,7 @@ export class BoardSequencerEngine {
   private syncSource: BoardSyncSource | null = null;
   private lastBeatIndex = -1;
   private lastTickTime = 0;
+  private fired: FiredNote[] = [];
 
   constructor(cfg: BoardEngineConfig) {
     this.cfg = cfg;
@@ -203,6 +217,18 @@ export class BoardSequencerEngine {
       volume: -14,
     });
     this.tick.connect(mix);
+  }
+
+  private recordFired(n: FiredNote): void {
+    this.fired.push(n);
+    if (this.fired.length > FIRED_NOTE_CAP) this.fired.splice(0, this.fired.length - FIRED_NOTE_CAP);
+  }
+
+  /** Take (and clear) the notes scheduled since the last call. Polled from rAF. */
+  drainFiredNotes(): FiredNote[] {
+    const out = this.fired;
+    this.fired = [];
+    return out;
   }
 
   setActiveCells(cells: ActiveCell[]): void {
@@ -437,6 +463,7 @@ export class BoardSequencerEngine {
     this.lastInternalBeat = -1;
     this.lastBeatIndex = -1;
     this.lastTickTime = 0;
+    this.fired = [];
     if (this.timer) clearInterval(this.timer);
     this.timer = setInterval(() => this.scheduleTick(), TICK_INTERVAL_MS);
   }
@@ -538,7 +565,12 @@ export class BoardSequencerEngine {
     const cells = page === this.selectedPage ? this.active : (this.pages[page] ?? []);
     // Loop bank: active saved loops layer on top of the live/page cells. Pitch is
     // per-row-absolute, so a plain concat never disturbs voicing.
-    const playCells = this.activeLoops.length > 0 ? [...cells, ...this.activeLoops.flat()] : cells;
+    const liveSource: FiredNote['source'] = page === this.selectedPage ? 'live' : 'page';
+    const tagged: { cell: ActiveCell; source: FiredNote['source'] }[] = [
+      ...cells.map((c) => ({ cell: c, source: liveSource })),
+      ...this.activeLoops.flat().map((c) => ({ cell: c, source: 'loop' as const })),
+    ];
+    const playCells = tagged.map((t) => t.cell);
     // Voice ALL active melodic cells together so pitch is a complementary
     // spread that depends on the whole board (re-voices as pieces change /
     // follows the chord when locked); then play only this column's cells. A
@@ -555,7 +587,7 @@ export class BoardSequencerEngine {
     );
     const oct = this.cfg.octaveShift * 12;
     const h = this.cfg.humanize;
-    for (const cell of playCells) {
+    for (const { cell, source } of tagged) {
       const ch = this.channelById.get(cell.colour);
       if (!ch) continue;
       const role = ch.role;
@@ -577,7 +609,10 @@ export class BoardSequencerEngine {
         const drum = ch.drum && ch.drum.length > 0
           ? ch.drum
           : drumForRow(cell.row, this.cfg.rows, DEFAULT_DRUM_ROWS);
-        if (drum) this.drumKit?.play(drum as KitDrum, vel, stepTime);
+        if (drum && this.drumKit) {
+          this.drumKit.play(drum as KitDrum, vel, stepTime);
+          this.recordFired({ row: cell.row, col: cell.col, colour: cell.colour, role, audioTime: stepTime, durSec, source });
+        }
         continue;
       }
       const voice = this.voiceByChannel.get(ch.id)?.voice;
@@ -589,11 +624,13 @@ export class BoardSequencerEngine {
           ? chordDegreeMidi(degree, chord.notes)
           : degreeMidi(degree, this.cfg.scaleRootMidi, this.cfg.scaleSemitones);
         voice.play(base - 12 + oct, vel, durSec, stepTime);
+        this.recordFired({ row: cell.row, col: cell.col, colour: cell.colour, role, audioTime: stepTime, durSec, source });
       } else if (role === 'chord' || ch.instrument === 'chord') {
         // Chord stab: play a stack (the song chord, or a scale triad) at once.
         for (const n of this.chordStack(cell, chord, 'row')) {
           voice.play(n + oct, vel, durSec, stepTime);
         }
+        this.recordFired({ row: cell.row, col: cell.col, colour: cell.colour, role, audioTime: stepTime, durSec, source });
       } else {
         const midi = voicing.get(`${cell.row},${cell.col}`);
         if (midi !== undefined) {
@@ -601,6 +638,7 @@ export class BoardSequencerEngine {
           // held harmonic bed; others play the short note length.
           const dur = ch.instrument === 'pad' ? secPerBeat * melodicLoop : durSec;
           voice.play(midi + oct, vel, dur, stepTime);
+          this.recordFired({ row: cell.row, col: cell.col, colour: cell.colour, role, audioTime: stepTime, durSec: dur, source });
         }
       }
     }
@@ -609,6 +647,7 @@ export class BoardSequencerEngine {
   stop(): void {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+    this.fired = [];
   }
 
   dispose(): void {
