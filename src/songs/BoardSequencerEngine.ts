@@ -19,6 +19,7 @@ import type { ColourChannel, ColourId, ColourRole } from '../tracking/boardColou
 import { isFaderRole, isControlRole } from '../tracking/boardColours';
 import { getEffectChainManager } from '../effects';
 import { RoundRobinDrumKit } from '../audio/instruments/RoundRobinDrumKit';
+import { audibleTime } from './audibleTime';
 import type { KitDrum } from '../audio/instruments/RoundRobinDrumKit';
 
 /** Minimal chord shape the board needs for chord-locked pitch. */
@@ -194,15 +195,14 @@ export class BoardSequencerEngine {
       del.connect(delayBus);
       this.voiceByChannel.set(ch.id, { voice: v, gain, rev, del });
     }
-    if (this.cfg.tickEnabled) {
-      this.tick = new Tone.MembraneSynth({
-        pitchDecay: 0.008,
-        octaves: 2,
-        envelope: { attack: 0.001, decay: 0.08, sustain: 0, release: 0.02 },
-        volume: -14,
-      });
-      this.tick.connect(mix);
-    }
+    // Always built so the tick can be switched on live (setTickEnabled).
+    this.tick = new Tone.MembraneSynth({
+      pitchDecay: 0.008,
+      octaves: 2,
+      envelope: { attack: 0.001, decay: 0.08, sustain: 0, release: 0.02 },
+      volume: -14,
+    });
+    this.tick.connect(mix);
   }
 
   setActiveCells(cells: ActiveCell[]): void {
@@ -246,20 +246,21 @@ export class BoardSequencerEngine {
   }
 
   private applyFader(role: ColourRole, v: number): void {
-    const t = Tone.now();
+    const t = Tone.immediate();
     if (role === 'volume') this.setVolume(v);
     else if (role === 'reverb') this.reverbBus?.gain.setTargetAtTime(v, t, 0.05);
     else if (role === 'delay') this.delayBus?.gain.setTargetAtTime(v, t, 0.05);
     else if (role === 'tone') this.voiceByChannel.forEach((e) => e.voice.setBrightness(v));
-    else if (role === 'tempo') this.setTempo(80 + v * (300 - 80)); // 80…300 BPM (low ≈ original)
+    else if (role === 'tempo') this.setBpm(80 + v * (300 - 80)); // 80…300 BPM (low ≈ original)
   }
 
   /**
    * Set the standalone BPM live, rebasing the clock so the beat position stays
-   * continuous across the change (no skipped/repeated beats). No effect while
-   * locked to a song (the song drives tempo).
+   * continuous (no skipped/repeated beats). Ignored while locked to a song with
+   * beats (the song owns tempo).
    */
-  private setTempo(bpm: number): void {
+  setBpm(bpm: number): void {
+    if (this.syncSource && this.syncSource.beats.length > 0) return;
     const clamped = Math.max(20, Math.min(400, bpm));
     if (Math.abs(clamped - this.cfg.bpm) < 0.05) return;
     const now = Tone.now();
@@ -268,26 +269,43 @@ export class BoardSequencerEngine {
     this.cfg.bpm = clamped;
   }
 
+  /** The tempo actually in effect: the song's (from beat spacing) when synced, else cfg.bpm. */
+  getBpm(): number {
+    const beats = this.syncSource?.beats;
+    if (beats && beats.length > 1) {
+      const i = Math.min(Math.max(this.lastBeatIndex, 0), beats.length - 2);
+      const spacing = beats[i + 1] - beats[i];
+      if (spacing > 0) return 60 / spacing;
+    }
+    return this.cfg.bpm;
+  }
+
+  /** Context time of the sound being heard now (visuals use this, not Tone.now()). */
+  audibleNow(): number {
+    return audibleTime(this.ctx, performance.now());
+  }
+
+  /** The beat being heard now (synced: the last fired song beat). */
+  private visualBeat(): number {
+    return this.syncSource && this.syncSource.beats.length > 0
+      ? this.lastBeatIndex
+      : Math.floor((this.audibleNow() - this.startSec) / (60 / this.cfg.bpm));
+  }
+
   /** The column the playhead is on right now (drives the visual playhead). */
   getPlayheadCol(cols: number): number {
-    const beat = this.syncSource && this.syncSource.beats.length > 0
-      ? this.lastBeatIndex
-      : Math.floor((Tone.now() - this.startSec) / (60 / this.cfg.bpm));
+    const beat = this.visualBeat();
     return playheadStep(beat, 0, cols, this.cfg.pingPong ?? false);
   }
 
-  /** Whether the current lap is a variation (B) lap — drives the overlay A/B cue.
-   * Reads Tone.now() at draw time while the gate fires from the look-ahead beat,
-   * so the cue is best-effort (can disagree by one lap near a boundary), not sample-accurate. */
+  /** Whether the lap being heard is a variation (B) lap — drives the A/B cue. */
   isVariationLap(): boolean {
-    const beat = this.syncSource && this.syncSource.beats.length > 0
-      ? this.lastBeatIndex
-      : Math.floor((Tone.now() - this.startSec) / (60 / this.cfg.bpm));
+    const beat = this.visualBeat();
     return firesThisLap(true, beat, this.cfg.cols);
   }
 
   private applyToggle(role: ColourRole, on: boolean): void {
-    const t = Tone.now();
+    const t = Tone.immediate();
     const amt = on ? 0.35 : 0;
     if (role === 'reverbToggle') this.reverbBus?.gain.setTargetAtTime(amt, t, 0.05);
     else if (role === 'delayToggle') this.delayBus?.gain.setTargetAtTime(amt, t, 0.05);
@@ -301,13 +319,13 @@ export class BoardSequencerEngine {
   /** Live sound controls (safe to call while running). */
   setVolume(v: number): void {
     this.cfg.volume = v;
-    if (this.mix) this.mix.gain.setTargetAtTime(v, Tone.now(), 0.02);
+    if (this.mix) this.mix.gain.setTargetAtTime(v, Tone.immediate(), 0.02);
   }
 
   /** Live per-channel mixer (no-op if that channel has no voice). */
   setChannelVolume(id: string, v: number): void {
     const e = this.voiceByChannel.get(id);
-    if (e) e.gain.gain.setTargetAtTime(v, Tone.now(), 0.02);
+    if (e) e.gain.gain.setTargetAtTime(v, Tone.immediate(), 0.02);
   }
 
   setChannelTone(id: string, t: number): void {
@@ -316,12 +334,12 @@ export class BoardSequencerEngine {
 
   setChannelReverbSend(id: string, s: number): void {
     const e = this.voiceByChannel.get(id);
-    if (e) e.rev.gain.setTargetAtTime(s, Tone.now(), 0.03);
+    if (e) e.rev.gain.setTargetAtTime(s, Tone.immediate(), 0.03);
   }
 
   setChannelDelaySend(id: string, s: number): void {
     const e = this.voiceByChannel.get(id);
-    if (e) e.del.gain.setTargetAtTime(s, Tone.now(), 0.03);
+    if (e) e.del.gain.setTargetAtTime(s, Tone.immediate(), 0.03);
   }
 
   setOctaveShift(octaves: number): void {
@@ -365,9 +383,7 @@ export class BoardSequencerEngine {
   /** Current sweep direction for the overlay arrow: +1 forward (→), -1 return (←). */
   getPlayheadDirection(): 1 | -1 {
     if (!this.cfg.pingPong) return 1;
-    const beat = this.syncSource && this.syncSource.beats.length > 0
-      ? this.lastBeatIndex
-      : Math.floor((Tone.now() - this.startSec) / (60 / this.cfg.bpm));
+    const beat = this.visualBeat();
     return lapIndex(beat, this.cfg.cols) % 2 === 0 ? 1 : -1;
   }
 
@@ -399,14 +415,19 @@ export class BoardSequencerEngine {
     this.lastBeatIndex = -1;
   }
 
+  /** Turn the settle tick on/off live. */
+  setTickEnabled(on: boolean): void {
+    this.cfg.tickEnabled = on;
+  }
+
   /** Fire the confirmation tick immediately (distinct from a sequenced note). */
   fireTick(): void {
-    if (this.muted || !this.tick) return;
+    if (this.muted || !this.tick || !this.cfg.tickEnabled) return;
     // The tick is a monophonic MembraneSynth; Tone requires strictly increasing
     // start times. Two cells settling in the same audio quantum repeat Tone.now(),
     // so guard against a non-increasing time (was throwing "Start time must be
     // strictly greater than previous start time").
-    const t = strictlyAfter(Tone.now(), this.lastTickTime);
+    const t = strictlyAfter(Tone.immediate(), this.lastTickTime);
     this.lastTickTime = t;
     this.tick.triggerAttackRelease('C2', 0.05, t);
   }
