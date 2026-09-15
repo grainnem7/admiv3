@@ -102,6 +102,10 @@ export interface BoardSequencerStored {
   /** Display + sampling orientation. Calibration is captured in this same space. */
   mirrorX: boolean;
   mirrorY: boolean;
+  /** Chosen camera's deviceId ('' = browser default). Switching invalidates corners. */
+  cameraDeviceId: string;
+  /** Chosen camera's name, to say which camera is missing when it can't be found. */
+  cameraLabel: string;
 }
 
 const ZERO_CORNERS: [BoardPoint, BoardPoint, BoardPoint, BoardPoint] = [
@@ -152,6 +156,8 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   pages: [],
   mirrorX: true,
   mirrorY: false,
+  cameraDeviceId: '',
+  cameraLabel: '',
 };
 
 function isNum(v: unknown): v is number {
@@ -301,6 +307,8 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     pages: sanitizePages(o.pages),
     mirrorX: o.mirrorX !== false,
     mirrorY: o.mirrorY === true,
+    cameraDeviceId: typeof o.cameraDeviceId === 'string' ? o.cameraDeviceId : d.cameraDeviceId,
+    cameraLabel: typeof o.cameraLabel === 'string' ? o.cameraLabel : d.cameraLabel,
   };
 }
 

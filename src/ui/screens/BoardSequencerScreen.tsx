@@ -22,15 +22,16 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import * as Tone from 'tone';
 import { useAppStore } from '../../state/store';
-import { CameraManager } from '../../tracking/CameraManager';
+import { CameraManager, type CameraTrackInfo } from '../../tracking/CameraManager';
+import { frameMeanSaturation, nextColourlessState } from '../../tracking/cameraCheck';
 import { BoardReader } from '../../tracking/BoardReader';
 import { BoardSequencerMode, type PieceColour, type ActiveCell } from '../../tracking/BoardSequencerMode';
 import { ColourRecognizer } from '../../tracking/PieceRecognizer';
 import { counterColourFromRegion } from '../../tracking/ColorTracker';
 import {
   buildChannelMatchers, channelPriority, calibrationFromHsv,
-  describeChannel, freshChannelId, isFaderRole, ROLE_LABELS,
-  type ColourChannel, type ColourId, type ColourRole,
+  describeChannel, freshChannelId, isFaderRole, hueName, ROLE_LABELS,
+  type ColourChannel, type ColourId, type ColourKind, type ColourRole,
 } from '../../tracking/boardColours';
 import { BoardSequencerEngine } from '../../songs/BoardSequencerEngine';
 import { SongPresetEngine } from '../../songs/SongPresetEngine';
@@ -147,6 +148,24 @@ interface DetStats {
 /** What the next camera click calibrates: a brand-new channel, or an existing one. */
 type ColourCalibTarget = { mode: 'new' } | { mode: 'recal'; id: ColourId };
 
+/** The colour the last calibration click read, shown in the camera check readout. */
+interface LastColourSample {
+  hex: string;
+  h: number;
+  s: number;
+  v: number;
+  kind: ColourKind;
+}
+
+/** A camera message: the saved camera is missing, or the camera was just changed. */
+interface CameraNotice {
+  kind: 'fallback' | 'changed';
+  text: string;
+}
+
+/** How often the camera check re-reads the feed's name/settings and colourfulness. */
+const CAMERA_CHECK_MS = 1000;
+
 export default function BoardSequencerScreen() {
   const setCurrentScreen = useAppStore((s) => s.setCurrentScreen);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -190,6 +209,16 @@ export default function BoardSequencerScreen() {
   const [muted, setMuted] = useState(false);
   const mutedRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
+  // Camera choice + camera check: available cameras, what the running one delivers,
+  // a notice (chosen camera missing / just switched), how colourful the frames the
+  // app READS are, and the colour the last calibration click captured.
+  const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
+  const [camInfo, setCamInfo] = useState<CameraTrackInfo | null>(null);
+  const [camNotice, setCamNotice] = useState<CameraNotice | null>(null);
+  const [feedSaturation, setFeedSaturation] = useState<number | null>(null);
+  // Latched (hysteresis) so the black-and-white warning can't flicker/re-announce.
+  const [feedColourless, setFeedColourless] = useState(false);
+  const [lastSample, setLastSample] = useState<LastColourSample | null>(null);
 
   // Optional backing song (Song Preset engine) the board can lock to.
   const songEngineRef = useRef<SongPresetEngine | null>(null);
@@ -397,24 +426,104 @@ export default function BoardSequencerScreen() {
     [],
   );
 
-  // Camera lifecycle.
+  // Audio teardown on leaving the screen.
+  useEffect(() => () => {
+    engineRef.current?.dispose();
+    engineRef.current = null;
+    songEngineRef.current?.dispose();
+    songEngineRef.current = null;
+  }, []);
+
+  // The camera list (names are only available once camera permission is granted,
+  // so it's refreshed after each start attempt, and whenever a camera or phone app
+  // appears). It never switches camera by itself — that would swap the feed under
+  // saved corners, possibly mid-performance; the user picks or presses Try again.
+  const refreshCameras = useCallback(async () => {
+    try {
+      const list = await CameraManager.listDevices();
+      setCameras(list.filter((d) => d.deviceId !== ''));
+    } catch {
+      /* enumerateDevices unsupported — the dropdown just offers the default */
+    }
+  }, []);
+
+  useEffect(() => {
+    const md = navigator.mediaDevices;
+    if (!md?.addEventListener) return;
+    const handler = () => { void refreshCameras(); };
+    md.addEventListener('devicechange', handler);
+    return () => md.removeEventListener('devicechange', handler);
+  }, [refreshCameras]);
+
+  // True while the chosen camera couldn't be found and the default is standing in.
+  const fellBackRef = useRef(false);
+  // Bumped by "Try again" to reopen the saved camera without changing the choice
+  // (it's already selected, so the dropdown can't re-pick it).
+  const [cameraRetry, setCameraRetry] = useState(0);
+
+  // Camera lifecycle — (re)opens whenever the chosen camera changes.
+  const cameraDeviceId = config.cameraDeviceId;
   useEffect(() => {
     const cam = new CameraManager();
     cameraRef.current = cam;
+    // Fresh reader (no temporal history from the old camera) + rebuild the
+    // homography from the new stream's resolution.
     readerRef.current = new BoardReader();
+    homographyRef.current = null;
+    setCamInfo(null);
+    setError(null);
+    let cancelled = false;
     const video = videoRef.current;
     if (video) {
-      cam.start(video).catch((err) => {
+      cam.start(video, cameraDeviceId || undefined).then(({ fellBack }) => {
+        if (cancelled) return;
+        setCamInfo(cam.getTrackInfo());
+        fellBackRef.current = fellBack;
+        if (fellBack) {
+          const name = configRef.current.cameraLabel || 'the chosen camera';
+          setCamNotice({
+            kind: 'fallback',
+            text: `Couldn't find "${name}", so the browser's default camera is being used. Connect it (or start its phone app), then press Try again.`,
+          });
+          setOpenSection((s) => ({ ...s, camera: true })); // show the dropdown + Try again
+        } else {
+          setCamNotice((n) => (n?.kind === 'fallback' ? null : n)); // keep a "camera changed" hint
+        }
+        void refreshCameras();
+      }).catch((err) => {
+        if (cancelled) return;
         setError(err instanceof Error ? err.message : 'Camera failed');
+        // Permission may be granted even though this camera is busy/broken, so load
+        // the list — the user can then pick a different camera.
+        void refreshCameras();
       });
     }
     return () => {
-      engineRef.current?.dispose();
-      engineRef.current = null;
-      songEngineRef.current?.dispose();
-      songEngineRef.current = null;
+      cancelled = true;
       cam.stop();
     };
+  }, [cameraDeviceId, cameraRetry, refreshCameras]);
+
+  // Camera check: once a second, re-read the running camera's settings (virtual
+  // cameras can renegotiate resolution) and measure how colourful the frames the
+  // app actually READS are — a feed can look colourful on screen yet reach the
+  // canvas black-and-white, which silently ruins colour calibration.
+  useEffect(() => {
+    const cv = document.createElement('canvas');
+    cv.width = 64;
+    cv.height = 48;
+    const ctx = cv.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return;
+    const id = window.setInterval(() => {
+      const video = videoRef.current;
+      if (!video || video.videoWidth <= 0) return;
+      ctx.drawImage(video, 0, 0, cv.width, cv.height);
+      const sat = frameMeanSaturation(ctx.getImageData(0, 0, cv.width, cv.height).data);
+      setFeedSaturation(sat);
+      setFeedColourless((prev) => nextColourlessState(prev, sat));
+      setCamInfo(cameraRef.current?.getTrackInfo() ?? null);
+    }, CAMERA_CHECK_MS);
+    return () => window.clearInterval(id);
   }, []);
 
   // Single rAF loop while calibrated: read → draw overlay → (if running) step + audio.
@@ -536,7 +645,15 @@ export default function BoardSequencerScreen() {
 
   const handleCalibrated = useCallback(
     (corners: [BoardPoint, BoardPoint, BoardPoint, BoardPoint]) => {
-      const next = { ...configRef.current, corners, enabled: true };
+      let next = { ...configRef.current, corners, enabled: true };
+      if (fellBackRef.current) {
+        // These corners were clicked on the stand-in camera, so make it the saved
+        // choice — otherwise a Try again / reload would pair them with the missing one.
+        const info = cameraRef.current?.getTrackInfo();
+        next = { ...next, cameraDeviceId: info?.deviceId ?? '', cameraLabel: info?.label ?? '' };
+        fellBackRef.current = false;
+        setCamNotice(null);
+      }
       setConfig(next);
       saveBoardSequencerConfig(next);
       if (videoRef.current) homographyRef.current = buildHomography(corners, videoRef.current);
@@ -659,9 +776,9 @@ export default function BoardSequencerScreen() {
     setRunning(true);
   }, [buildHomography]);
 
-  // Changing orientation invalidates calibration (it was captured in the old
-  // orientation), so force a fresh corner click in the new space.
-  const changeOrientation = useCallback((patch: Partial<BoardSequencerStored>) => {
+  // Changing orientation or camera invalidates calibration (it was captured in the
+  // old view), so force a fresh corner click in the new space.
+  const changeView = useCallback((patch: Partial<BoardSequencerStored>) => {
     homographyRef.current = null;
     setCalibrated(false);
     setConfig((prev) => {
@@ -675,6 +792,24 @@ export default function BoardSequencerScreen() {
     });
     setCalibrating(true);
   }, []);
+
+  // Pick a different camera (external webcam, phone app, …). A new camera sees the
+  // board from a different place, so the corners are re-clicked; colours are kept
+  // but usually need recalibrating because each camera renders colour differently.
+  const changeCamera = useCallback((deviceId: string) => {
+    const label = cameras.find((c) => c.deviceId === deviceId)?.label ?? '';
+    fellBackRef.current = false; // an explicit choice supersedes any fallback
+    setLastSample(null);
+    setFeedSaturation(null);
+    setFeedColourless(false);
+    setCamNotice(configRef.current.channels.length > 0
+      ? {
+        kind: 'changed',
+        text: 'Camera changed: click the four board corners, then press ⟳ on each colour and click its piece again.',
+      }
+      : null);
+    changeView({ cameraDeviceId: deviceId, cameraLabel: label });
+  }, [cameras, changeView]);
 
   // Average HSV under a click (in displayed space). Draws the frame with the
   // same mirror transforms so a click on the displayed video samples the right
@@ -720,6 +855,7 @@ export default function BoardSequencerScreen() {
     const s = sampleAvgHsvAt(nx, ny);
     if (!s) return;
     const cal = calibrationFromHsv({ h: s.h, s: s.s, v: s.v });
+    setLastSample({ hex: s.hex, h: s.h, s: s.s, v: s.v, kind: cal.kind });
     setConfig((prev) => {
       let channels: ColourChannel[];
       if (target.mode === 'new') {
@@ -852,24 +988,49 @@ export default function BoardSequencerScreen() {
             title="Camera & board"
             open={!!openSection.camera} onToggle={() => toggleSection('camera')}
           >
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
+              Camera
+              <select
+                value={config.cameraDeviceId} disabled={running}
+                onChange={(e) => changeCamera(e.target.value)}
+              >
+                <option value="">Browser default</option>
+                {cameras.map((c, i) => (
+                  <option key={c.deviceId} value={c.deviceId}>{c.label || `Camera ${i + 1}`}</option>
+                ))}
+                {config.cameraDeviceId && !cameras.some((c) => c.deviceId === config.cameraDeviceId) && (
+                  <option value={config.cameraDeviceId}>
+                    {config.cameraLabel || 'Saved camera'} (not connected)
+                  </option>
+                )}
+              </select>
+            </label>
+            {camNotice?.kind === 'fallback' && (
+              <button type="button" disabled={running} onClick={() => setCameraRetry((n) => n + 1)}>
+                Try again
+              </button>
+            )}
+            <p style={{ fontSize: 11, opacity: 0.6, margin: 0 }}>
+              Using a phone? Start its webcam app first; it then appears in this list.
+            </p>
             <button type="button" onClick={() => setCalibrating(true)}>
               {calibrated ? 'Recalibrate corners' : 'Calibrate corners'}
             </button>
             <label>
               <input
                 type="checkbox" checked={config.mirrorX} disabled={running}
-                onChange={(e) => changeOrientation({ mirrorX: e.target.checked })}
+                onChange={(e) => changeView({ mirrorX: e.target.checked })}
               />
               Mirror horizontally
             </label>
             <label>
               <input
                 type="checkbox" checked={config.mirrorY} disabled={running}
-                onChange={(e) => changeOrientation({ mirrorY: e.target.checked })}
+                onChange={(e) => changeView({ mirrorY: e.target.checked })}
               />
               Flip vertically
             </label>
-            <p style={{ fontSize: 11, opacity: 0.6, margin: 0 }}>Stop the sequencer to change orientation.</p>
+            <p style={{ fontSize: 11, opacity: 0.6, margin: 0 }}>Stop the sequencer to change camera or orientation.</p>
           </Section>
 
           <Section
@@ -1344,6 +1505,42 @@ export default function BoardSequencerScreen() {
               </div>
             )}
             {error && <div style={{ position: 'absolute', top: 8, left: 8, color: '#ff8080' }}>{error}</div>}
+          </div>
+          {/* Camera check: which camera, what it delivers, whether the frames the
+              app reads carry colour, and what the last colour click captured. */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginTop: 8, fontSize: 12, opacity: 0.9 }}>
+            <span>
+              Camera: <strong>{camInfo ? (camInfo.label || 'Unnamed camera') : error ? 'not available' : 'starting…'}</strong>
+              {camInfo && camInfo.width > 0 && ` · ${camInfo.width}×${camInfo.height}`}
+              {camInfo && camInfo.frameRate > 0 && ` @ ${Math.round(camInfo.frameRate)} fps`}
+            </span>
+            {/* Always-mounted live regions: only their text changes, so each message is
+                announced once (and the camera notice is visible even with the
+                Camera & board section collapsed). */}
+            <span role="status" style={{ color: '#ffb74d' }}>{camNotice?.text ?? ''}</span>
+            <span role="alert" style={{ color: '#ffb74d' }}>
+              {feedColourless
+                ? '⚠ This camera\'s picture is reaching the app in black and white, so piece colours can\'t be told apart. Try another camera, or turn off filters/effects in its app.'
+                : ''}
+            </span>
+            {feedSaturation !== null && (
+              <span>
+                Colour in picture: {feedColourless ? 'black and white' : 'OK'} (colour level {Math.round(feedSaturation)})
+              </span>
+            )}
+            {lastSample && (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                Last colour click:
+                <span style={{
+                  width: 12, height: 12, borderRadius: '50%', background: lastSample.hex, border: '1px solid #0008',
+                }}
+                />
+                <strong>
+                  {lastSample.kind === 'hue' ? hueName(lastSample.h) : lastSample.kind === 'black' ? 'Black' : 'White'}
+                </strong>
+                · hue {Math.round(lastSample.h)}° · colour level {Math.round(lastSample.s)} · brightness {Math.round(lastSample.v)}
+              </span>
+            )}
           </div>
         </div>
 

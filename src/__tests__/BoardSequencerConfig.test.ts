@@ -10,6 +10,29 @@ import {
 describe('BoardSequencerConfig', () => {
   beforeEach(() => localStorage.clear());
 
+  it('defaults to the browser default camera (empty id/label)', () => {
+    expect(DEFAULT_BOARD_SEQUENCER_CONFIG.cameraDeviceId).toBe('');
+    expect(DEFAULT_BOARD_SEQUENCER_CONFIG.cameraLabel).toBe('');
+    localStorage.setItem('admi-board-sequencer', JSON.stringify({ bpm: 90 }));
+    expect(loadBoardSequencerConfig()?.cameraDeviceId).toBe('');
+    expect(loadBoardSequencerConfig()?.cameraLabel).toBe('');
+  });
+
+  it('round-trips the chosen camera', () => {
+    saveBoardSequencerConfig({
+      ...DEFAULT_BOARD_SEQUENCER_CONFIG, cameraDeviceId: 'abc123', cameraLabel: 'USB webcam',
+    });
+    const loaded = loadBoardSequencerConfig();
+    expect(loaded?.cameraDeviceId).toBe('abc123');
+    expect(loaded?.cameraLabel).toBe('USB webcam');
+  });
+
+  it('sanitises a garbage camera choice back to the default', () => {
+    localStorage.setItem('admi-board-sequencer', JSON.stringify({ cameraDeviceId: 42, cameraLabel: {} }));
+    expect(loadBoardSequencerConfig()?.cameraDeviceId).toBe('');
+    expect(loadBoardSequencerConfig()?.cameraLabel).toBe('');
+  });
+
   it('returns null when nothing is stored', () => {
     expect(loadBoardSequencerConfig()).toBeNull();
   });
