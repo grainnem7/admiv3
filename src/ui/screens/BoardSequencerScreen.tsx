@@ -44,9 +44,11 @@ import { applyHomography, type Mat3 } from '../../utils/homography';
 import { SCALE_PRESETS, NOTE_NAMES } from '../../songs/boardSequencerScale';
 import { clearLoopSlot } from '../../songs/loopBank';
 import {
-  loadBoardSequencerConfig, saveBoardSequencerConfig, DEFAULT_BOARD_SEQUENCER_CONFIG,
-  type BoardSequencerStored, type BoardPoint,
+  DEFAULT_BOARD_SEQUENCER_CONFIG, type BoardSequencerStored, type BoardPoint,
 } from '../../profiles/BoardSequencerConfig';
+import {
+  loadActiveBoardConfig as loadBoardSequencerConfig, saveActiveBoardConfig as saveBoardSequencerConfig,
+} from '../../profiles/BoardProfiles';
 import BoardCalibrationOverlay from '../components/board/BoardCalibrationOverlay';
 import WarpedBoardView from '../components/board/WarpedBoardView';
 import LoopBankView from '../components/board/LoopBankView';

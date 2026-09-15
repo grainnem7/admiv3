@@ -23,11 +23,14 @@ import {
   type SurfacePressStored,
 } from './SurfacePressConfig';
 import {
-  loadBoardSequencerConfig as loadBoardCfg,
-  saveBoardSequencerConfig as saveBoardCfg,
   clearBoardSequencerConfig as clearBoardCfg,
   type BoardSequencerStored,
 } from './BoardSequencerConfig';
+import {
+  loadActiveBoardConfig as loadBoardCfg,
+  saveActiveBoardConfig as saveBoardCfg,
+  RIG_KEY, PLAYERS_KEY, ACTIVE_PLAYER_KEY,
+} from './BoardProfiles';
 
 const STORAGE_KEY = 'admi-input-profiles';
 const ACTIVE_PROFILE_KEY = 'admi-active-profile';
@@ -328,9 +331,15 @@ export class InputProfileManager {
     saveBoardCfg(config);
   }
 
-  /** Remove all stored board-sequencer configuration. */
+  /** Remove all stored board-sequencer configuration (rig, players and the legacy key). */
   clearBoardSequencerConfig(): void {
     clearBoardCfg();
+    try {
+      if (typeof localStorage === 'undefined') return;
+      for (const key of [RIG_KEY, PLAYERS_KEY, ACTIVE_PLAYER_KEY]) localStorage.removeItem(key);
+    } catch (error) {
+      console.warn('[InputProfileManager] Failed to clear board profiles:', error);
+    }
   }
 
   /**
