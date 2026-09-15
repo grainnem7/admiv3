@@ -17,6 +17,27 @@ export interface LoopBankState {
   saved: (ActiveCell[] | null)[];
   /** Whether a counter was on each slot last frame (for rising-edge capture). */
   present: boolean[];
+  /** How long the pattern has been unchanged (ms), for the capture guard. */
+  quietMs?: number;
+  /** Shape of the pattern the quiet window is measuring. */
+  patternKey?: string;
+  /** Slots that were just cleared: they can't re-capture until the counter is lifted. */
+  blocked?: boolean[];
+}
+
+export interface LoopBankOptions {
+  /** The pattern must be unchanged this long before a slot captures it. 0 = capture at once. */
+  quietMs: number;
+  /** Milliseconds since the previous frame. */
+  dtMs: number;
+}
+
+/** A stable description of a pattern, so "unchanged" ignores detection order. */
+function patternKeyOf(cells: ActiveCell[]): string {
+  return cells
+    .map((c) => `${c.row},${c.col},${c.colour}${c.conditional ? ',v' : ''}`)
+    .sort()
+    .join('|');
 }
 
 export interface LoopBankStep {
@@ -30,7 +51,7 @@ export interface LoopBankStep {
 /** A fresh, all-empty bank for `slotCount` slots. */
 export function emptyLoopBank(slotCount: number): LoopBankState {
   const n = Math.max(0, Math.floor(slotCount));
-  return { saved: Array(n).fill(null), present: Array(n).fill(false) };
+  return { saved: Array(n).fill(null), present: Array(n).fill(false), quietMs: 0, patternKey: '' };
 }
 
 /**
@@ -43,25 +64,46 @@ export function stepLoopBank(
   present: boolean[],
   patternCells: ActiveCell[],
   slotCount: number,
+  opts?: LoopBankOptions,
 ): LoopBankStep {
   const n = Math.max(0, Math.floor(slotCount));
   const saved: (ActiveCell[] | null)[] = [];
   const nextPresent: boolean[] = [];
+  const nextBlocked: boolean[] = [];
   const active: ActiveCell[][] = [];
   const captured: number[] = [];
+
+  // Capture guard: a hand still arranging counters means the pattern is mid-edit, so a
+  // slot saves nothing until the board has been unchanged for the quiet window.
+  const quietMs = opts?.quietMs ?? 0;
+  const key = quietMs > 0 ? patternKeyOf(patternCells) : '';
+  const quiet = quietMs > 0 && key === (prev.patternKey ?? '')
+    ? (prev.quietMs ?? 0) + (opts?.dtMs ?? 0)
+    : 0;
+  const settledLongEnough = quietMs <= 0 || quiet >= quietMs;
+
   for (let i = 0; i < n; i++) {
     const here = present[i] === true;
     const was = prev.present[i] === true;
     let slot = prev.saved[i] ?? null;
-    if (here && !was && slot === null) {
+    // Lifting the counter re-arms a slot that was cleared while it sat there.
+    const blocked = here && (prev.blocked?.[i] ?? false);
+    // The counter may land before the pattern is quiet, so capture is a level check
+    // (counter here, slot still empty), not only the rising edge.
+    if (here && !blocked && slot === null && settledLongEnough && (!was || quietMs > 0)) {
       slot = patternCells.map((c) => ({ ...c })); // capture a copy
       captured.push(i);
     }
     saved[i] = slot;
     nextPresent[i] = here;
+    nextBlocked[i] = blocked;
     if (here && slot !== null) active.push(slot);
   }
-  return { state: { saved, present: nextPresent }, active, captured };
+  return {
+    state: { saved, present: nextPresent, quietMs: quiet, patternKey: key, blocked: nextBlocked },
+    active,
+    captured,
+  };
 }
 
 /** Empty a slot (the screen Clear button); returns a new state (present unchanged). */
@@ -69,5 +111,9 @@ export function clearLoopSlot(state: LoopBankState, slot: number): LoopBankState
   if (slot < 0 || slot >= state.saved.length) return state;
   const saved = state.saved.slice();
   saved[slot] = null;
-  return { saved, present: state.present.slice() };
+  // Clearing is the undo: the slot must not re-capture under the counter that is still
+  // sitting on it, so it stays blocked until that counter is lifted.
+  const blocked = (state.blocked ?? state.saved.map(() => false)).slice();
+  blocked[slot] = true;
+  return { saved, present: state.present.slice(), quietMs: 0, patternKey: state.patternKey, blocked };
 }

@@ -18,6 +18,12 @@ export interface BoardFrameCfg {
   variationEnabled: boolean;
   variationOffsetThreshold: number;
   numPages: number;
+  /** The pattern must be unchanged this long before a slot captures it. 0/absent = at once. */
+  captureQuietMs?: number;
+  /** Colours with a sequenced job: only these are worth saving into a loop slot. */
+  sequencedColours?: ReadonlySet<ColourId>;
+  /** Control colours: a fader or toggle counter must never trigger a loop slot. */
+  controlColours?: ReadonlySet<ColourId>;
 }
 
 export interface BoardFrameInput {
@@ -26,6 +32,8 @@ export interface BoardFrameInput {
   running: boolean;
   modeResult: BoardStepResult | null;
   loopBank: LoopBankState;
+  /** Milliseconds since the previous processed camera frame (drives the capture guard). */
+  dtMs?: number;
 }
 
 export interface BoardFrameOutput {
@@ -110,7 +118,7 @@ export function suppressSpill(readings: CellReading[], ctx: SpillCtx): CellReadi
     : r));
 }
 
-export function stepBoardFrame({ readings, cfg, running, modeResult, loopBank }: BoardFrameInput): BoardFrameOutput {
+export function stepBoardFrame({ readings, cfg, running, modeResult, loopBank, dtMs }: BoardFrameInput): BoardFrameOutput {
   const occupied = new Map<string, PieceColour>();
   const byColour: Partial<Record<ColourId, number>> = {};
   for (const rd of readings) {
@@ -137,9 +145,17 @@ export function stepBoardFrame({ readings, cfg, running, modeResult, loopBank }:
     if (cfg.loopBankEnabled) {
       const bankRow = cfg.rows - 1;
       patternCells = modeResult.activeCells.filter((c) => c.row < bankRow);
+      // A volume counter parked on the bank row is a control, not a loop trigger.
       const present = Array.from({ length: cfg.cols }, (_, i) =>
-        modeResult.activeCells.some((c) => c.row === bankRow && c.col === i));
-      const stepped = stepLoopBank(loopBank, present, patternCells, cfg.cols);
+        modeResult.activeCells.some((c) => c.row === bankRow && c.col === i
+          && !cfg.controlColours?.has(c.colour)));
+      // Only cells that actually play are worth saving.
+      const capturable = cfg.sequencedColours
+        ? patternCells.filter((c) => cfg.sequencedColours?.has(c.colour))
+        : patternCells;
+      const stepped = stepLoopBank(loopBank, present, capturable, cfg.cols, {
+        quietMs: cfg.captureQuietMs ?? 0, dtMs: dtMs ?? 0,
+      });
       nextBank = stepped.state;
       captured = stepped.captured;
       activeLoops = stepped.active;

@@ -9,7 +9,11 @@ import { CameraManager, type CameraTrackInfo } from '../../../tracking/CameraMan
 import { BoardReader } from '../../../tracking/BoardReader';
 import type { ActiveCell, BoardSequencerMode, CellReading } from '../../../tracking/BoardSequencerMode';
 import { ColourRecognizer } from '../../../tracking/PieceRecognizer';
-import { buildChannelMatchers, channelPriority, type ColourMatcher } from '../../../tracking/boardColours';
+import {
+  buildChannelMatchers, channelPriority, isControlRole, isSequencedRole,
+  type ColourId, type ColourMatcher,
+} from '../../../tracking/boardColours';
+import { initialControlState, stepControls, type ControlsResult } from '../../../tracking/controlCounters';
 import { frameMeanSaturation } from '../../../tracking/cameraCheck';
 import { startVideoFrameLoop } from '../../../tracking/videoFrameLoop';
 import { stepBoardFrame, suppressSpill, type BoardFrameOutput } from '../../../tracking/boardFrame';
@@ -22,6 +26,8 @@ import { homographyForCorners } from './homographyForCorners';
 export interface RuntimeFrame {
   readings: CellReading[];
   frame: BoardFrameOutput;
+  /** The control counters' committed values this frame (drives the legend). */
+  controls: ControlsResult;
   /** performance.now() of the camera frame this came from. */
   atMs: number;
 }
@@ -127,6 +133,9 @@ export function useBoardRuntime(opts: {
     let matchersFor: { channels: BoardSequencerStored['channels']; minFill: number } | null = null;
     let matchers: ColourMatcher[] = [];
     let recognizer = new ColourRecognizer(0.1, []);
+    let sequencedColours = new Set<ColourId>();
+    let controlColours = new Set<ColourId>();
+    let controls = initialControlState();
 
     const stopFrames = startVideoFrameLoop(video, ({ nowMs, dtMs }) => {
       const reader = readerRef.current;
@@ -143,6 +152,8 @@ export function useBoardRuntime(opts: {
         matchers = buildChannelMatchers(cfg.channels);
         recognizer = new ColourRecognizer(cfg.minFilledFraction, channelPriority(cfg.channels));
         matchersFor = { channels: cfg.channels, minFill: cfg.minFilledFraction };
+        sequencedColours = new Set(cfg.channels.filter((c) => isSequencedRole(c.role)).map((c) => c.id));
+        controlColours = new Set(cfg.channels.filter((c) => isControlRole(c.role)).map((c) => c.id));
       }
       // One counter, one box: a counter on a grid line is seen by both cells, so the
       // spill is cleared before anything settles or plays.
@@ -155,8 +166,27 @@ export function useBoardRuntime(opts: {
       engineRef.current?.setPingPong(cfg.pingPong);
       const running = runningRef.current && !!modeRef.current && !!engineRef.current;
       const modeResult = running && modeRef.current ? modeRef.current.step(readings, dtMs, nowMs) : null;
-      const frame = stepBoardFrame({ readings, cfg, running, modeResult, loopBank: loopBankRef.current });
+      const frame = stepBoardFrame({
+        readings,
+        cfg: { ...cfg, sequencedColours, controlColours },
+        running,
+        modeResult,
+        loopBank: loopBankRef.current,
+        dtMs,
+      });
+      // Controls read the RAW frame, not the settle: a slide should follow the hand.
+      const ctl = stepControls(controls, readings, cfg.channels, {
+        faderAxis: cfg.faderAxis,
+        boardSquares: cfg.boardSquares,
+        controlStillMs: cfg.controlStillMs,
+        controlReturnMs: cfg.controlReturnMs,
+        controlRanges: cfg.controlRanges,
+        controlRemoval: cfg.controlRemoval,
+        defaults: { volume: cfg.volume },
+      }, dtMs);
+      controls = ctl.state;
       const engine = engineRef.current;
+      engine?.setControlValues(ctl.values, ctl.toggles);
       if (running && engine) {
         loopBankRef.current = frame.loopBank;
         if (frame.captured.length > 0) callbacksRef.current.onLoopSlotsCaptured(frame.loopBank.saved);
@@ -165,7 +195,7 @@ export function useBoardRuntime(opts: {
         activeCellsRef.current = frame.patternCells;
         if (frame.fireTick) engine.fireTick();
       }
-      const rf: RuntimeFrame = { readings, frame, atMs: nowMs };
+      const rf: RuntimeFrame = { readings, frame, controls: ctl, atMs: nowMs };
       latestFrameRef.current = rf;
       callbacksRef.current.onFrame?.(rf, dtMs);
     });

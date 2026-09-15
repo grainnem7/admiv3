@@ -13,10 +13,10 @@
 
 import * as Tone from 'tone';
 import { BoardSequencerVoice } from './voices/BoardSequencerVoice';
-import { voicingForCells, degreeMidi, chordDegreeMidi, drumForRow, DEFAULT_DRUM_ROWS, loopLen, playheadStep, lapIndex, strictlyAfter, pageIndexAt, faderValue, firesThisLap, firesThisLapPaged } from './boardSequencerScale';
+import { voicingForCells, degreeMidi, chordDegreeMidi, drumForRow, DEFAULT_DRUM_ROWS, loopLen, playheadStep, lapIndex, strictlyAfter, pageIndexAt, firesThisLap, firesThisLapPaged } from './boardSequencerScale';
 import type { ActiveCell } from '../tracking/BoardSequencerMode';
 import type { ColourChannel, ColourId, ColourRole } from '../tracking/boardColours';
-import { isFaderRole, isControlRole } from '../tracking/boardColours';
+import type { FaderRole } from '../profiles/BoardSequencerConfig';
 import { getEffectChainManager } from '../effects';
 import { RoundRobinDrumKit } from '../audio/instruments/RoundRobinDrumKit';
 import { audibleTime } from './audibleTime';
@@ -80,6 +80,10 @@ export interface BoardEngineConfig {
   numPages: number;
   /** Ping-pong playhead: sweep → then ← (repeat-edge) instead of always left→right. */
   pingPong?: boolean;
+  /** Effect amount a toggle colour switches in (default 0.35). */
+  toggleAmount?: number;
+  /** Glide time for control-counter changes, so a slide never clicks (default 0.3 s). */
+  controlGlideSec?: number;
 }
 
 const LOOKAHEAD_SEC = 0.1;
@@ -109,7 +113,17 @@ export class BoardSequencerEngine {
   // with its own gain + reverb/delay sends into the shared buses.
   private voiceByChannel = new Map<string, {
     voice: BoardSequencerVoice; gain: GainNode; rev: GainNode; del: GainNode;
+    /** The channel's own send/tone settings; control counters scale these, never replace them. */
+    revBase: number; delBase: number; toneBase: number;
   }>();
+  /**
+   * Effect amount from the control counters (1 = the channels' own settings). One writer:
+   * a reverb/delay fader or its toggle scales every channel's send, instead of two places
+   * fighting over the bus gain.
+   */
+  private reverbAmount = 1;
+  private delayAmount = 1;
+  private toneScale = 1;
   private channelById = new Map<string, ColourChannel>();
   private drumKit: RoundRobinDrumKit | null = null;
   private tick: Tone.MembraneSynth | null = null;
@@ -199,15 +213,19 @@ export class BoardSequencerEngine {
       gain.gain.value = ch.volume ?? 1;
       v.connect(gain);
       gain.connect(mix);
+      const revBase = ch.reverbSend ?? 0.18;
+      const delBase = ch.delaySend ?? 0;
       const rev = ctx.createGain();
-      rev.gain.value = ch.reverbSend ?? 0.18;
+      rev.gain.value = revBase * this.reverbAmount;
       gain.connect(rev);
       rev.connect(reverbBus);
       const del = ctx.createGain();
-      del.gain.value = ch.delaySend ?? 0;
+      del.gain.value = delBase * this.delayAmount;
       gain.connect(del);
       del.connect(delayBus);
-      this.voiceByChannel.set(ch.id, { voice: v, gain, rev, del });
+      this.voiceByChannel.set(ch.id, {
+        voice: v, gain, rev, del, revBase, delBase, toneBase: ch.tone ?? 1,
+      });
     }
     // Always built so the tick can be switched on live (setTickEnabled).
     this.tick = new Tone.MembraneSynth({
@@ -233,7 +251,6 @@ export class BoardSequencerEngine {
 
   setActiveCells(cells: ActiveCell[]): void {
     this.active = cells;
-    this.applyControls(cells);
   }
 
   /** Set the layered loops (from the loop bank) that play atop the live pattern. */
@@ -242,42 +259,43 @@ export class BoardSequencerEngine {
   }
 
   /**
-   * Apply control-colour pieces live: fader colours map their pieces' position
-   * to a 0..1 value (volume / reverb / delay / tone); toggle colours switch an
-   * effect on while a piece of that colour is present. Reads the LIVE board only
-   * (controls are not paged). Cheap no-op when no colour has a control role.
+   * Apply the values read from the control counters this frame. Already ranged and
+   * debounced by `stepControls`, so this only routes them. A fader wins over its toggle,
+   * so the two can never fight over the same parameter, and a control that isn't present
+   * simply isn't in `values` — its parameter is left exactly as it was.
    */
-  private applyControls(active: ActiveCell[]): void {
-    const byColour = new Map<ColourId, ActiveCell[]>();
-    for (const c of active) {
-      const list = byColour.get(c.colour);
-      if (list) list.push(c); else byColour.set(c.colour, [c]);
-    }
-    for (const ch of this.cfg.channels) {
-      if (!isControlRole(ch.role)) continue;
-      const cells = byColour.get(ch.id) ?? [];
-      if (isFaderRole(ch.role)) {
-        const fv = faderValue(cells, this.cfg.faderAxis, this.cfg.rows, this.cfg.cols);
-        if (fv !== null) {
-          this.applyFader(ch.role, fv);
-        } else if (ch.role !== 'tempo') {
-          // No piece → most faders fall to 0 (a missing volume counter = silence),
-          // but tempo KEEPS the current tempo rather than crawling to the minimum.
-          this.applyFader(ch.role, 0);
-        }
-      } else {
-        this.applyToggle(ch.role, cells.length > 0);
-      }
+  setControlValues(
+    values: Partial<Record<FaderRole, number>>,
+    toggles: Partial<Record<ColourRole, boolean>> = {},
+  ): void {
+    const glide = this.cfg.controlGlideSec ?? 0.3;
+    const amt = this.cfg.toggleAmount ?? 0.35;
+    if (values.volume !== undefined) this.setVolume(values.volume, glide);
+    if (values.tempo !== undefined) this.setBpm(values.tempo);
+
+    const toggleAmount = (on: boolean | undefined): number | undefined =>
+      (on === undefined ? undefined : (on ? amt : 0));
+    const reverb = values.reverb ?? toggleAmount(toggles.reverbToggle);
+    const delay = values.delay ?? toggleAmount(toggles.delayToggle);
+    let sends = false;
+    if (reverb !== undefined && reverb !== this.reverbAmount) { this.reverbAmount = reverb; sends = true; }
+    if (delay !== undefined && delay !== this.delayAmount) { this.delayAmount = delay; sends = true; }
+    if (sends) this.applyEffectAmounts(glide);
+
+    if (values.tone !== undefined && values.tone !== this.toneScale) {
+      this.toneScale = values.tone;
+      // Scale each channel's own Tone rather than overwriting it, so a bright lead and a
+      // dark bass keep their relationship.
+      this.voiceByChannel.forEach((e) => e.voice.setBrightness(e.toneBase * this.toneScale));
     }
   }
 
-  private applyFader(role: ColourRole, v: number): void {
+  private applyEffectAmounts(glide: number): void {
     const t = Tone.immediate();
-    if (role === 'volume') this.setVolume(v);
-    else if (role === 'reverb') this.reverbBus?.gain.setTargetAtTime(v, t, 0.05);
-    else if (role === 'delay') this.delayBus?.gain.setTargetAtTime(v, t, 0.05);
-    else if (role === 'tone') this.voiceByChannel.forEach((e) => e.voice.setBrightness(v));
-    else if (role === 'tempo') this.setBpm(80 + v * (300 - 80)); // 80…300 BPM (low ≈ original)
+    this.voiceByChannel.forEach((e) => {
+      e.rev.gain.setTargetAtTime(e.revBase * this.reverbAmount, t, glide);
+      e.del.gain.setTargetAtTime(e.delBase * this.delayAmount, t, glide);
+    });
   }
 
   /**
@@ -330,22 +348,15 @@ export class BoardSequencerEngine {
     return firesThisLap(true, beat, this.cfg.cols);
   }
 
-  private applyToggle(role: ColourRole, on: boolean): void {
-    const t = Tone.immediate();
-    const amt = on ? 0.35 : 0;
-    if (role === 'reverbToggle') this.reverbBus?.gain.setTargetAtTime(amt, t, 0.05);
-    else if (role === 'delayToggle') this.delayBus?.gain.setTargetAtTime(amt, t, 0.05);
-  }
-
   /** Pause/resume all sound (the clock + detection keep running; output is silent). */
   setMuted(muted: boolean): void {
     this.muted = muted;
   }
 
   /** Live sound controls (safe to call while running). */
-  setVolume(v: number): void {
+  setVolume(v: number, glideSec = 0.02): void {
     this.cfg.volume = v;
-    if (this.mix) this.mix.gain.setTargetAtTime(v, Tone.immediate(), 0.02);
+    if (this.mix) this.mix.gain.setTargetAtTime(v, Tone.immediate(), glideSec);
   }
 
   /** Live per-channel mixer (no-op if that channel has no voice). */
@@ -360,7 +371,10 @@ export class BoardSequencerEngine {
 
   setChannelReverbSend(id: string, s: number): void {
     const e = this.voiceByChannel.get(id);
-    if (e) e.rev.gain.setTargetAtTime(s, Tone.immediate(), 0.03);
+    if (e) {
+      e.revBase = s;
+      e.rev.gain.setTargetAtTime(s * this.reverbAmount, Tone.immediate(), 0.03);
+    }
   }
 
   setChannelDelaySend(id: string, s: number): void {

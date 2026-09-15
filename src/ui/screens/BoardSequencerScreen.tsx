@@ -619,6 +619,7 @@ export default function BoardSequencerScreen() {
       loopStepsBlue: cfg.loopStepsBlue, numPages: cfg.numPages,
       octaveShift: cfg.octaveShift, volume: cfg.volume,
       pingPong: cfg.pingPong,
+      toggleAmount: cfg.toggleAmount, controlGlideSec: cfg.controlGlideSec,
     });
     await engine.init();
     engine.setMuted(mutedRef.current);
