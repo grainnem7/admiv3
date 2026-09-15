@@ -27,6 +27,7 @@ import InfoScreen from './screens/InfoScreen';
 
 // Components
 import MuteButton from './components/MuteButton';
+import { globalSpaceTogglesMute, showGlobalMuteButton } from './globalShortcuts';
 import DebugPanel from './facilitator/DebugPanel';
 import GuidedOverlay from './components/performance/GuidedOverlay';
 import CalibrationModal from './components/performance/CalibrationModal';
@@ -73,6 +74,7 @@ function App() {
 
       switch (e.key) {
         case ' ':
+          if (!globalSpaceTogglesMute(useAppStore.getState().currentScreen)) break;
           e.preventDefault();
           await getAudioEngine().resume();
           toggleMute();
@@ -139,8 +141,8 @@ function App() {
       {/* Calibration overlay (can be triggered from performance) */}
       <CalibrationModal />
 
-      {/* Always visible mute button */}
-      <MuteButton />
+      {/* Always visible mute button (not on the board, which has its own) */}
+      {showGlobalMuteButton(screen) && <MuteButton />}
 
       {/* Debug panel for facilitators */}
       {showDebug && <DebugPanel />}

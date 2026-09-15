@@ -187,9 +187,10 @@ export default function BoardSequencerScreen() {
   // (it's already selected, so the dropdown can't re-pick it).
   const [cameraRetry, setCameraRetry] = useState(0);
 
-  // Not-yet-calibrated is a first-class state: true only once a config has been
-  // saved (loaded from storage or calibrated this session).
-  const [calibrated, setCalibrated] = useState<boolean>(storedRef.current !== null);
+  // Not-yet-calibrated is a first-class state. It comes from the config itself
+  // (`enabled` is only true once corners have been clicked and saved), so a
+  // setting saved before calibrating can't make the board look ready.
+  const calibrated = config.enabled;
   const [calibrating, setCalibrating] = useState(false);
 
   // The runtime owns the camera, the per-camera-frame detection loop and the rAF draw
@@ -534,7 +535,6 @@ export default function BoardSequencerScreen() {
       saveBoardSequencerConfig(next);
       const video = videoRef.current;
       if (video) homographyRef.current = homographyForCorners(corners, video.videoWidth, video.videoHeight);
-      setCalibrated(true);
       setCalibrating(false);
     },
     [homographyRef, videoRef],
@@ -658,7 +658,6 @@ export default function BoardSequencerScreen() {
   // old view), so force a fresh corner click in the new space.
   const changeView = useCallback((patch: Partial<BoardSequencerStored>) => {
     homographyRef.current = null;
-    setCalibrated(false);
     setConfig((prev) => {
       const next = {
         ...prev, ...patch,
