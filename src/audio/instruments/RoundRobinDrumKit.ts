@@ -138,12 +138,16 @@ export class RoundRobinDrumKit {
     const i = this.rrIndex.get(key) ?? 0;
     const p = players[i];
     this.rrIndex.set(key, (i + 1) % players.length);
-    p.volume.value = gainDb;
+    // Schedule the volume AT the hit's own time. Writing `.value` applies immediately, so
+    // two hits scheduled inside the look-ahead window both ended up at the later one's
+    // volume — a quiet ghost note next to an accent made both loud.
+    if (time !== undefined) p.volume.setValueAtTime(gainDb, time);
+    else p.volume.value = gainDb;
     p.start(time); // start(undefined) === start-now in Tone.js; safe for existing callers
   }
 }
 
 /** Map a 0–1 velocity to a dB gain (−24 dB … 0 dB) for Tone.Player.volume. */
-function velToDb(v: number): number {
+export function velToDb(v: number): number {
   return -24 + v * 24;
 }
