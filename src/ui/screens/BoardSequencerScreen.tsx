@@ -259,6 +259,7 @@ export default function BoardSequencerScreen() {
   const [chooserOpen, setChooserOpen] = useState(() => listBoardPlayers().length > 1);
   const [pendingColour, setPendingColour] = useState<LastColourSample | null>(null);
   const [squarePicker, setSquarePicker] = useState<{ row: number; col: number } | null>(null);
+  const [showHelp, setShowHelp] = useState(false);
   const [viewportWidth, setViewportWidth] = useState(() => (typeof window === 'undefined' ? 1440 : window.innerWidth));
   const [playheadCol, setPlayheadCol] = useState(0);
   // Pattern chaining: which page the live camera edits, and which is playing now.
@@ -980,7 +981,11 @@ export default function BoardSequencerScreen() {
       minFilledFraction={config.minFilledFraction}
       readSettingsCustom={config.readSettingsCustom}
       onMinFill={(v) => update({ minFilledFraction: v, readSettingsCustom: true })}
-      onResetReadSettings={() => updateGrid({})}
+      onResetReadSettings={() => setConfig((prev) => {
+        const next = applyGridChange({ ...prev, readSettingsCustom: false }, {});
+        saveBoardSequencerConfig(next);
+        return next;
+      })}
       settleWindowMs={config.settleWindowMs}
       onSettleWindow={(ms) => update({ settleWindowMs: ms })}
       onBlackDarkness={setChannelBlackDarkness}
@@ -1136,7 +1141,7 @@ export default function BoardSequencerScreen() {
             onModeChange={(m) => update({ themeMode: m })}
             largeUi={uiSize === 'large'}
             onLargeUiChange={(large) => setUISize(large ? 'large' : 'standard')}
-            onHelp={() => setOpenSection((sec) => ({ ...sec, help: true }))}
+            onHelp={() => setShowHelp(true)}
             playerName={activePlayer?.name ?? null}
             onSwitchPlayer={() => setChooserOpen(true)}
             switchPlayerDisabledReason={running ? 'Stop playing to switch player.' : null}
@@ -1161,6 +1166,27 @@ export default function BoardSequencerScreen() {
               </div>
             )}
           />
+
+          {showHelp && (
+            <div
+              role="dialog"
+              aria-label="How to play"
+              style={{
+                position: 'fixed', inset: 0, zIndex: 40, display: 'grid', placeItems: 'center',
+                background: 'rgba(0,0,0,.45)',
+              }}
+            >
+              <div style={{
+                background: 'var(--bs-raised)', color: 'var(--bs-fg)', padding: 20,
+                borderRadius: 'var(--bs-radius-lg)', maxWidth: 560, maxHeight: '80vh', overflowY: 'auto',
+                display: 'flex', flexDirection: 'column', gap: 12,
+              }}
+              >
+                <BoardHelp />
+                <button type="button" autoFocus onClick={() => setShowHelp(false)}>Close</button>
+              </div>
+            </div>
+          )}
 
           <div
             style={{
