@@ -4,7 +4,7 @@
  * Views stay thin: they supply callbacks (via a ref, so effects never restart) and
  * read/drive the returned refs (start/stop still set engineRef/modeRef/runningRef).
  */
-import { useEffect, useRef, type MutableRefObject, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, type MutableRefObject, type RefObject } from 'react';
 import { CameraManager, type CameraTrackInfo } from '../../../tracking/CameraManager';
 import { BoardReader } from '../../../tracking/BoardReader';
 import type { ActiveCell, BoardSequencerMode, CellReading } from '../../../tracking/BoardSequencerMode';
@@ -14,6 +14,7 @@ import {
   type ColourId, type ColourMatcher,
 } from '../../../tracking/boardColours';
 import { initialControlState, stepControls, type ControlsResult } from '../../../tracking/controlCounters';
+import { dismissNudge, initialNudgeState, stepNudge, type NudgeKind, type NudgeSignal, type NudgeState } from './playNudge';
 import { frameMeanSaturation } from '../../../tracking/cameraCheck';
 import { startVideoFrameLoop } from '../../../tracking/videoFrameLoop';
 import { stepBoardFrame, suppressSpill, type BoardFrameOutput } from '../../../tracking/boardFrame';
@@ -28,6 +29,8 @@ export interface RuntimeFrame {
   frame: BoardFrameOutput;
   /** The control counters' committed values this frame (drives the legend). */
   controls: ControlsResult;
+  /** The hint to show, if any: the board seems to have moved, or a colour matches it. */
+  nudge: NudgeSignal | null;
   /** performance.now() of the camera frame this came from. */
   atMs: number;
 }
@@ -63,6 +66,8 @@ export interface BoardRuntimeRefs {
   loopBankRef: MutableRefObject<LoopBankState>;
   activeCellsRef: MutableRefObject<ActiveCell[]>;
   latestFrameRef: MutableRefObject<RuntimeFrame | null>;
+  /** "Not now" on a hint: it stays hidden until its condition clears and comes back. */
+  dismiss(kind: NudgeKind): void;
 }
 
 const CAMERA_CHECK_MS = 1000;
@@ -86,6 +91,10 @@ export function useBoardRuntime(opts: {
   const loopBankRef = useRef<LoopBankState>(emptyLoopBank(0));
   const activeCellsRef = useRef<ActiveCell[]>([]);
   const latestFrameRef = useRef<RuntimeFrame | null>(null);
+  const nudgeRef = useRef<NudgeState>(initialNudgeState());
+  const dismiss = useCallback((kind: NudgeKind) => {
+    nudgeRef.current = dismissNudge(nudgeRef.current, kind);
+  }, []);
 
   // Camera lifecycle — (re)opens whenever the chosen camera changes or Try again is pressed.
   useEffect(() => {
@@ -195,7 +204,19 @@ export function useBoardRuntime(opts: {
         activeCellsRef.current = frame.patternCells;
         if (frame.fireTick) engine.fireTick();
       }
-      const rf: RuntimeFrame = { readings, frame, controls: ctl, atMs: nowMs };
+      // Nudges: hints only, computed from the same readings, never acting on their own.
+      const nudge = stepNudge(nudgeRef.current, readings, {
+        boardSquares: cfg.boardSquares,
+        rows: cfg.rows,
+        cols: cfg.cols,
+        variationEnabled: cfg.variationEnabled,
+        variationOffsetThreshold: cfg.variationOffsetThreshold,
+        enabled: cfg.boardNudgesEnabled,
+        ignoreColours: controlColours,
+      }, nowMs);
+      nudgeRef.current = nudge.state;
+
+      const rf: RuntimeFrame = { readings, frame, controls: ctl, nudge: nudge.signal, atMs: nowMs };
       latestFrameRef.current = rf;
       callbacksRef.current.onFrame?.(rf, dtMs);
     });
@@ -221,6 +242,7 @@ export function useBoardRuntime(opts: {
   }, [calibrated, cameraDeviceId, cameraRetry, configRef, callbacksRef]);
 
   return {
-    videoRef, cameraRef, readerRef, homographyRef, modeRef, engineRef, runningRef, loopBankRef, activeCellsRef, latestFrameRef,
+    videoRef, cameraRef, readerRef, homographyRef, modeRef, engineRef, runningRef, loopBankRef,
+    activeCellsRef, latestFrameRef, dismiss,
   };
 }
