@@ -49,7 +49,7 @@ import { PlayPanel } from './boardSequencer/play/PlayPanel';
 import { NudgeBanner } from './boardSequencer/play/NudgeBanner';
 import { SwatchChip } from './boardSequencer/ui/SwatchChip';
 import { Button } from './boardSequencer/ui/Button';
-import type { NudgeSignal } from './boardSequencer/playNudge';
+import { colourMatchesBoardRaw, type NudgeSignal } from './boardSequencer/playNudge';
 import { spaceTogglesPlay, type BoardScreenView } from './boardSequencer/spaceKey';
 import type { FiredNote } from '../../songs/BoardSequencerEngine';
 import {
@@ -876,11 +876,21 @@ export default function BoardSequencerScreen() {
     setSquarePicker(null);
   }, [pendingColour]);
 
-  const addColour = useCallback(() => setColourCalib({ mode: 'new' }), []);
-  const recalibrateChannel = useCallback(
-    (id: ColourId) => setColourCalib((t) => (t && t.mode === 'recal' && t.id === id ? null : { mode: 'recal', id })),
-    [],
-  );
+  /** Arming the picker also puts the square cursor in the middle, so the no-pointer
+   *  path (arrows + Sample this square) is available without hunting for it. */
+  const armPicker = useCallback(() => {
+    const mid = Math.floor(configRef.current.boardSquares / 2);
+    setPendingColour(null);
+    setSquarePicker({ row: mid, col: mid });
+  }, []);
+  const addColour = useCallback(() => {
+    armPicker();
+    setColourCalib({ mode: 'new' });
+  }, [armPicker]);
+  const recalibrateChannel = useCallback((id: ColourId) => {
+    armPicker();
+    setColourCalib((t) => (t && t.mode === 'recal' && t.id === id ? null : { mode: 'recal', id }));
+  }, [armPicker]);
   const setChannelRole = useCallback((id: ColourId, role: ColourRole) => {
     setConfig((prev) => {
       const next = { ...prev, channels: prev.channels.map((c) => (c.id === id ? { ...c, role } : c)) };
@@ -1376,6 +1386,19 @@ export default function BoardSequencerScreen() {
     </>
   );
 
+  // The Ready check uses the same rule as the Play nudge, so a colour that will cause
+  // trouble is named before the player starts rather than after.
+  const matchingBoardColour = latestFrame
+    ? colourMatchesBoardRaw(latestFrame.readings, {
+      boardSquares: config.boardSquares,
+      rows: config.rows,
+      cols: config.cols,
+      variationEnabled: config.variationEnabled,
+      variationOffsetThreshold: config.variationOffsetThreshold,
+      enabled: true,
+    })
+    : null;
+
   const setupStepBody = step === 'camera' ? (
     <CameraStep
       cameras={cameras}
@@ -1457,7 +1480,7 @@ export default function BoardSequencerScreen() {
       counts={stats.byColour}
       detected={active}
       palette={palette}
-      matchingBoard={null}
+      matchingBoard={matchingBoardColour}
       onRecalibrate={(id) => { setStep('colours'); recalibrateChannel(id); }}
       onPlay={() => { setView('play'); void start(); }}
       playReason={playReason}
@@ -1548,6 +1571,22 @@ export default function BoardSequencerScreen() {
             onCancel={() => setCalibrating(false)}
           />
         )}
+        {colourCalib && squarePicker && config.enabled && (() => {
+          const centre = squareCentreToImage(config.corners, config.boardSquares, squarePicker.row, squarePicker.col);
+          return (
+            <span
+              aria-hidden="true"
+              style={{
+                position: 'absolute',
+                left: `${centre.x * 100}%`,
+                top: `${centre.y * 100}%`,
+                transform: 'translate(-50%, -50%)',
+                width: 34, height: 34, borderRadius: 'var(--bs-radius-sm)',
+                border: '3px solid var(--bs-accent)', boxShadow: '0 0 0 2px var(--bs-bg)',
+              }}
+            />
+          );
+        })()}
         {colourCalib && (
           <div style={{
             position: 'absolute', top: 8, left: 8, padding: '4px 8px',
