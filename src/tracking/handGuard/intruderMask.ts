@@ -25,6 +25,17 @@ export const STILL_MAX = 6;
 export const GLOBAL_RING_SHARE = 0.5;
 /** …and for how long (ms) before it is treated as a bump rather than an arm. */
 export const GLOBAL_HOLD_MS = 1000;
+/**
+ * Share of the board the mask may cover before the guard decides it is wrong about it.
+ *
+ * A hand, or even a forearm laid across the board, covers part of it. Nothing a player
+ * does covers nearly all of it — so a mask that big is evidence the background is stale
+ * (the light moved, the board was nudged, it was learnt through something), not evidence
+ * of a hand. Without this the guard deadlocks: the background can only be re-learnt while
+ * the mask is empty, and the mask is full BECAUSE the background is wrong, so it holds
+ * the whole board for ever and no sensitivity setting can free it.
+ */
+export const MAX_COVERED_SHARE = 0.7;
 /** Time constant for folding new, settled scenery into the background (s). */
 export const DEFAULT_BG_TAU_SEC = 2;
 
@@ -291,6 +302,36 @@ export function stepWatcher(
   const pointsPerSquare = size / ((1 + 2 * grid.ringFrac) * Math.max(1, grid.boardSquares));
   const radius = Math.max(0, Math.round(opts.marginSquares * pointsPerSquare));
   const dilated = radius > 0 ? dilate(mask, size, radius) : mask;
+
+  // How much of the playing area the mask claims. Measured over the watch grid, not over
+  // cells, so it means the same thing on a 2 x 2 grid as on an 8 x 16 one.
+  let inSquarePoints = 0;
+  let maskedPoints = 0;
+  for (let i = 0; i < n; i++) {
+    if (grid.imgIdx[i] < 0 || !grid.inSquares[i]) continue;
+    inSquarePoints++;
+    if (dilated[i]) maskedPoints++;
+  }
+  if (inSquarePoints > 0 && maskedPoints / inSquarePoints > MAX_COVERED_SHARE) {
+    // Same treatment as a camera bump: hold nothing, and re-learn once the picture is
+    // still again. Standing down is always safer than holding the whole board.
+    //
+    // Except while the ring says a bump may be under way: that has its own confirmation
+    // window, and re-learning inside it would settle the new picture before the bump was
+    // ever recognised as one.
+    if (still && state.globalSince === null) {
+      state.stillFrames += 1;
+      if (state.stillFrames >= STILL_FRAMES_NEEDED) {
+        state.bg = Float32Array.from(cur);
+        state.stillFrames = 0;
+      }
+    } else {
+      state.stillFrames = 0;
+    }
+    state.maskSince.clear();
+    state.heldUntil.clear();
+    return { state, mask: dilated, heldCells: new Set(), resting: false, global: false, ready: true };
+  }
 
   const covered = new Set<number>();
   for (let i = 0; i < n; i++) {

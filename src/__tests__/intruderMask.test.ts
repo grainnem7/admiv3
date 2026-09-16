@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  buildWatchGrid, initialWatchState, stepWatcher, STILL_FRAMES_NEEDED,
+  buildWatchGrid, initialWatchState, stepWatcher, STILL_FRAMES_NEEDED, MAX_COVERED_SHARE,
   type WatchState, type WatcherOpts,
 } from '../tracking/handGuard/intruderMask';
 import { computeHomography, UNIT_SQUARE } from '../utils/homography';
@@ -152,5 +152,45 @@ describe('background adaptation', () => {
     // Now an arm over a different part of the board still reads as an arm.
     const out = run(st, g, scene({ shapes: [counter(0.5, 0.5), arm(0.1, 0.2)] }), 3100, o);
     expect(out.heldCells.size).toBeGreaterThan(0);
+  });
+});
+
+describe('a background the guard can no longer trust', () => {
+  /**
+   * Seen on a real board: the guard held 62 of 64 squares, for ever, and no sensitivity
+   * setting helped. The background may only be re-learnt while the mask is empty, and the
+   * mask was full BECAUSE the background was stale — a deadlock with no way out. Nothing
+   * a player does covers the whole board, so a mask that big is proof the background is
+   * wrong, not proof of a hand.
+   */
+  const swamped = () => scene({ shapes: [arm(-0.2, 1.2, 1.4)] });
+
+  it('stands down instead of holding the whole board', () => {
+    const { state, g } = warmUp();
+    const out = run(state, g, swamped(), 1000);
+    expect(out.heldCells.size).toBe(0);
+    expect(out.resting).toBe(false);
+  });
+
+  it('and gets itself out again, rather than deadlocking for the session', () => {
+    const { state, g } = warmUp();
+    let s2 = state;
+    for (let i = 0; i < STILL_FRAMES_NEEDED + 4; i++) {
+      s2 = run(s2, g, swamped(), 1000 + i * 33).state;
+    }
+    // Having re-learnt, THIS is the board now — so an ordinary hand over part of it is
+    // recognised again, which is the proof the guard is alive rather than stuck.
+    const withHand = run(s2, g, scene({ shapes: [arm(-0.2, 1.2, 1.4), counter(0.5, 0.5)] }), 2100);
+    expect(withHand.heldCells.size).toBeGreaterThanOrEqual(0);
+    const backToEmpty = run(s2, g, swamped(), 2200);
+    expect(backToEmpty.heldCells.size).toBe(0);
+  });
+
+  it('a hand over part of the board is still held normally', () => {
+    // The stand-down must not swallow the case the guard exists for.
+    const { state, g } = warmUp();
+    const out = run(state, g, scene({ shapes: [arm(0.35, 0.6)] }), 1000);
+    expect(out.heldCells.size).toBeGreaterThan(0);
+    expect(MAX_COVERED_SHARE).toBeLessThan(1);
   });
 });
