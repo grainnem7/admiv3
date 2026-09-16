@@ -49,6 +49,8 @@ import { PlayPanel } from './boardSequencer/play/PlayPanel';
 import { NudgeBanner } from './boardSequencer/play/NudgeBanner';
 import { SwatchChip } from './boardSequencer/ui/SwatchChip';
 import { Switch } from './boardSequencer/ui/Switch';
+import { SegmentedControl } from './boardSequencer/ui/SegmentedControl';
+import { clampZone, describeZone, type ZoneMode } from '../../tracking/zones';
 import { LabeledSlider } from './boardSequencer/ui/LabeledSlider';
 import { Button } from './boardSequencer/ui/Button';
 import { colourMatchesBoardRaw, type NudgeSignal } from './boardSequencer/playNudge';
@@ -1429,6 +1431,73 @@ export default function BoardSequencerScreen() {
           />
         </>
       )}
+      <div>
+        <span style={{ fontWeight: 600, display: 'block', marginBottom: 4 }}>Controls live</span>
+        <SegmentedControl<ZoneMode>
+          label="Controls live"
+          value={config.controlZone.mode === 'off' ? 'anywhere' : config.controlZone.mode}
+          onChange={(mode) => update({ controlZone: clampZone({ mode, index: config.controlZone.index }, config.rows, config.cols) })}
+          options={[
+            { value: 'anywhere', label: 'Anywhere' },
+            { value: 'row', label: 'A row' },
+            { value: 'col', label: 'A step' },
+          ]}
+        />
+        {config.controlZone.mode !== 'anywhere' && config.controlZone.mode !== 'off' && (
+          <SegmentedControl<number>
+            label="Which one"
+            value={config.controlZone.index}
+            onChange={(index) => update({ controlZone: { ...config.controlZone, index } })}
+            options={Array.from(
+              { length: config.controlZone.mode === 'row' ? config.rows : config.cols },
+              (_, i) => ({ value: i, label: String(i + 1) }),
+            )}
+          />
+        )}
+      </div>
+
+      <div>
+        <span style={{ fontWeight: 600, display: 'block', marginBottom: 4 }}>Loop pads live</span>
+        <SegmentedControl<ZoneMode>
+          label="Loop pads live"
+          value={config.loopZone.mode === 'anywhere' ? 'off' : config.loopZone.mode}
+          onChange={(mode) => update({
+            loopZone: clampZone(
+              { mode, index: mode === 'row' ? config.rows - 1 : config.loopZone.index },
+              config.rows,
+              config.cols,
+            ),
+          })}
+          options={[
+            { value: 'off', label: 'Off' },
+            { value: 'row', label: 'A row' },
+            { value: 'col', label: 'A step' },
+          ]}
+        />
+        {(config.loopZone.mode === 'row' || config.loopZone.mode === 'col') && (
+          <>
+            <SegmentedControl<number>
+              label="Which one"
+              value={config.loopZone.index}
+              onChange={(index) => update({ loopZone: { ...config.loopZone, index } })}
+              options={Array.from(
+                { length: config.loopZone.mode === 'row' ? config.rows : config.cols },
+                (_, i) => ({ value: i, label: String(i + 1) }),
+              )}
+            />
+            <SegmentedControl<'hold' | 'toggle'>
+              label="How a loop pad works"
+              value={config.loopPadMode}
+              onChange={(m) => update({ loopPadMode: m })}
+              options={[
+                { value: 'hold', label: 'Hold', hint: 'The counter stays on the pad while the loop plays.' },
+                { value: 'toggle', label: 'Toggle', hint: 'Place it to start, place it again to stop.' },
+              ]}
+            />
+          </>
+        )}
+      </div>
+
       <Switch
         label="Two counters in a box both play"
         checked={config.twoCounterMode === 'both'}
@@ -1782,6 +1851,16 @@ export default function BoardSequencerScreen() {
               </strong>
             </span>
           ))}
+          {config.controlZone.mode !== 'anywhere' && config.controlZone.mode !== 'off' && (
+            <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
+              {`Controls: ${describeZone(config.controlZone)}`}
+            </span>
+          )}
+          {(config.loopZone.mode === 'row' || config.loopZone.mode === 'col') && (
+            <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
+              {`Loops: ${describeZone(config.loopZone)}`}
+            </span>
+          )}
           <Button tone="quiet" onClick={() => announce(describeBoard(active, config.channels, config.rows, config.cols, config.velocity))}>
             Describe board
           </Button>

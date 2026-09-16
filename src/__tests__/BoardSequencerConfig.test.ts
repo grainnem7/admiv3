@@ -269,3 +269,48 @@ describe('BoardSequencerConfig — hand and knock guard', () => {
     });
   });
 });
+
+describe('BoardSequencerConfig — zones', () => {
+  beforeEach(() => localStorage.clear());
+
+  it('controls start anywhere and there are no loop pads', () => {
+    expect(DEFAULT_BOARD_SEQUENCER_CONFIG.controlZone).toEqual({ mode: 'anywhere', index: 0 });
+    expect(DEFAULT_BOARD_SEQUENCER_CONFIG.loopZone).toEqual({ mode: 'off', index: 0 });
+    expect(DEFAULT_BOARD_SEQUENCER_CONFIG.loopPadMode).toBe('hold');
+  });
+
+  it('an old bottom-row loop bank becomes a bottom-row lane', () => {
+    localStorage.setItem('admi-board-sequencer', JSON.stringify({ rows: 6, cols: 8, loopBankEnabled: true }));
+    const c = loadBoardSequencerConfig()!;
+    expect(c.loopZone).toEqual({ mode: 'row', index: 5 });
+    expect(c.loopBankEnabled).toBe(true);
+  });
+
+  it('no loop bank means no lane', () => {
+    localStorage.setItem('admi-board-sequencer', JSON.stringify({ rows: 4, cols: 4, loopBankEnabled: false }));
+    const c = loadBoardSequencerConfig()!;
+    expect(c.loopZone.mode).toBe('off');
+    expect(c.loopBankEnabled).toBe(false);
+  });
+
+  it('round-trips chosen lanes and keeps them inside the grid', () => {
+    saveBoardSequencerConfig({
+      ...DEFAULT_BOARD_SEQUENCER_CONFIG,
+      rows: 4,
+      cols: 4,
+      controlZone: { mode: 'col', index: 9 },
+      loopZone: { mode: 'row', index: 2 },
+      loopPadMode: 'toggle',
+    });
+    const c = loadBoardSequencerConfig()!;
+    expect(c.controlZone).toEqual({ mode: 'col', index: 3 });   // clamped to the grid
+    expect(c.loopZone).toEqual({ mode: 'row', index: 2 });
+    expect(c.loopPadMode).toBe('toggle');
+    expect(c.loopBankEnabled).toBe(true);
+  });
+
+  it('sanitises a garbage lane back to the default', () => {
+    localStorage.setItem('admi-board-sequencer', JSON.stringify({ controlZone: { mode: 'diagonal', index: -4 } }));
+    expect(loadBoardSequencerConfig()!.controlZone).toEqual({ mode: 'anywhere', index: 0 });
+  });
+});

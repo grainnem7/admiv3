@@ -317,7 +317,7 @@ export function useBoardRuntime(opts: {
 
       const frame = stepBoardFrame({
         readings: visible,
-        cfg: { ...cfg, sequencedColours, controlColours },
+        cfg: { ...cfg, sequencedColours, controlColours },   // zones ride along on cfg
         running,
         modeResult,
         loopBank: loopBankRef.current,
@@ -334,6 +334,7 @@ export function useBoardRuntime(opts: {
         controlRanges: cfg.controlRanges,
         controlRemoval: cfg.controlRemoval,
         defaults: { volume: cfg.volume },
+        zone: cfg.controlZone,
       }, dtMs);
       controls = ctl.state;
       const engine = engineRef.current;

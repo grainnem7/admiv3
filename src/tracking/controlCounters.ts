@@ -14,6 +14,7 @@ import type { CellReading } from './BoardSequencerMode';
 import type { ColourChannel, ColourRole } from './boardColours';
 import { isFaderRole, isToggleRole } from './boardColours';
 import type { ControlRange, ControlRemoval, FaderRole } from '../profiles/BoardSequencerConfig';
+import { zoneContains, zonePosition, type Zone } from './zones';
 
 /** A move smaller than this never commits, so a resting hand can't dither the value. */
 export const CONTROL_HYSTERESIS = 0.05;
@@ -29,6 +30,12 @@ export interface ControlsConfig {
   controlRemoval: Record<FaderRole, ControlRemoval>;
   /** Normalised position each fader returns to under 'default' removal (0 when unset). */
   defaults?: Partial<Record<FaderRole, number>>;
+  /**
+   * Where control counters live. In a lane, the value is read ALONG the lane and a
+   * control counter outside it is ignored, so a stray volume counter in the middle of
+   * the pattern does nothing rather than something surprising.
+   */
+  zone?: Zone;
 }
 
 export interface RoleState {
@@ -79,19 +86,26 @@ export function faderPositionFromCentroid(
 
 /** The highest position among this colour's counters this frame, or null when it's absent. */
 export function rawFaderPosition(
-  readings: CellReading[], colour: string, cfg: Pick<ControlsConfig, 'faderAxis' | 'boardSquares'>,
+  readings: CellReading[], colour: string,
+  cfg: Pick<ControlsConfig, 'faderAxis' | 'boardSquares' | 'zone'>,
 ): number | null {
+  const zone = cfg.zone;
+  const inLane = zone !== undefined && (zone.mode === 'row' || zone.mode === 'col');
   let best: number | null = null;
   for (const r of readings) {
     if (!r.occupied || r.colour !== colour || !r.centroid) continue;
-    const p = faderPositionFromCentroid(r.centroid, cfg.faderAxis, cfg.boardSquares);
+    if (inLane && !zoneContains(zone, r)) continue;
+    const p = inLane
+      ? zonePosition(zone, r.centroid)
+      : faderPositionFromCentroid(r.centroid, cfg.faderAxis, cfg.boardSquares);
     if (best === null || p > best) best = p;
   }
   return best;
 }
 
-function present(readings: CellReading[], colour: string): boolean {
-  return readings.some((r) => r.occupied && r.colour === colour);
+function present(readings: CellReading[], colour: string, zone?: Zone): boolean {
+  const inLane = zone !== undefined && (zone.mode === 'row' || zone.mode === 'col');
+  return readings.some((r) => r.occupied && r.colour === colour && (!inLane || zoneContains(zone, r)));
 }
 
 function stepFader(st: RoleState, raw: number | null, role: FaderRole, cfg: ControlsConfig, dtMs: number): boolean {
@@ -147,7 +161,7 @@ export function stepControls(
     const st: RoleState = { ...(prev[ch.id] ?? freshRole()) };
     state[ch.id] = st;
     if (isToggleRole(ch.role)) {
-      stepToggle(st, present(readings, ch.id), cfg, dtMs);
+      stepToggle(st, present(readings, ch.id, cfg.zone), cfg, dtMs);
       toggles[ch.role] = st.on;
       continue;
     }

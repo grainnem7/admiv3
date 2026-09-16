@@ -23,6 +23,8 @@ export interface LoopBankState {
   patternKey?: string;
   /** Slots that were just cleared: they can't re-capture until the counter is lifted. */
   blocked?: boolean[];
+  /** Toggle mode: slots latched on, so a loop plays without its counter staying put. */
+  playing?: boolean[];
 }
 
 export interface LoopBankOptions {
@@ -30,6 +32,12 @@ export interface LoopBankOptions {
   quietMs: number;
   /** Milliseconds since the previous frame. */
   dtMs: number;
+  /**
+   * Hold = the counter must stay for the loop to play (you can see what is playing).
+   * Toggle = placing it starts the loop and placing it again stops it, so a player with
+   * few counters can run several loops at once.
+   */
+  padMode?: 'hold' | 'toggle';
 }
 
 /** A stable description of a pattern, so "unchanged" ignores detection order. */
@@ -51,7 +59,10 @@ export interface LoopBankStep {
 /** A fresh, all-empty bank for `slotCount` slots. */
 export function emptyLoopBank(slotCount: number): LoopBankState {
   const n = Math.max(0, Math.floor(slotCount));
-  return { saved: Array(n).fill(null), present: Array(n).fill(false), quietMs: 0, patternKey: '' };
+  return {
+    saved: Array(n).fill(null), present: Array(n).fill(false),
+    quietMs: 0, patternKey: '', playing: Array(n).fill(false),
+  };
 }
 
 /**
@@ -70,6 +81,8 @@ export function stepLoopBank(
   const saved: (ActiveCell[] | null)[] = [];
   const nextPresent: boolean[] = [];
   const nextBlocked: boolean[] = [];
+  const nextPlaying: boolean[] = [];
+  const toggle = opts?.padMode === 'toggle';
   const active: ActiveCell[][] = [];
   const captured: number[] = [];
 
@@ -88,6 +101,9 @@ export function stepLoopBank(
     let slot = prev.saved[i] ?? null;
     // Lifting the counter re-arms a slot that was cleared while it sat there.
     const blocked = here && (prev.blocked?.[i] ?? false);
+    // Toggle: each fresh placement flips the loop on or off.
+    let latched = prev.playing?.[i] ?? false;
+    if (toggle && here && !was && !blocked) latched = slot === null ? true : !latched;
     // The counter may land before the pattern is quiet, so capture is a level check
     // (counter here, slot still empty), not only the rising edge.
     if (here && !blocked && slot === null && settledLongEnough && (!was || quietMs > 0)) {
@@ -97,10 +113,15 @@ export function stepLoopBank(
     saved[i] = slot;
     nextPresent[i] = here;
     nextBlocked[i] = blocked;
-    if (here && slot !== null) active.push(slot);
+    nextPlaying[i] = slot === null ? false : latched;
+    const sounding = toggle ? nextPlaying[i] : here;
+    if (sounding && slot !== null) active.push(slot);
   }
   return {
-    state: { saved, present: nextPresent, quietMs: quiet, patternKey: key, blocked: nextBlocked },
+    state: {
+      saved, present: nextPresent, quietMs: quiet, patternKey: key,
+      blocked: nextBlocked, playing: nextPlaying,
+    },
     active,
     captured,
   };
@@ -115,5 +136,9 @@ export function clearLoopSlot(state: LoopBankState, slot: number): LoopBankState
   // sitting on it, so it stays blocked until that counter is lifted.
   const blocked = (state.blocked ?? state.saved.map(() => false)).slice();
   blocked[slot] = true;
-  return { saved, present: state.present.slice(), quietMs: 0, patternKey: state.patternKey, blocked };
+  const playing = (state.playing ?? state.saved.map(() => false)).slice();
+  playing[slot] = false;
+  return {
+    saved, present: state.present.slice(), quietMs: 0, patternKey: state.patternKey, blocked, playing,
+  };
 }

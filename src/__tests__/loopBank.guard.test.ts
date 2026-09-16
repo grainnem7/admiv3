@@ -70,3 +70,32 @@ describe('Clear is the undo', () => {
     expect(out.state.saved[0]).toHaveLength(2);
   });
 });
+
+describe('toggle loop pads', () => {
+  const toggleOpts = { quietMs: 0, dtMs: 50, padMode: 'toggle' as const };
+
+  it('one placement starts the loop and it keeps playing with the counter gone', () => {
+    const first = stepLoopBank(emptyLoopBank(2), [true, false], pattern, 2, toggleOpts);
+    expect(first.state.saved[0]).toHaveLength(2);
+    expect(first.active).toEqual([first.state.saved[0]]);
+    // Counter lifted: in Toggle the loop carries on.
+    const lifted = stepLoopBank(first.state, [false, false], [], 2, toggleOpts);
+    expect(lifted.active).toHaveLength(1);
+  });
+
+  it('the next placement stops it', () => {
+    let out = stepLoopBank(emptyLoopBank(2), [true, false], pattern, 2, toggleOpts);
+    out = stepLoopBank(out.state, [false, false], [], 2, toggleOpts);
+    out = stepLoopBank(out.state, [true, false], [], 2, toggleOpts);
+    expect(out.active).toHaveLength(0);
+    expect(out.state.saved[0]).toHaveLength(2);   // the loop is kept, just silent
+  });
+
+  it('Hold is unchanged: lifting the counter pauses the loop', () => {
+    const holdOpts = { quietMs: 0, dtMs: 50, padMode: 'hold' as const };
+    let out = stepLoopBank(emptyLoopBank(2), [true, false], pattern, 2, holdOpts);
+    expect(out.active).toHaveLength(1);
+    out = stepLoopBank(out.state, [false, false], [], 2, holdOpts);
+    expect(out.active).toHaveLength(0);
+  });
+});

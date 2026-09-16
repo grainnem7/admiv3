@@ -8,6 +8,7 @@ import type { ColourId } from './boardColours';
 import type { ActiveCell, BoardStepResult, CellReading, PieceColour } from './BoardSequencerMode';
 import { stepLoopBank, type LoopBankState } from '../songs/loopBank';
 import { conditionalFromOffset } from '../songs/boardSequencerScale';
+import { ANYWHERE, NO_ZONE, splitByZone, zoneSlotCount, zoneSlotOf, type Zone } from './zones';
 
 export type BankSlotState = 'empty' | 'paused' | 'active';
 
@@ -24,6 +25,10 @@ export interface BoardFrameCfg {
   sequencedColours?: ReadonlySet<ColourId>;
   /** Control colours: a fader or toggle counter must never trigger a loop slot. */
   controlColours?: ReadonlySet<ColourId>;
+  /** Where control counters and loop pads live (project B). */
+  controlZone?: Zone;
+  loopZone?: Zone;
+  loopPadMode?: 'hold' | 'toggle';
 }
 
 export interface BoardFrameInput {
@@ -148,26 +153,29 @@ export function stepBoardFrame({ readings, cfg, running, modeResult, loopBank, d
   let nextBank = loopBank;
   let captured: number[] = [];
   let fireTick = false;
+  // Lanes: a cell in the control or loop lane is never part of the pattern, so a lane
+  // can't make a stray note. With no lanes set, everything is pattern, as before.
+  const controlZone = cfg.controlZone ?? ANYWHERE;
+  const loopZone = cfg.loopZone ?? (cfg.loopBankEnabled ? { mode: 'row' as const, index: cfg.rows - 1 } : NO_ZONE);
+  const slots = zoneSlotCount(loopZone, cfg.rows, cfg.cols);
   if (running && modeResult) {
-    if (cfg.loopBankEnabled) {
-      const bankRow = cfg.rows - 1;
-      patternCells = modeResult.activeCells.filter((c) => c.row < bankRow);
-      // A volume counter parked on the bank row is a control, not a loop trigger.
-      const present = Array.from({ length: cfg.cols }, (_, i) =>
-        modeResult.activeCells.some((c) => c.row === bankRow && c.col === i
-          && !cfg.controlColours?.has(c.colour)));
+    const split = splitByZone(modeResult.activeCells, controlZone, loopZone);
+    patternCells = split.pattern;
+    if (slots > 0) {
+      // A volume counter parked on a pad is a control, not a loop trigger.
+      const present = Array.from({ length: slots }, (_, i) => split.pads.some(
+        (c) => zoneSlotOf(loopZone, c, cfg.rows) === i && !cfg.controlColours?.has(c.colour),
+      ));
       // Only cells that actually play are worth saving.
       const capturable = cfg.sequencedColours
         ? patternCells.filter((c) => cfg.sequencedColours?.has(c.colour))
         : patternCells;
-      const stepped = stepLoopBank(loopBank, present, capturable, cfg.cols, {
-        quietMs: cfg.captureQuietMs ?? 0, dtMs: dtMs ?? 0,
+      const stepped = stepLoopBank(loopBank, present, capturable, slots, {
+        quietMs: cfg.captureQuietMs ?? 0, dtMs: dtMs ?? 0, padMode: cfg.loopPadMode,
       });
       nextBank = stepped.state;
       captured = stepped.captured;
       activeLoops = stepped.active;
-    } else {
-      patternCells = modeResult.activeCells;
     }
     fireTick = modeResult.justSettled.length > 0;
   }
@@ -181,11 +189,12 @@ export function stepBoardFrame({ readings, cfg, running, modeResult, loopBank, d
   const activeMap = new Map<string, PieceColour>();
   for (const c of patternCells) activeMap.set(`${c.row},${c.col}`, c.colour);
 
-  const bankSlots = cfg.loopBankEnabled
-    ? Array.from({ length: cfg.cols }, (_, i): BankSlotState => {
+  const bankSlots = slots > 0
+    ? Array.from({ length: slots }, (_, i): BankSlotState => {
       const saved = nextBank.saved[i];
       if (saved == null) return 'empty';
-      return nextBank.present[i] ? 'active' : 'paused';
+      const sounding = cfg.loopPadMode === 'toggle' ? nextBank.playing?.[i] === true : nextBank.present[i];
+      return sounding ? 'active' : 'paused';
     })
     : null;
 

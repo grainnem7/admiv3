@@ -13,6 +13,7 @@ import type {
 } from '../tracking/boardColours';
 import { ROLE_LABELS, DEFAULT_BLACK_BAND, DEFAULT_WHITE_BAND } from '../tracking/boardColours';
 import { suggestReadSettings, type BoardSquares } from '../tracking/boardGrid';
+import { ANYWHERE, clampZone, NO_ZONE, type Zone } from '../tracking/zones';
 
 const STORAGE_KEY = 'admi-board-sequencer';
 
@@ -167,6 +168,12 @@ export interface BoardSequencerStored {
   boardTrackingEnabled: boolean;
   /** How far a nudge may be followed, in board squares, before it needs Find board. */
   boardTrackMaxSquares: number;
+  /** Where control counters live: anywhere on the board, or in one row or column. */
+  controlZone: Zone;
+  /** Where the loop pads live. 'off' = no loop pads. */
+  loopZone: Zone;
+  /** Hold = the counter must stay; Toggle = on and off with each placement. */
+  loopPadMode: 'hold' | 'toggle';
 }
 
 /** Fader-role controls, whose value comes from a counter's position. */
@@ -269,7 +276,18 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   twoCounterMode: 'off',
   boardTrackingEnabled: true,
   boardTrackMaxSquares: 0.6,
+  controlZone: ANYWHERE,
+  loopZone: NO_ZONE,
+  loopPadMode: 'hold',
 };
+
+function sanitizeZone(v: unknown, fallback: Zone): Zone {
+  const o = (typeof v === 'object' && v !== null ? v : {}) as Record<string, unknown>;
+  const mode = o.mode === 'row' || o.mode === 'col' || o.mode === 'off' || o.mode === 'anywhere'
+    ? o.mode
+    : fallback.mode;
+  return { mode, index: Math.max(0, Math.round(num(o.index, fallback.index))) };
+}
 
 function sanitizeControlRanges(v: unknown): Record<FaderRole, ControlRange> {
   const o = (typeof v === 'object' && v !== null ? v : {}) as Record<string, unknown>;
@@ -412,6 +430,14 @@ function sanitize(input: unknown): BoardSequencerStored | null {
   const readSettingsCustom = typeof o.readSettingsCustom === 'boolean'
     ? o.readSettingsCustom
     : storedFill !== null && Math.abs(storedFill - 0.1) > 1e-9;
+  // The lane is authoritative when it names one; otherwise the old bottom-row bank flag
+  // still turns it on, so nothing changes for anyone already using it.
+  const storedZone = o.loopZone !== undefined
+    ? sanitizeZone(o.loopZone, DEFAULT_BOARD_SEQUENCER_CONFIG.loopZone)
+    : null;
+  const loopZone: Zone = storedZone !== null && storedZone.mode !== 'off'
+    ? storedZone
+    : (o.loopBankEnabled === true ? { mode: 'row', index: rows - 1 } : NO_ZONE);
   let samplesPerAxis = isNum(o.samplesPerAxis) ? Math.round(Math.min(15, Math.max(3, o.samplesPerAxis))) : NaN;
   let minFilledFraction = storedFill ?? d.minFilledFraction;
   if (!Number.isFinite(samplesPerAxis)) {
@@ -445,7 +471,7 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     variationEnabled: o.variationEnabled === true,
     variationOffsetThreshold: num(o.variationOffsetThreshold, d.variationOffsetThreshold),
     pingPong: o.pingPong === true,
-    loopBankEnabled: o.loopBankEnabled === true,
+    loopBankEnabled: loopZone.mode !== 'off',
     loopSlots: sanitizeLoopSlots(o.loopSlots),
     noteLengthBeats: num(o.noteLengthBeats, d.noteLengthBeats),
     velocity: num(o.velocity, d.velocity),
@@ -491,6 +517,9 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     twoCounterMode: o.twoCounterMode === 'both' ? 'both' : 'off',
     boardTrackingEnabled: o.boardTrackingEnabled !== false,
     boardTrackMaxSquares: clampNum(o.boardTrackMaxSquares, 0.2, 1.5, d.boardTrackMaxSquares),
+    controlZone: clampZone(sanitizeZone(o.controlZone, d.controlZone), rows, cols),
+    loopZone: clampZone(loopZone, rows, cols),
+    loopPadMode: o.loopPadMode === 'toggle' ? 'toggle' : 'hold',
   };
 }
 
