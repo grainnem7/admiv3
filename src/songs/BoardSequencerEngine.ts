@@ -36,6 +36,13 @@ export interface FiredNote {
 /** Mute ramps this fast: short enough to read as a cut, long enough not to click. */
 const MUTE_GLIDE_SEC = 0.02;
 
+/**
+ * The most missed beats to replay after a stall. Long enough to cover a heavy camera
+ * frame or a GC pause, short enough that coming back to a tab left open for an hour
+ * doesn't dump a wall of notes.
+ */
+const MAX_CATCHUP_BEATS = 4;
+
 export const FIRED_NOTE_CAP = 256;
 
 /** Minimal chord shape the board needs for chord-locked pitch. */
@@ -529,19 +536,37 @@ export class BoardSequencerEngine {
   private scheduleInternal(): void {
     const secPerBeat = 60 / this.cfg.bpm;
     const now = Tone.now();
-    const beatIdx = Math.floor((now + LOOKAHEAD_SEC - this.startSec) / secPerBeat);
-    if (beatIdx === this.lastInternalBeat) return;
-    this.lastInternalBeat = beatIdx;
-    let stepTime = this.startSec + beatIdx * secPerBeat;
-    if (beatIdx % 2 === 1) stepTime += this.cfg.swing * secPerBeat * 0.5; // groove off-beats
-    this.fireStep(beatIdx, stepTime, secPerBeat, null);
+    const target = Math.floor((now + LOOKAHEAD_SEC - this.startSec) / secPerBeat);
+    if (target === this.lastInternalBeat) return;
+    // Catch up over EVERY beat that was missed, the way the song-locked path already does.
+    // Jumping straight to the newest one deleted the beats in between: one heavy camera
+    // frame dropped a column, and a backgrounded tab (setInterval clamped to 1 Hz) played
+    // exactly half the pattern — while the playhead, which is time-derived, swept on and
+    // lit the columns that never sounded.
+    if (target < this.lastInternalBeat) {
+      // The look-ahead is a fixed number of SECONDS, so it spans fewer beats after a
+      // slow-down and the target can step back over beats that have already played.
+      // Resync quietly: replaying them made sliding the tempo counter down hiccup and
+      // flam, and the counter calls setBpm on every camera frame while it is moving.
+      this.lastInternalBeat = target;
+      return;
+    }
+    const first = Math.max(this.lastInternalBeat + 1, target - MAX_CATCHUP_BEATS);
+    for (let beatIdx = first; beatIdx <= target; beatIdx++) {
+      let stepTime = this.startSec + beatIdx * secPerBeat;
+      if (beatIdx % 2 === 1) stepTime += this.cfg.swing * secPerBeat * 0.5; // groove off-beats
+      // A stall can leave a beat's time already behind us; Tone would clamp it anyway, but
+      // saying so here keeps the fired-note log honest about when it really sounds.
+      this.fireStep(beatIdx, Math.max(now, stepTime), secPerBeat, null);
+    }
+    this.lastInternalBeat = target;
   }
 
   /** Locked to a song: fire a step on each of the song's beats, chord-locked. */
   private scheduleSynced(src: BoardSyncSource): void {
     const beats = src.beats;
     const t = src.getTime();
-    const now = Tone.now();
+    const now = Tone.immediate();
     // Re-align the beat pointer on start / seek / loop (when it no longer
     // straddles the current song time).
     const cur = this.lastBeatIndex;
@@ -557,6 +582,9 @@ export class BoardSequencerEngine {
       const spacing = i + 1 < beats.length
         ? Math.max(0.05, beats[i + 1] - beatTime)
         : (i > 0 ? Math.max(0.05, beatTime - beats[i - 1]) : 0.5);
+      // `t` is the song's AUDIBLE position (ctx.currentTime), so the base has to be the
+      // same clock. Tone.now() is currentTime + lookAhead, which put every board note a
+      // whole look-ahead (100 ms) behind the song's beat — a constant, obvious flam.
       let audioTime = now + Math.max(0, beatTime - t);
       if (i % 2 === 1) audioTime += this.cfg.swing * spacing * 0.5; // groove off-beats
       this.fireStep(i, audioTime, spacing, src.chordAt(beatTime));
@@ -641,25 +669,47 @@ export class BoardSequencerEngine {
     );
     const oct = this.cfg.octaveShift * 12;
     const h = this.cfg.humanize;
+    // The same drum piece hit twice at the same instant. Three kit pieces (hat, crash,
+    // rim) have a single sample, so round robin reuses one Player, and Tone THROWS if a
+    // Player is restarted at a time it is already playing. The exception escaped the loop
+    // and every cell after it in this beat was silently dropped — which reads as "the
+    // board randomly forgets notes". Two identical hits at one instant are one hit anyway.
+    const drumHits = new Set<string>();
     for (const { cell, source } of tagged) {
+      try {
+        this.fireCell(cell, source, beat, cellTime, secPerBeat, chord, voicing, oct, h, melodicLoop, durSec, drumHits);
+      } catch (err) {
+        // One cell must never take the rest of the beat with it.
+        console.warn('[BoardSequencer] a cell failed to play:', err);
+      }
+    }
+  }
+
+  /* eslint-disable-next-line max-params */
+  private fireCell(
+    cell: ActiveCell, source: FiredNote['source'], beat: number, cellTime: number,
+    secPerBeat: number, chord: BoardChord | null, voicing: Map<string, number>,
+    oct: number, h: number, melodicLoop: number, durSec: number, drumHits: Set<string>,
+  ): void {
+    {
       const ch = this.channelById.get(cell.colour);
-      if (!ch) continue;
+      if (!ch) return;
       const role = ch.role;
       // Control roles (faders/toggles) and 'off' are not sequenced.
-      if (role !== 'melody' && role !== 'chord' && role !== 'drums' && role !== 'bass') continue;
+      if (role !== 'melody' && role !== 'chord' && role !== 'drums' && role !== 'bass') return;
       // Per-role polyrhythm: a cell fires when its column matches the role's
       // own playhead (beat wrapped at that role's loop length).
       const cat = this.loopCategory(role);
-      if (cell.col !== playheadStep(beat, this.rawLoop(cat), this.cfg.cols, this.cfg.pingPong ?? false)) continue;
+      if (cell.col !== playheadStep(beat, this.rawLoop(cat), this.cfg.cols, this.cfg.pingPong ?? false)) return;
       // Variation: an off-centre ("conditional") cell plays only on variation laps,
       // so the loop alternates a full pass and a full-plus-variations pass.
       // A saved loop keeps the Variation flags it was captured with. Once Variation is
       // switched off the live board plays every counter every pass, so a loop that went
       // on dropping notes on alternate laps had nothing on screen explaining why.
       const varies = (cell.conditional ?? false) && this.cfg.variationEnabled !== false;
-      if (!firesThisLapPaged(varies, beat, this.cfg.cols, this.cfg.numPages)) continue;
+      if (!firesThisLapPaged(varies, beat, this.cfg.cols, this.cfg.numPages)) return;
       // Humanize: occasionally skip a step + vary velocity, so loops breathe.
-      if (h > 0 && Math.random() < h * 0.5) continue;
+      if (h > 0 && Math.random() < h * 0.5) return;
       // Box detail: where the counter sits gives it its own loudness and timing. The
       // shift can never reach into the past — a late note is fine, a missed one is not.
       const base = cell.velocity ?? this.cfg.velocity;
@@ -674,13 +724,16 @@ export class BoardSequencerEngine {
           ? ch.drum
           : drumForRow(cell.row, this.cfg.rows, DEFAULT_DRUM_ROWS);
         if (drum && this.drumKit) {
+          const hit = `${drum}@${stepTime}`;
+          if (drumHits.has(hit)) return;
+          drumHits.add(hit);
           this.drumKit.play(drum as KitDrum, vel, stepTime);
           this.recordFired({ row: cell.row, col: cell.col, colour: cell.colour, role, audioTime: stepTime, durSec, source });
         }
-        continue;
+        return;
       }
       const voice = this.voiceByChannel.get(ch.id)?.voice;
-      if (!voice) continue;
+      if (!voice) return;
       if (role === 'bass') {
         // Bass pitch follows the row like melody (bottom = low), an octave down.
         const degree = this.cfg.rows - 1 - cell.row;

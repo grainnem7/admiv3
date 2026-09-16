@@ -45,6 +45,13 @@ export interface ColoursStepProps {
   onDiscardPending(): void;
   onRecalibrate(id: ColourId): void;
   onRole(id: ColourId, role: ColourRole): void;
+  /**
+   * A colour's JOB is read once, when the engine is built. Changing it while the board is
+   * playing left the sound on the old job and the control counters on the new one — a
+   * melody colour switched to "Control: reverb" both drove the reverb and went on playing
+   * melody. The Instrument and Drum pickers are already stopped for the same reason.
+   */
+  running: boolean;
   onRemove(id: ColourId): void;
   onClearAll(): void;
   /** True when saved pages or loops reference this colour, for the confirmation wording. */
@@ -87,7 +94,7 @@ export interface ColoursStepProps {
 export function ColoursStep(props: ColoursStepProps): JSX.Element {
   const {
     channels, counts, palette, arming, pending, onFindColours, onArmTap, onCancelArm,
-    onAddPending, onDiscardPending, onRecalibrate, onRole, onRemove, onClearAll, isReferenced,
+    onAddPending, onDiscardPending, onRecalibrate, onRole, onRemove, onClearAll, isReferenced, running,
     minFilledFraction, readSettingsCustom, onMinFill, onResetReadSettings,
     settleWindowMs, onSettleWindow, onBlackDarkness, picker, onMovePicker, onSampleSquare, hands,
     finding, onCancelFind, found, onUseFound, onDiscardFound,
@@ -206,6 +213,7 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
       {channels.map((c, i) => {
         const count = counts[c.id] ?? 0;
         const isControl = CONTROL_JOBS.includes(c.role);
+        const jobReason = running ? 'Stop the board to change what a colour does.' : null;
         return (
           <div
             key={c.id}
@@ -236,12 +244,14 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
                   key={role}
                   label={role === 'off' ? 'Off (not used)' : ROLE_LABELS[role]}
                   selected={c.role === role}
+                  disabledReason={jobReason}
                   onClick={() => { onRole(c.id, role); setControlOpen(null); }}
                 />
               ))}
               <JobChip
                 label={isControl ? `Control: ${ROLE_LABELS[c.role]}` : 'Control…'}
                 selected={isControl}
+                disabledReason={jobReason}
                 onClick={() => setControlOpen((id) => (id === c.id ? null : c.id))}
               />
             </div>
@@ -253,6 +263,7 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
                     key={role}
                     label={ROLE_LABELS[role]}
                     selected={c.role === role}
+                    disabledReason={jobReason}
                     onClick={() => onRole(c.id, role)}
                   />
                 ))}
@@ -366,12 +377,17 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
   );
 }
 
-function JobChip({ label, selected, onClick }: { label: string; selected: boolean; onClick(): void }): JSX.Element {
+function JobChip(
+  { label, selected, onClick, disabledReason = null }:
+  { label: string; selected: boolean; onClick(): void; disabledReason?: string | null },
+): JSX.Element {
   return (
     <button
       type="button"
       role="radio"
       aria-checked={selected}
+      disabled={disabledReason !== null}
+      title={disabledReason ?? undefined}
       onClick={onClick}
       style={{
         minHeight: 'var(--bs-target)',

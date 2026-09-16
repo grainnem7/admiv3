@@ -173,3 +173,32 @@ describe('settings reaching saved loops', () => {
     expect(e.drainFiredNotes()).toHaveLength(0);
   });
 });
+
+describe('one bad cell must never take the beat with it', () => {
+  it('hits a single-sample drum once when two counters ask for it at the same instant', () => {
+    // hat, crash and rim have ONE sample each, so round robin reuses one Tone.Player, and
+    // Tone throws if a Player is restarted at a time it is already playing. The exception
+    // escaped the cell loop and every cell after it in that beat was dropped — which the
+    // player experiences as the board randomly forgetting notes.
+    const { e, p } = engine({ cols: 4 });
+    const kit = { play: vi.fn() };
+    (e as unknown as { drumKit: typeof kit }).drumKit = kit;
+    (e as unknown as { channelById: Map<string, ColourChannel> }).channelById = new Map([
+      ['d', { id: 'd', kind: 'black', role: 'drums', swatch: '#000', drum: 'hat' }],
+    ]);
+    e.setActiveCells([cell(0, 0, 'd'), cell(2, 0, 'd')]);
+    p.fireStep(0, 1, 1, null);
+    expect(kit.play).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps playing the rest of the beat when one cell throws', () => {
+    const { e, p, play } = engine({ cols: 4 });
+    const kit = { play: vi.fn(() => { throw new Error('Start time must be strictly greater'); }) };
+    (e as unknown as { drumKit: typeof kit }).drumKit = kit;
+    e.setActiveCells([cell(3, 0, 'd'), cell(0, 0, 'm')]);
+    p.fireStep(0, 1, 1, null);
+    // The melody cell is listed after the drum cell and must still sound.
+    expect(play).toHaveBeenCalled();
+    expect(e.drainFiredNotes().map((f) => f.colour)).toEqual(['m']);
+  });
+});

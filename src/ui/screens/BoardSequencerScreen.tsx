@@ -2040,6 +2040,7 @@ export default function BoardSequencerScreen() {
       onDiscardPending={() => setPendingColour(null)}
       onRecalibrate={recalibrateChannel}
       onRole={setChannelRole}
+      running={running}
       onRemove={removeChannel}
       onClearAll={clearChannels}
       isReferenced={(id) => allReferencedChannelIds().has(id)}
