@@ -4,19 +4,14 @@ import { Switch } from '../ui/Switch';
 import { Disclosure } from '../ui/Disclosure';
 import { SegmentedControl } from '../ui/SegmentedControl';
 import { gridSizeOptions, type BoardSquares } from '../../../../tracking/boardGrid';
-import type { BoardSequencerStored } from '../../../../profiles/BoardSequencerConfig';
-
-export type SeatEdge = BoardSequencerStored['seatEdge'];
 
 export interface BoardStepProps {
   boardSquares: BoardSquares;
   rows: number;
   cols: number;
-  seatEdge: SeatEdge;
   nudgesEnabled: boolean;
   trackingEnabled: boolean;
   onTrackingEnabled(on: boolean): void;
-  playerName: string;
   running: boolean;
   /** True while the corner editor is open, so Find board isn't offered twice. */
   editing: boolean;
@@ -24,7 +19,6 @@ export interface BoardStepProps {
   onTapCorners(): void;
   onBoardSquares(n: BoardSquares): void;
   onGrid(patch: { rows?: number; cols?: number }): void;
-  onSeatEdge(edge: SeatEdge): void;
   onNudgesEnabled(on: boolean): void;
   /** Warns that confirming corners adopts the stand-in camera. */
   usingFallbackCamera: boolean;
@@ -35,17 +29,16 @@ export interface BoardStepProps {
   findMessage: string | null;
 }
 
-const SEAT_OPTIONS: { value: SeatEdge; label: string }[] = [
-  { value: 'low', label: 'Low-notes side' },
-  { value: 'high', label: 'High-notes side' },
-  { value: 'start', label: 'Start side' },
-  { value: 'end', label: 'End side' },
-];
+// NOTE: "Where does <player> sit?" used to be asked here. The answer was saved and then
+// read by nothing at all, so it changed neither the pitch direction, the playhead nor the
+// box-detail sides. Asking a question that does nothing is worse than not asking, so the
+// control is gone until the seat rotation is really built and checked against the board.
+// `seatEdge` is still stored, so saved profiles keep their answer for when it is.
 
 export function BoardStep({
-  boardSquares, rows, cols, seatEdge, nudgesEnabled, trackingEnabled, onTrackingEnabled,
-  playerName, running, editing,
-  onFindBoard, onTapCorners, onBoardSquares, onGrid, onSeatEdge, onNudgesEnabled, usingFallbackCamera,
+  boardSquares, rows, cols, nudgesEnabled, trackingEnabled, onTrackingEnabled,
+  running, editing,
+  onFindBoard, onTapCorners, onBoardSquares, onGrid, onNudgesEnabled, usingFallbackCamera,
   finding, onCancelFind, findMessage,
 }: BoardStepProps): JSX.Element {
   const options = gridSizeOptions(boardSquares, { rows, cols });
@@ -143,18 +136,6 @@ export function BoardStep({
           </Button>
         )}
       </Disclosure>
-
-      <div>
-        <span style={{ fontWeight: 600, display: 'block', marginBottom: 4 }}>
-          {`Where does ${playerName} sit?`}
-        </span>
-        <SegmentedControl<SeatEdge>
-          label={`Where does ${playerName} sit?`}
-          value={seatEdge}
-          onChange={onSeatEdge}
-          options={SEAT_OPTIONS}
-        />
-      </div>
 
       <Disclosure summary="Details">
         <Switch

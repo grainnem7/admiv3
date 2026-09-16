@@ -1889,9 +1889,7 @@ export default function BoardSequencerScreen() {
       boardSquares={config.boardSquares}
       rows={config.rows}
       cols={config.cols}
-      seatEdge={config.seatEdge}
       nudgesEnabled={config.boardNudgesEnabled}
-      playerName={activePlayer?.name ?? 'the player'}
       running={running}
       editing={calibrating !== null}
       onFindBoard={() => void findBoard()}
@@ -1901,7 +1899,6 @@ export default function BoardSequencerScreen() {
       findMessage={proposal?.reasons[0] ?? null}
       onBoardSquares={(n: BoardSquares) => updateGrid({ boardSquares: n })}
       onGrid={updateGrid}
-      onSeatEdge={(edge) => update({ seatEdge: edge })}
       onNudgesEnabled={(on) => update({ boardNudgesEnabled: on })}
       trackingEnabled={config.boardTrackingEnabled}
       onTrackingEnabled={(on) => update({ boardTrackingEnabled: on })}

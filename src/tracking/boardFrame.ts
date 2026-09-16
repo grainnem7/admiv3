@@ -9,6 +9,7 @@ import type { ActiveCell, BoardStepResult, CellReading, PieceColour } from './Bo
 import { stepLoopBank, type LoopBankState } from '../songs/loopBank';
 import { conditionalFromOffset } from '../songs/boardSequencerScale';
 import { ANYWHERE, NO_ZONE, splitByZone, zoneCellOf, zoneSlotCount, zoneSlotOf, type Zone } from './zones';
+import { keyOf as ghostKey, posKey } from './handGuard/knockGuard';
 
 export type BankSlotState = 'empty' | 'paused' | 'active';
 
@@ -29,6 +30,8 @@ export interface BoardFrameCfg {
   controlZone?: Zone;
   loopZone?: Zone;
   loopPadMode?: 'hold' | 'toggle';
+  /** Two counters to a square both play, so a square can be live in one colour and haunted in another. */
+  twoCounterMode?: 'off' | 'both';
 }
 
 export interface BoardFrameInput {
@@ -185,9 +188,13 @@ export function stepBoardFrame({ readings, cfg, running, modeResult, loopBank, d
     fireTick = modeResult.justSettled.length > 0;
   }
   if (running && ghosts && ghosts.size > 0) {
-    const live = new Set(patternCells.map((c) => `${c.row},${c.col}`));
+    // A counter back on the board wins over the ghost it replaces. The ghost map is keyed
+    // by counter, so the comparison has to be by square unless two counters share one.
+    const two = cfg.twoCounterMode === 'both';
+    const idOf = two ? ghostKey : posKey;
+    const live = new Set(patternCells.map(idOf));
     const withGhosts = [...patternCells];
-    for (const [key, cell] of ghosts) if (!live.has(key)) withGhosts.push(cell);
+    for (const cell of ghosts.values()) if (!live.has(idOf(cell))) withGhosts.push(cell);
     patternCells = withGhosts;
   }
 

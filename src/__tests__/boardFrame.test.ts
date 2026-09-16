@@ -167,3 +167,44 @@ describe('stepBoardFrame — saving and recalling a loop through a column lane',
     expect(out.patternCells.map((c) => `${c.row},${c.col}`)).toEqual(['2,2']);
   });
 });
+
+describe('ghosts in the pattern', () => {
+  const ghost = (row: number, col: number, colour: string): ActiveCell => ({ row, col, colour });
+  const ghosts = (cells: ActiveCell[]): Map<string, ActiveCell> =>
+    new Map(cells.map((c) => [`${c.row},${c.col},${c.colour}`, c]));
+
+  it('keeps sounding the cells whose counters were knocked off', () => {
+    const out = stepBoardFrame({
+      readings: [], cfg: cfg(), running: true, modeResult: res([ghost(0, 0, 'red')]),
+      loopBank: emptyLoopBank(0), ghosts: ghosts([ghost(2, 2, 'blue')]),
+    });
+    expect(out.patternCells).toHaveLength(2);
+  });
+
+  it('a counter put back replaces its ghost rather than doubling the note', () => {
+    // The ghost map is keyed by counter; comparing those keys against squares made every
+    // ghost look unreplaced, so the square played twice over.
+    const out = stepBoardFrame({
+      readings: [], cfg: cfg(), running: true, modeResult: res([ghost(2, 2, 'red')]),
+      loopBank: emptyLoopBank(0), ghosts: ghosts([ghost(2, 2, 'blue')]),
+    });
+    expect(out.patternCells).toEqual([ghost(2, 2, 'red')]);
+  });
+
+  it('with two counters to a square, only the matching ghost is replaced', () => {
+    const out = stepBoardFrame({
+      readings: [], cfg: cfg({ twoCounterMode: 'both' }), running: true,
+      modeResult: res([ghost(2, 2, 'red')]), loopBank: emptyLoopBank(0),
+      ghosts: ghosts([ghost(2, 2, 'red'), ghost(2, 2, 'blue')]),
+    });
+    expect(out.patternCells.map((c) => c.colour).sort()).toEqual(['blue', 'red']);
+  });
+
+  it('nothing sounds while stopped, however many ghosts are waiting', () => {
+    const out = stepBoardFrame({
+      readings: [], cfg: cfg(), running: false, modeResult: null,
+      loopBank: emptyLoopBank(0), ghosts: ghosts([ghost(2, 2, 'blue')]),
+    });
+    expect(out.patternCells).toEqual([]);
+  });
+});

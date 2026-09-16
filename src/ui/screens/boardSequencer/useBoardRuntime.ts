@@ -348,12 +348,18 @@ export function useBoardRuntime(opts: {
           windowMs: cfg.knockWindowMs,
         });
         knockRef.current = releaseGhostsAt(step.state, now, cfg.twoCounterMode === 'both');
-        knocked = knockRef.current.ghosts.size > 0;
         settledBefore = modeResult.activeCells;
       } else {
-        if (knockRef.current.ghosts.size > 0) knockRef.current = letGo(knockRef.current);
+        // Switching the guard off really does drop the ghosts. Merely pressing Stop does
+        // not: the promise of the guard is that a knocked-over pattern waits until the
+        // player decides, and Stop is not that decision. They stay silent until Play, and
+        // "Save as loop" / "Let go" stay on offer the whole time.
+        if (!cfg.knockGuardEnabled && knockRef.current.ghosts.size > 0) {
+          knockRef.current = letGo(knockRef.current);
+        }
         settledBefore = modeResult ? modeResult.activeCells : [];
       }
+      knocked = knockRef.current.ghosts.size > 0;
 
       const frame = stepBoardFrame({
         readings: visible,
