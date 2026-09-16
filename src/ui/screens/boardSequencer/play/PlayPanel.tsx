@@ -16,6 +16,9 @@ export interface PlayPanelProps {
   variationLap: boolean | null;
   /** Flips each beat, so the pulse is visible as well as audible. */
   beatOn: boolean;
+  /** How many cells the hand guard is holding, and whether it has a clear view yet. */
+  heldCount: number;
+  handGuardWaiting: boolean;
   groove: ReactNode;
   sound: ReactNode;
   loops: ReactNode;
@@ -31,7 +34,7 @@ export interface PlayPanelProps {
  */
 export function PlayPanel({
   running, muted, onStart, onStop, onToggleMute, bpm, step, cols, variationLap, beatOn,
-  groove, sound, loops, stacked, transportAlign,
+  heldCount, handGuardWaiting, groove, sound, loops, stacked, transportAlign,
 }: PlayPanelProps): JSX.Element {
   const [tab, setTab] = useState('groove');
 
@@ -69,7 +72,13 @@ export function PlayPanel({
         />
         {running ? `Playing · ${Math.round(bpm)} BPM · step ${step + 1} of ${cols}` : `Stopped · ${Math.round(bpm)} BPM`}
         {variationLap !== null && running && ` · lap ${variationLap ? 'B' : 'A'}`}
+        {heldCount > 0 && ` · ✋ holding ${heldCount}`}
       </span>
+      {handGuardWaiting && (
+        <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
+          Hand guard: waiting for a clear view of the board
+        </span>
+      )}
     </div>
   );
 

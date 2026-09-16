@@ -12,6 +12,10 @@ export interface BoardViewFrame {
   settled: Map<string, PieceColour>;
   conditional: Set<string>;
   bankSlots: BankSlotState[] | null;
+  /** Cells the hand guard is holding — drawn hatched, so "on hold" is its own picture. */
+  held?: ReadonlySet<string>;
+  /** Knocked cells still sounding: a hollow disc with a double outline and a ↺. */
+  ghosts?: ReadonlyMap<string, { colour: ColourId }>;
 }
 
 export interface BoardViewProps {
@@ -105,9 +109,28 @@ export function BoardView({
         ctx.stroke();
 
         const key = keyOf(r, c);
+        const isHeld = frame.held?.has(key) === true;
+        const ghost = frame.ghosts?.get(key);
+        if (isHeld) {
+          // Hatching: distinct from the unsettled dotted ring and the Variation dashes.
+          ctx.save();
+          ctx.beginPath();
+          roundRect(ctx, x, y, cellW, cellH, radius);
+          ctx.clip();
+          ctx.strokeStyle = palette.fg3;
+          ctx.lineWidth = 1;
+          for (let d = -cellH; d < cellW; d += 6) {
+            ctx.beginPath();
+            ctx.moveTo(x + d, y);
+            ctx.lineTo(x + d + cellH, y + cellH);
+            ctx.stroke();
+          }
+          ctx.restore();
+        }
+
         const settledColour = frame.settled.get(key);
         const detectedColour = frame.detected.get(key);
-        const colour = settledColour ?? detectedColour;
+        const colour = settledColour ?? detectedColour ?? ghost?.colour;
         if (!colour) continue;
 
         const swatch = swatchFor(colour);
@@ -122,6 +145,21 @@ export function BoardView({
 
         ctx.beginPath();
         ctx.arc(cx, cy, rr, 0, Math.PI * 2);
+        if (ghost && !settledColour && !detectedColour) {
+          // A ghost is hollow: the sound is still there, the counter is not.
+          ctx.strokeStyle = swatch;
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.arc(cx, cy, rr - 4, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.fillStyle = palette.fg2;
+          ctx.font = `${Math.round(rr)}px system-ui, sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('↺', cx, cy);
+          continue;
+        }
         if (settledColour) {
           ctx.fillStyle = swatch;
           ctx.fill();
@@ -192,12 +230,15 @@ export function BoardView({
   }, [dims, rows, cols, frame, pops, playheadCol, playing, pingPongDirection, swatchFor, palette, reducedMotion]);
 
   const pieces = frame.settled.size;
+  const heldCount = frame.held?.size ?? 0;
   return (
     <div ref={wrapRef} style={{ position: 'relative', width: '100%', height: '100%', minHeight: 160, display: 'grid', placeItems: 'center' }}>
       <canvas
         ref={canvasRef}
         role="img"
-        aria-label={boardSummary(rows, cols, playheadCol, pieces)}
+        aria-label={heldCount > 0
+          ? `${boardSummary(rows, cols, playheadCol, pieces)}, ${heldCount} on hold`
+          : boardSummary(rows, cols, playheadCol, pieces)}
         style={{ width: dims.w, height: dims.h, borderRadius: 'var(--bs-radius-lg)' }}
       />
       {pageLabel && (

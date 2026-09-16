@@ -51,6 +51,7 @@ import { SwatchChip } from './boardSequencer/ui/SwatchChip';
 import { Button } from './boardSequencer/ui/Button';
 import { colourMatchesBoardRaw, type NudgeSignal } from './boardSequencer/playNudge';
 import { spaceTogglesPlay, type BoardScreenView } from './boardSequencer/spaceKey';
+import { ghostsForSave } from '../../tracking/handGuard/knockGuard';
 import type { FiredNote } from '../../songs/BoardSequencerEngine';
 import {
   SETUP_STEPS, canOpenStep, canPlay, resolveEntry, stepIndicator,
@@ -208,7 +209,8 @@ export default function BoardSequencerScreen() {
   // loop; this screen supplies the callbacks below and drives start/stop through its refs.
   const callbacksRef = useRef<BoardRuntimeCallbacks>(NOOP_RUNTIME_CALLBACKS);
   const {
-    videoRef, cameraRef, homographyRef, modeRef, engineRef, runningRef, loopBankRef, activeCellsRef, dismiss,
+    videoRef, cameraRef, homographyRef, modeRef, engineRef, runningRef, loopBankRef, activeCellsRef,
+    dismiss, letGoGhosts, knockRef, latestFrameRef,
   } = useBoardRuntime({ cameraDeviceId: config.cameraDeviceId, cameraRetry, calibrated, configRef, callbacksRef });
   // Colour calibration armed for the next camera click: add a new channel, or
   // recalibrate an existing one (null = not calibrating).
@@ -232,6 +234,11 @@ export default function BoardSequencerScreen() {
   const [chooserOpen, setChooserOpen] = useState(() => listBoardPlayers().length > 1);
   const [pendingColour, setPendingColour] = useState<LastColourSample | null>(null);
   const [squarePicker, setSquarePicker] = useState<{ row: number; col: number } | null>(null);
+  const [handCheck, setHandCheck] = useState<{ checking: boolean; result: string | null }>(
+    { checking: false, result: null },
+  );
+  // A ref, so the sampling interval always reads the current colours.
+  const channelNameRef = useRef<(id: ColourId) => string>((id) => id);
   const [showHelp, setShowHelp] = useState(false);
   const bigBoardRef = useRef<HTMLDivElement | null>(null);
   const bigBoardButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -370,6 +377,23 @@ export default function BoardSequencerScreen() {
   }, []);
 
   // Clear a bank slot (screen "Clear" button on a mini-view).
+  /** "Save as loop": the knocked pattern plus what is still down, into the first free slot. */
+  const saveGhostsAsLoop = useCallback(() => {
+    const cfg = configRef.current;
+    const slots = loopBankRef.current.saved;
+    const slot = slots.findIndex((sl) => sl == null);
+    if (slot < 0) return;
+    const cells = ghostsForSave(knockRef.current, activeCellsRef.current);
+    loopBankRef.current = {
+      ...loopBankRef.current,
+      saved: slots.map((sl, i) => (i === slot ? cells.map((c) => ({ ...c })) : sl)),
+    };
+    persistLoopSlots(loopBankRef.current.saved);
+    letGoGhosts();
+    announce(`Saved to slot ${slot + 1} — put a counter on slot ${slot + 1} to play it.`);
+    void cfg;
+  }, [persistLoopSlots, letGoGhosts, announce, activeCellsRef, knockRef, loopBankRef, configRef]);
+
   const clearLoopSlotAt = useCallback((slot: number) => {
     loopBankRef.current = clearLoopSlot(loopBankRef.current, slot);
     persistLoopSlots(loopBankRef.current.saved);
@@ -523,6 +547,38 @@ export default function BoardSequencerScreen() {
       bigBoardButtonRef.current?.focus();
     };
   }, [view]);
+
+  /**
+   * "Check my hand": hold a hand over the board for two seconds and find out what the
+   * guard makes of it, and whether any counter colour lights up under a sleeve. It only
+   * reports — a sleeve that isn't a counter colour is advice, not a setting.
+   */
+  const startHandCheck = useCallback(() => {
+    setHandCheck({ checking: true, result: null });
+    const started = performance.now();
+    let maxHeld = 0;
+    const lit = new Set<ColourId>();
+    const id = window.setInterval(() => {
+      const f = latestFrameRef.current;
+      if (f) {
+        maxHeld = Math.max(maxHeld, f.held.size);
+        for (const r of f.readings) {
+          if (r.occupied && r.colour && f.held.has(`${r.row},${r.col}`)) lit.add(r.colour);
+        }
+      }
+      if (performance.now() - started < 2000) return;
+      window.clearInterval(id);
+      const names = [...lit].map((cid) => channelNameRef.current(cid));
+      setHandCheck({
+        checking: false,
+        result: maxHeld === 0
+          ? "Nothing was held. Move your hand further over the board, or raise Hand sensitivity."
+          : names.length === 0
+            ? `Held ${maxHeld} ${maxHeld === 1 ? 'square' : 'squares'}. No counter colour lit up under your hand.`
+            : `Held ${maxHeld} ${maxHeld === 1 ? 'square' : 'squares'}. ${names.join(' and ')} lights up under your hand — the guard will hold those squares, but a sleeve that isn't a counter colour helps.`,
+      });
+    }, 100);
+  }, [latestFrameRef]);
 
   // The handedness layout switches at a breakpoint, so the width has to be watched.
   useEffect(() => {
@@ -935,6 +991,7 @@ export default function BoardSequencerScreen() {
     const c = channelById.get(id);
     return c ? describeChannel(c) : id;
   };
+  channelNameRef.current = labelForId;
   const calibLabel = colourCalib === null ? ''
     : colourCalib.mode === 'new' ? 'a new colour'
       : labelForId(colourCalib.id);
@@ -1473,6 +1530,19 @@ export default function BoardSequencerScreen() {
         return { row: clamp(base.row + dRow), col: clamp(base.col + dCol) };
       })}
       onSampleSquare={sampleSquare}
+      hands={{
+        handGuardEnabled: config.handGuardEnabled,
+        onHandGuardEnabled: (on) => update({ handGuardEnabled: on }),
+        knockGuardEnabled: config.knockGuardEnabled,
+        onKnockGuardEnabled: (on) => update({ knockGuardEnabled: on }),
+        handMarginSquares: config.handMarginSquares,
+        onHandMargin: (v) => update({ handMarginSquares: v }),
+        intruderSensitivity: config.intruderSensitivity,
+        onSensitivity: (v) => update({ intruderSensitivity: v }),
+        checking: handCheck.checking,
+        onCheckHand: startHandCheck,
+        checkResult: handCheck.result,
+      }}
     />
   ) : (
     <ReadyStep
@@ -1512,12 +1582,18 @@ export default function BoardSequencerScreen() {
 
   // While playing, the board is the stage and the camera shrinks to a picture-in-picture;
   // the surface keeps its place in the tree either way, so the camera never restarts.
+  const heldCells = latestFrame?.held ?? new Set<string>();
+  const ghostCells = latestFrame?.ghosts ?? new Map();
   const boardFrame = {
     detected: latestFrame?.frame.occupied ?? new Map(),
     settled: cellMap(active),
     conditional: latestFrame?.frame.conditional ?? new Set<string>(),
     bankSlots: latestFrame?.frame.bankSlots ?? null,
+    held: heldCells,
+    ghosts: ghostCells,
   };
+  const emptyLoopSlot = config.loopBankEnabled
+    && loopBankRef.current.saved.some((sl) => sl == null);
 
   const boardView = (
     <BoardView
@@ -1545,6 +1621,9 @@ export default function BoardSequencerScreen() {
           onFindBoard={() => { stop(); setView('setup'); setStep('board'); setCalibrating(true); }}
           onRecalibrate={(id) => { stop(); setView('setup'); setStep('colours'); recalibrateChannel(id); }}
           onDismiss={(kind) => { dismiss(kind); setNudge(null); }}
+          onLetGo={() => { letGoGhosts(); setNudge(null); }}
+          onSaveAsLoop={saveGhostsAsLoop}
+          saveReason={emptyLoopSlot ? null : 'Turn the loop bank on and leave a slot free to save it.'}
         />
       )}
       {view === 'play' && <div style={{ flex: 1, minHeight: 200 }}>{boardView}</div>}
@@ -1820,6 +1899,8 @@ export default function BoardSequencerScreen() {
                   cols={config.cols}
                   variationLap={config.variationEnabled && config.numPages <= 1 ? isVarLap : null}
                   beatOn={beatOn}
+                  heldCount={heldCells.size}
+                  handGuardWaiting={config.handGuardEnabled && running && latestFrame?.handGuardReady === false}
                   groove={grooveTab}
                   sound={soundTab}
                   loops={loopsTab}

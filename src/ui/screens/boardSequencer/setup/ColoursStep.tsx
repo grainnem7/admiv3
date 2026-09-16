@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Button } from '../ui/Button';
 import { Disclosure } from '../ui/Disclosure';
+import { Switch } from '../ui/Switch';
 import { LabeledSlider } from '../ui/LabeledSlider';
 import { SwatchChip } from '../ui/SwatchChip';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -51,6 +52,21 @@ export interface ColoursStepProps {
   picker: { row: number; col: number } | null;
   onMovePicker(dRow: number, dCol: number): void;
   onSampleSquare(): void;
+  /** The Hands group: the guards and their plain-language settings. */
+  hands: {
+    handGuardEnabled: boolean;
+    onHandGuardEnabled(on: boolean): void;
+    knockGuardEnabled: boolean;
+    onKnockGuardEnabled(on: boolean): void;
+    handMarginSquares: number;
+    onHandMargin(v: number): void;
+    intruderSensitivity: number;
+    onSensitivity(v: number): void;
+    /** "Check my hand": what the colours do under the player's own hand. */
+    checking: boolean;
+    onCheckHand(): void;
+    checkResult: string | null;
+  };
 }
 
 export function ColoursStep(props: ColoursStepProps): JSX.Element {
@@ -58,7 +74,7 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
     channels, counts, palette, arming, pending, onFindColours, onArmTap, onCancelArm,
     onAddPending, onDiscardPending, onRecalibrate, onRole, onRemove, onClearAll, isReferenced,
     minFilledFraction, readSettingsCustom, onMinFill, onResetReadSettings,
-    settleWindowMs, onSettleWindow, onBlackDarkness, picker, onMovePicker, onSampleSquare,
+    settleWindowMs, onSettleWindow, onBlackDarkness, picker, onMovePicker, onSampleSquare, hands,
   } = props;
   const [confirm, setConfirm] = useState<{ kind: 'remove'; id: ColourId } | { kind: 'clear' } | null>(null);
   const [controlOpen, setControlOpen] = useState<ColourId | null>(null);
@@ -221,6 +237,44 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
           onChange={onSettleWindow}
         />
         <p style={{ margin: 0, fontSize: 12, color: 'var(--bs-fg2)' }}>Settle time takes effect once you are playing.</p>
+      </Disclosure>
+
+      <Disclosure summary="Hands">
+        <Switch
+          label="Ignore hands"
+          checked={hands.handGuardEnabled}
+          onChange={hands.onHandGuardEnabled}
+          hint="Holds the squares your hand is over, so placing a counter adds no stray notes and a covered counter keeps playing."
+        />
+        <Switch
+          label="Keep the pattern if pieces get knocked"
+          checked={hands.knockGuardEnabled}
+          onChange={hands.onKnockGuardEnabled}
+          hint="Knocked pieces keep sounding until you let them go or save them as a loop."
+        />
+        <Button tone="secondary" onClick={hands.onCheckHand} disabled={hands.checking}>
+          {hands.checking ? 'Hold your hand over the board…' : 'Check my hand'}
+        </Button>
+        {hands.checkResult && (
+          <p role="status" style={{ margin: 0, fontSize: 12, color: 'var(--bs-fg2)' }}>{hands.checkResult}</p>
+        )}
+        <LabeledSlider
+          label="Space around a hand"
+          min={25}
+          max={200}
+          step={5}
+          value={Math.round(hands.handMarginSquares * 100)}
+          display={`${hands.handMarginSquares.toFixed(2)} squares`}
+          onChange={(v) => hands.onHandMargin(v / 100)}
+        />
+        <LabeledSlider
+          label="Hand sensitivity"
+          min={8}
+          max={40}
+          value={hands.intruderSensitivity}
+          display={String(hands.intruderSensitivity)}
+          onChange={hands.onSensitivity}
+        />
       </Disclosure>
 
       {removeTarget && (
