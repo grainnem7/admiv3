@@ -114,7 +114,13 @@ describe('fitSafeBand', () => {
     expect(fitted.boardMatch).toBe(0);
   });
 
-  it('with no board to check against, it reports no match rather than guessing', () => {
-    expect(fitSafeBand(rgbToHsv(200, 40, 40), []).boardMatch).toBe(0);
+  it('with no board to check against, it flags the colour rather than blessing it', () => {
+    // This check exists to stop the board's own colour being offered as a playing
+    // counter. With no board model there is no evidence either way, and "no evidence"
+    // must not read as "safe" — that is the one failure this function exists to prevent.
+    // Flagged still means proposed, just switched off until the player says otherwise.
+    const fitted = fitSafeBand(rgbToHsv(200, 40, 40), []);
+    expect(fitted.boardMatch).toBe(1);
+    expect(fitted.unsafe).toBe(true);
   });
 });

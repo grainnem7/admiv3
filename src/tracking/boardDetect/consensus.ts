@@ -17,8 +17,14 @@ export const AGREE_COUNT = 3;
 export function consensus(detections: readonly BoardDetection[]): BoardDetection {
   const usable = detections.filter((d) => d.corners && (d.status === 'high' || d.status === 'low'));
   if (usable.length === 0) {
-    const partial = detections.find((d) => d.status === 'partial');
-    if (partial) return partial;
+    // A "partial" used to skip the agreement rule entirely: the FIRST one found was
+    // returned, from a single frame, corners and all — so a chequered floor or a keyboard
+    // with no board in shot pre-loaded the corner editor with four handles of nonsense.
+    const partials = detections.filter((d) => d.status === 'partial');
+    const backed = partials.find((cand) => partials.filter((o) => agrees(cand, o)).length >= AGREE_COUNT);
+    if (backed) return backed;
+    // Keep what it has to say — "move the camera back" is useful — but not the corners.
+    if (partials.length > 0) return { ...partials[0], corners: undefined };
     return detections[detections.length - 1] ?? {
       status: 'none',
       metrics: { coverage: 0, margin: 0, rms: 0, nodes: 0, ms: 0 },

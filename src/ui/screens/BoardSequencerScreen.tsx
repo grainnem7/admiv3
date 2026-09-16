@@ -74,7 +74,7 @@ import {
   type BoardPlayerProfile,
 } from '../../profiles/BoardProfiles';
 import { layoutFor } from './boardSequencer/layout';
-import { squareCentreToImage } from './boardSequencer/cornerEditor';
+import { isConvexQuad, squareCentreToImage } from './boardSequencer/cornerEditor';
 import type { BoardSquares } from '../../tracking/boardGrid';
 import type { ControlsResult } from '../../tracking/controlCounters';
 import type { FaderRole, ControlRemoval } from '../../profiles/BoardSequencerConfig';
@@ -982,6 +982,13 @@ export default function BoardSequencerScreen() {
 
   const handleCalibrated = useCallback(
     (corners: [BoardPoint, BoardPoint, BoardPoint, BoardPoint], patch: Partial<BoardSequencerStored> = {}) => {
+      // Dragging a handle across the board makes a bow-tie, which still solves — every
+      // cell maps to the same pixel or to NaN — so the board reads nothing for ever,
+      // silently, including after a reload. Only the four-tap path used to check.
+      if (!isConvexQuad(corners)) {
+        announce('Those corners cross over each other. Drag them back so the outline is a proper four-sided shape.');
+        return;
+      }
       // The tracker's corrections are superseded by corners the player just confirmed.
       trackedCornersRef.current = null;
       const adoptCamera = fellBackRef.current;
@@ -1009,10 +1016,16 @@ export default function BoardSequencerScreen() {
         return next;
       });
       const video = videoRef.current;
-      if (video) homographyRef.current = homographyForCorners(corners, video.videoWidth, video.videoHeight);
+      // Convexity has already been checked, so this can't throw on the corners we just
+      // saved; guard anyway rather than leave the editor stuck open on an exception.
+      try {
+        if (video) homographyRef.current = homographyForCorners(corners, video.videoWidth, video.videoHeight);
+      } catch {
+        homographyRef.current = null;
+      }
       setCalibrating(null);
     },
-    [homographyRef, videoRef],
+    [homographyRef, videoRef, announce],
   );
 
   const stop = useCallback(() => {

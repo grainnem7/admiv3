@@ -136,6 +136,10 @@ function assign(corners: XCorner[], toImage: Mat3): LatticeNode[] {
     const p = applyHomography(inverse, { x: c.x, y: c.y });
     const i = Math.round(p.x);
     const j = Math.round(p.y);
+    // A point on the horizon divides by ~0 and comes back infinite. Math.round(Infinity)
+    // is Infinity and Infinity - Infinity is NaN, so the tolerance test below is FALSE and
+    // the bad node was kept — which made the span infinite and the board unconfirmable.
+    if (!Number.isFinite(i) || !Number.isFinite(j)) continue;
     if (Math.abs(p.x - i) > LATTICE_TOLERANCE || Math.abs(p.y - j) > LATTICE_TOLERANCE) continue;
     const key = `${i},${j}`;
     if (taken.has(key)) continue;    // one corner per lattice point

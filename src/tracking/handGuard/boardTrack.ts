@@ -35,6 +35,13 @@ export interface TrackResult {
 
 const NO_MOVE: TrackResult = { dx: 0, dy: 0, scale: 1, improved: false, before: 0, after: 0 };
 
+/**
+ * The most the board may appear to grow or shrink in one correction (2.8%, the reach of
+ * the coarse then fine scale search). A winner at this limit is treated like a big shift:
+ * left to the "Board moved?" hint rather than half-followed into the saved corners.
+ */
+const MAX_SCALE_STEP = 0.028;
+
 /** Mean absolute difference from the background, for one candidate move. */
 function residual(
   grid: WatchGrid, bg: Float32Array, rgba: Uint8ClampedArray, h: Mat3, frame: FrameInfo,
@@ -97,7 +104,13 @@ export function estimateBoardShift(
 
   // A winner sitting on the edge of the search means the real move is bigger than we are
   // willing to follow: leave it to the "Board moved?" hint rather than half-following it.
-  const atEdge = Math.abs(best.dx) > maxShift * 0.95 || Math.abs(best.dy) > maxShift * 0.95;
+  // Scale was bounded by nothing and tested at no edge, yet every accepted correction is
+  // written into the player's saved corners and the next one starts from there. A slow
+  // exposure ramp could keep preferring a slightly smaller board and shrink the saved
+  // calibration, step by step, with no undo and nothing said.
+  const atEdge = Math.abs(best.dx) > maxShift * 0.95
+    || Math.abs(best.dy) > maxShift * 0.95
+    || Math.abs(best.scale - 1) > MAX_SCALE_STEP * 0.95;
   const improved = !atEdge && best.score < before * (1 - opts.minImprovement);
 
   return {

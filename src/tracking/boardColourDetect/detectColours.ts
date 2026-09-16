@@ -149,7 +149,10 @@ export function fitSafeBand(
 function matchShare(
   band: ReturnType<typeof calibrationFromHsv>, boardColours: { h: number; s: number; v: number }[],
 ): number {
-  if (boardColours.length === 0) return 0;
+  // Nothing to compare against is not proof of safety. This check exists to stop the
+  // board's own colour being offered as a counter, so with no board model it has to say
+  // "can't tell" — which is 1, not 0.
+  if (boardColours.length === 0) return 1;
   const channel: ColourChannel = {
     id: 'candidate', kind: band.kind, role: 'off', swatch: '#000',
     band: band.band, blackBand: band.blackBand, whiteBand: band.whiteBand,

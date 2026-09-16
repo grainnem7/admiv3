@@ -60,6 +60,12 @@ export interface SquareModel {
    * as part of the board and then never detected.
    */
   covered: Uint8Array;
+  /**
+   * 1 where a square has no pixels at all because it falls outside the camera picture.
+   * These are NOT counters: their median stays black, and proposing them produced a
+   * confident "black counter" for a board hanging off the edge of the frame.
+   */
+  offFrame: Uint8Array;
 }
 
 export type SquareModelResult =
@@ -90,6 +96,7 @@ export function buildSquareModel(warped: WarpedBoard): SquareModelResult {
   const rgb = new Float32Array(squares * squares * 3);
   const greys: { grey: number; index: number }[] = [];
   let covered = 0;
+  const offFrame = new Uint8Array(squares * squares);
 
   for (let sq = 0; sq < squares * squares; sq++) {
     const row = Math.floor(sq / squares);
@@ -106,7 +113,7 @@ export function buildSquareModel(warped: WarpedBoard): SquareModelResult {
         rs.push(data[i]); gs.push(data[i + 1]); bs.push(data[i + 2]);
       }
     }
-    if (rs.length === 0) { covered++; continue; }
+    if (rs.length === 0) { offFrame[sq] = 1; covered++; continue; }
     const mr = median(rs);
     const mg = median(gs);
     const mb = median(bs);
@@ -155,6 +162,8 @@ export function buildSquareModel(warped: WarpedBoard): SquareModelResult {
   }
   for (let sq = 0; sq < squares * squares; sq++) {
     if (!greys.some((e) => e.index === sq)) coveredFlags[sq] = 1;
+    // Off the picture is not covered-by-a-counter; it must never be offered as a colour.
+    if (offFrame[sq]) coveredFlags[sq] = 0;
   }
 
   const contrast = (light.r + light.g + light.b) / 3 - (dark.r + dark.g + dark.b) / 3;
@@ -164,7 +173,7 @@ export function buildSquareModel(warped: WarpedBoard): SquareModelResult {
     return { ok: false, reason: 'board-too-covered' };
   }
 
-  return { ok: true, model: { squares, rgb, dark, light, covered: coveredFlags } };
+  return { ok: true, model: { squares, rgb, dark, light, covered: coveredFlags, offFrame } };
 }
 
 /** Every square's colour as HSV, for testing a candidate band against the board. */

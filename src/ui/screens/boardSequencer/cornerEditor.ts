@@ -13,7 +13,13 @@ export function nudgeCorner(c: Corners, index: number, dx: number, dy: number, s
   return out;
 }
 
-function isConvexQuad(q: Corners): boolean {
+/**
+ * Four corners that make a usable board: convex, going the same way round, no two on the
+ * same spot. A bow-tie or a collapsed quad still SOLVES — it just maps every cell to the
+ * same pixel, or to NaN — so nothing downstream throws and the board silently reads
+ * nothing at all, this session and every session after it.
+ */
+export function isConvexQuad(q: Corners): boolean {
   let sign = 0;
   for (let i = 0; i < 4; i++) {
     const a = q[i]; const b = q[(i + 1) % 4]; const c = q[(i + 2) % 4];
