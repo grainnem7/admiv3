@@ -1,18 +1,19 @@
 import { describe, it, expect } from 'vitest';
 import {
-  suggestReadSettings, gridSizeOptions, applyGridChange, offsetFromSquare, gridDividesBoard, type GridFields,
+  suggestReadSettings, gridSizeOptions, applyGridChange, offsetFromSquare, gridDividesBoard,
+  ASSUMED_PIECE_AREA_SQUARES, type GridFields,
 } from '../tracking/boardGrid';
 
 describe('suggestReadSettings', () => {
   it.each([
-    [8, 8, 8, 5, 0.10],
+    [8, 8, 8, 5, 0.18],
     [8, 4, 4, 9, 0.045],
-    [8, 2, 2, 15, 0.04],
+    [8, 2, 2, 15, 0.01125],
     [8, 4, 8, 9, 0.09],
-    [8, 6, 8, 6, 0.10],
-    [10, 10, 10, 5, 0.10],
+    [8, 6, 8, 6, 0.135],
+    [10, 10, 10, 5, 0.18],
     [10, 5, 5, 9, 0.045],
-    [10, 2, 2, 15, 0.04],
+    [10, 2, 2, 15, 0.01],   // the floor, and still under a counter's 1.8% coverage
   ])('board %i, %i rows × %i cols → %i samples, %f fill', (board, rows, cols, samples, fill) => {
     const s = suggestReadSettings(board, rows, cols);
     expect(s.samplesPerAxis).toBe(samples);
@@ -49,7 +50,7 @@ describe('applyGridChange', () => {
   it('re-suggests read settings on a grid change', () => {
     const next = applyGridChange(base, { rows: 8, cols: 8 });
     expect(next).toMatchObject({ rows: 8, cols: 8, samplesPerAxis: 5 });
-    expect(next.minFilledFraction).toBeCloseTo(0.1, 6);
+    expect(next.minFilledFraction).toBeCloseTo(0.18, 6);
   });
 
   it('keeps read settings the user tuned', () => {
@@ -84,5 +85,38 @@ describe('gridDividesBoard', () => {
     expect(gridDividesBoard(8, 4, 8)).toBe(true);
     expect(gridDividesBoard(8, 3, 4)).toBe(false);
     expect(gridDividesBoard(10, 4, 4)).toBe(false);
+  });
+});
+
+describe('read settings the grid can actually work with', () => {
+  // Seen on a real board: an 8 x 8 grid on an 8 x 8 board read two cyan counters as four,
+  // because the suggested threshold was capped at 10% when the sum asks for 18%.
+  const pieceCoverage = (boardSquares: number, rows: number, cols: number): number =>
+    (ASSUMED_PIECE_AREA_SQUARES * rows * cols) / (boardSquares * boardSquares);
+
+  it('one cell per square asks for most of a counter, not a fifth of one', () => {
+    expect(suggestReadSettings(8, 8, 8).minFilledFraction).toBeCloseTo(0.18, 6);
+    expect(suggestReadSettings(10, 10, 10).minFilledFraction).toBeCloseTo(0.18, 6);
+  });
+
+  it('never sets the bar above what a single counter can reach', () => {
+    // A 2 x 2 grid puts 16 squares in one cell, so a counter covers 2.8% of it. A floor
+    // above that made a lone counter literally undetectable.
+    for (const boardSquares of [8, 10] as const) {
+      for (const n of [2, 4, 5, 8, 10]) {
+        if (boardSquares % n !== 0) continue;
+        const { minFilledFraction } = suggestReadSettings(boardSquares, n, n);
+        expect(minFilledFraction).toBeLessThan(pieceCoverage(boardSquares, n, n));
+      }
+    }
+  });
+
+  it('and never sets it so low that the square next door counts too', () => {
+    // Below about half a counter's coverage, a counter bleeding over a grid line
+    // registers in both squares — which is exactly the two-reads-as-four fault.
+    for (const n of [4, 8]) {
+      const { minFilledFraction } = suggestReadSettings(8, n, n);
+      expect(minFilledFraction).toBeGreaterThan(pieceCoverage(8, n, n) * 0.35);
+    }
   });
 });

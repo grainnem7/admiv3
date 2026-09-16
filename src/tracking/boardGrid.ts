@@ -20,7 +20,16 @@ export function suggestReadSettings(
   const sqY = boardSquares / Math.max(1, rows);
   return {
     samplesPerAxis: clamp(Math.round(4.5 * Math.max(sqX, sqY)), 3, 15),
-    minFilledFraction: clamp((0.4 * pieceAreaSquares) / (sqX * sqY), 0.04, 0.1),
+    // The bounds are only there to stop a nonsensical answer; they must not overrule the
+    // sum itself. They used to, at BOTH ends, and in opposite directions:
+    //
+    //  - One cell per square (an 8 x 8 grid on an 8 x 8 board — the finest and most
+    //    useful setting) wants 18%, and the old 10% ceiling handed back a threshold
+    //    almost twice as sensitive as intended. A counter then registered in its own
+    //    square AND in the one next door, so two counters read as four.
+    //  - A 2 x 2 grid puts 16 squares in a cell, so one counter covers 2.8% of it. The
+    //    old 4% floor put the bar ABOVE that: a single counter could never be seen at all.
+    minFilledFraction: clamp((0.4 * pieceAreaSquares) / (sqX * sqY), 0.01, 0.35),
   };
 }
 
