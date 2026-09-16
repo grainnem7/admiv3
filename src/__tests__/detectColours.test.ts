@@ -124,3 +124,52 @@ describe('fitSafeBand', () => {
     expect(fitted.unsafe).toBe(true);
   });
 });
+
+describe('a counter tapped on a warm wooden board', () => {
+  /**
+   * Reported from the real board: tapping the red counter lit up bare dark-wood squares.
+   *
+   * A red counter's band is centred on its hue with a +/-24 window and a saturation floor
+   * scaled off the sample, and walnut sits close enough in hue to fall inside it. The
+   * automatic search has always tightened the band against the board; tapping never did,
+   * so the same colour behaved differently depending on how it was added.
+   */
+  // A reddish-brown board: the dark squares land at hue ~18, which is inside a red
+  // counter's +/-24 window, with saturation and value above its floors too.
+  const walnut = [
+    rgbToHsv(150, 100, 78), rgbToHsv(128, 85, 66), rgbToHsv(110, 72, 56),
+    rgbToHsv(214, 203, 180), rgbToHsv(196, 184, 160),
+  ];
+
+  it('the raw band would light the wood, and the fitted one does not', () => {
+    const red = rgbToHsv(206, 52, 56);
+    const raw = calibrationFromHsv(red);
+    const rawMatcher = buildChannelMatcher({ id: 'r', kind: raw.kind, role: 'melody', swatch: '#c33', band: raw.band });
+    // The problem, stated: the band as sampled accepts the board's own wood.
+    expect(walnut.some((c) => rawMatcher.test(c))).toBe(true);
+
+    const fitted = fitSafeBand(red, walnut);
+    const safeMatcher = buildChannelMatcher({
+      id: 'r', kind: fitted.band.kind, role: 'melody', swatch: '#c33', band: fitted.band.band,
+    });
+    expect(walnut.some((c) => safeMatcher.test(c))).toBe(false);
+    expect(fitted.unsafe).toBe(false);
+    // …and it still recognises the counter it came from.
+    expect(safeMatcher.test(red)).toBe(true);
+  });
+
+  it('a counter that really is the board colour is reported, not silently accepted', () => {
+    const woodish = rgbToHsv(150, 100, 78);
+    const fitted = fitSafeBand(woodish, walnut);
+    expect(fitted.unsafe).toBe(true);
+  });
+
+  it('a colour nothing like the board is left alone', () => {
+    const cyan = rgbToHsv(64, 224, 208);
+    const raw = calibrationFromHsv(cyan);
+    const fitted = fitSafeBand(cyan, walnut);
+    expect(fitted.unsafe).toBe(false);
+    expect(fitted.band.band?.hueTolerance).toBe(raw.band?.hueTolerance);
+    expect(fitted.band.band?.minSaturation).toBeCloseTo(raw.band?.minSaturation ?? 0, 6);
+  });
+});

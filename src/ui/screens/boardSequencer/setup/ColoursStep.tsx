@@ -29,6 +29,8 @@ export interface PendingColour {
   s: number;
   v: number;
   kindLabel: string;
+  /** True when this colour can't be told apart from the board itself. */
+  unsafe?: boolean;
 }
 
 export interface ColoursStepProps {
@@ -197,7 +199,11 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
           <SwatchChip swatch={pending.hex} palette={palette} size={36} />
           <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 600 }}>{pending.kindLabel}</div>
-            <div style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>Nothing is saved until you press Add.</div>
+            <div style={{ fontSize: 12, color: pending.unsafe ? 'var(--bs-warn)' : 'var(--bs-fg2)' }}>
+              {pending.unsafe
+                ? 'This looks like the board itself, so it would light up bare squares. Try a counter that stands out more from the wood, or add it and switch its job Off.'
+                : 'Nothing is saved until you press Add.'}
+            </div>
           </div>
           <Button tone="primary" onClick={onAddPending}>Add</Button>
           <Button tone="secondary" onClick={onDiscardPending}>Try again</Button>

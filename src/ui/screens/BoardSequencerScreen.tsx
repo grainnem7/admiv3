@@ -63,7 +63,8 @@ import { TRACK_SAVE_MS } from '../../tracking/handGuard/boardTrack';
 import { detectBoard, type BoardDetection } from '../../tracking/boardDetect/detectBoard';
 import { consensus, AGREE_COUNT } from '../../tracking/boardDetect/consensus';
 import { runFrameBurst } from './boardSequencer/useFrameBurst';
-import { buildSquareModel, warpToBoard } from '../../tracking/boardColourDetect/squareModel';
+import { buildSquareModel, modelHsv, warpToBoard } from '../../tracking/boardColourDetect/squareModel';
+import { fitSafeBand } from '../../tracking/boardColourDetect/detectColours';
 import { detectColours, type DetectedColour } from '../../tracking/boardColourDetect/detectColours';
 import type { FiredNote } from '../../songs/BoardSequencerEngine';
 import {
@@ -206,6 +207,8 @@ interface LastColourSample {
   s: number;
   v: number;
   kind: ColourKind;
+  /** True when the band can't be narrowed enough to stop matching the board itself. */
+  unsafe?: boolean;
 }
 
 /** A camera message: the saved camera is missing, or the camera was just changed. */
@@ -1269,17 +1272,58 @@ export default function BoardSequencerScreen() {
   // A camera click while calibrating: sample the piece's colour, then either add
   // a new channel or update the one being recalibrated. The kind (hue/black/
   // white) is inferred from the sample, and the swatch shows the real colour.
+  /**
+   * The board's own colours, from a fresh frame, for keeping a counter's band off them.
+   *
+   * "Find colours" has always done this; tapping a counter never did, so a red counter on
+   * a warm wooden board handed back a band wide enough to light the bare dark squares —
+   * the player taps one counter and the board fills with phantom notes. Null when the
+   * board can't be modelled (too covered, no corners yet), in which case the band is
+   * simply left as sampled, exactly as before.
+   */
+  const boardColoursNow = useCallback((): { h: number; s: number; v: number }[] | null => {
+    const cfg = configRef.current;
+    const video = videoRef.current;
+    if (!cfg.enabled || !video || video.videoWidth <= 0) return null;
+    try {
+      const cv = document.createElement('canvas');
+      cv.width = video.videoWidth;
+      cv.height = video.videoHeight;
+      const ctx = cv.getContext('2d', { willReadFrequently: true });
+      if (!ctx) return null;
+      ctx.save();
+      ctx.translate(cfg.mirrorX ? cv.width : 0, cfg.mirrorY ? cv.height : 0);
+      ctx.scale(cfg.mirrorX ? -1 : 1, cfg.mirrorY ? -1 : 1);
+      ctx.drawImage(video, 0, 0, cv.width, cv.height);
+      ctx.restore();
+      const { data } = ctx.getImageData(0, 0, cv.width, cv.height);
+      const h = homographyForCorners(cfg.corners, cv.width, cv.height);
+      const warped = warpToBoard(data, cv.width, cv.height, h, cfg.boardSquares);
+      const model = buildSquareModel(warped);
+      return model.ok ? modelHsv(model.model) : null;
+    } catch {
+      return null;
+    }
+  }, [configRef, videoRef]);
+
   const sampleColourClick = useCallback((nx: number, ny: number) => {
     if (!colourCalibRef.current) return;
     const s = sampleAvgHsvAt(nx, ny);
     if (!s) return;
-    const cal = calibrationFromHsv({ h: s.h, s: s.s, v: s.v });
+    // Same treatment the automatic search gets: tighten the band until it stops matching
+    // the board, and say so if it can't be separated from it.
+    const board = boardColoursNow();
+    const fitted = board ? fitSafeBand({ h: s.h, s: s.s, v: s.v }, board) : null;
+    const cal = fitted?.band ?? calibrationFromHsv({ h: s.h, s: s.s, v: s.v });
     // Nothing is saved on a tap: the sample is shown first, so a mis-tap on the wood
     // doesn't quietly become a colour.
-    const sample = { hex: s.hex, h: s.h, s: s.s, v: s.v, kind: cal.kind };
+    const sample = {
+      hex: s.hex, h: s.h, s: s.s, v: s.v, kind: cal.kind,
+      unsafe: fitted?.unsafe === true,
+    };
     setLastSample(sample);
     setPendingColour(sample);
-  }, [sampleAvgHsvAt]);
+  }, [sampleAvgHsvAt, boardColoursNow]);
 
   /** Sample the centre of the square the keyboard picker is on (no pointer needed). */
   const sampleSquare = useCallback(() => {
@@ -1295,7 +1339,12 @@ export default function BoardSequencerScreen() {
     const target = colourCalibRef.current;
     const sample = pendingColour;
     if (!target || !sample) return;
-    const cal = calibrationFromHsv({ h: sample.h, s: sample.s, v: sample.v });
+    // Re-fit against the board at commit time too, so the band that is SAVED is the one
+    // the player was shown as safe.
+    const board = boardColoursNow();
+    const cal = board
+      ? fitSafeBand({ h: sample.h, s: sample.s, v: sample.v }, board).band
+      : calibrationFromHsv({ h: sample.h, s: sample.s, v: sample.v });
     setConfig((prev) => {
       let channels: ColourChannel[];
       if (target.mode === 'new') {
@@ -2034,6 +2083,7 @@ export default function BoardSequencerScreen() {
         v: pendingColour.v,
         kindLabel: pendingColour.kind === 'hue' ? hueName(pendingColour.h)
           : pendingColour.kind === 'black' ? 'Black' : 'White',
+        unsafe: pendingColour.unsafe === true,
       }}
       onFindColours={() => void findColours()}
       finding={findingColours}

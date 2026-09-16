@@ -121,27 +121,44 @@ export function fitSafeBand(
 ): { band: ReturnType<typeof calibrationFromHsv>; boardMatch: number; unsafe: boolean } {
   let band = calibrationFromHsv(hsv);
   let boardMatch = matchShare(band, boardColours);
+
+  /** A band is only useful while it still recognises the counter it was sampled from. */
+  const stillFindsIt = (candidate: typeof band): boolean => buildChannelMatcher({
+    id: 'candidate', kind: candidate.kind, role: 'off', swatch: '#000',
+    band: candidate.band, blackBand: candidate.blackBand, whiteBand: candidate.whiteBand,
+  }).test(hsv);
+
+  /** Take a tightening step only if it keeps the counter. Returns false when it can't. */
+  const step = (next: typeof band): boolean => {
+    if (!stillFindsIt(next)) return false;
+    band = next;
+    boardMatch = matchShare(band, boardColours);
+    return true;
+  };
+
   // Each pass narrows the hue window and lifts the saturation floor: the two things that
-  // let a warm counter colour spill onto warm wood.
+  // let a warm counter colour spill onto warm wood. Tightening stops at the counter's own
+  // colour — narrowing past that produced a band matching NOTHING, which read as "safe"
+  // and then never detected the counter at all.
   for (let pass = 0; pass < 4 && boardMatch > MAX_BOARD_MATCH; pass++) {
     if (!band.band) break;                       // black/white bands are tightened below
-    band = {
+    if (!step({
       ...band,
       band: {
         ...band.band,
         hueTolerance: Math.max(6, band.band.hueTolerance * 0.7),
         minSaturation: Math.min(90, band.band.minSaturation * 1.25 + 4),
       },
-    };
-    boardMatch = matchShare(band, boardColours);
+    })) break;
   }
   for (let pass = 0; pass < 4 && boardMatch > MAX_BOARD_MATCH; pass++) {
     if (band.blackBand) {
-      band = { ...band, blackBand: { ...band.blackBand, maxValue: band.blackBand.maxValue * 0.8 } };
+      if (!step({ ...band, blackBand: { ...band.blackBand, maxValue: band.blackBand.maxValue * 0.8 } })) break;
     } else if (band.whiteBand) {
-      band = { ...band, whiteBand: { ...band.whiteBand, minValue: Math.min(98, band.whiteBand.minValue * 1.1) } };
+      if (!step({
+        ...band, whiteBand: { ...band.whiteBand, minValue: Math.min(98, band.whiteBand.minValue * 1.1) },
+      })) break;
     } else break;
-    boardMatch = matchShare(band, boardColours);
   }
   return { band, boardMatch, unsafe: boardMatch > MAX_BOARD_MATCH };
 }
