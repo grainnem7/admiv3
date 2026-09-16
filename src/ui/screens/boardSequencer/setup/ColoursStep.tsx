@@ -15,6 +15,14 @@ import {
 const MAIN_JOBS: ColourRole[] = ['melody', 'bass', 'drums', 'chord', 'off'];
 const CONTROL_JOBS: ColourRole[] = [...FADER_ROLES, ...TOGGLE_ROLES];
 
+/** One detected colour, as the results panel needs it. */
+export interface DetectedColourCard {
+  swatch: string;
+  counters: number;
+  unsafe: boolean;
+  boardMatch: number;
+}
+
 export interface PendingColour {
   hex: string;
   h: number;
@@ -52,6 +60,13 @@ export interface ColoursStepProps {
   picker: { row: number; col: number } | null;
   onMovePicker(dRow: number, dCol: number): void;
   onSampleSquare(): void;
+  /** Find colours is looking at the board right now. */
+  finding: boolean;
+  onCancelFind(): void;
+  /** What it found, for the player to accept or discard. Nothing is saved until they do. */
+  found: { colours: DetectedColourCard[]; message: string } | null;
+  onUseFound(): void;
+  onDiscardFound(): void;
   /** The Hands group: the guards and their plain-language settings. */
   hands: {
     handGuardEnabled: boolean;
@@ -75,6 +90,7 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
     onAddPending, onDiscardPending, onRecalibrate, onRole, onRemove, onClearAll, isReferenced,
     minFilledFraction, readSettingsCustom, onMinFill, onResetReadSettings,
     settleWindowMs, onSettleWindow, onBlackDarkness, picker, onMovePicker, onSampleSquare, hands,
+    finding, onCancelFind, found, onUseFound, onDiscardFound,
   } = props;
   const [confirm, setConfirm] = useState<{ kind: 'remove'; id: ColourId } | { kind: 'clear' } | null>(null);
   const [controlOpen, setControlOpen] = useState<ColourId | null>(null);
@@ -83,10 +99,56 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
 
   return (
     <>
-      {!arming && (
+      {finding && (
+        <div
+          role="status"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 10, padding: 10,
+            borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-accent-muted)',
+            border: '1px solid var(--bs-accent)',
+          }}
+        >
+          <span style={{ flex: 1 }}>Hold still — keep hands away from the board.</span>
+          <Button tone="secondary" onClick={onCancelFind}>Cancel</Button>
+        </div>
+      )}
+      {!arming && !finding && !found && (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <Button tone="primary" onClick={onFindColours}>Find colours</Button>
           <Button tone="secondary" onClick={onArmTap}>Tap a counter</Button>
+        </div>
+      )}
+
+      {found && !finding && (
+        <div
+          style={{
+            display: 'flex', flexDirection: 'column', gap: 8, padding: 10,
+            borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-raised)',
+            border: '1px solid var(--bs-border-control)',
+          }}
+        >
+          <span role="status">{found.message}</span>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+            {found.colours.map((c, i) => (
+              <span key={`${c.swatch}-${i}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <SwatchChip swatch={c.swatch} palette={palette} number={i + 1} size={26} />
+                <span style={{ fontSize: 12 }}>
+                  {`${c.counters} ${c.counters === 1 ? 'counter' : 'counters'}`}
+                  <br />
+                  <span style={{ color: c.unsafe ? 'var(--bs-warn)' : 'var(--bs-fg2)' }}>
+                    {c.unsafe ? 'looks like the board' : 'doesn’t match the board ✓'}
+                  </span>
+                </span>
+              </span>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {found.colours.length > 0 && (
+              <Button tone="primary" onClick={onUseFound}>Use these colours</Button>
+            )}
+            <Button tone="secondary" onClick={onFindColours}>Try again</Button>
+            <Button tone="quiet" onClick={onDiscardFound}>Tap a counter instead</Button>
+          </div>
         </div>
       )}
 

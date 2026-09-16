@@ -60,6 +60,8 @@ import { TRACK_SAVE_MS } from '../../tracking/handGuard/boardTrack';
 import { detectBoard, type BoardDetection } from '../../tracking/boardDetect/detectBoard';
 import { consensus, AGREE_COUNT } from '../../tracking/boardDetect/consensus';
 import { runFrameBurst } from './boardSequencer/useFrameBurst';
+import { buildSquareModel, warpToBoard } from '../../tracking/boardColourDetect/squareModel';
+import { detectColours, type DetectedColour } from '../../tracking/boardColourDetect/detectColours';
 import type { FiredNote } from '../../songs/BoardSequencerEngine';
 import {
   SETUP_STEPS, canOpenStep, canPlay, resolveEntry, stepIndicator,
@@ -249,6 +251,9 @@ export default function BoardSequencerScreen() {
   const [finding, setFinding] = useState(false);
   const [proposal, setProposal] = useState<BoardDetection | null>(null);
   const findAbortRef = useRef<AbortController | null>(null);
+  // Find colours: detected colours the player confirms, never saved on their own.
+  const [findingColours, setFindingColours] = useState(false);
+  const [colourProposal, setColourProposal] = useState<{ colours: DetectedColour[]; message: string } | null>(null);
   // A ref, so the sampling interval always reads the current colours.
   const channelNameRef = useRef<(id: ColourId) => string>((id) => id);
   const [showHelp, setShowHelp] = useState(false);
@@ -601,6 +606,89 @@ export default function BoardSequencerScreen() {
       setFinding(false);
     }
   }, [announce, configRef, runningRef, videoRef]);
+
+  /**
+   * Find colours: take a few frames of the board with the counters on it, learn what the
+   * board itself looks like, and offer each counter colour with a band that has been
+   * CHECKED against the board — the thing tapping a counter never did.
+   */
+  const findColours = useCallback(async () => {
+    const video = videoRef.current;
+    const cfg = configRef.current;
+    if (!video || runningRef.current || !cfg.enabled) return;
+    const controller = new AbortController();
+    findAbortRef.current = controller;
+    setFindingColours(true);
+    setColourProposal(null);
+    try {
+      const burst = await runFrameBurst({
+        video,
+        mirrorX: cfg.mirrorX,
+        mirrorY: cfg.mirrorY,
+        signal: controller.signal,
+        maxFrames: 5,
+        enough: () => false,
+      });
+      if (controller.signal.aborted || burst.frames.length === 0) return;
+      const frame = burst.frames[burst.frames.length - 1];
+      const h = homographyForCorners(cfg.corners, frame.width, frame.height);
+      const warped = warpToBoard(frame.data, frame.width, frame.height, h, cfg.boardSquares);
+      const model = buildSquareModel(warped);
+      if (!model.ok) {
+        setColourProposal({
+          colours: [],
+          message: 'Too much of the board is covered to tell squares from counters. Clear it and press Find board first.',
+        });
+        return;
+      }
+      const found = detectColours(warped, model.model);
+      if (!found.ok) {
+        setColourProposal({
+          colours: [],
+          message: 'I couldn’t see any counters. Put one of each on the board and try again.',
+        });
+        return;
+      }
+      const unsafe = found.colours.filter((c) => c.unsafe).length;
+      setColourProposal({
+        colours: found.colours,
+        message: unsafe > 0
+          ? `Found ${found.colours.length} colours. ${unsafe} of them look like the board itself, so they start switched off.`
+          : `Found ${found.colours.length} ${found.colours.length === 1 ? 'colour' : 'colours'}, and none of them match the board.`,
+      });
+    } finally {
+      if (findAbortRef.current === controller) findAbortRef.current = null;
+      setFindingColours(false);
+    }
+  }, [configRef, runningRef, videoRef]);
+
+  /** Accept the detected colours: existing ones keep their job, new ones get a suggestion. */
+  const useDetectedColours = useCallback(() => {
+    const found = colourProposal?.colours;
+    if (!found || found.length === 0) return;
+    setConfig((prev) => {
+      const referenced = allReferencedChannelIds();
+      const channels: ColourChannel[] = [];
+      for (const c of found) {
+        const id = freshChannelId([...prev.channels.map((ch) => ch.id), ...channels.map((ch) => ch.id)], referenced);
+        channels.push({
+          id,
+          kind: c.kind,
+          // A colour that matches the board starts switched off rather than filling the
+          // pattern with notes nobody played.
+          role: c.unsafe ? 'off' : suggestRole(channels, { kind: c.kind }),
+          swatch: c.swatch,
+          band: c.band.band,
+          blackBand: c.band.blackBand,
+          whiteBand: c.band.whiteBand,
+        });
+      }
+      const next = { ...prev, channels };
+      saveBoardSequencerConfig(next);
+      return next;
+    });
+    setColourProposal(null);
+  }, [colourProposal]);
 
   /**
    * "Check my hand": hold a hand over the board for two seconds and find out what the
@@ -1674,7 +1762,12 @@ export default function BoardSequencerScreen() {
         kindLabel: pendingColour.kind === 'hue' ? hueName(pendingColour.h)
           : pendingColour.kind === 'black' ? 'Black' : 'White',
       }}
-      onFindColours={addColour}
+      onFindColours={() => void findColours()}
+      finding={findingColours}
+      onCancelFind={() => findAbortRef.current?.abort()}
+      found={colourProposal}
+      onUseFound={useDetectedColours}
+      onDiscardFound={() => setColourProposal(null)}
       onArmTap={addColour}
       onCancelArm={() => { setColourCalib(null); setPendingColour(null); setSquarePicker(null); }}
       onAddPending={commitPendingColour}
