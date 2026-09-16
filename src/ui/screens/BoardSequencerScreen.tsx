@@ -1469,6 +1469,7 @@ export default function BoardSequencerScreen() {
       mirrorY={config.mirrorY}
       onViewChange={changeView}
       onRefreshCameras={() => void refreshCameras()}
+      handedness={config.handedness}
     />
   ) : step === 'board' ? (
     <BoardStep

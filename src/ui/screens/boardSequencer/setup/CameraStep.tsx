@@ -18,11 +18,13 @@ export interface CameraStepProps {
   onViewChange(patch: { mirrorX?: boolean; mirrorY?: boolean }): void;
   /** Permission may not have been asked for yet. */
   onRefreshCameras(): void;
+  /** Which side the player sits on, so the tip names the right corner of the room. */
+  handedness: 'left' | 'right';
 }
 
 export function CameraStep({
   cameras, deviceId, onPickCamera, onTryAgain, camera, trackInfo, saturation,
-  mirrorX, mirrorY, onViewChange, onRefreshCameras,
+  mirrorX, mirrorY, onViewChange, onRefreshCameras, handedness,
 }: CameraStepProps): JSX.Element {
   const colourless = camera.colourless === true;
   return (
@@ -91,6 +93,16 @@ export function CameraStep({
         hint="Changing this asks for the board corners again. Your colours are kept."
       />
       <Switch label="Flip the picture upside down" checked={mirrorY} onChange={(v) => onViewChange({ mirrorY: v })} />
+
+      <Disclosure summary="Where to put the camera">
+        <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--bs-fg2)', fontSize: 12, lineHeight: 1.5 }}>
+          <li>
+            {`High up and opposite the player — never over their shoulder. For a ${handedness}-handed player, front-${handedness === 'left' ? 'right' : 'left'}.`}
+          </li>
+          <li>Light coming from near the camera, so the board isn&apos;t in its own shadow.</li>
+          <li>Plain sleeves that aren&apos;t one of the counter colours.</li>
+        </ul>
+      </Disclosure>
 
       <Disclosure summary="Details">
         <p style={{ margin: 0, fontSize: 12, color: 'var(--bs-fg2)' }}>
