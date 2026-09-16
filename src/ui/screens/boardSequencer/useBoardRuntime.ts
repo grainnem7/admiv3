@@ -134,16 +134,26 @@ export function useBoardRuntime(opts: {
     readerRef.current = new BoardReader();
     homographyRef.current = null;
     let cancelled = false;
-    const video = videoRef.current;
-    if (video) {
+    let raf = 0;
+    // The element can arrive a frame late (an overlay covering the screen on the first
+    // commit, say). Waiting for it beats never starting the camera at all.
+    const startWhenReady = (): void => {
+      if (cancelled) return;
+      const video = videoRef.current;
+      if (!video) {
+        raf = requestAnimationFrame(startWhenReady);
+        return;
+      }
       cam.start(video, cameraDeviceId || undefined).then(({ fellBack }) => {
         if (!cancelled) callbacksRef.current.onCameraStarted(fellBack, cam.getTrackInfo());
       }).catch((err: unknown) => {
         if (!cancelled) callbacksRef.current.onCameraError(err instanceof Error ? err.message : 'Camera failed');
       });
-    }
+    };
+    startWhenReady();
     return () => {
       cancelled = true;
+      cancelAnimationFrame(raf);
       cam.stop();
     };
   }, [cameraDeviceId, cameraRetry, callbacksRef]);

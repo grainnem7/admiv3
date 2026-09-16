@@ -24,6 +24,8 @@ export interface BoardHeaderProps {
   notice?: CameraNotice | null;
   /** "Change camera" takes the user to the Camera step from wherever they are. */
   onChangeCamera?(): void;
+  /** Big board hides the header — visually only, so nothing below it is unmounted. */
+  hidden?: boolean;
 }
 
 /**
@@ -33,10 +35,15 @@ export interface BoardHeaderProps {
  */
 export function BoardHeader({
   title, onExit, mode, onModeChange, largeUi, onLargeUiChange, onHelp, right,
-  playerName, onSwitchPlayer, switchPlayerDisabledReason = null, notice, onChangeCamera,
+  playerName, onSwitchPlayer, switchPlayerDisabledReason = null, notice, onChangeCamera, hidden = false,
 }: BoardHeaderProps): JSX.Element {
   return (
-    <header style={{ display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0 }}>
+    <header
+      aria-hidden={hidden || undefined}
+      style={{
+        display: hidden ? 'none' : 'flex', flexDirection: 'column', gap: 8, flexShrink: 0,
+      }}
+    >
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <Button tone="quiet" onClick={onExit} aria-label="Exit the Board Sequencer">← Exit</Button>
         <h1 style={{ fontSize: 18, margin: 0, flex: '0 0 auto' }}>{title}</h1>

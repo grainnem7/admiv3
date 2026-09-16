@@ -73,6 +73,9 @@ export function BoardCornerEditor({
   };
 
   const onSurfaceClick = (e: React.MouseEvent<HTMLDivElement>): void => {
+    // The camera surface behind also listens for taps (to sample a colour); one press
+    // must not do two things.
+    e.stopPropagation();
     const p = pointAt(e);
     if (!p) return;
     if (mode === 'tap') {
@@ -144,13 +147,21 @@ export function BoardCornerEditor({
       : 'Check the outline sits on the outside corners of the squares.';
 
   return (
-    <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: controlsSide === 'left' ? 'row' : 'row-reverse' }}>
-      {/* Controls column, on the player's side; the picture keeps the rest. */}
+    <div style={{ position: 'absolute', inset: 0 }}>
+      {/* The controls float OVER the picture on the player's side. They must not take
+          layout width: the picture below them is the coordinate space the corners are
+          stored in, and any inset would scale and shift every tap. */}
       <div
         style={{
+          position: 'absolute', top: 0, bottom: 0, zIndex: 2,
+          left: controlsSide === 'left' ? 0 : undefined,
+          right: controlsSide === 'right' ? 0 : undefined,
           display: 'flex', flexDirection: 'column', gap: 6, padding: 8, width: 168,
+          boxSizing: 'border-box',
           background: 'var(--bs-bg)', opacity: 0.94, overflowY: 'auto',
         }}
+        // A press on the controls is not a press on the board.
+        onClick={(e) => e.stopPropagation()}
       >
         <p role="status" style={{ margin: 0, fontSize: 12, color: tapError ? 'var(--bs-warn)' : 'var(--bs-fg2)' }}>
           {prompt}
@@ -182,6 +193,7 @@ export function BoardCornerEditor({
               ⇋ Flip
             </Button>
             <Button tone="quiet" onClick={() => { setTaps([]); setMode('tap'); }}>Tap corners again</Button>
+            <Button tone="quiet" onClick={onCancel}>Close</Button>
           </>
         )}
 
@@ -216,10 +228,11 @@ export function BoardCornerEditor({
         )}
       </div>
 
-      {/* The picture itself: taps, drags and handles live here. */}
+      {/* The picture itself: taps, drags and handles live here, in the SAME space as the
+          saved corners — the whole surface, not what is left beside the controls. */}
       <div
         ref={surfaceRef}
-        style={{ position: 'relative', flex: 1, cursor: mode === 'review' ? 'default' : 'crosshair' }}
+        style={{ position: 'absolute', inset: 0, cursor: mode === 'review' ? 'default' : 'crosshair' }}
         onClick={onSurfaceClick}
         onPointerMove={(e) => {
           if (dragging === null || !draft) return;

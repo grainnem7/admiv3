@@ -200,8 +200,24 @@ export default function BoardSequencerScreen() {
   const [config, setConfig] = useState<BoardSequencerStored>(
     () => storedRef.current ?? DEFAULT_BOARD_SEQUENCER_CONFIG,
   );
+  // Corners the board tracker has moved since the last save. They must survive a render,
+  // so they are merged into the ref the runtime reads rather than living in React state
+  // (which is only written every few seconds).
+  const trackedCornersRef = useRef<BoardSequencerStored['corners'] | null>(null);
   const configRef = useRef(config);
-  configRef.current = config;
+  configRef.current = trackedCornersRef.current
+    ? { ...config, corners: trackedCornersRef.current }
+    : config;
+
+  // One place writes the config to storage. Doing it inside the state updaters made them
+  // impure — React may run an updater twice, or discard its result, and the write would
+  // happen anyway.
+  const savedConfigRef = useRef(config);
+  useEffect(() => {
+    if (savedConfigRef.current === config) return;
+    savedConfigRef.current = config;
+    saveBoardSequencerConfig(config);
+  }, [config]);
 
   // True while the chosen camera couldn't be found and the default is standing in.
   const fellBackRef = useRef(false);
@@ -308,7 +324,6 @@ export default function BoardSequencerScreen() {
   const update = useCallback((patch: Partial<BoardSequencerStored>) => {
     setConfig((prev) => {
       const next = { ...prev, ...patch };
-      saveBoardSequencerConfig(next);
       return next;
     });
   }, []);
@@ -316,9 +331,14 @@ export default function BoardSequencerScreen() {
   // Grid changes re-suggest the read settings (unless the user has tuned them).
   const updateGrid = useCallback((patch: Partial<Pick<BoardSequencerStored, 'rows' | 'cols' | 'boardSquares'>>) => {
     setConfig((prev) => {
-      const next = applyGridChange(prev, patch);
-      saveBoardSequencerConfig(next);
-      return next;
+      const grid = applyGridChange(prev, patch);
+      // A smaller grid can leave a lane pointing at a row or step that no longer exists,
+      // which would quietly stop every control counter working.
+      return {
+        ...grid,
+        controlZone: clampZone(grid.controlZone, grid.rows, grid.cols),
+        loopZone: clampZone(grid.loopZone, grid.rows, grid.cols),
+      };
     });
   }, []);
 
@@ -326,7 +346,6 @@ export default function BoardSequencerScreen() {
   const patchChannel = useCallback((id: string, patch: Partial<ColourChannel>) => {
     setConfig((prev) => {
       const next = { ...prev, channels: prev.channels.map((c) => (c.id === id ? { ...c, ...patch } : c)) };
-      saveBoardSequencerConfig(next);
       return next;
     });
   }, []);
@@ -353,7 +372,6 @@ export default function BoardSequencerScreen() {
   const setPagesCount = useCallback((n: number) => {
     setConfig((prev) => {
       const next = { ...prev, numPages: n };
-      saveBoardSequencerConfig(next);
       return next;
     });
     engineRef.current?.setNumPages(n);
@@ -370,7 +388,6 @@ export default function BoardSequencerScreen() {
       while (pages.length <= i) pages.push([]);
       pages[i] = cells;
       const next = { ...prev, pages };
-      saveBoardSequencerConfig(next);
       return next;
     });
     engineRef.current?.setPageSnapshot(i, activeCellsRef.current.map(({ row, col, colour }) => ({ row, col, colour })));
@@ -389,7 +406,6 @@ export default function BoardSequencerScreen() {
           ? { row: c.row, col: c.col, colour: c.colour, conditional: true as const }
           : { row: c.row, col: c.col, colour: c.colour }))));
       const next = { ...prev, loopSlots };
-      saveBoardSequencerConfig(next);
       return next;
     });
   }, []);
@@ -684,7 +700,6 @@ export default function BoardSequencerScreen() {
         });
       }
       const next = { ...prev, channels };
-      saveBoardSequencerConfig(next);
       return next;
     });
     setColourProposal(null);
@@ -721,6 +736,21 @@ export default function BoardSequencerScreen() {
       });
     }, 100);
   }, [latestFrameRef]);
+
+  // A camera tool belongs to the step that opened it. Leaving the step (or Play) closes
+  // it, so the corner editor can't end up over the picture-in-picture rewriting corners,
+  // and an armed colour picker can't record a sample the player never sees.
+  useEffect(() => {
+    if (view === 'setup' && step === 'board') return;
+    setCalibrating(false);
+  }, [view, step]);
+
+  useEffect(() => {
+    if (view === 'setup' && step === 'colours') return;
+    setColourCalib(null);
+    setPendingColour(null);
+    setSquarePicker(null);
+  }, [view, step]);
 
   // The handedness layout switches at a breakpoint, so the width has to be watched.
   useEffect(() => {
@@ -768,8 +798,7 @@ export default function BoardSequencerScreen() {
       lastCornerSaveRef.current = now;
       setConfig((prev) => {
         const next = { ...prev, corners };
-        saveBoardSequencerConfig(next);
-        return next;
+          return next;
       });
     },
     draw: ({ frame, nudge: signal }: RuntimeFrame) => {
@@ -818,18 +847,29 @@ export default function BoardSequencerScreen() {
   };
 
   const handleCalibrated = useCallback(
-    (corners: [BoardPoint, BoardPoint, BoardPoint, BoardPoint]) => {
-      let next = { ...configRef.current, corners, enabled: true };
-      if (fellBackRef.current) {
-        // These corners were clicked on the stand-in camera, so make it the saved
-        // choice — otherwise a Try again / reload would pair them with the missing one.
-        const info = cameraRef.current?.getTrackInfo();
-        next = { ...next, cameraDeviceId: info?.deviceId ?? '', cameraLabel: info?.label ?? '' };
+    (corners: [BoardPoint, BoardPoint, BoardPoint, BoardPoint], patch: Partial<BoardSequencerStored> = {}) => {
+      // The tracker's corrections are superseded by corners the player just confirmed.
+      trackedCornersRef.current = null;
+      const adoptCamera = fellBackRef.current;
+      if (adoptCamera) {
         fellBackRef.current = false;
         setCamNotice(null);
       }
-      setConfig(next);
-      saveBoardSequencerConfig(next);
+      const info = adoptCamera ? cameraRef.current?.getTrackInfo() : null;
+      setConfig((prev) => {
+        // One functional update, so anything else queued in the same event survives and
+        // only one config is ever written.
+        let next: BoardSequencerStored = { ...prev, ...patch, corners, enabled: true };
+        if (patch.boardSquares !== undefined || patch.rows !== undefined || patch.cols !== undefined) {
+          next = applyGridChange(next, {});
+        }
+        if (adoptCamera) {
+          // These corners were clicked on the stand-in camera, so make it the saved
+          // choice — otherwise a Try again / reload would pair them with the missing one.
+          next = { ...next, cameraDeviceId: info?.deviceId ?? '', cameraLabel: info?.label ?? '' };
+        }
+        return next;
+      });
       const video = videoRef.current;
       if (video) homographyRef.current = homographyForCorners(corners, video.videoWidth, video.videoHeight);
       setCalibrating(false);
@@ -974,13 +1014,13 @@ export default function BoardSequencerScreen() {
   // old view), so force a fresh corner click in the new space.
   const changeView = useCallback((patch: Partial<BoardSequencerStored>) => {
     homographyRef.current = null;
+    trackedCornersRef.current = null;
     setConfig((prev) => {
       const next = {
         ...prev, ...patch,
         corners: DEFAULT_BOARD_SEQUENCER_CONFIG.corners,
         enabled: false,
       };
-      saveBoardSequencerConfig(next);
       return next;
     });
     setCalibrating(true);
@@ -1083,7 +1123,6 @@ export default function BoardSequencerScreen() {
         channels = prev.channels.map((c) => (c.id === target.id ? recalibratedChannel(c, cal, sample.hex) : c));
       }
       const next = { ...prev, channels };
-      saveBoardSequencerConfig(next);
       return next;
     });
     setPendingColour(null);
@@ -1109,7 +1148,6 @@ export default function BoardSequencerScreen() {
   const setChannelRole = useCallback((id: ColourId, role: ColourRole) => {
     setConfig((prev) => {
       const next = { ...prev, channels: prev.channels.map((c) => (c.id === id ? { ...c, role } : c)) };
-      saveBoardSequencerConfig(next);
       return next;
     });
   }, []);
@@ -1121,23 +1159,31 @@ export default function BoardSequencerScreen() {
           ? { ...c, blackBand: { maxValue, maxSaturation: c.blackBand?.maxSaturation ?? 45 } }
           : c)),
       };
-      saveBoardSequencerConfig(next);
       return next;
     });
   }, []);
   const removeChannel = useCallback((id: ColourId) => {
-    setColourCalib((t) => (t && t.mode === 'recal' && t.id === id ? null : t));
+    setColourCalib((t) => {
+      if (t && t.mode === 'recal' && t.id === id) {
+        // Its pending sample has nowhere to go now, so it must not sit there with a
+        // dead Add button.
+        setPendingColour(null);
+        setSquarePicker(null);
+        return null;
+      }
+      return t;
+    });
     setConfig((prev) => {
       const next = { ...prev, channels: prev.channels.filter((c) => c.id !== id) };
-      saveBoardSequencerConfig(next);
       return next;
     });
   }, []);
   const clearChannels = useCallback(() => {
     setColourCalib(null);
+    setPendingColour(null);
+    setSquarePicker(null);
     setConfig((prev) => {
       const next = { ...prev, channels: [] };
-      saveBoardSequencerConfig(next);
       return next;
     });
   }, []);
@@ -1788,8 +1834,7 @@ export default function BoardSequencerScreen() {
       onMinFill={(v) => update({ minFilledFraction: v, readSettingsCustom: true })}
       onResetReadSettings={() => setConfig((prev) => {
         const next = applyGridChange({ ...prev, readSettingsCustom: false }, {});
-        saveBoardSequencerConfig(next);
-        return next;
+          return next;
       })}
       settleWindowMs={config.settleWindowMs}
       onSettleWindow={(ms) => update({ settleWindowMs: ms })}
@@ -1905,6 +1950,7 @@ export default function BoardSequencerScreen() {
       <CameraSurface
         videoRef={videoRef}
         overlayRef={overlayRef}
+        hidden={view === 'bigBoard'}
         mirrorX={config.mirrorX}
         mirrorY={config.mirrorY}
         onPick={colourCalib ? (pt) => sampleColourClick(pt.x, pt.y) : undefined}
@@ -1918,11 +1964,13 @@ export default function BoardSequencerScreen() {
             cols={config.cols}
             controlsSide={layout.nudgePad}
             onConfirm={(corners) => {
-              // A confirmed proposal also saves the square count it found.
-              if (proposal?.squares && proposal.squares !== config.boardSquares) {
-                updateGrid({ boardSquares: proposal.squares });
-              }
-              handleCalibrated(corners);
+              // A confirmed proposal saves its square count with the corners, in one write.
+              handleCalibrated(
+                corners,
+                proposal?.squares && proposal.squares !== config.boardSquares
+                  ? { boardSquares: proposal.squares }
+                  : {},
+              );
               setProposal(null);
               setCalibrating(false);
             }}
@@ -2032,42 +2080,42 @@ export default function BoardSequencerScreen() {
     </div>
   );
 
-  if (view === 'bigBoard') {
-    return (
+  // Big board is an OVERLAY, not a different tree: replacing the tree would unmount the
+  // one <video> and stop the camera dead in the middle of a performance.
+  const bigBoardOverlay = view === 'bigBoard' ? (
+    <div
+      ref={bigBoardRef}
+      tabIndex={-1}
+            data-bs-style="calm"
+      data-bs-mode={config.themeMode}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 30,
+        display: 'flex', flexDirection: 'column',
+        padding: 12, boxSizing: 'border-box', gap: 8, background: 'var(--bs-bg)',
+      }}
+      onKeyDown={(e) => {
+        // Esc leaves when the browser isn't in fullscreen (there it exits fullscreen,
+        // and the fullscreenchange handler brings us back).
+        if (e.key === 'Escape' && document.fullscreenElement === null) setView('play');
+      }}
+    >
+      <div style={{ flex: 1, minHeight: 0 }}>{boardView}</div>
       <div
-        ref={bigBoardRef}
-        tabIndex={-1}
-        className="bs-root board-sequencer-screen"
-        data-bs-style="calm"
-        data-bs-mode={config.themeMode}
         style={{
-          display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw',
-          padding: 12, boxSizing: 'border-box', gap: 8, background: 'var(--bs-bg)',
-        }}
-        onKeyDown={(e) => {
-          // Esc leaves when the browser isn't in fullscreen (there it exits fullscreen,
-          // and the fullscreenchange handler brings us back).
-          if (e.key === 'Escape' && document.fullscreenElement === null) setView('play');
+          display: 'flex', gap: 8, alignItems: 'center',
+          justifyContent: layout.bigBoardControls === 'left' ? 'flex-start' : 'flex-end',
         }}
       >
-        <div style={{ flex: 1, minHeight: 0 }}>{boardView}</div>
-        <div
-          style={{
-            display: 'flex', gap: 8, alignItems: 'center',
-            justifyContent: layout.bigBoardControls === 'left' ? 'flex-start' : 'flex-end',
-          }}
-        >
-          {running
-            ? <Button tone="primary" onClick={stop}>■ Stop</Button>
-            : <Button tone="primary" onClick={() => void start()}>▶ Play</Button>}
-          <Button tone="secondary" aria-pressed={muted} disabled={!running} onClick={toggleMuted}>
-            {muted ? 'Sound off' : 'Mute'}
-          </Button>
-          <Button tone="secondary" onClick={() => setView('play')}>Exit big board</Button>
-        </div>
+        {running
+          ? <Button tone="primary" onClick={stop}>■ Stop</Button>
+          : <Button tone="primary" onClick={() => void start()}>▶ Play</Button>}
+        <Button tone="secondary" aria-pressed={muted} disabled={!running} onClick={toggleMuted}>
+          {muted ? 'Sound off' : 'Mute'}
+        </Button>
+        <Button tone="secondary" onClick={() => setView('play')}>Exit big board</Button>
       </div>
-    );
-  }
+    </div>
+  ) : null;
 
   return (
     <div
@@ -2076,7 +2124,14 @@ export default function BoardSequencerScreen() {
       data-bs-mode={config.themeMode}
       style={{ display: 'flex', flexDirection: 'column', height: '100vh', padding: 16, boxSizing: 'border-box', gap: 12 }}
     >
-      {chooserOpen ? (
+      {/* The chooser sits OVER the screen so the camera element below it stays mounted
+          and the camera actually starts. */}
+      {chooserOpen && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 40, overflowY: 'auto',
+          background: 'var(--bs-bg)',
+        }}
+        >
         <PlayerChooser
           players={players}
           onPick={(id) => {
@@ -2098,109 +2153,108 @@ export default function BoardSequencerScreen() {
           }}
           onCancel={players.length > 0 ? () => setChooserOpen(false) : undefined}
         />
-      ) : (
-        <>
-          <BoardHeader
-            title={view === 'setup' ? 'Board Sequencer · Set up' : 'Board Sequencer'}
-            onExit={() => { stop(); setCurrentScreen('welcome'); }}
-            mode={config.themeMode}
-            onModeChange={(m) => update({ themeMode: m })}
-            largeUi={uiSize === 'large'}
-            onLargeUiChange={(large) => setUISize(large ? 'large' : 'standard')}
-            onHelp={() => setShowHelp(true)}
-            playerName={activePlayer?.name ?? null}
-            onSwitchPlayer={() => setChooserOpen(true)}
-            switchPlayerDisabledReason={running ? 'Stop playing to switch player.' : null}
-            notice={headerNotice}
-            onChangeCamera={() => { setView('setup'); setStep('camera'); }}
-            right={view === 'setup' ? (
-              <StepIndicator
-                steps={SETUP_STEPS.map((id) => ({
-                  id,
-                  label: STEP_LABELS[id],
-                  state: stepIndicator(id, step, setupCfg, camera, storedRef.current !== null),
-                }))}
-                canOpen={(id: SetupStep) => canOpenStep(id, setupCfg, camera, storedRef.current !== null)}
-                onOpen={(id: SetupStep) => setStep(id)}
-              />
-            ) : (
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <span style={{ color: 'var(--bs-fg2)', fontSize: 13 }}>
-                  {running ? 'Playing' : 'Stopped'}
-                </span>
-                <Button
-                  tone="secondary"
-                  onClick={() => { if (running) stop(); setView('setup'); }}
-                >
-                  ⚙ Set up
-                </Button>
-                <Button ref={bigBoardButtonRef} tone="secondary" aria-label="Big board" onClick={() => setView('bigBoard')}>
-                  <span aria-hidden="true">⤢</span>
-                </Button>
-              </div>
-            )}
-          />
-
-          {showHelp && (
-            <div
-              role="dialog"
-              aria-label="How to play"
-              style={{
-                position: 'fixed', inset: 0, zIndex: 40, display: 'grid', placeItems: 'center',
-                background: 'rgba(0,0,0,.45)',
-              }}
-            >
-              <div style={{
-                background: 'var(--bs-raised)', color: 'var(--bs-fg)', padding: 20,
-                borderRadius: 'var(--bs-radius-lg)', maxWidth: 560, maxHeight: '80vh', overflowY: 'auto',
-                display: 'flex', flexDirection: 'column', gap: 12,
-              }}
+        </div>
+      )}
+        <BoardHeader
+          title={view === 'setup' ? 'Board Sequencer · Set up' : 'Board Sequencer'}
+          onExit={() => { stop(); setCurrentScreen('welcome'); }}
+          mode={config.themeMode}
+          onModeChange={(m) => update({ themeMode: m })}
+          largeUi={uiSize === 'large'}
+          onLargeUiChange={(large) => setUISize(large ? 'large' : 'standard')}
+          onHelp={() => setShowHelp(true)}
+          playerName={activePlayer?.name ?? null}
+          onSwitchPlayer={() => setChooserOpen(true)}
+          switchPlayerDisabledReason={running ? 'Stop playing to switch player.' : null}
+          notice={headerNotice}
+          onChangeCamera={() => { setView('setup'); setStep('camera'); }}
+          right={view === 'setup' ? (
+            <StepIndicator
+              steps={SETUP_STEPS.map((id) => ({
+                id,
+                label: STEP_LABELS[id],
+                state: stepIndicator(id, step, setupCfg, camera, storedRef.current !== null),
+              }))}
+              canOpen={(id: SetupStep) => canOpenStep(id, setupCfg, camera, storedRef.current !== null)}
+              onOpen={(id: SetupStep) => setStep(id)}
+            />
+          ) : (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <span style={{ color: 'var(--bs-fg2)', fontSize: 13 }}>
+                {running ? 'Playing' : 'Stopped'}
+              </span>
+              <Button
+                tone="secondary"
+                onClick={() => { if (running) stop(); setView('setup'); }}
               >
-                {helpContent}
-                <button type="button" autoFocus onClick={() => setShowHelp(false)}>Close</button>
-              </div>
+                ⚙ Set up
+              </Button>
+              <Button ref={bigBoardButtonRef} tone="secondary" aria-label="Big board" onClick={() => setView('bigBoard')}>
+                <span aria-hidden="true">⤢</span>
+              </Button>
             </div>
           )}
+        />
 
+        {showHelp && (
           <div
+            role="dialog"
+            aria-label="How to play"
             style={{
-              display: 'flex',
-              gap: 16,
-              flex: 1,
-              minHeight: 0,
-              flexDirection: layout.mode === 'stacked'
-                ? 'column'
-                : config.handedness === 'left' ? 'row-reverse' : 'row',
+              position: 'fixed', inset: 0, zIndex: 40, display: 'grid', placeItems: 'center',
+              background: 'rgba(0,0,0,.45)',
             }}
           >
-            {stage}
-            {/* The panel keeps its place in the DOM for both hands; only the row flips. */}
-            <div style={{ width: layout.mode === 'stacked' ? '100%' : 320, flexShrink: 0, display: 'flex', flexDirection: 'column', minHeight: 0, overflowY: 'auto' }}>
-              {view === 'setup' ? setupPanel : (
-                <PlayPanel
-                  running={running}
-                  muted={muted}
-                  onStart={() => void start()}
-                  onStop={stop}
-                  onToggleMute={toggleMuted}
-                  bpm={liveBpm}
-                  step={playheadCol}
-                  cols={config.cols}
-                  variationLap={config.variationEnabled && config.numPages <= 1 ? isVarLap : null}
-                  beatOn={beatOn}
-                  heldCount={heldCells.size}
-                  handGuardWaiting={config.handGuardEnabled && running && latestFrame?.handGuardReady === false}
-                  groove={grooveTab}
-                  sound={soundTab}
-                  loops={loopsTab}
-                  stacked={layout.mode === 'stacked'}
-                  transportAlign={layout.transportAlign}
-                />
-              )}
+            <div style={{
+              background: 'var(--bs-raised)', color: 'var(--bs-fg)', padding: 20,
+              borderRadius: 'var(--bs-radius-lg)', maxWidth: 560, maxHeight: '80vh', overflowY: 'auto',
+              display: 'flex', flexDirection: 'column', gap: 12,
+            }}
+            >
+              {helpContent}
+              <button type="button" autoFocus onClick={() => setShowHelp(false)}>Close</button>
             </div>
           </div>
-        </>
-      )}
+        )}
+
+        <div
+          style={{
+            display: 'flex',
+            gap: 16,
+            flex: 1,
+            minHeight: 0,
+            flexDirection: layout.mode === 'stacked'
+              ? 'column'
+              : config.handedness === 'left' ? 'row-reverse' : 'row',
+          }}
+        >
+          {stage}
+          {/* The panel keeps its place in the DOM for both hands; only the row flips. */}
+          <div style={{ width: layout.mode === 'stacked' ? '100%' : 320, flexShrink: 0, display: 'flex', flexDirection: 'column', minHeight: 0, overflowY: 'auto' }}>
+            {view === 'setup' ? setupPanel : (
+              <PlayPanel
+                running={running}
+                muted={muted}
+                onStart={() => void start()}
+                onStop={stop}
+                onToggleMute={toggleMuted}
+                bpm={liveBpm}
+                step={playheadCol}
+                cols={config.cols}
+                variationLap={config.variationEnabled && config.numPages <= 1 ? isVarLap : null}
+                beatOn={beatOn}
+                heldCount={heldCells.size}
+                handGuardWaiting={config.handGuardEnabled && running && latestFrame?.handGuardReady === false}
+                groove={grooveTab}
+                sound={soundTab}
+                loops={loopsTab}
+                stacked={layout.mode === 'stacked'}
+                transportAlign={layout.transportAlign}
+              />
+            )}
+          </div>
+        </div>
+      {bigBoardOverlay}
     </div>
   );
 }
