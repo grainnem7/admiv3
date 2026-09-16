@@ -67,9 +67,13 @@ export function detectBoard(
   if (lattices.length === 0) {
     return NONE(['Couldn’t find a grid of squares. Is the whole board in view?'], now() - started);
   }
-  if (now() - started > budget) {
-    return NONE(['That took too long — try again with the board still.'], now() - started);
-  }
+  // NOTE: no bail-out here. This point is past everything expensive — the corners are
+  // found and the lattices are fitted — so throwing the result away would discard a board
+  // it had already located, and the old message blamed the player ("try again with the
+  // board still") for what was only a busy machine. Detection ran slow on a loaded
+  // browser and simply refused to find a board that was sitting there perfectly still.
+  // The work left below is scoring two sizes and reading four corners off the lattice.
+  const slow = now() - started > budget;
 
   const best = lattices[0];
   const span = latticeSpan(best);
@@ -95,6 +99,8 @@ export function detectBoard(
   const nodes = best.nodes.map((n) => toFraction(n.point));
   const ms = now() - started;
   const metrics = { coverage: winner.fit, margin, rms: best.rms, nodes: best.nodes.length, ms };
+  // Slowness is worth knowing about, but it is information, not a failure.
+  const slowNote = slow ? ['That took a while — close other tabs if it feels slow.'] : [];
 
   if (offscreen >= 0) {
     return {
@@ -104,7 +110,10 @@ export function detectBoard(
       latticeNodes: nodes,
       offscreenCorner: offscreen as 0 | 1 | 2 | 3,
       metrics,
-      reasons: [`The ${CORNER_NAMES[offscreen]} corner is outside the camera picture. Move the camera back.`],
+      reasons: [
+        `The ${CORNER_NAMES[offscreen]} corner is outside the camera picture. Move the camera back.`,
+        ...slowNote,
+      ],
     };
   }
 
@@ -115,9 +124,12 @@ export function detectBoard(
     squares: winner.squares,
     latticeNodes: nodes,
     metrics,
-    reasons: high
-      ? [`Found a ${winner.squares} × ${winner.squares} board.`]
-      : ['I’m not sure this is right. Check the corners sit on the outside corners of the squares.'],
+    reasons: [
+      ...(high
+        ? [`Found a ${winner.squares} × ${winner.squares} board.`]
+        : ['I’m not sure this is right. Check the corners sit on the outside corners of the squares.']),
+      ...slowNote,
+    ],
   };
 }
 

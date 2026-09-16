@@ -7,7 +7,9 @@
  * the guess that explains the most corners. That gives an image → board-index mapping
  * without ever assuming the camera is square on.
  */
-import { applyHomography, computeHomography, type Mat3, type Point } from '../../utils/homography';
+import {
+  applyHomography, computeHomography, computeHomographyFit, type Mat3, type Point,
+} from '../../utils/homography';
 import type { XCorner } from './xCorners';
 
 /** A corner must land this close to an integer lattice point to count as explained. */
@@ -107,7 +109,11 @@ function growLattice(corners: XCorner[], origin: Point, u: Point, v: Point): Lat
     const assigned = assign(corners, toImage);
     if (assigned.length < MIN_LATTICE_NODES) return null;
     try {
-      toImage = computeHomography(
+      // Least squares over EVERY agreeing corner. computeHomography takes exactly four
+      // and threw on anything else, so this refit used to fail every single pass and
+      // silently keep the seed — a parallelogram, i.e. a map with no perspective in it.
+      // On a board seen at an angle that put the proposed corners off the board entirely.
+      toImage = computeHomographyFit(
         assigned.map((n) => ({ x: n.i, y: n.j })),
         assigned.map((n) => n.point),
       );

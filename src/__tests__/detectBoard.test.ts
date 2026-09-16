@@ -60,11 +60,17 @@ describe('detectBoard', () => {
     }
   });
 
-  it('gives up inside its time budget', () => {
+  it('still hands back a board it has already found, however slow the machine was', () => {
+    // The budget check sat AFTER the expensive work, so a busy browser made it discard a
+    // board it had located and tell the player to hold the board still — which had
+    // nothing to do with it. It also made this suite flaky under parallel load.
     let t = 0;
     const out = run(frame(), { now: () => { t += 1000; return t; }, budgetMs: 150 });
-    expect(out.status).toBe('none');
-    expect(out.reasons[0]).toMatch(/too long/i);
+    expect(out.status).not.toBe('none');
+    expect(out.corners).toBeDefined();
+    expect(out.squares).toBe(8);
+    // Said as information, not as a failure.
+    expect(out.reasons.join(' ')).toMatch(/took a while/i);
   });
 
   it('reports how long it took and how much it explained', () => {
