@@ -25,6 +25,7 @@ import {
   estimateBoardShift, shiftCorners, TRACK_INTERVAL_MS,
 } from '../../../tracking/handGuard/boardTrack';
 import { frameMeanSaturation } from '../../../tracking/cameraCheck';
+import { readLighting, type LightingReading } from '../../../tracking/lightingCheck';
 import { startVideoFrameLoop } from '../../../tracking/videoFrameLoop';
 import { stepBoardFrame, suppressSpill, type BoardFrameOutput } from '../../../tracking/boardFrame';
 import { splitByZone, zoneContains, zoneSlotCount } from '../../../tracking/zones';
@@ -53,7 +54,9 @@ export interface RuntimeFrame {
 export interface BoardRuntimeCallbacks {
   onCameraStarted(fellBack: boolean, trackInfo: CameraTrackInfo | null): void;
   onCameraError(message: string): void;
-  onCameraCheck(saturation: number | null, trackInfo: CameraTrackInfo | null): void;
+  onCameraCheck(
+    saturation: number | null, trackInfo: CameraTrackInfo | null, lighting: LightingReading | null,
+  ): void;
   onLoopSlotsCaptured(saved: (ActiveCell[] | null)[]): void;
   /** The board was nudged and the grid followed it; save the new corners (throttled). */
   onCornersTracked?(corners: BoardSequencerStored['corners']): void;
@@ -169,8 +172,12 @@ export function useBoardRuntime(opts: {
       const video = videoRef.current;
       if (!video || video.videoWidth <= 0) return;
       ctx.drawImage(video, 0, 0, cv.width, cv.height);
-      const sat = frameMeanSaturation(ctx.getImageData(0, 0, cv.width, cv.height).data);
-      callbacksRef.current.onCameraCheck(sat, cameraRef.current?.getTrackInfo() ?? null);
+      const { data } = ctx.getImageData(0, 0, cv.width, cv.height);
+      const sat = frameMeanSaturation(data);
+      // Same frame, so glare and an uneven lamp are judged on exactly the pixels the
+      // colour work will later have to learn the board from.
+      const lighting = readLighting(data, cv.width, cv.height, 1);
+      callbacksRef.current.onCameraCheck(sat, cameraRef.current?.getTrackInfo() ?? null, lighting);
     }, CAMERA_CHECK_MS);
     return () => window.clearInterval(id);
   }, [callbacksRef]);

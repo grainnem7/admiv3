@@ -24,6 +24,7 @@ import * as Tone from 'tone';
 import { useAppStore } from '../../state/store';
 import { CameraManager, type CameraTrackInfo } from '../../tracking/CameraManager';
 import { nextColourlessState } from '../../tracking/cameraCheck';
+import { describeLighting, nextLightingProblem, type LightingProblem } from '../../tracking/lightingCheck';
 import {
   useBoardRuntime, NOOP_RUNTIME_CALLBACKS, type BoardRuntimeCallbacks, type RuntimeFrame,
 } from './boardSequencer/useBoardRuntime';
@@ -343,6 +344,8 @@ export default function BoardSequencerScreen() {
   const [error, setError] = useState<string | null>(null);
   /** A sound problem (backing song, audio engine). Never a camera problem. */
   const [soundError, setSoundError] = useState<string | null>(null);
+  /** Glare / too dark / uneven — the faults that make the board's own colour look like a counter. */
+  const [lighting, setLighting] = useState<LightingProblem>(null);
   /** A saved loop the player has asked to clear, waiting on the confirmation. */
   const [clearSlotTarget, setClearSlotTarget] = useState<number | null>(null);
   // Camera choice + camera check: available cameras, what the running one delivers,
@@ -911,9 +914,10 @@ export default function BoardSequencerScreen() {
       // list — the user can then pick a different camera.
       void refreshCameras();
     },
-    onCameraCheck: (sat, trackInfo) => {
+    onCameraCheck: (sat, trackInfo, lighting) => {
       setFeedSaturation(sat);
       setFeedColourless((prev) => nextColourlessState(prev, sat));
+      setLighting((prev) => nextLightingProblem(prev, lighting));
       setCamInfo(trackInfo);
     },
     onLoopSlotsCaptured: (saved) => persistLoopSlots(saved),
@@ -1990,6 +1994,7 @@ export default function BoardSequencerScreen() {
       camera={camera}
       trackInfo={camInfo}
       saturation={feedSaturation}
+      lightingNote={describeLighting(lighting)}
       mirrorX={config.mirrorX}
       mirrorY={config.mirrorY}
       onViewChange={changeView}

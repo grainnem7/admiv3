@@ -12,6 +12,8 @@ export interface CameraStepProps {
   camera: CameraStatus;
   trackInfo: CameraTrackInfo | null;
   saturation: number | null;
+  /** Glare / too dark / uneven, in plain words; null when the light is good enough. */
+  lightingNote: string | null;
   mirrorX: boolean;
   mirrorY: boolean;
   /** Mirror/Flip change what the camera sees, so corners are reset (colours are kept). */
@@ -23,7 +25,7 @@ export interface CameraStepProps {
 }
 
 export function CameraStep({
-  cameras, deviceId, onPickCamera, onTryAgain, camera, trackInfo, saturation,
+  cameras, deviceId, onPickCamera, onTryAgain, camera, trackInfo, saturation, lightingNote,
   mirrorX, mirrorY, onViewChange, onRefreshCameras, handedness,
 }: CameraStepProps): JSX.Element {
   const colourless = camera.colourless === true;
@@ -82,6 +84,23 @@ export function CameraStep({
             : 'Picture has colour')}
         </span>
       </div>
+      {/* Lighting is judged on the same pixels the colour work will have to learn the
+          board from, and it is the one thing the player can fix by moving a lamp. Saying
+          it here saves calibrating corners and colours before finding out. */}
+      {lightingNote !== null && (camera.phase === 'running' || camera.phase === 'fallback') && (
+        <div
+          role="status"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px',
+            borderRadius: 'var(--bs-radius-md)',
+            background: 'var(--bs-warn-tint)', border: '1px solid var(--bs-border-control)',
+          }}
+        >
+          <span aria-hidden="true" style={{ color: 'var(--bs-warn)', fontWeight: 700 }}>!</span>
+          <span>{lightingNote}</span>
+        </div>
+      )}
+
       <p style={{ margin: 0, color: 'var(--bs-fg2)', fontSize: 12 }}>
         {trackInfo ? `${trackInfo.label || 'Camera'} · ${trackInfo.width} × ${trackInfo.height}` : 'No camera details yet'}
       </p>
