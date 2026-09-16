@@ -27,9 +27,9 @@ import {
 import { frameMeanSaturation } from '../../../tracking/cameraCheck';
 import { startVideoFrameLoop } from '../../../tracking/videoFrameLoop';
 import { stepBoardFrame, suppressSpill, type BoardFrameOutput } from '../../../tracking/boardFrame';
-import { splitByZone } from '../../../tracking/zones';
+import { splitByZone, zoneSlotCount } from '../../../tracking/zones';
 import type { BoardSequencerEngine } from '../../../songs/BoardSequencerEngine';
-import { emptyLoopBank, type LoopBankState } from '../../../songs/loopBank';
+import { emptyLoopBank, seedLoopBank, type LoopBankState } from '../../../songs/loopBank';
 import type { Mat3 } from '../../../utils/homography';
 import type { BoardSequencerStored } from '../../../profiles/BoardSequencerConfig';
 import { homographyForCorners } from './homographyForCorners';
@@ -305,6 +305,14 @@ export function useBoardRuntime(opts: {
       engineRef.current?.setPingPong(cfg.pingPong);
       const running = runningRef.current && !!modeRef.current && !!engineRef.current;
       const modeResult = running && modeRef.current ? modeRef.current.step(visible, dtMs, nowMs) : null;
+      // The pads are a lane the player can move at any time, so the bank is kept the
+      // right size and seeded from what is saved — otherwise a Clear or a capture could
+      // write an empty bank over loops the config still holds.
+      const padCount = zoneSlotCount(cfg.loopZone, cfg.rows, cfg.cols);
+      if (loopBankRef.current.saved.length !== padCount) {
+        loopBankRef.current = seedLoopBank(padCount, cfg.loopSlots);
+      }
+
       // Knock guard: only the cells that actually play a note count. Lifting a counter
       // off a control or loop lane is not a knock, and which cells those are comes from
       // the lanes — the same rule the pattern itself uses.

@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { emptyLoopBank, stepLoopBank, clearLoopSlot, type LoopBankState } from '../songs/loopBank';
+import {
+  emptyLoopBank, seedLoopBank, stepLoopBank, clearLoopSlot, type LoopBankState,
+} from '../songs/loopBank';
 import type { ActiveCell } from '../tracking/BoardSequencerMode';
 
 const pattern: ActiveCell[] = [{ row: 0, col: 0, colour: 'red' }, { row: 1, col: 2, colour: 'black' }];
@@ -97,5 +99,31 @@ describe('toggle loop pads', () => {
     expect(out.active).toHaveLength(1);
     out = stepLoopBank(out.state, [false, false], [], 2, holdOpts);
     expect(out.active).toHaveLength(0);
+  });
+});
+
+describe('seedLoopBank', () => {
+  it('gives one pad per slot, holding the loops that were saved', () => {
+    const bank = seedLoopBank(3, [pattern, null, pattern]);
+    expect(bank.saved).toHaveLength(3);
+    expect(bank.saved[0]).toHaveLength(2);
+    expect(bank.saved[1]).toBeNull();
+    expect(bank.present).toEqual([false, false, false]);
+    expect(bank.playing).toEqual([false, false, false]);
+  });
+
+  it('copies the cells, so playing can never edit what is saved', () => {
+    const bank = seedLoopBank(1, [pattern]);
+    bank.saved[0]![0].row = 99;
+    expect(pattern[0].row).toBe(0);
+  });
+
+  it('a lane with fewer pads than saved loops keeps only what it can reach', () => {
+    const bank = seedLoopBank(2, [pattern, pattern, pattern]);
+    expect(bank.saved).toHaveLength(2);
+  });
+
+  it('no lane means no pads', () => {
+    expect(seedLoopBank(0, [pattern]).saved).toEqual([]);
   });
 });

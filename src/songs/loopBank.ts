@@ -66,6 +66,29 @@ export function emptyLoopBank(slotCount: number): LoopBankState {
 }
 
 /**
+ * A bank of `slotCount` pads holding the loops saved in the config.
+ *
+ * The bank has to be rebuilt whenever the number of pads changes — the pads are a lane
+ * the player can move at any time — and it must be seeded from what is saved, or a Clear
+ * (or a capture) would write an empty bank over loops that are still in the config.
+ */
+export function seedLoopBank(
+  slotCount: number, saved: readonly (readonly ActiveCell[] | null)[],
+): LoopBankState {
+  const n = Math.max(0, Math.floor(slotCount));
+  return {
+    saved: Array.from({ length: n }, (_, i) => {
+      const slot = saved[i];
+      return slot == null ? null : slot.map((c) => ({ ...c }));
+    }),
+    present: Array(n).fill(false),
+    playing: Array(n).fill(false),
+    quietMs: 0,
+    patternKey: '',
+  };
+}
+
+/**
  * Advance the bank one frame. `present[i]` = a settled counter sits on slot i now;
  * `patternCells` = the current settled pattern (already excluding the bank row).
  * Capture fires only on a rising edge (absent→present) of an EMPTY slot.

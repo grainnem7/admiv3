@@ -77,6 +77,29 @@ import type { BoardSquares } from '../../tracking/boardGrid';
 import type { ControlsResult } from '../../tracking/controlCounters';
 import type { FaderRole, ControlRemoval } from '../../profiles/BoardSequencerConfig';
 
+/**
+ * How close two swatches must be to be the same counter colour. Comfortably inside the
+ * distance between, say, red and orange counters, so re-running Find colours updates a
+ * colour rather than duplicating it.
+ */
+const MATCH_SWATCH_DISTANCE = 90;
+
+/** Straight-line distance between two hex swatches in RGB. */
+function swatchDistance(a: string, b: string): number {
+  const rgb = (hex: string): [number, number, number] => {
+    const h = hex.replace('#', '');
+    const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
+    return [
+      parseInt(full.slice(0, 2), 16) || 0,
+      parseInt(full.slice(2, 4), 16) || 0,
+      parseInt(full.slice(4, 6), 16) || 0,
+    ];
+  };
+  const [ar, ag, ab] = rgb(a);
+  const [br, bg, bb] = rgb(b);
+  return Math.hypot(ar - br, ag - bg, ab - bb);
+}
+
 /** Reserved space under a control, so a disabled reason never shifts the layout. */
 const REASON_STYLE = { display: 'block', minHeight: 14, fontSize: 11, opacity: 0.7 } as const;
 
@@ -98,7 +121,7 @@ import { SONG_LIBRARY, type SongConfig } from '../../songs/songLibrary';
 import { getChordAtTime } from '../../songs/voices/chordLookup';
 import { applyHomography, type Mat3 } from '../../utils/homography';
 import { SCALE_PRESETS, NOTE_NAMES } from '../../songs/boardSequencerScale';
-import { clearLoopSlot } from '../../songs/loopBank';
+import { clearLoopSlot, seedLoopBank } from '../../songs/loopBank';
 import {
   DEFAULT_BOARD_SEQUENCER_CONFIG, type BoardSequencerStored, type BoardPoint,
 } from '../../profiles/BoardSequencerConfig';
@@ -400,13 +423,13 @@ export default function BoardSequencerScreen() {
   // Persist the loop bank's saved slots into config (called when a slot captures or clears).
   const persistLoopSlots = useCallback((saved: (ActiveCell[] | null)[]) => {
     setConfig((prev) => {
+      const kept = prev.loopSlots.slice(saved.length);
       const loopSlots = saved.map((s) => (s == null
         ? null
         : s.map((c) => (c.conditional
           ? { row: c.row, col: c.col, colour: c.colour, conditional: true as const }
           : { row: c.row, col: c.col, colour: c.colour }))));
-      const next = { ...prev, loopSlots };
-      return next;
+      return { ...prev, loopSlots: [...loopSlots, ...kept] };
     });
   }, []);
 
@@ -429,9 +452,14 @@ export default function BoardSequencerScreen() {
   }, [persistLoopSlots, letGoGhosts, announce, activeCellsRef, knockRef, loopBankRef, configRef]);
 
   const clearLoopSlotAt = useCallback((slot: number) => {
+    // The bank may not exist yet (nothing has been played this session), so the saved
+    // loops in the config are the thing being cleared.
     loopBankRef.current = clearLoopSlot(loopBankRef.current, slot);
-    persistLoopSlots(loopBankRef.current.saved);
-  }, [persistLoopSlots]);
+    setConfig((prev) => ({
+      ...prev,
+      loopSlots: prev.loopSlots.map((s, i) => (i === slot ? null : s)),
+    }));
+  }, [loopBankRef]);
 
   // Draw our sampling grid onto the camera, tinting cells by detection state +
   // colour (red vs black).
@@ -678,15 +706,41 @@ export default function BoardSequencerScreen() {
     }
   }, [configRef, runningRef, videoRef]);
 
-  /** Accept the detected colours: existing ones keep their job, new ones get a suggestion. */
+  /**
+   * Accept the detected colours. A colour the player already had keeps its identity —
+   * its id, job, instrument and mix — and only takes the new band and swatch, because
+   * the id is what saved pages and loops point at. Nothing is removed here: a colour
+   * that simply wasn't on the board this time is not a colour the player wanted deleted.
+   */
   const useDetectedColours = useCallback(() => {
     const found = colourProposal?.colours;
     if (!found || found.length === 0) return;
     setConfig((prev) => {
       const referenced = allReferencedChannelIds();
-      const channels: ColourChannel[] = [];
+      const channels = prev.channels.map((c) => ({ ...c }));
+      const taken = new Set<number>();
       for (const c of found) {
-        const id = freshChannelId([...prev.channels.map((ch) => ch.id), ...channels.map((ch) => ch.id)], referenced);
+        // Match on colour: the nearest existing swatch, if it is near enough to be the
+        // same counter rather than a different one.
+        let best = -1;
+        let bestDistance = MATCH_SWATCH_DISTANCE;
+        channels.forEach((existing, i) => {
+          if (taken.has(i)) return;
+          const d = swatchDistance(existing.swatch, c.swatch);
+          if (d < bestDistance) { bestDistance = d; best = i; }
+        });
+        const band = { band: c.band.band, blackBand: c.band.blackBand, whiteBand: c.band.whiteBand };
+        if (best >= 0) {
+          taken.add(best);
+          channels[best] = {
+            ...channels[best], kind: c.kind, swatch: c.swatch, ...band,
+            // An unsafe colour is switched off, but a job the player chose is not thrown
+            // away for one that was already doing something.
+            role: c.unsafe ? 'off' : channels[best].role,
+          };
+          continue;
+        }
+        const id = freshChannelId(channels.map((ch) => ch.id), referenced);
         channels.push({
           id,
           kind: c.kind,
@@ -694,13 +748,10 @@ export default function BoardSequencerScreen() {
           // pattern with notes nobody played.
           role: c.unsafe ? 'off' : suggestRole(channels, { kind: c.kind }),
           swatch: c.swatch,
-          band: c.band.band,
-          blackBand: c.band.blackBand,
-          whiteBand: c.band.whiteBand,
+          ...band,
         });
       }
-      const next = { ...prev, channels };
-      return next;
+      return { ...prev, channels };
     });
     setColourProposal(null);
   }, [colourProposal]);
@@ -979,17 +1030,10 @@ export default function BoardSequencerScreen() {
     }
     engine.start();
     engineRef.current = engine;
-    // One pad per cell of the loop lane — which is a row of steps or a column of rows,
-    // so the count comes from the lane rather than being assumed.
-    const slots = zoneSlotCount(cfg.loopZone, cfg.rows, cfg.cols);
-    loopBankRef.current = {
-      saved: Array.from({ length: slots }, (_, i) => {
-        const s = cfg.loopSlots[i];
-        return s == null ? null : s.map((c) => ({ ...c }));
-      }),
-      present: Array(slots).fill(false),
-      playing: Array(slots).fill(false),
-    };
+    // One pad per cell of the loop lane — a row of steps or a column of rows.
+    loopBankRef.current = seedLoopBank(
+      zoneSlotCount(cfg.loopZone, cfg.rows, cfg.cols), cfg.loopSlots,
+    );
     engine.setActiveLoops([]);
     startSecRef.current = Tone.now();
     runningRef.current = true;
