@@ -124,10 +124,12 @@ export class BoardSequencerMode {
 
   private variationEnabled: boolean;
   private variationOffsetThreshold: number;
+  private settleWindowMs: number;
 
   constructor(private readonly cfg: BoardSettleConfig) {
     this.variationEnabled = cfg.variationEnabled ?? false;
     this.variationOffsetThreshold = cfg.variationOffsetThreshold ?? 0.6;
+    this.settleWindowMs = cfg.settleWindowMs;
   }
 
   /** Live-update the variation calibration (safe to call while running). */
@@ -149,10 +151,36 @@ export class BoardSequencerMode {
     this.states.clear();
   }
 
+  /**
+   * Live-update the settle window. The hand guard makes settling safe to shorten: the
+   * long window existed to ride out hands, and those cells are now held instead.
+   */
+  setSettleWindow(ms: number): void {
+    this.settleWindowMs = ms;
+  }
+
+  /**
+   * Restart the settle clock for cells that have just been released by the hand guard.
+   * Settled cells are left alone: a counter that was already playing before the hand
+   * arrived must not stop because the hand went away.
+   */
+  restartSettle(cells: Iterable<CellRef>): void {
+    for (const { row, col } of cells) {
+      const st = this.states.get(keyOf(row, col));
+      if (!st || st.phase === 'settled') continue;
+      st.stillMs = 0;
+      st.movingMs = 0;
+      st.lastCentroid = null;
+      st.velocity = 0;
+      st.offsets = [];
+    }
+  }
+
   step(readings: CellReading[], dtMs: number, _nowMs: number): BoardStepResult {
     const {
-      settleWindowMs, velocityFloor, velocitySmoothing, occupancyGraceMs, motionConfirmMs,
+      velocityFloor, velocitySmoothing, occupancyGraceMs, motionConfirmMs,
     } = this.cfg;
+    const settleWindowMs = this.settleWindowMs;
     const justSettled: CellRef[] = [];
     const justDeactivated: CellRef[] = [];
 

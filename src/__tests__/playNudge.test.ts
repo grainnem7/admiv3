@@ -86,3 +86,47 @@ describe('dismiss, hysteresis and switch', () => {
     expect(run(spread(0.35, 0), ctx({ enabled: false }), 3000).signal).toBeNull();
   });
 });
+
+describe('hand-guard nudges and priority', () => {
+  const cells = (n: number, fill: number): CellReading[] => Array.from({ length: n }, (_, i) => ({
+    row: Math.floor(i / 4), col: i % 4, occupied: true, colour: 'orange', centroid: { x: 0.5, y: 0.5 }, offset: 0.5, fractions: { orange: fill },
+  }));
+
+  it('something resting needs the same hold as the other hints, and can be dismissed', () => {
+    const c = ctx({ resting: true });
+    expect(run([], c, 1500).signal).toBeNull();
+    let { st, signal } = run([], c, 2200);
+    expect(signal).toEqual({ kind: 'something-resting' });
+    st = dismissNudge(st, 'something-resting');
+    ({ signal } = stepNudge(st, [], c, 2300));
+    expect(signal).toBeNull();
+  });
+
+  it('a knock outranks every other hint and appears at once', () => {
+    const both = [...cells(12, 0.8), ...spread(0.35, 0)];
+    const { signal } = run(both, ctx({ knocked: true, resting: true }), 2200);
+    expect(signal).toEqual({ kind: 'knocked' });
+  });
+
+  it('a knock is reported even when hints are switched off', () => {
+    expect(run([], ctx({ enabled: false, knocked: true }), 100).signal).toEqual({ kind: 'knocked' });
+    expect(run([], ctx({ enabled: false }), 100).signal).toBeNull();
+  });
+
+  it('a knock can never be dismissed: it needs a decision', () => {
+    const { st } = run([], ctx({ knocked: true }), 2200);
+    expect(stepNudge(dismissNudge(st, 'knocked'), [], ctx({ knocked: true }), 2300).signal)
+      .toEqual({ kind: 'knocked' });
+  });
+
+  it('colour-matches-board still outranks resting, which outranks board-moved', () => {
+    const colourAndRest = run(cells(12, 0.8), ctx({ resting: true }), 2200);
+    expect(colourAndRest.signal).toEqual({ kind: 'colour-matches-board', channelId: 'orange' });
+    const restAndMoved = run(spread(0.35, 0), ctx({ resting: true }), 2200);
+    expect(restAndMoved.signal).toEqual({ kind: 'something-resting' });
+  });
+
+  it('a bumped camera raises board-moved without the four-piece rule', () => {
+    expect(run([], ctx({ global: true }), 2200).signal).toEqual({ kind: 'board-moved' });
+  });
+});

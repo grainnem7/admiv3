@@ -15,6 +15,12 @@ import {
 } from '../../../tracking/boardColours';
 import { initialControlState, stepControls, type ControlsResult } from '../../../tracking/controlCounters';
 import { dismissNudge, initialNudgeState, stepNudge, type NudgeKind, type NudgeSignal, type NudgeState } from './playNudge';
+import {
+  buildWatchGrid, initialWatchState, stepWatcher, type WatchGrid, type WatchState,
+} from '../../../tracking/handGuard/intruderMask';
+import {
+  initialKnockState, letGo, releaseGhostsAt, stepKnock, type KnockState,
+} from '../../../tracking/handGuard/knockGuard';
 import { frameMeanSaturation } from '../../../tracking/cameraCheck';
 import { startVideoFrameLoop } from '../../../tracking/videoFrameLoop';
 import { stepBoardFrame, suppressSpill, type BoardFrameOutput } from '../../../tracking/boardFrame';
@@ -31,6 +37,11 @@ export interface RuntimeFrame {
   controls: ControlsResult;
   /** The hint to show, if any: the board seems to have moved, or a colour matches it. */
   nudge: NudgeSignal | null;
+  /** Cells the hand guard is holding, and the knocked cells still sounding. */
+  held: ReadonlySet<string>;
+  ghosts: ReadonlyMap<string, ActiveCell>;
+  /** False until the watcher has seen a clear view of the board. */
+  handGuardReady: boolean;
   /** performance.now() of the camera frame this came from. */
   atMs: number;
 }
@@ -68,6 +79,9 @@ export interface BoardRuntimeRefs {
   latestFrameRef: MutableRefObject<RuntimeFrame | null>;
   /** "Not now" on a hint: it stays hidden until its condition clears and comes back. */
   dismiss(kind: NudgeKind): void;
+  /** Knock guard: drop the ghosts, or read them for "Save as loop". */
+  letGoGhosts(): void;
+  knockRef: MutableRefObject<KnockState>;
 }
 
 const CAMERA_CHECK_MS = 1000;
@@ -92,6 +106,10 @@ export function useBoardRuntime(opts: {
   const activeCellsRef = useRef<ActiveCell[]>([]);
   const latestFrameRef = useRef<RuntimeFrame | null>(null);
   const nudgeRef = useRef<NudgeState>(initialNudgeState());
+  const watchRef = useRef<WatchState>(initialWatchState());
+  const watchGridRef = useRef<{ grid: WatchGrid; key: string } | null>(null);
+  const knockRef = useRef<KnockState>(initialKnockState());
+  const letGoGhosts = useCallback(() => { knockRef.current = letGo(knockRef.current); }, []);
   const dismiss = useCallback((kind: NudgeKind) => {
     nudgeRef.current = dismissNudge(nudgeRef.current, kind);
   }, []);
@@ -145,6 +163,8 @@ export function useBoardRuntime(opts: {
     let sequencedColours = new Set<ColourId>();
     let controlColours = new Set<ColourId>();
     let controls = initialControlState();
+    let prevHeld: ReadonlySet<string> = new Set<string>();
+    let settledBefore: ActiveCell[] = [];
 
     const stopFrames = startVideoFrameLoop(video, ({ nowMs, dtMs }) => {
       const reader = readerRef.current;
@@ -171,20 +191,95 @@ export function useBoardRuntime(opts: {
         mirrorX: cfg.mirrorX, mirrorY: cfg.mirrorY, samplesPerAxis: cfg.samplesPerAxis,
         boardSquares: cfg.boardSquares, dtMs,
       }), cfg);
+      // The hand guard: find what is reaching over the board before anything is read.
+      let held = new Set<string>();
+      let resting = false;
+      let globalChange = false;
+      let handGuardReady = false;
+      const lastFrame = reader.lastFrame();
+      if (cfg.handGuardEnabled && lastFrame) {
+        const gridKey = `${homographyRef.current.join(',')}|${cfg.rows}|${cfg.cols}|${cfg.boardSquares}|${lastFrame.width}x${lastFrame.height}`;
+        if (watchGridRef.current?.key !== gridKey) {
+          watchGridRef.current = {
+            key: gridKey,
+            grid: buildWatchGrid(
+              homographyRef.current, lastFrame, cfg.rows, cfg.cols, cfg.boardSquares,
+            ),
+          };
+          watchRef.current = initialWatchState();
+        }
+        const watch = stepWatcher(watchRef.current, watchGridRef.current.grid, lastFrame.data, nowMs, {
+          sensitivity: cfg.intruderSensitivity,
+          marginSquares: cfg.handMarginSquares,
+          releaseMs: cfg.handReleaseMs,
+          restNudgeMs: cfg.restNudgeMs,
+          dtMs,
+        });
+        watchRef.current = watch.state;
+        handGuardReady = watch.ready;
+        resting = watch.resting;
+        globalChange = watch.global;
+        for (const cell of watch.heldCells) {
+          held.add(`${Math.floor(cell / cfg.cols)},${cell % cfg.cols}`);
+        }
+      } else if (!cfg.handGuardEnabled) {
+        watchRef.current = initialWatchState();
+        watchGridRef.current = null;
+      }
+
+      // A held cell isn't read at all: the settle state it had is simply left alone, so a
+      // counter under a hand keeps playing and a sleeve can't add a note.
+      const released: { row: number; col: number }[] = [];
+      const visible = held.size === 0 ? readings : readings.filter((r) => {
+        const key = `${r.row},${r.col}`;
+        if (held.has(key)) return false;
+        if (prevHeld.has(key)) released.push({ row: r.row, col: r.col });
+        return true;
+      });
+      if (released.length > 0) modeRef.current?.restartSettle(released);
+      prevHeld = held;
+
       modeRef.current?.setVariation(cfg.variationEnabled, cfg.variationOffsetThreshold);
+      // With hands excluded, a counter no longer needs the long window to prove itself.
+      modeRef.current?.setSettleWindow(
+        cfg.handGuardEnabled && handGuardReady && !globalChange ? cfg.settleAfterHandMs : cfg.settleWindowMs,
+      );
       engineRef.current?.setPingPong(cfg.pingPong);
       const running = runningRef.current && !!modeRef.current && !!engineRef.current;
-      const modeResult = running && modeRef.current ? modeRef.current.step(readings, dtMs, nowMs) : null;
+      const modeResult = running && modeRef.current ? modeRef.current.step(visible, dtMs, nowMs) : null;
+      // Knock guard: only sequenced note cells count, and never the loop-bank row.
+      let knocked = false;
+      if (running && modeResult && cfg.knockGuardEnabled) {
+        const bankRow = cfg.loopBankEnabled ? cfg.rows - 1 : -1;
+        const notes = (cells: ActiveCell[]): ActiveCell[] => cells.filter(
+          (c) => c.row !== bankRow && sequencedColours.has(c.colour),
+        );
+        const now = notes(modeResult.activeCells);
+        const step = stepKnock(knockRef.current, notes(settledBefore), now, held, nowMs, {
+          minCount: cfg.knockMinCount,
+          minFraction: cfg.knockMinFraction,
+          windowMs: cfg.knockWindowMs,
+        });
+        knockRef.current = releaseGhostsAt(step.state, now);
+        knocked = knockRef.current.ghosts.size > 0;
+        settledBefore = modeResult.activeCells;
+      } else {
+        if (knockRef.current.ghosts.size > 0) knockRef.current = letGo(knockRef.current);
+        settledBefore = modeResult ? modeResult.activeCells : [];
+      }
+
       const frame = stepBoardFrame({
-        readings,
+        readings: visible,
         cfg: { ...cfg, sequencedColours, controlColours },
         running,
         modeResult,
         loopBank: loopBankRef.current,
         dtMs,
+        held,
+        ghosts: knockRef.current.ghosts,
       });
       // Controls read the RAW frame, not the settle: a slide should follow the hand.
-      const ctl = stepControls(controls, readings, cfg.channels, {
+      const ctl = stepControls(controls, visible, cfg.channels, {
         faderAxis: cfg.faderAxis,
         boardSquares: cfg.boardSquares,
         controlStillMs: cfg.controlStillMs,
@@ -213,10 +308,16 @@ export function useBoardRuntime(opts: {
         variationOffsetThreshold: cfg.variationOffsetThreshold,
         enabled: cfg.boardNudgesEnabled,
         ignoreColours: controlColours,
+        resting,
+        global: globalChange,
+        knocked,
       }, nowMs);
       nudgeRef.current = nudge.state;
 
-      const rf: RuntimeFrame = { readings, frame, controls: ctl, nudge: nudge.signal, atMs: nowMs };
+      const rf: RuntimeFrame = {
+        readings: visible, frame, controls: ctl, nudge: nudge.signal,
+        held, ghosts: knockRef.current.ghosts, handGuardReady, atMs: nowMs,
+      };
       latestFrameRef.current = rf;
       callbacksRef.current.onFrame?.(rf, dtMs);
     });
@@ -243,6 +344,6 @@ export function useBoardRuntime(opts: {
 
   return {
     videoRef, cameraRef, readerRef, homographyRef, modeRef, engineRef, runningRef, loopBankRef,
-    activeCellsRef, latestFrameRef, dismiss,
+    activeCellsRef, latestFrameRef, dismiss, letGoGhosts, knockRef,
   };
 }

@@ -15,11 +15,19 @@ export const COLOUR_MATCH_MIN_CELLS = 8;
 export const COLOUR_MATCH_MIN_FILL = 0.5;
 export const COLOUR_MATCH_MIN_GRID = 16;
 
-export type NudgeKind = 'board-moved' | 'colour-matches-board';
-export type NudgeSignal = { kind: 'board-moved' } | { kind: 'colour-matches-board'; channelId: ColourId };
+export type NudgeKind = 'board-moved' | 'colour-matches-board' | 'something-resting' | 'knocked';
+export type NudgeSignal =
+  | { kind: 'board-moved' }
+  | { kind: 'colour-matches-board'; channelId: ColourId }
+  | { kind: 'something-resting' }
+  | { kind: 'knocked' };
 
 export interface KindState { active: boolean; since: number | null; clearSince: number | null; dismissed: boolean }
-export interface NudgeState { boardMoved: KindState; colourMatches: KindState & { channelId: ColourId | null } }
+export interface NudgeState {
+  boardMoved: KindState;
+  colourMatches: KindState & { channelId: ColourId | null };
+  resting: KindState;
+}
 
 export interface NudgeContext {
   boardSquares: number;
@@ -29,12 +37,18 @@ export interface NudgeContext {
   variationOffsetThreshold: number;
   enabled: boolean;
   ignoreColours?: ReadonlySet<ColourId>;
+  /** The hand guard says something has been sitting over the board. */
+  resting?: boolean;
+  /** The hand guard says the whole picture changed — a bump, not an arm. */
+  global?: boolean;
+  /** Knocked pieces are still sounding as ghosts. */
+  knocked?: boolean;
 }
 
 const idle = (): KindState => ({ active: false, since: null, clearSince: null, dismissed: false });
 
 export function initialNudgeState(): NudgeState {
-  return { boardMoved: idle(), colourMatches: { ...idle(), channelId: null } };
+  return { boardMoved: idle(), colourMatches: { ...idle(), channelId: null }, resting: idle() };
 }
 
 const median = (v: number[]): number => {
@@ -101,25 +115,41 @@ function advance(k: KindState, raw: boolean, now: number): KindState {
 }
 
 export function stepNudge(prev: NudgeState, readings: CellReading[], ctx: NudgeContext, now: number): { state: NudgeState; signal: NudgeSignal | null } {
-  if (!ctx.enabled) return { state: initialNudgeState(), signal: null };
-  const boardMoved = advance(prev.boardMoved, boardMovedRaw(readings, ctx), now);
+  if (!ctx.enabled) {
+    // A knock still has to be reported: it is the one hint the player must act on.
+    return { state: initialNudgeState(), signal: ctx.knocked ? { kind: 'knocked' } : null };
+  }
+  // A bumped camera is a board-moved hint on its own evidence: the usual "at least four
+  // pieces line up the same way" rule can't apply when the whole picture shifted.
+  const boardMoved = advance(prev.boardMoved, ctx.global === true || boardMovedRaw(readings, ctx), now);
+  const resting = advance(prev.resting, ctx.resting === true, now);
   const channel = colourMatchesBoardRaw(readings, ctx);
   const restarted = channel !== null && prev.colourMatches.channelId !== null && channel !== prev.colourMatches.channelId;
   const baseColour: KindState = restarted ? idle() : prev.colourMatches;
   const colourKind = advance(baseColour, channel !== null, now);
   const colourMatches = { ...colourKind, channelId: channel ?? (colourKind.active ? prev.colourMatches.channelId : null) };
-  const state: NudgeState = { boardMoved, colourMatches };
+  const state: NudgeState = { boardMoved, colourMatches, resting };
+  // Priority: what needs a decision first. A knock is the only one that changed the
+  // music, so it outranks everything.
   let signal: NudgeSignal | null = null;
-  if (colourMatches.active && !colourMatches.dismissed && colourMatches.channelId) {
+  if (ctx.knocked) {
+    signal = { kind: 'knocked' };
+  } else if (colourMatches.active && !colourMatches.dismissed && colourMatches.channelId) {
     signal = { kind: 'colour-matches-board', channelId: colourMatches.channelId };
+  } else if (resting.active && !resting.dismissed) {
+    signal = { kind: 'something-resting' };
   } else if (boardMoved.active && !boardMoved.dismissed) {
     signal = { kind: 'board-moved' };
   }
   return { state, signal };
 }
 
+/** "Not now". A knock has no dismissal: it needs Let go or Save as loop. */
 export function dismissNudge(state: NudgeState, kind: NudgeKind): NudgeState {
-  return kind === 'board-moved'
-    ? { ...state, boardMoved: { ...state.boardMoved, dismissed: true } }
-    : { ...state, colourMatches: { ...state.colourMatches, dismissed: true } };
+  if (kind === 'board-moved') return { ...state, boardMoved: { ...state.boardMoved, dismissed: true } };
+  if (kind === 'something-resting') return { ...state, resting: { ...state.resting, dismissed: true } };
+  if (kind === 'colour-matches-board') {
+    return { ...state, colourMatches: { ...state.colourMatches, dismissed: true } };
+  }
+  return state;
 }

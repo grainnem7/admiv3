@@ -32,12 +32,18 @@ export interface BoardFrameInput {
   running: boolean;
   modeResult: BoardStepResult | null;
   loopBank: LoopBankState;
+  /** Cells the hand guard is holding ("row,col"), left out of the counts and the capture. */
+  held?: ReadonlySet<string>;
+  /** Knocked cells that keep sounding until the player decides what to do with them. */
+  ghosts?: ReadonlyMap<string, ActiveCell>;
   /** Milliseconds since the previous processed camera frame (drives the capture guard). */
   dtMs?: number;
 }
 
 export interface BoardFrameOutput {
   occupied: Map<string, PieceColour>;
+  /** Cells held by the hand guard, for the board view and the legend. */
+  held: ReadonlySet<string>;
   byColour: Partial<Record<ColourId, number>>;
   conditional: Set<string>;
   patternCells: ActiveCell[];
@@ -118,12 +124,13 @@ export function suppressSpill(readings: CellReading[], ctx: SpillCtx): CellReadi
     : r));
 }
 
-export function stepBoardFrame({ readings, cfg, running, modeResult, loopBank, dtMs }: BoardFrameInput): BoardFrameOutput {
+export function stepBoardFrame({ readings, cfg, running, modeResult, loopBank, dtMs, held, ghosts }: BoardFrameInput): BoardFrameOutput {
   const occupied = new Map<string, PieceColour>();
   const byColour: Partial<Record<ColourId, number>> = {};
   for (const rd of readings) {
-    if (rd.occupied && rd.colour) {
-      occupied.set(`${rd.row},${rd.col}`, rd.colour);
+    const key = `${rd.row},${rd.col}`;
+    if (rd.occupied && rd.colour && !held?.has(key)) {
+      occupied.set(key, rd.colour);
       byColour[rd.colour] = (byColour[rd.colour] ?? 0) + 1;
     }
   }
@@ -164,6 +171,13 @@ export function stepBoardFrame({ readings, cfg, running, modeResult, loopBank, d
     }
     fireTick = modeResult.justSettled.length > 0;
   }
+  if (running && ghosts && ghosts.size > 0) {
+    const live = new Set(patternCells.map((c) => `${c.row},${c.col}`));
+    const withGhosts = [...patternCells];
+    for (const [key, cell] of ghosts) if (!live.has(key)) withGhosts.push(cell);
+    patternCells = withGhosts;
+  }
+
   const activeMap = new Map<string, PieceColour>();
   for (const c of patternCells) activeMap.set(`${c.row},${c.col}`, c.colour);
 
@@ -175,5 +189,5 @@ export function stepBoardFrame({ readings, cfg, running, modeResult, loopBank, d
     })
     : null;
 
-  return { occupied, byColour, conditional, patternCells, activeLoops, activeMap, loopBank: nextBank, captured, fireTick, bankSlots };
+  return { occupied, held: held ?? new Set<string>(), byColour, conditional, patternCells, activeLoops, activeMap, loopBank: nextBank, captured, fireTick, bankSlots };
 }
