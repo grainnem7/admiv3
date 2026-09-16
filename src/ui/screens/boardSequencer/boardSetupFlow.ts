@@ -55,7 +55,7 @@ export function stepIndicator(
   }
   if (step === 'board') return cfg.enabled && cameraSatisfied(camera, hasStoredConfig) ? 'done' : 'todo';
   if (step === 'colours') return cfg.enabled && hasActiveChannel(cfg) ? 'done' : 'todo';
-  return 'todo';
+  return canOpenStep('ready', cfg, camera, hasStoredConfig) ? 'done' : 'todo';
 }
 
 export function continueLabel(step: SetupStep, camera: CameraStatus): string {

@@ -24,7 +24,16 @@ export interface KnockState {
   ghosts: Map<string, ActiveCell>;
 }
 
-export const keyOf = (c: { row: number; col: number }): string => `${c.row},${c.col}`;
+/** Where a cell is. The hand watcher holds positions, so this is what `held` is keyed by. */
+export const posKey = (c: { row: number; col: number }): string => `${c.row},${c.col}`;
+
+/**
+ * Which counter it is. With two counters to a square both play, so a square can hold a red
+ * and a blue at once; keying by position alone would hide one of them losing its counter
+ * and would drop a colour when the pattern is saved.
+ */
+export const keyOf = (c: { row: number; col: number; colour: string }): string =>
+  `${c.row},${c.col},${c.colour}`;
 
 export function initialKnockState(): KnockState {
   return { recentLost: [], ghosts: new Map() };
@@ -55,7 +64,7 @@ export function stepKnock(
     const key = keyOf(cell);
     // A covered counter is being held, not knocked — that is the whole point of the
     // hand guard, and treating it as a knock would fill the board with ghosts.
-    if (nowKeys.has(key) || held.has(key) || ghosts.has(key)) continue;
+    if (nowKeys.has(key) || held.has(posKey(cell)) || ghosts.has(key)) continue;
     lostThisFrame.push(cell);
     recentLost.push({ cell: key, at: now });
   }
@@ -82,11 +91,25 @@ export function stepKnock(
   return { state: { recentLost, ghosts }, knocked };
 }
 
-/** A counter settling where a ghost is takes over from it, whatever its colour. */
-export function releaseGhostsAt(state: KnockState, settledNow: ActiveCell[]): KnockState {
+/**
+ * A counter settling takes over the ghost it replaces.
+ *
+ * With one counter to a square, any counter put on that square replaces whatever was
+ * there, so the ghost goes whatever its colour. With two counters to a square the colours
+ * sound side by side, so only the matching ghost is taken over — putting the red one back
+ * must not silence the blue one that is still missing.
+ */
+export function releaseGhostsAt(
+  state: KnockState, settledNow: ActiveCell[], twoCounters = false,
+): KnockState {
   if (state.ghosts.size === 0) return state;
   const ghosts = new Map(state.ghosts);
-  for (const cell of settledNow) ghosts.delete(keyOf(cell));
+  if (twoCounters) {
+    for (const cell of settledNow) ghosts.delete(keyOf(cell));
+  } else {
+    const taken = new Set(settledNow.map(posKey));
+    for (const [key, cell] of state.ghosts) if (taken.has(posKey(cell))) ghosts.delete(key);
+  }
   return ghosts.size === state.ghosts.size ? state : { ...state, ghosts };
 }
 
@@ -95,10 +118,20 @@ export function letGo(state: KnockState): KnockState {
   return state.ghosts.size === 0 ? state : { recentLost: [], ghosts: new Map() };
 }
 
-/** Ghosts plus what is still on the board, for "Save as loop". Live cells win. */
-export function ghostsForSave(state: KnockState, liveNotes: ActiveCell[]): ActiveCell[] {
+/**
+ * Ghosts plus what is still on the board, for "Save as loop". A counter on the board wins
+ * over a ghost it stands in for — by square when a square holds one counter, by colour
+ * when it holds two, so saving a two-colour pattern keeps both.
+ */
+export function ghostsForSave(
+  state: KnockState, liveNotes: ActiveCell[], twoCounters = false,
+): ActiveCell[] {
   const out = new Map<string, ActiveCell>();
-  for (const [key, cell] of state.ghosts) out.set(key, cell);
+  const live = twoCounters ? new Set(liveNotes.map(keyOf)) : new Set(liveNotes.map(posKey));
+  for (const [key, cell] of state.ghosts) {
+    if (live.has(twoCounters ? key : posKey(cell))) continue;
+    out.set(key, cell);
+  }
   for (const cell of liveNotes) out.set(keyOf(cell), cell);
   return [...out.values()];
 }

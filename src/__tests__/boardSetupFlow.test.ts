@@ -69,7 +69,10 @@ describe('stepIndicator', () => {
     expect(stepIndicator('board', 'board', valid, cam('running'), true)).toBe('current');
     expect(stepIndicator('colours', 'board', valid, cam('running'), true)).toBe('done');
     expect(stepIndicator('colours', 'board', cornersOnly, cam('running'), true)).toBe('todo');
-    expect(stepIndicator('ready', 'board', valid, cam('running'), true)).toBe('todo');
+    // Ready is reachable once board and colours are done, so the map must say so —
+    // leaving it grey makes a finished set-up look unfinished.
+    expect(stepIndicator('ready', 'board', valid, cam('running'), true)).toBe('done');
+    expect(stepIndicator('ready', 'board', cornersOnly, cam('running'), true)).toBe('todo');
   });
 });
 

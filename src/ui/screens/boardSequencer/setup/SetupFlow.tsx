@@ -1,7 +1,7 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { Button } from '../ui/Button';
 import {
-  SETUP_STEPS, canContinue, continueLabel, nextStep, prevStep,
+  SETUP_STEPS, canContinue, cameraSatisfied, continueLabel, nextStep, prevStep,
   type CameraStatus, type SetupConfigView, type SetupStep,
 } from '../boardSetupFlow';
 
@@ -61,7 +61,7 @@ export function SetupFlow({
   const back = prevStep(step);
   const next = nextStep(step);
   const canGo = canContinue(step, cfg, camera, hasStoredConfig);
-  const continueReason = canGo ? null : reasonFor(step, camera);
+  const continueReason = canGo ? null : reasonFor(step, cfg, camera, hasStoredConfig);
 
   return (
     <section
@@ -91,13 +91,24 @@ export function SetupFlow({
   );
 }
 
-/** Plain-language reason a step can't be left yet. */
-function reasonFor(step: SetupStep, camera: CameraStatus): string {
+/** Plain-language reason a step can't be left yet — the one that is actually blocking. */
+function reasonFor(
+  step: SetupStep, cfg: SetupConfigView, camera: CameraStatus, hasStoredConfig: boolean,
+): string {
   if (step === 'camera') {
     if (camera.phase === 'starting') return 'Waiting for the camera to start…';
     return "The camera isn't working yet. Pick another camera or press Try again.";
   }
+  // Later steps also need a working camera; saying "find the board" when the board is
+  // already found and the camera is the problem sends the player the wrong way.
+  if (!cameraSatisfied(camera, hasStoredConfig)) {
+    return camera.phase === 'starting'
+      ? 'Waiting for the camera to start…'
+      : "The camera isn't working yet. Go back to Camera and try again.";
+  }
   if (step === 'board') return 'Find the board and confirm its corners first.';
+  // On Colours, a missing board blocks Continue just as hard as a missing colour does.
+  if (!cfg.enabled) return 'Go back to Board and confirm the corners first.';
   if (step === 'colours') return 'Add at least one colour and give it a job.';
   return '';
 }

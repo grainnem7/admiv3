@@ -13,7 +13,7 @@ import type {
 } from '../tracking/boardColours';
 import { ROLE_LABELS, DEFAULT_BLACK_BAND, DEFAULT_WHITE_BAND } from '../tracking/boardColours';
 import { suggestReadSettings, type BoardSquares } from '../tracking/boardGrid';
-import { ANYWHERE, clampZone, NO_ZONE, type Zone } from '../tracking/zones';
+import { ANYWHERE, clampZone, NO_ZONE, zoneSlotCount, type Zone } from '../tracking/zones';
 
 const STORAGE_KEY = 'admi-board-sequencer';
 
@@ -471,7 +471,7 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     variationEnabled: o.variationEnabled === true,
     variationOffsetThreshold: num(o.variationOffsetThreshold, d.variationOffsetThreshold),
     pingPong: o.pingPong === true,
-    loopBankEnabled: loopZone.mode !== 'off',
+    loopBankEnabled: zoneSlotCount(loopZone, rows, cols) > 0,
     loopSlots: sanitizeLoopSlots(o.loopSlots),
     noteLengthBeats: num(o.noteLengthBeats, d.noteLengthBeats),
     velocity: num(o.velocity, d.velocity),

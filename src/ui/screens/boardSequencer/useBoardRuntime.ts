@@ -280,10 +280,18 @@ export function useBoardRuntime(opts: {
 
       // A held cell isn't read at all: the settle state it had is simply left alone, so a
       // counter under a hand keeps playing and a sleeve can't add a note.
+      // The commonest gesture is lifting the hand straight off, which frees every held
+      // cell at once — so released has to be computed even when nothing is held now.
       const released: { row: number; col: number }[] = [];
-      const visible = held.size === 0 ? readings : readings.filter((r) => {
+      const heldColours = new Set<ColourId>();
+      const visible = held.size === 0 && prevHeld.size === 0 ? readings : readings.filter((r) => {
         const key = `${r.row},${r.col}`;
-        if (held.has(key)) return false;
+        if (held.has(key)) {
+          // A control counter under a hand is still on the board; its value must hold
+          // rather than take the "counter removed" path.
+          if (r.colour && controlColours.has(r.colour)) heldColours.add(r.colour);
+          return false;
+        }
         if (prevHeld.has(key)) released.push({ row: r.row, col: r.col });
         return true;
       });
@@ -328,7 +336,7 @@ export function useBoardRuntime(opts: {
           minFraction: cfg.knockMinFraction,
           windowMs: cfg.knockWindowMs,
         });
-        knockRef.current = releaseGhostsAt(step.state, now);
+        knockRef.current = releaseGhostsAt(step.state, now, cfg.twoCounterMode === 'both');
         knocked = knockRef.current.ghosts.size > 0;
         settledBefore = modeResult.activeCells;
       } else {
@@ -356,6 +364,7 @@ export function useBoardRuntime(opts: {
         controlRemoval: cfg.controlRemoval,
         defaults: { volume: cfg.volume },
         zone: cfg.controlZone,
+        heldColours,
       }, dtMs);
       controls = ctl.state;
       const engine = engineRef.current;

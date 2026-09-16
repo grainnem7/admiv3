@@ -36,6 +36,11 @@ export interface ControlsConfig {
    * the pattern does nothing rather than something surprising.
    */
   zone?: Zone;
+  /**
+   * Colours whose counter is under a hand. The hand guard's whole premise is that a
+   * covered counter is still there, so its value holds instead of being treated as gone.
+   */
+  heldColours?: ReadonlySet<string>;
 }
 
 export interface RoleState {
@@ -108,7 +113,16 @@ function present(readings: CellReading[], colour: string, zone?: Zone): boolean 
   return readings.some((r) => r.occupied && r.colour === colour && (!inLane || zoneContains(zone, r)));
 }
 
-function stepFader(st: RoleState, raw: number | null, role: FaderRole, cfg: ControlsConfig, dtMs: number): boolean {
+function stepFader(
+  st: RoleState, raw: number | null, role: FaderRole, cfg: ControlsConfig, dtMs: number,
+  covered = false,
+): boolean {
+  if (raw === null && covered) {
+    // Under a hand: not a new reading, and not a removal either.
+    st.candidate = null;
+    st.stillMs = 0;
+    return st.position !== null;
+  }
   if (raw === null) {
     st.candidate = null;
     st.stillMs = 0;
@@ -161,12 +175,15 @@ export function stepControls(
     const st: RoleState = { ...(prev[ch.id] ?? freshRole()) };
     state[ch.id] = st;
     if (isToggleRole(ch.role)) {
-      stepToggle(st, present(readings, ch.id, cfg.zone), cfg, dtMs);
+      // A covered toggle counter is still on the board, so it stays on.
+      stepToggle(st, present(readings, ch.id, cfg.zone) || cfg.heldColours?.has(ch.id) === true, cfg, dtMs);
       toggles[ch.role] = st.on;
       continue;
     }
     const role = ch.role as FaderRole;
-    const isHeld = stepFader(st, rawFaderPosition(readings, ch.id, cfg), role, cfg, dtMs);
+    const isHeld = stepFader(
+      st, rawFaderPosition(readings, ch.id, cfg), role, cfg, dtMs, cfg.heldColours?.has(ch.id) === true,
+    );
     if (isHeld) held.add(role);
     if (st.position !== null) {
       const range = cfg.controlRanges[role];

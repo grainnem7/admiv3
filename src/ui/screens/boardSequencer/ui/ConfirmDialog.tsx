@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Button } from './Button';
+import { useModalFocus } from './Modal';
 
 export interface ConfirmDialogProps {
   title: string;
@@ -21,31 +22,9 @@ export function ConfirmDialog({
 }: ConfirmDialogProps): JSX.Element {
   const panel = useRef<HTMLDivElement | null>(null);
   const confirmRef = useRef<HTMLButtonElement | null>(null);
-  const opener = useRef<Element | null>(null);
+  const onKeyDown = useModalFocus(panel, onCancel);
 
-  useEffect(() => {
-    opener.current = document.activeElement;
-    confirmRef.current?.focus();
-    return () => {
-      // Restore focus, so a switch or screen-reader user isn't dropped at the page top.
-      (opener.current as HTMLElement | null)?.focus?.();
-    };
-  }, []);
-
-  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>): void => {
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      onCancel();
-      return;
-    }
-    if (e.key !== 'Tab') return;
-    const focusable = panel.current?.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
-    if (!focusable || focusable.length === 0) return;
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
-  };
+  useEffect(() => { confirmRef.current?.focus(); }, []);
 
   return (
     <div

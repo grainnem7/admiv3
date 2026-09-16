@@ -126,3 +126,30 @@ describe('stepControls — toggles', () => {
     expect(out.state).toEqual({});
   });
 });
+
+describe('a control counter under a hand', () => {
+  it('holds its value instead of being treated as removed', () => {
+    // 'zero' would drop the volume to its minimum the moment a hand crossed the board.
+    const c = cfg({ controlRemoval: { ...DEFAULT_BOARD_SEQUENCER_CONFIG.controlRemoval, volume: 'zero' } });
+    const { state } = hold(initialControlState(), at(0.5), c, 200);
+    const covered = hold(state, empty, { ...c, heldColours: new Set(['vol']) }, 1000);
+    expect(covered.values.volume).toBeCloseTo(0.6, 10);
+    expect([...covered.held]).toEqual(['volume']);
+  });
+
+  it('and once the hand really leaves, removal applies as chosen', () => {
+    const c = cfg({ controlRemoval: { ...DEFAULT_BOARD_SEQUENCER_CONFIG.controlRemoval, volume: 'zero' } });
+    const { state } = hold(initialControlState(), at(0.5), c, 200);
+    const covered = hold(state, empty, { ...c, heldColours: new Set(['vol']) }, 300);
+    const gone = hold(covered.state, empty, c, 100);
+    expect(gone.values.volume).toBeCloseTo(0.2, 10);
+  });
+
+  it('a covered toggle counter stays on', () => {
+    const chans = [revToggle];
+    const on = hold(initialControlState(), at(0.5, 'rv'), cfg(), 200, chans);
+    expect(on.toggles.reverbToggle).toBe(true);
+    const covered = hold(on.state, empty, { ...cfg(), heldColours: new Set(['rv']) }, 400, chans);
+    expect(covered.toggles.reverbToggle).toBe(true);
+  });
+});

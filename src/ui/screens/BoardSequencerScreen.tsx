@@ -53,6 +53,7 @@ import { SegmentedControl } from './boardSequencer/ui/SegmentedControl';
 import { clampZone, describeZone, zoneSlotCount, type ZoneMode } from '../../tracking/zones';
 import { LabeledSlider } from './boardSequencer/ui/LabeledSlider';
 import { Button } from './boardSequencer/ui/Button';
+import { Modal } from './boardSequencer/ui/Modal';
 import { colourMatchesBoardRaw, type NudgeSignal } from './boardSequencer/playNudge';
 import { spaceTogglesPlay, type BoardScreenView } from './boardSequencer/spaceKey';
 import { ghostsForSave } from '../../tracking/handGuard/knockGuard';
@@ -281,6 +282,16 @@ export default function BoardSequencerScreen() {
   const [activePlayer, setActivePlayerState] = useState<BoardPlayerProfile | null>(() => getActiveBoardPlayer());
   // Ask who's playing only when there is a real choice to make.
   const [chooserOpen, setChooserOpen] = useState(() => listBoardPlayers().length > 1);
+  // The first save creates an implicit "Player 1". Without picking it up, the Player button
+  // never appears and every screen keeps calling them "the player".
+  useEffect(() => {
+    if (activePlayer !== null) return;
+    const active = getActiveBoardPlayer();
+    if (!active) return;
+    setPlayers(listBoardPlayers());
+    setActivePlayerState(active);
+  }, [config, activePlayer]);
+
   const [pendingColour, setPendingColour] = useState<LastColourSample | null>(null);
   const [squarePicker, setSquarePicker] = useState<{ row: number; col: number } | null>(null);
   const [handCheck, setHandCheck] = useState<{ checking: boolean; result: string | null }>(
@@ -442,7 +453,9 @@ export default function BoardSequencerScreen() {
     const slots = loopBankRef.current.saved;
     const slot = slots.findIndex((sl) => sl == null);
     if (slot < 0) return;
-    const cells = ghostsForSave(knockRef.current, activeCellsRef.current);
+    const cells = ghostsForSave(
+      knockRef.current, activeCellsRef.current, configRef.current.twoCounterMode === 'both',
+    );
     loopBankRef.current = {
       ...loopBankRef.current,
       saved: slots.map((sl, i) => (i === slot ? cells.map((c) => ({ ...c })) : sl)),
@@ -2280,24 +2293,10 @@ export default function BoardSequencerScreen() {
         />
 
         {showHelp && (
-          <div
-            role="dialog"
-            aria-label="How to play"
-            style={{
-              position: 'fixed', inset: 0, zIndex: 40, display: 'grid', placeItems: 'center',
-              background: 'rgba(0,0,0,.45)',
-            }}
-          >
-            <div style={{
-              background: 'var(--bs-raised)', color: 'var(--bs-fg)', padding: 20,
-              borderRadius: 'var(--bs-radius-lg)', maxWidth: 560, maxHeight: '80vh', overflowY: 'auto',
-              display: 'flex', flexDirection: 'column', gap: 12,
-            }}
-            >
-              {helpContent}
-              <button type="button" autoFocus onClick={() => setShowHelp(false)}>Close</button>
-            </div>
-          </div>
+          <Modal label="How to play" onClose={() => setShowHelp(false)}>
+            {helpContent}
+            <Button tone="secondary" autoFocus onClick={() => setShowHelp(false)}>Close</Button>
+          </Modal>
         )}
 
         <div

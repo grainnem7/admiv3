@@ -9,6 +9,7 @@ import {
   DEFAULT_BOARD_SEQUENCER_CONFIG, sanitizeBoardSequencerConfig, referencedChannelIds,
   type BoardSequencerStored,
 } from './BoardSequencerConfig';
+import { applyGridChange } from '../tracking/boardGrid';
 
 export const RIG_KEY = 'admi-board-rig';
 export const PLAYERS_KEY = 'admi-board-players';
@@ -181,7 +182,12 @@ export function saveActiveBoardConfig(cfg: BoardSequencerStored): void {
 export function createBoardPlayer(name: string, handedness: 'left' | 'right'): BoardPlayerProfile {
   migrateLegacy();
   const players = listBoardPlayers();
-  const { settings } = splitBoardConfig({ ...DEFAULT_BOARD_SEQUENCER_CONFIG, handedness });
+  // The rig's board size decides how much of a cell a counter covers, so a new player on
+  // a 10 x 10 board must not start with the sampling suggested for an 8 x 8 one.
+  const rig = loadRig();
+  const boardSquares = rig?.fields.boardSquares ?? DEFAULT_BOARD_SEQUENCER_CONFIG.boardSquares;
+  const base = { ...DEFAULT_BOARD_SEQUENCER_CONFIG, handedness, boardSquares };
+  const { settings } = splitBoardConfig(applyGridChange(base, {}));
   const player: BoardPlayerProfile = { id: freshPlayerId(players), name: name.trim() || 'Player', settings, channelSettings: {} };
   savePlayers([...players, player]);
   localStorage.setItem(ACTIVE_PLAYER_KEY, player.id);
