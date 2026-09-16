@@ -50,7 +50,7 @@ import { NudgeBanner } from './boardSequencer/play/NudgeBanner';
 import { SwatchChip } from './boardSequencer/ui/SwatchChip';
 import { Switch } from './boardSequencer/ui/Switch';
 import { SegmentedControl } from './boardSequencer/ui/SegmentedControl';
-import { clampZone, describeZone, zoneSlotCount, type ZoneMode } from '../../tracking/zones';
+import { clampZone, describeZone, zoneSlotCount, zonesCollide, type Zone, type ZoneMode } from '../../tracking/zones';
 import { LabeledSlider } from './boardSequencer/ui/LabeledSlider';
 import { Button } from './boardSequencer/ui/Button';
 import { Modal } from './boardSequencer/ui/Modal';
@@ -125,7 +125,7 @@ import { applyHomography, type Mat3 } from '../../utils/homography';
 import { SCALE_PRESETS, NOTE_NAMES } from '../../songs/boardSequencerScale';
 import { clearLoopSlot, seedLoopBank } from '../../songs/loopBank';
 import {
-  DEFAULT_BOARD_SEQUENCER_CONFIG, type BoardSequencerStored, type BoardPoint,
+  DEFAULT_BOARD_SEQUENCER_CONFIG, type BoardSequencerStored, type BoardPoint, type StoredLoopCell,
 } from '../../profiles/BoardSequencerConfig';
 import {
   loadActiveBoardConfig as loadBoardSequencerConfig, saveActiveBoardConfig as saveBoardSequencerConfig,
@@ -431,11 +431,23 @@ export default function BoardSequencerScreen() {
     if (selectedPageRef.current >= n) selectPage(0);
   }, [selectPage]);
 
+  /**
+   * A cell as it is saved. Box detail comes too: where the counter sat is what gives the
+   * note its loudness and its push or drag, and dropping it made a reloaded loop play
+   * flat and dead on the beat beside a live board that still swung.
+   */
+  const storedCell = useCallback((c: ActiveCell): StoredLoopCell => {
+    const out: StoredLoopCell = { row: c.row, col: c.col, colour: c.colour };
+    if (c.velocity !== undefined) out.velocity = c.velocity;
+    if (c.timingBeats !== undefined) out.timingBeats = c.timingBeats;
+    return out;
+  }, []);
+
   // Freeze the current live board into the selected page, then auto-advance so
   // the next page can be laid down.
   const capturePage = useCallback(() => {
     const i = selectedPageRef.current;
-    const cells = activeCellsRef.current.map((c) => ({ row: c.row, col: c.col, colour: c.colour }));
+    const cells = activeCellsRef.current.map(storedCell);
     setConfig((prev) => {
       const pages = prev.pages.map((p) => [...p]);
       while (pages.length <= i) pages.push([]);
@@ -443,7 +455,7 @@ export default function BoardSequencerScreen() {
       const next = { ...prev, pages };
       return next;
     });
-    engineRef.current?.setPageSnapshot(i, activeCellsRef.current.map(({ row, col, colour }) => ({ row, col, colour })));
+    engineRef.current?.setPageSnapshot(i, activeCellsRef.current.map(storedCell));
     const n = Math.max(1, configRef.current.numPages);
     const nextPage = (i + 1) % n;
     setSelectedPage(nextPage);
@@ -456,9 +468,7 @@ export default function BoardSequencerScreen() {
       const kept = prev.loopSlots.slice(saved.length);
       const loopSlots = saved.map((s) => (s == null
         ? null
-        : s.map((c) => (c.conditional
-          ? { row: c.row, col: c.col, colour: c.colour, conditional: true as const }
-          : { row: c.row, col: c.col, colour: c.colour }))));
+        : s.map((c) => (c.conditional ? { ...storedCell(c), conditional: true as const } : storedCell(c)))));
       return { ...prev, loopSlots: [...loopSlots, ...kept] };
     });
   }, []);
@@ -1744,6 +1754,22 @@ export default function BoardSequencerScreen() {
     </div>
   );
 
+  /**
+   * Move a lane, refusing a move that would put it over the other one. Controls win that
+   * argument, so an overlapping loop lane is simply dead pads — better to say why than to
+   * let the player set it and wonder which pad broke.
+   */
+  const setLane = (which: 'controlZone' | 'loopZone', zone: Zone): void => {
+    const other = which === 'controlZone' ? config.loopZone : config.controlZone;
+    if (zonesCollide(zone, other)) {
+      announce(which === 'controlZone'
+        ? `${describeZone(zone)} is already the loop pads. Pick another, or turn the pads off.`
+        : `${describeZone(zone)} is already the controls. Pick another, or move the controls.`);
+      return;
+    }
+    update({ [which]: zone } as Partial<BoardSequencerStored>);
+  };
+
   const loopSlotCount = zoneSlotCount(config.loopZone, config.rows, config.cols);
 
   const loopsTab = (
@@ -1779,7 +1805,7 @@ export default function BoardSequencerScreen() {
         <SegmentedControl<ZoneMode>
           label="Controls live"
           value={config.controlZone.mode === 'off' ? 'anywhere' : config.controlZone.mode}
-          onChange={(mode) => update({ controlZone: clampZone({ mode, index: config.controlZone.index }, config.rows, config.cols) })}
+          onChange={(mode) => setLane('controlZone', clampZone({ mode, index: config.controlZone.index }, config.rows, config.cols))}
           options={[
             { value: 'anywhere', label: 'Anywhere' },
             { value: 'row', label: 'A row' },
@@ -1790,7 +1816,7 @@ export default function BoardSequencerScreen() {
           <SegmentedControl<number>
             label="Which one"
             value={config.controlZone.index}
-            onChange={(index) => update({ controlZone: { ...config.controlZone, index } })}
+            onChange={(index) => setLane('controlZone', { ...config.controlZone, index })}
             options={Array.from(
               { length: config.controlZone.mode === 'row' ? config.rows : config.cols },
               (_, i) => ({ value: i, label: String(i + 1) }),
@@ -1804,13 +1830,11 @@ export default function BoardSequencerScreen() {
         <SegmentedControl<ZoneMode>
           label="Loop pads live"
           value={config.loopZone.mode === 'anywhere' ? 'off' : config.loopZone.mode}
-          onChange={(mode) => update({
-            loopZone: clampZone(
-              { mode, index: mode === 'row' ? config.rows - 1 : config.loopZone.index },
-              config.rows,
-              config.cols,
-            ),
-          })}
+          onChange={(mode) => setLane('loopZone', clampZone(
+            { mode, index: mode === 'row' ? config.rows - 1 : config.loopZone.index },
+            config.rows,
+            config.cols,
+          ))}
           options={[
             { value: 'off', label: 'Off' },
             { value: 'row', label: 'A row' },
@@ -1822,7 +1846,7 @@ export default function BoardSequencerScreen() {
             <SegmentedControl<number>
               label="Which one"
               value={config.loopZone.index}
-              onChange={(index) => update({ loopZone: { ...config.loopZone, index } })}
+              onChange={(index) => setLane('loopZone', { ...config.loopZone, index })}
               options={Array.from(
                 { length: config.loopZone.mode === 'row' ? config.rows : config.cols },
                 (_, i) => ({ value: i, label: String(i + 1) }),

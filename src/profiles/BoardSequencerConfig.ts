@@ -13,7 +13,7 @@ import type {
 } from '../tracking/boardColours';
 import { ROLE_LABELS, DEFAULT_BLACK_BAND, DEFAULT_WHITE_BAND } from '../tracking/boardColours';
 import { suggestReadSettings, type BoardSquares } from '../tracking/boardGrid';
-import { ANYWHERE, clampZone, NO_ZONE, zoneSlotCount, type Zone } from '../tracking/zones';
+import { ANYWHERE, clampZone, NO_ZONE, zoneSlotCount, zonesCollide, type Zone } from '../tracking/zones';
 
 const STORAGE_KEY = 'admi-board-sequencer';
 
@@ -26,18 +26,23 @@ export interface BoardPoint {
   y: number;
 }
 
-/** A single settled cell as persisted in a captured page snapshot. */
+/**
+ * A single settled cell as persisted in a captured page snapshot.
+ *
+ * Box detail rides along: where the counter sat in its square is what gives that note its
+ * loudness and its push or drag, so a saved pattern that dropped it played back flat and
+ * dead on the beat next to a live board that didn't.
+ */
 export interface StoredBoardCell {
   row: number;
   col: number;
   colour: ColourId;
+  velocity?: number;
+  timingBeats?: number;
 }
 
 /** A single cell of a saved loop (StoredBoardCell + the slice-1 variation flag). */
-export interface StoredLoopCell {
-  row: number;
-  col: number;
-  colour: ColourId;
+export interface StoredLoopCell extends StoredBoardCell {
   conditional?: boolean;
 }
 
@@ -349,9 +354,16 @@ function sanitizePages(v: unknown): StoredBoardCell[][] {
     return page.flatMap((c) => {
       const o = (typeof c === 'object' && c !== null ? c : {}) as Record<string, unknown>;
       if (!isNum(o.row) || !isNum(o.col) || typeof o.colour !== 'string' || !o.colour) return [];
-      return [{ row: o.row, col: o.col, colour: o.colour }];
+      return [withBoxDetail({ row: o.row, col: o.col, colour: o.colour }, o)];
     });
   });
+}
+
+/** Carry a stored cell's box detail through, when it has any and it is in range. */
+function withBoxDetail<T extends StoredBoardCell>(cell: T, o: Record<string, unknown>): T {
+  if (isNum(o.velocity) && o.velocity > 0 && o.velocity <= 1) cell.velocity = o.velocity;
+  if (isNum(o.timingBeats) && Math.abs(o.timingBeats) <= 1) cell.timingBeats = o.timingBeats;
+  return cell;
 }
 
 function sanitizeLoopSlots(v: unknown): (StoredLoopCell[] | null)[] {
@@ -361,7 +373,7 @@ function sanitizeLoopSlots(v: unknown): (StoredLoopCell[] | null)[] {
     return slot.flatMap((c) => {
       const o = (typeof c === 'object' && c !== null ? c : {}) as Record<string, unknown>;
       if (!isNum(o.row) || !isNum(o.col) || typeof o.colour !== 'string' || !o.colour) return [];
-      const cell: StoredLoopCell = { row: o.row, col: o.col, colour: o.colour };
+      const cell = withBoxDetail<StoredLoopCell>({ row: o.row, col: o.col, colour: o.colour }, o);
       if (o.conditional === true) cell.conditional = true;
       return [cell];
     });
@@ -449,6 +461,12 @@ function sanitize(input: unknown): BoardSequencerStored | null {
   const loopZone: Zone = storedZone !== null && storedZone.mode !== 'off'
     ? storedZone
     : (o.loopBankEnabled === true ? { mode: 'row', index: rows - 1 } : NO_ZONE);
+  const controlZone = clampZone(sanitizeZone(o.controlZone, d.controlZone), rows, cols);
+  const clampedLoopZone = clampZone(loopZone, rows, cols);
+  // Two lanes over the same cells leave the loop pads dead but still drawn as pads.
+  // Controls win, so a colliding loop lane is switched off where the player can see it
+  // rather than left looking like a bank that simply doesn't work.
+  const resolvedLoopZone = zonesCollide(controlZone, clampedLoopZone) ? NO_ZONE : clampedLoopZone;
   let samplesPerAxis = isNum(o.samplesPerAxis) ? Math.round(Math.min(15, Math.max(3, o.samplesPerAxis))) : NaN;
   let minFilledFraction = storedFill ?? d.minFilledFraction;
   if (!Number.isFinite(samplesPerAxis)) {
@@ -482,7 +500,7 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     variationEnabled: o.variationEnabled === true,
     variationOffsetThreshold: num(o.variationOffsetThreshold, d.variationOffsetThreshold),
     pingPong: o.pingPong === true,
-    loopBankEnabled: zoneSlotCount(loopZone, rows, cols) > 0,
+    loopBankEnabled: zoneSlotCount(resolvedLoopZone, rows, cols) > 0,
     loopSlots: sanitizeLoopSlots(o.loopSlots),
     noteLengthBeats: num(o.noteLengthBeats, d.noteLengthBeats),
     velocity: num(o.velocity, d.velocity),
@@ -530,8 +548,8 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     twoCounterMode: o.twoCounterMode === 'both' ? 'both' : 'off',
     boardTrackingEnabled: o.boardTrackingEnabled !== false,
     boardTrackMaxSquares: clampNum(o.boardTrackMaxSquares, 0.2, 1.5, d.boardTrackMaxSquares),
-    controlZone: clampZone(sanitizeZone(o.controlZone, d.controlZone), rows, cols),
-    loopZone: clampZone(loopZone, rows, cols),
+    controlZone,
+    loopZone: resolvedLoopZone,
     loopPadMode: o.loopPadMode === 'toggle' ? 'toggle' : 'hold',
   };
 }

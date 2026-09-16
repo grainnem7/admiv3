@@ -93,6 +93,24 @@ export function describeZone(zone: Zone): string {
 }
 
 /** Keep a lane inside the grid after a rows/steps change. */
+/**
+ * True when one lane swallows the other entirely. Controls win where lanes meet
+ * (splitByZone takes them first), so a loop lane underneath one is completely dead: no
+ * pad ever fires, while the board still paints them as pads.
+ *
+ * A row crossing a column is NOT this. They meet at a single cell, which belongs to the
+ * controls and costs one pad — a sensible layout (controls down one side, pads along the
+ * bottom) that must not be refused. Nor is "anywhere", which claims no cells at all.
+ */
+export function zonesCollide(a: Zone, b: Zone): boolean {
+  // Only a named lane claims cells. "Anywhere" means controls are recognised by their
+  // COLOUR wherever they are put (zoneContains is false for it), so it takes no cells
+  // from anyone; "off" takes none either.
+  const lane = (z: Zone): boolean => z.mode === 'row' || z.mode === 'col';
+  if (!lane(a) || !lane(b)) return false;
+  return a.mode === b.mode && a.index === b.index;
+}
+
 export function clampZone(zone: Zone, rows: number, cols: number): Zone {
   if (zone.mode === 'row') return { mode: 'row', index: Math.max(0, Math.min(rows - 1, zone.index)) };
   if (zone.mode === 'col') return { mode: 'col', index: Math.max(0, Math.min(cols - 1, zone.index)) };

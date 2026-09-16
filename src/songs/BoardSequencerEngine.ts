@@ -607,9 +607,15 @@ export class BoardSequencerEngine {
     // Loop bank: active saved loops layer on top of the live/page cells. Pitch is
     // per-row-absolute, so a plain concat never disturbs voicing.
     const liveSource: FiredNote['source'] = page === this.selectedPage ? 'live' : 'page';
+    // Saved loops and pages outlive the grid they were made on, so a player who shrinks
+    // Rows or Steps can hold cells that no longer fit. Those must be silent, not wrong:
+    // a row past the top gives a negative degree and sounds an octave BELOW the root —
+    // a note nobody ever placed.
+    const onGrid = (c: ActiveCell): boolean =>
+      c.row >= 0 && c.row < this.cfg.rows && c.col >= 0 && c.col < this.cfg.cols;
     const tagged: { cell: ActiveCell; source: FiredNote['source'] }[] = [
-      ...cells.map((c) => ({ cell: c, source: liveSource })),
-      ...this.activeLoops.flat().map((c) => ({ cell: c, source: 'loop' as const })),
+      ...cells.filter(onGrid).map((c) => ({ cell: c, source: liveSource })),
+      ...this.activeLoops.flat().filter(onGrid).map((c) => ({ cell: c, source: 'loop' as const })),
     ];
     const playCells = tagged.map((t) => t.cell);
     // Voice ALL active melodic cells together so pitch is a complementary

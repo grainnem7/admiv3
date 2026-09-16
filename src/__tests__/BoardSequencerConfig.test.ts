@@ -343,3 +343,45 @@ describe('counts that must be whole numbers', () => {
     expect(loadWith({ numPages: 4, loopStepsRed: 3 })).toMatchObject({ numPages: 4, loopStepsRed: 3 });
   });
 });
+
+describe('saved work that has to survive a reload', () => {
+  it('keeps where each counter sat, so a reloaded loop still swings', () => {
+    // Box detail is the whole point of "where the counter sits matters": drop it and a
+    // saved loop replays flat and dead on the beat next to a live board that doesn't.
+    const cfg = loadWith({
+      loopSlots: [[{ row: 1, col: 2, colour: 'c1', velocity: 0.42, timingBeats: 0.2, conditional: true }]],
+      pages: [[{ row: 0, col: 0, colour: 'c1', velocity: 0.9, timingBeats: -0.1 }]],
+    });
+    expect(cfg.loopSlots[0]?.[0]).toMatchObject({
+      row: 1, col: 2, colour: 'c1', velocity: 0.42, timingBeats: 0.2, conditional: true,
+    });
+    expect(cfg.pages[0][0]).toMatchObject({ velocity: 0.9, timingBeats: -0.1 });
+  });
+
+  it('drops box detail that is out of range rather than storing nonsense', () => {
+    const cfg = loadWith({
+      loopSlots: [[{ row: 0, col: 0, colour: 'c1', velocity: 9, timingBeats: 50 }]],
+    });
+    expect(cfg.loopSlots[0]?.[0]).toEqual({ row: 0, col: 0, colour: 'c1' });
+  });
+});
+
+describe('two lanes that would sit on top of each other', () => {
+  it('turns the loop pads off, where the player can see it', () => {
+    // Controls win, so an overlapping loop lane is dead pads that the board still draws
+    // as pads. Saying "off" is honest; leaving it is a bank that silently doesn't work.
+    const cfg = loadWith({
+      rows: 4, cols: 4, controlZone: { mode: 'row', index: 3 }, loopZone: { mode: 'row', index: 3 },
+    });
+    expect(cfg.loopZone.mode).toBe('off');
+    expect(cfg.loopBankEnabled).toBe(false);
+  });
+
+  it('leaves lanes that keep clear of one another alone', () => {
+    const cfg = loadWith({
+      rows: 4, cols: 4, controlZone: { mode: 'row', index: 0 }, loopZone: { mode: 'row', index: 3 },
+    });
+    expect(cfg.loopZone).toEqual({ mode: 'row', index: 3 });
+    expect(cfg.loopBankEnabled).toBe(true);
+  });
+});

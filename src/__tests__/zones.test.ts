@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   zoneContains, zoneSlotCount, zoneSlotOf, zoneCellOf, zonePosition, splitByZone, describeZone, clampZone,
-  ANYWHERE, NO_ZONE, type Zone,
+  ANYWHERE, NO_ZONE, zonesCollide, type Zone,
 } from '../tracking/zones';
 
 const row3: Zone = { mode: 'row', index: 3 };
@@ -104,5 +104,27 @@ describe('zoneCellOf', () => {
     expect(zoneCellOf(row3, -1, 4, 8)).toBeNull();
     expect(zoneCellOf(ANYWHERE, 0, 4, 8)).toBeNull();
     expect(zoneCellOf(NO_ZONE, 0, 4, 8)).toBeNull();
+  });
+});
+
+describe('two lanes over the same cells', () => {
+  // Controls win in splitByZone, so an overlapping loop lane is dead pads: they never
+  // fire, and the board still draws them as pads. Crossing lanes kill just the one cell
+  // where they meet, which reads as "that one pad is broken".
+  it('spots a lane sitting on top of another', () => {
+    expect(zonesCollide({ mode: 'row', index: 3 }, { mode: 'row', index: 3 })).toBe(true);
+    expect(zonesCollide({ mode: 'row', index: 3 }, { mode: 'row', index: 2 })).toBe(false);
+    // A row crossing a column meets at one cell, which the controls take. That costs a
+    // single pad, not the bank — controls down one side with pads along the bottom is a
+    // layout someone would actually choose.
+    expect(zonesCollide({ mode: 'row', index: 3 }, { mode: 'col', index: 0 })).toBe(false);
+    // "Anywhere" recognises control counters by colour wherever they are put; it claims
+    // no cells, so it never takes a pad away.
+    expect(zonesCollide(ANYWHERE, { mode: 'row', index: 1 })).toBe(false);
+  });
+
+  it('a lane that is off never collides with anything', () => {
+    expect(zonesCollide(NO_ZONE, ANYWHERE)).toBe(false);
+    expect(zonesCollide({ mode: 'row', index: 3 }, NO_ZONE)).toBe(false);
   });
 });
