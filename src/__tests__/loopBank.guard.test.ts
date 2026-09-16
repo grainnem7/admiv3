@@ -127,3 +127,61 @@ describe('seedLoopBank', () => {
     expect(seedLoopBank(0, [pattern]).saved).toEqual([]);
   });
 });
+
+describe('a pad the player has to press twice', () => {
+  /** Hold `present` for `ms` in Toggle mode. */
+  function holdToggle(state: LoopBankState, present: boolean[], cells: ActiveCell[], ms: number) {
+    let out = stepLoopBank(state, present, cells, present.length, { quietMs: QUIET, dtMs: 0, padMode: 'toggle' });
+    const captured = [...out.captured];
+    for (let t = 0; t < ms; t += 50) {
+      out = stepLoopBank(out.state, present, cells, present.length, { quietMs: QUIET, dtMs: 50, padMode: 'toggle' });
+      captured.push(...out.captured);
+    }
+    return { ...out, captured };
+  }
+
+  it('starts playing as soon as it captures, without a second placement', () => {
+    // The counter lands, and the slot fills half a second later once the board is quiet.
+    // The toggle latch was thrown away in between, so the pad filled in and stayed silent.
+    const out = holdToggle(emptyLoopBank(2), [true, false], pattern, 700);
+    expect(out.captured).toEqual([0]);
+    expect(out.state.playing?.[0]).toBe(true);
+    expect(out.active).toHaveLength(1);
+  });
+
+  it('and placing it again still stops it', () => {
+    const on = holdToggle(emptyLoopBank(2), [true, false], pattern, 700);
+    const lifted = holdToggle(on.state, [false, false], pattern, 100);
+    expect(lifted.active).toHaveLength(1);       // toggle: it keeps playing while away
+    const again = holdToggle(lifted.state, [true, false], pattern, 100);
+    expect(again.state.playing?.[0]).toBe(false);
+    expect(again.active).toHaveLength(0);
+  });
+});
+
+describe('Clear is a real undo', () => {
+  it('survives the bank being rebuilt, so the next Play does not re-capture', () => {
+    // The bank is re-seeded on every Play and whenever the lane moves. Forgetting that a
+    // slot was cleared meant the counter still sitting on that pad captured the board all
+    // over again, writing the player's undo straight back.
+    const filled = hold(emptyLoopBank(2), [true, false], pattern, 700);
+    expect(filled.state.saved[0]).not.toBeNull();
+    const cleared = clearLoopSlot(filled.state, 0);
+    expect(cleared.saved[0]).toBeNull();
+
+    const reseeded = seedLoopBank(2, cleared.saved, cleared);
+    expect(reseeded.blocked?.[0]).toBe(true);
+    const after = hold(reseeded, [true, false], pattern, 700);
+    expect(after.captured).toEqual([]);
+    expect(after.state.saved[0]).toBeNull();
+  });
+
+  it('and lifting the counter re-arms the pad', () => {
+    const filled = hold(emptyLoopBank(2), [true, false], pattern, 700);
+    const reseeded = seedLoopBank(2, clearLoopSlot(filled.state, 0).saved, clearLoopSlot(filled.state, 0));
+    const lifted = hold(reseeded, [false, false], pattern, 100);
+    expect(lifted.state.blocked?.[0]).toBe(false);
+    const again = hold(lifted.state, [true, false], pattern, 700);
+    expect(again.captured).toEqual([0]);
+  });
+});

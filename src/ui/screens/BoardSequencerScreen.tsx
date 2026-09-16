@@ -1064,7 +1064,7 @@ export default function BoardSequencerScreen() {
     engineRef.current = engine;
     // One pad per cell of the loop lane — a row of steps or a column of rows.
     loopBankRef.current = seedLoopBank(
-      zoneSlotCount(cfg.loopZone, cfg.rows, cfg.cols), cfg.loopSlots,
+      zoneSlotCount(cfg.loopZone, cfg.rows, cfg.cols), cfg.loopSlots, loopBankRef.current,
     );
     engine.setActiveLoops([]);
     // Stop may have been pressed while the samples were loading; the engine that is no

@@ -121,6 +121,21 @@ describe('Mute', () => {
     expect(play).toHaveBeenCalled();
   });
 
+  it('cuts at its own speed, however slowly the volume counter glides', () => {
+    // A volume counter writes the bus every frame with controlGlideSec (0.3 s). Sharing
+    // that ramp made Mute take about a second to arrive, with every note still firing
+    // underneath it.
+    const { e } = engine();
+    const mix = { gain: { value: 0.6, setTargetAtTime: vi.fn() } };
+    (e as unknown as { mix: typeof mix }).mix = mix;
+    e.setVolume(0.6, 0.3);
+    e.setMuted(true);
+    expect(mix.gain.setTargetAtTime).toHaveBeenLastCalledWith(0, 0, 0.02);
+    // A later counter move must not restart the fade it just cut.
+    e.setVolume(0.55, 0.3);
+    expect(mix.gain.setTargetAtTime).toHaveBeenLastCalledWith(0, 0, 0.02);
+  });
+
   it('moving the volume while muted does not bring the sound back', () => {
     const { e } = engine();
     const mix = { gain: { value: 0.6, setTargetAtTime: vi.fn() } };

@@ -27,7 +27,7 @@ import {
 import { frameMeanSaturation } from '../../../tracking/cameraCheck';
 import { startVideoFrameLoop } from '../../../tracking/videoFrameLoop';
 import { stepBoardFrame, suppressSpill, type BoardFrameOutput } from '../../../tracking/boardFrame';
-import { splitByZone, zoneSlotCount } from '../../../tracking/zones';
+import { splitByZone, zoneContains, zoneSlotCount } from '../../../tracking/zones';
 import type { BoardSequencerEngine } from '../../../songs/BoardSequencerEngine';
 import { emptyLoopBank, seedLoopBank, type LoopBankState } from '../../../songs/loopBank';
 import type { Mat3 } from '../../../utils/homography';
@@ -191,6 +191,9 @@ export function useBoardRuntime(opts: {
     let settledBefore: ActiveCell[] = [];
 
     let hSize = { w: 0, h: 0 };
+    // The last colour each cell showed while it was still visible, so a covered control
+    // counter can be recognised through the hand that is covering it.
+    const lastColourAt = new Map<string, ColourId>();
     const stopFrames = startVideoFrameLoop(video, ({ nowMs, dtMs }) => {
       const reader = readerRef.current;
       const cfg = configRef.current;
@@ -299,10 +302,17 @@ export function useBoardRuntime(opts: {
         const key = `${r.row},${r.col}`;
         if (held.has(key)) {
           // A control counter under a hand is still on the board; its value must hold
-          // rather than take the "counter removed" path.
-          if (r.colour && controlColours.has(r.colour)) heldColours.add(r.colour);
+          // rather than take the "counter removed" path. The hand is exactly what stops
+          // the colour being readable, so this has to use the colour the cell had BEFORE
+          // it was covered, not whatever the reader can make out through a hand.
+          const remembered = r.colour ?? lastColourAt.get(key) ?? null;
+          if (remembered && controlColours.has(remembered) && zoneContains(cfg.controlZone, r)) {
+            heldColours.add(remembered);
+          }
           return false;
         }
+        if (r.colour) lastColourAt.set(key, r.colour);
+        else lastColourAt.delete(key);
         if (prevHeld.has(key)) released.push({ row: r.row, col: r.col });
         return true;
       });
@@ -330,7 +340,7 @@ export function useBoardRuntime(opts: {
       // write an empty bank over loops the config still holds.
       const padCount = zoneSlotCount(cfg.loopZone, cfg.rows, cfg.cols);
       if (loopBankRef.current.saved.length !== padCount) {
-        loopBankRef.current = seedLoopBank(padCount, cfg.loopSlots);
+        loopBankRef.current = seedLoopBank(padCount, cfg.loopSlots, loopBankRef.current);
       }
 
       // Knock guard: only the cells that actually play a note count. Lifting a counter

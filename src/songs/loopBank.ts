@@ -74,6 +74,7 @@ export function emptyLoopBank(slotCount: number): LoopBankState {
  */
 export function seedLoopBank(
   slotCount: number, saved: readonly (readonly ActiveCell[] | null)[],
+  prev?: LoopBankState,
 ): LoopBankState {
   const n = Math.max(0, Math.floor(slotCount));
   return {
@@ -81,8 +82,12 @@ export function seedLoopBank(
       const slot = saved[i];
       return slot == null ? null : slot.map((c) => ({ ...c }));
     }),
-    present: Array(n).fill(false),
-    playing: Array(n).fill(false),
+    // A slot cleared while its counter still sits on the pad must stay blocked across a
+    // re-seed. Forgetting it meant the next Play saw a counter on an empty pad, captured
+    // whatever happened to be on the board, and wrote the player's undo straight back.
+    present: Array.from({ length: n }, (_, i) => prev?.present[i] ?? false),
+    blocked: Array.from({ length: n }, (_, i) => prev?.blocked?.[i] ?? false),
+    playing: Array.from({ length: n }, (_, i) => prev?.playing?.[i] ?? false),
     quietMs: 0,
     patternKey: '',
   };
@@ -136,7 +141,11 @@ export function stepLoopBank(
     saved[i] = slot;
     nextPresent[i] = here;
     nextBlocked[i] = blocked;
-    nextPlaying[i] = slot === null ? false : latched;
+    // Keep the latch even while the slot is still empty. With a capture guard the counter
+    // lands several frames before the slot fills, and throwing the latch away in between
+    // meant a freshly captured loop never started: the pad filled in, and stayed silent
+    // until the player lifted the counter and put it down a second time.
+    nextPlaying[i] = latched;
     const sounding = toggle ? nextPlaying[i] : here;
     if (sounding && slot !== null) active.push(slot);
   }

@@ -14,9 +14,12 @@ export function useModalFocus(
   const opener = useRef<Element | null>(null);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
+  // Read during render, on purpose. React applies a child's `autoFocus` while it commits
+  // the DOM, which is BEFORE effects run — so by the time an effect looked, the "opener"
+  // it found was already the dialog's own button and focus never came back.
+  if (opener.current === null) opener.current = document.activeElement;
 
   useEffect(() => {
-    opener.current = document.activeElement;
     return () => {
       const prev = opener.current as HTMLElement | null;
       if (prev?.isConnected) { prev.focus?.(); return; }

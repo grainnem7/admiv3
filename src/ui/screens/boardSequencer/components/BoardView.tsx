@@ -16,7 +16,7 @@ export interface BoardViewFrame {
   /** Cells the hand guard is holding — drawn hatched, so "on hold" is its own picture. */
   held?: ReadonlySet<string>;
   /** Knocked cells still sounding: a hollow disc with a double outline and a ↺. */
-  ghosts?: ReadonlyMap<string, { colour: ColourId }>;
+  ghosts?: ReadonlyMap<string, ActiveCell>;
 }
 
 export interface BoardViewProps {
@@ -36,6 +36,13 @@ export interface BoardViewProps {
 }
 
 const keyOf = (row: number, col: number): string => `${row},${col}`;
+
+/** Ghosts by square, whatever colour they are and however many share the square. */
+function ghostsBySquare(ghosts: ReadonlyMap<string, ActiveCell> | undefined): Map<string, ActiveCell> {
+  const out = new Map<string, ActiveCell>();
+  if (ghosts) for (const cell of ghosts.values()) out.set(keyOf(cell.row, cell.col), cell);
+  return out;
+}
 
 /**
  * The board as the player reads it: one canvas, drawn from the detection frame and the
@@ -87,6 +94,7 @@ export function BoardView({
     const ch = h / rows;
     const pad = Math.min(cw, ch) * 0.08;
     const popByKey = new Map(pops.map((p) => [keyOf(p.row, p.col), p]));
+    const ghostAt = ghostsBySquare(frame.ghosts);
 
     // Playhead band first, so pieces sit on top of it.
     if (playing) {
@@ -111,7 +119,9 @@ export function BoardView({
 
         const key = keyOf(r, c);
         const isHeld = frame.held?.has(key) === true;
-        const ghost = frame.ghosts?.get(key);
+        // The ghost map is keyed by counter ("row,col,colour"), so a square can only be
+        // found by looking for any ghost standing on it.
+        const ghost = ghostAt.get(key);
         if (isHeld) {
           // Hatching: distinct from the unsettled dotted ring and the Variation dashes.
           ctx.save();

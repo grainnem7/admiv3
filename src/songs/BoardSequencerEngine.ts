@@ -33,6 +33,9 @@ export interface FiredNote {
   source: 'live' | 'page' | 'loop';
 }
 
+/** Mute ramps this fast: short enough to read as a cut, long enough not to click. */
+const MUTE_GLIDE_SEC = 0.02;
+
 export const FIRED_NOTE_CAP = 256;
 
 /** Minimal chord shape the board needs for chord-locked pitch. */
@@ -359,16 +362,21 @@ export class BoardSequencerEngine {
    */
   setMuted(muted: boolean): void {
     this.muted = muted;
-    this.applyMixGain();
+    // Always its own short ramp: Mute has to cut, not fade. A volume counter glides over
+    // controlGlideSec (0.3 s by default), and borrowing that made Mute take about a
+    // second, with every note still firing underneath it.
+    this.applyMixGain(MUTE_GLIDE_SEC);
   }
 
   /** Live sound controls (safe to call while running). */
   setVolume(v: number, glideSec = 0.02): void {
     this.cfg.volume = v;
+    // Remembered for when the sound comes back; while muted the bus stays where it is,
+    // so a volume counter being moved can neither un-mute nor restart the fade.
+    if (this.muted) return;
     this.applyMixGain(glideSec);
   }
 
-  /** Mute wins over the volume, so moving a volume counter can't undo it. */
   private applyMixGain(glideSec = 0.02): void {
     if (this.mix) this.mix.gain.setTargetAtTime(this.muted ? 0 : this.cfg.volume, Tone.immediate(), glideSec);
   }
