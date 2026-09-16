@@ -196,14 +196,25 @@ export class BoardSequencerMode {
    * arrived must not stop because the hand went away.
    */
   restartSettle(cells: Iterable<CellRef>): void {
-    for (const { row, col } of cells) {
-      const st = this.states.get(keyOf(row, col));
-      if (!st || st.phase === 'settled') continue;
+    const positions = new Set<string>();
+    for (const { row, col } of cells) positions.add(keyOf(row, col));
+    if (positions.size === 0) return;
+    for (const [key, st] of this.states) {
+      // With two counters to a square each colour has its own state, keyed
+      // "row,col,colour" — so the square is the first two parts of the key, not all of
+      // it. Looking up the whole key missed every time and the hand guard's release
+      // restarted nothing at all.
+      const second = key.indexOf(',', key.indexOf(',') + 1);
+      if (!positions.has(second === -1 ? key : key.slice(0, second))) continue;
+      if (st.phase === 'settled') continue;
       st.stillMs = 0;
       st.movingMs = 0;
       st.lastCentroid = null;
       st.velocity = 0;
       st.offsets = [];
+      // Box detail latches from these too, so a counter moved under a hand must not keep
+      // the loudness and timing it had before.
+      st.positions = [];
     }
   }
 

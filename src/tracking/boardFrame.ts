@@ -133,7 +133,13 @@ export function suppressSpill(readings: CellReading[], ctx: SpillCtx): CellReadi
   }
   if (cleared.size === 0) return readings;
   return readings.map((r) => (cleared.has(`${r.row},${r.col}`)
-    ? { ...r, occupied: false, colour: null, centroid: null, offset: null }
+    // The per-colour fields have to go too: with two counters to a square the mode reads
+    // `colours` first, so a cell blanked here would otherwise still play its note.
+    ? {
+      ...r,
+      occupied: false, colour: null, centroid: null, offset: null,
+      colours: undefined, centroids: undefined, offsets: undefined, boxPositions: undefined,
+    }
     : r));
 }
 

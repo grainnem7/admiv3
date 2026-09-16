@@ -869,6 +869,11 @@ export default function BoardSequencerScreen() {
     // A followed nudge is silent: the corners move, the music carries on, and the new
     // position is saved every few seconds so the next session starts where the board is.
     onCornersTracked: (corners) => {
+      // Both of these matter: the ref so THIS frame reads the moved corners, and the
+      // tracked ref so the next render doesn't rebuild configRef from the older saved
+      // corners and undo the correction. Without it every pass measured its shift from a
+      // stale position and the sampling grid twitched twice a second.
+      trackedCornersRef.current = corners;
       configRef.current = { ...configRef.current, corners };
       const now = performance.now();
       if (now - lastCornerSaveRef.current < TRACK_SAVE_MS) return;
