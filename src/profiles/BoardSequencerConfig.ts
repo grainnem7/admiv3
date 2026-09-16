@@ -163,6 +163,10 @@ export interface BoardSequencerStored {
   boxTimingAmount: number;
   /** What two counters in one box mean. 'off' = the strongest colour wins. */
   twoCounterMode: 'off' | 'both';
+  /** Follow the board silently when it is nudged, instead of going off the squares. */
+  boardTrackingEnabled: boolean;
+  /** How far a nudge may be followed, in board squares, before it needs Find board. */
+  boardTrackMaxSquares: number;
 }
 
 /** Fader-role controls, whose value comes from a counter's position. */
@@ -263,6 +267,8 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   boxLoudnessAmount: 0.5,
   boxTimingAmount: 0.35,
   twoCounterMode: 'off',
+  boardTrackingEnabled: true,
+  boardTrackMaxSquares: 0.6,
 };
 
 function sanitizeControlRanges(v: unknown): Record<FaderRole, ControlRange> {
@@ -483,6 +489,8 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     boxLoudnessAmount: clampNum(o.boxLoudnessAmount, 0, 1, d.boxLoudnessAmount),
     boxTimingAmount: clampNum(o.boxTimingAmount, 0, 1, d.boxTimingAmount),
     twoCounterMode: o.twoCounterMode === 'both' ? 'both' : 'off',
+    boardTrackingEnabled: o.boardTrackingEnabled !== false,
+    boardTrackMaxSquares: clampNum(o.boardTrackMaxSquares, 0.2, 1.5, d.boardTrackMaxSquares),
   };
 }
 

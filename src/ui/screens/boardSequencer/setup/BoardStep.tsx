@@ -14,6 +14,8 @@ export interface BoardStepProps {
   cols: number;
   seatEdge: SeatEdge;
   nudgesEnabled: boolean;
+  trackingEnabled: boolean;
+  onTrackingEnabled(on: boolean): void;
   playerName: string;
   running: boolean;
   /** True while the corner editor is open, so Find board isn't offered twice. */
@@ -36,7 +38,8 @@ const SEAT_OPTIONS: { value: SeatEdge; label: string }[] = [
 ];
 
 export function BoardStep({
-  boardSquares, rows, cols, seatEdge, nudgesEnabled, playerName, running, editing,
+  boardSquares, rows, cols, seatEdge, nudgesEnabled, trackingEnabled, onTrackingEnabled,
+  playerName, running, editing,
   onFindBoard, onTapCorners, onBoardSquares, onGrid, onSeatEdge, onNudgesEnabled, usingFallbackCamera,
 }: BoardStepProps): JSX.Element {
   const options = gridSizeOptions(boardSquares, { rows, cols });
@@ -132,6 +135,12 @@ export function BoardStep({
       </div>
 
       <Disclosure summary="Details">
+        <Switch
+          label="Follow small nudges"
+          checked={trackingEnabled}
+          onChange={onTrackingEnabled}
+          hint="If the board is knocked a little, the grid follows it without stopping the music. A bigger move still asks you to find the board again."
+        />
         <Switch
           label="Show the “Board moved?” hint"
           checked={nudgesEnabled}

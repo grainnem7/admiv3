@@ -21,6 +21,9 @@ import {
 import {
   initialKnockState, letGo, releaseGhostsAt, stepKnock, type KnockState,
 } from '../../../tracking/handGuard/knockGuard';
+import {
+  estimateBoardShift, shiftCorners, TRACK_INTERVAL_MS,
+} from '../../../tracking/handGuard/boardTrack';
 import { frameMeanSaturation } from '../../../tracking/cameraCheck';
 import { startVideoFrameLoop } from '../../../tracking/videoFrameLoop';
 import { stepBoardFrame, suppressSpill, type BoardFrameOutput } from '../../../tracking/boardFrame';
@@ -51,6 +54,8 @@ export interface BoardRuntimeCallbacks {
   onCameraError(message: string): void;
   onCameraCheck(saturation: number | null, trackInfo: CameraTrackInfo | null): void;
   onLoopSlotsCaptured(saved: (ActiveCell[] | null)[]): void;
+  /** The board was nudged and the grid followed it; save the new corners (throttled). */
+  onCornersTracked?(corners: BoardSequencerStored['corners']): void;
   /** Called on every processed camera frame, after the engine hand-off (pure bookkeeping only). */
   onFrame?(frame: RuntimeFrame, dtMs: number): void;
   draw(frame: RuntimeFrame): void;
@@ -82,6 +87,13 @@ export interface BoardRuntimeRefs {
   /** Knock guard: drop the ghosts, or read them for "Save as loop". */
   letGoGhosts(): void;
   knockRef: MutableRefObject<KnockState>;
+}
+
+/** The watch grid is rebuilt whenever any of this changes. */
+function watchKey(
+  h: Mat3, cfg: BoardSequencerStored, frame: { width: number; height: number },
+): string {
+  return `${h.join(',')}|${cfg.rows}|${cfg.cols}|${cfg.boardSquares}|${frame.width}x${frame.height}`;
 }
 
 const CAMERA_CHECK_MS = 1000;
@@ -164,6 +176,7 @@ export function useBoardRuntime(opts: {
     let controlColours = new Set<ColourId>();
     let controls = initialControlState();
     let prevHeld: ReadonlySet<string> = new Set<string>();
+    let lastTrackMs = 0;
     let settledBefore: ActiveCell[] = [];
 
     const stopFrames = startVideoFrameLoop(video, ({ nowMs, dtMs }) => {
@@ -198,7 +211,7 @@ export function useBoardRuntime(opts: {
       let handGuardReady = false;
       const lastFrame = reader.lastFrame();
       if (cfg.handGuardEnabled && lastFrame) {
-        const gridKey = `${homographyRef.current.join(',')}|${cfg.rows}|${cfg.cols}|${cfg.boardSquares}|${lastFrame.width}x${lastFrame.height}`;
+        const gridKey = watchKey(homographyRef.current, cfg, lastFrame);
         if (watchGridRef.current?.key !== gridKey) {
           watchGridRef.current = {
             key: gridKey,
@@ -225,6 +238,33 @@ export function useBoardRuntime(opts: {
       } else if (!cfg.handGuardEnabled) {
         watchRef.current = initialWatchState();
         watchGridRef.current = null;
+      }
+
+      // Follow a nudge: a small rigid move of a board we have already learnt. Never while
+      // a hand is over it, never during a whole-picture change, and never more than the
+      // limit — a real move is the hint's job, not a guess.
+      if (cfg.boardTrackingEnabled && cfg.handGuardEnabled && handGuardReady && !globalChange
+        && held.size === 0 && watchRef.current.bg && watchGridRef.current && lastFrame
+        && nowMs - lastTrackMs >= TRACK_INTERVAL_MS) {
+        lastTrackMs = nowMs;
+        const track = estimateBoardShift(
+          watchGridRef.current.grid, watchRef.current.bg, lastFrame.data,
+          homographyRef.current, lastFrame,
+          { maxShiftSquares: cfg.boardTrackMaxSquares, minImprovement: 0.15 },
+        );
+        if (track.improved) {
+          const moved = shiftCorners(cfg.corners, track.dx, track.dy, track.scale);
+          const nextH = homographyForCorners(moved, video.videoWidth, video.videoHeight);
+          homographyRef.current = nextH;
+          // Re-project the watch grid, but KEEP the background: the same board is still
+          // there, just in a slightly different place, and re-learning would blind the
+          // hand guard for several frames every time the board is touched.
+          watchGridRef.current = {
+            key: watchKey(nextH, cfg, lastFrame),
+            grid: buildWatchGrid(nextH, lastFrame, cfg.rows, cfg.cols, cfg.boardSquares),
+          };
+          callbacksRef.current.onCornersTracked?.(moved as BoardSequencerStored['corners']);
+        }
       }
 
       // A held cell isn't read at all: the settle state it had is simply left alone, so a

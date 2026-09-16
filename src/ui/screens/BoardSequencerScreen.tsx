@@ -54,6 +54,7 @@ import { Button } from './boardSequencer/ui/Button';
 import { colourMatchesBoardRaw, type NudgeSignal } from './boardSequencer/playNudge';
 import { spaceTogglesPlay, type BoardScreenView } from './boardSequencer/spaceKey';
 import { ghostsForSave } from '../../tracking/handGuard/knockGuard';
+import { TRACK_SAVE_MS } from '../../tracking/handGuard/boardTrack';
 import type { FiredNote } from '../../songs/BoardSequencerEngine';
 import {
   SETUP_STEPS, canOpenStep, canPlay, resolveEntry, stepIndicator,
@@ -242,6 +243,7 @@ export default function BoardSequencerScreen() {
   // A ref, so the sampling interval always reads the current colours.
   const channelNameRef = useRef<(id: ColourId) => string>((id) => id);
   const [showHelp, setShowHelp] = useState(false);
+  const lastCornerSaveRef = useRef(0);
   const bigBoardRef = useRef<HTMLDivElement | null>(null);
   const bigBoardButtonRef = useRef<HTMLButtonElement | null>(null);
   // Play-side visuals, all read from audible time so they match what is heard.
@@ -619,6 +621,19 @@ export default function BoardSequencerScreen() {
       setCamInfo(trackInfo);
     },
     onLoopSlotsCaptured: (saved) => persistLoopSlots(saved),
+    // A followed nudge is silent: the corners move, the music carries on, and the new
+    // position is saved every few seconds so the next session starts where the board is.
+    onCornersTracked: (corners) => {
+      configRef.current = { ...configRef.current, corners };
+      const now = performance.now();
+      if (now - lastCornerSaveRef.current < TRACK_SAVE_MS) return;
+      lastCornerSaveRef.current = now;
+      setConfig((prev) => {
+        const next = { ...prev, corners };
+        saveBoardSequencerConfig(next);
+        return next;
+      });
+    },
     draw: ({ frame, nudge: signal }: RuntimeFrame) => {
       const cfg = configRef.current;
       const engine = engineRef.current;
@@ -1521,6 +1536,8 @@ export default function BoardSequencerScreen() {
       onGrid={updateGrid}
       onSeatEdge={(edge) => update({ seatEdge: edge })}
       onNudgesEnabled={(on) => update({ boardNudgesEnabled: on })}
+      trackingEnabled={config.boardTrackingEnabled}
+      onTrackingEnabled={(on) => update({ boardTrackingEnabled: on })}
       usingFallbackCamera={camera.phase === 'fallback'}
     />
   ) : step === 'colours' ? (

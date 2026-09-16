@@ -40,6 +40,8 @@ export interface WatchGrid {
   inSquares: Uint8Array;
   /** Grid cell (row * cols + col) for points inside the playing squares, else -1. */
   cellOf: Int16Array;
+  /** Each point's board coordinates (u, v interleaved), so tracking can re-project them. */
+  uv: Float32Array;
 }
 
 export interface FrameInfo {
@@ -59,6 +61,7 @@ export function buildWatchGrid(
   const offImage = new Uint8Array(n);
   const inSquares = new Uint8Array(n);
   const cellOf = new Int16Array(n);
+  const uv = new Float32Array(n * 2);
   const span = 1 + 2 * ringFrac;
 
   for (let gy = 0; gy < size; gy++) {
@@ -66,6 +69,8 @@ export function buildWatchGrid(
       const i = gy * size + gx;
       const u = -ringFrac + (gx / (size - 1)) * span;
       const v = -ringFrac + (gy / (size - 1)) * span;
+      uv[i * 2] = u;
+      uv[i * 2 + 1] = v;
       const p = applyHomography(h, { x: u, y: v });
       const px = Math.round(p.x / frame.downscale);
       const py = Math.round(p.y / frame.downscale);
@@ -83,7 +88,7 @@ export function buildWatchGrid(
         : -1;
     }
   }
-  return { size, ringFrac, rows, cols, boardSquares, imgIdx, offImage, inSquares, cellOf };
+  return { size, ringFrac, rows, cols, boardSquares, imgIdx, offImage, inSquares, cellOf, uv };
 }
 
 export interface WatchState {
