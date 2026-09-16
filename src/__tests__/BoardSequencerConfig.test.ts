@@ -248,12 +248,27 @@ describe('BoardSequencerConfig — control counter settings', () => {
 describe('BoardSequencerConfig — hand and knock guard', () => {
   beforeEach(() => localStorage.clear());
 
-  it('defaults: both guards on, with the spec\u2019s thresholds', () => {
+  it('the hand guard starts OFF, because when it is wrong it blinds the board', () => {
+    // It drops the cells it thinks a hand is over BEFORE anything is read, so a false
+    // positive doesn't degrade detection, it stops it. On a real webcam \u2014 sensor noise,
+    // auto-exposure drift, neither of which the synthetic frames it was tuned on have \u2014
+    // it held half an empty board. It goes back on once it is proven against a camera.
+    expect(DEFAULT_BOARD_SEQUENCER_CONFIG.handGuardEnabled).toBe(false);
+    // The knock guard only adds ghosts after a knock, so it can never blind anything.
+    expect(DEFAULT_BOARD_SEQUENCER_CONFIG.knockGuardEnabled).toBe(true);
+  });
+
+  it('keeps the spec\u2019s thresholds for when it is switched on', () => {
     expect(DEFAULT_BOARD_SEQUENCER_CONFIG).toMatchObject({
-      handGuardEnabled: true, handMarginSquares: 0.75, handReleaseMs: 250, settleAfterHandMs: 300,
+      handMarginSquares: 0.75, handReleaseMs: 250, settleAfterHandMs: 300,
       intruderSensitivity: 18, restNudgeMs: 4000,
-      knockGuardEnabled: true, knockMinCount: 3, knockMinFraction: 0.4, knockWindowMs: 300,
+      knockMinCount: 3, knockMinFraction: 0.4, knockWindowMs: 300,
     });
+  });
+
+  it('a saved "on" is still honoured', () => {
+    localStorage.setItem('admi-board-sequencer', JSON.stringify({ handGuardEnabled: true }));
+    expect(loadBoardSequencerConfig()?.handGuardEnabled).toBe(true);
   });
 
   it('clamps every threshold to its usable range and keeps the switches boolean', () => {

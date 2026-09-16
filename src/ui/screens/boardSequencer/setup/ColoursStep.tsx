@@ -317,7 +317,7 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
           label="Ignore hands"
           checked={hands.handGuardEnabled}
           onChange={hands.onHandGuardEnabled}
-          hint="Holds the squares your hand is over, so placing a counter adds no stray notes and a covered counter keeps playing."
+          hint="Holds the squares your hand is over, so placing a counter adds no stray notes and a covered counter keeps playing. Still being tuned: if counters stop being seen, turn this off."
         />
         <Switch
           label="Keep the pattern if pieces get knocked"

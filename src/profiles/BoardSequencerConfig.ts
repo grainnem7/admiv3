@@ -142,6 +142,13 @@ export interface BoardSequencerStored {
   /** The pattern must be unchanged this long before a loop slot captures it (ms). */
   captureQuietMs: number;
   /** Ignore hands: hold the cells an arm or hand is over instead of reading them. */
+  /**
+   * OFF by default. The guard drops the cells it thinks a hand is over BEFORE anything is
+   * read, so when it is wrong it doesn't degrade the instrument, it blinds it. Its
+   * thresholds were only ever tuned on synthetic, noise-free frames; on a real webcam,
+   * sensor noise and auto-exposure drift had it holding half an empty board. It stays
+   * available, and goes back on by default once it is proven against a real camera.
+   */
   handGuardEnabled: boolean;
   /** Space kept around a hand, in board squares. */
   handMarginSquares: number;
@@ -265,7 +272,7 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   controlRemoval: DEFAULT_CONTROL_REMOVAL,
   toggleAmount: 0.35,
   captureQuietMs: 500,
-  handGuardEnabled: true,
+  handGuardEnabled: false,
   handMarginSquares: 0.75,
   handReleaseMs: 250,
   settleAfterHandMs: 300,
@@ -532,7 +539,7 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     controlRemoval: sanitizeControlRemoval(o.controlRemoval),
     toggleAmount: clampNum(o.toggleAmount, 0, 1, d.toggleAmount),
     captureQuietMs: clampNum(o.captureQuietMs, 0, 5000, d.captureQuietMs),
-    handGuardEnabled: o.handGuardEnabled !== false,
+    handGuardEnabled: o.handGuardEnabled === true,
     handMarginSquares: clampNum(o.handMarginSquares, 0.25, 2, d.handMarginSquares),
     handReleaseMs: clampNum(o.handReleaseMs, 100, 1000, d.handReleaseMs),
     settleAfterHandMs: clampNum(o.settleAfterHandMs, 150, 1000, d.settleAfterHandMs),
