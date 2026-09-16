@@ -303,6 +303,7 @@ export function useBoardRuntime(opts: {
         cfg.handGuardEnabled && handGuardReady && !globalChange ? cfg.settleAfterHandMs : cfg.settleWindowMs,
       );
       engineRef.current?.setPingPong(cfg.pingPong);
+      engineRef.current?.setTickEnabled(cfg.tickEnabled);
       const running = runningRef.current && !!modeRef.current && !!engineRef.current;
       const modeResult = running && modeRef.current ? modeRef.current.step(visible, dtMs, nowMs) : null;
       // The pads are a lane the player can move at any time, so the bank is kept the

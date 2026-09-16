@@ -117,9 +117,8 @@ export class BoardSequencerEngine {
     revBase: number; delBase: number; toneBase: number;
   }>();
   /**
-   * Effect amount from the control counters (1 = the channels' own settings). One writer:
-   * a reverb/delay fader or its toggle scales every channel's send, instead of two places
-   * fighting over the bus gain.
+   * How much of each effect is returned to the mix, when a control counter owns it.
+   * One writer: a fader beats its toggle before either reaches the bus.
    */
   private reverbAmount = 1;
   private delayAmount = 1;
@@ -277,10 +276,15 @@ export class BoardSequencerEngine {
       (on === undefined ? undefined : (on ? amt : 0));
     const reverb = values.reverb ?? toggleAmount(toggles.reverbToggle);
     const delay = values.delay ?? toggleAmount(toggles.delayToggle);
-    let sends = false;
-    if (reverb !== undefined && reverb !== this.reverbAmount) { this.reverbAmount = reverb; sends = true; }
-    if (delay !== undefined && delay !== this.delayAmount) { this.delayAmount = delay; sends = true; }
-    if (sends) this.applyEffectAmounts(glide);
+    const t = Tone.immediate();
+    if (reverb !== undefined && reverb !== this.reverbAmount) {
+      this.reverbAmount = reverb;
+      this.reverbBus?.gain.setTargetAtTime(reverb, t, glide);
+    }
+    if (delay !== undefined && delay !== this.delayAmount) {
+      this.delayAmount = delay;
+      this.delayBus?.gain.setTargetAtTime(delay, t, glide);
+    }
 
     if (values.tone !== undefined && values.tone !== this.toneScale) {
       this.toneScale = values.tone;
@@ -288,14 +292,6 @@ export class BoardSequencerEngine {
       // dark bass keep their relationship.
       this.voiceByChannel.forEach((e) => e.voice.setBrightness(e.toneBase * this.toneScale));
     }
-  }
-
-  private applyEffectAmounts(glide: number): void {
-    const t = Tone.immediate();
-    this.voiceByChannel.forEach((e) => {
-      e.rev.gain.setTargetAtTime(e.revBase * this.reverbAmount, t, glide);
-      e.del.gain.setTargetAtTime(e.delBase * this.delayAmount, t, glide);
-    });
   }
 
   /**
@@ -336,6 +332,13 @@ export class BoardSequencerEngine {
       : Math.floor((this.audibleNow() - this.startSec) / (60 / this.cfg.bpm));
   }
 
+  /** The beat being heard now, for the pulse dot. The engine rebases its own clock on a
+   *  tempo change and follows the song's beats when synced, so nothing outside can
+   *  reconstruct this from a start time. */
+  getVisualBeat(): number {
+    return this.visualBeat();
+  }
+
   /** The column the playhead is on right now (drives the visual playhead). */
   getPlayheadCol(cols: number): number {
     const beat = this.visualBeat();
@@ -366,20 +369,26 @@ export class BoardSequencerEngine {
   }
 
   setChannelTone(id: string, t: number): void {
-    this.voiceByChannel.get(id)?.voice.setBrightness(t);
+    const e = this.voiceByChannel.get(id);
+    if (!e) return;
+    e.toneBase = t;
+    e.voice.setBrightness(t * this.toneScale);
   }
 
   setChannelReverbSend(id: string, s: number): void {
     const e = this.voiceByChannel.get(id);
     if (e) {
       e.revBase = s;
-      e.rev.gain.setTargetAtTime(s * this.reverbAmount, Tone.immediate(), 0.03);
+      e.rev.gain.setTargetAtTime(s, Tone.immediate(), 0.03);
     }
   }
 
   setChannelDelaySend(id: string, s: number): void {
     const e = this.voiceByChannel.get(id);
-    if (e) e.del.gain.setTargetAtTime(s, Tone.immediate(), 0.03);
+    if (e) {
+      e.delBase = s;
+      e.del.gain.setTargetAtTime(s, Tone.immediate(), 0.03);
+    }
   }
 
   setOctaveShift(octaves: number): void {

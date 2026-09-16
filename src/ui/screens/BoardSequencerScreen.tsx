@@ -296,6 +296,8 @@ export default function BoardSequencerScreen() {
   // A ref, so the sampling interval always reads the current colours.
   const channelNameRef = useRef<(id: ColourId) => string>((id) => id);
   const [showHelp, setShowHelp] = useState(false);
+  /** Non-null while an engine is being built, so Play can't be pressed twice. */
+  const startingRef = useRef<number | null>(null);
   const lastCornerSaveRef = useRef(0);
   const bigBoardRef = useRef<HTMLDivElement | null>(null);
   const bigBoardButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -890,7 +892,7 @@ export default function BoardSequencerScreen() {
         setIsVarLap(cfg.numPages <= 1 ? engine.isVariationLap() : false);
         setPingDir(cfg.pingPong ? engine.getPlayheadDirection() : 0);
         // A beat dot that flips with the beat: every audio event has a visual cue.
-        setBeatOn(Math.floor((engine.audibleNow() - startSecRef.current) / (60 / Math.max(1, engine.getBpm()))) % 2 === 0);
+        setBeatOn(Math.abs(engine.getVisualBeat()) % 2 === 0);
       } else {
         setLiveBpm(cfg.bpm);
       }
@@ -929,6 +931,7 @@ export default function BoardSequencerScreen() {
   );
 
   const stop = useCallback(() => {
+    startingRef.current = null;
     runningRef.current = false;
     engineRef.current?.dispose();
     engineRef.current = null;
@@ -975,7 +978,7 @@ export default function BoardSequencerScreen() {
     }
   }, []);
 
-  const start = useCallback(async () => {
+  const startEngine = useCallback(async (generation: number) => {
     await Tone.start();
     if (engineRef.current) {
       engineRef.current.dispose();
@@ -1035,10 +1038,28 @@ export default function BoardSequencerScreen() {
       zoneSlotCount(cfg.loopZone, cfg.rows, cfg.cols), cfg.loopSlots,
     );
     engine.setActiveLoops([]);
+    // Stop may have been pressed while the samples were loading; the engine that is no
+    // longer wanted is disposed rather than left playing with nothing able to stop it.
+    if (startingRef.current !== generation) {
+      engine.dispose();
+      engineRef.current = null;
+      return;
+    }
     startSecRef.current = Tone.now();
     runningRef.current = true;
     setRunning(true);
-  }, [engineRef, homographyRef, loopBankRef, modeRef, runningRef, videoRef]);
+  }, [engineRef, homographyRef, loopBankRef, modeRef, runningRef, startingRef, videoRef]);
+
+  const start = useCallback(async () => {
+    if (startingRef.current) return;
+    startingRef.current = performance.now();
+    const generation = startingRef.current;
+    try {
+      await startEngine(generation);
+    } finally {
+      if (startingRef.current === generation) startingRef.current = null;
+    }
+  }, [startEngine, startingRef]);
 
   // Space starts and stops the board in Play and Big board. The global handler in
   // App.tsx stands down on this screen, so this is the only one listening.
@@ -1270,7 +1291,7 @@ export default function BoardSequencerScreen() {
   // One writer per parameter: a control counter disables the matching screen control.
   const owners = controlOwners(config.channels);
   const volumeReason = disabledReason('volume', owners);
-  const tempoReason = disabledReason('tempo', owners);
+  const tempoReason = disabledReason('tempo', owners, songStatus === 'loaded' && selectedSongId !== '');
   const controlChannels = config.channels.filter((c) => isFaderRole(c.role));
 
 
@@ -1547,7 +1568,25 @@ export default function BoardSequencerScreen() {
                 />
                 Confirmation tick
               </label>
-              {controlChannels.map((c) => {
+              {controlChannels.length > 0 && (
+              <div>
+                <span style={{ fontWeight: 600, display: 'block', marginBottom: 4 }}>Fader reads</span>
+                <SegmentedControl<'row' | 'col'>
+                  label="Fader reads"
+                  value={config.faderAxis}
+                  onChange={(axis) => update({ faderAxis: axis })}
+                  options={[
+                    { value: 'row', label: 'Up and down' },
+                    { value: 'col', label: 'Left and right' },
+                  ]}
+                />
+                <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--bs-fg2)' }}>
+                  Which way a control counter is read when it isn&apos;t in a lane. A lane always
+                  reads along itself.
+                </p>
+              </div>
+            )}
+            {controlChannels.map((c) => {
                 const role = c.role as FaderRole;
                 const range = config.controlRanges[role];
                 return (
