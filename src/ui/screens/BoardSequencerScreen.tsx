@@ -863,20 +863,22 @@ export default function BoardSequencerScreen() {
     handCheckRef.current = id;
   }, [latestFrameRef]);
 
-  // A camera tool belongs to the step that opened it. Leaving the step (or Play) closes
-  // it, so the corner editor can't end up over the picture-in-picture rewriting corners,
-  // and an armed colour picker can't record a sample the player never sees.
+  // A camera tool belongs to the step that opened it, wherever it was opened FROM. Keying
+  // this on the step alone wasn't enough: picking a camera opens the corner editor, and on
+  // the Camera step no step change followed, so the player was asked to tap the board's
+  // corners over a picture they hadn't got working yet.
   useEffect(() => {
     if (view === 'setup' && step === 'board') return;
-    setCalibrating(null);
-  }, [view, step]);
+    if (calibrating !== null) setCalibrating(null);
+  }, [view, step, calibrating]);
 
   useEffect(() => {
     if (view === 'setup' && step === 'colours') return;
+    if (colourCalib === null && pendingColour === null && squarePicker === null) return;
     setColourCalib(null);
     setPendingColour(null);
     setSquarePicker(null);
-  }, [view, step]);
+  }, [view, step, colourCalib, pendingColour, squarePicker]);
 
   // The handedness layout switches at a breakpoint, so the width has to be watched.
   useEffect(() => {
