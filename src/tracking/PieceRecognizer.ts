@@ -22,6 +22,8 @@ export interface CellSample {
 }
 
 export interface CellClassification {
+  /** Every colour above the threshold, in priority order (the first is `colour`). */
+  colours?: ColourId[];
   occupied: boolean;
   colour: ColourId | null;
   /** LEVEL 3 (future): Scrabble-letter identity. Never set today. */
@@ -56,9 +58,13 @@ export class ColourRecognizer implements PieceRecognizer {
   ) {}
   classify(sample: CellSample): CellClassification {
     const min = this.minFilledFraction;
+    // Every colour that clears the threshold, in priority order. The first is what the
+    // cell plays today; the rest let "two counters in a box" mean both of them.
+    const colours: ColourId[] = [];
     for (const id of this.priority) {
-      if ((sample.fractions[id] ?? 0) >= min) return { occupied: true, colour: id };
+      if ((sample.fractions[id] ?? 0) >= min) colours.push(id);
     }
-    return { occupied: false, colour: null };
+    if (colours.length === 0) return { occupied: false, colour: null };
+    return { occupied: true, colour: colours[0], colours };
   }
 }

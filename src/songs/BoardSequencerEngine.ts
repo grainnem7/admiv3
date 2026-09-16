@@ -568,7 +568,7 @@ export class BoardSequencerEngine {
    * (polyrhythm), so a cell fires when cell.col === (beat mod roleLength).
    * chord locks melodic pitch.
    */
-  private fireStep(beat: number, stepTime: number, secPerBeat: number, chord: BoardChord | null): void {
+  private fireStep(beat: number, cellTime: number, secPerBeat: number, chord: BoardChord | null): void {
     if (this.muted) return;
     const durSec = this.cfg.noteLengthBeats * secPerBeat;
     const melodicLoop = loopLen(this.rawLoop('melodic'), this.cfg.cols);
@@ -616,7 +616,13 @@ export class BoardSequencerEngine {
       if (!firesThisLapPaged(cell.conditional ?? false, beat, this.cfg.cols, this.cfg.numPages)) continue;
       // Humanize: occasionally skip a step + vary velocity, so loops breathe.
       if (h > 0 && Math.random() < h * 0.5) continue;
-      const vel = h > 0 ? this.cfg.velocity * (1 - Math.random() * h * 0.4) : this.cfg.velocity;
+      // Box detail: where the counter sits gives it its own loudness and timing. The
+      // shift can never reach into the past — a late note is fine, a missed one is not.
+      const base = cell.velocity ?? this.cfg.velocity;
+      const vel = h > 0 ? base * (1 - Math.random() * h * 0.4) : base;
+      const stepTime = cell.timingBeats
+        ? Math.max(Tone.now(), cellTime + cell.timingBeats * secPerBeat)
+        : cellTime;
       if (role === 'drums') {
         // The drum varies by row (kick→…→crash bottom→top), unless the channel
         // pins a specific kit piece.

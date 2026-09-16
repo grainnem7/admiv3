@@ -15,6 +15,7 @@ import { rgbToHsv } from './ColorTracker';
 import { alphaForDt, REFERENCE_FRAME_MS } from '../utils/timeConstant';
 import type { ColourId, ColourMatcher } from './boardColours';
 import { gridDividesBoard, offsetFromSquare } from './boardGrid';
+import { boxPosition, MAX_CELL_COLOURS, type BoxPosition } from './boxDetail';
 import type { CellReading } from './BoardSequencerMode';
 import type { PieceRecognizer } from './PieceRecognizer';
 
@@ -304,14 +305,33 @@ export class BoardReader {
         const cls = opts.recognizer.classify({ filledFraction, fractions: smoothed });
         // Measure position on the colour actually played, which may not be the dominant one.
         const playedCentroid = (cls.colour ? centroids[cls.colour] : null) ?? centroid;
-        const playedOffset = cls.colour && playedCentroid
-          ? (squareOffsets
-            ? offsetFromSquare(playedCentroid, opts.boardSquares ?? 8)
-            : offsetFromCellCentre(playedCentroid, row, col, opts.rows, opts.cols))
-          : offset;
+        const offsetOf = (pt: { x: number; y: number }): number => (squareOffsets
+          ? offsetFromSquare(pt, opts.boardSquares ?? 8)
+          : offsetFromCellCentre(pt, row, col, opts.rows, opts.cols));
+        const playedOffset = cls.colour && playedCentroid ? offsetOf(playedCentroid) : offset;
+
+        // Each colour in the box keeps its own measurements, so two counters sharing a
+        // box can be shoved (or placed high and low) independently.
+        const cellColours = cls.colours?.slice(0, MAX_CELL_COLOURS);
+        let offsets: Partial<Record<ColourId, number>> | undefined;
+        let boxPositions: Partial<Record<ColourId, BoxPosition>> | undefined;
+        if (cellColours && cellColours.length > 0) {
+          offsets = {};
+          boxPositions = {};
+          for (const id of cellColours) {
+            const pt = centroids[id];
+            if (!pt) continue;
+            offsets[id] = offsetOf(pt);
+            boxPositions[id] = boxPosition(pt, row, col, {
+              rows: opts.rows, cols: opts.cols, boardSquares: opts.boardSquares ?? 8,
+            });
+          }
+        }
         readings.push({
           row, col, occupied: cls.occupied, colour: cls.colour, centroid: playedCentroid,
-          centroids, fractions: smoothed, offset: playedOffset,
+          // Capped: a box holds two counters at most before they stop being distinguishable.
+          colours: cellColours,
+          centroids, offsets, boxPositions, fractions: smoothed, offset: playedOffset,
         });
       }
     }

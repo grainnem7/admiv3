@@ -48,6 +48,8 @@ import { describeBoard, popsAt, pruneFired, type Pop } from './boardSequencer/co
 import { PlayPanel } from './boardSequencer/play/PlayPanel';
 import { NudgeBanner } from './boardSequencer/play/NudgeBanner';
 import { SwatchChip } from './boardSequencer/ui/SwatchChip';
+import { Switch } from './boardSequencer/ui/Switch';
+import { LabeledSlider } from './boardSequencer/ui/LabeledSlider';
 import { Button } from './boardSequencer/ui/Button';
 import { colourMatchesBoardRaw, type NudgeSignal } from './boardSequencer/playNudge';
 import { spaceTogglesPlay, type BoardScreenView } from './boardSequencer/spaceKey';
@@ -1386,6 +1388,38 @@ export default function BoardSequencerScreen() {
 
   const loopsTab = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 10 }}>
+      <Switch
+        label="Where the counter sits matters"
+        checked={config.boxDetailEnabled}
+        onChange={(on) => update({ boxDetailEnabled: on })}
+        hint="Higher in the square plays louder; right of centre plays late. Off by default."
+      />
+      {config.boxDetailEnabled && (
+        <>
+          <LabeledSlider
+            label="How much louder"
+            min={0}
+            max={100}
+            value={Math.round(config.boxLoudnessAmount * 100)}
+            display={`${Math.round(config.boxLoudnessAmount * 100)}%`}
+            onChange={(v) => update({ boxLoudnessAmount: v / 100 })}
+          />
+          <LabeledSlider
+            label="How much later"
+            min={0}
+            max={100}
+            value={Math.round(config.boxTimingAmount * 100)}
+            display={`${Math.round(config.boxTimingAmount * 100)}%`}
+            onChange={(v) => update({ boxTimingAmount: v / 100 })}
+          />
+        </>
+      )}
+      <Switch
+        label="Two counters in a box both play"
+        checked={config.twoCounterMode === 'both'}
+        onChange={(on) => update({ twoCounterMode: on ? 'both' : 'off' })}
+        hint="Otherwise the stronger colour wins the box."
+      />
               <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <input
                   type="checkbox" checked={config.pingPong}
@@ -1731,7 +1765,7 @@ export default function BoardSequencerScreen() {
               </strong>
             </span>
           ))}
-          <Button tone="quiet" onClick={() => announce(describeBoard(active, config.channels, config.rows, config.cols))}>
+          <Button tone="quiet" onClick={() => announce(describeBoard(active, config.channels, config.rows, config.cols, config.velocity))}>
             Describe board
           </Button>
         </div>

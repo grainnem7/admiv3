@@ -240,6 +240,13 @@ export function useBoardRuntime(opts: {
       prevHeld = held;
 
       modeRef.current?.setVariation(cfg.variationEnabled, cfg.variationOffsetThreshold);
+      modeRef.current?.setTwoCounters(cfg.twoCounterMode === 'both');
+      modeRef.current?.setBoxDetail({
+        enabled: cfg.boxDetailEnabled,
+        loudness: cfg.boxLoudnessAmount,
+        timing: cfg.boxTimingAmount,
+        baseVelocity: cfg.velocity,
+      });
       // With hands excluded, a counter no longer needs the long window to prove itself.
       modeRef.current?.setSettleWindow(
         cfg.handGuardEnabled && handGuardReady && !globalChange ? cfg.settleAfterHandMs : cfg.settleWindowMs,

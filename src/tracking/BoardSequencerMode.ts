@@ -23,6 +23,7 @@
 import type { ColourId } from './boardColours';
 import { conditionalFromOffset } from '../songs/boardSequencerScale';
 import { alphaForDt } from '../utils/timeConstant';
+import { CENTRED, medianPosition, timingBeatsFor, velocityFor, type BoxPosition } from './boxDetail';
 
 export interface Point {
   x: number;
@@ -39,6 +40,12 @@ export interface CellReading {
   centroid: Point | null;
   /** Centroid of EVERY colour matched in the cell, for spill checks and control reads. */
   centroids?: Partial<Record<ColourId, Point>>;
+  /** Every colour above the threshold, priority-first — two counters can share a box. */
+  colours?: ColourId[];
+  /** Per-colour shove from the square centre, so each counter has its own Variation. */
+  offsets?: Partial<Record<ColourId, number>>;
+  /** Per-colour position within the box, for loudness and timing. */
+  boxPositions?: Partial<Record<ColourId, BoxPosition>>;
   /** Fraction of the sampled region matching each colour this frame (0..1). Diagnostic. */
   fractions?: Partial<Record<ColourId, number>>;
   /**
@@ -58,6 +65,10 @@ export interface ActiveCell extends CellRef {
   colour: PieceColour;
   /** True only when shoved off-centre → plays every other pass. Absent = every pass. */
   conditional?: boolean;
+  /** Box detail: this counter's own velocity, when where-it-sits is switched on. */
+  velocity?: number;
+  /** Box detail: how late (+) or early (−) it plays, as a fraction of a step. */
+  timingBeats?: number;
 }
 
 export interface BoardStepResult {
@@ -96,6 +107,9 @@ interface CellState {
   pendingColourMs: number;
   /** Offsets seen during the current settle window; their median latches `conditional`. */
   offsets: number[];
+  /** Box positions over the same window; their median latches loudness and timing. */
+  positions: BoxPosition[];
+  settledPosition: BoxPosition;
   /** The median offset this piece was placed at, kept so recalibration can re-latch. */
   settledOffset: number | null;
   /** Latched at settle: this piece was placed off-centre, so it plays every other pass. */
@@ -125,6 +139,10 @@ export class BoardSequencerMode {
   private variationEnabled: boolean;
   private variationOffsetThreshold: number;
   private settleWindowMs: number;
+  private twoCounters = false;
+  private boxDetail: { enabled: boolean; loudness: number; timing: number; baseVelocity: number } = {
+    enabled: false, loudness: 0.5, timing: 0.35, baseVelocity: 0.7,
+  };
 
   constructor(private readonly cfg: BoardSettleConfig) {
     this.variationEnabled = cfg.variationEnabled ?? false;
@@ -145,6 +163,19 @@ export class BoardSequencerMode {
         st.conditional = conditionalFromOffset(st.settledOffset, enabled, offsetThreshold);
       }
     }
+  }
+
+  /** Two counters in one box: each colour gets its own settle clock and its own note. */
+  setTwoCounters(on: boolean): void {
+    if (on === this.twoCounters) return;
+    this.twoCounters = on;
+    // The keys change shape, so old state would never be matched or expired again.
+    this.states.clear();
+  }
+
+  /** Live box-detail calibration; latched values are re-derived from the stored position. */
+  setBoxDetail(detail: { enabled: boolean; loudness: number; timing: number; baseVelocity: number }): void {
+    this.boxDetail = detail;
   }
 
   reset(): void {
@@ -184,19 +215,61 @@ export class BoardSequencerMode {
     const justSettled: CellRef[] = [];
     const justDeactivated: CellRef[] = [];
 
+    interface Track {
+      key: string;
+      row: number;
+      col: number;
+      colour: PieceColour | null;
+      centroid: Point | null;
+      offset: number | null;
+      position: BoxPosition;
+    }
+    const tracks: Track[] = [];
+    const cellsRead = new Set<string>();
+    const present = new Set<string>();
     for (const r of readings) {
-      const k = keyOf(r.row, r.col);
+      cellsRead.add(keyOf(r.row, r.col));
+      const colours = this.twoCounters
+        ? (r.colours ?? (r.colour ? [r.colour] : []))
+        : (r.colour ? [r.colour] : []);
+      for (const colour of colours) {
+        const key = this.twoCounters ? `${r.row},${r.col},${colour}` : keyOf(r.row, r.col);
+        present.add(key);
+        tracks.push({
+          key,
+          row: r.row,
+          col: r.col,
+          colour,
+          centroid: (this.twoCounters ? r.centroids?.[colour] : null) ?? r.centroid,
+          offset: (this.twoCounters ? r.offsets?.[colour] : null) ?? r.offset ?? null,
+          position: r.boxPositions?.[colour] ?? CENTRED,
+        });
+      }
+    }
+    // Anything this frame's cells no longer show has to be stepped as absent, or its
+    // note would hang on for ever.
+    for (const [key] of this.states) {
+      if (present.has(key)) continue;
+      const parts = key.split(',');
+      const row = Number(parts[0]);
+      const col = Number(parts[1]);
+      if (!cellsRead.has(keyOf(row, col))) continue;   // the cell wasn't read (held)
+      tracks.push({ key, row, col, colour: null, centroid: null, offset: null, position: CENTRED });
+    }
+
+    for (const r of tracks) {
+      const k = r.key;
       let st = this.states.get(k);
       if (!st) {
         st = {
           lastCentroid: null, velocity: 0, stillMs: 0, movingMs: 0, lostMs: 0, phase: 'idle',
-          colour: null, pendingColour: null, pendingColourMs: 0, offsets: [], settledOffset: null,
-          conditional: false, resettle: false,
+          colour: null, pendingColour: null, pendingColourMs: 0, offsets: [], positions: [],
+          settledPosition: CENTRED, settledOffset: null, conditional: false, resettle: false,
         };
         this.states.set(k, st);
       }
 
-      const isPiece = r.occupied && r.colour !== null && r.centroid !== null;
+      const isPiece = r.colour !== null && r.centroid !== null;
 
       if (isPiece && r.centroid && r.colour) {
         if (st.phase === 'settled') {
@@ -214,6 +287,7 @@ export class BoardSequencerMode {
               st.stillMs = 0;
               st.movingMs = 0;
               st.offsets = [];
+              st.positions = [];
               st.pendingColour = null;
               st.pendingColourMs = 0;
               st.colour = r.colour;
@@ -233,6 +307,8 @@ export class BoardSequencerMode {
             st.offsets.push(r.offset);
             if (st.offsets.length > MAX_OFFSET_SAMPLES) st.offsets.shift();
           }
+          st.positions.push(r.position);
+          if (st.positions.length > MAX_OFFSET_SAMPLES) st.positions.shift();
         }
         st.lostMs = 0;
         if (st.lastCentroid) {
@@ -249,7 +325,7 @@ export class BoardSequencerMode {
         if (moving) {
           st.movingMs += dtMs;
           st.stillMs = 0;
-          if (st.phase === 'idle') st.offsets = [];
+          if (st.phase === 'idle') { st.offsets = []; st.positions = []; }
         } else {
           st.stillMs += dtMs;
           st.movingMs = 0;
@@ -262,6 +338,9 @@ export class BoardSequencerMode {
             // Latch how far off centre the piece was placed, from the whole settle
             // window, so later jitter can't flip it in and out of Variation.
             st.settledOffset = st.offsets.length > 0 ? median(st.offsets) : null;
+            // Latched with the conditional flag: jitter under a resting counter must not
+            // change how loud it is or when it plays.
+            st.settledPosition = medianPosition(st.positions);
             st.conditional = conditionalFromOffset(
               st.settledOffset, this.variationEnabled, this.variationOffsetThreshold,
             );
@@ -286,6 +365,7 @@ export class BoardSequencerMode {
             st.lostMs = 0;
             st.stillMs = 0;
             st.offsets = [];
+            st.positions = [];
             st.pendingColour = null;
             st.pendingColourMs = 0;
             justDeactivated.push({ row: r.row, col: r.col });
@@ -294,6 +374,7 @@ export class BoardSequencerMode {
           st.stillMs = 0;
           st.lostMs = 0;
           st.offsets = [];
+          st.positions = [];
         }
       }
     }
@@ -304,6 +385,13 @@ export class BoardSequencerMode {
         const [row, col] = k.split(',').map(Number);
         const cell: ActiveCell = { row, col, colour: st.colour };
         if (st.conditional) cell.conditional = true;
+        if (this.boxDetail.enabled) {
+          cell.velocity = velocityFor(
+            this.boxDetail.baseVelocity, st.settledPosition.up, this.boxDetail.loudness,
+          );
+          const timing = timingBeatsFor(st.settledPosition.side, this.boxDetail.timing);
+          if (timing !== 0) cell.timingBeats = timing;
+        }
         activeCells.push(cell);
       }
     }

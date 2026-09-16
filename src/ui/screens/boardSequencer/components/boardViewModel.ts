@@ -52,6 +52,7 @@ export function boardSummary(rows: number, cols: number, step: number, pieces: n
 /** The whole layout in words, for the Describe board button. */
 export function describeBoard(
   cells: readonly ActiveCell[], channels: readonly ColourChannel[], rows: number, cols: number,
+  base?: number,
 ): string {
   if (cells.length === 0) return `${cols} by ${rows} board, empty.`;
   const nameOf = (id: ColourId): string => {
@@ -60,6 +61,19 @@ export function describeBoard(
   };
   const parts = [...cells]
     .sort((a, b) => (a.row - b.row) || (a.col - b.col))
-    .map((c) => `${nameOf(c.colour)} row ${c.row + 1} step ${c.col + 1}${c.conditional ? ', every other pass' : ''}`);
+    .map((c) => {
+      const extras: string[] = [];
+      if (c.conditional) extras.push('every other pass');
+      // Box detail is part of how a cell plays, so it belongs in the spoken description.
+      if (c.velocity !== undefined && base !== undefined) {
+        if (c.velocity > base * 1.05) extras.push('louder');
+        else if (c.velocity < base * 0.95) extras.push('softer');
+      }
+      if (c.timingBeats !== undefined && c.timingBeats !== 0) {
+        extras.push(c.timingBeats > 0 ? 'late' : 'early');
+      }
+      const tail = extras.length > 0 ? `, ${extras.join(', ')}` : '';
+      return `${nameOf(c.colour)} row ${c.row + 1} step ${c.col + 1}${tail}`;
+    });
   return `${cols} by ${rows} board. ${parts.join('. ')}.`;
 }

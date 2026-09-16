@@ -155,6 +155,14 @@ export interface BoardSequencerStored {
   knockMinFraction: number;
   /** The window those losses must fall inside (ms). */
   knockWindowMs: number;
+  /** Where a counter sits in its box changes how it plays (off by default). */
+  boxDetailEnabled: boolean;
+  /** How much higher-in-the-box raises the volume (0 = not at all). */
+  boxLoudnessAmount: number;
+  /** How far right-of-centre pushes a note late, as a share of half a step. */
+  boxTimingAmount: number;
+  /** What two counters in one box mean. 'off' = the strongest colour wins. */
+  twoCounterMode: 'off' | 'both';
 }
 
 /** Fader-role controls, whose value comes from a counter's position. */
@@ -251,6 +259,10 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   knockMinCount: 3,
   knockMinFraction: 0.4,
   knockWindowMs: 300,
+  boxDetailEnabled: false,
+  boxLoudnessAmount: 0.5,
+  boxTimingAmount: 0.35,
+  twoCounterMode: 'off',
 };
 
 function sanitizeControlRanges(v: unknown): Record<FaderRole, ControlRange> {
@@ -467,6 +479,10 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     knockMinCount: Math.round(clampNum(o.knockMinCount, 2, 8, d.knockMinCount)),
     knockMinFraction: clampNum(o.knockMinFraction, 0.2, 0.8, d.knockMinFraction),
     knockWindowMs: clampNum(o.knockWindowMs, 150, 1000, d.knockWindowMs),
+    boxDetailEnabled: o.boxDetailEnabled === true,
+    boxLoudnessAmount: clampNum(o.boxLoudnessAmount, 0, 1, d.boxLoudnessAmount),
+    boxTimingAmount: clampNum(o.boxTimingAmount, 0, 1, d.boxTimingAmount),
+    twoCounterMode: o.twoCounterMode === 'both' ? 'both' : 'off',
   };
 }
 
