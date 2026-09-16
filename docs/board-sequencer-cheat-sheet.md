@@ -9,10 +9,10 @@
 
 ## Set up — four steps
 1. **Camera.** Pick the camera, check it says **"Picture has colour"**, set Mirror/Flip. *Changing mirror or flip asks for the corners again; colours are kept.*
-2. **Board.** **Find board** or **Tap corners myself** — corners are the **outside corners of the squares**, not the wooden edge. Set board size, Rows and Steps, and where the player sits.
+2. **Board.** **Find board** looks for the crossings where four squares meet, works out 8 × 8 or 10 × 10, and shows you what it found — **nothing is saved until Looks right**. Not sure? It hands you the editor with its best guess. Or **Tap corners myself**: corners are the **outside corners of the squares**, not the wooden edge. Set Rows and Steps, and where the player sits.
    - **No pointer?** **Place corners for me**, then the arrows (Fine/Coarse) and **Next corner**.
    - Coming back and the board hasn't moved: **Skip, board hasn't moved**.
-3. **Colours.** Put one of each counter down, then **Tap a counter** (or **Pick a square** + arrows + **Sample this square**). The sample is shown first — **nothing is saved until Add**. Each colour gets a suggested job; change it with the chips.
+3. **Colours.** Put one of each counter down and press **Find colours**: it learns what your board looks like, finds the counters, and **checks every colour against the board** before offering it. A colour that would light up the wood says so and starts **Off**. Press **Use these colours** to keep them. Or **Tap a counter** (or **Pick a square** + arrows + **Sample this square**) — the sample is shown first, and **nothing is saved until Add**.
 4. **Ready.** Check the counts and the list, then **▶ Play**.
 
 ## Playing
@@ -47,6 +47,22 @@
 - **Pause / resume:** lift the slot's counter to pause, put it back to resume.
 - **Clear** empties a slot; it won't re-save until that counter is lifted and put back.
 - Control counters never trigger a slot, and only cells that play are saved.
+
+## Hands, knocks and nudges
+- **Hands are ignored.** Squares your hand is over are **held**, not read: a counter underneath keeps playing, a sleeve adds nothing, and nothing flickers. Held squares are hatched, and the status line says "✋ holding 3".
+- **Check my hand** (Colours → Hands) reports whether your sleeve is one of the counter colours.
+- **A knock keeps the music.** If several counters go at once the pattern plays on as **ghosts** (hollow, with ↺) until you press **Let go**, **Save as loop**, or put the counters back.
+- **A small nudge is followed automatically** — the grid moves with the board, the music carries on, nothing is announced. A bigger move asks you to find the board again. Switch it off in Board → Details.
+
+## Where the counter sits (optional, off by default)
+- Loops tab → **"Where the counter sits matters"**: higher in the square = **louder**, right of centre = **later** ("the and").
+- There's a dead zone in the middle, so "just in the square" stays easy, and the value is fixed when the counter settles — a wobble afterwards changes nothing.
+- **"Two counters in a box both play"** lets one box hold two counters, each with its own place and loudness.
+
+## Lanes — where controls and loops live
+- Loops tab → **Controls live** and **Loop pads live**: **Anywhere**, **a row**, or **a step** — per player.
+- A lane **never plays notes**, so it can't make stray sounds. A fader in a lane reads **along** the lane.
+- **Hold** = the counter stays on the pad while the loop plays. **Toggle** = place it to start, place it again to stop.
 
 ## Hints
 - **"Has the board moved?"** — the pieces have shifted together off their squares.

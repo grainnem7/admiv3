@@ -17,6 +17,47 @@ const HELP: HelpEntry[] = [
       + 'and says why when it is not.',
   },
   {
+    title: 'Finding the board for you',
+    body: 'Press Find board and hold still for a second. It looks for the crossings where '
+      + 'four squares meet, works out whether the board is 8 x 8 or 10 x 10, and shows you '
+      + 'the corners it found. Nothing is saved until you press Looks right, and if it '
+      + 'isn’t sure it hands you the editor with its best guess.',
+  },
+  {
+    title: 'Finding the colours for you',
+    body: 'Put one of each counter out and press Find colours. It learns what your board '
+      + 'itself looks like, finds the counters as whatever doesn’t match it, and checks '
+      + 'each colour against the board before offering it — so a colour that would light up '
+      + 'the wood is caught here and starts switched off.',
+  },
+  {
+    title: 'If the board gets knocked',
+    body: 'A small nudge is followed automatically: the grid moves with the board and the '
+      + 'music carries on. A bigger move asks you to find the board again. If pieces are '
+      + 'knocked off, the pattern keeps playing as ghosts until you let them go, save them '
+      + 'as a loop, or put the counters back.',
+  },
+  {
+    title: 'Hands on the board',
+    body: 'Squares your hand is over are held, not read: a counter underneath keeps playing '
+      + 'and a sleeve can’t add a note. Held squares are drawn hatched, and the status '
+      + 'line says how many. Check my hand (in Colours → Hands) shows what your own '
+      + 'sleeve does.',
+  },
+  {
+    title: 'Where the counter sits',
+    body: 'Optional, and off by default: turn on "Where the counter sits matters" and a '
+      + 'counter higher in its square plays louder, one to the right plays a little late. '
+      + 'There is a dead zone in the middle, so "just in the square" stays easy.',
+  },
+  {
+    title: 'Lanes',
+    body: 'Controls and loop pads can live anywhere, or in one row or step you choose. A lane '
+      + 'never plays notes, so it can’t make stray sounds, and a fader in a lane reads '
+      + 'along it. Loop pads can be Hold (the counter stays) or Toggle (place to start, '
+      + 'place again to stop).',
+  },
+  {
     title: 'Board corners',
     body: 'Corners are the outside corners of the squares, not the wooden edge. Tap them in '
       + 'the order the prompt asks, or press "Place corners for me" and nudge them with the '
