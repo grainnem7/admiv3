@@ -135,6 +135,26 @@ export interface BoardSequencerStored {
   toggleAmount: number;
   /** The pattern must be unchanged this long before a loop slot captures it (ms). */
   captureQuietMs: number;
+  /** Ignore hands: hold the cells an arm or hand is over instead of reading them. */
+  handGuardEnabled: boolean;
+  /** Space kept around a hand, in board squares. */
+  handMarginSquares: number;
+  /** How long a cell stays held after the hand leaves (ms). */
+  handReleaseMs: number;
+  /** Settle time while the hand guard is working — shorter, because hands are excluded. */
+  settleAfterHandMs: number;
+  /** How different a pixel must be from the learnt board to count as an intruder (0–255). */
+  intruderSensitivity: number;
+  /** Something resting over the same cells this long raises a hint (ms). */
+  restNudgeMs: number;
+  /** Keep the pattern playing as ghosts when pieces are knocked off. */
+  knockGuardEnabled: boolean;
+  /** How many counters must go at once to count as a knock. */
+  knockMinCount: number;
+  /** …and what share of the pattern they must be. */
+  knockMinFraction: number;
+  /** The window those losses must fall inside (ms). */
+  knockWindowMs: number;
 }
 
 /** Fader-role controls, whose value comes from a counter's position. */
