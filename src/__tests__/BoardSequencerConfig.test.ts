@@ -244,3 +244,28 @@ describe('BoardSequencerConfig — control counter settings', () => {
     expect(c.controlRemoval.tone).toBe('default');
   });
 });
+
+describe('BoardSequencerConfig — hand and knock guard', () => {
+  beforeEach(() => localStorage.clear());
+
+  it('defaults: both guards on, with the spec\u2019s thresholds', () => {
+    expect(DEFAULT_BOARD_SEQUENCER_CONFIG).toMatchObject({
+      handGuardEnabled: true, handMarginSquares: 0.75, handReleaseMs: 250, settleAfterHandMs: 300,
+      intruderSensitivity: 18, restNudgeMs: 4000,
+      knockGuardEnabled: true, knockMinCount: 3, knockMinFraction: 0.4, knockWindowMs: 300,
+    });
+  });
+
+  it('clamps every threshold to its usable range and keeps the switches boolean', () => {
+    localStorage.setItem('admi-board-sequencer', JSON.stringify({
+      handGuardEnabled: false, handMarginSquares: 9, handReleaseMs: 10, settleAfterHandMs: 9999,
+      intruderSensitivity: 200, restNudgeMs: 10, knockGuardEnabled: 'yes',
+      knockMinCount: 99, knockMinFraction: 5, knockWindowMs: 5,
+    }));
+    expect(loadBoardSequencerConfig()).toMatchObject({
+      handGuardEnabled: false, handMarginSquares: 2, handReleaseMs: 100, settleAfterHandMs: 1000,
+      intruderSensitivity: 40, restNudgeMs: 2000, knockGuardEnabled: true,
+      knockMinCount: 8, knockMinFraction: 0.8, knockWindowMs: 150,
+    });
+  });
+});

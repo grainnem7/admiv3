@@ -221,6 +221,16 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   controlRemoval: DEFAULT_CONTROL_REMOVAL,
   toggleAmount: 0.35,
   captureQuietMs: 500,
+  handGuardEnabled: true,
+  handMarginSquares: 0.75,
+  handReleaseMs: 250,
+  settleAfterHandMs: 300,
+  intruderSensitivity: 18,
+  restNudgeMs: 4000,
+  knockGuardEnabled: true,
+  knockMinCount: 3,
+  knockMinFraction: 0.4,
+  knockWindowMs: 300,
 };
 
 function sanitizeControlRanges(v: unknown): Record<FaderRole, ControlRange> {
@@ -427,6 +437,16 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     controlRemoval: sanitizeControlRemoval(o.controlRemoval),
     toggleAmount: clampNum(o.toggleAmount, 0, 1, d.toggleAmount),
     captureQuietMs: clampNum(o.captureQuietMs, 0, 5000, d.captureQuietMs),
+    handGuardEnabled: o.handGuardEnabled !== false,
+    handMarginSquares: clampNum(o.handMarginSquares, 0.25, 2, d.handMarginSquares),
+    handReleaseMs: clampNum(o.handReleaseMs, 100, 1000, d.handReleaseMs),
+    settleAfterHandMs: clampNum(o.settleAfterHandMs, 150, 1000, d.settleAfterHandMs),
+    intruderSensitivity: clampNum(o.intruderSensitivity, 8, 40, d.intruderSensitivity),
+    restNudgeMs: clampNum(o.restNudgeMs, 2000, 15000, d.restNudgeMs),
+    knockGuardEnabled: o.knockGuardEnabled !== false,
+    knockMinCount: Math.round(clampNum(o.knockMinCount, 2, 8, d.knockMinCount)),
+    knockMinFraction: clampNum(o.knockMinFraction, 0.2, 0.8, d.knockMinFraction),
+    knockWindowMs: clampNum(o.knockWindowMs, 150, 1000, d.knockWindowMs),
   };
 }
 
