@@ -9,6 +9,21 @@ export const STEP_LABELS: Record<SetupStep, string> = {
   camera: 'Camera', board: 'Board', colours: 'Colours', ready: 'Ready',
 };
 
+/** One plain instruction per step: what to do with the board, not what the app does. */
+export const SETUP_HEADINGS: Record<SetupStep, string> = {
+  camera: 'Point the camera at the board',
+  board: 'Put the board in view, empty',
+  colours: 'Put one of each counter on the board',
+  ready: 'Ready to play',
+};
+
+export const SETUP_HINTS: Record<SetupStep, string> = {
+  camera: 'The whole board should be in the picture, with the counters easy to tell apart.',
+  board: 'Corners are the outside corners of the squares, not the wooden edge.',
+  colours: 'Add each counter colour, then give it a job.',
+  ready: 'Check the counters below are the ones you put down.',
+};
+
 export interface SetupFlowProps {
   step: SetupStep;
   onStepChange(step: SetupStep): void;

@@ -31,6 +31,29 @@ import { homographyForCorners } from './boardSequencer/homographyForCorners';
 import { applyGridChange } from '../../tracking/boardGrid';
 import { suggestRole } from './boardSequencer/roles';
 import { controlOwners, disabledReason, legendValue } from './boardSequencer/controlOwnership';
+import './boardSequencer/theme/boardTheme.css';
+import { BOARD_TOKENS } from './boardSequencer/theme/boardTokens';
+import { BoardHeader, type CameraNotice as HeaderNotice } from './boardSequencer/BoardHeader';
+import { CameraSurface } from './boardSequencer/CameraSurface';
+import { PlayerChooser } from './boardSequencer/PlayerChooser';
+import { StepIndicator } from './boardSequencer/ui/StepIndicator';
+import { SetupFlow, STEP_LABELS, SETUP_HEADINGS, SETUP_HINTS } from './boardSequencer/setup/SetupFlow';
+import { CameraStep } from './boardSequencer/setup/CameraStep';
+import { BoardStep } from './boardSequencer/setup/BoardStep';
+import { ColoursStep } from './boardSequencer/setup/ColoursStep';
+import { ReadyStep } from './boardSequencer/setup/ReadyStep';
+import { BoardCornerEditor } from './boardSequencer/components/BoardCornerEditor';
+import {
+  SETUP_STEPS, canOpenStep, canPlay, resolveEntry, stepIndicator,
+  type CameraStatus, type SetupStep,
+} from './boardSequencer/boardSetupFlow';
+import {
+  listBoardPlayers, getActiveBoardPlayer, createBoardPlayer, setActiveBoardPlayer,
+  type BoardPlayerProfile,
+} from '../../profiles/BoardProfiles';
+import { layoutFor } from './boardSequencer/layout';
+import { squareCentreToImage } from './boardSequencer/cornerEditor';
+import type { BoardSquares } from '../../tracking/boardGrid';
 import type { ControlsResult } from '../../tracking/controlCounters';
 import type { FaderRole, ControlRemoval } from '../../profiles/BoardSequencerConfig';
 
@@ -63,7 +86,6 @@ import {
   loadActiveBoardConfig as loadBoardSequencerConfig, saveActiveBoardConfig as saveBoardSequencerConfig,
   allReferencedChannelIds,
 } from '../../profiles/BoardProfiles';
-import BoardCalibrationOverlay from '../components/board/BoardCalibrationOverlay';
 import WarpedBoardView from '../components/board/WarpedBoardView';
 import LoopBankView from '../components/board/LoopBankView';
 import BoardHelp from '../components/board/BoardHelp';
@@ -184,6 +206,9 @@ interface CameraNotice {
 
 export default function BoardSequencerScreen() {
   const setCurrentScreen = useAppStore((s) => s.setCurrentScreen);
+  const uiSize = useAppStore((s) => s.uiSize);
+  const setUISize = useAppStore((s) => s.setUISize);
+  const announce = useAppStore((s) => s.announce);
   const overlayRef = useRef<HTMLCanvasElement>(null);
   const startSecRef = useRef(0);
 
@@ -220,6 +245,21 @@ export default function BoardSequencerScreen() {
   const [active, setActive] = useState<ActiveCell[]>([]);
   // Live control-counter values, for the legend (‖ = the counter is away, value held).
   const [controlState, setControlState] = useState<ControlsResult | null>(null);
+
+  // Guided Set up vs Play. The entry step is resolved once, from the config alone:
+  // routing never moves the player on its own.
+  const [view, setView] = useState<'setup' | 'play'>('setup');
+  const [step, setStep] = useState<SetupStep>(() => resolveEntry(
+    { enabled: storedRef.current?.enabled ?? false, channels: storedRef.current?.channels ?? [] },
+    storedRef.current !== null,
+  ));
+  const [players, setPlayers] = useState<BoardPlayerProfile[]>(() => listBoardPlayers());
+  const [activePlayer, setActivePlayerState] = useState<BoardPlayerProfile | null>(() => getActiveBoardPlayer());
+  // Ask who's playing only when there is a real choice to make.
+  const [chooserOpen, setChooserOpen] = useState(() => listBoardPlayers().length > 1);
+  const [pendingColour, setPendingColour] = useState<LastColourSample | null>(null);
+  const [squarePicker, setSquarePicker] = useState<{ row: number; col: number } | null>(null);
+  const [viewportWidth, setViewportWidth] = useState(() => (typeof window === 'undefined' ? 1440 : window.innerWidth));
   const [playheadCol, setPlayheadCol] = useState(0);
   // Pattern chaining: which page the live camera edits, and which is playing now.
   const [selectedPage, setSelectedPage] = useState(0);
@@ -484,6 +524,13 @@ export default function BoardSequencerScreen() {
     setError(null);
   }, [config.cameraDeviceId, cameraRetry]);
 
+  // The handedness layout switches at a breakpoint, so the width has to be watched.
+  useEffect(() => {
+    const onResize = (): void => setViewportWidth(window.innerWidth);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
   // Runtime callbacks, re-assigned on every render so they always see fresh state.
   callbacksRef.current = {
     onCameraStarted: (fellBack, trackInfo) => {
@@ -744,12 +791,32 @@ export default function BoardSequencerScreen() {
   // a new channel or update the one being recalibrated. The kind (hue/black/
   // white) is inferred from the sample, and the swatch shows the real colour.
   const sampleColourClick = useCallback((nx: number, ny: number) => {
-    const target = colourCalibRef.current;
-    if (!target) return;
+    if (!colourCalibRef.current) return;
     const s = sampleAvgHsvAt(nx, ny);
     if (!s) return;
     const cal = calibrationFromHsv({ h: s.h, s: s.s, v: s.v });
-    setLastSample({ hex: s.hex, h: s.h, s: s.s, v: s.v, kind: cal.kind });
+    // Nothing is saved on a tap: the sample is shown first, so a mis-tap on the wood
+    // doesn't quietly become a colour.
+    const sample = { hex: s.hex, h: s.h, s: s.s, v: s.v, kind: cal.kind };
+    setLastSample(sample);
+    setPendingColour(sample);
+  }, [sampleAvgHsvAt]);
+
+  /** Sample the centre of the square the keyboard picker is on (no pointer needed). */
+  const sampleSquare = useCallback(() => {
+    const pick = squarePicker;
+    if (!pick) return;
+    const cfg = configRef.current;
+    const p = squareCentreToImage(cfg.corners, cfg.boardSquares, pick.row, pick.col);
+    sampleColourClick(p.x, p.y);
+  }, [squarePicker, sampleColourClick]);
+
+  /** Apply the sample the player accepted, as a new colour or a recalibration. */
+  const commitPendingColour = useCallback(() => {
+    const target = colourCalibRef.current;
+    const sample = pendingColour;
+    if (!target || !sample) return;
+    const cal = calibrationFromHsv({ h: sample.h, s: sample.s, v: sample.v });
     setConfig((prev) => {
       let channels: ColourChannel[];
       if (target.mode === 'new') {
@@ -757,18 +824,20 @@ export default function BoardSequencerScreen() {
         // would silently adopt the new colour.
         const id = freshChannelId(prev.channels.map((c) => c.id), allReferencedChannelIds());
         channels = [...prev.channels, {
-          id, kind: cal.kind, role: suggestRole(prev.channels, { kind: cal.kind }), swatch: s.hex,
+          id, kind: cal.kind, role: suggestRole(prev.channels, { kind: cal.kind }), swatch: sample.hex,
           band: cal.band, blackBand: cal.blackBand, whiteBand: cal.whiteBand,
         }];
       } else {
-        channels = prev.channels.map((c) => (c.id === target.id ? recalibratedChannel(c, cal, s.hex) : c));
+        channels = prev.channels.map((c) => (c.id === target.id ? recalibratedChannel(c, cal, sample.hex) : c));
       }
       const next = { ...prev, channels };
       saveBoardSequencerConfig(next);
       return next;
     });
+    setPendingColour(null);
     setColourCalib(null);
-  }, [sampleAvgHsvAt]);
+    setSquarePicker(null);
+  }, [pendingColour]);
 
   const addColour = useCallback(() => setColourCalib({ mode: 'new' }), []);
   const recalibrateChannel = useCallback(
@@ -811,7 +880,6 @@ export default function BoardSequencerScreen() {
     });
   }, []);
 
-  const transform = `scaleX(${config.mirrorX ? -1 : 1}) scaleY(${config.mirrorY ? -1 : 1})`;
   // Per-render derived: the calibrated channels, whether any drums (drives the
   // per-row drum picker), and a colour-id → channel lookup for labels/swatches.
   const channels = config.channels;
@@ -825,641 +893,172 @@ export default function BoardSequencerScreen() {
     : colourCalib.mode === 'new' ? 'a new colour'
       : labelForId(colourCalib.id);
 
+  // ---- Redesigned frame: player, theme, view routing --------------------------------
+  const palette = BOARD_TOKENS.calm[config.themeMode];
+  const layout = layoutFor(config.handedness, viewportWidth, uiSize === 'large' ? 'large' : 'standard');
+
+  const camera: CameraStatus = {
+    phase: error !== null ? 'error'
+      : fellBackRef.current ? 'fallback'
+        : camInfo !== null ? 'running' : 'starting',
+    colourless: feedSaturation === null ? null : feedColourless,
+  };
+  const setupCfg = { enabled: config.enabled, channels: config.channels };
+  const headerNotice: HeaderNotice | null = error
+    ? { kind: 'error', text: error }
+    : camNotice;
+
+
+  const playReason = canPlay(setupCfg, camera)
+    ? null
+    : !config.enabled ? 'Find the board first.'
+      : camera.phase === 'error' ? "The camera isn't working."
+        : 'Give at least one colour a job first.';
+
   // One writer per parameter: a control counter disables the matching screen control.
   const owners = controlOwners(config.channels);
   const volumeReason = disabledReason('volume', owners);
   const tempoReason = disabledReason('tempo', owners);
   const controlChannels = config.channels.filter((c) => isFaderRole(c.role));
 
-  return (
-    <div
-      className="board-sequencer-screen"
-      style={{ display: 'flex', flexDirection: 'column', height: '100vh', padding: 16, boxSizing: 'border-box', gap: 12 }}
+  const setupStepBody = step === 'camera' ? (
+    <CameraStep
+      cameras={cameras}
+      deviceId={config.cameraDeviceId}
+      onPickCamera={(id) => changeCamera(id)}
+      onTryAgain={() => setCameraRetry((n) => n + 1)}
+      camera={camera}
+      trackInfo={camInfo}
+      saturation={feedSaturation}
+      mirrorX={config.mirrorX}
+      mirrorY={config.mirrorY}
+      onViewChange={changeView}
+      onRefreshCameras={() => void refreshCameras()}
+    />
+  ) : step === 'board' ? (
+    <BoardStep
+      boardSquares={config.boardSquares}
+      rows={config.rows}
+      cols={config.cols}
+      seatEdge={config.seatEdge}
+      nudgesEnabled={config.boardNudgesEnabled}
+      playerName={activePlayer?.name ?? 'the player'}
+      running={running}
+      editing={calibrating}
+      onFindBoard={() => setCalibrating(true)}
+      onTapCorners={() => setCalibrating(true)}
+      onBoardSquares={(n: BoardSquares) => updateGrid({ boardSquares: n })}
+      onGrid={updateGrid}
+      onSeatEdge={(edge) => update({ seatEdge: edge })}
+      onNudgesEnabled={(on) => update({ boardNudgesEnabled: on })}
+      usingFallbackCamera={camera.phase === 'fallback'}
+    />
+  ) : step === 'colours' ? (
+    <ColoursStep
+      channels={config.channels}
+      counts={stats.byColour}
+      palette={palette}
+      arming={colourCalib}
+      pending={pendingColour && {
+        hex: pendingColour.hex,
+        h: pendingColour.h,
+        s: pendingColour.s,
+        v: pendingColour.v,
+        kindLabel: pendingColour.kind === 'hue' ? hueName(pendingColour.h)
+          : pendingColour.kind === 'black' ? 'Black' : 'White',
+      }}
+      onFindColours={addColour}
+      onArmTap={addColour}
+      onCancelArm={() => { setColourCalib(null); setPendingColour(null); setSquarePicker(null); }}
+      onAddPending={commitPendingColour}
+      onDiscardPending={() => setPendingColour(null)}
+      onRecalibrate={recalibrateChannel}
+      onRole={setChannelRole}
+      onRemove={removeChannel}
+      onClearAll={clearChannels}
+      isReferenced={(id) => allReferencedChannelIds().has(id)}
+      minFilledFraction={config.minFilledFraction}
+      readSettingsCustom={config.readSettingsCustom}
+      onMinFill={(v) => update({ minFilledFraction: v, readSettingsCustom: true })}
+      onResetReadSettings={() => updateGrid({})}
+      settleWindowMs={config.settleWindowMs}
+      onSettleWindow={(ms) => update({ settleWindowMs: ms })}
+      onBlackDarkness={setChannelBlackDarkness}
+      picker={squarePicker}
+      onMovePicker={(dRow, dCol) => setSquarePicker((pick) => {
+        const base = pick ?? { row: Math.floor(config.boardSquares / 2), col: Math.floor(config.boardSquares / 2) };
+        const clamp = (v: number) => Math.max(0, Math.min(config.boardSquares - 1, v));
+        return { row: clamp(base.row + dRow), col: clamp(base.col + dCol) };
+      })}
+      onSampleSquare={sampleSquare}
+    />
+  ) : (
+    <ReadyStep
+      channels={config.channels}
+      counts={stats.byColour}
+      detected={active}
+      palette={palette}
+      matchingBoard={null}
+      onRecalibrate={(id) => { setStep('colours'); recalibrateChannel(id); }}
+      onPlay={() => { setView('play'); void start(); }}
+      playReason={playReason}
+    />
+  );
+
+  const setupPanel = (
+    <SetupFlow
+      step={step}
+      onStepChange={setStep}
+      cfg={setupCfg}
+      camera={camera}
+      hasStoredConfig={storedRef.current !== null}
+      announce={announce}
+      footerAlign={layout.footerAlign}
+      heading={SETUP_HEADINGS[step]}
+      hint={SETUP_HINTS[step]}
+      skip={step === 'board' ? {
+        label: "Skip, board hasn't moved",
+        reason: !config.enabled ? 'Find the board first.'
+          : camera.phase === 'fallback' || camera.phase === 'error'
+            ? 'Check the camera first.' : null,
+        onClick: () => setStep('ready'),
+      } : null}
     >
-      <header style={{ display: 'flex', gap: 12, alignItems: 'center', flexShrink: 0 }}>
-        <button type="button" onClick={() => setCurrentScreen('welcome')}>&larr; Back</button>
-        <h1 style={{ fontSize: 18, margin: 0 }}>Board Sequencer</h1>
-      </header>
+      {setupStepBody}
+    </SetupFlow>
+  );
 
-      <div style={{ display: 'flex', gap: 16, flex: 1, minHeight: 0 }}>
-        {/* Controls rail */}
-        <div style={{ width: 248, flexShrink: 0, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
-          {/* Pinned transport — always visible */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingBottom: 12 }}>
-            <div style={{ display: 'flex', gap: 6 }}>
-              <button type="button" style={{ flex: 1 }} disabled={!calibrated || running} onClick={() => void start()}>
-                ▶ Start
-              </button>
-              <button type="button" style={{ flex: 1 }} disabled={!running} onClick={stop}>■ Stop</button>
-            </div>
-            <button type="button" disabled={!running} onClick={toggleMuted}>
-              {muted ? 'Resume sound' : 'Pause sound'}
-            </button>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', fontSize: 12, opacity: 0.9 }}>
-              {channels.map((c) => (
-                <span key={c.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }} title={describeChannel(c)}>
-                  <span style={{
-                    width: 10, height: 10, borderRadius: '50%', background: c.swatch, border: '1px solid #0006',
-                  }}
-                  />
-                  <strong>{stats.byColour[c.id] ?? 0}</strong>
-                </span>
-              ))}
-              <span style={{ opacity: 0.7 }}>· Settled <strong>{stats.settled}</strong></span>
-            </div>
-            {!calibrated && (
-              <p style={{ fontSize: 11, opacity: 0.75, margin: 0 }}>
-                Open <strong>Camera &amp; board</strong> below and calibrate the corners to begin.
-              </p>
-            )}
+  const stage = (
+    <div style={{ flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <CameraSurface
+        videoRef={videoRef}
+        overlayRef={overlayRef}
+        mirrorX={config.mirrorX}
+        mirrorY={config.mirrorY}
+        onPick={colourCalib ? (pt) => sampleColourClick(pt.x, pt.y) : undefined}
+        label={colourCalib ? `Tap a counter to set ${calibLabel}` : 'Board camera'}
+      >
+        {calibrating && (
+          <BoardCornerEditor
+            corners={config.enabled ? config.corners : undefined}
+            mode={config.enabled ? 'review' : 'tap'}
+            rows={config.rows}
+            cols={config.cols}
+            controlsSide={layout.nudgePad}
+            onConfirm={(corners) => { handleCalibrated(corners); setCalibrating(false); }}
+            onCancel={() => setCalibrating(false)}
+          />
+        )}
+        {colourCalib && (
+          <div style={{
+            position: 'absolute', top: 8, left: 8, padding: '4px 8px',
+            background: 'var(--bs-bg)', color: 'var(--bs-fg)', borderRadius: 'var(--bs-radius-sm)',
+          }}
+          >
+            {`Tap a counter to set ${calibLabel}`}
           </div>
-
-          <Section
-            title="How to play"
-            open={!!openSection.help} onToggle={() => toggleSection('help')}
-          >
-            <BoardHelp />
-          </Section>
-
-          <Section
-            title="Camera & board"
-            open={!!openSection.camera} onToggle={() => toggleSection('camera')}
-          >
-            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
-              Camera
-              <select
-                value={config.cameraDeviceId} disabled={running}
-                onChange={(e) => changeCamera(e.target.value)}
-              >
-                <option value="">Browser default</option>
-                {cameras.map((c, i) => (
-                  <option key={c.deviceId} value={c.deviceId}>{c.label || `Camera ${i + 1}`}</option>
-                ))}
-                {config.cameraDeviceId && !cameras.some((c) => c.deviceId === config.cameraDeviceId) && (
-                  <option value={config.cameraDeviceId}>
-                    {config.cameraLabel || 'Saved camera'} (not connected)
-                  </option>
-                )}
-              </select>
-            </label>
-            {camNotice?.kind === 'fallback' && (
-              <button type="button" disabled={running} onClick={() => setCameraRetry((n) => n + 1)}>
-                Try again
-              </button>
-            )}
-            <p style={{ fontSize: 11, opacity: 0.6, margin: 0 }}>
-              Using a phone? Start its webcam app first; it then appears in this list.
-            </p>
-            <button type="button" onClick={() => setCalibrating(true)}>
-              {calibrated ? 'Recalibrate corners' : 'Calibrate corners'}
-            </button>
-            <label>
-              <input
-                type="checkbox" checked={config.mirrorX} disabled={running}
-                onChange={(e) => changeView({ mirrorX: e.target.checked })}
-              />
-              Mirror horizontally
-            </label>
-            <label>
-              <input
-                type="checkbox" checked={config.mirrorY} disabled={running}
-                onChange={(e) => changeView({ mirrorY: e.target.checked })}
-              />
-              Flip vertically
-            </label>
-            <p style={{ fontSize: 11, opacity: 0.6, margin: 0 }}>Stop the sequencer to change camera or orientation.</p>
-          </Section>
-
-          <Section
-            title="Colours & detection"
-            hint="Give each piece colour a job, then calibrate the colours you switch on."
-            open={!!openSection.colours} onToggle={() => toggleSection('colours')}
-          >
-            {channels.length === 0 && (
-              <span style={{ fontSize: 11, opacity: 0.6 }}>
-                No colours yet. Add one, then click a piece on the camera to calibrate it.
-              </span>
-            )}
-            {channels.map((c) => {
-              const isCalib = colourCalib?.mode === 'recal' && colourCalib.id === c.id;
-              const isMelodic = c.role === 'melody' || c.role === 'chord' || c.role === 'bass';
-              return (
-                <div
-                  key={c.id}
-                  style={{
-                    display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12,
-                    padding: '5px 6px', borderRadius: 6,
-                    border: isCalib ? '1px solid #4caf50' : '1px solid #ffffff14',
-                    background: '#ffffff08',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span
-                      title={`${describeChannel(c)} — click ⟳ then a piece to recalibrate`}
-                      style={{
-                        width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
-                        background: c.swatch, border: '1px solid #0008',
-                      }}
-                    />
-                    <select
-                      style={{ flex: 1, minWidth: 0 }}
-                      value={c.role}
-                      onChange={(e) => setChannelRole(c.id, e.target.value as ColourRole)}
-                    >
-                      {ROLE_OPTIONS.map((o) => (
-                        <option key={o.value} value={o.value}>{o.label}</option>
-                      ))}
-                    </select>
-                    <button
-                      type="button" title="Recalibrate (then click a piece)"
-                      aria-label={`Recalibrate ${describeChannel(c)}`}
-                      onClick={() => recalibrateChannel(c.id)}
-                      style={{ padding: '2px 6px' }}
-                    >
-                      {isCalib ? '◉' : '⟳'}
-                    </button>
-                    <button
-                      type="button" title="Remove colour"
-                      aria-label={`Remove ${describeChannel(c)}`}
-                      onClick={() => removeChannel(c.id)}
-                      style={{ padding: '2px 6px' }}
-                    >
-                      ×
-                    </button>
-                  </div>
-                  {isMelodic && (
-                    <select
-                      style={{ width: '100%' }}
-                      value={c.instrument ?? ''} disabled={running}
-                      onChange={(e) => patchChannel(c.id, { instrument: e.target.value })}
-                      title="Instrument for this colour"
-                    >
-                      <option value="">{c.role === 'bass' ? 'Default (electric bass)' : 'Default (electric piano)'}</option>
-                      {INSTRUMENT_OPTIONS.map((i) => (
-                        <option key={i.key} value={i.key}>{i.name}</option>
-                      ))}
-                    </select>
-                  )}
-                  {c.role === 'drums' && (
-                    <select
-                      style={{ width: '100%' }}
-                      value={c.drum ?? ''} disabled={running}
-                      onChange={(e) => patchChannel(c.id, { drum: e.target.value })}
-                      title="Drum for this colour"
-                    >
-                      <option value="">Vary by row (kick→crash)</option>
-                      {DRUM_OPTIONS.map((d) => (
-                        <option key={d.key} value={d.key}>{d.name}</option>
-                      ))}
-                    </select>
-                  )}
-                  {c.kind === 'black' && (
-                    <label style={{ fontSize: 11 }}>
-                      Darkness ≤ {c.blackBand?.maxValue ?? 34}%
-                      <input
-                        type="range" min={10} max={70} value={Math.round(c.blackBand?.maxValue ?? 34)}
-                        onChange={(e) => setChannelBlackDarkness(c.id, Number(e.target.value))}
-                      />
-                    </label>
-                  )}
-                </div>
-              );
-            })}
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-              <button type="button" style={{ flex: 1 }} disabled={running} onClick={addColour}>
-                {colourCalib?.mode === 'new' ? 'Click a piece on the camera…' : '+ Add colour'}
-              </button>
-              {channels.length > 0 && (
-                <button
-                  type="button" disabled={running} onClick={clearChannels}
-                  style={{ fontSize: 11, opacity: 0.8 }}
-                  title="Remove all colours"
-                >
-                  Clear all
-                </button>
-              )}
-            </div>
-            {anyFader && (
-              <label>
-                Fader reads
-                <select
-                  value={config.faderAxis} disabled={running}
-                  onChange={(e) => update({ faderAxis: e.target.value === 'col' ? 'col' : 'row' })}
-                >
-                  <option value="row">Vertical (low → high)</option>
-                  <option value="col">Horizontal (left → right)</option>
-                </select>
-              </label>
-            )}
-            {controlChannels.map((c) => {
-              const role = c.role as FaderRole;
-              const range = config.controlRanges[role];
-              return (
-                <div key={`ctl-${c.id}`} style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span
-                      aria-hidden="true"
-                      style={{ width: 12, height: 12, borderRadius: '50%', background: c.swatch, border: '1px solid #0008' }}
-                    />
-                    <span style={{ flex: 1 }}>{describeChannel(c)}</span>
-                    <span aria-live="off">
-                      {legendValue(role, controlState?.values[role], controlState?.held ?? new Set())}
-                    </span>
-                  </div>
-                  <label>
-                    When it leaves the board
-                    <select
-                      value={config.controlRemoval[role]}
-                      onChange={(e) => update({
-                        controlRemoval: { ...config.controlRemoval, [role]: e.target.value as ControlRemoval },
-                      })}
-                    >
-                      {REMOVAL_LABELS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </select>
-                  </label>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <label style={{ flex: 1 }}>
-                      Lowest
-                      <input
-                        type="number" step={role === 'tempo' ? 5 : 0.05} value={range.min}
-                        onChange={(e) => update({
-                          controlRanges: { ...config.controlRanges, [role]: { ...range, min: Number(e.target.value) } },
-                        })}
-                      />
-                    </label>
-                    <label style={{ flex: 1 }}>
-                      Highest
-                      <input
-                        type="number" step={role === 'tempo' ? 5 : 0.05} value={range.max}
-                        onChange={(e) => update({
-                          controlRanges: { ...config.controlRanges, [role]: { ...range, max: Number(e.target.value) } },
-                        })}
-                      />
-                    </label>
-                  </div>
-                </div>
-              );
-            })}
-            <label>
-              Min fill {Math.round(config.minFilledFraction * 100)}%
-              <input
-                type="range" min={3} max={50} value={Math.round(config.minFilledFraction * 100)}
-                onChange={(e) => update({ minFilledFraction: Number(e.target.value) / 100, readSettingsCustom: true })}
-              />
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <input
-                type="checkbox" checked={config.pingPong}
-                onChange={(e) => update({ pingPong: e.target.checked })}
-              />
-              Ping-pong (sweep → then ←)
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <input
-                type="checkbox" checked={config.loopBankEnabled}
-                onChange={(e) => update({ loopBankEnabled: e.target.checked })}
-              />
-              Loop bank (bottom row = save/recall slots)
-            </label>
-            {config.loopBankEnabled && (
-              <LoopBankView
-                rows={config.rows}
-                cols={config.cols}
-                swatchById={new Map(config.channels.map((c) => [c.id, c.swatch]))}
-                onClear={clearLoopSlotAt}
-                slots={Array.from({ length: config.cols }, (_, i) => ({
-                  cells: config.loopSlots[i] ?? null,
-                  active: loopBankRef.current.present[i] === true && (config.loopSlots[i] ?? null) != null,
-                }))}
-              />
-            )}
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <input
-                type="checkbox" checked={config.variationEnabled}
-                onChange={(e) => update({ variationEnabled: e.target.checked })}
-              />
-              Variation — shove a piece to its edge = every other pass
-            </label>
-            {config.variationEnabled && (
-              <label>
-                Shove needed {Math.round(config.variationOffsetThreshold * 100)}%
-                <input
-                  type="range" min={30} max={85}
-                  value={Math.round(config.variationOffsetThreshold * 100)}
-                  onChange={(e) => update({ variationOffsetThreshold: Number(e.target.value) / 100 })}
-                />
-              </label>
-            )}
-            {config.variationEnabled && config.numPages > 1 && (
-              <span style={{ fontSize: 11, opacity: 0.7 }}>
-                Variation applies to a single page only (v1) — set Pages to 1 to use it.
-              </span>
-            )}
-          </Section>
-
-          <Section
-            title="Sound"
-            hint="Pitch follows the piece's row (low at the bottom). Each colour's instrument/drum is set in Colours."
-            open={!!openSection.sound} onToggle={() => toggleSection('sound')}
-          >
-            <label>
-              Key
-              <select
-                value={config.scaleRootMidi}
-                onChange={(e) => {
-                  const root = Number(e.target.value);
-                  update({ scaleRootMidi: root });
-                  engineRef.current?.setScale(root, configRef.current.scaleSemitones);
-                }}
-              >
-                {NOTE_NAMES.map((n, i) => (
-                  <option key={n} value={60 + i}>{n}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Scale
-              <select
-                value={config.scaleName}
-                onChange={(e) => {
-                  const preset = SCALE_PRESETS.find((s) => s.name === e.target.value) ?? SCALE_PRESETS[0];
-                  update({ scaleName: preset.name, scaleSemitones: preset.semitones });
-                  engineRef.current?.setScale(configRef.current.scaleRootMidi, preset.semitones);
-                }}
-              >
-                {SCALE_PRESETS.map((s) => (
-                  <option key={s.name} value={s.name}>{s.name}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Octave {config.octaveShift > 0 ? `+${config.octaveShift}` : config.octaveShift}
-              <input
-                type="range" min={-2} max={2} step={1} value={config.octaveShift}
-                onChange={(e) => {
-                  const v = Number(e.target.value);
-                  update({ octaveShift: v });
-                  engineRef.current?.setOctaveShift(v);
-                }}
-              />
-            </label>
-            <label>
-              Note length {config.noteLengthBeats.toFixed(1)} beats
-              <input
-                type="range" min={1} max={40} value={Math.round(config.noteLengthBeats * 10)}
-                onChange={(e) => {
-                  const v = Number(e.target.value) / 10;
-                  update({ noteLengthBeats: v });
-                  engineRef.current?.setNoteLength(v);
-                }}
-              />
-            </label>
-            <label>
-              Volume {Math.round(config.volume * 100)}%
-              <input
-                type="range" min={0} max={100} value={Math.round(config.volume * 100)}
-                disabled={volumeReason !== null}
-                onChange={(e) => {
-                  const v = Number(e.target.value) / 100;
-                  update({ volume: v });
-                  engineRef.current?.setVolume(v);
-                }}
-              />
-              <span style={REASON_STYLE}>{volumeReason ?? ''}</span>
-            </label>
-            <label>
-              <input
-                type="checkbox" checked={config.tickEnabled}
-                onChange={(e) => update({ tickEnabled: e.target.checked })}
-              />
-              Confirmation tick
-            </label>
-          </Section>
-
-          <Section
-            title="Groove & tempo"
-            open={!!openSection.groove} onToggle={() => toggleSection('groove')}
-          >
-            <label>
-              Tempo {config.bpm} BPM
-              <input
-                type="range" min={50} max={300} value={config.bpm}
-                disabled={tempoReason !== null}
-                onChange={(e) => {
-                  const v = Number(e.target.value);
-                  update({ bpm: v });
-                  engineRef.current?.setBpm(v); // live, not only on the next start
-                }}
-              />
-              <span style={REASON_STYLE}>{tempoReason ?? ''}</span>
-            </label>
-            <label>
-              Swing {Math.round(config.swing * 100)}%
-              <input
-                type="range" min={0} max={60} value={Math.round(config.swing * 100)}
-                onChange={(e) => {
-                  const v = Number(e.target.value) / 100;
-                  update({ swing: v });
-                  engineRef.current?.setSwing(v);
-                }}
-              />
-            </label>
-            <label>
-              Humanize {Math.round(config.humanize * 100)}%
-              <input
-                type="range" min={0} max={100} value={Math.round(config.humanize * 100)}
-                onChange={(e) => {
-                  const v = Number(e.target.value) / 100;
-                  update({ humanize: v });
-                  engineRef.current?.setHumanize(v);
-                }}
-              />
-            </label>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <span style={{ fontSize: 11, opacity: 0.65 }}>
-                Polyrhythm — loop length per role (Off = full {config.cols} steps; shorter values drift)
-              </span>
-              {POLY_ROLES.map(({ role, field, label }) => (
-                <label key={role} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
-                  <span style={{ width: 64 }}>{label}</span>
-                  <select
-                    value={config[field]}
-                    onChange={(e) => {
-                      const n = Number(e.target.value);
-                      update({ [field]: n } as Partial<BoardSequencerStored>);
-                      engineRef.current?.setLoopSteps(role, n);
-                    }}
-                  >
-                    <option value={0}>Off</option>
-                    {[2, 3, 4, 5, 6, 7, 8].filter((n) => n <= config.cols).map((n) => (
-                      <option key={n} value={n}>{n}</option>
-                    ))}
-                  </select>
-                </label>
-              ))}
-            </div>
-          </Section>
-
-          <Section
-            title="Pattern length"
-            open={!!openSection.pattern} onToggle={() => toggleSection('pattern')}
-          >
-            <label>
-              Rows
-              <select
-                value={config.rows} disabled={running}
-                onChange={(e) => updateGrid({ rows: Number(e.target.value) })}
-              >
-                {[2, 3, 4, 5, 6, 7, 8].map((n) => <option key={n} value={n}>{n}</option>)}
-              </select>
-            </label>
-            <label>
-              Steps
-              <select
-                value={config.cols} disabled={running}
-                onChange={(e) => updateGrid({ cols: Number(e.target.value) })}
-              >
-                {[2, 3, 4, 5, 6, 7, 8, 10, 12, 16].map((n) => <option key={n} value={n}>{n}</option>)}
-              </select>
-            </label>
-            <label>
-              Pages
-              <select
-                value={config.numPages} disabled={running}
-                onChange={(e) => setPagesCount(Number(e.target.value))}
-              >
-                {[1, 2, 4].map((n) => <option key={n} value={n}>{n}</option>)}
-              </select>
-            </label>
-            {config.numPages > 1 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <span style={{ fontSize: 11, opacity: 0.65 }}>
-                  Selected page (●) plays live; Capture freezes it and moves on. Loop = {config.numPages * config.cols} steps.
-                </span>
-                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                  {Array.from({ length: config.numPages }, (_, i) => {
-                    const isSel = i === selectedPage;
-                    const isPlaying = running && i === playingPage;
-                    const hasSnapshot = (config.pages[i]?.length ?? 0) > 0;
-                    return (
-                      <button
-                        key={i} type="button" onClick={() => selectPage(i)}
-                        style={{
-                          fontSize: 12, padding: '4px 10px',
-                          fontWeight: isSel ? 700 : 400,
-                          border: isPlaying ? '2px solid #4caf50' : '1px solid #888',
-                          opacity: hasSnapshot || isSel ? 1 : 0.5,
-                        }}
-                      >
-                        {String.fromCharCode(65 + i)}{isSel ? ' ●' : ''}
-                      </button>
-                    );
-                  })}
-                </div>
-                <button
-                  type="button" style={{ fontSize: 12 }} disabled={!running}
-                  onClick={capturePage}
-                >
-                  Capture board → Page {String.fromCharCode(65 + selectedPage)}
-                </button>
-              </div>
-            )}
-          </Section>
-
-          <Section
-            title="Backing song"
-            open={!!openSection.song} onToggle={() => toggleSection('song')}
-          >
-            <label>
-              Backing song
-              <select value={selectedSongId} disabled={running} onChange={(e) => void handleSelectSong(e.target.value)}>
-                <option value="">None (standalone)</option>
-                {SONG_LIBRARY.map((s) => (
-                  <option key={s.id} value={s.id}>{s.title}</option>
-                ))}
-              </select>
-            </label>
-            {selectedSongId && (
-              <p style={{ fontSize: 11, opacity: 0.75, margin: 0 }}>
-                {songStatus === 'loading' && 'Loading song…'}
-                {songStatus === 'loaded' && 'Song ready — board will lock to its tempo + chords'}
-                {songStatus === 'error' && 'Song failed to load'}
-              </p>
-            )}
-          </Section>
-
-          <Section
-            title="Per-colour mixer"
-            open={!!openSection.mixer} onToggle={() => toggleSection('mixer')}
-          >
-            {channels.filter((c) => c.role === 'melody' || c.role === 'chord' || c.role === 'bass').length === 0 ? (
-              <span style={{ fontSize: 11, opacity: 0.6 }}>Add a melody/chord/bass colour to mix it.</span>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <div style={{ display: 'flex', gap: 4, fontSize: 10, opacity: 0.7 }}>
-                  <span style={{ width: 20 }} />
-                  <span style={{ width: 48, textAlign: 'center' }}>Vol</span>
-                  <span style={{ width: 48, textAlign: 'center' }}>Tone</span>
-                  <span style={{ width: 48, textAlign: 'center' }}>Rev</span>
-                  <span style={{ width: 48, textAlign: 'center' }}>Dly</span>
-                </div>
-                {channels.filter((c) => c.role === 'melody' || c.role === 'chord' || c.role === 'bass').map((c) => (
-                  <div key={c.id} style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                    <span style={{
-                      width: 14, height: 14, borderRadius: '50%', flexShrink: 0,
-                      background: c.swatch, border: '1px solid #0008',
-                    }}
-                    />
-                    {([
-                      ['volume', c.volume ?? 1],
-                      ['tone', c.tone ?? 1],
-                      ['reverbSend', c.reverbSend ?? 0.18],
-                      ['delaySend', c.delaySend ?? 0],
-                    ] as const).map(([field, val]) => (
-                      <input
-                        key={field} type="range" min={0} max={100} style={{ width: 48 }}
-                        value={Math.round(val * 100)}
-                        onChange={(e) => setChannelMix(c.id, field, Number(e.target.value) / 100)}
-                      />
-                    ))}
-                  </div>
-                ))}
-              </div>
-            )}
-          </Section>
-        </div>
-
-        {/* Camera + grid/detection overlay + calibration */}
-        <div style={{ flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-          <div style={{ position: 'relative', width: '100%' }}>
-            <video
-              ref={videoRef}
-              autoPlay playsInline muted
-              style={{ width: '100%', display: 'block', transform, borderRadius: 6 }}
-            />
-            <canvas
-              ref={overlayRef}
-              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
-            />
-            {calibrating && <BoardCalibrationOverlay onComplete={handleCalibrated} />}
-            {colourCalib && (
-              <div
-                onClick={(e) => {
-                  const r = e.currentTarget.getBoundingClientRect();
-                  sampleColourClick((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
-                }}
-                style={{ position: 'absolute', inset: 0, cursor: 'crosshair' }}
-                role="button"
-                tabIndex={0}
-                aria-label={`Click a piece to calibrate ${calibLabel}`}
-              >
-                <div style={{ position: 'absolute', top: 8, left: 8, color: '#fff', background: '#000a', padding: '4px 8px' }}>
-                  Click a piece to set {calibLabel}
-                </div>
-              </div>
-            )}
-            {error && <div style={{ position: 'absolute', top: 8, left: 8, color: '#ff8080' }}>{error}</div>}
-          </div>
+        )}
+      </CameraSurface>
           {/* Camera check: which camera, what it delivers, whether the frames the
               app reads carry colour, and what the last colour click captured. */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginTop: 8, fontSize: 12, opacity: 0.9 }}>
@@ -1496,16 +1095,690 @@ export default function BoardSequencerScreen() {
               </span>
             )}
           </div>
-        </div>
+    </div>
+  );
 
-        {/* Warped board (abstract view) */}
-        <div style={{ flex: '1 1 0', minWidth: 0, minHeight: 0 }}>
-          <WarpedBoardView
-            rows={config.rows} cols={config.cols} active={active} playheadCol={playheadCol}
-            colourFor={(id) => channelById.get(id)?.swatch ?? '#e23'}
+  return (
+    <div
+      className="bs-root board-sequencer-screen"
+      data-bs-style="calm"
+      data-bs-mode={config.themeMode}
+      style={{ display: 'flex', flexDirection: 'column', height: '100vh', padding: 16, boxSizing: 'border-box', gap: 12 }}
+    >
+      {chooserOpen ? (
+        <PlayerChooser
+          players={players}
+          onPick={(id) => {
+            setActiveBoardPlayer(id);
+            const loaded = loadBoardSequencerConfig();
+            if (loaded) setConfig(loaded);
+            setActivePlayerState(getActiveBoardPlayer());
+            setChooserOpen(false);
+          }}
+          onCreate={(name, handedness) => {
+            createBoardPlayer(name, handedness);
+            const loaded = loadBoardSequencerConfig();
+            if (loaded) setConfig(loaded);
+            setPlayers(listBoardPlayers());
+            setActivePlayerState(getActiveBoardPlayer());
+            setChooserOpen(false);
+            setView('setup');
+            setStep('colours');
+          }}
+          onCancel={players.length > 0 ? () => setChooserOpen(false) : undefined}
+        />
+      ) : (
+        <>
+          <BoardHeader
+            title={view === 'setup' ? 'Board Sequencer · Set up' : 'Board Sequencer'}
+            onExit={() => { stop(); setCurrentScreen('welcome'); }}
+            mode={config.themeMode}
+            onModeChange={(m) => update({ themeMode: m })}
+            largeUi={uiSize === 'large'}
+            onLargeUiChange={(large) => setUISize(large ? 'large' : 'standard')}
+            onHelp={() => setOpenSection((sec) => ({ ...sec, help: true }))}
+            playerName={activePlayer?.name ?? null}
+            onSwitchPlayer={() => setChooserOpen(true)}
+            switchPlayerDisabledReason={running ? 'Stop playing to switch player.' : null}
+            notice={headerNotice}
+            onChangeCamera={() => { setView('setup'); setStep('camera'); }}
+            right={view === 'setup' ? (
+              <StepIndicator
+                steps={SETUP_STEPS.map((id) => ({
+                  id,
+                  label: STEP_LABELS[id],
+                  state: stepIndicator(id, step, setupCfg, camera, storedRef.current !== null),
+                }))}
+                canOpen={(id: SetupStep) => canOpenStep(id, setupCfg, camera, storedRef.current !== null)}
+                onOpen={(id: SetupStep) => setStep(id)}
+              />
+            ) : (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <span style={{ color: 'var(--bs-fg2)', fontSize: 13 }}>
+                  {running ? 'Playing' : 'Stopped'}
+                </span>
+                <button type="button" onClick={() => { setView('setup'); }}>⚙ Set up</button>
+              </div>
+            )}
           />
-        </div>
-      </div>
+
+          <div
+            style={{
+              display: 'flex',
+              gap: 16,
+              flex: 1,
+              minHeight: 0,
+              flexDirection: layout.mode === 'stacked'
+                ? 'column'
+                : config.handedness === 'left' ? 'row-reverse' : 'row',
+            }}
+          >
+            {stage}
+            {/* The panel keeps its place in the DOM for both hands; only the row flips. */}
+            <div style={{ width: layout.mode === 'stacked' ? '100%' : 320, flexShrink: 0, display: 'flex', flexDirection: 'column', minHeight: 0, overflowY: 'auto' }}>
+              {view === 'setup' ? setupPanel : (
+                <>
+          {/* Controls rail */}
+          <div style={{ width: 248, flexShrink: 0, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+            {/* Pinned transport — always visible */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingBottom: 12 }}>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button type="button" style={{ flex: 1 }} disabled={!calibrated || running} onClick={() => void start()}>
+                  ▶ Start
+                </button>
+                <button type="button" style={{ flex: 1 }} disabled={!running} onClick={stop}>■ Stop</button>
+              </div>
+              <button type="button" disabled={!running} onClick={toggleMuted}>
+                {muted ? 'Resume sound' : 'Pause sound'}
+              </button>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', fontSize: 12, opacity: 0.9 }}>
+                {channels.map((c) => (
+                  <span key={c.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }} title={describeChannel(c)}>
+                    <span style={{
+                      width: 10, height: 10, borderRadius: '50%', background: c.swatch, border: '1px solid #0006',
+                    }}
+                    />
+                    <strong>{stats.byColour[c.id] ?? 0}</strong>
+                  </span>
+                ))}
+                <span style={{ opacity: 0.7 }}>· Settled <strong>{stats.settled}</strong></span>
+              </div>
+              {!calibrated && (
+                <p style={{ fontSize: 11, opacity: 0.75, margin: 0 }}>
+                  Open <strong>Camera &amp; board</strong> below and calibrate the corners to begin.
+                </p>
+              )}
+            </div>
+
+            <Section
+              title="How to play"
+              open={!!openSection.help} onToggle={() => toggleSection('help')}
+            >
+              <BoardHelp />
+            </Section>
+
+            <Section
+              title="Camera & board"
+              open={!!openSection.camera} onToggle={() => toggleSection('camera')}
+            >
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
+                Camera
+                <select
+                  value={config.cameraDeviceId} disabled={running}
+                  onChange={(e) => changeCamera(e.target.value)}
+                >
+                  <option value="">Browser default</option>
+                  {cameras.map((c, i) => (
+                    <option key={c.deviceId} value={c.deviceId}>{c.label || `Camera ${i + 1}`}</option>
+                  ))}
+                  {config.cameraDeviceId && !cameras.some((c) => c.deviceId === config.cameraDeviceId) && (
+                    <option value={config.cameraDeviceId}>
+                      {config.cameraLabel || 'Saved camera'} (not connected)
+                    </option>
+                  )}
+                </select>
+              </label>
+              {camNotice?.kind === 'fallback' && (
+                <button type="button" disabled={running} onClick={() => setCameraRetry((n) => n + 1)}>
+                  Try again
+                </button>
+              )}
+              <p style={{ fontSize: 11, opacity: 0.6, margin: 0 }}>
+                Using a phone? Start its webcam app first; it then appears in this list.
+              </p>
+              <button type="button" onClick={() => setCalibrating(true)}>
+                {calibrated ? 'Recalibrate corners' : 'Calibrate corners'}
+              </button>
+              <label>
+                <input
+                  type="checkbox" checked={config.mirrorX} disabled={running}
+                  onChange={(e) => changeView({ mirrorX: e.target.checked })}
+                />
+                Mirror horizontally
+              </label>
+              <label>
+                <input
+                  type="checkbox" checked={config.mirrorY} disabled={running}
+                  onChange={(e) => changeView({ mirrorY: e.target.checked })}
+                />
+                Flip vertically
+              </label>
+              <p style={{ fontSize: 11, opacity: 0.6, margin: 0 }}>Stop the sequencer to change camera or orientation.</p>
+            </Section>
+
+            <Section
+              title="Colours & detection"
+              hint="Give each piece colour a job, then calibrate the colours you switch on."
+              open={!!openSection.colours} onToggle={() => toggleSection('colours')}
+            >
+              {channels.length === 0 && (
+                <span style={{ fontSize: 11, opacity: 0.6 }}>
+                  No colours yet. Add one, then click a piece on the camera to calibrate it.
+                </span>
+              )}
+              {channels.map((c) => {
+                const isCalib = colourCalib?.mode === 'recal' && colourCalib.id === c.id;
+                const isMelodic = c.role === 'melody' || c.role === 'chord' || c.role === 'bass';
+                return (
+                  <div
+                    key={c.id}
+                    style={{
+                      display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12,
+                      padding: '5px 6px', borderRadius: 6,
+                      border: isCalib ? '1px solid #4caf50' : '1px solid #ffffff14',
+                      background: '#ffffff08',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span
+                        title={`${describeChannel(c)} — click ⟳ then a piece to recalibrate`}
+                        style={{
+                          width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
+                          background: c.swatch, border: '1px solid #0008',
+                        }}
+                      />
+                      <select
+                        style={{ flex: 1, minWidth: 0 }}
+                        value={c.role}
+                        onChange={(e) => setChannelRole(c.id, e.target.value as ColourRole)}
+                      >
+                        {ROLE_OPTIONS.map((o) => (
+                          <option key={o.value} value={o.value}>{o.label}</option>
+                        ))}
+                      </select>
+                      <button
+                        type="button" title="Recalibrate (then click a piece)"
+                        aria-label={`Recalibrate ${describeChannel(c)}`}
+                        onClick={() => recalibrateChannel(c.id)}
+                        style={{ padding: '2px 6px' }}
+                      >
+                        {isCalib ? '◉' : '⟳'}
+                      </button>
+                      <button
+                        type="button" title="Remove colour"
+                        aria-label={`Remove ${describeChannel(c)}`}
+                        onClick={() => removeChannel(c.id)}
+                        style={{ padding: '2px 6px' }}
+                      >
+                        ×
+                      </button>
+                    </div>
+                    {isMelodic && (
+                      <select
+                        style={{ width: '100%' }}
+                        value={c.instrument ?? ''} disabled={running}
+                        onChange={(e) => patchChannel(c.id, { instrument: e.target.value })}
+                        title="Instrument for this colour"
+                      >
+                        <option value="">{c.role === 'bass' ? 'Default (electric bass)' : 'Default (electric piano)'}</option>
+                        {INSTRUMENT_OPTIONS.map((i) => (
+                          <option key={i.key} value={i.key}>{i.name}</option>
+                        ))}
+                      </select>
+                    )}
+                    {c.role === 'drums' && (
+                      <select
+                        style={{ width: '100%' }}
+                        value={c.drum ?? ''} disabled={running}
+                        onChange={(e) => patchChannel(c.id, { drum: e.target.value })}
+                        title="Drum for this colour"
+                      >
+                        <option value="">Vary by row (kick→crash)</option>
+                        {DRUM_OPTIONS.map((d) => (
+                          <option key={d.key} value={d.key}>{d.name}</option>
+                        ))}
+                      </select>
+                    )}
+                    {c.kind === 'black' && (
+                      <label style={{ fontSize: 11 }}>
+                        Darkness ≤ {c.blackBand?.maxValue ?? 34}%
+                        <input
+                          type="range" min={10} max={70} value={Math.round(c.blackBand?.maxValue ?? 34)}
+                          onChange={(e) => setChannelBlackDarkness(c.id, Number(e.target.value))}
+                        />
+                      </label>
+                    )}
+                  </div>
+                );
+              })}
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <button type="button" style={{ flex: 1 }} disabled={running} onClick={addColour}>
+                  {colourCalib?.mode === 'new' ? 'Click a piece on the camera…' : '+ Add colour'}
+                </button>
+                {channels.length > 0 && (
+                  <button
+                    type="button" disabled={running} onClick={clearChannels}
+                    style={{ fontSize: 11, opacity: 0.8 }}
+                    title="Remove all colours"
+                  >
+                    Clear all
+                  </button>
+                )}
+              </div>
+              {anyFader && (
+                <label>
+                  Fader reads
+                  <select
+                    value={config.faderAxis} disabled={running}
+                    onChange={(e) => update({ faderAxis: e.target.value === 'col' ? 'col' : 'row' })}
+                  >
+                    <option value="row">Vertical (low → high)</option>
+                    <option value="col">Horizontal (left → right)</option>
+                  </select>
+                </label>
+              )}
+              {controlChannels.map((c) => {
+                const role = c.role as FaderRole;
+                const range = config.controlRanges[role];
+                return (
+                  <div key={`ctl-${c.id}`} style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span
+                        aria-hidden="true"
+                        style={{ width: 12, height: 12, borderRadius: '50%', background: c.swatch, border: '1px solid #0008' }}
+                      />
+                      <span style={{ flex: 1 }}>{describeChannel(c)}</span>
+                      <span aria-live="off">
+                        {legendValue(role, controlState?.values[role], controlState?.held ?? new Set())}
+                      </span>
+                    </div>
+                    <label>
+                      When it leaves the board
+                      <select
+                        value={config.controlRemoval[role]}
+                        onChange={(e) => update({
+                          controlRemoval: { ...config.controlRemoval, [role]: e.target.value as ControlRemoval },
+                        })}
+                      >
+                        {REMOVAL_LABELS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                    </label>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <label style={{ flex: 1 }}>
+                        Lowest
+                        <input
+                          type="number" step={role === 'tempo' ? 5 : 0.05} value={range.min}
+                          onChange={(e) => update({
+                            controlRanges: { ...config.controlRanges, [role]: { ...range, min: Number(e.target.value) } },
+                          })}
+                        />
+                      </label>
+                      <label style={{ flex: 1 }}>
+                        Highest
+                        <input
+                          type="number" step={role === 'tempo' ? 5 : 0.05} value={range.max}
+                          onChange={(e) => update({
+                            controlRanges: { ...config.controlRanges, [role]: { ...range, max: Number(e.target.value) } },
+                          })}
+                        />
+                      </label>
+                    </div>
+                  </div>
+                );
+              })}
+              <label>
+                Min fill {Math.round(config.minFilledFraction * 100)}%
+                <input
+                  type="range" min={3} max={50} value={Math.round(config.minFilledFraction * 100)}
+                  onChange={(e) => update({ minFilledFraction: Number(e.target.value) / 100, readSettingsCustom: true })}
+                />
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <input
+                  type="checkbox" checked={config.pingPong}
+                  onChange={(e) => update({ pingPong: e.target.checked })}
+                />
+                Ping-pong (sweep → then ←)
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <input
+                  type="checkbox" checked={config.loopBankEnabled}
+                  onChange={(e) => update({ loopBankEnabled: e.target.checked })}
+                />
+                Loop bank (bottom row = save/recall slots)
+              </label>
+              {config.loopBankEnabled && (
+                <LoopBankView
+                  rows={config.rows}
+                  cols={config.cols}
+                  swatchById={new Map(config.channels.map((c) => [c.id, c.swatch]))}
+                  onClear={clearLoopSlotAt}
+                  slots={Array.from({ length: config.cols }, (_, i) => ({
+                    cells: config.loopSlots[i] ?? null,
+                    active: loopBankRef.current.present[i] === true && (config.loopSlots[i] ?? null) != null,
+                  }))}
+                />
+              )}
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <input
+                  type="checkbox" checked={config.variationEnabled}
+                  onChange={(e) => update({ variationEnabled: e.target.checked })}
+                />
+                Variation — shove a piece to its edge = every other pass
+              </label>
+              {config.variationEnabled && (
+                <label>
+                  Shove needed {Math.round(config.variationOffsetThreshold * 100)}%
+                  <input
+                    type="range" min={30} max={85}
+                    value={Math.round(config.variationOffsetThreshold * 100)}
+                    onChange={(e) => update({ variationOffsetThreshold: Number(e.target.value) / 100 })}
+                  />
+                </label>
+              )}
+              {config.variationEnabled && config.numPages > 1 && (
+                <span style={{ fontSize: 11, opacity: 0.7 }}>
+                  Variation applies to a single page only (v1) — set Pages to 1 to use it.
+                </span>
+              )}
+            </Section>
+
+            <Section
+              title="Sound"
+              hint="Pitch follows the piece's row (low at the bottom). Each colour's instrument/drum is set in Colours."
+              open={!!openSection.sound} onToggle={() => toggleSection('sound')}
+            >
+              <label>
+                Key
+                <select
+                  value={config.scaleRootMidi}
+                  onChange={(e) => {
+                    const root = Number(e.target.value);
+                    update({ scaleRootMidi: root });
+                    engineRef.current?.setScale(root, configRef.current.scaleSemitones);
+                  }}
+                >
+                  {NOTE_NAMES.map((n, i) => (
+                    <option key={n} value={60 + i}>{n}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Scale
+                <select
+                  value={config.scaleName}
+                  onChange={(e) => {
+                    const preset = SCALE_PRESETS.find((s) => s.name === e.target.value) ?? SCALE_PRESETS[0];
+                    update({ scaleName: preset.name, scaleSemitones: preset.semitones });
+                    engineRef.current?.setScale(configRef.current.scaleRootMidi, preset.semitones);
+                  }}
+                >
+                  {SCALE_PRESETS.map((s) => (
+                    <option key={s.name} value={s.name}>{s.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Octave {config.octaveShift > 0 ? `+${config.octaveShift}` : config.octaveShift}
+                <input
+                  type="range" min={-2} max={2} step={1} value={config.octaveShift}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    update({ octaveShift: v });
+                    engineRef.current?.setOctaveShift(v);
+                  }}
+                />
+              </label>
+              <label>
+                Note length {config.noteLengthBeats.toFixed(1)} beats
+                <input
+                  type="range" min={1} max={40} value={Math.round(config.noteLengthBeats * 10)}
+                  onChange={(e) => {
+                    const v = Number(e.target.value) / 10;
+                    update({ noteLengthBeats: v });
+                    engineRef.current?.setNoteLength(v);
+                  }}
+                />
+              </label>
+              <label>
+                Volume {Math.round(config.volume * 100)}%
+                <input
+                  type="range" min={0} max={100} value={Math.round(config.volume * 100)}
+                  disabled={volumeReason !== null}
+                  onChange={(e) => {
+                    const v = Number(e.target.value) / 100;
+                    update({ volume: v });
+                    engineRef.current?.setVolume(v);
+                  }}
+                />
+                <span style={REASON_STYLE}>{volumeReason ?? ''}</span>
+              </label>
+              <label>
+                <input
+                  type="checkbox" checked={config.tickEnabled}
+                  onChange={(e) => update({ tickEnabled: e.target.checked })}
+                />
+                Confirmation tick
+              </label>
+            </Section>
+
+            <Section
+              title="Groove & tempo"
+              open={!!openSection.groove} onToggle={() => toggleSection('groove')}
+            >
+              <label>
+                Tempo {config.bpm} BPM
+                <input
+                  type="range" min={50} max={300} value={config.bpm}
+                  disabled={tempoReason !== null}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    update({ bpm: v });
+                    engineRef.current?.setBpm(v); // live, not only on the next start
+                  }}
+                />
+                <span style={REASON_STYLE}>{tempoReason ?? ''}</span>
+              </label>
+              <label>
+                Swing {Math.round(config.swing * 100)}%
+                <input
+                  type="range" min={0} max={60} value={Math.round(config.swing * 100)}
+                  onChange={(e) => {
+                    const v = Number(e.target.value) / 100;
+                    update({ swing: v });
+                    engineRef.current?.setSwing(v);
+                  }}
+                />
+              </label>
+              <label>
+                Humanize {Math.round(config.humanize * 100)}%
+                <input
+                  type="range" min={0} max={100} value={Math.round(config.humanize * 100)}
+                  onChange={(e) => {
+                    const v = Number(e.target.value) / 100;
+                    update({ humanize: v });
+                    engineRef.current?.setHumanize(v);
+                  }}
+                />
+              </label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <span style={{ fontSize: 11, opacity: 0.65 }}>
+                  Polyrhythm — loop length per role (Off = full {config.cols} steps; shorter values drift)
+                </span>
+                {POLY_ROLES.map(({ role, field, label }) => (
+                  <label key={role} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+                    <span style={{ width: 64 }}>{label}</span>
+                    <select
+                      value={config[field]}
+                      onChange={(e) => {
+                        const n = Number(e.target.value);
+                        update({ [field]: n } as Partial<BoardSequencerStored>);
+                        engineRef.current?.setLoopSteps(role, n);
+                      }}
+                    >
+                      <option value={0}>Off</option>
+                      {[2, 3, 4, 5, 6, 7, 8].filter((n) => n <= config.cols).map((n) => (
+                        <option key={n} value={n}>{n}</option>
+                      ))}
+                    </select>
+                  </label>
+                ))}
+              </div>
+            </Section>
+
+            <Section
+              title="Pattern length"
+              open={!!openSection.pattern} onToggle={() => toggleSection('pattern')}
+            >
+              <label>
+                Rows
+                <select
+                  value={config.rows} disabled={running}
+                  onChange={(e) => updateGrid({ rows: Number(e.target.value) })}
+                >
+                  {[2, 3, 4, 5, 6, 7, 8].map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </label>
+              <label>
+                Steps
+                <select
+                  value={config.cols} disabled={running}
+                  onChange={(e) => updateGrid({ cols: Number(e.target.value) })}
+                >
+                  {[2, 3, 4, 5, 6, 7, 8, 10, 12, 16].map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </label>
+              <label>
+                Pages
+                <select
+                  value={config.numPages} disabled={running}
+                  onChange={(e) => setPagesCount(Number(e.target.value))}
+                >
+                  {[1, 2, 4].map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </label>
+              {config.numPages > 1 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <span style={{ fontSize: 11, opacity: 0.65 }}>
+                    Selected page (●) plays live; Capture freezes it and moves on. Loop = {config.numPages * config.cols} steps.
+                  </span>
+                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                    {Array.from({ length: config.numPages }, (_, i) => {
+                      const isSel = i === selectedPage;
+                      const isPlaying = running && i === playingPage;
+                      const hasSnapshot = (config.pages[i]?.length ?? 0) > 0;
+                      return (
+                        <button
+                          key={i} type="button" onClick={() => selectPage(i)}
+                          style={{
+                            fontSize: 12, padding: '4px 10px',
+                            fontWeight: isSel ? 700 : 400,
+                            border: isPlaying ? '2px solid #4caf50' : '1px solid #888',
+                            opacity: hasSnapshot || isSel ? 1 : 0.5,
+                          }}
+                        >
+                          {String.fromCharCode(65 + i)}{isSel ? ' ●' : ''}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <button
+                    type="button" style={{ fontSize: 12 }} disabled={!running}
+                    onClick={capturePage}
+                  >
+                    Capture board → Page {String.fromCharCode(65 + selectedPage)}
+                  </button>
+                </div>
+              )}
+            </Section>
+
+            <Section
+              title="Backing song"
+              open={!!openSection.song} onToggle={() => toggleSection('song')}
+            >
+              <label>
+                Backing song
+                <select value={selectedSongId} disabled={running} onChange={(e) => void handleSelectSong(e.target.value)}>
+                  <option value="">None (standalone)</option>
+                  {SONG_LIBRARY.map((s) => (
+                    <option key={s.id} value={s.id}>{s.title}</option>
+                  ))}
+                </select>
+              </label>
+              {selectedSongId && (
+                <p style={{ fontSize: 11, opacity: 0.75, margin: 0 }}>
+                  {songStatus === 'loading' && 'Loading song…'}
+                  {songStatus === 'loaded' && 'Song ready — board will lock to its tempo + chords'}
+                  {songStatus === 'error' && 'Song failed to load'}
+                </p>
+              )}
+            </Section>
+
+            <Section
+              title="Per-colour mixer"
+              open={!!openSection.mixer} onToggle={() => toggleSection('mixer')}
+            >
+              {channels.filter((c) => c.role === 'melody' || c.role === 'chord' || c.role === 'bass').length === 0 ? (
+                <span style={{ fontSize: 11, opacity: 0.6 }}>Add a melody/chord/bass colour to mix it.</span>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <div style={{ display: 'flex', gap: 4, fontSize: 10, opacity: 0.7 }}>
+                    <span style={{ width: 20 }} />
+                    <span style={{ width: 48, textAlign: 'center' }}>Vol</span>
+                    <span style={{ width: 48, textAlign: 'center' }}>Tone</span>
+                    <span style={{ width: 48, textAlign: 'center' }}>Rev</span>
+                    <span style={{ width: 48, textAlign: 'center' }}>Dly</span>
+                  </div>
+                  {channels.filter((c) => c.role === 'melody' || c.role === 'chord' || c.role === 'bass').map((c) => (
+                    <div key={c.id} style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                      <span style={{
+                        width: 14, height: 14, borderRadius: '50%', flexShrink: 0,
+                        background: c.swatch, border: '1px solid #0008',
+                      }}
+                      />
+                      {([
+                        ['volume', c.volume ?? 1],
+                        ['tone', c.tone ?? 1],
+                        ['reverbSend', c.reverbSend ?? 0.18],
+                        ['delaySend', c.delaySend ?? 0],
+                      ] as const).map(([field, val]) => (
+                        <input
+                          key={field} type="range" min={0} max={100} style={{ width: 48 }}
+                          value={Math.round(val * 100)}
+                          onChange={(e) => setChannelMix(c.id, field, Number(e.target.value) / 100)}
+                        />
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Section>
+          </div>
+                </>
+              )}
+            </div>
+            {/* Warped board (abstract view), alongside the camera while playing. */}
+            {view === 'play' && (
+              <div style={{ flex: '1 1 0', minWidth: 0, minHeight: 0 }}>
+                <WarpedBoardView
+                  rows={config.rows} cols={config.cols} active={active} playheadCol={playheadCol}
+                  colourFor={(id) => channelById.get(id)?.swatch ?? '#e23'}
+                />
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }
