@@ -144,13 +144,16 @@ describe('ConfirmDialog', () => {
     const dialog = r.get('[role="dialog"]');
     expect(dialog.getAttribute('aria-modal')).toBe('true');
     const buttons = r.all('button');
-    // Focus lands on the confirm button, which is last in the dialog.
-    expect(document.activeElement).toBe(buttons[buttons.length - 1]);
-
-    pressKey(document.activeElement!, 'Tab');
+    // Focus lands on Cancel, not on Remove. A player with tremor, or a switch that fires
+    // twice, can press whatever has focus the instant a dialog opens — and this dialog's
+    // other button destroys their work.
     expect(document.activeElement).toBe(buttons[0]);
+    expect(buttons[0].textContent).toBe('Cancel');
+
     pressKey(document.activeElement!, 'Tab', { shiftKey: true });
     expect(document.activeElement).toBe(buttons[buttons.length - 1]);
+    pressKey(document.activeElement!, 'Tab');
+    expect(document.activeElement).toBe(buttons[0]);
 
     pressKey(dialog, 'Escape');
     expect(onCancel).toHaveBeenCalledTimes(1);
@@ -158,5 +161,38 @@ describe('ConfirmDialog', () => {
 
     r.unmount();
     expect(document.activeElement).toBe(opener);
+  });
+
+  it('a dialog that is not destructive still opens on its main action', () => {
+    const r = render(
+      <ConfirmDialog
+        title="Start again?"
+        confirmLabel="Start"
+        tone="primary"
+        onConfirm={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+    const buttons = r.all('button');
+    expect(document.activeElement).toBe(buttons[buttons.length - 1]);
+    r.unmount();
+  });
+
+  it('restores focus to something real when the opener is destroyed with it', () => {
+    // Confirming Remove unmounts the button that opened the dialog, so focusing it back
+    // would do nothing at all and drop the player at the top of the page.
+    const heading = document.createElement('h2');
+    document.body.appendChild(heading);
+    const opener = document.createElement('button');
+    document.body.appendChild(opener);
+    opener.focus();
+
+    const r = render(
+      <ConfirmDialog title="Remove Red?" confirmLabel="Remove" onConfirm={vi.fn()} onCancel={vi.fn()} />,
+    );
+    opener.remove();
+    r.unmount();
+    expect(document.activeElement).toBe(heading);
+    heading.remove();
   });
 });

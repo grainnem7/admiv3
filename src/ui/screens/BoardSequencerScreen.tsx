@@ -54,6 +54,7 @@ import { clampZone, describeZone, zoneSlotCount, type ZoneMode } from '../../tra
 import { LabeledSlider } from './boardSequencer/ui/LabeledSlider';
 import { Button } from './boardSequencer/ui/Button';
 import { Modal } from './boardSequencer/ui/Modal';
+import { ConfirmDialog } from './boardSequencer/ui/ConfirmDialog';
 import { colourMatchesBoardRaw, type NudgeSignal } from './boardSequencer/playNudge';
 import { spaceTogglesPlay, type BoardScreenView } from './boardSequencer/spaceKey';
 import { ghostsForSave } from '../../tracking/handGuard/knockGuard';
@@ -338,6 +339,10 @@ export default function BoardSequencerScreen() {
   const [muted, setMuted] = useState(false);
   const mutedRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
+  /** A sound problem (backing song, audio engine). Never a camera problem. */
+  const [soundError, setSoundError] = useState<string | null>(null);
+  /** A saved loop the player has asked to clear, waiting on the confirmation. */
+  const [clearSlotTarget, setClearSlotTarget] = useState<number | null>(null);
   // Camera choice + camera check: available cameras, what the running one delivers,
   // a notice (chosen camera missing / just switched), how colourful the frames the
   // app READS are, and the colour the last calibration click captured.
@@ -407,6 +412,15 @@ export default function BoardSequencerScreen() {
     engineRef.current?.setSelectedPage(i);
   }, []);
 
+  // The page the camera edits has to be inside THIS player's number of pages. Switching
+  // profiles swaps numPages without touching the selection, and a selection past the end
+  // made the engine play an empty snapshot instead of the live board: every counter
+  // silent, nothing on screen saying why. Clamping here covers every path, not just the
+  // Pages control.
+  useEffect(() => {
+    if (selectedPage >= config.numPages) selectPage(0);
+  }, [config.numPages, selectedPage, selectPage]);
+
   // Change how many pages the sequence chains across; clamp the selection.
   const setPagesCount = useCallback((n: number) => {
     setConfig((prev) => {
@@ -468,6 +482,14 @@ export default function BoardSequencerScreen() {
     announce(`Saved to slot ${slot + 1} — put a counter on slot ${slot + 1} to play it.`);
     void cfg;
   }, [persistLoopSlots, letGoGhosts, announce, activeCellsRef, knockRef, loopBankRef, configRef]);
+
+  /** The detected counters as cells, for the word list when nothing is playing yet. */
+  const cellsFromOccupied = useCallback((occ: ReadonlyMap<string, PieceColour>): ActiveCell[] => (
+    [...occ].map(([key, colour]) => {
+      const [row, col] = key.split(',').map(Number);
+      return { row, col, colour };
+    })
+  ), []);
 
   const clearLoopSlotAt = useCallback((slot: number) => {
     // The bank may not exist yet (nothing has been played this session), so the saved
@@ -912,7 +934,10 @@ export default function BoardSequencerScreen() {
       const engine = engineRef.current;
       setLatestFrame(rf);
       setControlState(controls);
-      setActive(frame.patternCells);
+      // Settled pattern cells only exist while playing, so in Set up (and when stopped)
+      // this falls back to what the camera can see. Otherwise "On the board now" and
+      // Describe board told the player the board was empty with counters all over it.
+      setActive(runningRef.current ? frame.patternCells : cellsFromOccupied(frame.occupied));
       setPlayheadCol(runningRef.current && engine ? engine.getPlayheadCol(cfg.cols) : 0);
       if (cfg.numPages > 1 && engine) setPlayingPage(engine.getCurrentPage());
       setStats({ byColour: frame.byColour, settled: frame.activeMap.size });
@@ -1002,7 +1027,9 @@ export default function BoardSequencerScreen() {
       await songEngineRef.current.loadSong(song);
       setSongStatus('loaded');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Song failed to load');
+      // NOT setError: that one means the camera, and reporting a song problem there told
+      // the player their camera was broken and locked every set-up step behind it.
+      setSoundError(err instanceof Error ? err.message : 'Song failed to load');
       setSongStatus('error');
     }
   }, []);
@@ -1083,12 +1110,20 @@ export default function BoardSequencerScreen() {
     if (startingRef.current) return;
     startingRef.current = performance.now();
     const generation = startingRef.current;
+    setSoundError(null);
     try {
       await startEngine(generation);
+    } catch (err) {
+      // Without this the button simply did nothing: no sound, no error, no reason — and
+      // the player presses it again and again.
+      const text = err instanceof Error ? err.message : 'The sound could not be started.';
+      setSoundError(text);
+      announce(`Could not start. ${text}`);
+      stop();
     } finally {
       if (startingRef.current === generation) startingRef.current = null;
     }
-  }, [startEngine, startingRef]);
+  }, [startEngine, startingRef, stop, announce]);
 
   // Space starts and stops the board in Play and Big board. The global handler in
   // App.tsx stands down on this screen, so this is the only one listening.
@@ -1124,6 +1159,10 @@ export default function BoardSequencerScreen() {
   // board from a different place, so the corners are re-clicked; colours are kept
   // but usually need recalibrating because each camera renders colour differently.
   const changeCamera = useCallback((deviceId: string) => {
+    // Tapping the camera that is already chosen is not a change. It used to run the whole
+    // "new camera" path anyway, which throws the board calibration away — so opening
+    // Camera just to check the picture and touching the selected row destroyed it.
+    if (deviceId === configRef.current.cameraDeviceId) return;
     const label = cameras.find((c) => c.deviceId === deviceId)?.label ?? '';
     fellBackRef.current = false; // an explicit choice supersedes any fallback
     setLastSample(null);
@@ -1136,7 +1175,7 @@ export default function BoardSequencerScreen() {
       }
       : null);
     changeView({ cameraDeviceId: deviceId, cameraLabel: label });
-  }, [cameras, changeView]);
+  }, [cameras, changeView, configRef]);
 
   // Average HSV under a click (in displayed space). Draws the frame with the
   // same mirror transforms so a click on the displayed video samples the right
@@ -1299,6 +1338,8 @@ export default function BoardSequencerScreen() {
   const palette = BOARD_TOKENS.calm[config.themeMode];
   const layout = layoutFor(config.handedness, viewportWidth, uiSize === 'large' ? 'large' : 'standard');
 
+  // Sound problems (a backing song, the audio engine) are reported apart from camera
+  // problems, because they block completely different things.
   const camera: CameraStatus = {
     phase: error !== null ? 'error'
       : fellBackRef.current ? 'fallback'
@@ -1308,7 +1349,9 @@ export default function BoardSequencerScreen() {
   const setupCfg = { enabled: config.enabled, channels: config.channels };
   const headerNotice: HeaderNotice | null = error
     ? { kind: 'error', text: error }
-    : camNotice;
+    : soundError
+      ? { kind: 'error', text: soundError }
+      : camNotice;
 
 
   const playReason = canPlay(setupCfg, camera)
@@ -1818,7 +1861,7 @@ export default function BoardSequencerScreen() {
                   rows={config.rows}
                   cols={config.cols}
                   swatchById={new Map(config.channels.map((c) => [c.id, c.swatch]))}
-                  onClear={clearLoopSlotAt}
+                  onClear={(slot: number) => setClearSlotTarget(slot)}
                   slots={Array.from({ length: loopSlotCount }, (_, i) => ({
                     cells: config.loopSlots[i] ?? null,
                     // In Toggle mode a loop plays without its counter, so "playing" is
@@ -2309,6 +2352,16 @@ export default function BoardSequencerScreen() {
             </div>
           )}
         />
+
+        {clearSlotTarget !== null && (
+          <ConfirmDialog
+            title={`Clear loop ${clearSlotTarget + 1}?`}
+            body="The loop saved on this pad is deleted for this player. There is no way to get it back."
+            confirmLabel="Clear it"
+            onConfirm={() => { clearLoopSlotAt(clearSlotTarget); setClearSlotTarget(null); }}
+            onCancel={() => setClearSlotTarget(null)}
+          />
+        )}
 
         {showHelp && (
           <Modal label="How to play" onClose={() => setShowHelp(false)}>

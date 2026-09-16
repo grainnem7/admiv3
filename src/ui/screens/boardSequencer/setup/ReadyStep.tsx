@@ -69,7 +69,7 @@ export function ReadyStep({
           : (
             <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--bs-fg2)' }}>
               {detected.map((d) => (
-                <li key={`${d.row},${d.col}`}>{`${nameOf(d.colour)} · row ${d.row + 1} · step ${d.col + 1}`}</li>
+                <li key={`${d.row},${d.col},${d.colour}`}>{`${nameOf(d.colour)} · row ${d.row + 1} · step ${d.col + 1}`}</li>
               ))}
             </ul>
           )}

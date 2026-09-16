@@ -22,9 +22,16 @@ export function ConfirmDialog({
 }: ConfirmDialogProps): JSX.Element {
   const panel = useRef<HTMLDivElement | null>(null);
   const confirmRef = useRef<HTMLButtonElement | null>(null);
+  const cancelRef = useRef<HTMLButtonElement | null>(null);
   const onKeyDown = useModalFocus(panel, onCancel);
 
-  useEffect(() => { confirmRef.current?.focus(); }, []);
+  // Focus lands on the safe button when the action destroys something. A player with
+  // tremor or spasticity, or a switch that fires twice, can press whatever has focus the
+  // moment a dialog opens — and that must never be the thing that wipes their work.
+  useEffect(() => {
+    if (tone === 'danger') cancelRef.current?.focus();
+    else confirmRef.current?.focus();
+  }, [tone]);
 
   return (
     <div
@@ -49,7 +56,7 @@ export function ConfirmDialog({
         <h2 style={{ margin: 0, fontSize: 18 }}>{title}</h2>
         {body && <p style={{ margin: 0, color: 'var(--bs-fg2)' }}>{body}</p>}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-          <Button tone="secondary" onClick={onCancel}>{cancelLabel}</Button>
+          <Button ref={cancelRef} tone="secondary" onClick={onCancel}>{cancelLabel}</Button>
           <Button ref={confirmRef} tone={tone} onClick={onConfirm}>{confirmLabel}</Button>
         </div>
       </div>

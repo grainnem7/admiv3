@@ -92,7 +92,12 @@ export function CameraStep({
         onChange={(v) => onViewChange({ mirrorX: v })}
         hint="Changing this asks for the board corners again. Your colours are kept."
       />
-      <Switch label="Flip the picture upside down" checked={mirrorY} onChange={(v) => onViewChange({ mirrorY: v })} />
+      <Switch
+        label="Flip the picture upside down"
+        checked={mirrorY}
+        onChange={(v) => onViewChange({ mirrorY: v })}
+        hint="Changing this asks for the board corners again. Your colours are kept."
+      />
 
       <Disclosure summary="Where to put the camera">
         <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--bs-fg2)', fontSize: 12, lineHeight: 1.5 }}>

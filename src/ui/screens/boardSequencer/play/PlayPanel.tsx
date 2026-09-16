@@ -57,7 +57,6 @@ export function PlayPanel({
         {muted ? 'Sound off' : 'Mute'}
       </Button>
       <span
-        role="status"
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 8, padding: '4px 10px',
           borderRadius: 999, background: 'var(--bs-elev)', color: 'var(--bs-fg)', fontSize: 13,
@@ -70,9 +69,15 @@ export function PlayPanel({
             background: running && beatOn ? 'var(--bs-accent)' : 'var(--bs-border-control)',
           }}
         />
-        {running ? `Playing · ${Math.round(bpm)} BPM · step ${step + 1} of ${cols}` : `Stopped · ${Math.round(bpm)} BPM`}
-        {variationLap !== null && running && ` · lap ${variationLap ? 'B' : 'A'}`}
-        {heldCount > 0 && ` · ✋ holding ${heldCount}`}
+        {/* Only the transport is announced. The step, the lap and the held count change
+            several times a second, and putting them in a live region meant a screen
+            reader read the pill over and over and nothing else on the screen got through. */}
+        <span role="status">{running ? 'Playing' : 'Stopped'}</span>
+        <span aria-hidden="true">
+          {running ? ` · ${Math.round(bpm)} BPM · step ${step + 1} of ${cols}` : ` · ${Math.round(bpm)} BPM`}
+          {variationLap !== null && running && ` · lap ${variationLap ? 'B' : 'A'}`}
+          {heldCount > 0 && ` · ✋ holding ${heldCount}`}
+        </span>
       </span>
       {handGuardWaiting && (
         <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
