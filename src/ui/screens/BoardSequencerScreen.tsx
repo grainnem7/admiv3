@@ -50,6 +50,7 @@ import { NudgeBanner } from './boardSequencer/play/NudgeBanner';
 import { SwatchChip } from './boardSequencer/ui/SwatchChip';
 import { Button } from './boardSequencer/ui/Button';
 import type { NudgeSignal } from './boardSequencer/playNudge';
+import { spaceTogglesPlay, type BoardScreenView } from './boardSequencer/spaceKey';
 import type { FiredNote } from '../../songs/BoardSequencerEngine';
 import {
   SETUP_STEPS, canOpenStep, canPlay, resolveEntry, stepIndicator,
@@ -221,7 +222,7 @@ export default function BoardSequencerScreen() {
 
   // Guided Set up vs Play. The entry step is resolved once, from the config alone:
   // routing never moves the player on its own.
-  const [view, setView] = useState<'setup' | 'play'>('setup');
+  const [view, setView] = useState<BoardScreenView>('setup');
   const [step, setStep] = useState<SetupStep>(() => resolveEntry(
     { enabled: storedRef.current?.enabled ?? false, channels: storedRef.current?.channels ?? [] },
     storedRef.current !== null,
@@ -233,6 +234,8 @@ export default function BoardSequencerScreen() {
   const [pendingColour, setPendingColour] = useState<LastColourSample | null>(null);
   const [squarePicker, setSquarePicker] = useState<{ row: number; col: number } | null>(null);
   const [showHelp, setShowHelp] = useState(false);
+  const bigBoardRef = useRef<HTMLDivElement | null>(null);
+  const bigBoardButtonRef = useRef<HTMLButtonElement | null>(null);
   // Play-side visuals, all read from audible time so they match what is heard.
   const [pops, setPops] = useState<Pop[]>([]);
   const [latestFrame, setLatestFrame] = useState<RuntimeFrame | null>(null);
@@ -503,6 +506,25 @@ export default function BoardSequencerScreen() {
     setError(null);
   }, [config.cameraDeviceId, cameraRetry]);
 
+  // Big board follows the browser: leaving fullscreen by any route comes back to Play.
+  useEffect(() => {
+    if (view !== 'bigBoard') return;
+    const root = bigBoardRef.current;
+    root?.focus();
+    void root?.requestFullscreen?.().catch(() => {
+      // Refused (or unsupported): the view still fills the window, which is the point.
+    });
+    const onChange = (): void => {
+      if (document.fullscreenElement === null) setView('play');
+    };
+    document.addEventListener('fullscreenchange', onChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', onChange);
+      if (document.fullscreenElement !== null) void document.exitFullscreen?.().catch(() => {});
+      bigBoardButtonRef.current?.focus();
+    };
+  }, [view]);
+
   // The handedness layout switches at a breakpoint, so the width has to be watched.
   useEffect(() => {
     const onResize = (): void => setViewportWidth(window.innerWidth);
@@ -719,6 +741,20 @@ export default function BoardSequencerScreen() {
     runningRef.current = true;
     setRunning(true);
   }, [engineRef, homographyRef, loopBankRef, modeRef, runningRef, videoRef]);
+
+  // Space starts and stops the board in Play and Big board. The global handler in
+  // App.tsx stands down on this screen, so this is the only one listening.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent): void => {
+      if (e.key !== ' ' || e.repeat) return;
+      if (!spaceTogglesPlay(view, e.target)) return;
+      e.preventDefault();
+      if (runningRef.current) stop();
+      else void start();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [view, start, stop, runningRef]);
 
   // Changing orientation or camera invalidates calibration (it was captured in the
   // old view), so force a fresh corner click in the new space.
@@ -1461,6 +1497,22 @@ export default function BoardSequencerScreen() {
     bankSlots: latestFrame?.frame.bankSlots ?? null,
   };
 
+  const boardView = (
+    <BoardView
+      rows={config.rows}
+      cols={config.cols}
+      frame={boardFrame}
+      pops={pops}
+      playheadCol={playheadCol}
+      playing={running}
+      pingPongDirection={pingDir}
+      swatchFor={(id) => channelById.get(id)?.swatch ?? '#e23'}
+      palette={palette}
+      pageLabel={config.numPages > 1 ? `Page ${String.fromCharCode(65 + playingPage)} · live` : null}
+      reducedMotion={reducedMotion}
+    />
+  );
+
   const stage = (
     <div style={{ flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
       {view === 'play' && (
@@ -1473,23 +1525,7 @@ export default function BoardSequencerScreen() {
           onDismiss={(kind) => { dismiss(kind); setNudge(null); }}
         />
       )}
-      {view === 'play' && (
-        <div style={{ flex: 1, minHeight: 200 }}>
-          <BoardView
-            rows={config.rows}
-            cols={config.cols}
-            frame={boardFrame}
-            pops={pops}
-            playheadCol={playheadCol}
-            playing={running}
-            pingPongDirection={pingDir}
-            swatchFor={(id) => channelById.get(id)?.swatch ?? '#e23'}
-            palette={palette}
-            pageLabel={config.numPages > 1 ? `Page ${String.fromCharCode(65 + playingPage)} · live` : null}
-            reducedMotion={reducedMotion}
-          />
-        </div>
-      )}
+      {view === 'play' && <div style={{ flex: 1, minHeight: 200 }}>{boardView}</div>}
       <div style={view === 'play'
         ? { width: 220, alignSelf: layout.pip === 'bottom-left' ? 'flex-start' : 'flex-end' }
         : undefined}
@@ -1590,6 +1626,43 @@ export default function BoardSequencerScreen() {
     </div>
   );
 
+  if (view === 'bigBoard') {
+    return (
+      <div
+        ref={bigBoardRef}
+        tabIndex={-1}
+        className="bs-root board-sequencer-screen"
+        data-bs-style="calm"
+        data-bs-mode={config.themeMode}
+        style={{
+          display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw',
+          padding: 12, boxSizing: 'border-box', gap: 8, background: 'var(--bs-bg)',
+        }}
+        onKeyDown={(e) => {
+          // Esc leaves when the browser isn't in fullscreen (there it exits fullscreen,
+          // and the fullscreenchange handler brings us back).
+          if (e.key === 'Escape' && document.fullscreenElement === null) setView('play');
+        }}
+      >
+        <div style={{ flex: 1, minHeight: 0 }}>{boardView}</div>
+        <div
+          style={{
+            display: 'flex', gap: 8, alignItems: 'center',
+            justifyContent: layout.bigBoardControls === 'left' ? 'flex-start' : 'flex-end',
+          }}
+        >
+          {running
+            ? <Button tone="primary" onClick={stop}>■ Stop</Button>
+            : <Button tone="primary" onClick={() => void start()}>▶ Play</Button>}
+          <Button tone="secondary" aria-pressed={muted} disabled={!running} onClick={toggleMuted}>
+            {muted ? 'Sound off' : 'Mute'}
+          </Button>
+          <Button tone="secondary" onClick={() => setView('play')}>Exit big board</Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className="bs-root board-sequencer-screen"
@@ -1649,7 +1722,15 @@ export default function BoardSequencerScreen() {
                 <span style={{ color: 'var(--bs-fg2)', fontSize: 13 }}>
                   {running ? 'Playing' : 'Stopped'}
                 </span>
-                <button type="button" onClick={() => { setView('setup'); }}>⚙ Set up</button>
+                <Button
+                  tone="secondary"
+                  onClick={() => { if (running) stop(); setView('setup'); }}
+                >
+                  ⚙ Set up
+                </Button>
+                <Button ref={bigBoardButtonRef} tone="secondary" aria-label="Big board" onClick={() => setView('bigBoard')}>
+                  <span aria-hidden="true">⤢</span>
+                </Button>
               </div>
             )}
           />
