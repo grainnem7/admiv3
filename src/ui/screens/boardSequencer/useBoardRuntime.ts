@@ -27,6 +27,7 @@ import {
 import { frameMeanSaturation } from '../../../tracking/cameraCheck';
 import { startVideoFrameLoop } from '../../../tracking/videoFrameLoop';
 import { stepBoardFrame, suppressSpill, type BoardFrameOutput } from '../../../tracking/boardFrame';
+import { splitByZone } from '../../../tracking/zones';
 import type { BoardSequencerEngine } from '../../../songs/BoardSequencerEngine';
 import { emptyLoopBank, type LoopBankState } from '../../../songs/loopBank';
 import type { Mat3 } from '../../../utils/homography';
@@ -294,13 +295,14 @@ export function useBoardRuntime(opts: {
       engineRef.current?.setPingPong(cfg.pingPong);
       const running = runningRef.current && !!modeRef.current && !!engineRef.current;
       const modeResult = running && modeRef.current ? modeRef.current.step(visible, dtMs, nowMs) : null;
-      // Knock guard: only sequenced note cells count, and never the loop-bank row.
+      // Knock guard: only the cells that actually play a note count. Lifting a counter
+      // off a control or loop lane is not a knock, and which cells those are comes from
+      // the lanes — the same rule the pattern itself uses.
       let knocked = false;
       if (running && modeResult && cfg.knockGuardEnabled) {
-        const bankRow = cfg.loopBankEnabled ? cfg.rows - 1 : -1;
-        const notes = (cells: ActiveCell[]): ActiveCell[] => cells.filter(
-          (c) => c.row !== bankRow && sequencedColours.has(c.colour),
-        );
+        const notes = (cells: ActiveCell[]): ActiveCell[] =>
+          splitByZone(cells, cfg.controlZone, cfg.loopZone).pattern
+            .filter((c) => sequencedColours.has(c.colour));
         const now = notes(modeResult.activeCells);
         const step = stepKnock(knockRef.current, notes(settledBefore), now, held, nowMs, {
           minCount: cfg.knockMinCount,
