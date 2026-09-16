@@ -253,7 +253,10 @@ export default function BoardSequencerScreen() {
   // (`enabled` is only true once corners have been clicked and saved), so a
   // setting saved before calibrating can't make the board look ready.
   const calibrated = config.enabled;
-  const [calibrating, setCalibrating] = useState(false);
+  // How the corner editor was opened: 'tap' starts from nothing, 'review' checks corners
+  // that already exist. "Tap corners myself" must mean tapping, even for a board that is
+  // already set up.
+  const [calibrating, setCalibrating] = useState<'tap' | 'review' | null>(null);
 
   // The runtime owns the camera, the per-camera-frame detection loop and the rAF draw
   // loop; this screen supplies the callbacks below and drives start/stop through its refs.
@@ -658,7 +661,7 @@ export default function BoardSequencerScreen() {
       announce(result.reasons[0] ?? '');
       if (result.corners) {
         // Show it in the editor for review; Looks right is what saves it.
-        setCalibrating(true);
+        setCalibrating('review');
       }
     } finally {
       if (findAbortRef.current === controller) findAbortRef.current = null;
@@ -688,7 +691,15 @@ export default function BoardSequencerScreen() {
         maxFrames: 5,
         enough: () => false,
       });
-      if (controller.signal.aborted || burst.frames.length === 0) return;
+      if (controller.signal.aborted) return;
+      if (burst.frames.length === 0) {
+        // Saying nothing here looked exactly like a colour search that found nothing.
+        setColourProposal({
+          colours: [],
+          message: 'I couldn’t get a picture from the camera. Check it is still connected, then try again.',
+        });
+        return;
+      }
       const frame = burst.frames[burst.frames.length - 1];
       const h = homographyForCorners(cfg.corners, frame.width, frame.height);
       const warped = warpToBoard(frame.data, frame.width, frame.height, h, cfg.boardSquares);
@@ -808,7 +819,7 @@ export default function BoardSequencerScreen() {
   // and an armed colour picker can't record a sample the player never sees.
   useEffect(() => {
     if (view === 'setup' && step === 'board') return;
-    setCalibrating(false);
+    setCalibrating(null);
   }, [view, step]);
 
   useEffect(() => {
@@ -938,7 +949,7 @@ export default function BoardSequencerScreen() {
       });
       const video = videoRef.current;
       if (video) homographyRef.current = homographyForCorners(corners, video.videoWidth, video.videoHeight);
-      setCalibrating(false);
+      setCalibrating(null);
     },
     [homographyRef, videoRef],
   );
@@ -1101,7 +1112,7 @@ export default function BoardSequencerScreen() {
       };
       return next;
     });
-    setCalibrating(true);
+    setCalibrating('tap');
   }, []);
 
   // Pick a different camera (external webcam, phone app, …). A new camera sees the
@@ -1882,9 +1893,9 @@ export default function BoardSequencerScreen() {
       nudgesEnabled={config.boardNudgesEnabled}
       playerName={activePlayer?.name ?? 'the player'}
       running={running}
-      editing={calibrating}
+      editing={calibrating !== null}
       onFindBoard={() => void findBoard()}
-      onTapCorners={() => { setProposal(null); setCalibrating(true); }}
+      onTapCorners={() => { setProposal(null); setCalibrating('tap'); }}
       finding={finding}
       onCancelFind={() => findAbortRef.current?.abort()}
       findMessage={proposal?.reasons[0] ?? null}
@@ -2030,7 +2041,7 @@ export default function BoardSequencerScreen() {
           signal={nudge}
           align={layout.footerAlign}
           nameFor={labelForId}
-          onFindBoard={() => { stop(); setView('setup'); setStep('board'); setCalibrating(true); }}
+          onFindBoard={() => { stop(); setView('setup'); setStep('board'); setCalibrating('review'); }}
           onRecalibrate={(id) => { stop(); setView('setup'); setStep('colours'); recalibrateChannel(id); }}
           onDismiss={(kind) => { dismiss(kind); setNudge(null); }}
           onLetGo={() => { letGoGhosts(); setNudge(null); }}
@@ -2052,10 +2063,10 @@ export default function BoardSequencerScreen() {
         onPick={colourCalib ? (pt) => sampleColourClick(pt.x, pt.y) : undefined}
         label={colourCalib ? `Tap a counter to set ${calibLabel}` : 'Board camera'}
       >
-        {calibrating && (
+        {calibrating !== null && (
           <BoardCornerEditor
-            corners={proposal?.corners ?? (config.enabled ? config.corners : undefined)}
-            mode={proposal?.corners ? 'review' : config.enabled ? 'review' : 'tap'}
+            corners={calibrating === 'tap' ? undefined : proposal?.corners ?? (config.enabled ? config.corners : undefined)}
+            mode={calibrating}
             rows={config.rows}
             cols={config.cols}
             controlsSide={layout.nudgePad}
@@ -2068,9 +2079,9 @@ export default function BoardSequencerScreen() {
                   : {},
               );
               setProposal(null);
-              setCalibrating(false);
+              setCalibrating(null);
             }}
-            onCancel={() => { setProposal(null); setCalibrating(false); }}
+            onCancel={() => { setProposal(null); setCalibrating(null); }}
           />
         )}
         {colourCalib && squarePicker && config.enabled && (() => {
@@ -2245,7 +2256,12 @@ export default function BoardSequencerScreen() {
             setActivePlayerState(getActiveBoardPlayer());
             setChooserOpen(false);
             setView('setup');
-            setStep('colours');
+            // A new player needs their own jobs for the rig's colours — but only once
+            // there is a board to put them on. Otherwise start them at the beginning.
+            const view = { enabled: loaded?.enabled ?? false, channels: loaded?.channels ?? [] };
+            setStep(canOpenStep('colours', view, camera, loaded !== null)
+              ? 'colours'
+              : resolveEntry(view, loaded !== null));
           }}
           onCancel={players.length > 0 ? () => setChooserOpen(false) : undefined}
         />

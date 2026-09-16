@@ -169,7 +169,7 @@ export class BoardSequencerEngine {
     // Mix bus → limiter → shared effects bus. Shared reverb + delay buses return
     // into the mix; per-row sends feed them. Limiter stops stacked voices clipping.
     const mix = ctx.createGain();
-    mix.gain.value = this.cfg.volume;
+    mix.gain.value = this.muted ? 0 : this.cfg.volume;
     const limiter = new Tone.Limiter(-2);
     Tone.connect(mix, limiter);
     if (dest) limiter.connect(dest);
@@ -351,15 +351,26 @@ export class BoardSequencerEngine {
     return firesThisLap(true, beat, this.cfg.cols);
   }
 
-  /** Pause/resume all sound (the clock + detection keep running; output is silent). */
+  /**
+   * Pause/resume all sound. The clock, the detection and the whole step keep running and
+   * only the output is silenced, so the lights, the "Now:" line and the playhead carry on
+   * — players who rely on watching rather than hearing must not lose the pattern the
+   * moment someone presses Mute.
+   */
   setMuted(muted: boolean): void {
     this.muted = muted;
+    this.applyMixGain();
   }
 
   /** Live sound controls (safe to call while running). */
   setVolume(v: number, glideSec = 0.02): void {
     this.cfg.volume = v;
-    if (this.mix) this.mix.gain.setTargetAtTime(v, Tone.immediate(), glideSec);
+    this.applyMixGain(glideSec);
+  }
+
+  /** Mute wins over the volume, so moving a volume counter can't undo it. */
+  private applyMixGain(glideSec = 0.02): void {
+    if (this.mix) this.mix.gain.setTargetAtTime(this.muted ? 0 : this.cfg.volume, Tone.immediate(), glideSec);
   }
 
   /** Live per-channel mixer (no-op if that channel has no voice). */
@@ -578,7 +589,6 @@ export class BoardSequencerEngine {
    * chord locks melodic pitch.
    */
   private fireStep(beat: number, cellTime: number, secPerBeat: number, chord: BoardChord | null): void {
-    if (this.muted) return;
     const durSec = this.cfg.noteLengthBeats * secPerBeat;
     const melodicLoop = loopLen(this.rawLoop('melodic'), this.cfg.cols);
     // Pattern chaining: pick this beat's page. The selected page plays live from

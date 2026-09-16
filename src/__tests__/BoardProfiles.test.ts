@@ -5,6 +5,7 @@ import {
   createBoardPlayer, setActiveBoardPlayer, splitBoardConfig, resolveBoardConfig, allReferencedChannelIds,
 } from '../profiles/BoardProfiles';
 import { DEFAULT_BOARD_SEQUENCER_CONFIG, type BoardSequencerStored } from '../profiles/BoardSequencerConfig';
+import { suggestReadSettings } from '../tracking/boardGrid';
 
 const withColours = (): BoardSequencerStored => ({
   ...DEFAULT_BOARD_SEQUENCER_CONFIG,
@@ -83,6 +84,64 @@ describe('BoardProfiles', () => {
     const tim = loadActiveBoardConfig()!;
     saveActiveBoardConfig({ ...tim, pages: [[{ row: 1, col: 1, colour: 'c9' }]] });
     expect([...allReferencedChannelIds()].sort()).toEqual(['c7', 'c9']);
+  });
+
+  // The round-trip test above can't catch a field filed in the wrong bucket, because
+  // split + resolve is symmetric either way. What it costs a player is only visible with
+  // two of them: a setting that belongs to one person leaking onto everyone, or a shared
+  // rig setting being trapped on one profile.
+  it('a setting changed by one player reaches the other only if it belongs to the rig', () => {
+    localStorage.setItem(LEGACY_KEY, JSON.stringify(withColours()));
+    const base = loadActiveBoardConfig()!;
+    const p1 = getActiveBoardPlayer()!;
+
+    // Something from each bucket, all changed at once by Player 1.
+    saveActiveBoardConfig({
+      ...base,
+      bpm: 137, handedness: 'left', themeMode: 'light', numPages: 3, octaveShift: -1,
+      variationEnabled: true, twoCounterMode: 'both', boxDetailEnabled: true,
+      controlZone: { mode: 'row', index: 0 }, loopZone: { mode: 'col', index: 3 },
+      boardSquares: 10, mirrorY: true, cameraLabel: 'Studio cam',
+    });
+
+    const tim = createBoardPlayer('Tim', 'left');
+    const timCfg = loadActiveBoardConfig()!;
+    // The rig is the room: the board and the camera are the same for whoever sits down.
+    expect(timCfg).toMatchObject({ boardSquares: 10, mirrorY: true, cameraLabel: 'Studio cam' });
+    // Everything else is theirs alone, and starts fresh.
+    expect(timCfg).toMatchObject({
+      bpm: DEFAULT_BOARD_SEQUENCER_CONFIG.bpm,
+      themeMode: DEFAULT_BOARD_SEQUENCER_CONFIG.themeMode,
+      numPages: DEFAULT_BOARD_SEQUENCER_CONFIG.numPages,
+      octaveShift: DEFAULT_BOARD_SEQUENCER_CONFIG.octaveShift,
+      variationEnabled: DEFAULT_BOARD_SEQUENCER_CONFIG.variationEnabled,
+      twoCounterMode: DEFAULT_BOARD_SEQUENCER_CONFIG.twoCounterMode,
+      boxDetailEnabled: DEFAULT_BOARD_SEQUENCER_CONFIG.boxDetailEnabled,
+    });
+    expect(timCfg.controlZone).toEqual(DEFAULT_BOARD_SEQUENCER_CONFIG.controlZone);
+    expect(timCfg.loopZone).toEqual(DEFAULT_BOARD_SEQUENCER_CONFIG.loopZone);
+    // Handedness comes from how the new player was set up, not from whoever played last.
+    expect(timCfg.handedness).toBe('left');
+    expect(tim.id).not.toBe(p1.id);
+
+    // And going back finds Player 1's own settings exactly as they left them.
+    setActiveBoardPlayer(p1.id);
+    expect(loadActiveBoardConfig()).toMatchObject({
+      bpm: 137, themeMode: 'light', numPages: 3, octaveShift: -1, variationEnabled: true,
+      twoCounterMode: 'both', boxDetailEnabled: true,
+    });
+  });
+
+  it('a new player reads the board at the size the rig actually is', () => {
+    // Read settings are suggested from the board size; a 10 x 10 board covers far less of
+    // a cell per counter than an 8 x 8 one, so inheriting the default was a misread.
+    localStorage.setItem(LEGACY_KEY, JSON.stringify({ ...withColours(), boardSquares: 10, rows: 4, cols: 4 }));
+    loadActiveBoardConfig();
+    createBoardPlayer('Tim', 'left');
+    const timCfg = loadActiveBoardConfig()!;
+    expect(timCfg.boardSquares).toBe(10);
+    expect(timCfg.minFilledFraction).toBeCloseTo(suggestReadSettings(10, 4, 4).minFilledFraction, 10);
+    expect(timCfg.samplesPerAxis).toBe(suggestReadSettings(10, 4, 4).samplesPerAxis);
   });
 
   it('first run with nothing stored: saving creates the rig and Player 1', () => {

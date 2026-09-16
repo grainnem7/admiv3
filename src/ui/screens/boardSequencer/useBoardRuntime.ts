@@ -190,13 +190,23 @@ export function useBoardRuntime(opts: {
     let lastTrackMs = 0;
     let settledBefore: ActiveCell[] = [];
 
+    let hSize = { w: 0, h: 0 };
     const stopFrames = startVideoFrameLoop(video, ({ nowMs, dtMs }) => {
       const reader = readerRef.current;
       const cfg = configRef.current;
       if (!reader || video.videoWidth <= 0) return;
+      // The homography maps the board into full-resolution pixels, so it is only valid for
+      // the size the stream was when it was built. Some cameras renegotiate mid-session;
+      // keeping the old matrix would read every cell from the wrong part of the picture.
+      if (homographyRef.current
+        && (hSize.w !== video.videoWidth || hSize.h !== video.videoHeight)) {
+        homographyRef.current = null;
+        watchGridRef.current = null;
+      }
       if (!homographyRef.current) {
         try {
           homographyRef.current = homographyForCorners(cfg.corners, video.videoWidth, video.videoHeight);
+          hSize = { w: video.videoWidth, h: video.videoHeight };
         } catch {
           return; // degenerate corners — wait for recalibration
         }
@@ -267,6 +277,7 @@ export function useBoardRuntime(opts: {
           const moved = shiftCorners(cfg.corners, track.dx, track.dy, track.scale);
           const nextH = homographyForCorners(moved, video.videoWidth, video.videoHeight);
           homographyRef.current = nextH;
+          hSize = { w: video.videoWidth, h: video.videoHeight };
           // Re-project the watch grid, but KEEP the background: the same board is still
           // there, just in a slightly different place, and re-learning would blind the
           // hand guard for several frames every time the board is touched.

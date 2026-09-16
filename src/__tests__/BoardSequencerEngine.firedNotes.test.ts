@@ -80,13 +80,8 @@ describe('fired-note log', () => {
     expect(e.drainFiredNotes()).toHaveLength(0);
   });
 
-  it('records nothing while muted', () => {
-    const { e, p } = engine();
-    e.setMuted(true);
-    e.setActiveCells([cell(0, 0, 'm')]);
-    p.fireStep(0, 1, 1, null);
-    expect(e.drainFiredNotes()).toHaveLength(0);
-  });
+  // Muting is covered under "Mute" below: it silences the output and the log keeps
+  // running, because the log is what the lights and the "Now:" line are drawn from.
 
   it('tags page-snapshot cells as page and loop-bank cells as loop', () => {
     const { e, p } = engine({ numPages: 2, cols: 4 });
@@ -107,5 +102,34 @@ describe('fired-note log', () => {
     p.fireStep(0, 0, 1, null);
     e.stop();
     expect(e.drainFiredNotes()).toHaveLength(0);
+  });
+});
+
+describe('Mute', () => {
+  // Deaf and hard-of-hearing players read the pattern off the lights and the "Now:" line.
+  // Muting used to skip the whole step, so pressing it took those away as well as the
+  // sound, leaving nothing at all to follow.
+  it('silences the output but keeps the lights, the playhead and the "Now:" line going', () => {
+    const { e, p, play } = engine();
+    const mix = { gain: { value: 0.6, setTargetAtTime: vi.fn() } };
+    (e as unknown as { mix: typeof mix }).mix = mix;
+    e.setActiveCells([cell(0, 2, 'm')]);
+    e.setMuted(true);
+    p.fireStep(2, 7.5, 1, null);
+    expect(e.drainFiredNotes()).toHaveLength(1);
+    expect(mix.gain.setTargetAtTime).toHaveBeenLastCalledWith(0, 0, 0.02);
+    expect(play).toHaveBeenCalled();
+  });
+
+  it('moving the volume while muted does not bring the sound back', () => {
+    const { e } = engine();
+    const mix = { gain: { value: 0.6, setTargetAtTime: vi.fn() } };
+    (e as unknown as { mix: typeof mix }).mix = mix;
+    e.setMuted(true);
+    e.setVolume(0.9);
+    expect(mix.gain.setTargetAtTime).toHaveBeenLastCalledWith(0, 0, 0.02);
+    // ...and unmuting picks up the volume they chose in the meantime.
+    e.setMuted(false);
+    expect(mix.gain.setTargetAtTime).toHaveBeenLastCalledWith(0.9, 0, 0.02);
   });
 });
