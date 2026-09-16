@@ -18,8 +18,15 @@ import { zoneContains, zonePosition, type Zone } from './zones';
 
 /** A move smaller than this never commits, so a resting hand can't dither the value. */
 export const CONTROL_HYSTERESIS = 0.05;
-/** The outermost band (in board squares) that reads as exactly 0 or 1. */
-export const CONTROL_END_SNAP_SQUARES = 0.3;
+/**
+ * The outermost band (in board squares) that reads as exactly 0 or 1.
+ *
+ * It must be wider than HALF a square. A counter sits roughly centred on a square, so the
+ * furthest it can physically go is the centre of the end one — half a square in. At 0.3
+ * the band stopped short of that, so the ends were never actually reachable by a counter
+ * in any configuration, however hard the player pushed it.
+ */
+export const CONTROL_END_SNAP_SQUARES = 0.7;
 
 export interface ControlsConfig {
   faderAxis: 'row' | 'col';
@@ -77,16 +84,27 @@ const freshRole = (): RoleState => ({
   position: null, candidate: null, stillMs: 0, missingMs: 0, on: false, onCandidate: null, onStillMs: 0,
 });
 
+/**
+ * Snap the outermost band to exactly 0 and 1, so the ends of a fader are always reachable.
+ *
+ * A counter can only ever sit at the CENTRE of the end square, which on an 8-square board
+ * is 0.0625 rather than 0. Without this, a player who has pushed the counter as far as it
+ * physically goes still can't reach full or silent — which is the whole "tolerance over
+ * precision" rule, and it hits hardest the players with least range of movement.
+ */
+export function snapFaderEnds(raw: number, boardSquares: number): number {
+  const snap = CONTROL_END_SNAP_SQUARES / Math.max(1, boardSquares);
+  if (raw <= snap) return 0;
+  if (raw >= 1 - snap) return 1;
+  return Math.max(0, Math.min(1, raw));
+}
+
 /** A centroid (unit board coords) as a fader position, with the end zones snapped. */
 export function faderPositionFromCentroid(
   centroid: { x: number; y: number }, axis: 'row' | 'col', boardSquares: number,
 ): number {
   // The row axis runs up the board: the far edge is the top of the fader.
-  const raw = axis === 'row' ? 1 - centroid.y : centroid.x;
-  const snap = CONTROL_END_SNAP_SQUARES / Math.max(1, boardSquares);
-  if (raw <= snap) return 0;
-  if (raw >= 1 - snap) return 1;
-  return Math.max(0, Math.min(1, raw));
+  return snapFaderEnds(axis === 'row' ? 1 - centroid.y : centroid.x, boardSquares);
 }
 
 /** The highest position among this colour's counters this frame, or null when it's absent. */
@@ -100,8 +118,11 @@ export function rawFaderPosition(
   for (const r of readings) {
     if (!r.occupied || r.colour !== colour || !r.centroid) continue;
     if (inLane && !zoneContains(zone, r)) continue;
+    // A lane reads along its own orientation, but the ends must snap exactly as they do
+    // off-lane — otherwise moving the controls into a row quietly makes every fader end
+    // unreachable.
     const p = inLane
-      ? zonePosition(zone, r.centroid)
+      ? snapFaderEnds(zonePosition(zone, r.centroid), cfg.boardSquares)
       : faderPositionFromCentroid(r.centroid, cfg.faderAxis, cfg.boardSquares);
     if (best === null || p > best) best = p;
   }

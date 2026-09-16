@@ -148,3 +148,28 @@ describe('Mute', () => {
     expect(mix.gain.setTargetAtTime).toHaveBeenLastCalledWith(0.9, 0, 0.02);
   });
 });
+
+describe('settings reaching saved loops', () => {
+  it('turning Variation off makes a saved loop play every pass too', () => {
+    // The loop keeps the flags it was captured with. The live board plays everything
+    // every pass once Variation is off, so a loop still dropping notes on alternate laps
+    // had nothing on screen to explain it.
+    const { e, p } = engine({ cols: 4 });
+    e.setActiveLoops([[cell(0, 0, 'm', true)]]);
+    p.fireStep(0, 1, 1, null);
+    expect(e.drainFiredNotes()).toHaveLength(0);   // variation on: silent on lap A
+    e.setVariationEnabled(false);
+    p.fireStep(0, 1, 1, null);
+    expect(e.drainFiredNotes()).toHaveLength(1);
+  });
+
+  it('a cell outside the current grid is silent, not wrong', () => {
+    // Shrinking Rows leaves saved cells past the top. row 5 on a 4-row grid gives a
+    // negative degree and sounds an octave BELOW the root — a note never placed.
+    const { e, p } = engine({ rows: 4, cols: 4 });
+    e.setActiveLoops([[cell(9, 0, 'm'), cell(0, 9, 'm')]]);
+    e.setActiveCells([cell(7, 0, 'm')]);
+    p.fireStep(0, 1, 1, null);
+    expect(e.drainFiredNotes()).toHaveLength(0);
+  });
+});

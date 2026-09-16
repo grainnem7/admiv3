@@ -37,6 +37,18 @@ describe('PieceRecognizer', () => {
       .toMatchObject({ occupied: true, colour: 'blue' });
   });
 
+  it('ColourRecognizer: reports EVERY colour above the threshold, priority-first', () => {
+    // `colours` is the whole basis of "two counters in a box both play". Every other
+    // assertion here is a toMatchObject subset that never looks at it, so the feature
+    // could be deleted at the source and the suite would stay green.
+    const r = new ColourRecognizer(0.2, ['red', 'blue', 'white', 'black']);
+    expect(r.classify({ filledFraction: 0, fractions: { blue: 0.4, red: 0.3 } }).colours)
+      .toEqual(['red', 'blue']);
+    expect(r.classify({ filledFraction: 0, fractions: { red: 0.4, blue: 0.1 } }).colours)
+      .toEqual(['red']);
+    expect(r.classify({ filledFraction: 0, fractions: { red: 0.1 } }).colours ?? []).toEqual([]);
+  });
+
   it('ColourRecognizer: honours a custom priority order', () => {
     const r = new ColourRecognizer(0.2, ['green', 'red']);
     expect(r.classify({ filledFraction: 0, fractions: { green: 0.3, red: 0.3 } }))

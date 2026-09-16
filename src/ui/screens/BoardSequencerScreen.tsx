@@ -50,7 +50,7 @@ import { NudgeBanner } from './boardSequencer/play/NudgeBanner';
 import { SwatchChip } from './boardSequencer/ui/SwatchChip';
 import { Switch } from './boardSequencer/ui/Switch';
 import { SegmentedControl } from './boardSequencer/ui/SegmentedControl';
-import { clampZone, describeZone, zoneSlotCount, zonesCollide, type Zone, type ZoneMode } from '../../tracking/zones';
+import { clampZone, describeZone, NO_ZONE, zoneSlotCount, zonesCollide, type Zone, type ZoneMode } from '../../tracking/zones';
 import { LabeledSlider } from './boardSequencer/ui/LabeledSlider';
 import { Button } from './boardSequencer/ui/Button';
 import { Modal } from './boardSequencer/ui/Modal';
@@ -123,7 +123,7 @@ import { SONG_LIBRARY, type SongConfig } from '../../songs/songLibrary';
 import { getChordAtTime } from '../../songs/voices/chordLookup';
 import { applyHomography, type Mat3 } from '../../utils/homography';
 import { SCALE_PRESETS, NOTE_NAMES } from '../../songs/boardSequencerScale';
-import { clearLoopSlot, seedLoopBank } from '../../songs/loopBank';
+import { clearLoopSlot, emptyLoopBank, seedLoopBank } from '../../songs/loopBank';
 import {
   DEFAULT_BOARD_SEQUENCER_CONFIG, type BoardSequencerStored, type BoardPoint, type StoredLoopCell,
 } from '../../profiles/BoardSequencerConfig';
@@ -314,6 +314,8 @@ export default function BoardSequencerScreen() {
   /** Non-null while an engine is being built, so Play can't be pressed twice. */
   const startingRef = useRef<number | null>(null);
   const lastCornerSaveRef = useRef(0);
+  /** The running hand-check poll, so it can be stopped on unmount or a re-run. */
+  const handCheckRef = useRef<number | null>(null);
   const bigBoardRef = useRef<HTMLDivElement | null>(null);
   const bigBoardButtonRef = useRef<HTMLButtonElement | null>(null);
   // Play-side visuals, all read from audible time so they match what is heard.
@@ -378,11 +380,13 @@ export default function BoardSequencerScreen() {
       const grid = applyGridChange(prev, patch);
       // A smaller grid can leave a lane pointing at a row or step that no longer exists,
       // which would quietly stop every control counter working.
-      return {
-        ...grid,
-        controlZone: clampZone(grid.controlZone, grid.rows, grid.cols),
-        loopZone: clampZone(grid.loopZone, grid.rows, grid.cols),
-      };
+      const controlZone = clampZone(grid.controlZone, grid.rows, grid.cols);
+      const loopZone = clampZone(grid.loopZone, grid.rows, grid.cols);
+      // Clamping them separately can land both on the same line — controls row 4 and pads
+      // row 6 both become row 3 on a 4-row grid. Storage resolves that by switching the
+      // pads off, so resolving it the same way here keeps the screen and the saved config
+      // telling the player the same story.
+      return { ...grid, controlZone, loopZone: zonesCollide(controlZone, loopZone) ? NO_ZONE : loopZone };
     });
   }, []);
 
@@ -608,11 +612,21 @@ export default function BoardSequencerScreen() {
 
   // Audio teardown on leaving the screen.
   useEffect(() => () => {
+    // Clearing the generation is what makes an engine still loading its samples throw
+    // itself away when it finishes. Without it the abort check passed, the engine started
+    // its scheduler after the screen had gone, and nothing was left holding a reference
+    // able to stop it — notes for the rest of the page's life.
+    startingRef.current = null;
+    runningRef.current = false;
     engineRef.current?.dispose();
     engineRef.current = null;
     songEngineRef.current?.dispose();
     songEngineRef.current = null;
-  }, []);
+    // A frame burst can still be sampling; it would set state on a screen that has gone.
+    findAbortRef.current?.abort();
+    findAbortRef.current = null;
+    if (handCheckRef.current !== null) window.clearInterval(handCheckRef.current);
+  }, [engineRef, runningRef, startingRef]);
 
   // The camera list (names are only available once camera permission is granted,
   // so it's refreshed after each start attempt, and whenever a camera or phone app
@@ -820,6 +834,7 @@ export default function BoardSequencerScreen() {
    * reports — a sleeve that isn't a counter colour is advice, not a setting.
    */
   const startHandCheck = useCallback(() => {
+    if (handCheckRef.current !== null) window.clearInterval(handCheckRef.current);
     setHandCheck({ checking: true, result: null });
     const started = performance.now();
     let maxHeld = 0;
@@ -834,6 +849,7 @@ export default function BoardSequencerScreen() {
       }
       if (performance.now() - started < 2000) return;
       window.clearInterval(id);
+      handCheckRef.current = null;
       const names = [...lit].map((cid) => channelNameRef.current(cid));
       setHandCheck({
         checking: false,
@@ -844,6 +860,7 @@ export default function BoardSequencerScreen() {
             : `Held ${maxHeld} ${maxHeld === 1 ? 'square' : 'squares'}. ${names.join(' and ')} lights up under your hand — the guard will hold those squares, but a sleeve that isn't a counter colour helps.`,
       });
     }, 100);
+    handCheckRef.current = id;
   }, [latestFrameRef]);
 
   // A camera tool belongs to the step that opened it. Leaving the step (or Play) closes
@@ -968,6 +985,10 @@ export default function BoardSequencerScreen() {
       // The tracker's corrections are superseded by corners the player just confirmed.
       trackedCornersRef.current = null;
       const adoptCamera = fellBackRef.current;
+      // Confirming corners is the step the "camera changed" notice asks for, so it has
+      // been done — otherwise the banner (and the Change camera button beside it) stayed
+      // up for the rest of the session.
+      setCamNotice((n) => (n?.kind === 'changed' ? null : n));
       if (adoptCamera) {
         fellBackRef.current = false;
         setCamNotice(null);
@@ -1070,7 +1091,7 @@ export default function BoardSequencerScreen() {
       humanize: cfg.humanize,
       noteLengthBeats: cfg.noteLengthBeats, velocity: cfg.velocity,
       tickEnabled: cfg.tickEnabled,
-      channels: cfg.channels, faderAxis: cfg.faderAxis,
+      channels: cfg.channels, faderAxis: cfg.faderAxis, variationEnabled: cfg.variationEnabled,
       loopStepsRed: cfg.loopStepsRed, loopStepsBlack: cfg.loopStepsBlack,
       loopStepsBlue: cfg.loopStepsBlue, numPages: cfg.numPages,
       octaveShift: cfg.octaveShift, volume: cfg.volume,
@@ -1152,6 +1173,10 @@ export default function BoardSequencerScreen() {
   // Changing orientation or camera invalidates calibration (it was captured in the
   // old view), so force a fresh corner click in the new space.
   const changeView = useCallback((patch: Partial<BoardSequencerStored>) => {
+    // This turns detection off (enabled: false tears down the frame loop). Leaving the
+    // engine running would loop the last settled pattern with no camera behind it, and
+    // Set up has no Stop button to escape with.
+    stop();
     homographyRef.current = null;
     trackedCornersRef.current = null;
     setConfig((prev) => {
@@ -1163,7 +1188,7 @@ export default function BoardSequencerScreen() {
       return next;
     });
     setCalibrating('tap');
-  }, []);
+  }, [stop]);
 
   // Pick a different camera (external webcam, phone app, …). A new camera sees the
   // board from a different place, so the corners are re-clicked; colours are kept
@@ -2315,6 +2340,11 @@ export default function BoardSequencerScreen() {
             const loaded = loadBoardSequencerConfig();
             if (loaded) setConfig(loaded);
             setActivePlayerState(getActiveBoardPlayer());
+            // Their loops, not the last player's: the bank keeps the pad latches across a
+            // re-seed so a cleared slot stays cleared, and carrying those into another
+            // profile started their loops with nothing on the board.
+            loopBankRef.current = emptyLoopBank(0);
+            storedRef.current = loadBoardSequencerConfig();
             setChooserOpen(false);
           }}
           onCreate={(name, handedness) => {
@@ -2323,6 +2353,8 @@ export default function BoardSequencerScreen() {
             if (loaded) setConfig(loaded);
             setPlayers(listBoardPlayers());
             setActivePlayerState(getActiveBoardPlayer());
+            loopBankRef.current = emptyLoopBank(0);
+            storedRef.current = loadBoardSequencerConfig();
             setChooserOpen(false);
             setView('setup');
             // A new player needs their own jobs for the rig's colours — but only once
@@ -2348,7 +2380,7 @@ export default function BoardSequencerScreen() {
           onSwitchPlayer={() => setChooserOpen(true)}
           switchPlayerDisabledReason={running ? 'Stop playing to switch player.' : null}
           notice={headerNotice}
-          onChangeCamera={() => { setView('setup'); setStep('camera'); }}
+          onChangeCamera={() => { stop(); setView('setup'); setStep('camera'); }}
           right={view === 'setup' ? (
             <StepIndicator
               steps={SETUP_STEPS.map((id) => ({

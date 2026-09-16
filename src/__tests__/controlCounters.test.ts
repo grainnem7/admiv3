@@ -42,6 +42,25 @@ describe('faderPositionFromCentroid', () => {
     expect(faderPositionFromCentroid({ x: 0.98, y: 0.5 }, 'col', 8)).toBe(1);
   });
 
+  it('the ends are reachable by a counter sitting ON the end square', () => {
+    // The test above used centroids hard against the very edge of the board, which no
+    // counter can reach: a counter sits roughly centred on a square, so the furthest it
+    // physically goes is half a square in — 0.0625 on an 8-square board. The snap band
+    // has to be wider than that, or the ends can never actually be played.
+    for (const squares of [8, 10]) {
+      const end = 0.5 / squares;
+      expect(faderPositionFromCentroid({ x: 0.5, y: end }, 'row', squares)).toBe(1);
+      expect(faderPositionFromCentroid({ x: 0.5, y: 1 - end }, 'row', squares)).toBe(0);
+      expect(faderPositionFromCentroid({ x: end, y: 0.5 }, 'col', squares)).toBe(0);
+      expect(faderPositionFromCentroid({ x: 1 - end, y: 0.5 }, 'col', squares)).toBe(1);
+    }
+  });
+
+  it('but the square next to the end is still a real step, not snapped', () => {
+    expect(faderPositionFromCentroid({ x: 0.5, y: 1.5 / 8 }, 'row', 8)).toBeLessThan(1);
+    expect(faderPositionFromCentroid({ x: 0.5, y: 1 - 1.5 / 8 }, 'row', 8)).toBeGreaterThan(0);
+  });
+
   it('gives far more than a cell-per-step resolution on a 4 × 4 grid', () => {
     const levels = new Set<number>();
     for (let i = 0; i < 40; i++) levels.add(faderPositionFromCentroid({ x: 0.5, y: 0.1 + i * 0.02 }, 'row', 8));
@@ -151,5 +170,41 @@ describe('a control counter under a hand', () => {
     expect(on.toggles.reverbToggle).toBe(true);
     const covered = hold(on.state, empty, { ...cfg(), heldColours: new Set(['rv']) }, 400, chans);
     expect(covered.toggles.reverbToggle).toBe(true);
+  });
+});
+
+describe('a fader living in a control lane', () => {
+  // Every other test here runs with no lane, so the lane path had never been exercised.
+  // It reads along the lane's own orientation instead of the fader axis.
+  const lane = (over: Partial<ControlsConfig> = {}): ControlsConfig =>
+    cfg({ zone: { mode: 'row', index: 0 }, ...over });
+
+  /** A counter in lane row 0, `x` across the board. */
+  const inLane = (x: number, colour = 'vol'): CellReading[] => [
+    { row: 0, col: 0, occupied: true, colour, centroid: { x, y: 0.05 }, offset: 0 },
+  ];
+
+  it('reaches both ends, even though a counter can only sit in the middle of a square', () => {
+    // On an 8-square board the end squares centre on 0.0625 and 0.9375. Without the end
+    // snap a player who has pushed the counter as far as it physically goes still can't
+    // reach full or silent — and that is hardest on the players with least movement.
+    expect(rawFaderPosition(inLane(0.0625), 'vol', lane())).toBe(0);
+    expect(rawFaderPosition(inLane(0.9375), 'vol', lane())).toBe(1);
+  });
+
+  it('still reads smoothly in between', () => {
+    expect(rawFaderPosition(inLane(0.5), 'vol', lane())).toBeCloseTo(0.5, 10);
+  });
+
+  it('ignores a counter of the same colour outside the lane', () => {
+    const outside: CellReading[] = [
+      { row: 2, col: 0, occupied: true, colour: 'vol', centroid: { x: 0.9, y: 0.6 }, offset: 0 },
+    ];
+    expect(rawFaderPosition(outside, 'vol', lane())).toBeNull();
+  });
+
+  it('commits through the same stillness window and range', () => {
+    const settled = hold(initialControlState(), inLane(0.5), lane(), 200);
+    expect(settled.values.volume).toBeCloseTo(0.6, 10);
   });
 });

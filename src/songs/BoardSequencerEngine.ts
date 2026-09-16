@@ -75,6 +75,8 @@ export interface BoardEngineConfig {
   channels: ColourChannel[];
   /** Axis a control-colour piece's position maps to its value ('row' = vertical). */
   faderAxis: 'row' | 'col';
+  /** Off means every counter plays every pass — including inside saved loops. */
+  variationEnabled?: boolean;
   /** Polyrhythm: per-role loop length in steps (0 = full grid width). */
   loopStepsRed: number;
   loopStepsBlack: number;
@@ -488,6 +490,11 @@ export class BoardSequencerEngine {
     this.cfg.tickEnabled = on;
   }
 
+  /** Turn Variation on/off live. Off means every counter plays every pass, loops too. */
+  setVariationEnabled(on: boolean): void {
+    this.cfg.variationEnabled = on;
+  }
+
   /** Fire the confirmation tick immediately (distinct from a sequenced note). */
   fireTick(): void {
     if (this.muted || !this.tick || !this.cfg.tickEnabled) return;
@@ -646,7 +653,11 @@ export class BoardSequencerEngine {
       if (cell.col !== playheadStep(beat, this.rawLoop(cat), this.cfg.cols, this.cfg.pingPong ?? false)) continue;
       // Variation: an off-centre ("conditional") cell plays only on variation laps,
       // so the loop alternates a full pass and a full-plus-variations pass.
-      if (!firesThisLapPaged(cell.conditional ?? false, beat, this.cfg.cols, this.cfg.numPages)) continue;
+      // A saved loop keeps the Variation flags it was captured with. Once Variation is
+      // switched off the live board plays every counter every pass, so a loop that went
+      // on dropping notes on alternate laps had nothing on screen explaining why.
+      const varies = (cell.conditional ?? false) && this.cfg.variationEnabled !== false;
+      if (!firesThisLapPaged(varies, beat, this.cfg.cols, this.cfg.numPages)) continue;
       // Humanize: occasionally skip a step + vary velocity, so loops breathe.
       if (h > 0 && Math.random() < h * 0.5) continue;
       // Box detail: where the counter sits gives it its own loudness and timing. The
