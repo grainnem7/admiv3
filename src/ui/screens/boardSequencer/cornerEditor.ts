@@ -32,9 +32,14 @@ export function isConvexQuad(q: Corners): boolean {
   return true;
 }
 
-/** Taps are prompted [start+low, start+high, end+high, end+low]; returns saved order or null. */
+/**
+ * Taps are prompted in saved order — [start+high, end+high, end+low, start+low] — so this
+ * only has to check the shape. It used to rotate the taps by one, which meant the corner
+ * you tapped first was saved as corner 4 and every handle was renamed the moment the
+ * fourth tap landed: you tapped 1, 2, 3, 4 and watched them become 4, 1, 2, 3.
+ */
 export function cornerOrderForTaps(taps: Corners): Corners | null {
-  const saved: Corners = [taps[1], taps[2], taps[3], taps[0]];
+  const saved: Corners = [taps[0], taps[1], taps[2], taps[3]];
   return isConvexQuad(saved) ? saved : null;
 }
 

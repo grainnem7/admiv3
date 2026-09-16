@@ -266,8 +266,16 @@ describe('BoardSequencerConfig — hand and knock guard', () => {
     });
   });
 
-  it('a saved "on" is still honoured', () => {
+  it('an inherited "on" is cleared once, then the choice sticks', () => {
+    // It was ON by default and is known to blind the board on a real camera. Leaving a
+    // saved true set would hand the fault to exactly the people who hit it first and
+    // never chose it — so it is cleared once...
     localStorage.setItem('admi-board-sequencer', JSON.stringify({ handGuardEnabled: true }));
+    const cleared = loadBoardSequencerConfig()!;
+    expect(cleared.handGuardEnabled).toBe(false);
+
+    // ...and turning it back on after that is respected.
+    localStorage.setItem('admi-board-sequencer', JSON.stringify({ handGuardEnabled: true, handGuardReset: true }));
     expect(loadBoardSequencerConfig()?.handGuardEnabled).toBe(true);
   });
 

@@ -150,6 +150,8 @@ export interface BoardSequencerStored {
    * available, and goes back on by default once it is proven against a real camera.
    */
   handGuardEnabled: boolean;
+  /** Set once the one-time clearing of an inherited "hand guard on" has happened. */
+  handGuardReset?: boolean;
   /** Space kept around a hand, in board squares. */
   handMarginSquares: number;
   /** How long a cell stays held after the hand leaves (ms). */
@@ -273,6 +275,7 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   toggleAmount: 0.35,
   captureQuietMs: 500,
   handGuardEnabled: false,
+  handGuardReset: true,
   handMarginSquares: 0.75,
   handReleaseMs: 250,
   settleAfterHandMs: 300,
@@ -539,7 +542,12 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     controlRemoval: sanitizeControlRemoval(o.controlRemoval),
     toggleAmount: clampNum(o.toggleAmount, 0, 1, d.toggleAmount),
     captureQuietMs: clampNum(o.captureQuietMs, 0, 5000, d.captureQuietMs),
-    handGuardEnabled: o.handGuardEnabled === true,
+    // A saved "on" from before it was switched off by default is cleared ONCE. It was on
+    // by default and is known to blind the board on a real camera, so leaving it set would
+    // hand the fault to exactly the people who hit it first and never chose it. Turning it
+    // back on after this migration sticks.
+    handGuardEnabled: o.handGuardEnabled === true && o.handGuardReset === true,
+    handGuardReset: true,
     handMarginSquares: clampNum(o.handMarginSquares, 0.25, 2, d.handMarginSquares),
     handReleaseMs: clampNum(o.handReleaseMs, 100, 1000, d.handReleaseMs),
     settleAfterHandMs: clampNum(o.settleAfterHandMs, 150, 1000, d.settleAfterHandMs),

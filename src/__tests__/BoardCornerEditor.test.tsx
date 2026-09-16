@@ -32,15 +32,16 @@ describe('BoardCornerEditor — tap mode', () => {
     const r = render(
       <BoardCornerEditor mode="tap" rows={4} cols={4} onConfirm={onConfirm} onCancel={vi.fn()} />,
     );
-    expect(r.container.textContent).toContain('where the loop starts, on the low-notes side');
+    expect(r.container.textContent).toContain('where the loop starts, on the high-notes side');
     const surface = r.all('div')[2];
 
-    // Prompt order: start+low, start+high, end+high, end+low.
-    tapAt(r.container, surface, 0.1, 0.9);
-    expect(r.container.textContent).toContain('starts, on the high-notes side');
+    // Prompts are asked in SAVED order, so corner 1 is corner 1 everywhere: the corner
+    // tapped first stays number 1 while adjusting and in the announcement.
     tapAt(r.container, surface, 0.1, 0.1);
+    expect(r.container.textContent).toContain('ends, on the high-notes side');
     tapAt(r.container, surface, 0.9, 0.1);
     tapAt(r.container, surface, 0.9, 0.9);
+    tapAt(r.container, surface, 0.1, 0.9);
 
     // Four valid taps land in review, where Looks right saves.
     const looksRight = r.byText('Looks right', 'button');

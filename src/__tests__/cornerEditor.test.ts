@@ -21,12 +21,13 @@ describe('nudgeCorner', () => {
 });
 
 describe('cornerOrderForTaps', () => {
-  it('maps prompt order [start+low, start+high, end+high, end+low] to saved order', () => {
-    const taps: Corners = [sq[3], sq[0], sq[1], sq[2]];
-    expect(cornerOrderForTaps(taps)).toEqual(sq);
+  it('keeps the tap order, so corner 1 is corner 1 everywhere', () => {
+    // Rotating the taps meant the corner tapped FIRST was saved as corner 4, and every
+    // handle was renamed the instant the fourth tap landed.
+    expect(cornerOrderForTaps(sq)).toEqual(sq);
   });
   it('taps in prompt order give a homography whose start + low cell is at the start-low corner', () => {
-    const saved = cornerOrderForTaps([sq[3], sq[0], sq[1], sq[2]])!;
+    const saved = cornerOrderForTaps(sq)!;
     const h = computeHomography(UNIT_SQUARE, saved);
     const p = applyHomography(h, cellCentreUnit(3, 0, 4, 4));
     expect(p.x).toBeLessThan(0.5);

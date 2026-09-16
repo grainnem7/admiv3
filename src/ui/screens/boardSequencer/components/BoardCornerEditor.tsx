@@ -21,15 +21,19 @@ export interface BoardCornerEditorProps {
 }
 
 /** Prompted tap order: the loop's start on the low side first, then round the board. */
+// Asked for in the order they are SAVED, so corner 1 is corner 1 everywhere — while
+// tapping, while adjusting, and in the announcement. Asking in a different order and
+// rotating afterwards renamed every corner the moment the fourth tap landed.
 const TAP_PROMPTS = [
-  'Tap the outside corner of the squares where the loop starts, on the low-notes side',
-  'Now the corner where the loop starts, on the high-notes side',
+  'Tap the outside corner of the squares where the loop starts, on the high-notes side',
   'Now the corner where the loop ends, on the high-notes side',
   'Now the corner where the loop ends, on the low-notes side',
+  'Now the corner where the loop starts, on the low-notes side',
 ];
 
 /** Saved order is [start+high, end+high, end+low, start+low]. */
 const HANDLE_LABELS = ['Start · high', 'End · high', 'End · low', 'Start · low'];
+
 
 const HANDLE_RADIUS = 0.06;
 

@@ -77,6 +77,7 @@ import {
 } from '../../profiles/BoardProfiles';
 import { layoutFor } from './boardSequencer/layout';
 import { isConvexQuad, squareCentreToImage } from './boardSequencer/cornerEditor';
+import { rotateCorners } from '../../tracking/boardDetect/orientation';
 import type { BoardSquares } from '../../tracking/boardGrid';
 import type { ControlsResult } from '../../tracking/controlCounters';
 import type { FaderRole, ControlRemoval } from '../../profiles/BoardSequencerConfig';
@@ -988,6 +989,22 @@ export default function BoardSequencerScreen() {
       }
     },
   };
+
+  /**
+   * Turn the board a quarter turn, from Play.
+   *
+   * The screen shows the board the way the CAMERA sees it, which is only the way the
+   * player sees it when they are sitting at the edge the camera calls the bottom. Someone
+   * sitting along the side — common in a wheelchair, where the table can't be approached
+   * head on — reads the whole thing rotated. Turning the corners is exactly what the
+   * corner editor's Turn does; it just was not reachable once you were playing.
+   */
+  const turnBoard = useCallback(() => {
+    trackedCornersRef.current = null;
+    homographyRef.current = null;
+    setConfig((prev) => (prev.enabled ? { ...prev, corners: rotateCorners(prev.corners, 1) } : prev));
+    announce('Board turned a quarter turn.');
+  }, [announce, homographyRef]);
 
   const handleCalibrated = useCallback(
     (corners: [BoardPoint, BoardPoint, BoardPoint, BoardPoint], patch: Partial<BoardSequencerStored> = {}) => {
@@ -2339,6 +2356,17 @@ export default function BoardSequencerScreen() {
               {`Loops: ${describeZone(config.loopZone)}`}
             </span>
           )}
+          {/* Which way round the board reads. A player sitting at a different edge sees the
+              screen turned relative to their board; this turns it back, without moving the
+              camera or asking for the corners again. */}
+          <Button
+            tone="quiet"
+            onClick={turnBoard}
+            reason={running ? null : config.enabled ? null : 'Find the board first.'}
+            aria-label="Turn the board a quarter turn, so the screen matches the way you are sitting"
+          >
+            ⟲ Turn board
+          </Button>
           <Button tone="quiet" onClick={() => announce(describeBoard(active, config.channels, config.rows, config.cols, config.velocity))}>
             Describe board
           </Button>
