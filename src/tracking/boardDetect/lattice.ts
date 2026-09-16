@@ -16,6 +16,11 @@ import type { XCorner } from './xCorners';
 export const LATTICE_TOLERANCE = 0.25;
 /** A lattice must explain at least this many corners to be worth returning. */
 export const MIN_LATTICE_NODES = 8;
+/**
+ * How far each growth pass reaches, in seed steps. The last reaches everywhere.
+ * Near first, because the affine seed is only trustworthy close to its origin.
+ */
+export const GROW_RADII = [2.5, 4, 6, 9, Infinity];
 /** How many seed triples to try before giving up (keeps the search bounded). */
 export const MAX_SEEDS = 400;
 
@@ -105,14 +110,35 @@ function growLattice(corners: XCorner[], origin: Point, u: Point, v: Point): Lat
     return null;
   }
 
-  for (let pass = 0; pass < 2; pass++) {
-    const assigned = assign(corners, toImage);
-    if (assigned.length < MIN_LATTICE_NODES) return null;
+  // Grow outwards a ring at a time.
+  //
+  // The seed is a parallelogram — an affine guess — and a board seen at an angle is not
+  // affine. The guess is good CLOSE to its origin and drifts further out, so handing it
+  // the whole board at once let it mis-name distant crossings by a whole step, and the
+  // refit then averaged those mistakes into a basis that fitted nothing: at a steep angle
+  // it produced a 23 x 17 "board" and corners somewhere off the side of the real one.
+  //
+  // Starting near and widening lets each refit earn the perspective it needs before it is
+  // asked to reach further. It stops as soon as a pass finds nothing new, so a board seen
+  // square-on still settles in two passes as it always did.
+  const step = Math.hypot(u.x - origin.x, u.y - origin.y);
+  let previous = 0;
+  for (let pass = 0; pass < GROW_RADII.length; pass++) {
+    const radius = GROW_RADII[pass] * step;
+    const within = Number.isFinite(radius)
+      ? corners.filter((c) => Math.hypot(c.x - origin.x, c.y - origin.y) <= radius)
+      : corners;
+    const assigned = assign(within, toImage);
+    if (assigned.length < MIN_LATTICE_NODES) {
+      if (pass === GROW_RADII.length - 1) return null;
+      continue;   // too few this close in; reach further before giving up
+    }
+    if (assigned.length === previous && pass > 0) break;
+    previous = assigned.length;
     try {
       // Least squares over EVERY agreeing corner. computeHomography takes exactly four
       // and threw on anything else, so this refit used to fail every single pass and
       // silently keep the seed — a parallelogram, i.e. a map with no perspective in it.
-      // On a board seen at an angle that put the proposed corners off the board entirely.
       toImage = computeHomographyFit(
         assigned.map((n) => ({ x: n.i, y: n.j })),
         assigned.map((n) => n.point),

@@ -150,22 +150,50 @@ function latticeSpan(lattice: Lattice): Span {
  * How well a square count explains the lattice: the share of that size's expected
  * crossings actually found, penalised when the block is the wrong shape.
  */
+/**
+ * Where a `squares` x `squares` board sits inside the lattice, and how much of it is there.
+ *
+ * The block used to be anchored at the lattice's lowest index and penalised by its FULL
+ * span, so a single stray crossing — a tiled splashback, a chequered cloth, one noisy
+ * corner — moved the window off the board AND applied a penalty big enough to take a
+ * confident detection to zero. Sliding the window fixes both: a stray node outside the
+ * board simply isn't in the best block, and no penalty is needed because a lattice that
+ * doesn't hold a full board can't fill one.
+ */
+function bestBlock(lattice: Lattice, span: Span, squares: number): { i0: number; j0: number; inside: number } {
+  let best = { i0: span.minI, j0: span.minJ, inside: 0 };
+  for (let i0 = span.minI; i0 <= span.maxI - squares; i0++) {
+    for (let j0 = span.minJ; j0 <= span.maxJ - squares; j0++) {
+      let inside = 0;
+      for (const n of lattice.nodes) {
+        if (n.i >= i0 && n.i <= i0 + squares && n.j >= j0 && n.j <= j0 + squares) inside++;
+      }
+      if (inside > best.inside) best = { i0, j0, inside };
+    }
+  }
+  return best;
+}
+
 function fitScore(lattice: Lattice, span: Span, squares: number): number {
-  const spanI = span.maxI - span.minI;
-  const spanJ = span.maxJ - span.minJ;
-  // A board's crossings span exactly `squares` steps on each axis.
-  const shapePenalty = (Math.abs(spanI - squares) + Math.abs(spanJ - squares)) * 0.25;
   const expected = (squares + 1) * (squares + 1);
-  const inside = lattice.nodes.filter(
-    (n) => n.i >= span.minI && n.i <= span.minI + squares && n.j >= span.minJ && n.j <= span.minJ + squares,
-  ).length;
-  return Math.max(0, inside / expected - shapePenalty);
+  const { inside } = bestBlock(lattice, span, squares);
+  // Two things have to be true: the block is FULL (this size explains the crossings it
+  // covers) and little is left OVER (no larger board is being read as a smaller one —
+  // an 8 x 8 block sits perfectly inside a 10 x 10 lattice, so fullness alone always
+  // prefers the smaller size).
+  //
+  // Expressing "left over" as a share of the lattice, rather than as a penalty on its
+  // span, is what makes this robust: one stray crossing from a tiled wall or a chequered
+  // cloth costs a couple of per cent instead of taking a confident reading to zero.
+  const explains = inside / Math.max(1, lattice.nodes.length);
+  return Math.max(0, (inside / expected) * explains);
 }
 
 /** The four outer corners of the playing area, in working-image pixels. */
 function cornersOf(lattice: Lattice, span: Span, squares: number, gray: GrayImage): [Point, Point, Point, Point] | null {
-  const i0 = span.minI;
-  const j0 = span.minJ;
+  // The same block the score chose, so the corners describe the board that was scored
+  // rather than whatever happened to have the lowest index.
+  const { i0, j0 } = bestBlock(lattice, span, squares);
   const i1 = i0 + squares;
   const j1 = j0 + squares;
   const at = (i: number, j: number): Point => applyHomography(lattice.toImage, { x: i, y: j });
