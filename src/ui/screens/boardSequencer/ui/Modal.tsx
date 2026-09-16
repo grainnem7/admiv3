@@ -1,6 +1,11 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 
-const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+// Disabled controls are skipped: focusing one is a no-op, so treating it as the first or
+// last element let Tab escape the dialog entirely.
+const FOCUSABLE = [
+  'button:not([disabled])', '[href]', 'input:not([disabled])', 'select:not([disabled])',
+  'textarea:not([disabled])', '[tabindex]:not([tabindex="-1"])',
+].join(', ');
 
 /**
  * Focus behaviour every modal on this screen needs: focus moves in on open, Tab is trapped

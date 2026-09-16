@@ -314,3 +314,32 @@ describe('BoardSequencerConfig — zones', () => {
     expect(loadBoardSequencerConfig()!.controlZone).toEqual({ mode: 'anywhere', index: 0 });
   });
 });
+
+/** Store a raw object under the legacy key and read it back through sanitisation. */
+function loadWith(raw: Record<string, unknown>) {
+  localStorage.setItem('admi-board-sequencer', JSON.stringify(raw));
+  return loadBoardSequencerConfig()!;
+}
+
+describe('counts that must be whole numbers', () => {
+  it('rounds a fraction instead of storing one', () => {
+    // Array.from({ length: numPages }) throws on a fraction, and the page picker showed
+    // nothing selected — from a value that sanitisation had waved through.
+    const rounded = loadWith({ numPages: 2.5, loopStepsBlack: 1.4 });
+    expect(rounded.numPages).toBe(3);
+    expect(rounded.loopStepsBlack).toBe(1);
+    expect(Number.isInteger(rounded.numPages)).toBe(true);
+  });
+
+  it('falls back when the count is out of range or not a number at all', () => {
+    expect(loadWith({ numPages: 0 }).numPages).toBe(DEFAULT_BOARD_SEQUENCER_CONFIG.numPages);
+    expect(loadWith({ numPages: -2 }).numPages).toBe(DEFAULT_BOARD_SEQUENCER_CONFIG.numPages);
+    expect(loadWith({ numPages: 1e9 }).numPages).toBe(DEFAULT_BOARD_SEQUENCER_CONFIG.numPages);
+    expect(loadWith({ numPages: 'four' }).numPages).toBe(DEFAULT_BOARD_SEQUENCER_CONFIG.numPages);
+    expect(loadWith({ loopStepsRed: -3 }).loopStepsRed).toBe(DEFAULT_BOARD_SEQUENCER_CONFIG.loopStepsRed);
+  });
+
+  it('keeps a sensible one', () => {
+    expect(loadWith({ numPages: 4, loopStepsRed: 3 })).toMatchObject({ numPages: 4, loopStepsRed: 3 });
+  });
+});

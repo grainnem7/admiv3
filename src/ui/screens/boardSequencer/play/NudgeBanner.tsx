@@ -37,6 +37,7 @@ export function NudgeBanner({
   const name = signal && signal.kind === 'colour-matches-board' ? nameFor(signal.channelId) : '';
   return (
     <div
+      role="status"
       aria-hidden={signal === null || undefined}
       style={{
         minHeight: 'calc(var(--bs-target) + 8px)',
@@ -47,7 +48,10 @@ export function NudgeBanner({
         borderRadius: 'var(--bs-radius-md)',
         background: signal ? 'var(--bs-warn-tint)' : 'transparent',
         border: signal ? '1px solid var(--bs-border-control)' : '1px solid transparent',
-        flexDirection: align === 'start' ? 'row-reverse' : 'row',
+        // Alignment moves for a left-handed player; the order never does. row-reverse put
+        // the buttons on screen in the opposite order to the one Tab follows, so tabbing
+        // to what looked like the first button reached the second.
+        justifyContent: align === 'start' ? 'flex-start' : 'flex-end',
       }}
     >
       {signal && (

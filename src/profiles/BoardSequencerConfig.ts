@@ -314,8 +314,19 @@ function isNum(v: unknown): v is number {
   return typeof v === 'number' && Number.isFinite(v);
 }
 
+/** Sensible ceilings, so a corrupt file can't ask for a million pages. */
+export const MAX_PAGES = 8;
+export const MAX_LOOP_STEPS = 64;
+
 function num(v: unknown, fallback: number): number {
   return isNum(v) ? v : fallback;
+}
+
+/** A whole number in range — anything that isn't one falls back rather than surviving. */
+function wholeCount(v: unknown, lo: number, hi: number, fallback: number): number {
+  if (!isNum(v)) return fallback;
+  const n = Math.round(v);
+  return n < lo || n > hi ? fallback : n;
 }
 
 function clampNum(v: unknown, lo: number, hi: number, fallback: number): number {
@@ -478,10 +489,12 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     octaveShift: num(o.octaveShift, d.octaveShift),
     volume: num(o.volume, d.volume),
     tickEnabled: o.tickEnabled !== false,
-    loopStepsRed: num(o.loopStepsRed, d.loopStepsRed),
-    loopStepsBlack: num(o.loopStepsBlack, d.loopStepsBlack),
-    loopStepsBlue: num(o.loopStepsBlue, d.loopStepsBlue),
-    numPages: num(o.numPages, d.numPages),
+    // Whole counts. A stored 0, 2.5 or -1 used to survive: Array.from({length: numPages})
+    // throws on a fraction, and the page picker showed nothing selected.
+    loopStepsRed: wholeCount(o.loopStepsRed, 0, MAX_LOOP_STEPS, d.loopStepsRed),
+    loopStepsBlack: wholeCount(o.loopStepsBlack, 0, MAX_LOOP_STEPS, d.loopStepsBlack),
+    loopStepsBlue: wholeCount(o.loopStepsBlue, 0, MAX_LOOP_STEPS, d.loopStepsBlue),
+    numPages: wholeCount(o.numPages, 1, MAX_PAGES, d.numPages),
     pages: sanitizePages(o.pages),
     mirrorX: o.mirrorX !== false,
     mirrorY: o.mirrorY === true,

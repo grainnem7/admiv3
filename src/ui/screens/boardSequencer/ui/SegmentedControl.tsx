@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useId, useRef } from 'react';
 
 export interface SegmentedOption<T extends string | number> {
   value: T;
@@ -25,6 +25,10 @@ export function SegmentedControl<T extends string | number>({
   label, value, options, onChange, disabled = false, name,
 }: SegmentedControlProps<T>): JSX.Element {
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
+  // A generated id, because the label is prose: "How a loop pad works-hint-hold" parses as
+  // several IDREFs that don't exist, so the hint was never announced at all.
+  const base = useId();
+  const hintId = (value: string): string => `${base}-hint-${value.replace(/\W+/g, '-')}`;
   const index = Math.max(0, options.findIndex((o) => o.value === value));
 
   const move = (delta: number): void => {
@@ -56,7 +60,7 @@ export function SegmentedControl<T extends string | number>({
             role="radio"
             name={name}
             aria-checked={selected}
-            aria-describedby={o.hint ? `${name ?? label}-hint-${String(o.value)}` : undefined}
+            aria-describedby={o.hint ? hintId(String(o.value)) : undefined}
             tabIndex={selected ? 0 : -1}
             disabled={disabled}
             onClick={() => onChange(o.value)}
@@ -73,7 +77,7 @@ export function SegmentedControl<T extends string | number>({
           >
             {o.label}
             {o.hint && (
-              <span id={`${name ?? label}-hint-${String(o.value)}`} hidden>{o.hint}</span>
+              <span id={hintId(String(o.value))} hidden>{o.hint}</span>
             )}
           </button>
         );
