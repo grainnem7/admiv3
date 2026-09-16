@@ -57,6 +57,9 @@ import { colourMatchesBoardRaw, type NudgeSignal } from './boardSequencer/playNu
 import { spaceTogglesPlay, type BoardScreenView } from './boardSequencer/spaceKey';
 import { ghostsForSave } from '../../tracking/handGuard/knockGuard';
 import { TRACK_SAVE_MS } from '../../tracking/handGuard/boardTrack';
+import { detectBoard, type BoardDetection } from '../../tracking/boardDetect/detectBoard';
+import { consensus, AGREE_COUNT } from '../../tracking/boardDetect/consensus';
+import { runFrameBurst } from './boardSequencer/useFrameBurst';
 import type { FiredNote } from '../../songs/BoardSequencerEngine';
 import {
   SETUP_STEPS, canOpenStep, canPlay, resolveEntry, stepIndicator,
@@ -242,6 +245,10 @@ export default function BoardSequencerScreen() {
   const [handCheck, setHandCheck] = useState<{ checking: boolean; result: string | null }>(
     { checking: false, result: null },
   );
+  // Find board: a short burst, then a proposal the player confirms. Never while playing.
+  const [finding, setFinding] = useState(false);
+  const [proposal, setProposal] = useState<BoardDetection | null>(null);
+  const findAbortRef = useRef<AbortController | null>(null);
   // A ref, so the sampling interval always reads the current colours.
   const channelNameRef = useRef<(id: ColourId) => string>((id) => id);
   const [showHelp, setShowHelp] = useState(false);
@@ -553,6 +560,47 @@ export default function BoardSequencerScreen() {
       bigBoardButtonRef.current?.focus();
     };
   }, [view]);
+
+  /**
+   * Find the board: take a few frames, ask each one where the board is, and trust the
+   * answer only when several agree. Nothing is saved — the editor opens with the
+   * proposal and the player confirms it, so a wrong guess costs one tap.
+   */
+  const findBoard = useCallback(async () => {
+    const video = videoRef.current;
+    if (!video || runningRef.current) return;
+    const cfg = configRef.current;
+    const controller = new AbortController();
+    findAbortRef.current = controller;
+    setFinding(true);
+    setProposal(null);
+    try {
+      const detections: BoardDetection[] = [];
+      await runFrameBurst<BoardDetection>({
+        video,
+        mirrorX: cfg.mirrorX,
+        mirrorY: cfg.mirrorY,
+        signal: controller.signal,
+        detect: (frame) => {
+          const d = detectBoard(frame.data, frame.width, frame.height);
+          detections.push(d);
+          return d;
+        },
+        enough: (results) => results.filter((r) => r.status === 'high').length >= AGREE_COUNT,
+      });
+      if (controller.signal.aborted) return;
+      const result = consensus(detections);
+      setProposal(result);
+      announce(result.reasons[0] ?? '');
+      if (result.corners) {
+        // Show it in the editor for review; Looks right is what saves it.
+        setCalibrating(true);
+      }
+    } finally {
+      if (findAbortRef.current === controller) findAbortRef.current = null;
+      setFinding(false);
+    }
+  }, [announce, configRef, runningRef, videoRef]);
 
   /**
    * "Check my hand": hold a hand over the board for two seconds and find out what the
@@ -1599,8 +1647,11 @@ export default function BoardSequencerScreen() {
       playerName={activePlayer?.name ?? 'the player'}
       running={running}
       editing={calibrating}
-      onFindBoard={() => setCalibrating(true)}
-      onTapCorners={() => setCalibrating(true)}
+      onFindBoard={() => void findBoard()}
+      onTapCorners={() => { setProposal(null); setCalibrating(true); }}
+      finding={finding}
+      onCancelFind={() => findAbortRef.current?.abort()}
+      findMessage={proposal?.reasons[0] ?? null}
       onBoardSquares={(n: BoardSquares) => updateGrid({ boardSquares: n })}
       onGrid={updateGrid}
       onSeatEdge={(edge) => update({ seatEdge: edge })}
@@ -1762,13 +1813,21 @@ export default function BoardSequencerScreen() {
       >
         {calibrating && (
           <BoardCornerEditor
-            corners={config.enabled ? config.corners : undefined}
-            mode={config.enabled ? 'review' : 'tap'}
+            corners={proposal?.corners ?? (config.enabled ? config.corners : undefined)}
+            mode={proposal?.corners ? 'review' : config.enabled ? 'review' : 'tap'}
             rows={config.rows}
             cols={config.cols}
             controlsSide={layout.nudgePad}
-            onConfirm={(corners) => { handleCalibrated(corners); setCalibrating(false); }}
-            onCancel={() => setCalibrating(false)}
+            onConfirm={(corners) => {
+              // A confirmed proposal also saves the square count it found.
+              if (proposal?.squares && proposal.squares !== config.boardSquares) {
+                updateGrid({ boardSquares: proposal.squares });
+              }
+              handleCalibrated(corners);
+              setProposal(null);
+              setCalibrating(false);
+            }}
+            onCancel={() => { setProposal(null); setCalibrating(false); }}
           />
         )}
         {colourCalib && squarePicker && config.enabled && (() => {

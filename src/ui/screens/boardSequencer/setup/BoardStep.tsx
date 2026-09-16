@@ -28,6 +28,11 @@ export interface BoardStepProps {
   onNudgesEnabled(on: boolean): void;
   /** Warns that confirming corners adopts the stand-in camera. */
   usingFallbackCamera: boolean;
+  /** Find board is looking at the picture right now. */
+  finding: boolean;
+  onCancelFind(): void;
+  /** What the last attempt found, in plain words. */
+  findMessage: string | null;
 }
 
 const SEAT_OPTIONS: { value: SeatEdge; label: string }[] = [
@@ -41,6 +46,7 @@ export function BoardStep({
   boardSquares, rows, cols, seatEdge, nudgesEnabled, trackingEnabled, onTrackingEnabled,
   playerName, running, editing,
   onFindBoard, onTapCorners, onBoardSquares, onGrid, onSeatEdge, onNudgesEnabled, usingFallbackCamera,
+  finding, onCancelFind, findMessage,
 }: BoardStepProps): JSX.Element {
   const options = gridSizeOptions(boardSquares, { rows, cols });
   const [moreOpen, setMoreOpen] = useState(options.rowsIsMore || options.colsIsMore);
@@ -54,11 +60,27 @@ export function BoardStep({
         </p>
       )}
 
-      {!editing && (
+      {finding && (
+        <div
+          role="status"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 10, padding: 10,
+            borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-accent-muted)',
+            border: '1px solid var(--bs-accent)',
+          }}
+        >
+          <span style={{ flex: 1 }}>Hold still — keep hands away from the board.</span>
+          <Button tone="secondary" onClick={onCancelFind}>Cancel</Button>
+        </div>
+      )}
+      {!editing && !finding && (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <Button tone="primary" onClick={onFindBoard}>Find board</Button>
           <Button tone="secondary" onClick={onTapCorners}>Tap corners myself</Button>
         </div>
+      )}
+      {findMessage && !finding && (
+        <p role="status" style={{ margin: 0, color: 'var(--bs-fg2)' }}>{findMessage}</p>
       )}
 
       <div>
