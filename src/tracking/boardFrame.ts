@@ -8,7 +8,7 @@ import type { ColourId } from './boardColours';
 import type { ActiveCell, BoardStepResult, CellReading, PieceColour } from './BoardSequencerMode';
 import { stepLoopBank, type LoopBankState } from '../songs/loopBank';
 import { conditionalFromOffset } from '../songs/boardSequencerScale';
-import { ANYWHERE, NO_ZONE, splitByZone, zoneSlotCount, zoneSlotOf, type Zone } from './zones';
+import { ANYWHERE, NO_ZONE, splitByZone, zoneCellOf, zoneSlotCount, zoneSlotOf, type Zone } from './zones';
 
 export type BankSlotState = 'empty' | 'paused' | 'active';
 
@@ -58,6 +58,11 @@ export interface BoardFrameOutput {
   captured: number[];
   fireTick: boolean;
   bankSlots: BankSlotState[] | null;
+  /**
+   * Which CELL each pad is in, keyed "row,col". The pads are a lane the player chooses,
+   * so nothing that draws them should be guessing at the bottom row.
+   */
+  bankCells: ReadonlyMap<string, BankSlotState>;
 }
 
 /**
@@ -198,5 +203,13 @@ export function stepBoardFrame({ readings, cfg, running, modeResult, loopBank, d
     })
     : null;
 
-  return { occupied, held: held ?? new Set<string>(), byColour, conditional, patternCells, activeLoops, activeMap, loopBank: nextBank, captured, fireTick, bankSlots };
+  const bankCells = new Map<string, BankSlotState>();
+  if (bankSlots) {
+    bankSlots.forEach((state, slot) => {
+      const cell = zoneCellOf(loopZone, slot, cfg.rows, cfg.cols);
+      if (cell) bankCells.set(`${cell.row},${cell.col}`, state);
+    });
+  }
+
+  return { occupied, held: held ?? new Set<string>(), byColour, conditional, bankCells, patternCells, activeLoops, activeMap, loopBank: nextBank, captured, fireTick, bankSlots };
 }

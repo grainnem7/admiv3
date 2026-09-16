@@ -40,6 +40,16 @@ export function zoneSlotOf(zone: Zone, cell: { row: number; col: number }, rows:
   return zone.mode === 'row' ? cell.col : rows - 1 - cell.row;
 }
 
+/** Which cell a pad sits in — the inverse of `zoneSlotOf`. Null when out of range. */
+export function zoneCellOf(
+  zone: Zone, slot: number, rows: number, cols: number,
+): { row: number; col: number } | null {
+  if (slot < 0 || slot >= zoneSlotCount(zone, rows, cols)) return null;
+  if (zone.mode === 'row') return { row: zone.index, col: slot };
+  if (zone.mode === 'col') return { row: rows - 1 - slot, col: zone.index };
+  return null;
+}
+
 /**
  * How far along its lane a counter sits, 0…1, from a centroid in unit board coordinates.
  * A row lane reads left → right; a column lane reads bottom → top.

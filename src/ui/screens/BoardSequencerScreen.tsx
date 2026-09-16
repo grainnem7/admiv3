@@ -429,7 +429,7 @@ export default function BoardSequencerScreen() {
       conditional: Set<string>,
       isVarLap: boolean,
       pingDir: number,
-      bankSlots: (null | 'empty' | 'paused' | 'active')[] | null,
+      bankCells: ReadonlyMap<string, 'empty' | 'paused' | 'active'>,
     ) => {
       const cv = overlayRef.current;
       const video = videoRef.current;
@@ -472,10 +472,10 @@ export default function BoardSequencerScreen() {
           ctx.fill();
           ctx.lineWidth = c === playCol && runningRef.current ? 3 : 1;
           ctx.strokeStyle = c === playCol && runningRef.current ? 'rgba(80,200,255,0.95)' : 'rgba(80,200,255,0.4)';
-          const isBankCell = bankSlots && r === cfg.rows - 1;
+          const st = bankCells.get(key);
+          const isBankCell = st !== undefined;
           if (isBankCell) {
             ctx.save();
-            const st = bankSlots[c];
             if (st === 'active') { ctx.fillStyle = 'rgba(80,200,255,0.5)'; ctx.fill(); }
             else if (st === 'paused') { ctx.fillStyle = 'rgba(80,200,255,0.18)'; ctx.fill(); }
             // 'empty' → leave as outline only
@@ -781,7 +781,7 @@ export default function BoardSequencerScreen() {
       const ping = playing && engine && cfg.pingPong ? engine.getPlayheadDirection() : 0;
       const swatchById = new Map(cfg.channels.map((c) => [c.id, c.swatch]));
       drawOverlay(
-        frame.occupied, frame.activeMap, cfg, playCol, swatchById, frame.conditional, varLap, ping, frame.bankSlots,
+        frame.occupied, frame.activeMap, cfg, playCol, swatchById, frame.conditional, varLap, ping, frame.bankCells,
       );
       // Note pops come from what the engine actually scheduled, matched against audible
       // time, so a cell never lights before its sound.
@@ -1859,7 +1859,7 @@ export default function BoardSequencerScreen() {
     detected: latestFrame?.frame.occupied ?? new Map(),
     settled: cellMap(active),
     conditional: latestFrame?.frame.conditional ?? new Set<string>(),
-    bankSlots: latestFrame?.frame.bankSlots ?? null,
+    bankCells: latestFrame?.frame.bankCells,
     held: heldCells,
     ghosts: ghostCells,
   };

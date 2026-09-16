@@ -59,3 +59,47 @@ describe('stepBoardFrame', () => {
     expect(out.bankSlots).toEqual(['empty', 'empty', 'empty', 'empty']);
   });
 });
+
+describe('stepBoardFrame — where the loop pads are', () => {
+  const settled = (cells: { row: number; col: number; colour: string }[]) => ({
+    activeCells: cells, justSettled: [], justDeactivated: [],
+  });
+  const base = {
+    rows: 4, cols: 4, loopBankEnabled: true, variationEnabled: false,
+    variationOffsetThreshold: 0.6, numPages: 1,
+  };
+
+  it('a row lane puts the pads in that row', () => {
+    const out = stepBoardFrame({
+      readings: [],
+      cfg: { ...base, loopZone: { mode: 'row', index: 3 } },
+      running: true,
+      modeResult: settled([]),
+      loopBank: emptyLoopBank(4),
+    });
+    expect([...out.bankCells.keys()].sort()).toEqual(['3,0', '3,1', '3,2', '3,3']);
+  });
+
+  it('a column lane puts them in that column, not the bottom row', () => {
+    const out = stepBoardFrame({
+      readings: [],
+      cfg: { ...base, loopZone: { mode: 'col', index: 0 } },
+      running: true,
+      modeResult: settled([]),
+      loopBank: emptyLoopBank(4),
+    });
+    expect([...out.bankCells.keys()].sort()).toEqual(['0,0', '1,0', '2,0', '3,0']);
+  });
+
+  it('no lane means no pads to draw anywhere', () => {
+    const out = stepBoardFrame({
+      readings: [],
+      cfg: { ...base, loopBankEnabled: false, loopZone: { mode: 'off', index: 0 } },
+      running: true,
+      modeResult: settled([]),
+      loopBank: emptyLoopBank(0),
+    });
+    expect(out.bankCells.size).toBe(0);
+    expect(out.bankSlots).toBeNull();
+  });
+});

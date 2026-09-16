@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  zoneContains, zoneSlotCount, zoneSlotOf, zonePosition, splitByZone, describeZone, clampZone,
+  zoneContains, zoneSlotCount, zoneSlotOf, zoneCellOf, zonePosition, splitByZone, describeZone, clampZone,
   ANYWHERE, NO_ZONE, type Zone,
 } from '../tracking/zones';
 
@@ -79,5 +79,30 @@ describe('describeZone and clampZone', () => {
     expect(clampZone({ mode: 'row', index: 7 }, 4, 8)).toEqual({ mode: 'row', index: 3 });
     expect(clampZone({ mode: 'col', index: 12 }, 4, 8)).toEqual({ mode: 'col', index: 7 });
     expect(clampZone(ANYWHERE, 4, 8)).toEqual(ANYWHERE);
+  });
+});
+
+describe('zoneCellOf', () => {
+  it('is the inverse of zoneSlotOf for a row lane', () => {
+    for (let slot = 0; slot < 8; slot++) {
+      const cell = zoneCellOf(row3, slot, 4, 8)!;
+      expect(cell).toEqual({ row: 3, col: slot });
+      expect(zoneSlotOf(row3, cell, 4)).toBe(slot);
+    }
+  });
+
+  it('is the inverse for a column lane, counting from the bottom', () => {
+    expect(zoneCellOf(col0, 0, 4, 8)).toEqual({ row: 3, col: 0 });
+    expect(zoneCellOf(col0, 3, 4, 8)).toEqual({ row: 0, col: 0 });
+    for (let slot = 0; slot < 4; slot++) {
+      expect(zoneSlotOf(col0, zoneCellOf(col0, slot, 4, 8)!, 4)).toBe(slot);
+    }
+  });
+
+  it('has no cell for a slot that does not exist, or for no lane', () => {
+    expect(zoneCellOf(col0, 4, 4, 8)).toBeNull();
+    expect(zoneCellOf(row3, -1, 4, 8)).toBeNull();
+    expect(zoneCellOf(ANYWHERE, 0, 4, 8)).toBeNull();
+    expect(zoneCellOf(NO_ZONE, 0, 4, 8)).toBeNull();
   });
 });

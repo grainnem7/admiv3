@@ -11,7 +11,8 @@ export interface BoardViewFrame {
   /** The pieces that have settled and are playing. */
   settled: Map<string, PieceColour>;
   conditional: Set<string>;
-  bankSlots: BankSlotState[] | null;
+  /** Which cell each loop pad is in, keyed "row,col" — the pads are a lane, not a row. */
+  bankCells?: ReadonlyMap<string, BankSlotState>;
   /** Cells the hand guard is holding — drawn hatched, so "on hold" is its own picture. */
   held?: ReadonlySet<string>;
   /** Knocked cells still sounding: a hollow disc with a double outline and a ↺. */
@@ -204,19 +205,21 @@ export function BoardView({
       }
     }
 
-    // Loop-bank row: each slot's state carries a glyph, not only a fill.
-    if (frame.bankSlots) {
-      const row = rows - 1;
+    // Loop pads: each one's state carries a glyph, not only a fill, and each is drawn
+    // where the lane actually puts it.
+    if (frame.bankCells && frame.bankCells.size > 0) {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.font = `${Math.round(Math.min(cw, ch) * 0.4)}px system-ui, sans-serif`;
-      frame.bankSlots.forEach((state, col) => {
-        if (col >= cols) return;
-        const cx = col * cw + cw / 2;
-        const cy = row * ch + ch / 2;
+      for (const [key, state] of frame.bankCells) {
+        const [row, col] = key.split(',').map(Number);
+        if (row < 0 || row >= rows || col < 0 || col >= cols) continue;
         ctx.fillStyle = palette.fg2;
-        ctx.fillText(state === 'empty' ? '□' : state === 'paused' ? '‖' : '▶', cx, cy);
-      });
+        ctx.fillText(
+          state === 'empty' ? '□' : state === 'paused' ? '‖' : '▶',
+          col * cw + cw / 2, row * ch + ch / 2,
+        );
+      }
     }
 
     // Ping-pong direction, so the sweep's turn is visible, not only audible.
