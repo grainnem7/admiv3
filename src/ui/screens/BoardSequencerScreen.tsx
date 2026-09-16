@@ -50,7 +50,7 @@ import { NudgeBanner } from './boardSequencer/play/NudgeBanner';
 import { SwatchChip } from './boardSequencer/ui/SwatchChip';
 import { Switch } from './boardSequencer/ui/Switch';
 import { SegmentedControl } from './boardSequencer/ui/SegmentedControl';
-import { clampZone, describeZone, type ZoneMode } from '../../tracking/zones';
+import { clampZone, describeZone, zoneSlotCount, type ZoneMode } from '../../tracking/zones';
 import { LabeledSlider } from './boardSequencer/ui/LabeledSlider';
 import { Button } from './boardSequencer/ui/Button';
 import { colourMatchesBoardRaw, type NudgeSignal } from './boardSequencer/playNudge';
@@ -939,12 +939,16 @@ export default function BoardSequencerScreen() {
     }
     engine.start();
     engineRef.current = engine;
+    // One pad per cell of the loop lane — which is a row of steps or a column of rows,
+    // so the count comes from the lane rather than being assumed.
+    const slots = zoneSlotCount(cfg.loopZone, cfg.rows, cfg.cols);
     loopBankRef.current = {
-      saved: Array.from({ length: cfg.cols }, (_, i) => {
+      saved: Array.from({ length: slots }, (_, i) => {
         const s = cfg.loopSlots[i];
         return s == null ? null : s.map((c) => ({ ...c }));
       }),
-      present: Array(cfg.cols).fill(false),
+      present: Array(slots).fill(false),
+      playing: Array(slots).fill(false),
     };
     engine.setActiveLoops([]);
     startSecRef.current = Tone.now();
@@ -1539,6 +1543,8 @@ export default function BoardSequencerScreen() {
     </div>
   );
 
+  const loopSlotCount = zoneSlotCount(config.loopZone, config.rows, config.cols);
+
   const loopsTab = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 10 }}>
       <Switch
@@ -1647,22 +1653,22 @@ export default function BoardSequencerScreen() {
                 />
                 Ping-pong (sweep → then ←)
               </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <input
-                  type="checkbox" checked={config.loopBankEnabled}
-                  onChange={(e) => update({ loopBankEnabled: e.target.checked })}
-                />
-                Loop bank (bottom row = save/recall slots)
-              </label>
-              {config.loopBankEnabled && (
+              {/* The lane picker above is the only switch: a second one could disagree
+                  with it, and the runtime follows the lane. */}
+              {loopSlotCount > 0 && (
                 <LoopBankView
                   rows={config.rows}
                   cols={config.cols}
                   swatchById={new Map(config.channels.map((c) => [c.id, c.swatch]))}
                   onClear={clearLoopSlotAt}
-                  slots={Array.from({ length: config.cols }, (_, i) => ({
+                  slots={Array.from({ length: loopSlotCount }, (_, i) => ({
                     cells: config.loopSlots[i] ?? null,
-                    active: loopBankRef.current.present[i] === true && (config.loopSlots[i] ?? null) != null,
+                    // In Toggle mode a loop plays without its counter, so "playing" is
+                    // what the player needs to see, not "a counter is on the pad".
+                    active: (config.loopPadMode === 'toggle'
+                      ? loopBankRef.current.playing?.[i] === true
+                      : loopBankRef.current.present[i] === true)
+                      && (config.loopSlots[i] ?? null) != null,
                   }))}
                 />
               )}
@@ -1857,8 +1863,8 @@ export default function BoardSequencerScreen() {
     held: heldCells,
     ghosts: ghostCells,
   };
-  const emptyLoopSlot = config.loopBankEnabled
-    && loopBankRef.current.saved.some((sl) => sl == null);
+  const emptyLoopSlot = loopSlotCount > 0
+    && loopBankRef.current.saved.slice(0, loopSlotCount).some((sl) => sl == null);
 
   const boardView = (
     <BoardView
