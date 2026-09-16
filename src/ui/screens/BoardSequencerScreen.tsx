@@ -95,7 +95,6 @@ import {
   loadActiveBoardConfig as loadBoardSequencerConfig, saveActiveBoardConfig as saveBoardSequencerConfig,
   allReferencedChannelIds,
 } from '../../profiles/BoardProfiles';
-import WarpedBoardView from '../components/board/WarpedBoardView';
 import LoopBankView from '../components/board/LoopBankView';
 import BoardHelp from '../components/board/BoardHelp';
 
@@ -1790,15 +1789,6 @@ export default function BoardSequencerScreen() {
                 />
               )}
             </div>
-            {/* Warped board (abstract view), alongside the camera while playing. */}
-            {view === 'play' && (
-              <div style={{ flex: '1 1 0', minWidth: 0, minHeight: 0 }}>
-                <WarpedBoardView
-                  rows={config.rows} cols={config.cols} active={active} playheadCol={playheadCol}
-                  colourFor={(id) => channelById.get(id)?.swatch ?? '#e23'}
-                />
-              </div>
-            )}
           </div>
         </>
       )}
