@@ -31,7 +31,22 @@ export interface CameraChoice {
   height: number;
 }
 
-const DEFAULT_SIZE = CAMERA_RESOLUTIONS[0];
+/**
+ * 1280 x 720, not 640 x 480 — and the reason is colour, not sharpness.
+ *
+ * With no colour metadata to go on, browsers infer the YUV-to-RGB coefficients partly
+ * from the frame SIZE: standard-definition sizes are read with one set, high-definition
+ * sizes with another. A bridged iPhone (Camo) encodes the HD way and, asked for 640 x 480,
+ * was read the SD way — so a purple counter arrived as tan (#a17f62, hue 28, saturation
+ * 39) while the screen showed it correctly, because the display path and the canvas path
+ * had made different assumptions. Confirmed on the rig: the same counter at 1280 x 720
+ * reads as the colour it actually is.
+ *
+ * Starting at an HD size keeps every camera out of that trap by default. It costs
+ * little — the readers downscale by 4 before doing any work — and the smaller size is
+ * still offered for a machine that needs it.
+ */
+const DEFAULT_SIZE = CAMERA_RESOLUTIONS[1];
 
 export function defaultCameraChoice(): CameraChoice {
   return { deviceId: '', label: '', width: DEFAULT_SIZE.width, height: DEFAULT_SIZE.height };

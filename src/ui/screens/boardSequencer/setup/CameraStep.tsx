@@ -127,7 +127,10 @@ export function CameraStep({
           options={CAMERA_RESOLUTIONS.map((r) => ({ value: `${r.width}x${r.height}`, label: r.label }))}
         />
         <p style={{ margin: '4px 0 0', color: 'var(--bs-fg2)', fontSize: 12 }}>
-          If the counters&rsquo; colours come out wrong, try a different size here first.
+          If the counters&rsquo; colours come out wrong &mdash; a purple counter reading as
+          brown, say &mdash; change this before changing anything else. A phone used as a
+          camera can send colour the browser reads correctly at one size and wrongly at
+          another. 1280 &times; 720 is the safe one.
         </p>
       </div>
 
