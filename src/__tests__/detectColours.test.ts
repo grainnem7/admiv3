@@ -371,3 +371,40 @@ describe('how much of a square has to change before it is a counter', () => {
     expect(out.colours.some((c) => !c.unsafe)).toBe(true);
   });
 });
+
+describe('saying which counter a proposal came from', () => {
+  const squareOf2 = (r: number, c: number): { x: number; y: number } =>
+    ({ x: (c + 0.5) / 8, y: (r + 0.5) / 8 });
+
+  it('reports the square of every counter behind a colour', () => {
+    // "3 counters" under one swatch is unarguable without this: which three?
+    const a = squareOf2(2, 2);
+    const b = squareOf2(5, 5);
+    const h = computeHomography(UNIT_SQUARE, sceneCorners());
+    // Learn from the EMPTY board, as the flow does. Learning from a frame that already
+    // has counters on it records the counters AS the board, and then nothing stands out.
+    const blank = scene();
+    const learntModel = buildSquareModel(warpToBoard(blank.data, blank.width, blank.height, h, 8));
+    if (!learntModel.ok) throw new Error('model');
+
+    const f = scene({ shapes: [counter(a.x, a.y, 0.1), counter(b.x, b.y, 0.1)] });
+    const warped = warpToBoard(f.data, f.width, f.height, h, 8);
+    const model = buildSquareModel(warped);
+    if (!model.ok) throw new Error('model');
+    const out = detectColours(warped, model.model, {
+      learntSquares: {
+        squares: learntModel.model.squares, rgb: Array.from(learntModel.model.rgb),
+      },
+    });
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+
+    const all = out.colours.flatMap((c) => c.squares);
+    // Both counters are the same colour, so they land under one proposal — and it names
+    // both squares, which is exactly what makes the grouping checkable.
+    expect(all).toHaveLength(2);
+    expect(all).toContainEqual({ row: 2, col: 2 });
+    expect(all).toContainEqual({ row: 5, col: 5 });
+    for (const c of out.colours) expect(c.squares).toHaveLength(c.counters);
+  });
+});

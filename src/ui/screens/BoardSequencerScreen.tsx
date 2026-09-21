@@ -2378,6 +2378,35 @@ export default function BoardSequencerScreen() {
             onCancel={() => { setProposal(null); setCalibrating(null); }}
           />
         )}
+        {/* Which counter each proposal came from, numbered to match the list.
+            "3 counters" under one swatch is unarguable without this: the player cannot
+            see WHICH three were run together, so cannot tell a wrong answer from counters
+            that really are that alike. Two badges with the same number on obviously
+            different counters says it in one glance. */}
+        {colourProposal && config.enabled && colourProposal.colours.flatMap((c, i) =>
+          c.squares.map((sqr) => {
+            const centre = squareCentreToImage(config.corners, config.boardSquares, sqr.row, sqr.col);
+            return (
+              <span
+                key={`${i}-${sqr.row}-${sqr.col}`}
+                aria-hidden="true"
+                style={{
+                  position: 'absolute',
+                  left: `${centre.x * 100}%`,
+                  top: `${centre.y * 100}%`,
+                  transform: 'translate(-50%, -50%)',
+                  minWidth: 22, height: 22, borderRadius: 11,
+                  display: 'grid', placeItems: 'center',
+                  background: c.swatch, color: '#000',
+                  border: '2px solid #fff', boxShadow: '0 0 0 2px #000',
+                  fontSize: 12, fontWeight: 700, fontFamily: 'ui-monospace, monospace',
+                }}
+              >
+                {i + 1}
+              </span>
+            );
+          }))}
+
         {/* Exactly where the colour was read from. A swatch alone can't tell you whether
             a wrong colour means "you tapped the wood" or "the tap landed somewhere else";
             this makes the difference visible instead of arguable. */}

@@ -51,6 +51,14 @@ export interface DetectedColour {
   boardMatch: number;
   /** True when the band could not be made safe — offered with the job preset to Off. */
   unsafe: boolean;
+  /**
+   * The squares this colour was found on.
+   *
+   * Without it, "3 counters" under one swatch is unarguable and unfixable: the player
+   * cannot tell WHICH three were run together, so they cannot tell whether the answer is
+   * wrong or their counters really are that similar.
+   */
+  squares: { row: number; col: number }[];
   band: ReturnType<typeof calibrationFromHsv>;
 }
 
@@ -63,6 +71,9 @@ interface Blob {
   g: number;
   b: number;
   pixels: number;
+  /** Which square it was found on, so a proposal can be pointed at on the board. */
+  row: number;
+  col: number;
 }
 
 /**
@@ -107,7 +118,7 @@ export function detectColours(
     // colour, which is exactly what we want to cluster. Only trusted when there is no
     // learnt board — with one, the pixel test below is both stricter and better founded.
     if (!learnt && model.covered[sq]) {
-      blobs.push({ r: mr, g: mg, b: mb, pixels: Math.round(per * per) });
+      blobs.push({ r: mr, g: mg, b: mb, pixels: Math.round(per * per), row, col });
       continue;
     }
     let r = 0; let g = 0; let b = 0; let n = 0;
@@ -123,7 +134,7 @@ export function detectColours(
     }
     const area = Math.max(1, (per - 2 * Math.max(1, Math.round(per * 0.15))) ** 2);
     if (n / area < MIN_BLOB_SQUARES) continue;
-    blobs.push({ r: r / n, g: g / n, b: b / n, pixels: n });
+    blobs.push({ r: r / n, g: g / n, b: b / n, pixels: n, row, col });
   }
   if (blobs.length === 0) return { ok: false, reason: 'nothing-found' };
 
@@ -141,11 +152,13 @@ export function detectColours(
     const b = group.reduce((s, b2) => s + b2.b * b2.pixels, 0) / weight;
     const hsv = rgbToHsv(r, g, b);
     const fitted = fitSafeBand(hsv, boardColours);
+    const squares = group.map((bl) => ({ row: bl.row, col: bl.col }));
     return {
       swatch: hex(r, g, b),
       kind: classifyCounterKind(hsv),
       hsv,
       counters: group.length,
+      squares,
       boardMatch: fitted.boardMatch,
       unsafe: fitted.unsafe,
       band: fitted.band,
