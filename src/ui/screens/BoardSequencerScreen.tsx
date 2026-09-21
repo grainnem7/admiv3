@@ -206,6 +206,8 @@ type ColourCalibTarget = { mode: 'new' } | { mode: 'recal'; id: ColourId };
 /** The colour the last calibration click read, shown in the camera check readout. */
 interface LastColourSample {
   hex: string;
+  /** Where on the picture it was read from, so the player can SEE what was sampled. */
+  at?: { x: number; y: number };
   h: number;
   s: number;
   v: number;
@@ -1339,6 +1341,7 @@ export default function BoardSequencerScreen() {
     const sample = {
       hex: s.hex, h: s.h, s: s.s, v: s.v, kind: cal.kind,
       unsafe: fitted?.unsafe === true,
+      at: { x: nx, y: ny },
     };
     setLastSample(sample);
     setPendingColour(sample);
@@ -2271,6 +2274,23 @@ export default function BoardSequencerScreen() {
               setCalibrating(null);
             }}
             onCancel={() => { setProposal(null); setCalibrating(null); }}
+          />
+        )}
+        {/* Exactly where the colour was read from. A swatch alone can't tell you whether
+            a wrong colour means "you tapped the wood" or "the tap landed somewhere else";
+            this makes the difference visible instead of arguable. */}
+        {pendingColour?.at && (
+          <span
+            aria-hidden="true"
+            style={{
+              position: 'absolute',
+              left: `${pendingColour.at.x * 100}%`,
+              top: `${pendingColour.at.y * 100}%`,
+              transform: 'translate(-50%, -50%)',
+              width: 26, height: 26, borderRadius: '50%',
+              border: `3px solid ${pendingColour.hex}`,
+              boxShadow: '0 0 0 2px #000, 0 0 0 5px #fff',
+            }}
           />
         )}
         {colourCalib && squarePicker && config.enabled && (() => {
