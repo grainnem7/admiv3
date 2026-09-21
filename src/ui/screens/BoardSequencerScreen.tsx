@@ -56,6 +56,7 @@ import { LabeledSlider } from './boardSequencer/ui/LabeledSlider';
 import { Button } from './boardSequencer/ui/Button';
 import { Modal } from './boardSequencer/ui/Modal';
 import { cameraDebugEnabled } from '../../tracking/cameraDebugFlag';
+import { loadCameraChoice, saveCameraChoice } from '../../tracking/cameraChoice';
 import { CameraDebugPanel } from '../components/camera/CameraDebugPanel';
 import { ConfirmDialog } from './boardSequencer/ui/ConfirmDialog';
 import { colourMatchesBoardRaw, type NudgeSignal } from './boardSequencer/playNudge';
@@ -258,6 +259,12 @@ export default function BoardSequencerScreen() {
   // Bumped by "Try again" to reopen the saved camera without changing the choice
   // (it's already selected, so the dropdown can't re-pick it).
   const [cameraRetry, setCameraRetry] = useState(0);
+  // The requested picture size. Kept with the camera choice (a property of this DEVICE,
+  // not of the player), because which size works is part of "which camera setup works".
+  const [resolution, setResolution] = useState(() => {
+    const c = loadCameraChoice();
+    return { width: c.width, height: c.height };
+  });
 
   // Not-yet-calibrated is a first-class state. It comes from the config itself
   // (`enabled` is only true once corners have been clicked and saved), so a
@@ -2075,6 +2082,14 @@ export default function BoardSequencerScreen() {
       onViewChange={changeView}
       onRefreshCameras={() => void refreshCameras()}
       handedness={config.handedness}
+      resolution={resolution}
+      onResolution={(size) => {
+        // Saved first, then the camera is reopened: start() reads the saved size.
+        saveCameraChoice({ ...loadCameraChoice(), ...size });
+        setResolution(size);
+        setCameraRetry((n) => n + 1);
+        announce(`Picture size ${size.width} by ${size.height}. Reopening the camera.`);
+      }}
     />
     </>
   ) : step === 'board' ? (

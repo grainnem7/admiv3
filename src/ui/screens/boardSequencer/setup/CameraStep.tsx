@@ -1,5 +1,7 @@
 import { Button } from '../ui/Button';
 import { Switch } from '../ui/Switch';
+import { SegmentedControl } from '../ui/SegmentedControl';
+import { CAMERA_RESOLUTIONS } from '../../../../tracking/cameraChoice';
 import { Disclosure } from '../ui/Disclosure';
 import type { CameraStatus } from '../boardSetupFlow';
 import type { CameraTrackInfo } from '../../../../tracking/CameraManager';
@@ -12,6 +14,9 @@ export interface CameraStepProps {
   camera: CameraStatus;
   trackInfo: CameraTrackInfo | null;
   saturation: number | null;
+  /** The size being requested, and how to change it. */
+  resolution: { width: number; height: number };
+  onResolution(size: { width: number; height: number }): void;
   /** Glare / too dark / uneven, in plain words; null when the light is good enough. */
   lightingNote: string | null;
   mirrorX: boolean;
@@ -26,6 +31,7 @@ export interface CameraStepProps {
 
 export function CameraStep({
   cameras, deviceId, onPickCamera, onTryAgain, camera, trackInfo, saturation, lightingNote,
+  resolution, onResolution,
   mirrorX, mirrorY, onViewChange, onRefreshCameras, handedness,
 }: CameraStepProps): JSX.Element {
   const colourless = camera.colourless === true;
@@ -104,6 +110,26 @@ export function CameraStep({
       <p style={{ margin: 0, color: 'var(--bs-fg2)', fontSize: 12 }}>
         {trackInfo ? `${trackInfo.label || 'Camera'} · ${trackInfo.width} × ${trackInfo.height}` : 'No camera details yet'}
       </p>
+
+      {/* Not a quality setting. A phone bridged over USB negotiates a different video
+          format per size, and the browser decides how to turn that format into colour
+          partly FROM the size — so a camera can hand back sensible colour at one size and
+          colours that are simply wrong at another. If the colours are off, change this. */}
+      <div>
+        <span style={{ fontWeight: 600, display: 'block', marginBottom: 4 }}>Picture size</span>
+        <SegmentedControl<string>
+          label="Picture size"
+          value={`${resolution.width}x${resolution.height}`}
+          onChange={(v) => {
+            const [w, h] = v.split('x').map(Number);
+            onResolution({ width: w, height: h });
+          }}
+          options={CAMERA_RESOLUTIONS.map((r) => ({ value: `${r.width}x${r.height}`, label: r.label }))}
+        />
+        <p style={{ margin: '4px 0 0', color: 'var(--bs-fg2)', fontSize: 12 }}>
+          If the counters&rsquo; colours come out wrong, try a different size here first.
+        </p>
+      </div>
 
       <Switch
         label="Mirror the picture"
