@@ -44,6 +44,19 @@ export const MIN_BLOB_SQUARES = 0.22;
  * that fight over the same counters.
  */
 export const MERGE_HUE = 15;
+/**
+ * …and how far apart in SATURATION, which hue alone cannot see.
+ *
+ * Pink and red sit about 10 degrees apart in hue and are told apart almost entirely by
+ * saturation (50 against 71); a pale near-white can share a hue with a vivid orange while
+ * having almost none. Hue alone ran both pairs together on the research board.
+ *
+ * Saturation is safe to compare because it SURVIVES a change in lighting: the same red
+ * counter in shadow measured hue 0 / saturation 72 / value 59, against hue 0 /
+ * saturation 71 / value 82 in the light. Hue and saturation held; only value moved —
+ * which is why value is deliberately not compared for coloured counters.
+ */
+export const MERGE_SAT = 18;
 /** …and for whites, greys and blacks, which have no hue: how far apart in lightness. */
 export const MERGE_VALUE = 22;
 /** A band may match at most this share of the board's squares. */
@@ -279,7 +292,9 @@ function cluster(blobs: Blob[]): Blob[][] {
       if (kind !== otherKind) return false;
       // Achromatic counters have no hue to compare; tell them apart by lightness.
       if (kind !== 'hue') return Math.abs(other.v - hsv.v) < MERGE_VALUE;
-      return hueGap(other.h, hsv.h) < MERGE_HUE;
+      // Hue AND saturation: hue says which colour, saturation says how strong it is, and
+      // both survive a change in light. Value does not, so it is left out.
+      return hueGap(other.h, hsv.h) < MERGE_HUE && Math.abs(other.s - hsv.s) < MERGE_SAT;
     }));
     if (found) { found.blobs.push(blob); found.hsv.push(hsv); }
     else groups.push({ blobs: [blob], hsv: [hsv] });

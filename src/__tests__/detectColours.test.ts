@@ -455,6 +455,33 @@ describe('telling one counter colour from another', () => {
     for (const c of out.colours) expect(c.counters).toBe(1);
   });
 
+  it('keeps pink apart from red, which hue alone cannot do', () => {
+    // 10 degrees of hue between them; what separates them is saturation, 50 against 71.
+    const r = squareAt(1, 5);
+    const p = squareAt(6, 2);
+    const out = findOn([
+      { u: r.x, v: r.y, rgb: [210, 60, 60] },
+      { u: p.x, v: p.y, rgb: [240, 120, 140] },
+    ]);
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.colours).toHaveLength(2);
+  });
+
+  it('keeps a near-white counter apart from a vivid one', () => {
+    // A pale counter can share a hue with a strong one while having almost no colour
+    // in it at all.
+    const o = squareAt(2, 6);
+    const w = squareAt(6, 4);
+    const out = findOn([
+      { u: o.x, v: o.y, rgb: [245, 140, 85] },
+      { u: w.x, v: w.y, rgb: [235, 232, 225] },
+    ]);
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.colours).toHaveLength(2);
+  });
+
   it('but still groups the same colour seen twice, lit differently', () => {
     // The reason not to simply tighten the old distance: one counter in shadow and the
     // same counter in light differ in brightness, not in hue.
