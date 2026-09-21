@@ -40,6 +40,8 @@ export interface ColoursStepProps {
   /** Armed picker: adding a new colour, or recalibrating an existing one. */
   arming: { mode: 'new' } | { mode: 'recal'; id: ColourId } | null;
   pending: PendingColour | null;
+  /** Whether the empty board has been learnt; 0 means colour checks have less to go on. */
+  boardLearnt: number;
   onFindColours(): void;
   onArmTap(): void;
   onCancelArm(): void;
@@ -95,7 +97,7 @@ export interface ColoursStepProps {
 
 export function ColoursStep(props: ColoursStepProps): JSX.Element {
   const {
-    channels, counts, palette, arming, pending, onFindColours, onArmTap, onCancelArm,
+    channels, counts, palette, arming, pending, boardLearnt, onFindColours, onArmTap, onCancelArm,
     onAddPending, onDiscardPending, onRecalibrate, onRole, onRemove, onClearAll, isReferenced, running,
     minFilledFraction, readSettingsCustom, onMinFill, onResetReadSettings,
     settleWindowMs, onSettleWindow, onBlackDarkness, picker, onMovePicker, onSampleSquare, hands,
@@ -159,6 +161,21 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
             <Button tone="quiet" onClick={onDiscardFound}>Tap a counter instead</Button>
           </div>
         </div>
+      )}
+
+      {boardLearnt === 0 && (
+        <p
+          role="status"
+          style={{
+            margin: 0, padding: 10, fontSize: 13,
+            borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-warn-tint)',
+            border: '1px solid var(--bs-border-control)',
+          }}
+        >
+          This board hasn&rsquo;t been learnt yet, so the wood and its shadows can still be
+          offered as counter colours. Go back to Board, take everything off, and press
+          &ldquo;Learn the board&rdquo; &mdash; then the counters are found by being unlike it.
+        </p>
       )}
 
       {arming && !pending && (

@@ -27,6 +27,15 @@ export interface BoardStepProps {
   onCancelFind(): void;
   /** What the last attempt found, in plain words. */
   findMessage: string | null;
+  /**
+   * Learning what the EMPTY board looks like, so "doesn't match the board" can mean
+   * something later. Its own visible step, not a side effect of confirming corners:
+   * the player has to know whether it has been done, and be able to do it again when
+   * the light changes.
+   */
+  boardLearnt: number;
+  onLearnBoard(): void;
+  learnMessage: string | null;
 }
 
 // NOTE: "Where does <player> sit?" used to be asked here. The answer was saved and then
@@ -40,6 +49,7 @@ export function BoardStep({
   running, editing,
   onFindBoard, onTapCorners, onBoardSquares, onGrid, onNudgesEnabled, usingFallbackCamera,
   finding, onCancelFind, findMessage,
+  boardLearnt, onLearnBoard, learnMessage,
 }: BoardStepProps): JSX.Element {
   const options = gridSizeOptions(boardSquares, { rows, cols });
   const [moreOpen, setMoreOpen] = useState(options.rowsIsMore || options.colsIsMore);
@@ -74,6 +84,33 @@ export function BoardStep({
       )}
       {findMessage && !finding && (
         <p role="status" style={{ margin: 0, color: 'var(--bs-fg2)' }}>{findMessage}</p>
+      )}
+
+      {!editing && !finding && (
+        <div style={{
+          display: 'flex', flexDirection: 'column', gap: 6, padding: 10,
+          borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-raised)',
+          border: '1px solid var(--bs-border-control)',
+        }}
+        >
+          <span style={{ fontWeight: 600 }}>Learn this board</span>
+          <p style={{ margin: 0, color: 'var(--bs-fg2)', fontSize: 13 }}>
+            With nothing on the board, this learns what its own squares look like. The
+            counters are then found by being unlike it &mdash; so wood and shadow stop
+            being offered as colours.
+          </p>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <Button tone="primary" onClick={onLearnBoard} reason={running ? 'Stop the board first.' : null}>
+              {boardLearnt > 0 ? 'Learn it again' : 'Learn the board'}
+            </Button>
+            <span style={{ fontSize: 13, color: boardLearnt > 0 ? 'var(--bs-ok)' : 'var(--bs-warn)' }}>
+              {boardLearnt > 0 ? `✓ Learnt from ${boardLearnt} squares` : 'Not learnt yet'}
+            </span>
+          </div>
+          {learnMessage && (
+            <p role="status" style={{ margin: 0, fontSize: 13, color: 'var(--bs-fg2)' }}>{learnMessage}</p>
+          )}
+        </div>
       )}
 
       <div>

@@ -66,7 +66,9 @@ import { TRACK_SAVE_MS } from '../../tracking/handGuard/boardTrack';
 import { detectBoard, type BoardDetection } from '../../tracking/boardDetect/detectBoard';
 import { consensus, AGREE_COUNT } from '../../tracking/boardDetect/consensus';
 import { runFrameBurst } from './boardSequencer/useFrameBurst';
-import { buildSquareModel, modelHsv, warpToBoard } from '../../tracking/boardColourDetect/squareModel';
+import {
+  buildSquareModel, modelHsv, warpToBoard, type SquareModel,
+} from '../../tracking/boardColourDetect/squareModel';
 import { fitSafeBand } from '../../tracking/boardColourDetect/detectColours';
 import { detectColours, type DetectedColour } from '../../tracking/boardColourDetect/detectColours';
 import type { FiredNote } from '../../songs/BoardSequencerEngine';
@@ -1020,17 +1022,13 @@ export default function BoardSequencerScreen() {
   }, [announce, homographyRef]);
 
   /**
-   * The board's own colours, from a fresh frame, for keeping a counter's band off them.
-   *
-   * "Find colours" has always done this; tapping a counter never did, so a red counter on
-   * a warm wooden board handed back a band wide enough to light the bare dark squares —
-   * the player taps one counter and the board fills with phantom notes. Null when the
-   * board can't be modelled (too covered, no corners yet), in which case the band is
-   * simply left as sampled, exactly as before.
+   * A model of the board from a fresh frame: what each square looks like, and which
+   * squares have something on them. Null when it can't be read (no corners yet, no
+   * picture, or too much of the board covered to tell squares from counters).
    */
-  const boardColoursNow = useCallback((
+  const boardModelNow = useCallback((
     cornersOverride?: BoardSequencerStored['corners'],
-  ): { h: number; s: number; v: number }[] | null => {
+  ): SquareModel | null => {
     const cfg = configRef.current;
     const video = videoRef.current;
     if ((!cfg.enabled && !cornersOverride) || !video || video.videoWidth <= 0) return null;
@@ -1049,11 +1047,59 @@ export default function BoardSequencerScreen() {
       const h = homographyForCorners(cornersOverride ?? cfg.corners, cv.width, cv.height);
       const warped = warpToBoard(data, cv.width, cv.height, h, cfg.boardSquares);
       const model = buildSquareModel(warped);
-      return model.ok ? modelHsv(model.model) : null;
+      return model.ok ? model.model : null;
     } catch {
       return null;
     }
   }, [configRef, videoRef]);
+
+  /** The board's own colours as they look RIGHT NOW (the fallback when none are stored). */
+  const boardColoursNow = useCallback((
+    cornersOverride?: BoardSequencerStored['corners'],
+  ): { h: number; s: number; v: number }[] | null => {
+    const model = boardModelNow(cornersOverride);
+    return model ? modelHsv(model) : null;
+  }, [boardModelNow]);
+
+
+  const [learnMessage, setLearnMessage] = useState<string | null>(null);
+
+  /**
+   * Learn what the EMPTY board looks like.
+   *
+   * Refuses when the board plainly is not empty. Learning a board with counters on it is
+   * worse than not learning at all: the counters' own colours would be recorded as "the
+   * board", and every one of them would then be rejected as "looks like the board" —
+   * failing in a way that points at the wrong thing entirely.
+   */
+  const learnBoard = useCallback(() => {
+    const cfg = configRef.current;
+    if (!cfg.enabled) {
+      setLearnMessage('Find the board and confirm its corners first.');
+      return;
+    }
+    const model = boardModelNow();
+    if (!model) {
+      setLearnMessage('Couldn’t read the board just now. Check the camera picture and try again.');
+      return;
+    }
+    const total = model.squares * model.squares;
+    let covered = 0;
+    for (let i = 0; i < total; i++) if (model.covered[i]) covered += 1;
+    if (covered > total * 0.12) {
+      setLearnMessage('There is still something on the board. Take the counters off, then learn it.');
+      announce('There is still something on the board.');
+      return;
+    }
+    const colours = modelHsv(model);
+    if (colours.length === 0) {
+      setLearnMessage('Couldn’t make out the squares. Try more even light.');
+      return;
+    }
+    update({ boardColours: colours });
+    setLearnMessage(null);
+    announce(`Board learnt from ${colours.length} squares.`);
+  }, [configRef, boardModelNow, update, announce]);
 
   const handleCalibrated = useCallback(
     (corners: [BoardPoint, BoardPoint, BoardPoint, BoardPoint], patch: Partial<BoardSequencerStored> = {}) => {
@@ -2126,6 +2172,9 @@ export default function BoardSequencerScreen() {
       nudgesEnabled={config.boardNudgesEnabled}
       running={running}
       editing={calibrating !== null}
+      boardLearnt={config.boardColours.length}
+      onLearnBoard={learnBoard}
+      learnMessage={learnMessage}
       onFindBoard={() => void findBoard()}
       onTapCorners={() => { setProposal(null); setCalibrating('tap'); }}
       finding={finding}
@@ -2153,6 +2202,7 @@ export default function BoardSequencerScreen() {
           : pendingColour.kind === 'black' ? 'Black' : 'White',
         unsafe: pendingColour.unsafe === true,
       }}
+      boardLearnt={config.boardColours.length}
       onFindColours={() => void findColours()}
       finding={findingColours}
       onCancelFind={() => findAbortRef.current?.abort()}
