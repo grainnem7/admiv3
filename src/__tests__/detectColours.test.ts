@@ -243,16 +243,14 @@ describe('a board that has been learnt square by square', () => {
    * covered. Judged against its own recorded appearance, its grain is simply what it
    * looks like.
    */
-  const grainy = () => {
-    // A board whose dark squares differ from each other far more than a family mean
-    // allows — which is exactly what real walnut does.
-    const shapes = [
-      { x0: 0.02, y0: 0.02, x1: 0.13, y1: 0.13, rgb: [96, 64, 44] as [number, number, number] },
-      { x0: 0.27, y0: 0.52, x1: 0.38, y1: 0.63, rgb: [150, 118, 86] as [number, number, number] },
-      { x0: 0.64, y0: 0.14, x1: 0.75, y1: 0.25, rgb: [88, 92, 96] as [number, number, number] },
-    ];
-    return scene({ shapes });
-  };
+  // A board whose dark squares differ from each other far more than a family mean
+  // allows — which is exactly what real walnut does.
+  const GRAIN = [
+    { x0: 0.02, y0: 0.02, x1: 0.13, y1: 0.13, rgb: [96, 64, 44] as [number, number, number] },
+    { x0: 0.27, y0: 0.52, x1: 0.38, y1: 0.63, rgb: [150, 118, 86] as [number, number, number] },
+    { x0: 0.64, y0: 0.14, x1: 0.75, y1: 0.25, rgb: [88, 92, 96] as [number, number, number] },
+  ];
+  const grainy = () => scene({ shapes: GRAIN });
 
   const warpOf = (f: ReturnType<typeof scene>) => warpToBoard(
     f.data, f.width, f.height, computeHomography(UNIT_SQUARE, sceneCorners()), 8,
@@ -275,13 +273,12 @@ describe('a board that has been learnt square by square', () => {
   });
 
   it('still finds a counter placed on that same board', () => {
-    const base = grainy();
-    const empty = warpOf(base);
+    const empty = warpOf(grainy());
     const model = buildSquareModel(empty);
     if (!model.ok) throw new Error('model');
     const learntSquares = { squares: model.model.squares, rgb: Array.from(model.model.rgb) };
 
-    const withCounter = warpOf(scene({ shapes: [...(base.shapes ?? []), counter(0.5, 0.5, 0.11)] }));
+    const withCounter = warpOf(scene({ shapes: [...GRAIN, counter(0.5, 0.5, 0.11)] }));
     const later = buildSquareModel(withCounter);
     if (!later.ok) throw new Error('model');
     const out = detectColours(withCounter, later.model, {
