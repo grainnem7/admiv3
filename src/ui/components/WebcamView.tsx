@@ -4,6 +4,11 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { CameraManager } from '../../tracking/CameraManager';
+import { loadCameraChoice, saveCameraChoice, type CameraChoice } from '../../tracking/cameraChoice';
+import { cameraDebugEnabled } from '../../tracking/cameraDebugFlag';
+import { CameraPicker } from './camera/CameraPicker';
+import { CameraDebugPanel } from './camera/CameraDebugPanel';
+import { useColourWatch } from './camera/useColourWatch';
 import { PoseDetector } from '../../tracking/PoseDetector';
 import { useAppStore } from '../../state/store';
 import type { PoseLandmarks } from '../../state/types';
@@ -22,6 +27,14 @@ function WebcamView({ onPose, showOverlay = true, trackedLandmark = 16 }: Webcam
 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Which camera and size to open. Remembered across sessions, because finding the
+  // combination that works is the slow part of setting a workshop up.
+  const [choice, setChoice] = useState<CameraChoice>(() => loadCameraChoice());
+  const [videoEl, setVideoEl] = useState<HTMLVideoElement | null>(null);
+  const showDebug = cameraDebugEnabled();
+  const choiceKey = `${choice.deviceId}|${choice.width}x${choice.height}`;
+  // Judged on the pixels the TRACKER reads, not on what the screen shows.
+  const { verdict, notice } = useColourWatch(videoEl, choiceKey);
 
   const setTracking = useAppStore((s) => s.setTracking);
   const setLandmarks = useAppStore((s) => s.setLandmarks);
@@ -113,7 +126,8 @@ function WebcamView({ onPose, showOverlay = true, trackedLandmark = 16 }: Webcam
         cameraRef.current = camera;
 
         if (!videoRef.current) return;
-        await camera.start(videoRef.current);
+        await camera.start(videoRef.current, choice.deviceId || undefined, choice);
+        setVideoEl(videoRef.current);
 
         if (!mounted) {
           camera.stop();
@@ -156,7 +170,13 @@ function WebcamView({ onPose, showOverlay = true, trackedLandmark = 16 }: Webcam
       cameraRef.current?.stop();
       setTracking(false);
     };
-  }, [handlePose, setTracking, setCameraError]);
+  }, [handlePose, setTracking, setCameraError, choice]);
+
+  // Only remember a combination once it has been SEEN to deliver colour: remembering one
+  // that handed back a grey picture would serve the same failure up again next session.
+  useEffect(() => {
+    if (verdict === 'colour') saveCameraChoice(choice);
+  }, [verdict, choice]);
 
   return (
     <div className="video-container">
@@ -168,6 +188,9 @@ function WebcamView({ onPose, showOverlay = true, trackedLandmark = 16 }: Webcam
         aria-label="Camera feed showing your movements"
       />
       <canvas ref={canvasRef} className="video-overlay" aria-hidden="true" />
+
+      <CameraPicker value={choice} onChange={setChoice} notice={notice} disabled={isLoading} />
+      {showDebug && <CameraDebugPanel video={videoEl} camera={cameraRef.current} />}
 
       {isLoading && (
         <div

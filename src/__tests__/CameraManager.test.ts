@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { buildVideoConstraints, shouldFallBackToDefault, CameraManager } from '../tracking/CameraManager';
+import {
+  buildVideoConstraints, shouldFallBackToDefault, CameraManager, CAMERA_RESOLUTIONS,
+} from '../tracking/CameraManager';
 
 /** A fake MediaStream whose single track records stop(). */
 function fakeStream(): { stream: MediaStream; stop: ReturnType<typeof vi.fn> } {
@@ -76,8 +78,8 @@ describe('CameraManager.start', () => {
 const CFG = { width: 640, height: 480, facingMode: 'user' as const, frameRate: 30 };
 
 describe('buildVideoConstraints', () => {
-  it('uses facingMode when no device is chosen (browser default camera)', () => {
-    const v = buildVideoConstraints(CFG);
+  it('uses facingMode on a phone when no device is chosen', () => {
+    const v = buildVideoConstraints(CFG, undefined, { mobile: true });
     expect(v.facingMode).toBe('user');
     expect(v.deviceId).toBeUndefined();
     expect(v.width).toEqual({ ideal: 640 });
@@ -86,7 +88,7 @@ describe('buildVideoConstraints', () => {
   });
 
   it('treats an empty device id as the browser default', () => {
-    const v = buildVideoConstraints(CFG, '');
+    const v = buildVideoConstraints(CFG, '', { mobile: true });
     expect(v.deviceId).toBeUndefined();
     expect(v.facingMode).toBe('user');
   });
@@ -114,5 +116,37 @@ describe('shouldFallBackToDefault', () => {
 
   it('recognises an OverconstrainedError-shaped object by name', () => {
     expect(shouldFallBackToDefault({ name: 'OverconstrainedError', constraint: 'deviceId' })).toBe(true);
+  });
+});
+
+describe('constraints for a virtual camera on a desktop', () => {
+  const cfg = { width: 640, height: 480, facingMode: 'user' as const, frameRate: 30 };
+
+  it('asks for no facing direction when a camera was chosen', () => {
+    // A phone bridged over USB presents as an ordinary camera with no front/back to it.
+    // Asking for one can only push the browser away from the camera that was picked.
+    const c = buildVideoConstraints(cfg, 'camo-device-id');
+    expect(c.facingMode).toBeUndefined();
+    expect(c.deviceId).toEqual({ exact: 'camo-device-id' });
+  });
+
+  it('asks for no facing direction on a desktop even with no camera chosen', () => {
+    // There is no user-facing camera to prefer on a desktop; the constraint is noise
+    // that a virtual camera may not advertise at all.
+    expect(buildVideoConstraints(cfg, undefined, { mobile: false }).facingMode).toBeUndefined();
+    expect(buildVideoConstraints(cfg, undefined, { mobile: true }).facingMode).toBe('user');
+  });
+
+  it('asks for the resolution it was given, as ideal, so a camera can still say no', () => {
+    const c = buildVideoConstraints({ ...cfg, width: 1920, height: 1080 }, 'x');
+    expect(c.width).toEqual({ ideal: 1920 });
+    expect(c.height).toEqual({ ideal: 1080 });
+  });
+
+  it('offers the three resolutions a virtual camera is worth retrying at', () => {
+    // Virtual cameras commonly deliver colour at one mode and luma-only at another, so
+    // the fix for a grey picture is often simply a different size.
+    expect(CAMERA_RESOLUTIONS.map((r) => `${r.width}x${r.height}`))
+      .toEqual(['640x480', '1280x720', '1920x1080']);
   });
 });

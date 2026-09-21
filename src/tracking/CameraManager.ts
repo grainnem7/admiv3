@@ -2,6 +2,10 @@
  * Camera Manager - Handles webcam access and stream management
  */
 
+import { loadCameraChoice } from './cameraChoice';
+
+export { CAMERA_RESOLUTIONS } from './cameraChoice';
+
 export interface CameraConfig {
   width?: number;
   height?: number;
@@ -25,14 +29,35 @@ export interface CameraTrackInfo {
   frameRate: number;
 }
 
+
+export interface CameraEnv {
+  /** True on a phone or tablet, where a front/back camera is a real distinction. */
+  mobile: boolean;
+}
+
+/** Whether this device has a front and a back camera worth choosing between. */
+export function detectCameraEnv(): CameraEnv {
+  if (typeof navigator === 'undefined') return { mobile: false };
+  const ua = navigator.userAgent ?? '';
+  const touch = typeof navigator.maxTouchPoints === 'number' && navigator.maxTouchPoints > 1;
+  return { mobile: touch && /Mobi|Android|iPhone|iPad|iPod/i.test(ua) };
+}
+
 /**
- * Video constraints for getUserMedia. With a chosen `deviceId` the exact camera is
- * pinned and facingMode is dropped (it would fight an explicit external/phone
- * camera choice); with none (or '') the browser picks its default camera.
+ * Video constraints for getUserMedia.
+ *
+ * `facingMode` is asked for ONLY on a phone or tablet. On a desktop there is no
+ * user-facing camera to prefer, and a virtual camera (a bridged phone, a capture app)
+ * usually advertises no facing direction at all — so the constraint is at best noise and
+ * at worst pushes the browser away from the camera the facilitator picked.
+ *
+ * Sizes stay `ideal`, never `exact`: a camera that cannot do 1080p should hand back what
+ * it can rather than failing to open.
  */
 export function buildVideoConstraints(
   config: Required<CameraConfig>,
   deviceId?: string,
+  env: CameraEnv = detectCameraEnv(),
 ): MediaTrackConstraints {
   const base: MediaTrackConstraints = {
     width: { ideal: config.width },
@@ -40,7 +65,7 @@ export function buildVideoConstraints(
     frameRate: { ideal: config.frameRate },
   };
   if (deviceId) return { ...base, deviceId: { exact: deviceId } };
-  return { ...base, facingMode: config.facingMode };
+  return env.mobile ? { ...base, facingMode: config.facingMode } : base;
 }
 
 /**
@@ -69,8 +94,19 @@ export class CameraManager {
    * Request camera access and start the video stream. Pass `deviceId` to use a
    * specific camera; if that camera can't be found, the browser default is used
    * instead and `fellBack` is true.
+   *
+   * `size` overrides the requested resolution for this start. It matters more than it
+   * looks: a virtual camera can negotiate a different pixel format per resolution and
+   * deliver proper colour at one size and a luma-only picture at another, so the size is
+   * part of "which camera setup works", not just a quality dial. Left out, the size the
+   * facilitator last got working on this device is used.
    */
-  async start(videoElement: HTMLVideoElement, deviceId?: string): Promise<{ fellBack: boolean }> {
+  async start(
+    videoElement: HTMLVideoElement,
+    deviceId?: string,
+    size: { width: number; height: number } = loadCameraChoice(),
+  ): Promise<{ fellBack: boolean }> {
+    this.config = { ...this.config, width: size.width, height: size.height };
     this.videoElement = videoElement;
     const generation = this.generation;
     let fellBack = false;
@@ -170,6 +206,28 @@ export class CameraManager {
       height: s.height ?? this.videoElement?.videoHeight ?? 0,
       frameRate: s.frameRate ?? 0,
     };
+  }
+
+  /**
+   * Everything the browser will tell us about the running track.
+   *
+   * `getSettings()` is what the camera actually negotiated — which for a virtual camera
+   * is frequently NOT what was asked for — and `getCapabilities()` is what it says it can
+   * do. Neither names the pixel format (no browser exposes that), which is exactly why a
+   * luma-only feed has to be diagnosed from the pixels instead. Kept together so the
+   * debug panel and any bug report show the same thing.
+   */
+  getTrackDiagnostics(): { settings: MediaTrackSettings; capabilities: MediaTrackCapabilities | null } | null {
+    const track = this.stream?.getVideoTracks()[0];
+    if (!track) return null;
+    let capabilities: MediaTrackCapabilities | null = null;
+    try {
+      // Not implemented everywhere, and throws on some virtual cameras.
+      capabilities = typeof track.getCapabilities === 'function' ? track.getCapabilities() : null;
+    } catch {
+      capabilities = null;
+    }
+    return { settings: track.getSettings(), capabilities };
   }
 
   /**
