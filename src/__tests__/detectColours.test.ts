@@ -408,3 +408,65 @@ describe('saying which counter a proposal came from', () => {
     for (const c of out.colours) expect(c.squares).toHaveLength(c.counters);
   });
 });
+
+describe('telling one counter colour from another', () => {
+  /**
+   * From the research board, with the badges drawn on: proposal 1 sat on the YELLOW, the
+   * ORANGE and the PINK counters at once. Yellow and pink are about 110 apart in RGB and
+   * should never have shared a colour.
+   *
+   * The old grouping compared each blob with the group's running MEAN, so the mean
+   * drifted: orange pulled it, pink then fitted the drifted mean, and yellow fitted it
+   * after that. Chaining, one counter at a time, until three colours were one.
+   */
+  const squareAt = (r: number, c: number): { x: number; y: number } =>
+    ({ x: (c + 0.5) / 8, y: (r + 0.5) / 8 });
+
+  const findOn = (shapes: { u: number; v: number; rgb: [number, number, number] }[]) => {
+    const h = computeHomography(UNIT_SQUARE, sceneCorners());
+    const blank = scene();
+    const learnt = buildSquareModel(warpToBoard(blank.data, blank.width, blank.height, h, 8));
+    if (!learnt.ok) throw new Error('model');
+    const f = scene({
+      shapes: shapes.map((sh) => ({
+        x0: sh.u - 0.05, y0: sh.v - 0.05, x1: sh.u + 0.05, y1: sh.v + 0.05, rgb: sh.rgb,
+      })),
+    });
+    const warped = warpToBoard(f.data, f.width, f.height, h, 8);
+    const model = buildSquareModel(warped);
+    if (!model.ok) throw new Error('model');
+    return detectColours(warped, model.model, {
+      learntSquares: { squares: learnt.model.squares, rgb: Array.from(learnt.model.rgb) },
+    });
+  };
+
+  it('keeps yellow, orange and pink apart', () => {
+    const y = squareAt(1, 1);
+    const o = squareAt(3, 3);
+    const p = squareAt(5, 5);
+    const out = findOn([
+      { u: y.x, v: y.y, rgb: [250, 205, 70] },
+      { u: o.x, v: o.y, rgb: [245, 140, 85] },
+      { u: p.x, v: p.y, rgb: [240, 120, 140] },
+    ]);
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.colours).toHaveLength(3);
+    for (const c of out.colours) expect(c.counters).toBe(1);
+  });
+
+  it('but still groups the same colour seen twice, lit differently', () => {
+    // The reason not to simply tighten the old distance: one counter in shadow and the
+    // same counter in light differ in brightness, not in hue.
+    const a = squareAt(2, 2);
+    const b = squareAt(4, 6);
+    const out = findOn([
+      { u: a.x, v: a.y, rgb: [210, 60, 60] },
+      { u: b.x, v: b.y, rgb: [150, 42, 42] },
+    ]);
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.colours).toHaveLength(1);
+    expect(out.colours[0].counters).toBe(2);
+  });
+});

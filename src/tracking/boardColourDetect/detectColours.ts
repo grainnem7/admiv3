@@ -35,8 +35,17 @@ export const COUNTER_DELTA = 90;
  * cured that but then missed the off-centre counters on the same board.
  */
 export const MIN_BLOB_SQUARES = 0.22;
-/** Two colours closer than this (in RGB distance) are the same counter colour. */
-export const MERGE_DISTANCE = 60;
+/**
+ * Counters whose hues are closer than this are the same colour.
+ *
+ * Detection bands span about 24 degrees either side of their hue, so two counters closer
+ * than this would produce overlapping bands and could not be told apart at play time
+ * anyway — grouping them here at least says so honestly, instead of offering two colours
+ * that fight over the same counters.
+ */
+export const MERGE_HUE = 15;
+/** …and for whites, greys and blacks, which have no hue: how far apart in lightness. */
+export const MERGE_VALUE = 22;
 /** A band may match at most this share of the board's squares. */
 export const MAX_BOARD_MATCH = 0.02;
 
@@ -236,19 +245,46 @@ function matchShare(
 }
 
 /** Group blobs whose colours are close enough to be the same counter colour. */
+/** Shortest way round the hue circle, in degrees. */
+function hueGap(a: number, b: number): number {
+  const d = Math.abs(a - b) % 360;
+  return d > 180 ? 360 - d : d;
+}
+
+/**
+ * Group the blobs into counter colours.
+ *
+ * Two rules, and both exist because of a specific way the old one failed.
+ *
+ * FIRST, colours are compared by HUE, not by distance in RGB. RGB distance treats "a bit
+ * darker" the same as "a different colour", which is backwards for this job: the same
+ * counter in shadow must group, and two different counters must not. Hue is also what the
+ * detection bands themselves are built on, so grouping this way asks the same question
+ * the matching will later ask. Whites, greys and blacks have no meaningful hue, so they
+ * are grouped by being achromatic instead.
+ *
+ * SECOND, a blob must be close to EVERY member of a group, not to the group's average.
+ * Comparing against a running mean lets it drift: orange pulls the mean, pink then fits
+ * the drifted mean, and yellow fits it after that — so yellow and pink end up sharing a
+ * colour despite being nothing like each other. That is exactly what happened on the
+ * research board: yellow, orange and pink came back as one.
+ */
 function cluster(blobs: Blob[]): Blob[][] {
-  const groups: Blob[][] = [];
+  const groups: { blobs: Blob[]; hsv: { h: number; s: number; v: number }[] }[] = [];
   for (const blob of blobs) {
-    const found = groups.find((group) => {
-      const r = group.reduce((s, b) => s + b.r, 0) / group.length;
-      const g = group.reduce((s, b) => s + b.g, 0) / group.length;
-      const b = group.reduce((s, x) => s + x.b, 0) / group.length;
-      return Math.hypot(blob.r - r, blob.g - g, blob.b - b) < MERGE_DISTANCE;
-    });
-    if (found) found.push(blob);
-    else groups.push([blob]);
+    const hsv = rgbToHsv(blob.r, blob.g, blob.b);
+    const kind = classifyCounterKind(hsv);
+    const found = groups.find((group) => group.hsv.every((other) => {
+      const otherKind = classifyCounterKind(other);
+      if (kind !== otherKind) return false;
+      // Achromatic counters have no hue to compare; tell them apart by lightness.
+      if (kind !== 'hue') return Math.abs(other.v - hsv.v) < MERGE_VALUE;
+      return hueGap(other.h, hsv.h) < MERGE_HUE;
+    }));
+    if (found) { found.blobs.push(blob); found.hsv.push(hsv); }
+    else groups.push({ blobs: [blob], hsv: [hsv] });
   }
-  return groups;
+  return groups.map((g) => g.blobs);
 }
 
 function hex(r: number, g: number, b: number): string {
