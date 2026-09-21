@@ -66,12 +66,18 @@ export function applyDetectedColours(
       };
       continue;
     }
+    // A colour that cannot be told apart from the board is NOT made into a new channel.
+    // It is still listed in the proposal, marked "looks like the board", so the player
+    // can see it was found and rejected — but creating it fills their list with the wood.
+    // Worse, the wood looks slightly different each time the board is searched, so every
+    // run added another one: three "Orange" channels, one of them matching 56 squares.
+    // A player who really does want such a colour can add it by tapping the counter,
+    // which warns and then does as it is told.
+    if (c.unsafe) continue;
     channels.push({
       id: freshChannelId(channels.map((ch) => ch.id), referenced),
       kind: c.kind,
-      // A colour that matches the board starts switched off rather than filling the
-      // pattern with notes nobody played.
-      role: c.unsafe ? 'off' : suggestRole(channels, { kind: c.kind }),
+      role: suggestRole(channels, { kind: c.kind }),
       swatch: c.swatch,
       ...band,
     });

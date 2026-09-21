@@ -59,18 +59,37 @@ describe('putting the found colours onto the board', () => {
     expect(out[1].id).not.toBe('c1');
   });
 
-  it('a colour that looks like the board arrives switched off', () => {
-    const out = applyDetectedColours([], [found('#c8b496', true)]);
-    expect(out[0].role).toBe('off');
+  it('a colour that looks like the board is not made into a channel', () => {
+    // It stays in the proposal list, marked, so the player sees it was found and
+    // rejected — but a channel for the wood is clutter at best. On the rig it was worse:
+    // the wood looks slightly different each search, so every run added another one,
+    // ending with three "Orange" channels and one of them matching 56 squares.
+    expect(applyDetectedColours([], [found('#c8b496', true)])).toHaveLength(0);
+    expect(applyDetectedColours([], [found('#c8b496', true), found('#2f6fd0')])).toHaveLength(1);
   });
 
-  it('but switching a board-like colour off does not erase a job already chosen', () => {
+  it('searching again and again does not pile up board-coloured channels', () => {
+    let channels = applyDetectedColours([], BOARD_SET.map((s) => found(s)));
+    for (let run = 0; run < 3; run++) {
+      // Each search sees the wood a little differently, which is what used to add a new
+      // channel every time.
+      channels = applyDetectedColours(channels, [
+        ...BOARD_SET.map((s) => found(s)),
+        found(`#c8b4${(0x96 + run * 8).toString(16)}`, true),
+      ]);
+    }
+    expect(channels).toHaveLength(8);
+  });
+
+  it('a colour they already have that now matches the board is switched off, not dropped', () => {
+    // Different from never creating it: this one they chose, so it stays, with its job
+    // turned off rather than silently removed from under them.
     const existing: ColourChannel[] = [
       { id: 'c1', kind: 'hue', role: 'bass', swatch: '#c8b496' },
     ];
     const out = applyDetectedColours(existing, [found('#c8b496', true)]);
-    expect(out[0].role).toBe('off');
-    expect(out[0].id).toBe('c1');
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ id: 'c1', role: 'off' });
   });
 
   it('never reuses an id that saved loops or pages still point at', () => {

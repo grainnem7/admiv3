@@ -2450,7 +2450,7 @@ export default function BoardSequencerScreen() {
               <strong>
                 {isFaderRole(c.role)
                   ? legendValue(c.role as FaderRole, controlState?.values[c.role as FaderRole], controlState?.held ?? new Set())
-                  : `${stats.byColour[c.id] ?? 0} playing`}
+                  : c.role === 'off' ? 'not used' : `${stats.byColour[c.id] ?? 0} playing`}
               </strong>
             </span>
           ))}

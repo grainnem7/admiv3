@@ -174,7 +174,13 @@ export function stepBoardFrame({ readings, cfg, running, modeResult, loopBank, d
   const slots = zoneSlotCount(loopZone, cfg.rows, cfg.cols);
   if (running && modeResult) {
     const split = splitByZone(modeResult.activeCells, controlZone, loopZone);
-    patternCells = split.pattern;
+    // A colour whose job is "Off (not used)" is not part of the pattern. The engine
+    // already ignores it, but the BOARD was still drawing it, so a colour that happened
+    // to match the wood filled every square on screen and the legend called it "playing".
+    // "Not used" has to mean not shown, not counted, and not played.
+    patternCells = cfg.sequencedColours
+      ? split.pattern.filter((c) => cfg.sequencedColours?.has(c.colour))
+      : split.pattern;
     if (slots > 0) {
       // A volume counter parked on a pad is a control, not a loop trigger.
       const present = Array.from({ length: slots }, (_, i) => split.pads.some(
