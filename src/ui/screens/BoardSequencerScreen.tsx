@@ -83,6 +83,7 @@ import {
 import { layoutFor } from './boardSequencer/layout';
 import { isConvexQuad, squareCentreToImage } from './boardSequencer/cornerEditor';
 import { rotateCorners } from '../../tracking/boardDetect/orientation';
+import { applyDetectedColours } from './boardSequencer/applyDetectedColours';
 import type { BoardSquares } from '../../tracking/boardGrid';
 import type { ControlsResult } from '../../tracking/controlCounters';
 import type { FaderRole, ControlRemoval } from '../../profiles/BoardSequencerConfig';
@@ -92,23 +93,6 @@ import type { FaderRole, ControlRemoval } from '../../profiles/BoardSequencerCon
  * distance between, say, red and orange counters, so re-running Find colours updates a
  * colour rather than duplicating it.
  */
-const MATCH_SWATCH_DISTANCE = 90;
-
-/** Straight-line distance between two hex swatches in RGB. */
-function swatchDistance(a: string, b: string): number {
-  const rgb = (hex: string): [number, number, number] => {
-    const h = hex.replace('#', '');
-    const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
-    return [
-      parseInt(full.slice(0, 2), 16) || 0,
-      parseInt(full.slice(2, 4), 16) || 0,
-      parseInt(full.slice(4, 6), 16) || 0,
-    ];
-  };
-  const [ar, ag, ab] = rgb(a);
-  const [br, bg, bb] = rgb(b);
-  return Math.hypot(ar - br, ag - bg, ab - bb);
-}
 
 /** Reserved space under a control, so a disabled reason never shifts the layout. */
 const REASON_STYLE = { display: 'block', minHeight: 14, fontSize: 11, opacity: 0.7 } as const;
@@ -812,44 +796,10 @@ export default function BoardSequencerScreen() {
   const useDetectedColours = useCallback(() => {
     const found = colourProposal?.colours;
     if (!found || found.length === 0) return;
-    setConfig((prev) => {
-      const referenced = allReferencedChannelIds();
-      const channels = prev.channels.map((c) => ({ ...c }));
-      const taken = new Set<number>();
-      for (const c of found) {
-        // Match on colour: the nearest existing swatch, if it is near enough to be the
-        // same counter rather than a different one.
-        let best = -1;
-        let bestDistance = MATCH_SWATCH_DISTANCE;
-        channels.forEach((existing, i) => {
-          if (taken.has(i)) return;
-          const d = swatchDistance(existing.swatch, c.swatch);
-          if (d < bestDistance) { bestDistance = d; best = i; }
-        });
-        const band = { band: c.band.band, blackBand: c.band.blackBand, whiteBand: c.band.whiteBand };
-        if (best >= 0) {
-          taken.add(best);
-          channels[best] = {
-            ...channels[best], kind: c.kind, swatch: c.swatch, ...band,
-            // An unsafe colour is switched off, but a job the player chose is not thrown
-            // away for one that was already doing something.
-            role: c.unsafe ? 'off' : channels[best].role,
-          };
-          continue;
-        }
-        const id = freshChannelId(channels.map((ch) => ch.id), referenced);
-        channels.push({
-          id,
-          kind: c.kind,
-          // A colour that matches the board starts switched off rather than filling the
-          // pattern with notes nobody played.
-          role: c.unsafe ? 'off' : suggestRole(channels, { kind: c.kind }),
-          swatch: c.swatch,
-          ...band,
-        });
-      }
-      return { ...prev, channels };
-    });
+    setConfig((prev) => ({
+      ...prev,
+      channels: applyDetectedColours(prev.channels, found, allReferencedChannelIds()),
+    }));
     setColourProposal(null);
   }, [colourProposal]);
 
