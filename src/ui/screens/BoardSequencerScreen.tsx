@@ -55,6 +55,8 @@ import { clampZone, describeZone, NO_ZONE, zoneSlotCount, zonesCollide, type Zon
 import { LabeledSlider } from './boardSequencer/ui/LabeledSlider';
 import { Button } from './boardSequencer/ui/Button';
 import { Modal } from './boardSequencer/ui/Modal';
+import { cameraDebugEnabled } from '../../tracking/cameraDebugFlag';
+import { CameraDebugPanel } from '../components/camera/CameraDebugPanel';
 import { ConfirmDialog } from './boardSequencer/ui/ConfirmDialog';
 import { colourMatchesBoardRaw, type NudgeSignal } from './boardSequencer/playNudge';
 import { spaceTogglesPlay, type BoardScreenView } from './boardSequencer/spaceKey';
@@ -2052,6 +2054,10 @@ export default function BoardSequencerScreen() {
     : null;
 
   const setupStepBody = step === 'camera' ? (
+    <>
+    {/* Behind ?cameradebug=1. This is the screen a facilitator is actually on when a
+        camera misbehaves, so the diagnostic belongs here too. */}
+    {cameraDebugEnabled() && <CameraDebugPanel video={videoRef.current} camera={cameraRef.current} />}
     <CameraStep
       cameras={cameras}
       deviceId={config.cameraDeviceId}
@@ -2067,6 +2073,7 @@ export default function BoardSequencerScreen() {
       onRefreshCameras={() => void refreshCameras()}
       handedness={config.handedness}
     />
+    </>
   ) : step === 'board' ? (
     <BoardStep
       boardSquares={config.boardSquares}
