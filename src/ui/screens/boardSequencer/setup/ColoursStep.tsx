@@ -204,6 +204,13 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
                 ? 'This looks like the board itself, so it would light up bare squares. Try a counter that stands out more from the wood, or add it and switch its job Off.'
                 : 'Nothing is saved until you press Add.'}
             </div>
+            {/* The numbers the sample actually produced. A swatch shows what was read;
+                these say how STRONG the colour was, which is the difference between
+                "you tapped the wood" and "this camera sends washed-out colour". A vivid
+                counter should read well above 40 saturation on any camera worth using. */}
+            <div style={{ fontSize: 11, color: 'var(--bs-fg2)', fontFamily: 'ui-monospace, monospace' }}>
+              {`${pending.hex}  ·  hue ${Math.round(pending.h)}°  ·  saturation ${Math.round(pending.s)}  ·  brightness ${Math.round(pending.v)}`}
+            </div>
           </div>
           <Button tone="primary" onClick={onAddPending}>Add</Button>
           <Button tone="secondary" onClick={onDiscardPending}>Try again</Button>
