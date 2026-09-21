@@ -1097,7 +1097,11 @@ export default function BoardSequencerScreen() {
       return;
     }
     update({ boardColours: colours });
-    setLearnMessage(null);
+    // Say so, with the time on it. Learning a second time usually finds the same number
+    // of squares, so a bare count is indistinguishable from the button doing nothing —
+    // and a control that gives no sign it ran is a control you cannot trust.
+    const at = new Date().toLocaleTimeString();
+    setLearnMessage(`Learnt from ${colours.length} squares at ${at}.`);
     announce(`Board learnt from ${colours.length} squares.`);
   }, [configRef, boardModelNow, update, announce]);
 

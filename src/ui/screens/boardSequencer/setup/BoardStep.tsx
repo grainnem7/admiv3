@@ -108,7 +108,13 @@ export function BoardStep({
             </span>
           </div>
           {learnMessage && (
-            <p role="status" style={{ margin: 0, fontSize: 13, color: 'var(--bs-fg2)' }}>{learnMessage}</p>
+            <p
+              role="status"
+              aria-live="polite"
+              style={{ margin: 0, fontSize: 13, color: 'var(--bs-fg)', fontWeight: 600 }}
+            >
+              {learnMessage}
+            </p>
           )}
         </div>
       )}
