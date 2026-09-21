@@ -318,10 +318,26 @@ describe('how much of a square has to change before it is a counter', () => {
     f.data, f.width, f.height, computeHomography(UNIT_SQUARE, sceneCorners()), 8,
   );
 
-  it('asks for most of the square, not a few stray pixels', () => {
-    expect(MIN_BLOB_SQUARES).toBeGreaterThan(0.2);
-    // …and not so much that a counter straddling the line between two squares is missed.
-    expect(MIN_BLOB_SQUARES).toBeLessThan(0.5);
+  it('sits clear of grain below it and of an off-centre counter above it', () => {
+    // Grain, a shadow edge or a slightly nudged board reach a few percent.
+    expect(MIN_BLOB_SQUARES).toBeGreaterThan(0.15);
+    // A counter only half on its square still covers about 30% on the research board,
+    // where the counters are small relative to the squares. It must not be missed.
+    expect(MIN_BLOB_SQUARES).toBeLessThan(0.3);
+  });
+
+  it('finds a counter that is well off the centre of its square', () => {
+    // The case that went missing when the bar was set from the assumed counter size
+    // rather than a real one.
+    const p = squareOf(3, 3);
+    const offset = 0.05;
+    const warped = warpOf(scene({ shapes: [counter(p.x + offset, p.y + offset, 0.1)] }));
+    const model = buildSquareModel(warped);
+    if (!model.ok) throw new Error('model');
+    const out = detectColours(warped, model.model, {
+      learntSquares: { squares: model.model.squares, rgb: Array.from(model.model.rgb) },
+    });
+    expect(out.ok).toBe(true);
   });
 
   it('a small mark on a square is not a counter', () => {

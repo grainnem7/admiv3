@@ -18,17 +18,23 @@ export const COUNTER_DELTA = 90;
 /**
  * How much of a square must differ before it counts as having something ON it.
  *
- * Derived, not picked. The sampled region is the square inset by 15% a side, and a
- * counter covers about 0.45 of a square — which works out at roughly 95% of that region
- * when the counter is on the square at all. So the honest question is "is most of this
- * square covered?", and a third of it is a generous floor: it still accepts a counter
- * straddling the line between two squares (about half each), while rejecting the handful
- * of stray pixels that grain, a shadow edge or a slightly nudged board produce.
+ * Derived, not picked, and it has to clear a wide gap from both sides.
+ *
+ * The sampled region is the square inset by 15% a side. How much of it a counter covers
+ * depends on how big the counters are RELATIVE TO THE SQUARES, which varies by set: the
+ * code's assumed 0.45 of a square gives about 95% of that region, while a smaller counter
+ * on a bigger square — measured at about 0.28 on the research board — gives about 59%,
+ * and roughly 30% when it sits off-centre.
+ *
+ * Grain, a shadow edge, or the board having shifted a hair since it was learnt reach a
+ * few percent. So the bar wants to sit well above those and below a counter that is only
+ * half on its square: a fifth of the square does both.
  *
  * It was 0.05 — about 97 pixels of the 1936 sampled — which an empty walnut board clears
- * without difficulty. That is why "Find colours" offered counters on a bare board.
+ * without difficulty, which is why "Find colours" offered counters on a bare board. 0.35
+ * cured that but then missed the off-centre counters on the same board.
  */
-export const MIN_BLOB_SQUARES = 0.35;
+export const MIN_BLOB_SQUARES = 0.22;
 /** Two colours closer than this (in RGB distance) are the same counter colour. */
 export const MERGE_DISTANCE = 60;
 /** A band may match at most this share of the board's squares. */
