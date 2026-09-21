@@ -775,7 +775,9 @@ export default function BoardSequencerScreen() {
         });
         return;
       }
-      const found = detectColours(warped, model.model);
+      // Judge every candidate against the board we learnt when it was empty, not against
+      // one inferred from this frame — which has counters all over it.
+      const found = detectColours(warped, model.model, { boardColours: cfg.boardColours });
       if (!found.ok) {
         setColourProposal({
           colours: [],
@@ -1017,6 +1019,42 @@ export default function BoardSequencerScreen() {
     announce('Board turned a quarter turn.');
   }, [announce, homographyRef]);
 
+  /**
+   * The board's own colours, from a fresh frame, for keeping a counter's band off them.
+   *
+   * "Find colours" has always done this; tapping a counter never did, so a red counter on
+   * a warm wooden board handed back a band wide enough to light the bare dark squares —
+   * the player taps one counter and the board fills with phantom notes. Null when the
+   * board can't be modelled (too covered, no corners yet), in which case the band is
+   * simply left as sampled, exactly as before.
+   */
+  const boardColoursNow = useCallback((
+    cornersOverride?: BoardSequencerStored['corners'],
+  ): { h: number; s: number; v: number }[] | null => {
+    const cfg = configRef.current;
+    const video = videoRef.current;
+    if ((!cfg.enabled && !cornersOverride) || !video || video.videoWidth <= 0) return null;
+    try {
+      const cv = document.createElement('canvas');
+      cv.width = video.videoWidth;
+      cv.height = video.videoHeight;
+      const ctx = cv.getContext('2d', { willReadFrequently: true });
+      if (!ctx) return null;
+      ctx.save();
+      ctx.translate(cfg.mirrorX ? cv.width : 0, cfg.mirrorY ? cv.height : 0);
+      ctx.scale(cfg.mirrorX ? -1 : 1, cfg.mirrorY ? -1 : 1);
+      ctx.drawImage(video, 0, 0, cv.width, cv.height);
+      ctx.restore();
+      const { data } = ctx.getImageData(0, 0, cv.width, cv.height);
+      const h = homographyForCorners(cornersOverride ?? cfg.corners, cv.width, cv.height);
+      const warped = warpToBoard(data, cv.width, cv.height, h, cfg.boardSquares);
+      const model = buildSquareModel(warped);
+      return model.ok ? modelHsv(model.model) : null;
+    } catch {
+      return null;
+    }
+  }, [configRef, videoRef]);
+
   const handleCalibrated = useCallback(
     (corners: [BoardPoint, BoardPoint, BoardPoint, BoardPoint], patch: Partial<BoardSequencerStored> = {}) => {
       // Dragging a handle across the board makes a bow-tie, which still solves — every
@@ -1026,6 +1064,12 @@ export default function BoardSequencerScreen() {
         announce('Those corners cross over each other. Drag them back so the outline is a proper four-sided shape.');
         return;
       }
+      // The Board step asks for the board EMPTY, so this is the one moment we can see what
+      // the board itself looks like with nothing in the way. Learning it here is what
+      // makes "doesn't match the board" mean anything later: inferring it from a frame
+      // with counters all over it means guessing which squares are board, and a square
+      // that guess gets wrong becomes a counter colour that lights up bare wood.
+      const learnt = boardColoursNow(corners) ?? [];
       // The tracker's corrections are superseded by corners the player just confirmed.
       trackedCornersRef.current = null;
       const adoptCamera = fellBackRef.current;
@@ -1042,6 +1086,8 @@ export default function BoardSequencerScreen() {
         // One functional update, so anything else queued in the same event survives and
         // only one config is ever written.
         let next: BoardSequencerStored = { ...prev, ...patch, corners, enabled: true };
+        // Keep what we already knew if this frame was too covered to learn from.
+        if (learnt.length > 0) next = { ...next, boardColours: learnt };
         if (patch.boardSquares !== undefined || patch.rows !== undefined || patch.cols !== undefined) {
           next = applyGridChange(next, {});
         }
@@ -1062,7 +1108,7 @@ export default function BoardSequencerScreen() {
       }
       setCalibrating(null);
     },
-    [homographyRef, videoRef, announce],
+    [homographyRef, videoRef, announce, boardColoursNow],
   );
 
   const stop = useCallback(() => {
@@ -1300,39 +1346,6 @@ export default function BoardSequencerScreen() {
   // A camera click while calibrating: sample the piece's colour, then either add
   // a new channel or update the one being recalibrated. The kind (hue/black/
   // white) is inferred from the sample, and the swatch shows the real colour.
-  /**
-   * The board's own colours, from a fresh frame, for keeping a counter's band off them.
-   *
-   * "Find colours" has always done this; tapping a counter never did, so a red counter on
-   * a warm wooden board handed back a band wide enough to light the bare dark squares —
-   * the player taps one counter and the board fills with phantom notes. Null when the
-   * board can't be modelled (too covered, no corners yet), in which case the band is
-   * simply left as sampled, exactly as before.
-   */
-  const boardColoursNow = useCallback((): { h: number; s: number; v: number }[] | null => {
-    const cfg = configRef.current;
-    const video = videoRef.current;
-    if (!cfg.enabled || !video || video.videoWidth <= 0) return null;
-    try {
-      const cv = document.createElement('canvas');
-      cv.width = video.videoWidth;
-      cv.height = video.videoHeight;
-      const ctx = cv.getContext('2d', { willReadFrequently: true });
-      if (!ctx) return null;
-      ctx.save();
-      ctx.translate(cfg.mirrorX ? cv.width : 0, cfg.mirrorY ? cv.height : 0);
-      ctx.scale(cfg.mirrorX ? -1 : 1, cfg.mirrorY ? -1 : 1);
-      ctx.drawImage(video, 0, 0, cv.width, cv.height);
-      ctx.restore();
-      const { data } = ctx.getImageData(0, 0, cv.width, cv.height);
-      const h = homographyForCorners(cfg.corners, cv.width, cv.height);
-      const warped = warpToBoard(data, cv.width, cv.height, h, cfg.boardSquares);
-      const model = buildSquareModel(warped);
-      return model.ok ? modelHsv(model.model) : null;
-    } catch {
-      return null;
-    }
-  }, [configRef, videoRef]);
 
   const sampleColourClick = useCallback((nx: number, ny: number) => {
     if (!colourCalibRef.current) return;
@@ -1340,7 +1353,7 @@ export default function BoardSequencerScreen() {
     if (!s) return;
     // Same treatment the automatic search gets: tighten the band until it stops matching
     // the board, and say so if it can't be separated from it.
-    const board = boardColoursNow();
+    const board = knownBoardColours();
     const fitted = board ? fitSafeBand({ h: s.h, s: s.s, v: s.v }, board) : null;
     const cal = fitted?.band ?? calibrationFromHsv({ h: s.h, s: s.s, v: s.v });
     // Nothing is saved on a tap: the sample is shown first, so a mis-tap on the wood
@@ -1363,6 +1376,19 @@ export default function BoardSequencerScreen() {
     sampleColourClick(p.x, p.y);
   }, [squarePicker, sampleColourClick]);
 
+  /**
+   * The board's own colours: the ones learnt from the EMPTY board if we have them, and
+   * otherwise whatever can be inferred from the picture as it is now.
+   *
+   * The stored ones are much better evidence. Inferring from a frame with counters on it
+   * means guessing which squares are board in the first place, and a square the guess
+   * gets wrong becomes a "counter colour" that lights up bare wood.
+   */
+  const knownBoardColours = useCallback((): { h: number; s: number; v: number }[] | null => {
+    const stored = configRef.current.boardColours;
+    return stored.length > 0 ? stored : boardColoursNow();
+  }, [configRef, boardColoursNow]);
+
   /** Apply the sample the player accepted, as a new colour or a recalibration. */
   const commitPendingColour = useCallback(() => {
     const target = colourCalibRef.current;
@@ -1370,7 +1396,7 @@ export default function BoardSequencerScreen() {
     if (!target || !sample) return;
     // Re-fit against the board at commit time too, so the band that is SAVED is the one
     // the player was shown as safe.
-    const board = boardColoursNow();
+    const board = knownBoardColours();
     const cal = board
       ? fitSafeBand({ h: sample.h, s: sample.s, v: sample.v }, board).band
       : calibrationFromHsv({ h: sample.h, s: sample.s, v: sample.v });

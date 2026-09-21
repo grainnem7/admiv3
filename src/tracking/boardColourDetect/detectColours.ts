@@ -52,7 +52,8 @@ interface Blob {
  * `oneEach` skips the merge step, for "Try again (one colour per counter)".
  */
 export function detectColours(
-  warped: WarpedBoard, model: SquareModel, opts: { oneEach?: boolean } = {},
+  warped: WarpedBoard, model: SquareModel,
+  opts: { oneEach?: boolean; boardColours?: { h: number; s: number; v: number }[] } = {},
 ): ColourDetection {
   const { size, squares, data } = warped;
   const per = size / squares;
@@ -89,7 +90,11 @@ export function detectColours(
   if (blobs.length === 0) return { ok: false, reason: 'nothing-found' };
 
   const clusters = opts.oneEach ? blobs.map((b) => [b]) : cluster(blobs);
-  const boardColours = modelHsv(model);
+  // Board colours learnt earlier, from a board with nothing on it, are far better
+  // evidence than anything inferred from a frame that has counters all over it: there,
+  // "which squares are board?" is itself a guess, and a square the guess gets wrong
+  // becomes a counter colour that lights up bare wood. Fall back when we have none.
+  const boardColours = opts.boardColours?.length ? opts.boardColours : modelHsv(model);
 
   const colours = clusters.map((group) => {
     const weight = group.reduce((s, b) => s + b.pixels, 0);

@@ -173,3 +173,60 @@ describe('a counter tapped on a warm wooden board', () => {
     expect(fitted.band.band?.minSaturation).toBeCloseTo(raw.band?.minSaturation ?? 0, 6);
   });
 });
+
+describe('knowing the board before judging the counters', () => {
+  /**
+   * The point the musician-facing failure turns on: "doesn't match the board" only means
+   * something if we know what the board IS. Inferred from a frame with counters all over
+   * it, that knowledge is itself a guess — and a square the guess gets wrong becomes a
+   * counter colour that lights up bare wood.
+   */
+  const walnut = [
+    rgbToHsv(150, 100, 78), rgbToHsv(128, 85, 66), rgbToHsv(110, 72, 56),
+    rgbToHsv(214, 203, 180), rgbToHsv(196, 184, 160),
+  ];
+
+  it('a board colour offered as a counter is refused once the board is known', () => {
+    const woodish = rgbToHsv(138, 95, 72);
+    expect(fitSafeBand(woodish, walnut).unsafe).toBe(true);
+    // With nothing known about the board, there is no evidence to refuse it with.
+    expect(fitSafeBand(woodish, []).unsafe).toBe(true);
+  });
+
+  it('a real counter is still accepted, and still recognises itself', () => {
+    const teal = rgbToHsv(64, 190, 170);
+    const fitted = fitSafeBand(teal, walnut);
+    expect(fitted.unsafe).toBe(false);
+    const matcher = buildChannelMatcher({
+      id: 't', kind: fitted.band.kind, role: 'melody', swatch: '#4b4', band: fitted.band.band,
+    });
+    expect(matcher.test(teal)).toBe(true);
+    expect(walnut.some((c) => matcher.test(c))).toBe(false);
+  });
+
+  it('detectColours judges against the board it is GIVEN, not the one it can guess', () => {
+    // Same picture, two different ideas of the board: the answer must follow the board
+    // we hand it, which is how learning from the empty board takes effect.
+    const corners = sceneCorners();
+    const h = computeHomography(UNIT_SQUARE, corners);
+    const f = scene({ shapes: [counter(0.5, 0.5, 0.12)] });
+    const warped = warpToBoard(f.data, f.width, f.height, h, 8);
+    const model = buildSquareModel(warped);
+    expect(model.ok).toBe(true);
+    if (!model.ok) return;
+
+    const asCounter = detectColours(warped, model.model, { boardColours: walnut });
+    expect(asCounter.ok).toBe(true);
+    if (!asCounter.ok) return;
+    // Told the board is walnut, the red counter is plainly not the board.
+    expect(asCounter.colours.some((c) => !c.unsafe)).toBe(true);
+
+    // Told the board is the counter's own colour, the same blob is refused.
+    const asBoard = detectColours(warped, model.model, {
+      boardColours: asCounter.colours.map((c) => ({ h: c.hsv.h, s: c.hsv.s, v: c.hsv.v })),
+    });
+    expect(asBoard.ok).toBe(true);
+    if (!asBoard.ok) return;
+    expect(asBoard.colours.every((c) => c.unsafe)).toBe(true);
+  });
+});

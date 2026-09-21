@@ -149,6 +149,12 @@ export interface BoardSequencerStored {
    * sensor noise and auto-exposure drift had it holding half an empty board. It stays
    * available, and goes back on by default once it is proven against a real camera.
    */
+  /**
+   * What this board's own squares look like, learnt when the corners were confirmed with
+   * nothing on it. Used to keep counter colours OFF the board: knowing the board first is
+   * what makes "not the board" a meaningful test.
+   */
+  boardColours: { h: number; s: number; v: number }[];
   handGuardEnabled: boolean;
   /** Set once the one-time clearing of an inherited "hand guard on" has happened. */
   handGuardReset?: boolean;
@@ -274,6 +280,7 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   controlRemoval: DEFAULT_CONTROL_REMOVAL,
   toggleAmount: 0.35,
   captureQuietMs: 500,
+  boardColours: [],
   handGuardEnabled: false,
   handGuardReset: true,
   handMarginSquares: 0.75,
@@ -295,6 +302,16 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   loopZone: NO_ZONE,
   loopPadMode: 'hold',
 };
+
+/** Board colours are only ever written by the app; drop anything malformed. */
+function sanitizeBoardColours(v: unknown): { h: number; s: number; v: number }[] {
+  if (!Array.isArray(v)) return [];
+  return v.flatMap((c) => {
+    const o = (typeof c === 'object' && c !== null ? c : {}) as Record<string, unknown>;
+    if (!isNum(o.h) || !isNum(o.s) || !isNum(o.v)) return [];
+    return [{ h: o.h, s: o.s, v: o.v }];
+  }).slice(0, 256);
+}
 
 function sanitizeZone(v: unknown, fallback: Zone): Zone {
   const o = (typeof v === 'object' && v !== null ? v : {}) as Record<string, unknown>;
@@ -546,6 +563,7 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     // by default and is known to blind the board on a real camera, so leaving it set would
     // hand the fault to exactly the people who hit it first and never chose it. Turning it
     // back on after this migration sticks.
+    boardColours: sanitizeBoardColours(o.boardColours),
     handGuardEnabled: o.handGuardEnabled === true && o.handGuardReset === true,
     handGuardReset: true,
     handMarginSquares: clampNum(o.handMarginSquares, 0.25, 2, d.handMarginSquares),
