@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { warpToBoard, buildSquareModel, modelHsv } from '../tracking/boardColourDetect/squareModel';
-import { detectColours, fitSafeBand, MAX_BOARD_MATCH } from '../tracking/boardColourDetect/detectColours';
+import {
+  detectColours, fitSafeBand, MAX_BOARD_MATCH, MIN_BLOB_SQUARES,
+} from '../tracking/boardColourDetect/detectColours';
 import { computeHomography, UNIT_SQUARE } from '../utils/homography';
 import { buildChannelMatcher, calibrationFromHsv } from '../tracking/boardColours';
 import { rgbToHsv } from '../tracking/ColorTracker';
@@ -209,7 +211,7 @@ describe('knowing the board before judging the counters', () => {
     // we hand it, which is how learning from the empty board takes effect.
     const corners = sceneCorners();
     const h = computeHomography(UNIT_SQUARE, corners);
-    const f = scene({ shapes: [counter(0.5, 0.5, 0.12)] });
+    const f = scene({ shapes: [counter(0.5625, 0.5625, 0.12)] });
     const warped = warpToBoard(f.data, f.width, f.height, h, 8);
     const model = buildSquareModel(warped);
     expect(model.ok).toBe(true);
@@ -278,7 +280,7 @@ describe('a board that has been learnt square by square', () => {
     if (!model.ok) throw new Error('model');
     const learntSquares = { squares: model.model.squares, rgb: Array.from(model.model.rgb) };
 
-    const withCounter = warpOf(scene({ shapes: [...GRAIN, counter(0.5, 0.5, 0.11)] }));
+    const withCounter = warpOf(scene({ shapes: [...GRAIN, counter(0.5625, 0.5625, 0.11)] }));
     const later = buildSquareModel(withCounter);
     if (!later.ok) throw new Error('model');
     const out = detectColours(withCounter, later.model, {
@@ -299,5 +301,57 @@ describe('a board that has been learnt square by square', () => {
       learntSquares: { squares: 10, rgb: new Array(300).fill(0) },
     });
     expect(out).toBeDefined();
+  });
+});
+
+describe('how much of a square has to change before it is a counter', () => {
+  /**
+   * The last of the phantom counters. A counter covers roughly 95% of the region sampled
+   * from its square; the bar for "something is on this square" was 5%, which on a real
+   * board is a few dozen pixels of grain, a shadow edge, or the board having shifted a
+   * hair since it was learnt. An empty board cleared it three times over.
+   */
+  const squareOf = (r: number, c: number): { x: number; y: number } =>
+    ({ x: (c + 0.5) / 8, y: (r + 0.5) / 8 });
+
+  const warpOf = (f: ReturnType<typeof scene>) => warpToBoard(
+    f.data, f.width, f.height, computeHomography(UNIT_SQUARE, sceneCorners()), 8,
+  );
+
+  it('asks for most of the square, not a few stray pixels', () => {
+    expect(MIN_BLOB_SQUARES).toBeGreaterThan(0.2);
+    // …and not so much that a counter straddling the line between two squares is missed.
+    expect(MIN_BLOB_SQUARES).toBeLessThan(0.5);
+  });
+
+  it('a small mark on a square is not a counter', () => {
+    const p = squareOf(3, 3);
+    const speck = scene({ shapes: [{
+      x0: p.x - 0.012, y0: p.y - 0.012, x1: p.x + 0.012, y1: p.y + 0.012,
+      rgb: [40, 40, 40] as [number, number, number],
+    }] });
+    const warped = warpOf(speck);
+    const model = buildSquareModel(warped);
+    if (!model.ok) throw new Error('model');
+    const out = detectColours(warped, model.model, {
+      learntSquares: { squares: model.model.squares, rgb: Array.from(model.model.rgb) },
+    });
+    expect(out.ok).toBe(false);
+  });
+
+  it('but a counter on that same square is', () => {
+    const p = squareOf(3, 3);
+    const withCounter = warpOf(scene({ shapes: [counter(p.x, p.y, 0.11)] }));
+    const empty = warpOf(scene());
+    const learntModel = buildSquareModel(empty);
+    const nowModel = buildSquareModel(withCounter);
+    if (!learntModel.ok || !nowModel.ok) throw new Error('model');
+    const out = detectColours(withCounter, nowModel.model, {
+      boardColours: modelHsv(learntModel.model),
+      learntSquares: { squares: learntModel.model.squares, rgb: Array.from(learntModel.model.rgb) },
+    });
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.colours.some((c) => !c.unsafe)).toBe(true);
   });
 });

@@ -15,8 +15,20 @@ import { modelHsv, type SquareModel, type WarpedBoard } from './squareModel';
 
 /** A pixel must differ from its square's own colour by this much to be part of a counter. */
 export const COUNTER_DELTA = 90;
-/** Blobs smaller than this share of a square are noise, not counters. */
-export const MIN_BLOB_SQUARES = 0.05;
+/**
+ * How much of a square must differ before it counts as having something ON it.
+ *
+ * Derived, not picked. The sampled region is the square inset by 15% a side, and a
+ * counter covers about 0.45 of a square — which works out at roughly 95% of that region
+ * when the counter is on the square at all. So the honest question is "is most of this
+ * square covered?", and a third of it is a generous floor: it still accepts a counter
+ * straddling the line between two squares (about half each), while rejecting the handful
+ * of stray pixels that grain, a shadow edge or a slightly nudged board produce.
+ *
+ * It was 0.05 — about 97 pixels of the 1936 sampled — which an empty walnut board clears
+ * without difficulty. That is why "Find colours" offered counters on a bare board.
+ */
+export const MIN_BLOB_SQUARES = 0.35;
 /** Two colours closer than this (in RGB distance) are the same counter colour. */
 export const MERGE_DISTANCE = 60;
 /** A band may match at most this share of the board's squares. */
