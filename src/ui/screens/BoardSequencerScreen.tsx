@@ -779,7 +779,10 @@ export default function BoardSequencerScreen() {
       }
       // Judge every candidate against the board we learnt when it was empty, not against
       // one inferred from this frame — which has counters all over it.
-      const found = detectColours(warped, model.model, { boardColours: cfg.boardColours });
+      const found = detectColours(warped, model.model, {
+        boardColours: cfg.boardColours,
+        learntSquares: { squares: cfg.boardLearntSquares, rgb: cfg.boardSquareRgb },
+      });
       if (!found.ok) {
         setColourProposal({
           colours: [],
@@ -1096,7 +1099,11 @@ export default function BoardSequencerScreen() {
       setLearnMessage('Couldn’t make out the squares. Try more even light.');
       return;
     }
-    update({ boardColours: colours });
+    update({
+      boardColours: colours,
+      boardSquareRgb: Array.from(model.rgb),
+      boardLearntSquares: model.squares,
+    });
     // Say so, with the time on it. Learning a second time usually finds the same number
     // of squares, so a bare count is indistinguishable from the button doing nothing —
     // and a control that gives no sign it ran is a control you cannot trust.

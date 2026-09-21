@@ -230,3 +230,77 @@ describe('knowing the board before judging the counters', () => {
     expect(asBoard.colours.every((c) => c.unsafe)).toBe(true);
   });
 });
+
+describe('a board that has been learnt square by square', () => {
+  /**
+   * Reported from the real rig: with NOTHING on the board, Find colours still offered
+   * seven "counters", all of them the board. The board check caught them, but they should
+   * never have been candidates — and a player cannot tell "correctly refused" from
+   * "broken".
+   *
+   * The cause is judging each square against the AVERAGE of its colour family: a dark
+   * square with unusual grain, or one in a shadow, is unlike its siblings and so reads as
+   * covered. Judged against its own recorded appearance, its grain is simply what it
+   * looks like.
+   */
+  const grainy = () => {
+    // A board whose dark squares differ from each other far more than a family mean
+    // allows — which is exactly what real walnut does.
+    const shapes = [
+      { x0: 0.02, y0: 0.02, x1: 0.13, y1: 0.13, rgb: [96, 64, 44] as [number, number, number] },
+      { x0: 0.27, y0: 0.52, x1: 0.38, y1: 0.63, rgb: [150, 118, 86] as [number, number, number] },
+      { x0: 0.64, y0: 0.14, x1: 0.75, y1: 0.25, rgb: [88, 92, 96] as [number, number, number] },
+    ];
+    return scene({ shapes });
+  };
+
+  const warpOf = (f: ReturnType<typeof scene>) => warpToBoard(
+    f.data, f.width, f.height, computeHomography(UNIT_SQUARE, sceneCorners()), 8,
+  );
+
+  it('offers nothing at all when the board it learnt is the board it sees', () => {
+    const empty = warpOf(grainy());
+    const model = buildSquareModel(empty);
+    expect(model.ok).toBe(true);
+    if (!model.ok) return;
+
+    const learntSquares = { squares: model.model.squares, rgb: Array.from(model.model.rgb) };
+    const out = detectColours(empty, model.model, {
+      boardColours: modelHsv(model.model),
+      learntSquares,
+    });
+    // Nothing is on it, so there is nothing to find.
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.reason).toBe('nothing-found');
+  });
+
+  it('still finds a counter placed on that same board', () => {
+    const base = grainy();
+    const empty = warpOf(base);
+    const model = buildSquareModel(empty);
+    if (!model.ok) throw new Error('model');
+    const learntSquares = { squares: model.model.squares, rgb: Array.from(model.model.rgb) };
+
+    const withCounter = warpOf(scene({ shapes: [...(base.shapes ?? []), counter(0.5, 0.5, 0.11)] }));
+    const later = buildSquareModel(withCounter);
+    if (!later.ok) throw new Error('model');
+    const out = detectColours(withCounter, later.model, {
+      boardColours: modelHsv(model.model),
+      learntSquares,
+    });
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.colours.some((c) => !c.unsafe)).toBe(true);
+  });
+
+  it('ignores a learning taken at a different board size', () => {
+    const empty = warpOf(grainy());
+    const model = buildSquareModel(empty);
+    if (!model.ok) throw new Error('model');
+    // A 10 x 10 learning against an 8 x 8 board is not about these squares at all.
+    const out = detectColours(empty, model.model, {
+      learntSquares: { squares: 10, rgb: new Array(300).fill(0) },
+    });
+    expect(out).toBeDefined();
+  });
+});

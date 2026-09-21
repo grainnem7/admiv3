@@ -53,22 +53,42 @@ interface Blob {
  */
 export function detectColours(
   warped: WarpedBoard, model: SquareModel,
-  opts: { oneEach?: boolean; boardColours?: { h: number; s: number; v: number }[] } = {},
+  opts: {
+    oneEach?: boolean;
+    boardColours?: { h: number; s: number; v: number }[];
+    /** This board's squares as learnt with nothing on it, in board order, 3 values each. */
+    learntSquares?: { squares: number; rgb: number[] };
+  } = {},
 ): ColourDetection {
   const { size, squares, data } = warped;
   const per = size / squares;
+
+  // What each empty square looks like. If this board has been LEARNT, use the square's
+  // own recorded appearance; otherwise fall back to the model inferred from this frame.
+  //
+  // The difference is the whole game on a grainy board. Inferring from one frame means
+  // judging each square against the average of its colour family, so a dark square with
+  // unusual grain, or one lying in a shadow, reads as "not like the others" and is
+  // offered as a counter — which is why an EMPTY board could still produce seven of them.
+  // Judged against its own learnt appearance, that square's grain is simply part of what
+  // it looks like, and only something actually placed on it can stand out.
+  const learnt = opts.learntSquares?.squares === squares
+    && opts.learntSquares.rgb.length >= squares * squares * 3
+    ? opts.learntSquares.rgb
+    : null;
 
   // A counter is whatever doesn't look like the square it is sitting on.
   const blobs: Blob[] = [];
   for (let sq = 0; sq < squares * squares; sq++) {
     const row = Math.floor(sq / squares);
     const col = sq % squares;
-    const mr = model.rgb[sq * 3];
-    const mg = model.rgb[sq * 3 + 1];
-    const mb = model.rgb[sq * 3 + 2];
+    const mr = learnt ? learnt[sq * 3] : model.rgb[sq * 3];
+    const mg = learnt ? learnt[sq * 3 + 1] : model.rgb[sq * 3 + 1];
+    const mb = learnt ? learnt[sq * 3 + 2] : model.rgb[sq * 3 + 2];
     // A square the model marked as covered IS a counter: its median is the counter's
-    // colour, which is exactly what we want to cluster.
-    if (model.covered[sq]) {
+    // colour, which is exactly what we want to cluster. Only trusted when there is no
+    // learnt board — with one, the pixel test below is both stricter and better founded.
+    if (!learnt && model.covered[sq]) {
       blobs.push({ r: mr, g: mg, b: mb, pixels: Math.round(per * per) });
       continue;
     }

@@ -155,6 +155,16 @@ export interface BoardSequencerStored {
    * what makes "not the board" a meaningful test.
    */
   boardColours: { h: number; s: number; v: number }[];
+  /**
+   * The same learning, kept PER SQUARE and in board order (3 values each).
+   *
+   * Position is what makes it powerful: a square with unusual grain, or one that sits in
+   * a shadow, is compared with its own recorded appearance rather than with the average
+   * of its colour family — so its grain stops looking like a counter.
+   */
+  boardSquareRgb: number[];
+  /** The board size it was learnt at; learning is discarded if that changes. */
+  boardLearntSquares: number;
   handGuardEnabled: boolean;
   /** Set once the one-time clearing of an inherited "hand guard on" has happened. */
   handGuardReset?: boolean;
@@ -281,6 +291,8 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   toggleAmount: 0.35,
   captureQuietMs: 500,
   boardColours: [],
+  boardSquareRgb: [],
+  boardLearntSquares: 0,
   handGuardEnabled: false,
   handGuardReset: true,
   handMarginSquares: 0.75,
@@ -564,6 +576,10 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     // hand the fault to exactly the people who hit it first and never chose it. Turning it
     // back on after this migration sticks.
     boardColours: sanitizeBoardColours(o.boardColours),
+    boardSquareRgb: Array.isArray(o.boardSquareRgb) && o.boardSquareRgb.every(isNum)
+      ? (o.boardSquareRgb as number[]).slice(0, 10 * 10 * 3)
+      : [],
+    boardLearntSquares: isNum(o.boardLearntSquares) ? Math.round(o.boardLearntSquares) : 0,
     handGuardEnabled: o.handGuardEnabled === true && o.handGuardReset === true,
     handGuardReset: true,
     handMarginSquares: clampNum(o.handMarginSquares, 0.25, 2, d.handMarginSquares),
