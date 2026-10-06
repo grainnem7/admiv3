@@ -86,6 +86,7 @@ import { drawOriented, orientedSize, reorientPoints, type FrameOrientation, type
 import { SOUND_WORLDS, SOUND_WORLD_IDS, worldOf, type SoundWorldChoice } from '../../audio/worlds/soundWorlds';
 import type { FillSourceStatus } from '../../songs/BoardSequencerEngine';
 import type { BandLevel, BandPart } from '../../songs/band/band';
+import { BoardMidiPanel } from './boardSequencer/components/BoardMidiPanel';
 import { useRemoteLink } from '../../remote/useRemoteLink';
 import {
   dynamicsFromValue, makeRemoteCode, REMOTE_INFO_PATH, tempoFromValue, valueFromTempo, valueFromVelocity,
@@ -1962,6 +1963,13 @@ export default function BoardSequencerScreen() {
         </>
       )}
     </div>
+    <BoardMidiPanel
+      enabled={config.midiEnabled}
+      deviceId={config.midiDeviceId}
+      sends={config.midiSends}
+      keepSound={config.midiKeepSound}
+      onChange={(patch) => update(patch)}
+    />
     {/* The two biggest choices about how the board sounds, first. Both work while playing. */}
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       <span style={{ fontWeight: 600 }}>Sound world</span>

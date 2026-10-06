@@ -3,6 +3,7 @@
  * beat). Pure, so the part of the AI path that can be wrong is tested without a model.
  */
 
+import { KIT_GM_NOTE } from '../../midi/gmDrums';
 import type { KitDrum } from '../../audio/instruments/RoundRobinDrumKit';
 import type { FillCandidate } from './fillFilter';
 import type { SoundingNote } from './rulesFill';
@@ -27,10 +28,6 @@ export interface QuantizedSequence {
   quantizationInfo: { stepsPerQuarter: number };
 }
 
-/** General MIDI drum notes for the kit pieces. */
-const KIT_TO_GM: Record<KitDrum, number> = {
-  kick: 36, snare: 38, hat: 42, crash: 49, tom: 45, clap: 39, rim: 37, kickCrash: 36,
-};
 
 /** A GM drum note back to the nearest kit piece. */
 export function gmToKit(pitch: number): KitDrum {
@@ -83,7 +80,7 @@ export function drumSeed(sounding: readonly SoundingNote[], loop: number): Quant
   for (const n of sounding) {
     if (n.role !== 'drums' || !n.drum) continue;
     const s = slotOf(n);
-    const pitch = KIT_TO_GM[n.drum];
+    const pitch = KIT_GM_NOTE[n.drum];
     if (s < 0 || s >= total || seen.has(`${s}:${pitch}`)) continue;
     seen.add(`${s}:${pitch}`);
     notes.push({ pitch, quantizedStartStep: s, quantizedEndStep: s + 1, isDrum: true });

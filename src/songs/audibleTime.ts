@@ -16,3 +16,16 @@ export function audibleTime(ctx: AudibleClockSource, perfNowMs: number): number 
   }
   return ctx.currentTime - (ctx.outputLatency ?? 0);
 }
+
+/**
+ * The performance.now() moment at which audio-context time `audioTime` will be heard —
+ * the inverse of audibleTime, for handing a scheduled note to something that keeps
+ * wall-clock time (Web MIDI).
+ */
+export function audioTimeToPerformanceMs(ctx: AudibleClockSource, audioTime: number, perfNowMs: number): number {
+  const ts = ctx.getOutputTimestamp?.();
+  if (ts && typeof ts.contextTime === 'number' && typeof ts.performanceTime === 'number' && ts.performanceTime > 0) {
+    return ts.performanceTime + (audioTime - ts.contextTime) * 1000;
+  }
+  return perfNowMs + (audioTime - ctx.currentTime + (ctx.outputLatency ?? 0)) * 1000;
+}

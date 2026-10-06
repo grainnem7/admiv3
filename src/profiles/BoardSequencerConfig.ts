@@ -9,6 +9,7 @@
 
 import type { FillNote } from '../songs/generative/rulesFill';
 import type { BandLevel } from '../songs/band/band';
+import type { MidiSends } from '../midi/boardMidi';
 import { isSoundWorldChoice, type SoundWorldChoice } from '../audio/worlds/soundWorlds';
 import { quarterTurns, type QuarterTurns } from '../tracking/frameOrientation';
 import type { TrackedColor } from '../tracking/ColorTracker';
@@ -157,6 +158,12 @@ export interface BoardSequencerStored {
   cameraDeviceId: string;
   /** Chosen camera's name, to say which camera is missing when it can't be found. */
   cameraLabel: string;
+  /** MIDI out (a setting of this laptop, like the camera): on/off, the output's id, and what is sent. */
+  midiEnabled: boolean;
+  midiDeviceId: string;
+  midiSends: MidiSends;
+  /** Keep the built-in sound on while sending MIDI (off = the external instrument is the sound). */
+  midiKeepSound: boolean;
   /** Physical squares per side of the board (8 × 8 chess/draughts, 10 × 10 draughts). */
   boardSquares: BoardSquares;
   /** Calm theme mode for the redesigned screens. */
@@ -343,6 +350,10 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   mirrorX: true,
   mirrorY: false,
   cameraRotation: 0,
+  midiEnabled: false,
+  midiDeviceId: '',
+  midiSends: 'player',
+  midiKeepSound: true,
   cameraDeviceId: '',
   cameraLabel: '',
   boardSquares: 8,
@@ -664,6 +675,10 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     cameraRotation: quarterTurns(o.cameraRotation),
     cameraDeviceId: typeof o.cameraDeviceId === 'string' ? o.cameraDeviceId : d.cameraDeviceId,
     cameraLabel: typeof o.cameraLabel === 'string' ? o.cameraLabel : d.cameraLabel,
+    midiEnabled: o.midiEnabled === true,
+    midiDeviceId: typeof o.midiDeviceId === 'string' ? o.midiDeviceId : '',
+    midiSends: o.midiSends === 'all' ? 'all' : 'player',
+    midiKeepSound: o.midiKeepSound !== false,
     boardSquares,
     themeMode: o.themeMode === 'light' ? 'light' : 'dark',
     samplesPerAxis,

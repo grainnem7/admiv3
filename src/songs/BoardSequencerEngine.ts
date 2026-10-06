@@ -32,6 +32,7 @@ import { describeEvolve, evolveState, NEUTRAL, type EvolveState } from '../audio
 import {
   BAND_GAIN, bandEventsAtStep, bandParts, defaultHarmonyAt, type BandLevel, type BandPart, type Harmony,
 } from './band/band';
+import { BoardMidiSender, type BoardMidiOptions } from '../midi/boardMidi';
 
 /** A note the engine actually scheduled (drives note pops / "Now:" — never inferred from the playhead). */
 export interface FiredNote {
@@ -47,6 +48,11 @@ export interface FiredNote {
    * session log tell what the player placed from what the instrument played for it.
    */
   origin?: 'placed' | 'phrase' | 'fill' | 'band';
+  /** What sounded, for MIDI out and the session log. A chord stab lists all its notes. */
+  midi?: number;
+  midis?: number[];
+  drum?: KitDrum;
+  velocity?: number;
 }
 
 /** How loud the fill is next to the player's own notes: about -6 dB. */
@@ -269,6 +275,11 @@ export class BoardSequencerEngine {
   private bandPlaying = false;
   private bandPartsNow: BandPart[] = [];
   private bandPrevHarmonyKey = '';
+  // MIDI out: every logged note is also sent, when the player has switched it on.
+  private midi: BoardMidiSender | null = null;
+  private midiOpts: BoardMidiOptions = { enabled: false, sends: 'player' };
+  /** False when the player wants MIDI only: the built-in sound is silenced, the log and the lights carry on. */
+  private internalSound = true;
 
   constructor(cfg: BoardEngineConfig) {
     this.cfg = cfg;
@@ -663,7 +674,23 @@ export class BoardSequencerEngine {
     g.setTargetAtTime(1, time + d.holdSec, d.releaseTc);
   }
 
+  /** MIDI out, live. Switching off silences whatever the receiving instrument still holds. */
+  setMidiOut(opts: BoardMidiOptions): void {
+    const was = this.midiOpts.enabled;
+    this.midiOpts = opts;
+    if (opts.enabled && !this.midi) this.midi = new BoardMidiSender(this.ctx);
+    if (was && !opts.enabled) this.midi?.allNotesOff();
+  }
+
+  /** The built-in sound on or off (off = MIDI only). Everything else carries on. */
+  setInternalSound(on: boolean): void {
+    if (this.internalSound === on) return;
+    this.internalSound = on;
+    this.applyMixGain(MUTE_GLIDE_SEC);
+  }
+
   private recordFired(n: FiredNote): void {
+    this.midi?.send(n, this.muted, this.midiOpts);
     this.fired.push(n);
     if (this.fired.length > FIRED_NOTE_CAP) this.fired.splice(0, this.fired.length - FIRED_NOTE_CAP);
   }
@@ -786,6 +813,7 @@ export class BoardSequencerEngine {
    */
   setMuted(muted: boolean): void {
     this.muted = muted;
+    if (muted) this.midi?.allNotesOff();
     // Always its own short ramp: Mute has to cut, not fade. A volume counter glides over
     // controlGlideSec (0.3 s by default), and borrowing that made Mute take about a
     // second, with every note still firing underneath it.
@@ -802,7 +830,8 @@ export class BoardSequencerEngine {
   }
 
   private applyMixGain(glideSec = 0.02): void {
-    if (this.mix) this.mix.gain.setTargetAtTime(this.muted ? 0 : this.cfg.volume, Tone.immediate(), glideSec);
+    const level = this.muted || !this.internalSound ? 0 : this.cfg.volume;
+    if (this.mix) this.mix.gain.setTargetAtTime(level, Tone.immediate(), glideSec);
   }
 
   /** Live per-channel mixer (no-op if that channel has no voice). */
@@ -1218,22 +1247,28 @@ export class BoardSequencerEngine {
           : (ev.offset === 0.25 || ev.offset === 0.75) ? ev.offset + swing / 12 : ev.offset;
         const time = Math.max(Tone.now(), cellTime + shifted * secPerBeat);
         const durSec = ev.dur * secPerBeat;
+        // The band's level is in its gain node; for the kit (shared) and for MIDI it is in the velocity.
+        const vel = Math.min(1, ev.accent * BAND_GAIN[this.band] * 1.6);
         let role: ColourRole;
+        let midi: number | undefined;
         if (ev.drum) {
           if (!this.drumKit) continue;
           const hit = `${ev.drum}@${time}`;
           if (hits.has(hit)) continue;
           hits.add(hit);
-          // The kit is shared with the player's drums, so the band's level is in the velocity.
-          this.drumKit.play(ev.drum, Math.min(1, ev.accent * BAND_GAIN[this.band] * 1.6), time);
+          this.drumKit.play(ev.drum, vel, time);
           if (ev.drum === 'kick' && this.band === 'full') this.duckForKick(time);
           role = 'drums';
         } else if (ev.midi !== undefined) {
-          (ev.part === 'pad' ? this.bandVoices.pad : this.bandVoices.bass).play(ev.midi + this.cfg.octaveShift * 12, ev.accent, durSec, time);
+          midi = ev.midi + this.cfg.octaveShift * 12;
+          (ev.part === 'pad' ? this.bandVoices.pad : this.bandVoices.bass).play(midi, ev.accent, durSec, time);
           role = ev.part === 'pad' ? 'chord' : 'bass';
         } else continue;
         // Logged for the session, never drawn: a band note has no counter.
-        this.recordFired({ row: -1, col: -1, colour: `band:${ev.part}`, role, audioTime: time, durSec, source: 'live', origin: 'band' });
+        this.recordFired({
+          row: -1, col: -1, colour: `band:${ev.part}`, role, audioTime: time, durSec, source: 'live', origin: 'band',
+          midi, drum: ev.drum, velocity: vel,
+        });
       } catch (err) {
         console.warn('[BoardSequencer] a band note failed to play:', err);
       }
@@ -1354,6 +1389,8 @@ export class BoardSequencerEngine {
         const time = Math.max(Tone.now(), cellTime + shifted * secPerBeat);
         // The fill sits under the player's notes: FILL_LEVEL is applied once, here.
         const vel = Math.max(0, Math.min(1, this.cfg.velocity * n.accent)) * FILL_LEVEL;
+        let midi: number | undefined;
+        let dur = n.dur * secPerBeat;
         if (n.drum) {
           if (!this.drumKit) continue;
           const hit = `${n.drum}@${time}`;
@@ -1364,11 +1401,13 @@ export class BoardSequencerEngine {
           const voice = this.voiceByChannel.get(n.colour)?.voice;
           if (!voice) continue;
           const evo = this.evoFor(n.colour);
-          voice.play(n.midi + oct + 12 * evo.octave, vel, n.dur * secPerBeat * evo.length, time);
+          midi = n.midi + oct + 12 * evo.octave;
+          dur *= evo.length;
+          voice.play(midi, vel, dur, time);
         } else continue;
         this.recordFired({
           row: n.cell.row, col: n.cell.col, colour: n.colour, role: n.role,
-          audioTime: time, durSec: n.dur * secPerBeat, source: 'live', origin: 'fill',
+          audioTime: time, durSec: dur, source: 'live', origin: 'fill', midi, drum: n.drum, velocity: vel,
         });
       } catch (err) {
         console.warn('[BoardSequencer] a fill note failed to play:', err);
@@ -1405,7 +1444,8 @@ export class BoardSequencerEngine {
         const shifted = ev.offset === 0.5 ? ev.offset + swing / 6
           : (ev.offset === 0.25 || ev.offset === 0.75) ? ev.offset + swing / 12 : ev.offset;
         const time = Math.max(Tone.now(), cellTime + (shifted + (tag?.cell.timingBeats ?? 0)) * secPerBeat);
-        const durSec = ev.dur * secPerBeat;
+        let durSec = ev.dur * secPerBeat;
+        let midi: number | undefined;
         if (ev.drum) {
           if (!this.drumKit) continue;
           const hit = `${ev.drum}@${time}`;
@@ -1417,11 +1457,13 @@ export class BoardSequencerEngine {
           const voice = this.voiceByChannel.get(ev.colour)?.voice;
           if (!voice) continue;
           const evo = this.evoFor(ev.colour);
-          voice.play(ev.midi + oct + 12 * evo.octave, vel, durSec * evo.length, time);
+          midi = ev.midi + oct + 12 * evo.octave;
+          durSec *= evo.length;
+          voice.play(midi, vel, durSec, time);
         } else continue;
         this.recordFired({
           row: ev.owner.row, col: ev.owner.col, colour: ev.colour, role: ev.role,
-          audioTime: time, durSec, source: tag?.source ?? 'live', origin: 'phrase',
+          audioTime: time, durSec, source: tag?.source ?? 'live', origin: 'phrase', midi, drum: ev.drum, velocity: vel,
         });
       } catch (err) {
         console.warn('[BoardSequencer] a phrase note failed to play:', err);
@@ -1474,7 +1516,10 @@ export class BoardSequencerEngine {
           drumHits.add(hit);
           this.drumKit.play(drum as KitDrum, vel, stepTime);
           if (drum === 'kick' || drum === 'kickCrash') this.duckForKick(stepTime);
-          this.recordFired({ row: cell.row, col: cell.col, colour: cell.colour, role, audioTime: stepTime, durSec, source });
+          this.recordFired({
+            row: cell.row, col: cell.col, colour: cell.colour, role, audioTime: stepTime, durSec, source,
+            origin: 'placed', drum: drum as KitDrum, velocity: vel,
+          });
         }
         return;
       }
@@ -1498,14 +1543,19 @@ export class BoardSequencerEngine {
           : degreeMidi(degree, this.cfg.scaleRootMidi, this.cfg.scaleSemitones);
         const dur = ringSec(loopLen(this.rawLoop('bass'), this.cfg.cols)) * this.evoFor(ch.id).length;
         voice.play(base - 12 + oct, vel, dur, stepTime);
-        this.recordFired({ row: cell.row, col: cell.col, colour: cell.colour, role, audioTime: stepTime, durSec: dur, source });
+        this.recordFired({
+          row: cell.row, col: cell.col, colour: cell.colour, role, audioTime: stepTime, durSec: dur, source,
+          origin: 'placed', midi: base - 12 + oct, velocity: vel,
+        });
       } else if (role === 'chord' || ch.instrument === 'chord') {
         // Chord stab: play a stack (the song chord, or a scale triad) at once.
         const evo = this.evoFor(ch.id);
-        for (const n of this.chordStack(cell, chord, 'row')) {
-          voice.play(n + oct + 12 * evo.octave, vel, durSec * evo.length, stepTime);
-        }
-        this.recordFired({ row: cell.row, col: cell.col, colour: cell.colour, role, audioTime: stepTime, durSec, source });
+        const midis = this.chordStack(cell, chord, 'row').map((n) => n + oct + 12 * evo.octave);
+        for (const n of midis) voice.play(n, vel, durSec * evo.length, stepTime);
+        this.recordFired({
+          row: cell.row, col: cell.col, colour: cell.colour, role, audioTime: stepTime, durSec: durSec * evo.length, source,
+          origin: 'placed', midis, velocity: vel,
+        });
       } else {
         const midi = voicing.get(`${cell.row},${cell.col}`);
         if (midi !== undefined) {
@@ -1514,7 +1564,10 @@ export class BoardSequencerEngine {
           const evo = this.evoFor(ch.id);
           const dur = (ch.instrument === 'pad' ? secPerBeat * melodicLoop : ringSec(melodicLoop)) * evo.length;
           voice.play(midi + oct + 12 * evo.octave, vel, dur, stepTime);
-          this.recordFired({ row: cell.row, col: cell.col, colour: cell.colour, role, audioTime: stepTime, durSec: dur, source });
+          this.recordFired({
+            row: cell.row, col: cell.col, colour: cell.colour, role, audioTime: stepTime, durSec: dur, source,
+            origin: 'placed', midi: midi + oct + 12 * evo.octave, velocity: vel,
+          });
         }
       }
     }
@@ -1524,6 +1577,7 @@ export class BoardSequencerEngine {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
     this.fired = [];
+    this.midi?.allNotesOff();
   }
 
   dispose(): void {

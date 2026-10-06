@@ -350,6 +350,8 @@ export function useBoardRuntime(opts: {
       engineRef.current?.setFill(cfg.fillAmount, cfg.fillSeed, cfg.fillKept);
       engineRef.current?.setFillEngine(cfg.fillEngine);
       engineRef.current?.setBand(cfg.band);
+      engineRef.current?.setMidiOut({ enabled: cfg.midiEnabled && cfg.midiDeviceId !== '', sends: cfg.midiSends });
+      engineRef.current?.setInternalSound(!cfg.midiEnabled || cfg.midiKeepSound);
       engineRef.current?.setEvolve({
         amount: cfg.evolveAmount, sceneLoops: cfg.evolveSceneLoops, seed: cfg.evolveSeed, holdLap: cfg.evolveHoldLap,
       });
