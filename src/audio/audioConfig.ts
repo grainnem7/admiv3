@@ -58,3 +58,34 @@ export const DEFAULT_SPACE_REVERB: ReverbConfig = {
   preDelay: 0.012,
   sendLevel: 0.12,
 };
+
+/**
+ * The board sequencer's mix. Stereo placement, kick ducking and how long a note may ring
+ * into the next one. Separate from the master chain so the board can be A/B'd against
+ * its old mix (the player's "Studio mix" switch) without touching Song or Remix.
+ */
+export interface BoardMixConfig {
+  /** Pan per extra channel of the same role, in order (-1 left … 1 right). Bass stays centred. */
+  pans: { melody: number[]; chord: number[] };
+  /** Kit pieces placed across the stereo field; anything unlisted stays centred. */
+  drumPans: Partial<Record<'kick' | 'snare' | 'hat' | 'crash' | 'tom' | 'clap' | 'rim', number>>;
+  duck: {
+    /** How far bass, chords and pads dip on each kick (0 = none, 0.3 ≈ -3 dB). */
+    depth: number;
+    /** Time constant of the dip, seconds. Short, so the kick punches through. */
+    attackTc: number;
+    /** How long the dip holds before recovering, seconds. */
+    holdSec: number;
+    /** Time constant of the recovery, seconds. The "breathing". */
+    releaseTc: number;
+  };
+  /** The longest a melody or bass note rings towards the next one, in beats. */
+  legatoMaxBeats: number;
+}
+
+export const DEFAULT_BOARD_MIX: BoardMixConfig = {
+  pans: { melody: [0.2, -0.35, 0.45, -0.15], chord: [-0.25, 0.3, -0.4, 0.15] },
+  drumPans: { hat: 0.3, crash: -0.25, tom: -0.15, clap: 0.1, rim: 0.2 },
+  duck: { depth: 0.3, attackTc: 0.004, holdSec: 0.05, releaseTc: 0.07 },
+  legatoMaxBeats: 4,
+};

@@ -25,6 +25,14 @@ export class RoundRobinDrumKit {
   private ready = false;
   private readonly loadedPromise: Promise<void>;
   private dest: AudioNode | null = null;
+  /**
+   * Stereo position per piece. Null until a caller asks for placement, so kits that never
+   * pan (Song, Remix) keep their direct player → destination wiring and build no panners.
+   */
+  private pans: Partial<Record<DrumName, number>> | null = null;
+  private panners = new Map<DrumName, Tone.Panner>();
+  /** When set, every hit of a piece uses this sample (wrapped to how many it has). */
+  private fixedVariant: number | null = null;
 
   constructor(_ctx: AudioContext, kitId: string) {
     // Players own their audio nodes; _ctx is kept for signature parity with DrumKit.
@@ -42,9 +50,41 @@ export class RoundRobinDrumKit {
 
   connect(dest: AudioNode): void {
     this.dest = dest;
-    for (const players of this.samples.values()) {
-      for (const p of players) p.connect(dest);
+    for (const [name, players] of this.samples) {
+      const out = this.outFor(name);
+      if (out) for (const p of players) p.connect(out);
     }
+  }
+
+  /**
+   * Place pieces across the stereo field (-1 left … 1 right); unlisted pieces are centred.
+   * Call before connect() to opt in. Afterwards it moves the existing placement live, and
+   * an empty map puts everything back in the centre.
+   */
+  setPans(pans: Partial<Record<DrumName, number>>): void {
+    this.pans = { ...pans };
+    for (const [name, panner] of this.panners) panner.pan.value = this.pans[name] ?? 0;
+  }
+
+  /**
+   * Play one particular sample of each piece instead of rotating through them — a
+   * different kick and snare for a while (Evolve's scenes). null = round robin again.
+   */
+  setFixedVariant(variant: number | null): void {
+    this.fixedVariant = variant === null ? null : Math.max(0, Math.floor(variant));
+  }
+
+  /** Where a piece's players connect: its panner when placement is on, else the destination. */
+  private outFor(name: DrumName): AudioNode | Tone.Panner | null {
+    if (!this.dest) return null;
+    if (this.pans === null) return this.dest;
+    let panner = this.panners.get(name);
+    if (!panner) {
+      panner = new Tone.Panner(this.pans[name] ?? 0);
+      panner.connect(this.dest);
+      this.panners.set(name, panner);
+    }
+    return panner;
   }
 
   /**
@@ -73,6 +113,8 @@ export class RoundRobinDrumKit {
     }
     this.samples.clear();
     this.rrIndex.clear();
+    for (const panner of this.panners.values()) panner.dispose();
+    this.panners.clear();
     this.ready = false;
   }
 
@@ -102,7 +144,8 @@ export class RoundRobinDrumKit {
             onload: () => resolve(),
             onerror: () => resolve(),
           });
-          if (this.dest) p.connect(this.dest);
+          const out = this.outFor(name);
+          if (out) p.connect(out);
           players.push(p);
         });
         loads.push(done);
@@ -135,9 +178,14 @@ export class RoundRobinDrumKit {
       players = this.samples.get(key);
     }
     if (!players || players.length === 0) return;
-    const i = this.rrIndex.get(key) ?? 0;
-    const p = players[i];
-    this.rrIndex.set(key, (i + 1) % players.length);
+    let p: Tone.Player;
+    if (this.fixedVariant !== null) {
+      p = players[this.fixedVariant % players.length];
+    } else {
+      const i = this.rrIndex.get(key) ?? 0;
+      p = players[i];
+      this.rrIndex.set(key, (i + 1) % players.length);
+    }
     // Schedule the volume AT the hit's own time. Writing `.value` applies immediately, so
     // two hits scheduled inside the look-ahead window both ended up at the later one's
     // volume — a quiet ghost note next to an accent made both loud.
