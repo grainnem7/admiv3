@@ -524,3 +524,22 @@ moves. The code is `src/audio/evolve/evolve.ts` (pure).
 - **Possible later step:** Magenta's GANSynth and DDSP can make new timbres, but they are
   far too slow to run live. They could pre-render a set of sounds offline for Evolve to
   move between.
+
+## Built on 2026-10-06, second pass ("make it the best AI-ADMI it can be")
+
+- **Slice 5, the band:** built as designed, with the wait-for-the-player clock and the
+  make-room rule. Phrases follow the band's progression when the band is on.
+- **MIDI out** (brought forward from "later"): every note as MIDI with its part's channel;
+  player-only or everything; built-in sound optional; All Notes Off on Stop and Mute.
+- **Fill and Evolve as control counters** (fader roles), so a counter on the board can set
+  them like volume or tempo — the `fill` fader role the design asked for, plus `evolve`.
+- **Session log** with note origins, board changes and attributed setting changes, saved
+  as JSON or CSV. This is the evidence base for the musical-agency question.
+- **Visuals for what is only heard:** phrase ownership bands (the "soft band" from part
+  B), "Band joins / stops" and "New sounds" on the board, and the "Now:" line marking
+  phrases and fill.
+- **iPad reach calibration** per player (principle 4 applied to the strips).
+- **Help and cheat sheet** updated for all of the above; iPad and MIDI live under a
+  "Connections" section on the Sound tab.
+- **Still not built:** world Preview; slice 3 (new samples); the chord-aware Magenta
+  model; naming phrases in the "Now:" line; Lo-fi crackle.

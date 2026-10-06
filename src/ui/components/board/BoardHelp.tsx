@@ -116,6 +116,79 @@ const HELP: HelpEntry[] = [
       + 'hides one until the problem comes back.',
   },
   {
+    title: 'Sound worlds',
+    body: 'Play → Sound → Sound world: Warm, Lo-fi, Ambient or Electronic. One choice sets '
+      + 'every part’s instrument, the drums and the space so they suit each other. A colour '
+      + 'you gave an instrument of your own keeps it. "My picks" is the old way: each colour '
+      + 'plays the instrument chosen for it.',
+  },
+  {
+    title: 'Each counter plays a phrase',
+    body: 'With "A phrase" on, a counter plays a musical idea until the next counter of its '
+      + 'colour: a drum counter plays a whole groove (higher rows are busier), a bass counter '
+      + 'a bassline, a melody counter a short tune, and chord counters set the chords that '
+      + 'bass and melody follow. One counter fills the loop; a second divides it. A soft band '
+      + 'under each counter shows which beats it owns. "One note" is the old way.',
+  },
+  {
+    title: 'The band',
+    body: 'Off, Gentle or Full. A pad, a bass and a groove that join in on the pass after the '
+      + 'first counter goes down, follow the chords, and stop once the pass the last counter '
+      + 'left in has finished. Put down a bass, chord or drum counter and the band hands that '
+      + 'part to you. The board’s bottom edge pulses with its beat.',
+  },
+  {
+    title: 'Fill — the instrument adds notes',
+    body: 'Turn Fill up and the instrument adds in-key notes around yours: passing notes, '
+      + 'echoes, softer drum hits. It never plays where you already play, never louder than '
+      + 'you, and nothing on a part you have not used. Ideas come from Magenta (Google’s '
+      + 'music AI, downloaded the first time) or from simple rules. New idea rerolls, Back '
+      + 'returns, Keep freezes, Clear turns it off. Added notes are dotted rings on the board. '
+      + 'A colour can be given the Fill-amount control job, so a counter sets how much.',
+  },
+  {
+    title: 'Evolve — the sound keeps moving',
+    body: 'Turn Evolve up and each colour’s sound drifts every loop — brighter, darker, more '
+      + 'space, echoes — and every 4, 8 or 16 loops moves to another instrument, another '
+      + 'pattern, another kick and snare. Your notes stay yours. New sound takes another '
+      + 'path, Back returns, Hold freezes the sound of this loop. The Play screen says what '
+      + 'each colour sounds like now, and "New sounds" appears on the board at each change. '
+      + 'A colour can be given the Evolve-amount control job.',
+  },
+  {
+    title: 'iPad controls',
+    body: 'Start ADMI with "npm run dev:ipad", tick iPad controls on the Sound tab, and open '
+      + 'the link it shows in Safari on an iPad on the same Wi-Fi. Four strips (Speed, '
+      + 'Dynamics, Fill, Evolve) slide like ThumbJam — the whole strip is the target, the '
+      + 'ends are generous, values move in steps — and four pads (New idea, New sound, Keep, '
+      + 'Mute) act on touch. Learn reach makes a player’s comfortable slide the whole range.',
+  },
+  {
+    title: 'MIDI out',
+    body: 'Sound tab → MIDI out: pick an output and the board’s notes go to it as they sound '
+      + '(melody ch 1, bass 2, chords 3, drums 10). Send only your notes, or everything, and '
+      + 'keep the built-in sound on or not. Chrome and Edge only; a DAW on this laptop needs '
+      + 'a virtual port such as loopMIDI.',
+  },
+  {
+    title: 'Session log',
+    body: 'While the board runs, every note is logged with where it came from — placed, '
+      + 'phrase, fill or band — plus the board whenever it changes and every setting change '
+      + 'with who made it. "Save session" on the Play screen writes it as JSON (everything) '
+      + 'or CSV (notes). Nothing leaves the machine otherwise.',
+  },
+  {
+    title: 'Camera on its side',
+    body: 'Camera step → Turn 90°. Press until the board is the right way up for the player. '
+      + 'The corners and your colours are kept.',
+  },
+  {
+    title: 'Learn the empty board',
+    body: 'With every counter off, press "Learn the empty board" (Board step, or the Colours '
+      + 'step when it has not been done). Counters are then found by being unlike the board, '
+      + 'and the wood is never offered as a colour.',
+  },
+  {
     title: 'Keyboard',
     body: 'Space starts and stops while playing (never during Set up, and never when a button '
       + 'or slider has focus). Tabs move with the arrow keys. Big board (⤢) fills the screen; '

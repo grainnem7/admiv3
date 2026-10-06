@@ -8,11 +8,11 @@
 - Switch later with the **Player** button in the header (stop playing first).
 
 ## Set up — four steps
-1. **Camera.** Pick the camera, check it says **"Picture has colour"**, set Mirror/Flip. *Changing mirror or flip asks for the corners again; colours are kept.*
+1. **Camera.** Pick the camera, check it says **"Picture has colour"**, set Mirror/Flip. *Changing mirror or flip asks for the corners again; colours are kept.* Camera on its side? **Turn 90°** until the board is the right way up — corners and colours are kept. A phone used as a camera: keep **Picture size 1280 × 720**.
 2. **Board.** **Find board** looks for the crossings where four squares meet, works out 8 × 8 or 10 × 10, and shows you what it found — **nothing is saved until Looks right**. Not sure? It hands you the editor with its best guess. Or **Tap corners myself**: corners are the **outside corners of the squares**, not the wooden edge. Set Rows and Steps, and where the player sits.
    - **No pointer?** **Place corners for me**, then the arrows (Fine/Coarse) and **Next corner**.
    - Coming back and the board hasn't moved: **Skip, board hasn't moved**.
-3. **Colours.** Put one of each counter down and press **Find colours**: it learns what your board looks like, finds the counters, and **checks every colour against the board** before offering it. A colour that would light up the wood says so and starts **Off**. Press **Use these colours** to keep them. Or **Tap a counter** (or **Pick a square** + arrows + **Sample this square**) — the sample is shown first, and **nothing is saved until Add**.
+3. **Colours.** First, with **every counter off**, press **Learn the empty board** (counters are then found by being unlike it). Then put one of each counter down and press **Find colours**: it learns what your board looks like, finds the counters, and **checks every colour against the board** before offering it. A colour that would light up the wood says so and starts **Off**. Press **Use these colours** to keep them. Or **Tap a counter** (or **Pick a square** + arrows + **Sample this square**) — the sample is shown first, and **nothing is saved until Add**.
 4. **Ready.** Check the counts and the list, then **▶ Play**.
 
 ## Playing
@@ -68,6 +68,29 @@
 - **"Has the board moved?"** — the pieces have shifted together off their squares.
 - **"<Colour> is matching the board itself"** — that colour is being seen almost everywhere.
 - Hints only inform. **Not now** hides one until the problem returns. They can be switched off in Board → Details.
+
+## Sound — the Sound tab while playing
+- **Sound world:** Warm · Lo-fi · Ambient · Electronic. One choice sets every part's instrument, the drums and the space. A colour you gave an instrument keeps it. **My picks** = each colour plays its own chosen instrument.
+- **Each counter plays — A phrase / One note.** A phrase: a drum counter plays a whole groove (higher = busier), bass a bassline, melody a tune, chord counters set the chords. **One counter fills the loop; the next counter of the same colour takes over from its step.** The band under each counter shows the beats it owns. *Polyrhythm loop lengths (Groove tab) fight phrases — leave them Off.*
+- **Band — Off / Gentle / Full.** Pad + bass + groove join on the pass **after** the first counter, follow the chords, and stop after the pass the last counter left in. Put down a bass, chord or drum counter and the band **hands that part to you**. The bottom edge of the board pulses with its beat.
+- **Fill 0–100%.** In-key notes added around the player's: never on their notes, never louder, nothing on a part they haven't used. **Ideas from Magenta AI** (downloads once, needs internet the first time; "Simple rules" if not) · **New idea / Back / Keep / Clear.** Added notes = **dotted rings**.
+- **Evolve 0–100%.** Each colour's sound drifts every loop and changes instrument/pattern/kit every **4 / 8 / 16 loops**. **New sound / Back / Hold.** The Play screen says what each colour sounds like now; **"New sounds"** flashes on the board.
+- **Control counters for Fill and Evolve:** give a colour the *Fill amount* or *Evolve amount* job and its counter's position sets the amount.
+- **Studio mix** (tick box): the fuller mix. Untick to compare with the old sound.
+
+## iPad controls (Tim)
+- Start ADMI with **`npm run dev:ipad`** (not `npm run dev`). Sound tab → **Connections** → tick **iPad controls** → open the link shown in **Safari on the iPad** (same Wi-Fi; allow Node through Windows Firewall on private networks the first time).
+- **Strips:** Speed · Dynamics · Fill · Evolve — slide anywhere on a strip; the ends are "all the way"; values move in 5% steps. **Pads:** New idea · New sound · Keep · Mute — act on touch, repeat taps ignored.
+- **Learn reach:** press it on the laptop, have the player slide each strip as far as is comfortable, press **Done**. Their reach is now the whole range. **Reset reach** undoes it. Per player.
+- What the iPad does shows on the Play screen ("iPad: Speed 96 BPM").
+
+## MIDI out — ADMI as a controller
+- Sound tab → **Connections** → **MIDI out** → choose an output. Melody **ch 1**, bass **ch 2**, chords **ch 3**, drums **ch 10** (General MIDI). **My notes only** or **Everything** (fill and band too). Untick **Keep the built-in sound** for MIDI only.
+- Chrome/Edge only. A DAW on the same laptop needs a virtual port (**loopMIDI** on Windows).
+
+## Session log — for the research
+- Runs while the board plays. Every note with its **origin** (placed · phrase · fill · band), pitch/drum, loudness, time; the board whenever it changes; every setting change and **who made it** (laptop · iPad · counter).
+- Play screen → **Save session** (JSON, everything) or **CSV** (notes). Named after the player and the time. Nothing leaves the machine otherwise.
 
 ## Good to know
 - **Variation** and **Loop bank** are single-page: set Pages to 1 to use them.

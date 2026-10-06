@@ -88,6 +88,7 @@ import { SOUND_WORLDS, SOUND_WORLD_IDS, worldOf, type SoundWorldChoice } from '.
 import type { FillSourceStatus } from '../../songs/BoardSequencerEngine';
 import type { BandLevel, BandPart } from '../../songs/band/band';
 import { BoardMidiPanel } from './boardSequencer/components/BoardMidiPanel';
+import { Disclosure } from './boardSequencer/ui/Disclosure';
 import { SessionLog, sessionFileName, type LogActor } from '../../songs/sessionLog';
 import { useRemoteLink } from '../../remote/useRemoteLink';
 import {
@@ -2000,6 +2001,8 @@ export default function BoardSequencerScreen() {
   const soundTab = (
 
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 10 }}>
+    {/* The iPad and MIDI: set up once per rig, so they fold away under the music. */}
+    <Disclosure summary="Connections: iPad controls and MIDI out" defaultOpen={remoteEnabled || config.midiEnabled}>
     {/* The iPad remote: a second controller in the performance (see src/remote). */}
     <div role="group" aria-label="iPad controls" style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 8, borderRadius: 'var(--bs-radius-md)', border: '1px solid var(--bs-border)' }}>
       <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600 }}>
@@ -2101,6 +2104,7 @@ export default function BoardSequencerScreen() {
       keepSound={config.midiKeepSound}
       onChange={(patch) => update(patch)}
     />
+    </Disclosure>
     {/* The two biggest choices about how the board sounds, first. Both work while playing. */}
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       <span style={{ fontWeight: 600 }}>Sound world</span>
