@@ -21,6 +21,18 @@ export type RemoteTriggerName = 'newIdea' | 'newSound' | 'keep' | 'mute';
 export const REMOTE_CONTROLS: RemoteControlName[] = ['tempo', 'dynamics', 'fill', 'evolve'];
 export const REMOTE_TRIGGERS: RemoteTriggerName[] = ['newIdea', 'newSound', 'keep', 'mute'];
 
+/**
+ * How far along a strip this player can comfortably reach, as fractions of its length:
+ * their reach becomes the whole range, so the extremes never need a stretch (the same
+ * rule as the batons' range calibration).
+ */
+export interface Reach { low: number; high: number }
+export const FULL_REACH: Reach = { low: 0, high: 1 };
+/** A reach narrower than this would make every value a few millimetres apart. */
+export const MIN_REACH_SPAN = 0.2;
+/** Kept inside the measured extremes, so "all the way" is reached a little before the end. */
+export const REACH_MARGIN = 0.03;
+
 export interface RemoteState {
   /** Each control as 0–1, exactly as its strip shows it. */
   values: Record<RemoteControlName, number>;
@@ -29,11 +41,17 @@ export interface RemoteState {
   kept: boolean;
   muted: boolean;
   playing: boolean;
+  /** This player's reach on each strip (missing = the whole strip). */
+  reach?: Record<RemoteControlName, Reach>;
+  /** True while the laptop is learning the player's reach: strips report, not control. */
+  learning?: boolean;
 }
 
 export type RemoteMessage =
   | { type: 'control'; name: RemoteControlName; value: number }
   | { type: 'trigger'; name: RemoteTriggerName }
+  /** While learning reach: where the finger is on a strip, before any mapping. */
+  | { type: 'reach'; name: RemoteControlName; fraction: number }
   | { type: 'state'; state: RemoteState }
   /** From the relay: how many of each side are in this room. */
   | { type: 'peers'; hosts: number; remotes: number };
@@ -56,6 +74,9 @@ export function parseRemoteMessage(raw: unknown): RemoteMessage | null {
   if (o.type === 'trigger' && REMOTE_TRIGGERS.includes(o.name as RemoteTriggerName)) {
     return { type: 'trigger', name: o.name as RemoteTriggerName };
   }
+  if (o.type === 'reach' && REMOTE_CONTROLS.includes(o.name as RemoteControlName) && isUnit(o.fraction)) {
+    return { type: 'reach', name: o.name as RemoteControlName, fraction: o.fraction };
+  }
   if (o.type === 'peers' && typeof o.hosts === 'number' && typeof o.remotes === 'number') {
     return { type: 'peers', hosts: o.hosts, remotes: o.remotes };
   }
@@ -64,6 +85,7 @@ export function parseRemoteMessage(raw: unknown): RemoteMessage | null {
     const values = s.values as Record<string, unknown> | undefined;
     const labels = s.labels as Record<string, unknown> | undefined;
     if (!values || !labels || !REMOTE_CONTROLS.every((k) => isUnit(values[k]) && typeof labels[k] === 'string')) return null;
+    const reach = typeof s.reach === 'object' && s.reach !== null ? sanitizeReachMap(s.reach as Record<string, unknown>) : undefined;
     return {
       type: 'state',
       state: {
@@ -72,6 +94,8 @@ export function parseRemoteMessage(raw: unknown): RemoteMessage | null {
         kept: s.kept === true,
         muted: s.muted === true,
         playing: s.playing === true,
+        ...(reach ? { reach } : {}),
+        ...(s.learning === true ? { learning: true } : {}),
       },
     };
   }
@@ -85,6 +109,62 @@ export function makeRemoteCode(rand: () => number = Math.random): string {
 
 export function isRemoteCode(code: unknown): code is string {
   return typeof code === 'string' && /^\d{4}$/.test(code);
+}
+
+// ---- reach ---------------------------------------------------------------------------
+
+/** A stored reach made safe: inside 0–1, low before high, never narrower than MIN_REACH_SPAN. */
+export function sanitizeReach(v: unknown): Reach {
+  const o = (typeof v === 'object' && v !== null ? v : {}) as Record<string, unknown>;
+  let low = isUnit(o.low) ? o.low : 0;
+  let high = isUnit(o.high) ? o.high : 1;
+  if (high < low) [low, high] = [high, low];
+  if (high - low < MIN_REACH_SPAN) {
+    const mid = (low + high) / 2;
+    low = Math.max(0, mid - MIN_REACH_SPAN / 2);
+    high = Math.min(1, low + MIN_REACH_SPAN);
+    low = high - MIN_REACH_SPAN;
+  }
+  return { low, high };
+}
+
+export function sanitizeReachMap(v: unknown): Record<RemoteControlName, Reach> {
+  const o = (typeof v === 'object' && v !== null ? v : {}) as Record<string, unknown>;
+  const out = {} as Record<RemoteControlName, Reach>;
+  for (const name of REMOTE_CONTROLS) out[name] = sanitizeReach(o[name]);
+  return out;
+}
+
+export function fullReachMap(): Record<RemoteControlName, Reach> {
+  const out = {} as Record<RemoteControlName, Reach>;
+  for (const name of REMOTE_CONTROLS) out[name] = { ...FULL_REACH };
+  return out;
+}
+
+/** Where the finger is, as a share of the player's reach rather than of the strip. */
+export function mapReach(fraction: number, reach: Reach): number {
+  const span = Math.max(1e-6, reach.high - reach.low);
+  return Math.max(0, Math.min(1, (fraction - reach.low) / span));
+}
+
+/** The inverse: where on the strip a value sits, so the strip's fill matches the finger. */
+export function unmapReach(value: number, reach: Reach): number {
+  return reach.low + Math.max(0, Math.min(1, value)) * (reach.high - reach.low);
+}
+
+/**
+ * A reach from the extremes the finger touched while learning. Pulled in by a margin so
+ * the ends are reached before the finger runs out, and never narrower than the minimum.
+ * No samples, or hardly any movement, keeps the reach that was there.
+ */
+export function reachFromSamples(samples: readonly number[], previous: Reach): Reach {
+  if (samples.length < 2) return previous;
+  let min = Math.min(...samples);
+  let max = Math.max(...samples);
+  if (max - min < MIN_REACH_SPAN) return previous;
+  min = Math.min(1, min + REACH_MARGIN);
+  max = Math.max(0, max - REACH_MARGIN);
+  return sanitizeReach({ low: min, high: max });
 }
 
 // ---- finger → value ----------------------------------------------------------------

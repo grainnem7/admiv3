@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import {
-  REMOTE_CONTROLS, stripValue, STRIP_STEP, TAP_REPEAT_MS,
+  FULL_REACH, mapReach, REMOTE_CONTROLS, stripValue, STRIP_STEP, TAP_REPEAT_MS, unmapReach,
   type RemoteControlName, type RemoteMessage, type RemoteState, type RemoteTriggerName,
 } from '../../remote/protocol';
 import { useRemoteLink } from '../../remote/useRemoteLink';
@@ -49,6 +49,9 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
   }, []);
   const link = useRemoteLink('remote', code, true, onMessage);
   const connected = link.status === 'open' && link.others > 0;
+  // This player's reach on each strip (from the laptop); while learning, strips only report.
+  const reachOf = (name: RemoteControlName) => state?.reach?.[name] ?? FULL_REACH;
+  const learning = state?.learning === true;
 
   // Keep the page still: no scroll, no zoom, no text selection, on the whole document.
   useEffect(() => {
@@ -77,24 +80,29 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
     link.send({ type: 'control', name, value });
   };
 
-  const fromPointer = (el: HTMLElement, clientY: number): number => {
+  /** The finger's place on the strip, 0 at the bottom, before any mapping. */
+  const fractionAt = (el: HTMLElement, clientY: number): number => {
     const box = el.getBoundingClientRect();
-    return stripValue(1 - (clientY - box.top) / Math.max(1, box.height));
+    return Math.max(0, Math.min(1, 1 - (clientY - box.top) / Math.max(1, box.height)));
   };
+  const fromPointer = (el: HTMLElement, clientY: number, name: RemoteControlName): number =>
+    stripValue(mapReach(fractionAt(el, clientY), reachOf(name)));
 
   const stripHandlers = (name: RemoteControlName) => ({
     onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => {
       e.preventDefault();
       e.currentTarget.setPointerCapture(e.pointerId);
       touching.current.set(name, e.pointerId);
-      const v = fromPointer(e.currentTarget, e.clientY);
+      if (learning) { link.send({ type: 'reach', name, fraction: fractionAt(e.currentTarget, e.clientY) }); return; }
+      const v = fromPointer(e.currentTarget, e.clientY, name);
       latest.current.set(name, v);
       setLocal((l) => ({ ...l, [name]: v }));
       send(name, v);
     },
     onPointerMove: (e: React.PointerEvent<HTMLDivElement>) => {
       if (touching.current.get(name) !== e.pointerId) return;
-      const v = fromPointer(e.currentTarget, e.clientY);
+      if (learning) { link.send({ type: 'reach', name, fraction: fractionAt(e.currentTarget, e.clientY) }); return; }
+      const v = fromPointer(e.currentTarget, e.clientY, name);
       latest.current.set(name, v);
       setLocal((l) => (l[name] === v ? l : { ...l, [name]: v }));
       send(name, v);
@@ -103,6 +111,7 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
       if (touching.current.get(name) !== e.pointerId) return;
       touching.current.delete(name);
       releasedAt.current.set(name, performance.now());
+      if (learning) return;
       const v = latest.current.get(name);
       if (v !== undefined) send(name, v, true); // the final value always arrives
     },
@@ -142,9 +151,11 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
       <div role="status" aria-live="polite" style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 20 }}>
         <span style={{ width: 16, height: 16, borderRadius: 8, background: connected ? '#66bb6a' : '#ef5350' }} aria-hidden="true" />
         <span style={{ fontWeight: 700 }}>
-          {connected
-            ? (state?.playing ? 'Connected · playing' : 'Connected · press Play on the laptop')
-            : link.status === 'open' ? 'Waiting for the laptop…' : 'Connecting…'}
+          {learning
+            ? 'Learning your reach: slide each strip as far as is comfortable'
+            : connected
+              ? (state?.playing ? 'Connected · playing' : 'Connected · press Play on the laptop')
+              : link.status === 'open' ? 'Waiting for the laptop…' : 'Connecting…'}
         </span>
         <span style={{ marginLeft: 'auto', opacity: 0.6, fontSize: 16 }}>{`Code ${code}`}</span>
       </div>
@@ -171,7 +182,7 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
               <div
                 aria-hidden="true"
                 style={{
-                  position: 'absolute', left: 0, right: 0, bottom: 0, height: `${v * 100}%`,
+                  position: 'absolute', left: 0, right: 0, bottom: 0, height: `${unmapReach(v, reachOf(name)) * 100}%`,
                   background: STRIP_COLOURS[name], opacity: 0.85, transition: 'height 60ms linear',
                 }}
               />
@@ -186,7 +197,7 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
         })}
       </div>
 
-      <div style={{ height: '24%', minHeight: 110, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, opacity: connected ? 1 : 0.4 }}>
+      <div style={{ height: '24%', minHeight: 110, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, opacity: connected && !learning ? 1 : 0.4 }}>
         {PADS.map((p) => {
           const on = (p.name === 'keep' && state?.kept) || (p.name === 'mute' && state?.muted);
           return (
@@ -194,7 +205,7 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
               key={p.name}
               type="button"
               aria-pressed={p.name === 'keep' || p.name === 'mute' ? !!on : undefined}
-              onPointerDown={(e) => { e.preventDefault(); tap(p.name); }}
+              onPointerDown={(e) => { e.preventDefault(); if (!learning) tap(p.name); }}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tap(p.name); } }}
               style={{
                 borderRadius: 20, border: `3px solid ${flash === p.name ? '#ffffff' : on ? '#ffd54f' : '#3a4152'}`,

@@ -91,7 +91,8 @@ import { BoardMidiPanel } from './boardSequencer/components/BoardMidiPanel';
 import { SessionLog, sessionFileName, type LogActor } from '../../songs/sessionLog';
 import { useRemoteLink } from '../../remote/useRemoteLink';
 import {
-  dynamicsFromValue, makeRemoteCode, REMOTE_INFO_PATH, tempoFromValue, valueFromTempo, valueFromVelocity,
+  dynamicsFromValue, fullReachMap, makeRemoteCode, reachFromSamples, REMOTE_CONTROLS, REMOTE_INFO_PATH,
+  tempoFromValue, valueFromTempo, valueFromVelocity,
   type RemoteControlName, type RemoteMessage, type RemoteState,
 } from '../../remote/protocol';
 import { rotateCorners } from '../../tracking/boardDetect/orientation';
@@ -435,6 +436,9 @@ export default function BoardSequencerScreen() {
   const [remoteInfo, setRemoteInfo] = useState<{ addresses: string[]; port: number | null; lan: boolean } | null>(null);
   /** The last thing the iPad did, shown on screen for a moment so it is seen, not only heard. */
   const [remoteNote, setRemoteNote] = useState<{ text: string; at: number } | null>(null);
+  // Learning the player's reach: the strips report raw finger positions until Done.
+  const [reachLearning, setReachLearning] = useState(false);
+  const reachSamplesRef = useRef<Record<RemoteControlName, number[]>>({ tempo: [], dynamics: [], fill: [], evolve: [] });
   // The link itself. Messages go to the handler defined with the Sound tab, through a ref,
   // so the hook always calls the current one.
   const remoteMsgRef = useRef<(msg: RemoteMessage) => void>(() => {});
@@ -472,11 +476,13 @@ export default function BoardSequencerScreen() {
       kept: config.fillKept !== null || config.evolveHoldLap !== null,
       muted,
       playing: running,
+      reach: config.remoteReach,
+      ...(reachLearning ? { learning: true } : {}),
     };
     remoteLink.send({ type: 'state', state });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [remoteEnabled, remoteLink.others, config.bpm, config.velocity, config.fillAmount, config.evolveAmount,
-    config.fillKept, config.evolveHoldLap, muted, running]);
+    config.fillKept, config.evolveHoldLap, muted, running, config.remoteReach, reachLearning]);
   const fillSigRef = useRef('');
   const [prevFillSeed, setPrevFillSeed] = useState<number | null>(null);
 
@@ -1979,6 +1985,8 @@ export default function BoardSequencerScreen() {
         ...(msg.name === 'fill' ? { fillAmount: msg.value } : {}),
         ...(msg.name === 'evolve' ? { evolveAmount: msg.value } : {}) };
       setRemoteNote({ text: `iPad: ${REMOTE_CONTROL_WORDS[msg.name]} ${remoteLabels(next)[msg.name]}`, at: performance.now() });
+    } else if (msg.type === 'reach') {
+      reachSamplesRef.current[msg.name].push(msg.fraction);
     } else if (msg.type === 'trigger') {
       if (msg.name === 'newIdea') newFillIdea();
       else if (msg.name === 'newSound') newEvolveSound();
@@ -2034,6 +2042,55 @@ export default function BoardSequencerScreen() {
           >
             New code
           </Button>
+          {/* Reach: the player's comfortable slide becomes the whole range of each strip. */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
+            <span style={{ fontWeight: 600, fontSize: 13 }}>Reach</span>
+            <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
+              {REMOTE_CONTROLS.map((n) => `${REMOTE_CONTROL_WORDS[n]} ${Math.round(config.remoteReach[n].low * 100)}–${Math.round(config.remoteReach[n].high * 100)}%`).join(' · ')}
+            </span>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {!reachLearning ? (
+                <Button
+                  tone="secondary"
+                  onClick={() => {
+                    reachSamplesRef.current = { tempo: [], dynamics: [], fill: [], evolve: [] };
+                    setReachLearning(true);
+                    announce('Learning reach. On the iPad, slide each strip as far as is comfortable, then press Done.');
+                  }}
+                  reason={remoteLink.others === 0 ? 'Connect the iPad first.' : null}
+                >
+                  Learn reach
+                </Button>
+              ) : (
+                <>
+                  <span role="status" style={{ fontSize: 12, fontWeight: 600 }}>
+                    On the iPad: slide each strip as far as is comfortable, then press Done here.
+                  </span>
+                  <Button
+                    tone="primary"
+                    onClick={() => {
+                      const prev = configRef.current.remoteReach;
+                      const next = { ...prev };
+                      for (const n of REMOTE_CONTROLS) next[n] = reachFromSamples(reachSamplesRef.current[n], prev[n]);
+                      update({ remoteReach: next });
+                      setReachLearning(false);
+                      announce('Reach learnt.');
+                    }}
+                  >
+                    Done
+                  </Button>
+                  <Button tone="quiet" onClick={() => setReachLearning(false)}>Cancel</Button>
+                </>
+              )}
+              <Button
+                tone="quiet"
+                onClick={() => update({ remoteReach: fullReachMap() })}
+                reason={REMOTE_CONTROLS.every((n) => config.remoteReach[n].low === 0 && config.remoteReach[n].high === 1) ? 'Already the whole strip.' : null}
+              >
+                Reset reach
+              </Button>
+            </div>
+          </div>
         </>
       )}
     </div>

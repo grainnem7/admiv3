@@ -24,7 +24,7 @@ const MAX_MESSAGE_BYTES = 4096;
 
 /** Who may send what: the iPad sends controls and taps, the laptop sends state. */
 export function allowedFrom(role: Role, type: string): boolean {
-  return role === 'remote' ? type === 'control' || type === 'trigger' : type === 'state';
+  return role === 'remote' ? type === 'control' || type === 'trigger' || type === 'reach' : type === 'state';
 }
 
 export function attachRemoteRelay(server: Server): void {

@@ -138,3 +138,50 @@ describe('relay', () => {
     await expect(join(port, 'abcd', 'remote')).rejects.toBeTruthy();
   });
 });
+
+// ---- reach: the player's comfortable slide becomes the whole strip ----
+import {
+  FULL_REACH, mapReach, MIN_REACH_SPAN, reachFromSamples, sanitizeReach, unmapReach,
+} from '../remote/protocol';
+
+describe('reach', () => {
+  it('maps the player\'s reach onto the whole range, and back', () => {
+    const reach = { low: 0.1, high: 0.8 };
+    expect(mapReach(0.1, reach)).toBe(0);
+    expect(mapReach(0.8, reach)).toBe(1);
+    expect(mapReach(0.45, reach)).toBeCloseTo(0.5, 9);
+    expect(mapReach(0.95, reach)).toBe(1); // past the reach is still "all the way"
+    expect(unmapReach(0.5, reach)).toBeCloseTo(0.45, 9);
+  });
+
+  it('learns a reach from where the finger went, pulled in by a margin', () => {
+    const r = reachFromSamples([0.12, 0.3, 0.5, 0.82, 0.79], FULL_REACH);
+    expect(r.low).toBeCloseTo(0.15, 9);
+    expect(r.high).toBeCloseTo(0.79, 9);
+  });
+
+  it('keeps the old reach when the finger hardly moved, or never touched', () => {
+    const prev = { low: 0.2, high: 0.7 };
+    expect(reachFromSamples([], prev)).toEqual(prev);
+    expect(reachFromSamples([0.5, 0.52, 0.55], prev)).toEqual(prev);
+  });
+
+  it('a stored reach is made safe', () => {
+    expect(sanitizeReach({ low: 0.9, high: 0.2 })).toEqual({ low: 0.2, high: 0.9 });
+    const narrow = sanitizeReach({ low: 0.5, high: 0.52 });
+    expect(narrow.high - narrow.low).toBeCloseTo(MIN_REACH_SPAN, 9);
+    expect(sanitizeReach('junk')).toEqual({ low: 0, high: 1 });
+  });
+
+  it('reach reports are messages the iPad may send, and the laptop may say it is learning', () => {
+    expect(parseRemoteMessage({ type: 'reach', name: 'fill', fraction: 0.3 })).toEqual({ type: 'reach', name: 'fill', fraction: 0.3 });
+    expect(parseRemoteMessage({ type: 'reach', name: 'fill', fraction: 3 })).toBeNull();
+    expect(allowedFrom('remote', 'reach')).toBe(true);
+    expect(allowedFrom('host', 'reach')).toBe(false);
+    const state = { values: { tempo: 0, dynamics: 0, fill: 0, evolve: 0 }, labels: { tempo: '', dynamics: '', fill: '', evolve: '' }, learning: true, reach: { fill: { low: 0.1, high: 0.9 } } };
+    const parsed = parseRemoteMessage({ type: 'state', state });
+    expect(parsed).toMatchObject({ type: 'state', state: { learning: true } });
+    expect(parsed && parsed.type === 'state' ? parsed.state.reach?.fill : null).toEqual({ low: 0.1, high: 0.9 });
+    expect(parsed && parsed.type === 'state' ? parsed.state.reach?.tempo : null).toEqual({ low: 0, high: 1 });
+  });
+});
