@@ -30,6 +30,12 @@ export interface BoardViewProps {
   pingPongDirection: number;
   swatchFor(colour: ColourId): string;
   palette: BoardPalette;
+  /**
+   * Where the fill adds notes. Drawn as a small dotted ring — never a solid piece — so
+   * what the instrument added is always told apart from what the player put down, by
+   * shape and not only by colour. A ring fills in while its note sounds.
+   */
+  fillMarks?: readonly { row: number; col: number; colour: ColourId }[];
   /** Page label ("Page A · live"), when there is more than one page. */
   pageLabel?: string | null;
   reducedMotion?: boolean;
@@ -52,7 +58,7 @@ function ghostsBySquare(ghosts: ReadonlyMap<string, ActiveCell> | undefined): Ma
  */
 export function BoardView({
   rows, cols, frame, pops, playheadCol, playing, pingPongDirection, swatchFor, palette,
-  pageLabel, reducedMotion = false,
+  pageLabel, reducedMotion = false, fillMarks,
 }: BoardViewProps): JSX.Element {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -93,7 +99,8 @@ export function BoardView({
     const cw = w / cols;
     const ch = h / rows;
     const pad = Math.min(cw, ch) * 0.08;
-    const popByKey = new Map(pops.map((p) => [keyOf(p.row, p.col), p]));
+    const popByKey = new Map(pops.filter((p) => p.origin !== 'fill').map((p) => [keyOf(p.row, p.col), p]));
+    const fillPopAt = new Set(pops.filter((p) => p.origin === 'fill').map((p) => keyOf(p.row, p.col)));
     const ghostAt = ghostsBySquare(frame.ghosts);
 
     // Playhead band first, so pieces sit on top of it.
@@ -215,6 +222,29 @@ export function BoardView({
       }
     }
 
+    // Fill marks, on squares with no counter of their own.
+    if (fillMarks && fillMarks.length > 0) {
+      for (const m of fillMarks) {
+        if (m.row < 0 || m.row >= rows || m.col < 0 || m.col >= cols) continue;
+        const key = keyOf(m.row, m.col);
+        if (frame.settled.has(key) || frame.detected.has(key)) continue;
+        const cx = m.col * cw + cw / 2;
+        const cy = m.row * ch + ch / 2;
+        const r = Math.min(cw, ch) * 0.2;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        if (fillPopAt.has(key)) {
+          ctx.fillStyle = swatchFor(m.colour);
+          ctx.fill();
+        }
+        ctx.setLineDash([2, 3]);
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = swatchFor(m.colour);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    }
+
     // Loop pads: each one's state carries a glyph, not only a fill, and each is drawn
     // where the lane actually puts it.
     if (frame.bankCells && frame.bankCells.size > 0) {
@@ -240,7 +270,7 @@ export function BoardView({
       ctx.textBaseline = 'top';
       ctx.fillText(pingPongDirection > 0 ? '→' : '←', playheadCol * cw + cw / 2, 2);
     }
-  }, [dims, rows, cols, frame, pops, playheadCol, playing, pingPongDirection, swatchFor, palette, reducedMotion]);
+  }, [dims, rows, cols, frame, pops, playheadCol, playing, pingPongDirection, swatchFor, palette, reducedMotion, fillMarks]);
 
   const pieces = frame.settled.size;
   const heldCount = frame.held?.size ?? 0;

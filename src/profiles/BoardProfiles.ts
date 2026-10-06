@@ -16,7 +16,7 @@ export const PLAYERS_KEY = 'admi-board-players';
 export const ACTIVE_PLAYER_KEY = 'admi-board-active-player';
 export const LEGACY_KEY = 'admi-board-sequencer';
 
-const RIG_FIELDS = ['version', 'enabled', 'corners', 'boardSquares', 'cameraDeviceId', 'cameraLabel', 'mirrorX', 'mirrorY'] as const;
+const RIG_FIELDS = ['version', 'enabled', 'corners', 'boardSquares', 'cameraDeviceId', 'cameraLabel', 'mirrorX', 'mirrorY', 'cameraRotation'] as const;
 export type RigField = (typeof RIG_FIELDS)[number];
 
 export type RigChannel = Pick<ColourChannel, 'id' | 'kind' | 'swatch' | 'band' | 'blackBand' | 'whiteBand'>;

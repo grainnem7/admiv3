@@ -69,7 +69,7 @@ import { runFrameBurst } from './boardSequencer/useFrameBurst';
 import {
   buildSquareModel, modelHsv, warpToBoard, type SquareModel,
 } from '../../tracking/boardColourDetect/squareModel';
-import { fitSafeBand } from '../../tracking/boardColourDetect/detectColours';
+import { bandKeeps, fitSafeBand } from '../../tracking/boardColourDetect/detectColours';
 import { detectColours, type DetectedColour } from '../../tracking/boardColourDetect/detectColours';
 import type { FiredNote } from '../../songs/BoardSequencerEngine';
 import {
@@ -82,6 +82,14 @@ import {
 } from '../../profiles/BoardProfiles';
 import { layoutFor } from './boardSequencer/layout';
 import { isConvexQuad, squareCentreToImage } from './boardSequencer/cornerEditor';
+import { drawOriented, orientedSize, reorientPoints, type FrameOrientation, type QuarterTurns } from '../../tracking/frameOrientation';
+import { SOUND_WORLDS, SOUND_WORLD_IDS, worldOf, type SoundWorldChoice } from '../../audio/worlds/soundWorlds';
+import type { FillSourceStatus } from '../../songs/BoardSequencerEngine';
+import { useRemoteLink } from '../../remote/useRemoteLink';
+import {
+  dynamicsFromValue, makeRemoteCode, REMOTE_INFO_PATH, tempoFromValue, valueFromTempo, valueFromVelocity,
+  type RemoteControlName, type RemoteMessage, type RemoteState,
+} from '../../remote/protocol';
 import { rotateCorners } from '../../tracking/boardDetect/orientation';
 import { applyDetectedColours } from './boardSequencer/applyDetectedColours';
 import type { BoardSquares } from '../../tracking/boardGrid';
@@ -95,6 +103,11 @@ import type { FaderRole, ControlRemoval } from '../../profiles/BoardSequencerCon
  */
 
 /** Reserved space under a control, so a disabled reason never shifts the layout. */
+/** How the camera picture is turned and flipped, from the saved settings. */
+const orientationOf = (c: Pick<BoardSequencerStored, 'mirrorX' | 'mirrorY' | 'cameraRotation'>): FrameOrientation => ({
+  mirrorX: c.mirrorX, mirrorY: c.mirrorY, rotation: c.cameraRotation,
+});
+
 const REASON_STYLE = { display: 'block', minHeight: 14, fontSize: 11, opacity: 0.7 } as const;
 
 const REMOVAL_LABELS: { value: ControlRemoval; label: string }[] = [
@@ -103,7 +116,7 @@ const REMOVAL_LABELS: { value: ControlRemoval; label: string }[] = [
   { value: 'default', label: 'Return to the saved value' },
 ];
 import { BoardSequencerMode, type PieceColour, type ActiveCell } from '../../tracking/BoardSequencerMode';
-import { counterColourFromRegion } from '../../tracking/ColorTracker';
+import { counterColourFromRegion, rgbToHsv } from '../../tracking/ColorTracker';
 import {
   calibrationFromHsv,
   describeChannel, freshChannelId, recalibratedChannel, isFaderRole, hueName, ROLE_LABELS,
@@ -201,7 +214,34 @@ interface LastColourSample {
   kind: ColourKind;
   /** True when the band can't be narrowed enough to stop matching the board itself. */
   unsafe?: boolean;
+  /** The counter's own pixels around the tap, so its band is fitted to all of it. */
+  pixels?: { h: number; s: number; v: number }[];
+  /** Share of those pixels the fitted band recognises. */
+  keeps?: number;
 }
+
+const REMOTE_ENABLED_KEY = 'admi-remote-enabled';
+const REMOTE_CODE_KEY = 'admi-remote-code';
+const REMOTE_CONTROL_WORDS: Record<RemoteControlName, string> = {
+  tempo: 'Speed', dynamics: 'Dynamics', fill: 'Fill', evolve: 'Evolve',
+};
+const REMOTE_TRIGGER_WORDS: Record<'newIdea' | 'newSound' | 'keep' | 'mute', string> = {
+  newIdea: 'New idea', newSound: 'New sound', keep: 'Keep', mute: 'Mute',
+};
+/** How long "iPad: Speed 96 BPM" stays on screen. */
+const REMOTE_NOTE_MS = 2500;
+
+/** What the player is told about where the fill is coming from. */
+const FILL_STATUS_TEXT: Record<FillSourceStatus, string> = {
+  rules: 'Ideas from the simple rules.',
+  loading: 'Loading the AI (first time only, a few seconds)… simple rules play meanwhile.',
+  thinking: 'The AI is thinking of an idea for this board…',
+  ai: 'Ideas from Magenta AI, fitted around your notes.',
+  offline: 'The AI could not load (no internet?), so the simple rules are playing.',
+};
+
+/** Radius, in camera pixels, of the disc around a tap taken as "the counter's pixels". */
+const TAP_PIXEL_RADIUS = 6;
 
 /** A camera message: the saved camera is missing, or the camera was just changed. */
 interface CameraNotice {
@@ -359,6 +399,67 @@ export default function BoardSequencerScreen() {
   // Latched (hysteresis) so the black-and-white warning can't flicker/re-announce.
   const [feedColourless, setFeedColourless] = useState(false);
   const [lastSample, setLastSample] = useState<LastColourSample | null>(null);
+  // The fill as the board draws it, and the idea before the last "New idea" (for Back).
+  const [fillMarks, setFillMarks] = useState<{ row: number; col: number; colour: ColourId }[]>([]);
+  const [fillCount, setFillCount] = useState(0);
+  const [fillStatus, setFillStatus] = useState<FillSourceStatus>('rules');
+  // What each colour sounds like now (Evolve), and the seed before "New sound" (for Back).
+  const [evolveLabels, setEvolveLabels] = useState<Map<string, { label: string; scene: number }>>(new Map());
+  const evolveSigRef = useRef('');
+  const [prevEvolveSeed, setPrevEvolveSeed] = useState<number | null>(null);
+  // The iPad remote: on/off and its pairing code belong to this laptop, not to a player.
+  const [remoteEnabled, setRemoteEnabled] = useState<boolean>(() => {
+    try { return localStorage.getItem(REMOTE_ENABLED_KEY) === '1'; } catch { return false; }
+  });
+  const [remoteCode, setRemoteCode] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem(REMOTE_CODE_KEY);
+      if (saved && /^\d{4}$/.test(saved)) return saved;
+    } catch { /* storage unavailable: a fresh code each time */ }
+    return makeRemoteCode();
+  });
+  const [remoteInfo, setRemoteInfo] = useState<{ addresses: string[]; port: number | null; lan: boolean } | null>(null);
+  /** The last thing the iPad did, shown on screen for a moment so it is seen, not only heard. */
+  const [remoteNote, setRemoteNote] = useState<{ text: string; at: number } | null>(null);
+  // The link itself. Messages go to the handler defined with the Sound tab, through a ref,
+  // so the hook always calls the current one.
+  const remoteMsgRef = useRef<(msg: RemoteMessage) => void>(() => {});
+  const remoteLink = useRemoteLink('host', remoteCode, remoteEnabled, (msg) => remoteMsgRef.current(msg));
+  useEffect(() => {
+    if (!remoteEnabled) { setRemoteInfo(null); return; }
+    let live = true;
+    fetch(REMOTE_INFO_PATH)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j: { addresses: string[]; port: number | null; lan: boolean } | null) => { if (live && j) setRemoteInfo(j); })
+      .catch(() => { if (live) setRemoteInfo({ addresses: [], port: null, lan: false }); });
+    return () => { live = false; };
+  }, [remoteEnabled]);
+  useEffect(() => {
+    if (!remoteNote) return;
+    const id = setTimeout(() => setRemoteNote(null), REMOTE_NOTE_MS);
+    return () => clearTimeout(id);
+  }, [remoteNote]);
+  // Tell the iPad the real values, so its strips match even when the laptop changes them.
+  useEffect(() => {
+    if (!remoteEnabled || remoteLink.others === 0) return;
+    const state: RemoteState = {
+      values: {
+        tempo: valueFromTempo(config.bpm),
+        dynamics: valueFromVelocity(config.velocity),
+        fill: config.fillAmount,
+        evolve: config.evolveAmount,
+      },
+      labels: remoteLabels(config),
+      kept: config.fillKept !== null || config.evolveHoldLap !== null,
+      muted,
+      playing: running,
+    };
+    remoteLink.send({ type: 'state', state });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [remoteEnabled, remoteLink.others, config.bpm, config.velocity, config.fillAmount, config.evolveAmount,
+    config.fillKept, config.evolveHoldLap, muted, running]);
+  const fillSigRef = useRef('');
+  const [prevFillSeed, setPrevFillSeed] = useState<number | null>(null);
 
   // Optional backing song (Song Preset engine) the board can lock to.
   const songEngineRef = useRef<SongPresetEngine | null>(null);
@@ -536,8 +637,10 @@ export default function BoardSequencerScreen() {
       const cv = overlayRef.current;
       const video = videoRef.current;
       if (!cv || !video) return;
-      const W = video.clientWidth;
-      const H = video.clientHeight;
+      // The overlay fills the surface. Not the video's own box: with the picture turned a
+      // quarter, the video element is laid out on its side.
+      const W = cv.clientWidth;
+      const H = cv.clientHeight;
       if (W <= 0 || H <= 0) return;
       if (cv.width !== W) cv.width = W;
       if (cv.height !== H) cv.height = H;
@@ -697,6 +800,7 @@ export default function BoardSequencerScreen() {
         video,
         mirrorX: cfg.mirrorX,
         mirrorY: cfg.mirrorY,
+        rotation: cfg.cameraRotation,
         signal: controller.signal,
         detect: (frame) => {
           const d = detectBoard(frame.data, frame.width, frame.height);
@@ -737,6 +841,7 @@ export default function BoardSequencerScreen() {
         video,
         mirrorX: cfg.mirrorX,
         mirrorY: cfg.mirrorY,
+        rotation: cfg.cameraRotation,
         signal: controller.signal,
         maxFrames: 5,
         enough: () => false,
@@ -952,6 +1057,35 @@ export default function BoardSequencerScreen() {
         setPingDir(cfg.pingPong ? engine.getPlayheadDirection() : 0);
         // A beat dot that flips with the beat: every audio event has a visual cue.
         setBeatOn(Math.abs(engine.getVisualBeat()) % 2 === 0);
+        // Fill marks: one per square, refreshed only when the fill itself changes.
+        const fill = engine.getFillNotes();
+        const marks = new Map<string, { row: number; col: number; colour: ColourId }>();
+        for (const n of fill) marks.set(`${n.cell.row},${n.cell.col}`, { row: n.cell.row, col: n.cell.col, colour: n.colour });
+        setFillStatus(engine.getFillStatus());
+        // Evolve labels: refreshed only when a colour's sound actually changes.
+        const labels = engine.getEvolveLabels();
+        const evoSig = [...labels.entries()].map(([id, l]) => `${id}:${l.scene}:${l.label}`).join('|');
+        if (evoSig !== evolveSigRef.current) {
+          const before = evolveSigRef.current;
+          evolveSigRef.current = evoSig;
+          setEvolveLabels(labels);
+          // A new scene is announced, so it is never only heard.
+          if (before && cfg.evolveAmount > 0) {
+            const prevScenes = new Map(before.split('|').map((x) => [x.split(':')[0], x.split(':')[1]]));
+            const moved = [...labels.entries()].filter(([id, l]) => prevScenes.get(id) !== String(l.scene));
+            const nameOfColour = (id: string): string => {
+              const ch = cfg.channels.find((c) => c.id === id);
+              return ch ? describeChannel(ch) : id;
+            };
+            if (moved.length > 0) announce(`New sounds: ${moved.map(([id, l]) => `${nameOfColour(id)} ${l.label}`).join('; ')}`);
+          }
+        }
+        const sig = `${fill.length}|${[...marks.keys()].join(';')}`;
+        if (sig !== fillSigRef.current) {
+          fillSigRef.current = sig;
+          setFillMarks([...marks.values()]);
+          setFillCount(fill.length);
+        }
       } else {
         setLiveBpm(cfg.bpm);
       }
@@ -987,15 +1121,12 @@ export default function BoardSequencerScreen() {
     if ((!cfg.enabled && !cornersOverride) || !video || video.videoWidth <= 0) return null;
     try {
       const cv = document.createElement('canvas');
-      cv.width = video.videoWidth;
-      cv.height = video.videoHeight;
+      const shown = orientedSize(video.videoWidth, video.videoHeight, cfg.cameraRotation);
+      cv.width = shown.width;
+      cv.height = shown.height;
       const ctx = cv.getContext('2d', { willReadFrequently: true });
       if (!ctx) return null;
-      ctx.save();
-      ctx.translate(cfg.mirrorX ? cv.width : 0, cfg.mirrorY ? cv.height : 0);
-      ctx.scale(cfg.mirrorX ? -1 : 1, cfg.mirrorY ? -1 : 1);
-      ctx.drawImage(video, 0, 0, cv.width, cv.height);
-      ctx.restore();
+      drawOriented(ctx, video, cv.width, cv.height, orientationOf(cfg));
       const { data } = ctx.getImageData(0, 0, cv.width, cv.height);
       const h = homographyForCorners(cornersOverride ?? cfg.corners, cv.width, cv.height);
       const warped = warpToBoard(data, cv.width, cv.height, h, cfg.boardSquares);
@@ -1109,7 +1240,10 @@ export default function BoardSequencerScreen() {
       // Convexity has already been checked, so this can't throw on the corners we just
       // saved; guard anyway rather than leave the editor stuck open on an exception.
       try {
-        if (video) homographyRef.current = homographyForCorners(corners, video.videoWidth, video.videoHeight);
+        if (video) {
+          const shown = orientedSize(video.videoWidth, video.videoHeight, configRef.current.cameraRotation);
+          homographyRef.current = homographyForCorners(corners, shown.width, shown.height);
+        }
       } catch {
         homographyRef.current = null;
       }
@@ -1177,7 +1311,8 @@ export default function BoardSequencerScreen() {
     const cfg = configRef.current;
     const video = videoRef.current;
     if (video && !homographyRef.current) {
-      homographyRef.current = homographyForCorners(cfg.corners, video.videoWidth, video.videoHeight);
+      const shown = orientedSize(video.videoWidth, video.videoHeight, cfg.cameraRotation);
+      homographyRef.current = homographyForCorners(cfg.corners, shown.width, shown.height);
     }
     modeRef.current = new BoardSequencerMode({
       settleWindowMs: cfg.settleWindowMs,
@@ -1193,7 +1328,8 @@ export default function BoardSequencerScreen() {
       scaleRootMidi: cfg.scaleRootMidi, scaleSemitones: cfg.scaleSemitones, swing: cfg.swing,
       humanize: cfg.humanize,
       noteLengthBeats: cfg.noteLengthBeats, velocity: cfg.velocity,
-      tickEnabled: cfg.tickEnabled,
+      tickEnabled: cfg.tickEnabled, studioMix: cfg.studioMix,
+      soundWorld: cfg.soundWorld, phrases: cfg.phrases, fillEngine: cfg.fillEngine,
       channels: cfg.channels, faderAxis: cfg.faderAxis, variationEnabled: cfg.variationEnabled,
       loopStepsRed: cfg.loopStepsRed, loopStepsBlack: cfg.loopStepsBlack,
       loopStepsBlue: cfg.loopStepsBlue, numPages: cfg.numPages,
@@ -1275,6 +1411,25 @@ export default function BoardSequencerScreen() {
 
   // Changing orientation or camera invalidates calibration (it was captured in the
   // old view), so force a fresh corner click in the new space.
+  /**
+   * Turn the camera picture a quarter turn, for a camera mounted on its side. Unlike the
+   * mirrors this keeps the board: the saved corners are turned with the picture, so they
+   * stay on the same physical corners and nothing has to be tapped again.
+   */
+  const turnCamera = useCallback(() => {
+    homographyRef.current = null;
+    trackedCornersRef.current = null;
+    setConfig((prev) => {
+      const from = orientationOf(prev);
+      const cameraRotation = (((prev.cameraRotation + 1) % 4) as QuarterTurns);
+      const corners = prev.enabled
+        ? reorientPoints(prev.corners, from, { ...from, rotation: cameraRotation }) as BoardSequencerStored['corners']
+        : prev.corners;
+      return { ...prev, cameraRotation, corners };
+    });
+    announce('Picture turned a quarter turn.');
+  }, [announce, homographyRef]);
+
   const changeView = useCallback((patch: Partial<BoardSequencerStored>) => {
     // This turns detection off (enabled: false tears down the frame loop). Leaving the
     // engine running would loop the last settled pattern with no camera behind it, and
@@ -1318,22 +1473,19 @@ export default function BoardSequencerScreen() {
   // Average HSV under a click (in displayed space). Draws the frame with the
   // same mirror transforms so a click on the displayed video samples the right
   // pixels.
-  const sampleAvgHsvAt = useCallback((nx: number, ny: number): { h: number; s: number; v: number; hex: string } | null => {
+  const sampleAvgHsvAt = useCallback((nx: number, ny: number): {
+    h: number; s: number; v: number; hex: string; pixels: { h: number; s: number; v: number }[];
+  } | null => {
     const video = videoRef.current;
     if (!video || video.videoWidth <= 0) return null;
     const cfg = configRef.current;
-    const w = video.videoWidth;
-    const h = video.videoHeight;
+    const { width: w, height: h } = orientedSize(video.videoWidth, video.videoHeight, cfg.cameraRotation);
     const cv = document.createElement('canvas');
     cv.width = w;
     cv.height = h;
     const ctx = cv.getContext('2d', { willReadFrequently: true });
     if (!ctx) return null;
-    ctx.save();
-    ctx.translate(cfg.mirrorX ? w : 0, cfg.mirrorY ? h : 0);
-    ctx.scale(cfg.mirrorX ? -1 : 1, cfg.mirrorY ? -1 : 1);
-    ctx.drawImage(video, 0, 0, w, h);
-    ctx.restore();
+    drawOriented(ctx, video, w, h, orientationOf(cfg));
     const px = Math.min(w - 1, Math.max(0, Math.round(nx * w)));
     const py = Math.min(h - 1, Math.max(0, Math.round(ny * h)));
     const R = 10;
@@ -1347,7 +1499,18 @@ export default function BoardSequencerScreen() {
     // can't hijack it. Then average the counter's hue for a clean swatch.
     const c = counterColourFromRegion(data, sw, sh);
     if (!c) return null;
-    return { h: c.h, s: c.s, v: c.v, hex: rgbToHex(c.r, c.g, c.b) };
+    // The disc right under the tap: on a counter, every one of these is the counter.
+    const pixels: { h: number; s: number; v: number }[] = [];
+    const cx = px - x0;
+    const cy = py - y0;
+    for (let y = 0; y < sh; y++) {
+      for (let x = 0; x < sw; x++) {
+        if ((x - cx) ** 2 + (y - cy) ** 2 > TAP_PIXEL_RADIUS ** 2) continue;
+        const i = (y * sw + x) * 4;
+        pixels.push(rgbToHsv(data[i], data[i + 1], data[i + 2]));
+      }
+    }
+    return { h: c.h, s: c.s, v: c.v, hex: rgbToHex(c.r, c.g, c.b), pixels };
   }, []);
 
   // A camera click while calibrating: sample the piece's colour, then either add
@@ -1361,7 +1524,7 @@ export default function BoardSequencerScreen() {
     // Same treatment the automatic search gets: tighten the band until it stops matching
     // the board, and say so if it can't be separated from it.
     const board = knownBoardColours();
-    const fitted = board ? fitSafeBand({ h: s.h, s: s.s, v: s.v }, board) : null;
+    const fitted = board ? fitSafeBand({ h: s.h, s: s.s, v: s.v }, board, s.pixels) : null;
     const cal = fitted?.band ?? calibrationFromHsv({ h: s.h, s: s.s, v: s.v });
     // Nothing is saved on a tap: the sample is shown first, so a mis-tap on the wood
     // doesn't quietly become a colour.
@@ -1369,6 +1532,8 @@ export default function BoardSequencerScreen() {
       hex: s.hex, h: s.h, s: s.s, v: s.v, kind: cal.kind,
       unsafe: fitted?.unsafe === true,
       at: { x: nx, y: ny },
+      pixels: s.pixels,
+      keeps: bandKeeps(cal, s.pixels),
     };
     setLastSample(sample);
     setPendingColour(sample);
@@ -1405,7 +1570,7 @@ export default function BoardSequencerScreen() {
     // the player was shown as safe.
     const board = knownBoardColours();
     const cal = board
-      ? fitSafeBand({ h: sample.h, s: sample.s, v: sample.v }, board).band
+      ? fitSafeBand({ h: sample.h, s: sample.s, v: sample.v }, board, sample.pixels).band
       : calibrationFromHsv({ h: sample.h, s: sample.s, v: sample.v });
     setConfig((prev) => {
       let channels: ColourChannel[];
@@ -1673,8 +1838,303 @@ export default function BoardSequencerScreen() {
     </div>
   );
 
+  const world = worldOf(config.soundWorld);
+
+  // ---- actions shared by the Sound tab and the iPad remote ----
+
+  const newFillIdea = (): void => {
+    const c = configRef.current;
+    setPrevFillSeed(c.fillSeed);
+    // A new idea for the board as it is now, so it follows the board again.
+    update({ fillSeed: Math.floor(Math.random() * 2 ** 31), fillKept: null, fillAmount: c.fillAmount > 0 ? c.fillAmount : 0.5 });
+    announce('New idea.');
+  };
+  const newEvolveSound = (): void => {
+    const c = configRef.current;
+    setPrevEvolveSeed(c.evolveSeed);
+    update({ evolveSeed: Math.floor(Math.random() * 2 ** 31), evolveHoldLap: null, evolveAmount: c.evolveAmount > 0 ? c.evolveAmount : 0.5 });
+    announce('New sound.');
+  };
+  /** Keep (from the iPad): freeze the fill AND the sounds together; tap again to let go. */
+  const toggleKeepAll = (): void => {
+    const c = configRef.current;
+    if (c.fillKept !== null || c.evolveHoldLap !== null) {
+      update({ fillKept: null, evolveHoldLap: null });
+      announce('Let go: the fill and the sounds move again.');
+      return;
+    }
+    const notes = engineRef.current?.getFillNotes() ?? [];
+    update({
+      fillKept: notes.length > 0 ? notes : null,
+      evolveHoldLap: c.evolveAmount > 0 ? (engineRef.current?.getEvolveLap() ?? 0) : null,
+    });
+    announce('Kept: the fill and the sounds stay as they are.');
+  };
+
+  const remoteLabels = (c: BoardSequencerStored): Record<RemoteControlName, string> => ({
+    tempo: `${Math.round(c.bpm)} BPM`,
+    dynamics: `${Math.round(valueFromVelocity(c.velocity) * 100)}%`,
+    fill: c.fillAmount <= 0 ? 'Off' : `${Math.round(c.fillAmount * 100)}%`,
+    evolve: c.evolveAmount <= 0 ? 'Off' : `${Math.round(c.evolveAmount * 100)}%`,
+  });
+
+  const onRemoteMessage = (msg: RemoteMessage): void => {
+    const c = configRef.current;
+    if (msg.type === 'control') {
+      if (msg.name === 'tempo') {
+        const bpm = tempoFromValue(msg.value);
+        update({ bpm });
+        engineRef.current?.setBpm(bpm);
+      } else if (msg.name === 'dynamics') {
+        const { velocity, volume } = dynamicsFromValue(msg.value);
+        update({ velocity, volume });
+        engineRef.current?.setVelocity(velocity);
+        engineRef.current?.setVolume(volume);
+      } else if (msg.name === 'fill') {
+        update({ fillAmount: msg.value });
+      } else {
+        update({ evolveAmount: msg.value });
+      }
+      const next = { ...c, ...(msg.name === 'tempo' ? { bpm: tempoFromValue(msg.value) } : {}),
+        ...(msg.name === 'dynamics' ? { velocity: dynamicsFromValue(msg.value).velocity } : {}),
+        ...(msg.name === 'fill' ? { fillAmount: msg.value } : {}),
+        ...(msg.name === 'evolve' ? { evolveAmount: msg.value } : {}) };
+      setRemoteNote({ text: `iPad: ${REMOTE_CONTROL_WORDS[msg.name]} ${remoteLabels(next)[msg.name]}`, at: performance.now() });
+    } else if (msg.type === 'trigger') {
+      if (msg.name === 'newIdea') newFillIdea();
+      else if (msg.name === 'newSound') newEvolveSound();
+      else if (msg.name === 'keep') toggleKeepAll();
+      else toggleMuted();
+      setRemoteNote({ text: `iPad: ${REMOTE_TRIGGER_WORDS[msg.name]}`, at: performance.now() });
+    }
+  };
+  remoteMsgRef.current = onRemoteMessage;
+
   const soundTab = (
+
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 10 }}>
+    {/* The iPad remote: a second controller in the performance (see src/remote). */}
+    <div role="group" aria-label="iPad controls" style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 8, borderRadius: 'var(--bs-radius-md)', border: '1px solid var(--bs-border)' }}>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600 }}>
+        <input
+          type="checkbox" checked={remoteEnabled}
+          onChange={(e) => {
+            setRemoteEnabled(e.target.checked);
+            try { localStorage.setItem(REMOTE_ENABLED_KEY, e.target.checked ? '1' : '0'); } catch { /* not remembered */ }
+          }}
+        />
+        iPad controls
+      </label>
+      {remoteEnabled && (
+        <>
+          <span role="status" style={{ fontSize: 13, fontWeight: 600, color: remoteLink.others > 0 ? 'var(--bs-ok)' : 'var(--bs-fg2)' }}>
+            {remoteLink.others > 0 ? '✓ iPad connected' : remoteLink.status === 'open' ? 'Waiting for the iPad…' : 'Starting…'}
+          </span>
+          {remoteInfo && !remoteInfo.lan ? (
+            <span style={{ fontSize: 12, color: 'var(--bs-warn)' }}>
+              The iPad can&apos;t reach this laptop yet. Close ADMI&apos;s server and start it with
+              {' '}<code>npm run dev:ipad</code>, then turn this on again.
+            </span>
+          ) : (
+            <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
+              On the iPad (same Wi-Fi), open Safari and go to:
+            </span>
+          )}
+          {remoteInfo?.lan && remoteInfo.addresses.map((ip) => (
+            <code key={ip} style={{ fontSize: 16, fontWeight: 700, userSelect: 'all' }}>
+              {`http://${ip}:${remoteInfo.port ?? window.location.port}/?remote=${remoteCode}`}
+            </code>
+          ))}
+          <Button
+            tone="quiet"
+            onClick={() => {
+              const code = makeRemoteCode();
+              setRemoteCode(code);
+              try { localStorage.setItem(REMOTE_CODE_KEY, code); } catch { /* not remembered */ }
+            }}
+          >
+            New code
+          </Button>
+        </>
+      )}
+    </div>
+    {/* The two biggest choices about how the board sounds, first. Both work while playing. */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <span style={{ fontWeight: 600 }}>Sound world</span>
+      <SegmentedControl<SoundWorldChoice>
+        label="Sound world"
+        value={config.soundWorld}
+        onChange={(v) => update({ soundWorld: v })}
+        options={[
+          ...SOUND_WORLD_IDS.map((id) => ({ value: id as SoundWorldChoice, label: SOUND_WORLDS[id].name })),
+          { value: 'none' as SoundWorldChoice, label: 'My picks' },
+        ]}
+      />
+      <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
+        {world ? world.description : 'Each colour plays the instrument chosen for it below.'}
+      </span>
+    </div>
+    {/* Fill: the instrument adds notes around the player's, and the player decides. */}
+    <div
+      role="group"
+      aria-label="Fill"
+      style={{ display: 'flex', flexDirection: 'column', gap: 6 }}
+    >
+      <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <span style={{ fontWeight: 600 }}>
+          {`Fill ${config.fillAmount <= 0 ? 'off' : `${Math.round(config.fillAmount * 100)}%`}`}
+        </span>
+        <input
+          type="range" min={0} max={100} value={Math.round(config.fillAmount * 100)}
+          aria-label="How much the instrument adds"
+          onChange={(e) => update({ fillAmount: Number(e.target.value) / 100 })}
+        />
+      </label>
+      <SegmentedControl<'magenta' | 'rules'>
+        label="Ideas from"
+        value={config.fillEngine}
+        onChange={(v) => update({ fillEngine: v })}
+        options={[{ value: 'magenta', label: 'Magenta AI' }, { value: 'rules', label: 'Simple rules' }]}
+      />
+      {config.fillEngine === 'magenta' && config.fillAmount > 0 && running && (
+        <span role="status" aria-live="polite" style={{ fontSize: 12, color: fillStatus === 'offline' ? 'var(--bs-warn)' : 'var(--bs-fg2)' }}>
+          {FILL_STATUS_TEXT[fillStatus]}
+        </span>
+      )}
+      <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
+        {config.fillAmount <= 0
+          ? 'Turn this up and the instrument adds notes around yours: passing notes, echoes, softer drum hits. It never plays over a note you put down.'
+          : `${fillCount} added ${fillCount === 1 ? 'note' : 'notes'}, shown as dotted rings. ${config.fillKept ? 'Kept: it stays as it is, whatever you move.' : 'It follows the board as you move counters.'}`}
+      </span>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        <Button
+          tone="primary"
+          onClick={newFillIdea}
+        >
+          New idea
+        </Button>
+        <Button
+          tone="secondary"
+          onClick={() => {
+            if (prevFillSeed === null) return;
+            update({ fillSeed: prevFillSeed, fillKept: null });
+            setPrevFillSeed(null);
+            announce('Back to the previous idea.');
+          }}
+          reason={prevFillSeed === null ? 'Nothing to go back to yet.' : null}
+        >
+          Back
+        </Button>
+        <Button
+          tone="secondary"
+          aria-pressed={config.fillKept !== null}
+          onClick={() => {
+            if (config.fillKept) {
+              update({ fillKept: null });
+              announce('Fill follows the board again.');
+              return;
+            }
+            const notes = engineRef.current?.getFillNotes() ?? [];
+            if (notes.length === 0) return;
+            update({ fillKept: notes });
+            announce('Fill kept.');
+          }}
+          reason={!config.fillKept && (!running || fillCount === 0) ? 'Play with some fill to keep it.' : null}
+        >
+          {config.fillKept ? 'Kept ✓' : 'Keep'}
+        </Button>
+        <Button
+          tone="quiet"
+          onClick={() => { update({ fillAmount: 0, fillKept: null }); announce('Fill off.'); }}
+          reason={config.fillAmount <= 0 ? 'The fill is already off.' : null}
+        >
+          Clear
+        </Button>
+      </div>
+    </div>
+    {/* Evolve: the sound of each colour keeps moving while the notes stay the player's. */}
+    <div role="group" aria-label="Evolve" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <span style={{ fontWeight: 600 }}>
+          {`Evolve ${config.evolveAmount <= 0 ? 'off' : `${Math.round(config.evolveAmount * 100)}%`}`}
+        </span>
+        <input
+          type="range" min={0} max={100} value={Math.round(config.evolveAmount * 100)}
+          aria-label="How much the sounds change as they play"
+          onChange={(e) => update({ evolveAmount: Number(e.target.value) / 100 })}
+        />
+      </label>
+      <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
+        {config.evolveAmount <= 0
+          ? 'Turn this up and each colour\'s sound slowly changes as it plays — brighter, darker, more space, echoes — and every few loops moves to another instrument. Your notes stay the same.'
+          : config.evolveHoldLap !== null
+            ? 'Held: the sounds stay as they are now.'
+            : `Sounds drift every loop and change instrument every ${config.evolveSceneLoops} loops.`}
+      </span>
+      <SegmentedControl<number>
+        label="New instrument every"
+        value={config.evolveSceneLoops}
+        onChange={(v) => update({ evolveSceneLoops: v })}
+        options={[{ value: 4, label: 'Every 4 loops' }, { value: 8, label: '8 loops' }, { value: 16, label: '16 loops' }]}
+      />
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        <Button
+          tone="primary"
+          onClick={newEvolveSound}
+        >
+          New sound
+        </Button>
+        <Button
+          tone="secondary"
+          onClick={() => {
+            if (prevEvolveSeed === null) return;
+            update({ evolveSeed: prevEvolveSeed, evolveHoldLap: null });
+            setPrevEvolveSeed(null);
+            announce('Back to the previous sound.');
+          }}
+          reason={prevEvolveSeed === null ? 'Nothing to go back to yet.' : null}
+        >
+          Back
+        </Button>
+        <Button
+          tone="secondary"
+          aria-pressed={config.evolveHoldLap !== null}
+          onClick={() => {
+            if (config.evolveHoldLap !== null) {
+              update({ evolveHoldLap: null });
+              announce('Sounds evolve again.');
+              return;
+            }
+            update({ evolveHoldLap: engineRef.current?.getEvolveLap() ?? 0 });
+            announce('Sounds held.');
+          }}
+          reason={config.evolveAmount <= 0 ? 'Turn Evolve up first.' : null}
+        >
+          {config.evolveHoldLap !== null ? 'Held ✓' : 'Hold'}
+        </Button>
+      </div>
+      {running && config.evolveAmount > 0 && evolveLabels.size > 0 && (
+        <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: 'var(--bs-fg2)' }}>
+          {config.channels.filter((c) => evolveLabels.has(c.id)).map((c) => (
+            <li key={`evo-${c.id}`}>{`${describeChannel(c)}: ${evolveLabels.get(c.id)!.label}`}</li>
+          ))}
+        </ul>
+      )}
+    </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <span style={{ fontWeight: 600 }}>Each counter plays</span>
+      <SegmentedControl<'phrase' | 'note'>
+        label="Each counter plays"
+        value={config.phrases ? 'phrase' : 'note'}
+        onChange={(v) => update({ phrases: v === 'phrase' })}
+        options={[{ value: 'phrase', label: 'A phrase' }, { value: 'note', label: 'One note' }]}
+      />
+      <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
+        {config.phrases
+          ? 'One counter fills the loop: drums play a groove (higher = busier), bass a bassline, melody a tune, and chord counters set the chords. The next counter of the same colour takes over from its step.'
+          : 'Each counter plays one note on its step.'}
+      </span>
+    </div>
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       {config.channels.map((c, i) => {
         const melodic = c.role === 'melody' || c.role === 'chord' || c.role === 'bass';
@@ -1700,7 +2160,11 @@ export default function BoardSequencerScreen() {
                   disabled={running}
                   onChange={(e) => patchChannel(c.id, { instrument: e.target.value })}
                 >
-                  <option value="">{c.role === 'bass' ? 'Default (electric bass)' : 'Default (electric piano)'}</option>
+                  <option value="">
+                    {world
+                      ? `${world.name} sound world`
+                      : (c.role === 'bass' ? 'Default (electric bass)' : 'Default (electric piano)')}
+                  </option>
                   {INSTRUMENT_OPTIONS.map((o) => <option key={o.key} value={o.key}>{o.name}</option>)}
                 </select>
                 <span style={{ minHeight: 14, fontSize: 11, color: 'var(--bs-fg2)' }}>
@@ -1804,6 +2268,18 @@ export default function BoardSequencerScreen() {
                   onChange={(e) => update({ tickEnabled: e.target.checked })}
                 />
                 Confirmation tick
+              </label>
+              <label>
+                <input
+                  type="checkbox" checked={config.studioMix}
+                  onChange={(e) => update({ studioMix: e.target.checked })}
+                />
+                Studio mix
+                <span style={REASON_STYLE}>
+                  {config.studioMix
+                    ? 'Fuller sound: stereo, notes ring on, bass and chords make room for the kick.'
+                    : 'The original mix, for comparing.'}
+                </span>
               </label>
               {controlChannels.length > 0 && (
               <div>
@@ -2112,6 +2588,8 @@ export default function BoardSequencerScreen() {
       lightingNote={describeLighting(lighting)}
       mirrorX={config.mirrorX}
       mirrorY={config.mirrorY}
+      rotation={config.cameraRotation}
+      onTurn={turnCamera}
       onViewChange={changeView}
       onRefreshCameras={() => void refreshCameras()}
       handedness={config.handedness}
@@ -2162,8 +2640,11 @@ export default function BoardSequencerScreen() {
         kindLabel: pendingColour.kind === 'hue' ? hueName(pendingColour.h)
           : pendingColour.kind === 'black' ? 'Black' : 'White',
         unsafe: pendingColour.unsafe === true,
+        keeps: pendingColour.keeps,
       }}
       boardLearnt={config.boardColours.length}
+      onLearnBoard={learnBoard}
+      learnMessage={learnMessage}
       onFindColours={() => void findColours()}
       finding={findingColours}
       onCancelFind={() => findAbortRef.current?.abort()}
@@ -2214,7 +2695,6 @@ export default function BoardSequencerScreen() {
   ) : (
     <ReadyStep
       channels={config.channels}
-      counts={stats.byColour}
       detected={active}
       palette={palette}
       matchingBoard={matchingBoardColour}
@@ -2275,6 +2755,7 @@ export default function BoardSequencerScreen() {
       palette={palette}
       pageLabel={config.numPages > 1 ? `Page ${String.fromCharCode(65 + playingPage)} · live` : null}
       reducedMotion={reducedMotion}
+      fillMarks={running ? fillMarks : undefined}
     />
   );
 
@@ -2304,6 +2785,7 @@ export default function BoardSequencerScreen() {
         hidden={view === 'bigBoard'}
         mirrorX={config.mirrorX}
         mirrorY={config.mirrorY}
+        rotation={config.cameraRotation}
         onPick={colourCalib ? (pt) => sampleColourClick(pt.x, pt.y) : undefined}
         label={colourCalib ? `Tap a counter to set ${calibLabel}` : 'Board camera'}
       >
@@ -2483,6 +2965,17 @@ export default function BoardSequencerScreen() {
       {view === 'play' && (
         <p aria-live="off" style={{ margin: 0, fontSize: 12, color: 'var(--bs-fg2)', minHeight: 18 }}>
           {pops.length > 0 ? `Now: ${pops.map((n) => labelForId(n.colour)).join(', ')}` : ''}
+        </p>
+      )}
+      {view === 'play' && remoteNote && (
+        <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--bs-accent)' }}>{remoteNote.text}</p>
+      )}
+      {view === 'play' && running && config.evolveAmount > 0 && evolveLabels.size > 0 && (
+        <p style={{ margin: 0, fontSize: 12, color: 'var(--bs-fg2)' }}>
+          {`Sounds${config.evolveHoldLap !== null ? ' (held)' : ''}: ${config.channels
+            .filter((c) => evolveLabels.has(c.id))
+            .map((c) => `${describeChannel(c)} — ${evolveLabels.get(c.id)!.label}`)
+            .join(' · ')}`}
         </p>
       )}
     </div>

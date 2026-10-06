@@ -31,6 +31,8 @@ export interface PendingColour {
   kindLabel: string;
   /** True when this colour can't be told apart from the board itself. */
   unsafe?: boolean;
+  /** Share (0–1) of the tapped counter's pixels its band recognises. */
+  keeps?: number;
 }
 
 export interface ColoursStepProps {
@@ -42,6 +44,10 @@ export interface ColoursStepProps {
   pending: PendingColour | null;
   /** Whether the empty board has been learnt; 0 means colour checks have less to go on. */
   boardLearnt: number;
+  /** Learn the empty board from here, without going back a step. */
+  onLearnBoard(): void;
+  /** What happened the last time it tried ("Learnt from 64 squares", or why it refused). */
+  learnMessage: string | null;
   onFindColours(): void;
   onArmTap(): void;
   onCancelArm(): void;
@@ -97,7 +103,8 @@ export interface ColoursStepProps {
 
 export function ColoursStep(props: ColoursStepProps): JSX.Element {
   const {
-    channels, counts, palette, arming, pending, boardLearnt, onFindColours, onArmTap, onCancelArm,
+    channels, counts, palette, arming, pending, boardLearnt, onLearnBoard, learnMessage,
+    onFindColours, onArmTap, onCancelArm,
     onAddPending, onDiscardPending, onRecalibrate, onRole, onRemove, onClearAll, isReferenced, running,
     minFilledFraction, readSettingsCustom, onMinFill, onResetReadSettings,
     settleWindowMs, onSettleWindow, onBlackDarkness, picker, onMovePicker, onSampleSquare, hands,
@@ -110,6 +117,33 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
 
   return (
     <>
+      {boardLearnt === 0 && (
+        <div
+          role="region"
+          aria-label="Learn the empty board"
+          style={{
+            display: 'flex', flexDirection: 'column', gap: 8, padding: 12,
+            borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-warn-tint)',
+            border: '2px solid var(--bs-warn)',
+          }}
+        >
+          <strong>First: let it see the empty board</strong>
+          <span style={{ fontSize: 13 }}>
+            Take every counter off, then press the button. It learns what each square looks
+            like on its own, so counters are found by being unlike the board &mdash; and the
+            wood is never offered as a colour.
+          </span>
+          <div>
+            <Button tone="primary" onClick={onLearnBoard} reason={running ? 'Stop the board first.' : null}>
+              Learn the empty board
+            </Button>
+          </div>
+          {learnMessage && (
+            <span role="status" aria-live="polite" style={{ fontSize: 13, fontWeight: 600 }}>{learnMessage}</span>
+          )}
+        </div>
+      )}
+
       {finding && (
         <div
           role="status"
@@ -163,21 +197,6 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
         </div>
       )}
 
-      {boardLearnt === 0 && (
-        <p
-          role="status"
-          style={{
-            margin: 0, padding: 10, fontSize: 13,
-            borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-warn-tint)',
-            border: '1px solid var(--bs-border-control)',
-          }}
-        >
-          This board hasn&rsquo;t been learnt yet, so the wood and its shadows can still be
-          offered as counter colours. Go back to Board, take everything off, and press
-          &ldquo;Learn the board&rdquo; &mdash; then the counters are found by being unlike it.
-        </p>
-      )}
-
       {arming && !pending && (
         <div
           role="status"
@@ -228,6 +247,15 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
             <div style={{ fontSize: 11, color: 'var(--bs-fg2)', fontFamily: 'ui-monospace, monospace' }}>
               {`${pending.hex}  ·  hue ${Math.round(pending.h)}°  ·  saturation ${Math.round(pending.s)}  ·  brightness ${Math.round(pending.v)}`}
             </div>
+            {/* How much of the counter its band will recognise. Low here is the reason a
+                counter that was just tapped can be listed as "0 on board". */}
+            {pending.keeps !== undefined && (
+              <div style={{ fontSize: 12, color: pending.keeps < 0.6 ? 'var(--bs-warn)' : 'var(--bs-fg2)' }}>
+                {pending.keeps < 0.6
+                  ? `Only recognises ${Math.round(pending.keeps * 100)}% of this counter, so it may be missed. Tap nearer the middle of the counter, or try a stronger colour.`
+                  : `Recognises ${Math.round(pending.keeps * 100)}% of this counter.`}
+              </div>
+            )}
           </div>
           <Button tone="primary" onClick={onAddPending}>Add</Button>
           <Button tone="secondary" onClick={onDiscardPending}>Try again</Button>

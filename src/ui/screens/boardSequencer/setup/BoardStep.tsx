@@ -120,7 +120,7 @@ export function BoardStep({
       )}
 
       <div>
-        <span style={{ fontWeight: 600, display: 'block', marginBottom: 4 }}>Board size</span>
+        <span style={{ fontWeight: 600, display: 'block', marginBottom: 4 }}>Squares on your board</span>
         <SegmentedControl<BoardSquares>
           label="Board size"
           value={boardSquares}
@@ -150,6 +150,14 @@ export function BoardStep({
           options={options.divisors.map((n) => ({ value: n, label: String(n) }))}
         />
       </div>
+      {/* Board size and the playing grid are different things, and the screen only ever
+          shows the grid — so say which one the player will see. */}
+      <p role="status" style={{ margin: 0, fontSize: 13, color: 'var(--bs-fg2)' }}>
+        {`You will play on a ${rows} × ${cols} grid.`}
+        {boardSquares % rows === 0 && boardSquares % cols === 0 && (rows < boardSquares || cols < boardSquares)
+          ? ` Each box covers ${boardSquares / rows} × ${boardSquares / cols} squares. For one box per square, choose ${boardSquares} rows and ${boardSquares} steps.`
+          : ''}
+      </p>
 
       <Disclosure summary="More sizes…" defaultOpen={moreOpen}>
         <p style={{ margin: 0, fontSize: 12, color: 'var(--bs-fg2)' }}>

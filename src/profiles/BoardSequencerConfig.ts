@@ -7,6 +7,9 @@
  * No change to UserProfile.
  */
 
+import type { FillNote } from '../songs/generative/rulesFill';
+import { isSoundWorldChoice, type SoundWorldChoice } from '../audio/worlds/soundWorlds';
+import { quarterTurns, type QuarterTurns } from '../tracking/frameOrientation';
 import type { TrackedColor } from '../tracking/ColorTracker';
 import type {
   ColourChannel, ColourId, ColourKind, ColourRole, BlackBand, WhiteBand,
@@ -86,6 +89,35 @@ export interface BoardSequencerStored {
   noteLengthBeats: number;
   velocity: number;
   tickEnabled: boolean;
+  /**
+   * The studio mix (shared master chain, stereo placement, kick ducking, notes that ring
+   * on). Off is the board's original mix, kept so the two can be compared by ear.
+   */
+  studioMix: boolean;
+  /**
+   * The sound world: one choice that sets every part's sound, the drums and the space.
+   * 'none' = the player's own instrument picks, as before. Players set up before worlds
+   * existed stay on 'none', so nothing changes under anyone mid-study.
+   */
+  soundWorld: SoundWorldChoice;
+  /** Each counter plays a phrase (groove, bassline, motif, chord change), not one note. */
+  phrases: boolean;
+  /** How much the instrument adds around the player's notes (0 = nothing, the default). */
+  fillAmount: number;
+  /** Which idea the fill is: "New idea" picks another. */
+  fillSeed: number;
+  /** A fill the player kept: these notes play whatever the board does, until let go. */
+  fillKept: FillNote[] | null;
+  /** Where fill ideas come from: Magenta's pre-trained models, or the simple rules. */
+  fillEngine: 'magenta' | 'rules';
+  /** Evolve: how far each colour's sound wanders as it plays (0 = never changes). */
+  evolveAmount: number;
+  /** Evolve: a bigger change (a new scene) every this many loops. */
+  evolveSceneLoops: number;
+  /** Evolve: which path the sounds take; "New sound" picks another. */
+  evolveSeed: number;
+  /** Evolve: the loop whose sound is held; null = keep evolving. */
+  evolveHoldLap: number | null;
   /** Global transpose in octaves (applied to all melodic + bass notes). */
   octaveShift: number;
   /** Board output volume (0..1). */
@@ -109,6 +141,11 @@ export interface BoardSequencerStored {
   /** Display + sampling orientation. Calibration is captured in this same space. */
   mirrorX: boolean;
   mirrorY: boolean;
+  /**
+   * Clockwise quarter turns of the camera picture, applied before mirroring — for a camera
+   * mounted on its side. Display and sampling both use it, like the mirrors.
+   */
+  cameraRotation: QuarterTurns;
   /** Chosen camera's deviceId ('' = browser default). Switching invalidates corners. */
   cameraDeviceId: string;
   /** Chosen camera's name, to say which camera is missing when it can't be found. */
@@ -121,6 +158,12 @@ export interface BoardSequencerStored {
   samplesPerAxis: number;
   /** True once the user tuned Piece coverage — freezes suggested read settings. */
   readSettingsCustom: boolean;
+  /**
+   * Which generation of suggested read settings these are. Saved settings are otherwise
+   * never re-suggested on load, so without this an improvement to the suggestion could
+   * never reach a player who had already saved — untuned settings are moved on once.
+   */
+  readSettingsRev: number;
   /** Show the "Board moved?" / colour-matches-board hints while playing. */
   boardNudgesEnabled: boolean;
   /** The player's handedness (per player; mirrors the screen layout). */
@@ -236,6 +279,9 @@ const FALLBACK_HUE_BAND: TrackedColor = {
   id: 'board-hue', hue: 0, hueTolerance: 22, minSaturation: 35, minValue: 25, minArea: 0.0005,
 };
 
+/** The current generation of suggested read settings (see `readSettingsRev`). */
+export const READ_SETTINGS_REV = 2;
+
 export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   version: CONFIG_VERSION,
   enabled: false,
@@ -267,6 +313,20 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   octaveShift: 0,
   volume: 0.6,
   tickEnabled: true,
+  studioMix: true,
+  // A new player starts with the full experience; see `soundWorld` for existing ones.
+  soundWorld: 'warm',
+  phrases: true,
+  // The instrument adding notes is something a player turns on, never a surprise.
+  fillAmount: 0,
+  fillSeed: 1,
+  fillKept: null,
+  fillEngine: 'magenta',
+  // New players hear the sound move a little; existing ones are left as they were.
+  evolveAmount: 0.4,
+  evolveSceneLoops: 8,
+  evolveSeed: 1,
+  evolveHoldLap: null,
   loopStepsRed: 0,
   loopStepsBlack: 0,
   loopStepsBlue: 0,
@@ -274,12 +334,14 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   pages: [],
   mirrorX: true,
   mirrorY: false,
+  cameraRotation: 0,
   cameraDeviceId: '',
   cameraLabel: '',
   boardSquares: 8,
   themeMode: 'dark',
   samplesPerAxis: suggestReadSettings(8, 4, 4).samplesPerAxis,
   readSettingsCustom: false,
+  readSettingsRev: READ_SETTINGS_REV,
   boardNudgesEnabled: true,
   handedness: 'right',
   seatEdge: 'low',
@@ -361,6 +423,23 @@ function isNum(v: unknown): v is number {
 /** Sensible ceilings, so a corrupt file can't ask for a million pages. */
 export const MAX_PAGES = 8;
 export const MAX_LOOP_STEPS = 64;
+
+const FILL_ROLES = new Set(['melody', 'bass', 'drums']);
+
+/** A kept fill from storage: only well-formed notes survive; anything else is no fill. */
+function sanitizeFillNotes(v: unknown): FillNote[] | null {
+  if (!Array.isArray(v)) return null;
+  const notes = v.filter((n): n is FillNote => {
+    if (typeof n !== 'object' || n === null) return false;
+    const o = n as Record<string, unknown>;
+    const cell = o.cell as Record<string, unknown> | undefined;
+    return isNum(o.step) && isNum(o.offset) && isNum(o.dur) && isNum(o.accent)
+      && typeof o.role === 'string' && FILL_ROLES.has(o.role) && typeof o.colour === 'string'
+      && (isNum(o.midi) || typeof o.drum === 'string')
+      && !!cell && isNum(cell.row) && isNum(cell.col);
+  });
+  return notes.length > 0 ? notes : null;
+}
 
 function num(v: unknown, fallback: number): number {
   return isNum(v) ? v : fallback;
@@ -513,6 +592,13 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     const s = suggestReadSettings(boardSquares, rows, cols);
     samplesPerAxis = s.samplesPerAxis;
     if (!readSettingsCustom) minFilledFraction = s.minFilledFraction;
+  } else if (!readSettingsCustom && num(o.readSettingsRev, 1) < READ_SETTINGS_REV) {
+    // Rev 2: denser sampling and the measured counter size. Untuned settings saved under
+    // rev 1 read a centred counter at exactly the minimum, so cyan and purple counters
+    // with shaded rims went undetected. Tuned settings are the player's and are kept.
+    const s = suggestReadSettings(boardSquares, rows, cols);
+    samplesPerAxis = s.samplesPerAxis;
+    minFilledFraction = s.minFilledFraction;
   }
   return {
     version: CONFIG_VERSION,
@@ -546,6 +632,17 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     octaveShift: num(o.octaveShift, d.octaveShift),
     volume: num(o.volume, d.volume),
     tickEnabled: o.tickEnabled !== false,
+    studioMix: o.studioMix !== false,
+    soundWorld: isSoundWorldChoice(o.soundWorld) ? o.soundWorld : 'none',
+    phrases: o.phrases === true,
+    fillAmount: Math.max(0, Math.min(1, num(o.fillAmount, 0))),
+    fillSeed: Math.round(num(o.fillSeed, 1)),
+    fillKept: sanitizeFillNotes(o.fillKept),
+    fillEngine: o.fillEngine === 'rules' ? 'rules' : 'magenta',
+    evolveAmount: Math.max(0, Math.min(1, num(o.evolveAmount, 0))),
+    evolveSceneLoops: [4, 8, 16].includes(num(o.evolveSceneLoops, 8)) ? num(o.evolveSceneLoops, 8) : 8,
+    evolveSeed: Math.round(num(o.evolveSeed, 1)),
+    evolveHoldLap: isNum(o.evolveHoldLap) && o.evolveHoldLap >= 0 ? Math.round(o.evolveHoldLap) : null,
     // Whole counts. A stored 0, 2.5 or -1 used to survive: Array.from({length: numPages})
     // throws on a fraction, and the page picker showed nothing selected.
     loopStepsRed: wholeCount(o.loopStepsRed, 0, MAX_LOOP_STEPS, d.loopStepsRed),
@@ -555,12 +652,14 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     pages: sanitizePages(o.pages),
     mirrorX: o.mirrorX !== false,
     mirrorY: o.mirrorY === true,
+    cameraRotation: quarterTurns(o.cameraRotation),
     cameraDeviceId: typeof o.cameraDeviceId === 'string' ? o.cameraDeviceId : d.cameraDeviceId,
     cameraLabel: typeof o.cameraLabel === 'string' ? o.cameraLabel : d.cameraLabel,
     boardSquares,
     themeMode: o.themeMode === 'light' ? 'light' : 'dark',
     samplesPerAxis,
     readSettingsCustom,
+    readSettingsRev: READ_SETTINGS_REV,
     boardNudgesEnabled: o.boardNudgesEnabled !== false,
     handedness: o.handedness === 'left' ? 'left' : 'right',
     seatEdge: o.seatEdge === 'start' || o.seatEdge === 'end' || o.seatEdge === 'high' ? o.seatEdge : 'low',

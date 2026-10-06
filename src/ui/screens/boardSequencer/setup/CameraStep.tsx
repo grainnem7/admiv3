@@ -21,6 +21,10 @@ export interface CameraStepProps {
   lightingNote: string | null;
   mirrorX: boolean;
   mirrorY: boolean;
+  /** Clockwise quarter turns of the picture. */
+  rotation: number;
+  /** Turn the picture a further quarter turn. Board corners follow, so nothing is redone. */
+  onTurn(): void;
   /** Mirror/Flip change what the camera sees, so corners are reset (colours are kept). */
   onViewChange(patch: { mirrorX?: boolean; mirrorY?: boolean }): void;
   /** Permission may not have been asked for yet. */
@@ -32,7 +36,7 @@ export interface CameraStepProps {
 export function CameraStep({
   cameras, deviceId, onPickCamera, onTryAgain, camera, trackInfo, saturation, lightingNote,
   resolution, onResolution,
-  mirrorX, mirrorY, onViewChange, onRefreshCameras, handedness,
+  mirrorX, mirrorY, rotation, onTurn, onViewChange, onRefreshCameras, handedness,
 }: CameraStepProps): JSX.Element {
   const colourless = camera.colourless === true;
   return (
@@ -131,6 +135,22 @@ export function CameraStep({
           brown, say &mdash; change this before changing anything else. A phone used as a
           camera can send colour the browser reads correctly at one size and wrongly at
           another. 1280 &times; 720 is the safe one.
+        </p>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <span style={{ fontWeight: 600 }}>Turn the picture</span>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <Button tone="secondary" onClick={onTurn} aria-label={`Turn the picture a quarter turn. Now turned ${rotation * 90} degrees.`}>
+            ↻ Turn 90°
+          </Button>
+          <span aria-hidden="true" style={{ color: 'var(--bs-fg2)', fontSize: 13 }}>
+            {rotation === 0 ? 'Not turned' : `Turned ${rotation * 90}°`}
+          </span>
+        </div>
+        <p style={{ margin: 0, color: 'var(--bs-fg2)', fontSize: 12 }}>
+          For a camera mounted on its side. Keep turning until the board is the right way up
+          for the player. The board&rsquo;s corners and your colours are kept.
         </p>
       </div>
 

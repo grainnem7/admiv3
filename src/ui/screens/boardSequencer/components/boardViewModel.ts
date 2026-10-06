@@ -16,6 +16,8 @@ export interface Pop {
   /** 0 at the start of the pop, 1 at its end. */
   progress: number;
   source: FiredNote['source'];
+  /** Placed, phrase or fill — a fill note lights its own mark, not a counter. */
+  origin?: FiredNote['origin'];
 }
 
 /**
@@ -34,6 +36,7 @@ export function popsAt(fired: readonly FiredNote[], now: number): Pop[] {
       colour: f.colour,
       progress: (now - f.audioTime) / dur,
       source: f.source,
+      origin: f.origin,
     });
   }
   return out;

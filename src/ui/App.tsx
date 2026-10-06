@@ -22,6 +22,7 @@ import HarmonicBlendingScreen from './screens/HarmonicBlendingScreen';
 import SongPresetScreen from './screens/SongPresetScreen';
 import RemixScreen from './screens/RemixScreen';
 import SurfaceKeyboardScreen from './screens/SurfaceKeyboardScreen';
+import { ScreenErrorBoundary } from './components/ScreenErrorBoundary';
 import BoardSequencerScreen from './screens/BoardSequencerScreen';
 import InfoScreen from './screens/InfoScreen';
 
@@ -131,7 +132,9 @@ function App() {
 
       <main id="main-content">
         <ScreenTransition screenKey={screen}>
-          {renderScreen()}
+          <ScreenErrorBoundary resetKey={screen}>
+            {renderScreen()}
+          </ScreenErrorBoundary>
         </ScreenTransition>
       </main>
 

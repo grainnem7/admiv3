@@ -4,6 +4,7 @@
  * Views stay thin: they supply callbacks (via a ref, so effects never restart) and
  * read/drive the returned refs (start/stop still set engineRef/modeRef/runningRef).
  */
+import { orientedSize } from '../../../tracking/frameOrientation';
 import { useCallback, useEffect, useRef, type MutableRefObject, type RefObject } from 'react';
 import { CameraManager, type CameraTrackInfo } from '../../../tracking/CameraManager';
 import { BoardReader } from '../../../tracking/BoardReader';
@@ -208,15 +209,17 @@ export function useBoardRuntime(opts: {
       // The homography maps the board into full-resolution pixels, so it is only valid for
       // the size the stream was when it was built. Some cameras renegotiate mid-session;
       // keeping the old matrix would read every cell from the wrong part of the picture.
+      // Sizes are in DISPLAYED orientation: a quarter turn swaps width and height.
+      const shown = orientedSize(video.videoWidth, video.videoHeight, cfg.cameraRotation);
       if (homographyRef.current
-        && (hSize.w !== video.videoWidth || hSize.h !== video.videoHeight)) {
+        && (hSize.w !== shown.width || hSize.h !== shown.height)) {
         homographyRef.current = null;
         watchGridRef.current = null;
       }
       if (!homographyRef.current) {
         try {
-          homographyRef.current = homographyForCorners(cfg.corners, video.videoWidth, video.videoHeight);
-          hSize = { w: video.videoWidth, h: video.videoHeight };
+          homographyRef.current = homographyForCorners(cfg.corners, shown.width, shown.height);
+          hSize = { w: shown.width, h: shown.height };
         } catch {
           return; // degenerate corners — wait for recalibration
         }
@@ -232,7 +235,8 @@ export function useBoardRuntime(opts: {
       // spill is cleared before anything settles or plays.
       const readings = suppressSpill(reader.read(video, {
         homography: homographyRef.current, rows: cfg.rows, cols: cfg.cols, colours: matchers, recognizer,
-        mirrorX: cfg.mirrorX, mirrorY: cfg.mirrorY, samplesPerAxis: cfg.samplesPerAxis,
+        mirrorX: cfg.mirrorX, mirrorY: cfg.mirrorY, rotation: cfg.cameraRotation,
+        samplesPerAxis: cfg.samplesPerAxis,
         boardSquares: cfg.boardSquares, dtMs,
       }), cfg);
       // The hand guard: find what is reaching over the board before anything is read.
@@ -285,9 +289,9 @@ export function useBoardRuntime(opts: {
         );
         if (track.improved) {
           const moved = shiftCorners(cfg.corners, track.dx, track.dy, track.scale);
-          const nextH = homographyForCorners(moved, video.videoWidth, video.videoHeight);
+          const nextH = homographyForCorners(moved, shown.width, shown.height);
           homographyRef.current = nextH;
-          hSize = { w: video.videoWidth, h: video.videoHeight };
+          hSize = { w: shown.width, h: shown.height };
           // Re-project the watch grid, but KEEP the background: the same board is still
           // there, just in a slightly different place, and re-learning would blind the
           // hand guard for several frames every time the board is touched.
@@ -340,6 +344,14 @@ export function useBoardRuntime(opts: {
       );
       engineRef.current?.setPingPong(cfg.pingPong);
       engineRef.current?.setTickEnabled(cfg.tickEnabled);
+      engineRef.current?.setStudioMix(cfg.studioMix);
+      engineRef.current?.setSoundWorld(cfg.soundWorld);
+      engineRef.current?.setPhrases(cfg.phrases);
+      engineRef.current?.setFill(cfg.fillAmount, cfg.fillSeed, cfg.fillKept);
+      engineRef.current?.setFillEngine(cfg.fillEngine);
+      engineRef.current?.setEvolve({
+        amount: cfg.evolveAmount, sceneLoops: cfg.evolveSceneLoops, seed: cfg.evolveSeed, holdLap: cfg.evolveHoldLap,
+      });
       engineRef.current?.setVariationEnabled(cfg.variationEnabled);
       const running = runningRef.current && !!modeRef.current && !!engineRef.current;
       const modeResult = running && modeRef.current ? modeRef.current.step(visible, dtMs, nowMs) : null;

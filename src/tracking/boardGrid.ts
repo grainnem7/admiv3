@@ -3,7 +3,13 @@
  * board; sizes that divide the square count keep each cell on whole squares, and the
  * detection read settings are suggested from how much of a cell a counter covers.
  */
-export const ASSUMED_PIECE_AREA_SQUARES = 0.45;
+/**
+ * How much of one square a counter covers. Measured on the rig board at about 0.28 (a
+ * counter about 0.6 of a square across); 0.45 was a guess, and it set the bar so close to
+ * what a counter can actually reach that a counter with a slightly shaded rim, or a little
+ * off centre, dropped out — cyan and purple vanished while vivid red survived.
+ */
+export const ASSUMED_PIECE_AREA_SQUARES = 0.3;
 export type BoardSquares = 8 | 10;
 
 export interface ReadSettings {
@@ -19,7 +25,10 @@ export function suggestReadSettings(
   const sqX = boardSquares / Math.max(1, cols);
   const sqY = boardSquares / Math.max(1, rows);
   return {
-    samplesPerAxis: clamp(Math.round(4.5 * Math.max(sqX, sqY)), 3, 15),
+    // Dense enough that a counter's share of the box is measured, not quantised: at 5 x 5
+    // a centred counter covered exactly 5 points (20%), so losing one point to a shaded rim
+    // was the difference between found and gone. At 9 x 9 it covers about 20 points.
+    samplesPerAxis: clamp(Math.round(9 * Math.max(sqX, sqY)), 3, 15),
     // The bounds are only there to stop a nonsensical answer; they must not overrule the
     // sum itself. They used to, at BOTH ends, and in opposite directions:
     //

@@ -148,8 +148,8 @@ describe('BoardSequencerConfig — redesign fields', () => {
   beforeEach(() => localStorage.clear());
 
   it('brand-new default grid is square 4 × 4 with suggested read settings', () => {
-    expect(DEFAULT_BOARD_SEQUENCER_CONFIG).toMatchObject({ rows: 4, cols: 4, boardSquares: 8, samplesPerAxis: 9, readSettingsCustom: false });
-    expect(DEFAULT_BOARD_SEQUENCER_CONFIG.minFilledFraction).toBeCloseTo(0.045, 6);
+    expect(DEFAULT_BOARD_SEQUENCER_CONFIG).toMatchObject({ rows: 4, cols: 4, boardSquares: 8, samplesPerAxis: 15, readSettingsCustom: false });
+    expect(DEFAULT_BOARD_SEQUENCER_CONFIG.minFilledFraction).toBeCloseTo(0.03, 6);
     expect(DEFAULT_BOARD_SEQUENCER_CONFIG).toMatchObject({ themeMode: 'dark', boardNudgesEnabled: true, handedness: 'right', seatEdge: 'low' });
   });
 
@@ -164,8 +164,8 @@ describe('BoardSequencerConfig — redesign fields', () => {
     localStorage.setItem('admi-board-sequencer', JSON.stringify({ rows: 4, cols: 4, minFilledFraction: 0.1 }));
     const c = loadBoardSequencerConfig()!;
     expect(c.readSettingsCustom).toBe(false);
-    expect(c.samplesPerAxis).toBe(9);
-    expect(c.minFilledFraction).toBeCloseTo(0.045, 6);
+    expect(c.samplesPerAxis).toBe(15);
+    expect(c.minFilledFraction).toBeCloseTo(0.03, 6);
   });
 
   it('migration: a tuned legacy min fill is kept, sampling is still suggested', () => {
@@ -173,7 +173,26 @@ describe('BoardSequencerConfig — redesign fields', () => {
     const c = loadBoardSequencerConfig()!;
     expect(c.readSettingsCustom).toBe(true);
     expect(c.minFilledFraction).toBeCloseTo(0.2, 6);
+    expect(c.samplesPerAxis).toBe(15);
+  });
+
+  it('untuned settings saved before the denser sampling are moved on, once', () => {
+    // Saved on an 8 x 8 grid under the old suggestion: 5 x 5 samples, 18% fill. A centred
+    // counter covered exactly 5 of those 25 points, so a shaded rim made it vanish.
+    localStorage.setItem('admi-board-sequencer', JSON.stringify({
+      rows: 8, cols: 8, samplesPerAxis: 5, minFilledFraction: 0.18, readSettingsCustom: false,
+    }));
+    const c = loadBoardSequencerConfig()!;
     expect(c.samplesPerAxis).toBe(9);
+    expect(c.minFilledFraction).toBeCloseTo(0.12, 6);
+    expect(c.readSettingsRev).toBe(2);
+  });
+
+  it('settings the player tuned are never moved by that update', () => {
+    localStorage.setItem('admi-board-sequencer', JSON.stringify({
+      rows: 8, cols: 8, samplesPerAxis: 5, minFilledFraction: 0.25, readSettingsCustom: true,
+    }));
+    expect(loadBoardSequencerConfig()).toMatchObject({ samplesPerAxis: 5, minFilledFraction: 0.25 });
   });
 
   it('once migrated, saved read settings are never re-suggested on load', () => {

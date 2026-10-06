@@ -6,14 +6,14 @@ import {
 
 describe('suggestReadSettings', () => {
   it.each([
-    [8, 8, 8, 5, 0.18],
-    [8, 4, 4, 9, 0.045],
-    [8, 2, 2, 15, 0.01125],
-    [8, 4, 8, 9, 0.09],
-    [8, 6, 8, 6, 0.135],
-    [10, 10, 10, 5, 0.18],
-    [10, 5, 5, 9, 0.045],
-    [10, 2, 2, 15, 0.01],   // the floor, and still under a counter's 1.8% coverage
+    [8, 8, 8, 9, 0.12],
+    [8, 4, 4, 15, 0.03],
+    [8, 2, 2, 15, 0.01],    // the floor, and still under a counter's 1.9% coverage
+    [8, 4, 8, 15, 0.06],
+    [8, 6, 8, 12, 0.09],
+    [10, 10, 10, 9, 0.12],
+    [10, 5, 5, 15, 0.03],
+    [10, 2, 2, 15, 0.01],   // the floor, and still under a counter's 1.2% coverage
   ])('board %i, %i rows × %i cols → %i samples, %f fill', (board, rows, cols, samples, fill) => {
     const s = suggestReadSettings(board, rows, cols);
     expect(s.samplesPerAxis).toBe(samples);
@@ -49,8 +49,8 @@ describe('applyGridChange', () => {
 
   it('re-suggests read settings on a grid change', () => {
     const next = applyGridChange(base, { rows: 8, cols: 8 });
-    expect(next).toMatchObject({ rows: 8, cols: 8, samplesPerAxis: 5 });
-    expect(next.minFilledFraction).toBeCloseTo(0.18, 6);
+    expect(next).toMatchObject({ rows: 8, cols: 8, samplesPerAxis: 9 });
+    expect(next.minFilledFraction).toBeCloseTo(0.12, 6);
   });
 
   it('keeps read settings the user tuned', () => {
@@ -94,9 +94,9 @@ describe('read settings the grid can actually work with', () => {
   const pieceCoverage = (boardSquares: number, rows: number, cols: number): number =>
     (ASSUMED_PIECE_AREA_SQUARES * rows * cols) / (boardSquares * boardSquares);
 
-  it('one cell per square asks for most of a counter, not a fifth of one', () => {
-    expect(suggestReadSettings(8, 8, 8).minFilledFraction).toBeCloseTo(0.18, 6);
-    expect(suggestReadSettings(10, 10, 10).minFilledFraction).toBeCloseTo(0.18, 6);
+  it('one cell per square asks for 40% of a counter, not a fifth of one', () => {
+    expect(suggestReadSettings(8, 8, 8).minFilledFraction).toBeCloseTo(0.4 * ASSUMED_PIECE_AREA_SQUARES, 6);
+    expect(suggestReadSettings(10, 10, 10).minFilledFraction).toBeCloseTo(0.4 * ASSUMED_PIECE_AREA_SQUARES, 6);
   });
 
   it('never sets the bar above what a single counter can reach', () => {
