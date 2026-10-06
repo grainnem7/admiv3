@@ -64,13 +64,19 @@ export interface PhraseInput {
    * other bassline / chord rhythm; `busy` moves the drum groove a step busier or sparser.
    */
   evolveOf?(colour: string): { variant: number; busy: number };
+  /**
+   * The harmony when no chord counter and no song sets one — the band's own progression,
+   * so melody and bass fit what the band is playing. Without it, no chord counter means
+   * no harmony: pitches come from the rows alone.
+   */
+  defaultHarmony?(step: number): { root: number; tones: number[] } | null;
 }
 
 // ---------------------------------------------------------------------------------------
 // Pattern banks. Times are in beats within a 4-beat bar (drums in sixteenths 0–15).
 // ---------------------------------------------------------------------------------------
 
-interface DrumHit { at: number; drum: KitDrum; accent: number }
+export interface DrumHit { at: number; drum: KitDrum; accent: number }
 /** Four grooves per style, sparse → busy. Sixteenth positions within the bar. */
 type DrumBank = DrumHit[][];
 
@@ -155,6 +161,12 @@ const MOTIFS: Record<SoundWorldId, MotifNote[][]> = {
 };
 const MOTIF_BEATS = 2;
 
+/** A world's groove at a busyness level 0 (sparse) … 3 (busy), for the band to share. */
+export function grooveFor(style: SoundWorldId, level: number): DrumHit[] {
+  const bank = DRUMS[style];
+  return bank[Math.max(0, Math.min(bank.length - 1, Math.round(level)))];
+}
+
 /** Chord comping: when the chord sounds within the bar, and for how long. Two per style. */
 const c = (t: number, d: number, accent: number) => ({ t, d, accent });
 const COMP: Record<SoundWorldId, { t: number; d: number; accent: number }[][]> = {
@@ -225,7 +237,7 @@ export function harmonyAt(input: PhraseInput): Harmony | null {
   const loop = input.loopFor('chord');
   const chords = input.cells.filter((c) => c.role === 'chord' && c.col < loop);
   const owner = ownerCol(chords.map((c) => c.col), input.stepFor('chord'));
-  if (owner === null) return null;
+  if (owner === null) return input.defaultHarmony?.(input.stepFor('chord')) ?? null;
   // Two chord counters in one column: the lower one names the chord.
   const degree = Math.min(...chords.filter((c) => c.col === owner).map((c) => input.rows - 1 - c.row));
   const tones = [0, 2, 4].map((o) => degreeMidi(degree + o, input.rootMidi, [...input.semitones]));

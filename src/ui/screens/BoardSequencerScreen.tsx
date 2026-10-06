@@ -85,6 +85,7 @@ import { isConvexQuad, squareCentreToImage } from './boardSequencer/cornerEditor
 import { drawOriented, orientedSize, reorientPoints, type FrameOrientation, type QuarterTurns } from '../../tracking/frameOrientation';
 import { SOUND_WORLDS, SOUND_WORLD_IDS, worldOf, type SoundWorldChoice } from '../../audio/worlds/soundWorlds';
 import type { FillSourceStatus } from '../../songs/BoardSequencerEngine';
+import type { BandLevel, BandPart } from '../../songs/band/band';
 import { useRemoteLink } from '../../remote/useRemoteLink';
 import {
   dynamicsFromValue, makeRemoteCode, REMOTE_INFO_PATH, tempoFromValue, valueFromTempo, valueFromVelocity,
@@ -403,6 +404,7 @@ export default function BoardSequencerScreen() {
   const [fillMarks, setFillMarks] = useState<{ row: number; col: number; colour: ColourId }[]>([]);
   const [fillCount, setFillCount] = useState(0);
   const [fillStatus, setFillStatus] = useState<FillSourceStatus>('rules');
+  const [bandStatus, setBandStatus] = useState<{ level: BandLevel; playing: boolean; parts: BandPart[] }>({ level: 'off', playing: false, parts: [] });
   // What each colour sounds like now (Evolve), and the seed before "New sound" (for Back).
   const [evolveLabels, setEvolveLabels] = useState<Map<string, { label: string; scene: number }>>(new Map());
   const evolveSigRef = useRef('');
@@ -1062,6 +1064,8 @@ export default function BoardSequencerScreen() {
         const marks = new Map<string, { row: number; col: number; colour: ColourId }>();
         for (const n of fill) marks.set(`${n.cell.row},${n.cell.col}`, { row: n.cell.row, col: n.cell.col, colour: n.colour });
         setFillStatus(engine.getFillStatus());
+        const bs = engine.getBandStatus();
+        setBandStatus((prev) => (prev.level === bs.level && prev.playing === bs.playing && prev.parts.join() === bs.parts.join() ? prev : bs));
         // Evolve labels: refreshed only when a colour's sound actually changes.
         const labels = engine.getEvolveLabels();
         const evoSig = [...labels.entries()].map(([id, l]) => `${id}:${l.scene}:${l.label}`).join('|');
@@ -1329,7 +1333,7 @@ export default function BoardSequencerScreen() {
       humanize: cfg.humanize,
       noteLengthBeats: cfg.noteLengthBeats, velocity: cfg.velocity,
       tickEnabled: cfg.tickEnabled, studioMix: cfg.studioMix,
-      soundWorld: cfg.soundWorld, phrases: cfg.phrases, fillEngine: cfg.fillEngine,
+      soundWorld: cfg.soundWorld, phrases: cfg.phrases, fillEngine: cfg.fillEngine, band: cfg.band,
       channels: cfg.channels, faderAxis: cfg.faderAxis, variationEnabled: cfg.variationEnabled,
       loopStepsRed: cfg.loopStepsRed, loopStepsBlack: cfg.loopStepsBlack,
       loopStepsBlue: cfg.loopStepsBlue, numPages: cfg.numPages,
@@ -2121,6 +2125,23 @@ export default function BoardSequencerScreen() {
         </ul>
       )}
     </div>
+    {/* The band waits for the player, then plays under them and makes room for them. */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <span style={{ fontWeight: 600 }}>Band</span>
+      <SegmentedControl<BandLevel>
+        label="Band"
+        value={config.band}
+        onChange={(v) => update({ band: v })}
+        options={[{ value: 'off', label: 'Off' }, { value: 'gentle', label: 'Gentle' }, { value: 'full', label: 'Full' }]}
+      />
+      <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
+        {config.band === 'off'
+          ? 'A pad, a bass and a groove that join in once your first counter is down, and follow your chords. Nothing plays on an empty board.'
+          : config.band === 'gentle'
+            ? 'A pad holds the chord, a bass plays the root, a soft pulse keeps time. Put down a bass, chord or drum counter and the band hands that part to you.'
+            : 'The whole band: chords, a walking bass and the full kit. Put down a bass, chord or drum counter and the band hands that part to you.'}
+      </span>
+    </div>
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       <span style={{ fontWeight: 600 }}>Each counter plays</span>
       <SegmentedControl<'phrase' | 'note'>
@@ -2756,6 +2777,7 @@ export default function BoardSequencerScreen() {
       pageLabel={config.numPages > 1 ? `Page ${String.fromCharCode(65 + playingPage)} · live` : null}
       reducedMotion={reducedMotion}
       fillMarks={running ? fillMarks : undefined}
+      band={running && bandStatus.playing ? { playing: true, beatOn } : null}
     />
   );
 
@@ -2969,6 +2991,13 @@ export default function BoardSequencerScreen() {
       )}
       {view === 'play' && remoteNote && (
         <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--bs-accent)' }}>{remoteNote.text}</p>
+      )}
+      {view === 'play' && running && config.band !== 'off' && (
+        <p style={{ margin: 0, fontSize: 12, color: 'var(--bs-fg2)' }}>
+          {bandStatus.playing
+            ? `Band (${config.band}): ${bandStatus.parts.length > 0 ? bandStatus.parts.join(' · ') : 'you have taken every part'}`
+            : active.length > 0 ? 'Band: joining on the next pass…' : 'Band: waiting for your first counter.'}
+        </p>
       )}
       {view === 'play' && running && config.evolveAmount > 0 && evolveLabels.size > 0 && (
         <p style={{ margin: 0, fontSize: 12, color: 'var(--bs-fg2)' }}>

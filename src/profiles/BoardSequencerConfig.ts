@@ -8,6 +8,7 @@
  */
 
 import type { FillNote } from '../songs/generative/rulesFill';
+import type { BandLevel } from '../songs/band/band';
 import { isSoundWorldChoice, type SoundWorldChoice } from '../audio/worlds/soundWorlds';
 import { quarterTurns, type QuarterTurns } from '../tracking/frameOrientation';
 import type { TrackedColor } from '../tracking/ColorTracker';
@@ -118,6 +119,12 @@ export interface BoardSequencerStored {
   evolveSeed: number;
   /** Evolve: the loop whose sound is held; null = keep evolving. */
   evolveHoldLap: number | null;
+  /**
+   * The band: a pad, bass and groove that join on the pass after the first counter goes
+   * down and make room for any part the player takes over. Off for players set up
+   * before it existed; Gentle for new ones.
+   */
+  band: BandLevel;
   /** Global transpose in octaves (applied to all melodic + bass notes). */
   octaveShift: number;
   /** Board output volume (0..1). */
@@ -327,6 +334,7 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   evolveSceneLoops: 8,
   evolveSeed: 1,
   evolveHoldLap: null,
+  band: 'gentle',
   loopStepsRed: 0,
   loopStepsBlack: 0,
   loopStepsBlue: 0,
@@ -643,6 +651,7 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     evolveSceneLoops: [4, 8, 16].includes(num(o.evolveSceneLoops, 8)) ? num(o.evolveSceneLoops, 8) : 8,
     evolveSeed: Math.round(num(o.evolveSeed, 1)),
     evolveHoldLap: isNum(o.evolveHoldLap) && o.evolveHoldLap >= 0 ? Math.round(o.evolveHoldLap) : null,
+    band: o.band === 'gentle' || o.band === 'full' ? o.band : 'off',
     // Whole counts. A stored 0, 2.5 or -1 used to survive: Array.from({length: numPages})
     // throws on a fraction, and the page picker showed nothing selected.
     loopStepsRed: wholeCount(o.loopStepsRed, 0, MAX_LOOP_STEPS, d.loopStepsRed),

@@ -28,6 +28,8 @@ export interface Pop {
 export function popsAt(fired: readonly FiredNote[], now: number): Pop[] {
   const out: Pop[] = [];
   for (const f of fired) {
+    // The band has no counter to light; the board's edge pulses for it instead.
+    if (f.origin === 'band') continue;
     const dur = Math.max(f.durSec, MIN_POP_SEC);
     if (now < f.audioTime || now >= f.audioTime + dur) continue;
     out.push({

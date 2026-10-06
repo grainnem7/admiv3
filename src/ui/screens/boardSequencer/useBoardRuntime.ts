@@ -349,6 +349,7 @@ export function useBoardRuntime(opts: {
       engineRef.current?.setPhrases(cfg.phrases);
       engineRef.current?.setFill(cfg.fillAmount, cfg.fillSeed, cfg.fillKept);
       engineRef.current?.setFillEngine(cfg.fillEngine);
+      engineRef.current?.setBand(cfg.band);
       engineRef.current?.setEvolve({
         amount: cfg.evolveAmount, sceneLoops: cfg.evolveSceneLoops, seed: cfg.evolveSeed, holdLap: cfg.evolveHoldLap,
       });

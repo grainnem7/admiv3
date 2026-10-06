@@ -36,6 +36,11 @@ export interface BoardViewProps {
    * shape and not only by colour. A ring fills in while its note sounds.
    */
   fillMarks?: readonly { row: number; col: number; colour: ColourId }[];
+  /**
+   * The band: it has no counters, so the board's bottom edge pulses with its beat instead.
+   * Every sound has something to see, including the ones the player did not place.
+   */
+  band?: { playing: boolean; beatOn: boolean } | null;
   /** Page label ("Page A · live"), when there is more than one page. */
   pageLabel?: string | null;
   reducedMotion?: boolean;
@@ -58,7 +63,7 @@ function ghostsBySquare(ghosts: ReadonlyMap<string, ActiveCell> | undefined): Ma
  */
 export function BoardView({
   rows, cols, frame, pops, playheadCol, playing, pingPongDirection, swatchFor, palette,
-  pageLabel, reducedMotion = false, fillMarks,
+  pageLabel, reducedMotion = false, fillMarks, band,
 }: BoardViewProps): JSX.Element {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -222,6 +227,14 @@ export function BoardView({
       }
     }
 
+    // The band's pulse: a soft bar along the bottom edge, brighter on the beat.
+    if (band?.playing) {
+      ctx.fillStyle = palette.accent;
+      ctx.globalAlpha = band.beatOn || reducedMotion ? 0.55 : 0.2;
+      ctx.fillRect(0, h - 5, w, 5);
+      ctx.globalAlpha = 1;
+    }
+
     // Fill marks, on squares with no counter of their own.
     if (fillMarks && fillMarks.length > 0) {
       for (const m of fillMarks) {
@@ -270,7 +283,7 @@ export function BoardView({
       ctx.textBaseline = 'top';
       ctx.fillText(pingPongDirection > 0 ? '→' : '←', playheadCol * cw + cw / 2, 2);
     }
-  }, [dims, rows, cols, frame, pops, playheadCol, playing, pingPongDirection, swatchFor, palette, reducedMotion, fillMarks]);
+  }, [dims, rows, cols, frame, pops, playheadCol, playing, pingPongDirection, swatchFor, palette, reducedMotion, fillMarks, band]);
 
   const pieces = frame.settled.size;
   const heldCount = frame.held?.size ?? 0;

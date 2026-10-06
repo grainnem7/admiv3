@@ -29,6 +29,9 @@ import { harmonyAt, phraseEventsAtStep, type PhraseCell, type PhraseInput, type 
 import { generateFill, type FillContext, type FillNote, type SoundingNote } from './generative/rulesFill';
 import { loadMagenta, magentaFill, magentaStatus } from './generative/magentaFill';
 import { describeEvolve, evolveState, NEUTRAL, type EvolveState } from '../audio/evolve/evolve';
+import {
+  BAND_GAIN, bandEventsAtStep, bandParts, defaultHarmonyAt, type BandLevel, type BandPart, type Harmony,
+} from './band/band';
 
 /** A note the engine actually scheduled (drives note pops / "Now:" — never inferred from the playhead). */
 export interface FiredNote {
@@ -43,7 +46,7 @@ export interface FiredNote {
    * Who made the note: the player's counter itself, or the phrase it started. Lets a
    * session log tell what the player placed from what the instrument played for it.
    */
-  origin?: 'placed' | 'phrase' | 'fill';
+  origin?: 'placed' | 'phrase' | 'fill' | 'band';
 }
 
 /** How loud the fill is next to the player's own notes: about -6 dB. */
@@ -133,6 +136,8 @@ export interface BoardEngineConfig {
   phrases?: boolean;
   /** Where fill ideas come from: Magenta's models, or the simple rules. */
   fillEngine?: 'magenta' | 'rules';
+  /** The band: pad, bass and groove that join once the first counter is down. */
+  band?: BandLevel;
 }
 
 /** Evolve: how each colour's sound keeps changing as it plays (see audio/evolve). */
@@ -255,6 +260,15 @@ export class BoardSequencerEngine {
   private drumRev: GainNode | null = null;
   /** The scene Evolve is in, so the fill can have a fresh idea for each one. */
   private evolveScene = 0;
+  // The band (see band.ts): its level, its own voices, and the clock that makes it wait
+  // for the player — the lap it may play from, and the last lap a counter was seen in.
+  private band: BandLevel = 'off';
+  private bandVoices: { pad: BoardSequencerVoice; bass: BoardSequencerVoice; gain: GainNode; rev: GainNode } | null = null;
+  private bandFromLap: number | null = null;
+  private bandLastCounterLap = -1;
+  private bandPlaying = false;
+  private bandPartsNow: BandPart[] = [];
+  private bandPrevHarmonyKey = '';
 
   constructor(cfg: BoardEngineConfig) {
     this.cfg = cfg;
@@ -326,27 +340,10 @@ export class BoardSequencerEngine {
 
     // Index channels for fast role/instrument lookup during scheduling.
     this.channelById = new Map(this.cfg.channels.map((c) => [c.id, c]));
-    const needsDrums = this.cfg.channels.some((c) => c.role === 'drums');
-    if (needsDrums) {
-      this.drumKit = new RoundRobinDrumKit(this.ctx, 'studio-kit');
-      this.drumKit.setPans(studio ? DEFAULT_BOARD_MIX.drumPans : {});
-      const drumTone = ctx.createBiquadFilter();
-      drumTone.type = 'lowpass';
-      drumTone.Q.value = 0.5;
-      const drumLevel = ctx.createGain();
-      drumTone.connect(drumLevel);
-      drumLevel.connect(mix);
-      this.drumTone = drumTone;
-      this.drumLevel = drumLevel;
-      const drumRev = ctx.createGain();
-      drumRev.gain.value = 0;
-      drumLevel.connect(drumRev);
-      drumRev.connect(reverbBus);
-      this.drumRev = drumRev;
-      this.applyDrumColour();
-      this.drumKit.connect(drumTone);
-      await this.drumKit.whenReady();
-    }
+    const needsDrums = this.cfg.channels.some((c) => c.role === 'drums') || (this.cfg.band ?? 'off') !== 'off';
+    if (needsDrums) await this.buildDrumKit();
+    this.band = this.cfg.band ?? 'off';
+    if (this.band !== 'off') this.buildBandVoices();
     // One sampled voice per melody/chord/bass channel → its own gain + FX sends.
     for (const ch of this.cfg.channels) {
       if (ch.role !== 'melody' && ch.role !== 'chord' && ch.role !== 'bass') continue;
@@ -391,6 +388,69 @@ export class BoardSequencerEngine {
     this.tick.connect(mix);
   }
 
+  /** The kit, its colour/level/room nodes, loaded. Shared by drum colours and the band. */
+  private async buildDrumKit(): Promise<void> {
+    if (this.drumKit || !this.mix || !this.reverbBus) return;
+    const ctx = this.ctx;
+    const kit = new RoundRobinDrumKit(ctx, 'studio-kit');
+    kit.setPans(this.studioOn() ? DEFAULT_BOARD_MIX.drumPans : {});
+    const drumTone = ctx.createBiquadFilter();
+    drumTone.type = 'lowpass';
+    drumTone.Q.value = 0.5;
+    const drumLevel = ctx.createGain();
+    drumTone.connect(drumLevel);
+    drumLevel.connect(this.mix);
+    this.drumTone = drumTone;
+    this.drumLevel = drumLevel;
+    const drumRev = ctx.createGain();
+    drumRev.gain.value = 0;
+    drumLevel.connect(drumRev);
+    drumRev.connect(this.reverbBus);
+    this.drumRev = drumRev;
+    this.drumKit = kit;
+    this.applyDrumColour();
+    kit.connect(drumTone);
+    await kit.whenReady();
+  }
+
+  /** The band's own pad and bass, under the player's parts and ducked by the kick. */
+  private buildBandVoices(): void {
+    if (!this.mix || !this.reverbBus) return;
+    const ctx = this.ctx;
+    const world = worldOf(this.cfg.soundWorld ?? 'none');
+    const gain = ctx.createGain();
+    gain.gain.value = BAND_GAIN[this.band];
+    gain.connect(this.duckBus ?? this.mix);
+    const pad = new BoardSequencerVoice(ctx, world?.voices.chord ?? { synth: 'pad', synthLevel: 0.8 });
+    const bass = new BoardSequencerVoice(ctx, world?.voices.bass ?? { synth: 'sub', synthLevel: 0.8 });
+    pad.setBrightness(0.6);
+    pad.connect(gain);
+    bass.connect(gain);
+    // The band sits a little further back than the player: a touch more room.
+    const rev = ctx.createGain();
+    rev.gain.value = (world?.reverbSend ?? 0.18) * 1.3;
+    gain.connect(rev);
+    rev.connect(this.reverbBus);
+    this.bandVoices = { pad, bass, gain, rev };
+  }
+
+  /** The band's level, live. Off is silent at once; a level change glides. */
+  setBand(level: BandLevel): void {
+    if (this.band === level) return;
+    this.band = level;
+    this.cfg.band = level;
+    if (level !== 'off') {
+      if (!this.drumKit) void this.buildDrumKit();
+      if (!this.bandVoices) this.buildBandVoices();
+    }
+    this.bandVoices?.gain.gain.setTargetAtTime(BAND_GAIN[level], Tone.immediate(), MIX_SWITCH_TC);
+  }
+
+  /** What the band is doing now, for the legend and the board's pulse. */
+  getBandStatus(): { level: BandLevel; playing: boolean; parts: BandPart[] } {
+    return { level: this.band, playing: this.bandPlaying, parts: this.bandPartsNow };
+  }
+
   /** The kit's colour and level for the current world (open and full without one). */
   private applyDrumColour(): void {
     const world = worldOf(this.cfg.soundWorld ?? 'none');
@@ -432,6 +492,12 @@ export class BoardSequencerEngine {
         e.delBase = world?.delaySend ?? 0;
         e.del.gain.setTargetAtTime(e.delBase, t, MIX_SWITCH_TC);
       }
+    }
+    if (this.bandVoices) {
+      const old = this.bandVoices;
+      this.bandVoices = null;
+      this.buildBandVoices();
+      setTimeout(() => { old.pad.dispose(); old.bass.dispose(); old.gain.disconnect(); old.rev.disconnect(); }, VOICE_RETIRE_MS);
     }
   }
 
@@ -1012,6 +1078,7 @@ export class BoardSequencerEngine {
       ...this.activeLoops.flat().filter(onGrid).map((c) => ({ cell: c, source: 'loop' as const })),
     ];
     const playCells = tagged.map((t) => t.cell);
+    this.fireBand(beat, cellTime, secPerBeat, chord, playCells);
     this.fireFill(beat, cellTime, secPerBeat, chord, playCells);
     if (this.cfg.phrases) {
       this.firePhrases(beat, cellTime, secPerBeat, chord, tagged);
@@ -1082,7 +1149,95 @@ export class BoardSequencerEngine {
         const evo = this.roleFor(colour) === 'drums' ? this.drumEvo : this.evoFor(colour);
         return { variant: evo.variant, busy: evo.busy };
       },
+      defaultHarmony: this.band !== 'off'
+        ? (step: number) => defaultHarmonyAt(
+          worldOf(this.cfg.soundWorld ?? 'none')?.id ?? 'warm', step,
+          loopLen(this.rawLoop('melodic'), this.cfg.cols), this.cfg.scaleRootMidi, this.cfg.scaleSemitones,
+        )
+        : undefined,
     };
+  }
+
+  /** The chord the band plays on `step`: the song's, the chord counters' (phrases), else its own. */
+  private harmonyForBand(step: number, cells: readonly ActiveCell[], chord: BoardChord | null): Harmony | null {
+    if (chord && chord.notes.length > 0) {
+      const tones = [...chord.notes].sort((a, b) => a - b);
+      return { root: tones[0], tones };
+    }
+    if (this.cfg.phrases) return harmonyAt(this.phraseInput(this.phraseCells(cells), step, null, false));
+    return defaultHarmonyAt(
+      worldOf(this.cfg.soundWorld ?? 'none')?.id ?? 'warm', step,
+      loopLen(this.rawLoop('melodic'), this.cfg.cols), this.cfg.scaleRootMidi, this.cfg.scaleSemitones,
+    );
+  }
+
+  /**
+   * The band on this beat. It waits for the player: silent until the pass after the
+   * first counter goes down, and silent again once the pass the last counter left in has
+   * finished. A part whose role the player has taken over is left out.
+   */
+  private fireBand(
+    beat: number, cellTime: number, secPerBeat: number, chord: BoardChord | null, cells: readonly ActiveCell[],
+  ): void {
+    const cycle = Math.max(1, this.cfg.cols * Math.max(1, this.cfg.numPages));
+    const lap = lapIndex(beat, cycle);
+    const roles = new Set<'melody' | 'chord' | 'bass' | 'drums'>();
+    for (const c of cells) {
+      const r = this.roleFor(c.colour);
+      if (r === 'melody' || r === 'chord' || r === 'bass' || r === 'drums') roles.add(r);
+    }
+    if (roles.size > 0) {
+      this.bandLastCounterLap = lap;
+      if (this.bandFromLap === null) this.bandFromLap = lap + 1; // in on the NEXT pass
+    } else if (this.bandFromLap !== null && lap > this.bandLastCounterLap) {
+      this.bandFromLap = null; // the pass the last counter left in has finished
+    }
+    const playing = this.band !== 'off' && this.bandFromLap !== null && lap >= this.bandFromLap;
+    this.bandPlaying = playing;
+    this.bandPartsNow = playing ? bandParts(this.band, roles) : [];
+    if (!playing || !this.bandVoices) return;
+    const loop = loopLen(this.rawLoop('melodic'), this.cfg.cols);
+    const step = ((beat % loop) + loop) % loop;
+    const keyOf = (h: Harmony | null): string => (h ? h.tones.join(',') : '');
+    const harmony = this.harmonyForBand(step, cells, chord);
+    const key = keyOf(harmony);
+    const chordChange = step === 0 || key !== this.bandPrevHarmonyKey;
+    this.bandPrevHarmonyKey = key;
+    let chordSpan = 1;
+    while (step + chordSpan < loop && keyOf(this.harmonyForBand(step + chordSpan, cells, chord)) === key) chordSpan++;
+    const events = bandEventsAtStep({
+      level: this.band, step, loop, style: worldOf(this.cfg.soundWorld ?? 'none')?.id ?? 'warm',
+      harmony, chordChange, chordSpan, playerRoles: roles,
+    });
+    const world = worldOf(this.cfg.soundWorld ?? 'none');
+    const swing = Math.min(0.9, this.cfg.swing + (world?.phraseSwing ?? 0));
+    const hits = new Set<string>();
+    for (const ev of events) {
+      try {
+        const shifted = ev.offset === 0.5 ? ev.offset + swing / 6
+          : (ev.offset === 0.25 || ev.offset === 0.75) ? ev.offset + swing / 12 : ev.offset;
+        const time = Math.max(Tone.now(), cellTime + shifted * secPerBeat);
+        const durSec = ev.dur * secPerBeat;
+        let role: ColourRole;
+        if (ev.drum) {
+          if (!this.drumKit) continue;
+          const hit = `${ev.drum}@${time}`;
+          if (hits.has(hit)) continue;
+          hits.add(hit);
+          // The kit is shared with the player's drums, so the band's level is in the velocity.
+          this.drumKit.play(ev.drum, Math.min(1, ev.accent * BAND_GAIN[this.band] * 1.6), time);
+          if (ev.drum === 'kick' && this.band === 'full') this.duckForKick(time);
+          role = 'drums';
+        } else if (ev.midi !== undefined) {
+          (ev.part === 'pad' ? this.bandVoices.pad : this.bandVoices.bass).play(ev.midi + this.cfg.octaveShift * 12, ev.accent, durSec, time);
+          role = ev.part === 'pad' ? 'chord' : 'bass';
+        } else continue;
+        // Logged for the session, never drawn: a band note has no counter.
+        this.recordFired({ row: -1, col: -1, colour: `band:${ev.part}`, role, audioTime: time, durSec, source: 'live', origin: 'band' });
+      } catch (err) {
+        console.warn('[BoardSequencer] a band note failed to play:', err);
+      }
+    }
   }
 
   /**
@@ -1412,5 +1567,14 @@ export class BoardSequencerEngine {
     this.drumKit = null;
     this.tick?.dispose();
     this.tick = null;
+    if (this.bandVoices) {
+      this.bandVoices.pad.dispose();
+      this.bandVoices.bass.dispose();
+      this.bandVoices.gain.disconnect();
+      this.bandVoices.rev.disconnect();
+      this.bandVoices = null;
+    }
+    this.drumRev?.disconnect();
+    this.drumRev = null;
   }
 }
