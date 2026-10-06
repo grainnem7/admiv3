@@ -226,9 +226,11 @@ describe('BoardSequencerConfig — control counter settings', () => {
       delay: { min: 0, max: 0.6 },
       tone: { min: 0, max: 1 },
       tempo: { min: 60, max: 160 },
+      fill: { min: 0, max: 1 },
+      evolve: { min: 0, max: 1 },
     });
     expect(DEFAULT_BOARD_SEQUENCER_CONFIG.controlRemoval).toEqual({
-      volume: 'hold', reverb: 'hold', delay: 'hold', tone: 'hold', tempo: 'hold',
+      volume: 'hold', reverb: 'hold', delay: 'hold', tone: 'hold', tempo: 'hold', fill: 'hold', evolve: 'hold',
     });
   });
 

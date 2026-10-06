@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { ActiveCell, PieceColour } from '../../../../tracking/BoardSequencerMode';
 import type { ColourId } from '../../../../tracking/boardColours';
 import { swatchRingFor, type BoardPalette } from '../theme/boardTokens';
-import { boardSummary, type Pop } from './boardViewModel';
+import { boardSummary, type PhraseSpan, type Pop } from './boardViewModel';
 import type { BankSlotState } from '../../../../tracking/boardFrame';
 
 export interface BoardViewFrame {
@@ -41,6 +41,10 @@ export interface BoardViewProps {
    * Every sound has something to see, including the ones the player did not place.
    */
   band?: { playing: boolean; beatOn: boolean } | null;
+  /** With phrases on: the beats each counter owns, drawn as a band under it. */
+  spans?: readonly PhraseSpan[];
+  /** Something that just changed and was only heard ("New sounds", "Band joins"): shown for a moment. */
+  notice?: string | null;
   /** Page label ("Page A · live"), when there is more than one page. */
   pageLabel?: string | null;
   reducedMotion?: boolean;
@@ -63,7 +67,7 @@ function ghostsBySquare(ghosts: ReadonlyMap<string, ActiveCell> | undefined): Ma
  */
 export function BoardView({
   rows, cols, frame, pops, playheadCol, playing, pingPongDirection, swatchFor, palette,
-  pageLabel, reducedMotion = false, fillMarks, band,
+  pageLabel, reducedMotion = false, fillMarks, band, spans, notice,
 }: BoardViewProps): JSX.Element {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -112,6 +116,22 @@ export function BoardView({
     if (playing) {
       ctx.fillStyle = palette.hi;
       ctx.fillRect(playheadCol * cw, 0, cw, h);
+    }
+
+    // Phrase spans: a soft band along the counter's row from its column to the next
+    // counter of its colour, wrapping at the right edge. Drawn under the pieces.
+    if (spans && spans.length > 0) {
+      const bandH = Math.max(3, ch * 0.16);
+      for (const s of spans) {
+        if (s.row < 0 || s.row >= rows) continue;
+        const y = s.row * ch + ch - pad - bandH;
+        ctx.fillStyle = swatchFor(s.colour);
+        ctx.globalAlpha = 0.28;
+        const first = Math.min(s.len, cols - s.col);
+        ctx.fillRect(s.col * cw + pad, y, first * cw - pad * 2, bandH);
+        if (s.len > first) ctx.fillRect(pad, y, (s.len - first) * cw - pad * 2, bandH);
+        ctx.globalAlpha = 1;
+      }
     }
 
     for (let r = 0; r < rows; r++) {
@@ -275,6 +295,20 @@ export function BoardView({
       }
     }
 
+    // A change that was only heard, said on the board for a moment.
+    if (notice) {
+      ctx.font = `600 ${Math.round(Math.min(cw, ch) * 0.3)}px system-ui, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const tw = ctx.measureText(notice).width + 24;
+      const th = Math.min(cw, ch) * 0.5;
+      roundRect(ctx, w / 2 - tw / 2, 8, tw, th, th / 2);
+      ctx.fillStyle = palette.accent;
+      ctx.fill();
+      ctx.fillStyle = palette.bg;
+      ctx.fillText(notice, w / 2, 8 + th / 2);
+    }
+
     // Ping-pong direction, so the sweep's turn is visible, not only audible.
     if (playing && pingPongDirection !== 0) {
       ctx.fillStyle = palette.accent;
@@ -283,7 +317,7 @@ export function BoardView({
       ctx.textBaseline = 'top';
       ctx.fillText(pingPongDirection > 0 ? '→' : '←', playheadCol * cw + cw / 2, 2);
     }
-  }, [dims, rows, cols, frame, pops, playheadCol, playing, pingPongDirection, swatchFor, palette, reducedMotion, fillMarks, band]);
+  }, [dims, rows, cols, frame, pops, playheadCol, playing, pingPongDirection, swatchFor, palette, reducedMotion, fillMarks, band, spans, notice]);
 
   const pieces = frame.settled.size;
   const heldCount = frame.held?.size ?? 0;

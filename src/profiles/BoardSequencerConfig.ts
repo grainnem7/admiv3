@@ -264,12 +264,12 @@ export interface BoardSequencerStored {
 }
 
 /** Fader-role controls, whose value comes from a counter's position. */
-export type FaderRole = 'volume' | 'reverb' | 'delay' | 'tone' | 'tempo';
+export type FaderRole = 'volume' | 'reverb' | 'delay' | 'tone' | 'tempo' | 'fill' | 'evolve';
 export interface ControlRange { min: number; max: number }
 /** What a fader does when its counter leaves: keep it, drop to zero, or drift back. */
 export type ControlRemoval = 'hold' | 'zero' | 'default';
 
-const FADER_ROLE_LIST: FaderRole[] = ['volume', 'reverb', 'delay', 'tone', 'tempo'];
+const FADER_ROLE_LIST: FaderRole[] = ['volume', 'reverb', 'delay', 'tone', 'tempo', 'fill', 'evolve'];
 
 const DEFAULT_CONTROL_RANGES: Record<FaderRole, ControlRange> = {
   volume: { min: 0.2, max: 1 },
@@ -277,10 +277,12 @@ const DEFAULT_CONTROL_RANGES: Record<FaderRole, ControlRange> = {
   delay: { min: 0, max: 0.6 },
   tone: { min: 0, max: 1 },
   tempo: { min: 60, max: 160 },
+  fill: { min: 0, max: 1 },
+  evolve: { min: 0, max: 1 },
 };
 
 const DEFAULT_CONTROL_REMOVAL: Record<FaderRole, ControlRemoval> = {
-  volume: 'hold', reverb: 'hold', delay: 'hold', tone: 'hold', tempo: 'hold',
+  volume: 'hold', reverb: 'hold', delay: 'hold', tone: 'hold', tempo: 'hold', fill: 'hold', evolve: 'hold',
 };
 
 const ZERO_CORNERS: [BoardPoint, BoardPoint, BoardPoint, BoardPoint] = [

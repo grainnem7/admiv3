@@ -258,6 +258,9 @@ export class BoardSequencerEngine {
     melody: new Set(), bass: new Set(), drums: new Set(),
   };
   private evolve: EvolveSettings = { amount: 0, sceneLoops: 8, seed: 1, holdLap: null };
+  /** Amounts set by a fill or evolve counter on the board; null = the saved setting. */
+  private fillOverride: number | null = null;
+  private evolveOverride: number | null = null;
   private evolveLap = -1;
   private evolveKey = '';
   /** The kit's Evolve state (one kit, shared by every drum colour). */
@@ -517,7 +520,7 @@ export class BoardSequencerEngine {
    * freezes a fill: those notes play whatever the board does, until it is let go.
    */
   setFill(amount: number, seed: number, kept: FillNote[] | null): void {
-    this.fillAmount = Math.max(0, Math.min(1, amount));
+    this.fillAmount = Math.max(0, Math.min(1, this.fillOverride ?? amount));
     this.fillSeed = seed;
     this.fillKept = kept;
   }
@@ -546,7 +549,7 @@ export class BoardSequencerEngine {
 
   /** Evolve settings (safe while playing). Applied from the next beat. */
   setEvolve(settings: EvolveSettings): void {
-    this.evolve = { ...settings, amount: Math.max(0, Math.min(1, settings.amount)) };
+    this.evolve = { ...settings, amount: Math.max(0, Math.min(1, this.evolveOverride ?? settings.amount)) };
   }
 
   /** The loop Evolve is on now (for Hold). */
@@ -740,6 +743,10 @@ export class BoardSequencerEngine {
       this.delayBus?.gain.setTargetAtTime(delay, t, glide);
     }
 
+    // A fill or evolve counter owns its amount while present; when its channel is gone the
+    // value is absent here and the saved setting is back in charge.
+    this.fillOverride = values.fill ?? null;
+    this.evolveOverride = values.evolve ?? null;
     if (values.tone !== undefined && values.tone !== this.toneScale) {
       this.toneScale = values.tone;
       // Scale each channel's own Tone rather than overwriting it, so a bright lead and a

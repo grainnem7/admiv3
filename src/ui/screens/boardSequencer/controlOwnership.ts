@@ -12,7 +12,7 @@ export interface ControlOwner {
 }
 
 const FADER_LABELS: Record<FaderRole, string> = {
-  volume: 'Volume', reverb: 'Reverb', delay: 'Delay', tone: 'Tone', tempo: 'Tempo',
+  volume: 'Volume', reverb: 'Reverb', delay: 'Delay', tone: 'Tone', tempo: 'Tempo', fill: 'Fill', evolve: 'Evolve',
 };
 
 const isFader = (r: ColourRole): r is FaderRole => r in FADER_LABELS;

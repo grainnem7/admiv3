@@ -412,7 +412,7 @@ export function useBoardRuntime(opts: {
         controlReturnMs: cfg.controlReturnMs,
         controlRanges: cfg.controlRanges,
         controlRemoval: cfg.controlRemoval,
-        defaults: { volume: cfg.volume },
+        defaults: { volume: cfg.volume, fill: cfg.fillAmount, evolve: cfg.evolveAmount },
         zone: cfg.controlZone,
         heldColours,
       }, dtMs);

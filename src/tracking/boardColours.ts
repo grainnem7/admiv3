@@ -27,10 +27,11 @@ export type ColourRole =
   | 'off'
   | 'melody' | 'bass' | 'drums' | 'chord'           // sequenced voices
   | 'volume' | 'reverb' | 'delay' | 'tone' | 'tempo' // position faders → 0..1
+  | 'fill' | 'evolve'                                // faders for what the instrument adds
   | 'reverbToggle' | 'delayToggle';                  // presence → on/off
 
 export const SEQUENCED_ROLES: ColourRole[] = ['melody', 'bass', 'drums', 'chord'];
-export const FADER_ROLES: ColourRole[] = ['volume', 'reverb', 'delay', 'tone', 'tempo'];
+export const FADER_ROLES: ColourRole[] = ['volume', 'reverb', 'delay', 'tone', 'tempo', 'fill', 'evolve'];
 export const TOGGLE_ROLES: ColourRole[] = ['reverbToggle', 'delayToggle'];
 
 export function isSequencedRole(r: ColourRole): boolean {
@@ -58,6 +59,8 @@ export const ROLE_LABELS: Record<ColourRole, string> = {
   delay: 'Delay amount (fader)',
   tone: 'Tone/brightness (fader)',
   tempo: 'Tempo (fader)',
+  fill: 'Fill amount (fader)',
+  evolve: 'Evolve amount (fader)',
   reverbToggle: 'Reverb on/off',
   delayToggle: 'Delay on/off',
 };

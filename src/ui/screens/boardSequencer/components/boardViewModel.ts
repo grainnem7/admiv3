@@ -82,3 +82,43 @@ export function describeBoard(
     });
   return `${cols} by ${rows} board. ${parts.join('. ')}.`;
 }
+
+/** The beats a phrase counter owns: from its column up to the next counter of its colour. */
+export interface PhraseSpan {
+  row: number;
+  /** The counter's column, where the phrase starts. */
+  col: number;
+  /** How many columns it owns (wrapping round the loop). */
+  len: number;
+  colour: ColourId;
+}
+
+/**
+ * With phrases on, a counter plays until the next counter of the same colour, wrapping
+ * round the loop — so one counter fills the loop and a second one divides it. These are
+ * the bands drawn under the counters so the player can see which beats each one owns.
+ * Only sequenced colours have phrases; `isSequenced` says which.
+ */
+export function phraseSpans(
+  cells: readonly ActiveCell[], cols: number, isSequenced: (colour: ColourId) => boolean,
+): PhraseSpan[] {
+  if (cols <= 0) return [];
+  const byColour = new Map<ColourId, ActiveCell[]>();
+  for (const c of cells) {
+    if (c.col < 0 || c.col >= cols || !isSequenced(c.colour)) continue;
+    const list = byColour.get(c.colour);
+    if (list) list.push(c);
+    else byColour.set(c.colour, [c]);
+  }
+  const out: PhraseSpan[] = [];
+  for (const [colour, list] of byColour) {
+    const starts = [...new Set(list.map((c) => c.col))].sort((a, b) => a - b);
+    for (const c of list) {
+      const i = starts.indexOf(c.col);
+      const next = starts[(i + 1) % starts.length];
+      const len = starts.length === 1 ? cols : ((next - c.col + cols) % cols);
+      out.push({ row: c.row, col: c.col, len, colour });
+    }
+  }
+  return out;
+}

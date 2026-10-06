@@ -19,7 +19,7 @@
  * a saved calibration from silently mismatching the orientation.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as Tone from 'tone';
 import { useAppStore } from '../../state/store';
 import { CameraManager, type CameraTrackInfo } from '../../tracking/CameraManager';
@@ -45,7 +45,8 @@ import { ColoursStep } from './boardSequencer/setup/ColoursStep';
 import { ReadyStep } from './boardSequencer/setup/ReadyStep';
 import { BoardCornerEditor } from './boardSequencer/components/BoardCornerEditor';
 import { BoardView, cellMap } from './boardSequencer/components/BoardView';
-import { describeBoard, popsAt, pruneFired, type Pop } from './boardSequencer/components/boardViewModel';
+import { describeBoard, phraseSpans, popsAt, pruneFired, type Pop } from './boardSequencer/components/boardViewModel';
+import { isSequencedRole } from '../../tracking/boardColours';
 import { PlayPanel } from './boardSequencer/play/PlayPanel';
 import { NudgeBanner } from './boardSequencer/play/NudgeBanner';
 import { SwatchChip } from './boardSequencer/ui/SwatchChip';
@@ -87,6 +88,7 @@ import { SOUND_WORLDS, SOUND_WORLD_IDS, worldOf, type SoundWorldChoice } from '.
 import type { FillSourceStatus } from '../../songs/BoardSequencerEngine';
 import type { BandLevel, BandPart } from '../../songs/band/band';
 import { BoardMidiPanel } from './boardSequencer/components/BoardMidiPanel';
+import { SessionLog, sessionFileName, type LogActor } from '../../songs/sessionLog';
 import { useRemoteLink } from '../../remote/useRemoteLink';
 import {
   dynamicsFromValue, makeRemoteCode, REMOTE_INFO_PATH, tempoFromValue, valueFromTempo, valueFromVelocity,
@@ -232,6 +234,8 @@ const REMOTE_TRIGGER_WORDS: Record<'newIdea' | 'newSound' | 'keep' | 'mute', str
 };
 /** How long "iPad: Speed 96 BPM" stays on screen. */
 const REMOTE_NOTE_MS = 2500;
+/** How long "New sounds" / "Band joins" stays on the board. */
+const BOARD_NOTICE_MS = 2500;
 
 /** What the player is told about where the fill is coming from. */
 const FILL_STATUS_TEXT: Record<FillSourceStatus, string> = {
@@ -406,6 +410,13 @@ export default function BoardSequencerScreen() {
   const [fillCount, setFillCount] = useState(0);
   const [fillStatus, setFillStatus] = useState<FillSourceStatus>('rules');
   const [bandStatus, setBandStatus] = useState<{ level: BandLevel; playing: boolean; parts: BandPart[] }>({ level: 'off', playing: false, parts: [] });
+  // The session log: kept while the board runs, saved when the facilitator asks.
+  const sessionLogRef = useRef(new SessionLog());
+  const logActorRef = useRef<LogActor>('laptop');
+  const [logCounts, setLogCounts] = useState({ notes: 0, placed: 0, added: 0, events: 0 });
+  // A change that was only heard, shown on the board for a moment (deaf and HoH players).
+  const [boardNotice, setBoardNotice] = useState<string | null>(null);
+  const bandPlayingRef = useRef(false);
   // What each colour sounds like now (Evolve), and the seed before "New sound" (for Back).
   const [evolveLabels, setEvolveLabels] = useState<Map<string, { label: string; scene: number }>>(new Map());
   const evolveSigRef = useRef('');
@@ -442,6 +453,11 @@ export default function BoardSequencerScreen() {
     const id = setTimeout(() => setRemoteNote(null), REMOTE_NOTE_MS);
     return () => clearTimeout(id);
   }, [remoteNote]);
+  useEffect(() => {
+    if (!boardNotice) return;
+    const id = setTimeout(() => setBoardNotice(null), BOARD_NOTICE_MS);
+    return () => clearTimeout(id);
+  }, [boardNotice]);
   // Tell the iPad the real values, so its strips match even when the laptop changes them.
   useEffect(() => {
     if (!remoteEnabled || remoteLink.others === 0) return;
@@ -476,6 +492,7 @@ export default function BoardSequencerScreen() {
 
   /** Patch the config and persist it (rig fields and player fields are routed on save). */
   const update = useCallback((patch: Partial<BoardSequencerStored>) => {
+    sessionLogRef.current.setting(logActorRef.current, patch as Record<string, unknown>);
     setConfig((prev) => {
       const next = { ...prev, ...patch };
       return next;
@@ -1033,7 +1050,9 @@ export default function BoardSequencerScreen() {
       // time, so a cell never lights before its sound.
       if (engine) {
         const audible = engine.audibleNow();
-        firedRef.current = pruneFired([...firedRef.current, ...engine.drainFiredNotes()], audible);
+        const drained = engine.drainFiredNotes();
+        sessionLogRef.current.addNotes(drained);
+        firedRef.current = pruneFired([...firedRef.current, ...drained], audible);
         setPops(popsAt(firedRef.current, audible));
       } else if (firedRef.current.length > 0) {
         firedRef.current = [];
@@ -1051,6 +1070,11 @@ export default function BoardSequencerScreen() {
       // this falls back to what the camera can see. Otherwise "On the board now" and
       // Describe board told the player the board was empty with counters all over it.
       setActive(runningRef.current ? frame.patternCells : cellsFromOccupied(frame.occupied));
+      if (runningRef.current) {
+        sessionLogRef.current.board(frame.patternCells);
+        const counts = sessionLogRef.current.counts();
+        setLogCounts((prev) => (prev.notes === counts.notes && prev.events === counts.events ? prev : counts));
+      }
       setPlayheadCol(runningRef.current && engine ? engine.getPlayheadCol(cfg.cols) : 0);
       if (cfg.numPages > 1 && engine) setPlayingPage(engine.getCurrentPage());
       setStats({ byColour: frame.byColour, settled: frame.activeMap.size });
@@ -1067,6 +1091,10 @@ export default function BoardSequencerScreen() {
         setFillStatus(engine.getFillStatus());
         const bs = engine.getBandStatus();
         setBandStatus((prev) => (prev.level === bs.level && prev.playing === bs.playing && prev.parts.join() === bs.parts.join() ? prev : bs));
+        if (bandPlayingRef.current !== bs.playing) {
+          bandPlayingRef.current = bs.playing;
+          if (cfg.band !== 'off') setBoardNotice(bs.playing ? 'Band joins' : 'Band stops');
+        }
         // Evolve labels: refreshed only when a colour's sound actually changes.
         const labels = engine.getEvolveLabels();
         const evoSig = [...labels.entries()].map(([id, l]) => `${id}:${l.scene}:${l.label}`).join('|');
@@ -1082,7 +1110,10 @@ export default function BoardSequencerScreen() {
               const ch = cfg.channels.find((c) => c.id === id);
               return ch ? describeChannel(ch) : id;
             };
-            if (moved.length > 0) announce(`New sounds: ${moved.map(([id, l]) => `${nameOfColour(id)} ${l.label}`).join('; ')}`);
+            if (moved.length > 0) {
+              announce(`New sounds: ${moved.map(([id, l]) => `${nameOfColour(id)} ${l.label}`).join('; ')}`);
+              setBoardNotice('New sounds');
+            }
           }
         }
         const sig = `${fill.length}|${[...marks.keys()].join(';')}`;
@@ -1264,6 +1295,8 @@ export default function BoardSequencerScreen() {
     engineRef.current = null;
     modeRef.current = null;
     songEngineRef.current?.stopPlayback();
+    sessionLogRef.current.stop();
+    setLogCounts(sessionLogRef.current.counts());
     setRunning(false);
   }, []);
 
@@ -1272,6 +1305,7 @@ export default function BoardSequencerScreen() {
       const next = !m;
       mutedRef.current = next;
       engineRef.current?.setMuted(next);
+      sessionLogRef.current.action(logActorRef.current, next ? 'mute' : 'unmute');
       const se = songEngineRef.current;
       if (se && songStatusRef.current === 'loaded') {
         if (next) se.pause();
@@ -1378,6 +1412,8 @@ export default function BoardSequencerScreen() {
     }
     startSecRef.current = Tone.now();
     runningRef.current = true;
+    sessionLogRef.current.start(activePlayer?.name ?? 'Player', cfg as unknown as Record<string, unknown>, engine.audibleNow());
+    setLogCounts(sessionLogRef.current.counts());
     setRunning(true);
   }, [engineRef, homographyRef, loopBankRef, modeRef, runningRef, startingRef, videoRef]);
 
@@ -1660,6 +1696,13 @@ export default function BoardSequencerScreen() {
   // per-row drum picker), and a colour-id → channel lookup for labels/swatches.
   const channels = config.channels;
   const channelById = new Map(channels.map((c) => [c.id, c]));
+  // With phrases on, which beats each counter owns — recomputed only when the board changes.
+  const spans = useMemo(
+    () => (config.phrases
+      ? phraseSpans(active, config.cols, (id) => isSequencedRole(config.channels.find((c) => c.id === id)?.role ?? 'off'))
+      : []),
+    [config.phrases, active, config.cols, config.channels],
+  );
   const labelForId = (id: ColourId) => {
     const c = channelById.get(id);
     return c ? describeChannel(c) : id;
@@ -1698,6 +1741,8 @@ export default function BoardSequencerScreen() {
   // One writer per parameter: a control counter disables the matching screen control.
   const owners = controlOwners(config.channels);
   const volumeReason = disabledReason('volume', owners);
+  const fillReason = disabledReason('fill', owners);
+  const evolveReason = disabledReason('evolve', owners);
   const tempoReason = disabledReason('tempo', owners, songStatus === 'loaded' && selectedSongId !== '');
   const controlChannels = config.channels.filter((c) => isFaderRole(c.role));
 
@@ -1852,12 +1897,14 @@ export default function BoardSequencerScreen() {
     setPrevFillSeed(c.fillSeed);
     // A new idea for the board as it is now, so it follows the board again.
     update({ fillSeed: Math.floor(Math.random() * 2 ** 31), fillKept: null, fillAmount: c.fillAmount > 0 ? c.fillAmount : 0.5 });
+    sessionLogRef.current.action(logActorRef.current, 'new idea');
     announce('New idea.');
   };
   const newEvolveSound = (): void => {
     const c = configRef.current;
     setPrevEvolveSeed(c.evolveSeed);
     update({ evolveSeed: Math.floor(Math.random() * 2 ** 31), evolveHoldLap: null, evolveAmount: c.evolveAmount > 0 ? c.evolveAmount : 0.5 });
+    sessionLogRef.current.action(logActorRef.current, 'new sound');
     announce('New sound.');
   };
   /** Keep (from the iPad): freeze the fill AND the sounds together; tap again to let go. */
@@ -1865,6 +1912,7 @@ export default function BoardSequencerScreen() {
     const c = configRef.current;
     if (c.fillKept !== null || c.evolveHoldLap !== null) {
       update({ fillKept: null, evolveHoldLap: null });
+      sessionLogRef.current.action(logActorRef.current, 'let go');
       announce('Let go: the fill and the sounds move again.');
       return;
     }
@@ -1873,7 +1921,25 @@ export default function BoardSequencerScreen() {
       fillKept: notes.length > 0 ? notes : null,
       evolveHoldLap: c.evolveAmount > 0 ? (engineRef.current?.getEvolveLap() ?? 0) : null,
     });
+    sessionLogRef.current.action(logActorRef.current, 'keep');
     announce('Kept: the fill and the sounds stay as they are.');
+  };
+
+  /** Hand the facilitator the session as a file. Nothing leaves the machine otherwise. */
+  const saveSession = (ext: 'json' | 'csv'): void => {
+    const log = sessionLogRef.current;
+    const data = log.toJSON();
+    const text = ext === 'json' ? JSON.stringify(data, null, 1) : log.toCsv();
+    const blob = new Blob([text], { type: ext === 'json' ? 'application/json' : 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = sessionFileName(data.player, new Date(data.startedAt), ext);
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    announce(`Session saved: ${data.notes.length} notes.`);
   };
 
   const remoteLabels = (c: BoardSequencerStored): Record<RemoteControlName, string> => ({
@@ -1885,6 +1951,14 @@ export default function BoardSequencerScreen() {
 
   const onRemoteMessage = (msg: RemoteMessage): void => {
     const c = configRef.current;
+    logActorRef.current = 'ipad';
+    try {
+      onRemoteMessageInner(msg, c);
+    } finally {
+      logActorRef.current = 'laptop';
+    }
+  };
+  const onRemoteMessageInner = (msg: RemoteMessage, c: BoardSequencerStored): void => {
     if (msg.type === 'control') {
       if (msg.name === 'tempo') {
         const bpm = tempoFromValue(msg.value);
@@ -1999,8 +2073,10 @@ export default function BoardSequencerScreen() {
         <input
           type="range" min={0} max={100} value={Math.round(config.fillAmount * 100)}
           aria-label="How much the instrument adds"
+          disabled={fillReason !== null}
           onChange={(e) => update({ fillAmount: Number(e.target.value) / 100 })}
         />
+        <span style={REASON_STYLE}>{fillReason ?? ''}</span>
       </label>
       <SegmentedControl<'magenta' | 'rules'>
         label="Ideas from"
@@ -2073,8 +2149,10 @@ export default function BoardSequencerScreen() {
         <input
           type="range" min={0} max={100} value={Math.round(config.evolveAmount * 100)}
           aria-label="How much the sounds change as they play"
+          disabled={evolveReason !== null}
           onChange={(e) => update({ evolveAmount: Number(e.target.value) / 100 })}
         />
+        <span style={REASON_STYLE}>{evolveReason ?? ''}</span>
       </label>
       <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
         {config.evolveAmount <= 0
@@ -2786,6 +2864,8 @@ export default function BoardSequencerScreen() {
       reducedMotion={reducedMotion}
       fillMarks={running ? fillMarks : undefined}
       band={running && bandStatus.playing ? { playing: true, beatOn } : null}
+      spans={running && config.phrases ? spans : undefined}
+      notice={running ? boardNotice : null}
     />
   );
 
@@ -2990,11 +3070,27 @@ export default function BoardSequencerScreen() {
           <Button tone="quiet" onClick={() => announce(describeBoard(active, config.channels, config.rows, config.cols, config.velocity))}>
             Describe board
           </Button>
+          {/* The session log: what the player made and what the instrument added, for the research. */}
+          <Button
+            tone="quiet"
+            onClick={() => saveSession('json')}
+            reason={logCounts.notes === 0 ? 'Nothing played yet this session.' : null}
+            aria-label={`Save the session log as JSON: ${logCounts.notes} notes, ${logCounts.placed} yours, ${logCounts.added} added`}
+          >
+            {`Save session (${logCounts.notes} notes)`}
+          </Button>
+          <Button tone="quiet" onClick={() => saveSession('csv')} reason={logCounts.notes === 0 ? 'Nothing played yet this session.' : null}>
+            CSV
+          </Button>
         </div>
       )}
       {view === 'play' && (
         <p aria-live="off" style={{ margin: 0, fontSize: 12, color: 'var(--bs-fg2)', minHeight: 18 }}>
-          {pops.length > 0 ? `Now: ${pops.map((n) => labelForId(n.colour)).join(', ')}` : ''}
+          {pops.length > 0
+            ? `Now: ${[...new Map(pops.map((n) => [n.colour, n])).values()]
+              .map((n) => `${labelForId(n.colour)}${n.origin === 'phrase' ? ' (phrase)' : n.origin === 'fill' ? ' (fill)' : ''}`)
+              .join(', ')}`
+            : ''}
         </p>
       )}
       {view === 'play' && remoteNote && (
