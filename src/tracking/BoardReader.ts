@@ -9,6 +9,7 @@
  * is unit-testable without a DOM.
  */
 
+import { drawOriented, orientedSize, type QuarterTurns } from './frameOrientation';
 import type { Mat3 } from '../utils/homography';
 import { applyHomography } from '../utils/homography';
 import { rgbToHsv } from './ColorTracker';
@@ -222,6 +223,8 @@ export interface BoardReaderOptions {
    */
   mirrorX?: boolean;
   mirrorY?: boolean;
+  /** Clockwise quarter turns, applied before the mirrors (see frameOrientation). */
+  rotation?: QuarterTurns;
 }
 
 /**
@@ -252,15 +255,14 @@ export class BoardReader {
   read(video: HTMLVideoElement, opts: BoardReaderOptions): CellReading[] {
     const downscale = opts.downscale ?? 4;
     const samples = opts.samplesPerAxis ?? 5;
-    const w = Math.max(1, Math.floor(video.videoWidth / downscale));
-    const h = Math.max(1, Math.floor(video.videoHeight / downscale));
+    const shown = orientedSize(video.videoWidth, video.videoHeight, opts.rotation ?? 0);
+    const w = Math.max(1, Math.floor(shown.width / downscale));
+    const h = Math.max(1, Math.floor(shown.height / downscale));
     if (this.canvas.width !== w) this.canvas.width = w;
     if (this.canvas.height !== h) this.canvas.height = h;
-    this.ctx.save();
-    this.ctx.translate(opts.mirrorX ? w : 0, opts.mirrorY ? h : 0);
-    this.ctx.scale(opts.mirrorX ? -1 : 1, opts.mirrorY ? -1 : 1);
-    this.ctx.drawImage(video, 0, 0, w, h);
-    this.ctx.restore();
+    drawOriented(this.ctx, video, w, h, {
+      mirrorX: opts.mirrorX ?? false, mirrorY: opts.mirrorY ?? false, rotation: opts.rotation ?? 0,
+    });
     const data = this.ctx.getImageData(0, 0, w, h).data;
     this.last = { data, width: w, height: h, downscale };
 

@@ -5,6 +5,7 @@
  * burst stops as soon as enough frames agree, so a steady board is quick and a difficult
  * one still ends rather than hanging. Cancel is always available and changes nothing.
  */
+import type { QuarterTurns } from '../../../tracking/frameOrientation';
 import { captureDisplayedFrame, type CapturedFrame } from '../../../tracking/boardDetect/captureFrame';
 
 /** How often a frame is taken. Slow enough that each one is genuinely new. */
@@ -18,6 +19,8 @@ export interface BurstOptions<T> {
   video: HTMLVideoElement;
   mirrorX: boolean;
   mirrorY: boolean;
+  /** Clockwise quarter turns of the picture (see frameOrientation). */
+  rotation?: QuarterTurns;
   /** Runs on each frame; return null when the frame told us nothing. */
   detect?(frame: CapturedFrame): T | null;
   /** True when we have seen enough and the burst can stop early. */
@@ -51,7 +54,7 @@ export async function runFrameBurst<T>(opts: BurstOptions<T>): Promise<BurstResu
 
   while (frames.length < maxFrames && now() - started < maxMs) {
     if (opts.signal?.aborted) return { frames, results, cancelled: true };
-    const frame = captureDisplayedFrame(opts.video, opts.mirrorX, opts.mirrorY);
+    const frame = captureDisplayedFrame(opts.video, opts.mirrorX, opts.mirrorY, undefined, opts.rotation ?? 0);
     if (frame) {
       frames.push(frame);
       if (opts.detect) {

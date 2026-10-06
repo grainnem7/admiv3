@@ -62,6 +62,13 @@ export const MERGE_VALUE = 22;
 /** A band may match at most this share of the board's squares. */
 export const MAX_BOARD_MATCH = 0.02;
 
+/**
+ * The share of a counter's own pixels a band must still match after it has been narrowed
+ * to stay off the board. Below this, the board reader sees too little of the counter in
+ * its box and reports it as not there.
+ */
+export const KEEP_COUNTER_SHARE = 0.8;
+
 export interface DetectedColour {
   /** Mean colour of the counters found, as a hex swatch. */
   swatch: string;
@@ -196,15 +203,29 @@ export function detectColours(
  */
 export function fitSafeBand(
   hsv: { h: number; s: number; v: number }, boardColours: { h: number; s: number; v: number }[],
+  counterPixels?: readonly { h: number; s: number; v: number }[],
 ): { band: ReturnType<typeof calibrationFromHsv>; boardMatch: number; unsafe: boolean } {
   let band = calibrationFromHsv(hsv);
   let boardMatch = matchShare(band, boardColours);
 
-  /** A band is only useful while it still recognises the counter it was sampled from. */
-  const stillFindsIt = (candidate: typeof band): boolean => buildChannelMatcher({
-    id: 'candidate', kind: candidate.kind, role: 'off', swatch: '#000',
-    band: candidate.band, blackBand: candidate.blackBand, whiteBand: candidate.whiteBand,
-  }).test(hsv);
+  /**
+   * A band is only useful while it still recognises the counter it was sampled from.
+   *
+   * With the counter's own pixels to hand, "recognises" means most of them, not just their
+   * average. Checking only the average let the band be narrowed until the average sat on
+   * its very edge: a counter's shading and highlight then fell outside it, the board
+   * reader found too little of the counter in its box, and a counter the player had just
+   * tapped was listed as "0 on board".
+   */
+  const stillFindsIt = (candidate: typeof band): boolean => {
+    const matcher = buildChannelMatcher({
+      id: 'candidate', kind: candidate.kind, role: 'off', swatch: '#000',
+      band: candidate.band, blackBand: candidate.blackBand, whiteBand: candidate.whiteBand,
+    });
+    if (!counterPixels || counterPixels.length < 5) return matcher.test(hsv);
+    const kept = counterPixels.filter((p) => matcher.test(p)).length;
+    return kept / counterPixels.length >= KEEP_COUNTER_SHARE;
+  };
 
   /** Take a tightening step only if it keeps the counter. Returns false when it can't. */
   const step = (next: typeof band): boolean => {
@@ -239,6 +260,18 @@ export function fitSafeBand(
     } else break;
   }
   return { band, boardMatch, unsafe: boardMatch > MAX_BOARD_MATCH };
+}
+
+/** The share of `pixels` a band recognises (0–1); 1 when there is nothing to check. */
+export function bandKeeps(
+  band: ReturnType<typeof calibrationFromHsv>, pixels: readonly { h: number; s: number; v: number }[],
+): number {
+  if (pixels.length === 0) return 1;
+  const matcher = buildChannelMatcher({
+    id: 'candidate', kind: band.kind, role: 'off', swatch: '#000',
+    band: band.band, blackBand: band.blackBand, whiteBand: band.whiteBand,
+  });
+  return pixels.filter((p) => matcher.test(p)).length / pixels.length;
 }
 
 function matchShare(
