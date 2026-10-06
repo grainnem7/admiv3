@@ -1,0 +1,140 @@
+import { describe, it, expect, afterEach } from 'vitest';
+import { createServer, type Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { WebSocket } from 'ws';
+import {
+  dynamicsFromValue, isRemoteCode, makeRemoteCode, parseRemoteMessage, REMOTE_PATH, stripValue,
+  STRIP_STEP, tempoFromValue, TEMPO_MAX, TEMPO_MIN, valueFromTempo, valueFromVelocity,
+} from '../remote/protocol';
+import { allowedFrom, attachRemoteRelay } from '../remote/relay';
+
+describe('finger → value, for imprecise fingers', () => {
+  it('the ends of a strip are generous "all the way" zones', () => {
+    expect(stripValue(0)).toBe(0);
+    expect(stripValue(0.07)).toBe(0);
+    expect(stripValue(0.93)).toBe(1);
+    expect(stripValue(1)).toBe(1);
+  });
+
+  it('values move in steps, so a trembling finger does not flicker them', () => {
+    const a = stripValue(0.5);
+    expect(stripValue(0.505)).toBe(a);
+    expect(Math.abs(a / STRIP_STEP - Math.round(a / STRIP_STEP))).toBeLessThan(1e-9);
+  });
+
+  it('never goes outside 0–1, wherever the finger strays', () => {
+    expect(stripValue(-3)).toBe(0);
+    expect(stripValue(9)).toBe(1);
+  });
+});
+
+describe('values ↔ settings', () => {
+  it('speed covers a usable range and round-trips', () => {
+    expect(tempoFromValue(0)).toBe(TEMPO_MIN);
+    expect(tempoFromValue(1)).toBe(TEMPO_MAX);
+    expect(tempoFromValue(valueFromTempo(96))).toBe(96);
+  });
+
+  it('dynamics never reaches silence (Mute is for that) and round-trips', () => {
+    expect(dynamicsFromValue(0).volume).toBeGreaterThan(0);
+    expect(dynamicsFromValue(0).velocity).toBeGreaterThan(0);
+    expect(valueFromVelocity(dynamicsFromValue(0.6).velocity)).toBeCloseTo(0.6, 9);
+  });
+});
+
+describe('messages', () => {
+  it('accepts well-formed controls and taps', () => {
+    expect(parseRemoteMessage('{"type":"control","name":"tempo","value":0.5}')).toEqual({ type: 'control', name: 'tempo', value: 0.5 });
+    expect(parseRemoteMessage({ type: 'trigger', name: 'keep' })).toEqual({ type: 'trigger', name: 'keep' });
+  });
+
+  it('drops anything malformed rather than half-applying it', () => {
+    expect(parseRemoteMessage('not json')).toBeNull();
+    expect(parseRemoteMessage({ type: 'control', name: 'volume', value: 0.5 })).toBeNull();
+    expect(parseRemoteMessage({ type: 'control', name: 'tempo', value: 7 })).toBeNull();
+    expect(parseRemoteMessage({ type: 'trigger', name: 'deleteEverything' })).toBeNull();
+    expect(parseRemoteMessage({ type: 'state', state: { values: {}, labels: {} } })).toBeNull();
+  });
+
+  it('codes are four digits', () => {
+    expect(isRemoteCode(makeRemoteCode())).toBe(true);
+    expect(isRemoteCode('12a4')).toBe(false);
+  });
+
+  it('the iPad may only send controls and taps; the laptop only state', () => {
+    expect(allowedFrom('remote', 'control')).toBe(true);
+    expect(allowedFrom('remote', 'state')).toBe(false);
+    expect(allowedFrom('host', 'state')).toBe(true);
+    expect(allowedFrom('host', 'trigger')).toBe(false);
+  });
+});
+
+// ---- the relay, over real sockets ----
+
+let server: Server | null = null;
+const sockets: WebSocket[] = [];
+afterEach(async () => {
+  for (const s of sockets.splice(0)) s.close();
+  await new Promise<void>((r) => (server ? server.close(() => r()) : r()));
+  server = null;
+});
+
+async function relay(): Promise<number> {
+  server = createServer();
+  attachRemoteRelay(server);
+  await new Promise<void>((r) => server!.listen(0, '127.0.0.1', () => r()));
+  return (server.address() as AddressInfo).port;
+}
+function join(port: number, code: string, role: string): Promise<{ ws: WebSocket; got: unknown[] }> {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(`ws://127.0.0.1:${port}${REMOTE_PATH}?code=${code}&role=${role}`);
+    sockets.push(ws);
+    const got: unknown[] = [];
+    ws.on('message', (d) => got.push(JSON.parse(d.toString())));
+    ws.on('open', () => resolve({ ws, got }));
+    ws.on('error', reject);
+  });
+}
+const settle = () => new Promise((r) => setTimeout(r, 60));
+
+describe('relay', () => {
+  it('passes the iPad\'s slides to the laptop with the same code, and the laptop\'s state back', async () => {
+    const port = await relay();
+    const host = await join(port, '4821', 'host');
+    const ipad = await join(port, '4821', 'remote');
+    await settle();
+    ipad.ws.send(JSON.stringify({ type: 'control', name: 'fill', value: 0.7 }));
+    const state = { values: { tempo: 0.5, dynamics: 0.5, fill: 0.7, evolve: 0 }, labels: { tempo: '100 BPM', dynamics: '50%', fill: '70%', evolve: 'Off' }, kept: false, muted: false, playing: true };
+    host.ws.send(JSON.stringify({ type: 'state', state }));
+    await settle();
+    expect(host.got).toContainEqual({ type: 'control', name: 'fill', value: 0.7 });
+    expect(ipad.got).toContainEqual({ type: 'state', state });
+    expect(host.got).toContainEqual({ type: 'peers', hosts: 1, remotes: 1 });
+  });
+
+  it('a different code hears nothing', async () => {
+    const port = await relay();
+    const host = await join(port, '1111', 'host');
+    const stranger = await join(port, '2222', 'remote');
+    await settle();
+    stranger.ws.send(JSON.stringify({ type: 'trigger', name: 'mute' }));
+    await settle();
+    expect(host.got.filter((m) => (m as { type: string }).type !== 'peers')).toEqual([]);
+  });
+
+  it('drops a malformed message, and one the sender may not send', async () => {
+    const port = await relay();
+    const host = await join(port, '4821', 'host');
+    const ipad = await join(port, '4821', 'remote');
+    await settle();
+    ipad.ws.send('{"type":"control","name":"tempo","value":42}');
+    ipad.ws.send(JSON.stringify({ type: 'state', state: {} }));
+    await settle();
+    expect(host.got.filter((m) => (m as { type: string }).type !== 'peers')).toEqual([]);
+  });
+
+  it('refuses a connection without a proper code', async () => {
+    const port = await relay();
+    await expect(join(port, 'abcd', 'remote')).rejects.toBeTruthy();
+  });
+});
