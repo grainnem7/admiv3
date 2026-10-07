@@ -10,19 +10,53 @@
  * "End now" applies the chosen ending at once, whatever the clock says.
  */
 
-export type EndingMode = 'fade' | 'stop' | 'cue';
+/** When the ending happens: by itself at the time, or only when End is pressed. */
+export type EndingMode = 'auto' | 'cue';
+
+/**
+ * The musical shape of the ending, chosen before the piece:
+ *  - fade:  everything fades over the passes;
+ *  - stop:  a tidy stop at the end of the pass;
+ *  - slow:  a ritardando over the passes, then a stop on the one;
+ *  - thin:  the band and the fill leave first, so the player's own notes end the piece,
+ *           with a fade over the last pass;
+ *  - chord: the texture thins over the passes, then a held tonic chord and a crash ring
+ *           out for one more pass.
+ */
+export type EndingStyle = 'fade' | 'stop' | 'slow' | 'thin' | 'chord';
+export const ENDING_STYLES: EndingStyle[] = ['fade', 'stop', 'slow', 'thin', 'chord'];
 
 export interface PerformanceSettings {
   /** The piece's length in seconds. */
   lengthSec: number;
   ending: EndingMode;
-  /** For 'fade': how many passes the fade takes. */
+  style: EndingStyle;
+  /** How many passes the ending takes (not for 'stop'). */
   fadePasses: number;
   /** Start the clock when Play is pressed, or only when Start clock is pressed. */
   startOn: 'play' | 'manual';
 }
 
-export const DEFAULT_PERFORMANCE: PerformanceSettings = { lengthSec: 7 * 60, ending: 'cue', fadePasses: 2, startOn: 'play' };
+export const DEFAULT_PERFORMANCE: PerformanceSettings = { lengthSec: 7 * 60, ending: 'cue', style: 'fade', fadePasses: 2, startOn: 'play' };
+
+/** How long an ending style takes, in passes: the chord rings for one more. */
+export function endingPasses(settings: Pick<PerformanceSettings, 'style' | 'fadePasses'>): number {
+  if (settings.style === 'stop') return 0;
+  return settings.fadePasses + (settings.style === 'chord' ? 1 : 0);
+}
+
+/** What an ending style is called, with its length. */
+export function describeEnding(settings: Pick<PerformanceSettings, 'style' | 'fadePasses'>): string {
+  const n = settings.fadePasses;
+  const passes = `${n} ${n === 1 ? 'pass' : 'passes'}`;
+  switch (settings.style) {
+    case 'stop': return 'stop at the end of the pass';
+    case 'slow': return `slow down over ${passes}`;
+    case 'thin': return `thin out over ${passes}`;
+    case 'chord': return `thin over ${passes}, then a final chord`;
+    default: return `fade over ${passes}`;
+  }
+}
 
 /** The moments before the end at which a cue is given, in seconds, largest first. */
 export const CUE_SECONDS = [60, 30, 10] as const;
@@ -76,9 +110,8 @@ export function cueText(sec: number): string {
  * end of a pass, so it begins at the start of the last whole pass.
  */
 export function endingLeadSec(settings: PerformanceSettings, passSec: number): number {
-  if (settings.ending === 'fade') return settings.fadePasses * passSec;
-  if (settings.ending === 'stop') return 0;
-  return Number.POSITIVE_INFINITY; // 'cue': never by itself
+  if (settings.ending === 'cue') return Number.POSITIVE_INFINITY; // never by itself
+  return endingPasses(settings) * passSec;
 }
 
 /**
@@ -114,9 +147,14 @@ const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFin
 export function sanitizePerformance(v: unknown): PerformanceSettings {
   const o = (typeof v === 'object' && v !== null ? v : {}) as Record<string, unknown>;
   const d = DEFAULT_PERFORMANCE;
+  // Saved before the style existed: 'fade' and 'stop' were endings at the time.
+  const legacyStyle = o.ending === 'fade' || o.ending === 'stop' ? o.ending : null;
+  const ending: EndingMode = o.ending === 'auto' || legacyStyle ? 'auto' : 'cue';
+  const style: EndingStyle = ENDING_STYLES.includes(o.style as EndingStyle) ? (o.style as EndingStyle) : (legacyStyle ?? d.style);
   return {
     lengthSec: isNum(o.lengthSec) ? Math.max(30, Math.min(60 * 60, Math.round(o.lengthSec))) : d.lengthSec,
-    ending: o.ending === 'fade' || o.ending === 'stop' || o.ending === 'cue' ? o.ending : d.ending,
+    ending,
+    style,
     fadePasses: isNum(o.fadePasses) && [1, 2, 4].includes(o.fadePasses) ? o.fadePasses : d.fadePasses,
     startOn: o.startOn === 'manual' ? 'manual' : 'play',
   };

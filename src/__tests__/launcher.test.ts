@@ -246,3 +246,67 @@ describe('engine — the ending', () => {
     expect(finished).not.toHaveBeenCalled();
   });
 });
+
+describe('engine — the musical endings', () => {
+  const cells = [0, 1, 2, 3].map((col) => ({ row: 2, col, colour: 'm' }));
+  interface EndPriv extends Priv { cfg: { bpm: number }; endGain: { gain: Record<string, ReturnType<typeof vi.fn>> } }
+  const endEngine = () => {
+    const { e, p } = engine();
+    const ep = p as EndPriv;
+    ep.endGain = { gain: { cancelScheduledValues: vi.fn(), setValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn(), setTargetAtTime: vi.fn() } };
+    e.setActiveCells(cells);
+    return { e, p: ep };
+  };
+
+  it('slow down: the tempo eases over the passes and comes back if cancelled', () => {
+    const { e, p } = endEngine();
+    const finished = vi.fn();
+    e.finish(8, finished, 'slow');
+    for (let b = 0; b < 7; b++) p.fireStep(b, b, 1, null);
+    expect(p.cfg.bpm).toBeLessThan(60);
+    expect(p.cfg.bpm).toBeGreaterThan(30);
+    e.cancelFinish();
+    expect(p.cfg.bpm).toBeCloseTo(60, 6);
+    const again = endEngine();
+    again.e.finish(8, finished, 'slow');
+    for (let b = 0; b < 9; b++) again.p.fireStep(b, b, 1, null);
+    expect(finished).toHaveBeenCalledTimes(1);
+    expect(again.p.cfg.bpm).toBeLessThan(40);
+  });
+
+  it('thin out: the fill leaves at once and the fade is over the last pass only', () => {
+    const { e, p } = endEngine();
+    e.setFill(1, 5, null);
+    p.fireStep(0, 0, 1, null);
+    e.drainFiredNotes();
+    e.finish(8, vi.fn(), 'thin');
+    for (let b = 1; b < 4; b++) p.fireStep(b, b, 1, null);      // before the boundary: fill still plays
+    expect(e.drainFiredNotes().some((f) => f.origin === 'fill')).toBe(true);
+    for (let b = 4; b < 12; b++) p.fireStep(b, b, 1, null);     // the ending: no fill
+    const during = e.drainFiredNotes();
+    expect(during.some((f) => f.origin === 'fill')).toBe(false);
+    expect(during.some((f) => f.origin === 'placed')).toBe(true);  // the player's notes carry on
+    // The ramp starts one pass before the end, not at the start.
+    const ramps = p.endGain.gain.linearRampToValueAtTime.mock.calls;
+    expect(ramps).toHaveLength(1);
+    expect(ramps[0]).toEqual([0, 4 + 8]);
+    expect(p.endGain.gain.setValueAtTime.mock.calls.some((c) => c[0] === 1 && c[1] === 4 + 4)).toBe(true);
+  });
+
+  it('final chord: the texture thins, the chord lands on the last pass, and nothing else plays after it', () => {
+    const { e, p } = endEngine();
+    const finished = vi.fn();
+    e.finish(4, finished, 'chord');                // one pass of thinning, then a pass of chord
+    for (let b = 0; b < 4; b++) p.fireStep(b, b, 1, null);
+    e.drainFiredNotes();
+    p.fireStep(4, 4, 1, null);                     // the chord
+    const fired = e.drainFiredNotes();
+    expect(fired.some((f) => f.colour === 'band:final' && f.midis && f.midis.length === 4)).toBe(true);
+    expect(fired.some((f) => f.origin === 'placed')).toBe(false);
+    for (let b = 5; b < 8; b++) p.fireStep(b, b, 1, null);
+    expect(e.drainFiredNotes()).toEqual([]);       // the chord rings alone
+    expect(finished).not.toHaveBeenCalled();
+    p.fireStep(8, 8, 1, null);
+    expect(finished).toHaveBeenCalledTimes(1);
+  });
+});

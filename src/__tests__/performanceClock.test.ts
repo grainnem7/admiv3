@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-  clockView, cuesCrossed, cueText, DEFAULT_PERFORMANCE, endingDue, endingLeadSec, formatClock, parseClock,
-  sanitizePerformance, scenesDue,
+  clockView, cuesCrossed, cueText, DEFAULT_PERFORMANCE, describeEnding, endingDue, endingLeadSec, endingPasses, formatClock,
+  parseClock, sanitizePerformance, scenesDue,
 } from '../songs/performance/clock';
 import { DEFAULT_LOOP_COLOUR_OPTIONS, initialLoopColourState, stepLoopColours } from '../songs/performance/loopColours';
 
@@ -24,15 +24,25 @@ describe('the performance clock', () => {
     expect(cueText(30)).toBe('30 seconds left');
   });
 
-  it('an automatic fade begins its passes before the end; a stop at the end; a cue never', () => {
+  it('an automatic ending begins its passes before the end; a stop at the end; "when I press" never', () => {
     const passSec = 8 * 60 / 90; // 8 beats at 90 BPM
-    const fade = { ...DEFAULT_PERFORMANCE, ending: 'fade' as const, fadePasses: 2 };
+    const fade = { ...DEFAULT_PERFORMANCE, ending: 'auto' as const, style: 'fade' as const, fadePasses: 2 };
     expect(endingLeadSec(fade, passSec)).toBeCloseTo(2 * passSec, 9);
     expect(endingDue(fade, 2 * passSec + 1, passSec)).toBe(false);
     expect(endingDue(fade, 2 * passSec - 0.1, passSec)).toBe(true);
-    expect(endingDue({ ...fade, ending: 'stop' }, 0.5, passSec)).toBe(false);
-    expect(endingDue({ ...fade, ending: 'stop' }, 0, passSec)).toBe(true);
+    expect(endingDue({ ...fade, style: 'stop' }, 0.5, passSec)).toBe(false);
+    expect(endingDue({ ...fade, style: 'stop' }, 0, passSec)).toBe(true);
+    // The chord rings for one more pass, so it starts one pass earlier still.
+    expect(endingLeadSec({ ...fade, style: 'chord' }, passSec)).toBeCloseTo(3 * passSec, 9);
     expect(endingDue({ ...fade, ending: 'cue' }, -100, passSec)).toBe(false);
+  });
+
+  it('each ending has a length and a name', () => {
+    expect(endingPasses({ style: 'stop', fadePasses: 4 })).toBe(0);
+    expect(endingPasses({ style: 'slow', fadePasses: 2 })).toBe(2);
+    expect(endingPasses({ style: 'chord', fadePasses: 2 })).toBe(3);
+    expect(describeEnding({ style: 'thin', fadePasses: 1 })).toBe('thin out over 1 pass');
+    expect(describeEnding({ style: 'chord', fadePasses: 2 })).toBe('thin over 2 passes, then a final chord');
   });
 
   it('scheduled scenes come due in time order, each once', () => {
@@ -50,10 +60,13 @@ describe('the performance clock', () => {
     expect(parseClock('x')).toBeNull();
   });
 
-  it('stored settings are made safe', () => {
-    expect(sanitizePerformance({ lengthSec: 5, ending: 'explode', fadePasses: 3, startOn: 'manual' }))
-      .toEqual({ lengthSec: 30, ending: 'cue', fadePasses: 2, startOn: 'manual' });
+  it('stored settings are made safe, and the old endings become a time and a style', () => {
+    expect(sanitizePerformance({ lengthSec: 5, ending: 'explode', style: 'bang', fadePasses: 3, startOn: 'manual' }))
+      .toEqual({ lengthSec: 30, ending: 'cue', style: 'fade', fadePasses: 2, startOn: 'manual' });
     expect(sanitizePerformance(undefined)).toEqual(DEFAULT_PERFORMANCE);
+    expect(sanitizePerformance({ ending: 'fade' })).toMatchObject({ ending: 'auto', style: 'fade' });
+    expect(sanitizePerformance({ ending: 'stop' })).toMatchObject({ ending: 'auto', style: 'stop' });
+    expect(sanitizePerformance({ ending: 'cue', style: 'chord' })).toMatchObject({ ending: 'cue', style: 'chord' });
   });
 });
 

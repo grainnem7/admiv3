@@ -33,6 +33,7 @@ import {
   BAND_GAIN, bandEventsAtStep, bandParts, defaultHarmonyAt, type BandLevel, type BandPart, type Harmony,
 } from './band/band';
 import { BoardMidiSender, type BoardMidiOptions } from '../midi/boardMidi';
+import type { EndingStyle } from './performance/clock';
 
 /** A note the engine actually scheduled (drives note pops / "Now:" — never inferred from the playhead). */
 export interface FiredNote {
@@ -246,8 +247,14 @@ export class BoardSequencerEngine {
   // The ending: everything fades over `beats` from the pass boundary after `finish()` is
   // called, then `onFinished` fires so the screen can stop. 0 beats = stop at the boundary.
   private endGain: GainNode | null = null;
-  private finishing: { beats: number; startBeat: number | null } | null = null;
+  private finishing: {
+    beats: number; style: EndingStyle; startBeat: number | null;
+    /** 'slow': the tempo the ritardando started from. 'chord': the beat the final chord lands on. */
+    startBpm?: number; chordAt?: number;
+  } | null = null;
   private onFinished: (() => void) | null = null;
+  /** 'thin' and 'chord': the band and the fill are out for the rest of the piece. */
+  private thinning = false;
   // Pattern chaining: captured page snapshots (the selected page plays live from
   // `active`; other pages play from their stored snapshot here).
   private pages: ActiveCell[][] = [];
@@ -761,21 +768,45 @@ export class BoardSequencerEngine {
    * the boundary), then `onFinished` is called. Visuals and the log carry on through the
    * fade — the lights go down with the sound.
    */
-  finish(beats: number, onFinished: () => void): void {
-    this.finishing = { beats: Math.max(0, Math.round(beats)), startBeat: null };
+  finish(beats: number, onFinished: () => void, style: EndingStyle = beats === 0 ? 'stop' : 'fade'): void {
+    const cycle = Math.max(1, this.cfg.cols * Math.max(1, this.cfg.numPages));
+    const n = style === 'stop' ? 0 : Math.max(cycle, Math.round(beats));
+    // The chord rings for one more pass after the texture has thinned.
+    this.finishing = { beats: style === 'chord' ? n + cycle : n, style, startBeat: null };
     this.onFinished = onFinished;
   }
 
   /** Change of mind: the ending is cancelled and the sound comes back. */
   cancelFinish(): void {
+    const f = this.finishing;
     this.finishing = null;
     this.onFinished = null;
+    this.thinning = false;
+    if (f?.style === 'slow' && f.startBpm !== undefined) this.setBpm(f.startBpm);
     const g = this.endGain?.gain;
     if (g) {
       const t = Tone.immediate();
       g.cancelScheduledValues(t);
       g.setTargetAtTime(1, t, MUTE_GLIDE_SEC);
     }
+  }
+
+  /** The final chord: the key note's chord on the band's pad and bass, and a crash. */
+  private playFinalChord(time: number, durSec: number): void {
+    if (!this.bandVoices) this.buildBandVoices();
+    const semis = this.cfg.scaleSemitones;
+    const tones = [0, 2, 4].map((o) => degreeMidi(o, this.cfg.scaleRootMidi, semis));
+    const oct = this.cfg.octaveShift * 12;
+    const midis = tones.map((t) => { let n = t; while (n >= 69) n -= 12; while (n < 57) n += 12; return n + oct; });
+    const root = (() => { let n = tones[0]; while (n >= 48) n -= 12; while (n < 36) n += 12; return n + oct; })();
+    this.bandVoices?.gain.gain.setTargetAtTime(1, time, 0.01);
+    for (const m of midis) this.bandVoices?.pad.play(m, 0.9, durSec, time);
+    this.bandVoices?.bass.play(root, 0.9, durSec, time);
+    this.drumKit?.play('crash', 0.9, time);
+    this.recordFired({
+      row: -1, col: -1, colour: 'band:final', role: 'chord', audioTime: time, durSec, source: 'live', origin: 'band',
+      midis: [...midis, root], velocity: 0.9,
+    });
   }
 
   isFinishing(): boolean {
@@ -1205,23 +1236,65 @@ export class BoardSequencerEngine {
   private fireStep(beat: number, cellTime: number, secPerBeat: number, chord: BoardChord | null): void {
     // The ending, aligned to the pass like everything else.
     if (this.finishing) {
+      const f = this.finishing;
       const cycle = Math.max(1, this.cfg.cols * Math.max(1, this.cfg.numPages));
       const atBoundary = ((beat % cycle) + cycle) % cycle === 0;
-      if (this.finishing.startBeat === null && atBoundary) {
-        this.finishing.startBeat = beat;
-        if (this.finishing.beats > 0 && this.endGain) {
-          const g = this.endGain.gain;
-          g.cancelScheduledValues(cellTime);
-          g.setValueAtTime(1, cellTime);
-          g.linearRampToValueAtTime(0, cellTime + this.finishing.beats * secPerBeat);
+      if (f.startBeat === null && atBoundary) {
+        f.startBeat = beat;
+        const g = this.endGain?.gain;
+        const t0 = cellTime;
+        if (f.style === 'fade' && g) {
+          g.cancelScheduledValues(t0);
+          g.setValueAtTime(1, t0);
+          g.linearRampToValueAtTime(0, t0 + f.beats * secPerBeat);
+        } else if (f.style === 'slow') {
+          f.startBpm = this.cfg.bpm;
+        } else if (f.style === 'thin') {
+          // The band and the fill leave now; the player's own notes carry on, and fade
+          // over the last pass.
+          this.thinning = true;
+          if (g) {
+            g.cancelScheduledValues(t0);
+            g.setValueAtTime(1, t0);
+            g.setValueAtTime(1, t0 + Math.max(0, f.beats - cycle) * secPerBeat);
+            g.linearRampToValueAtTime(0, t0 + f.beats * secPerBeat);
+          }
+        } else if (f.style === 'chord') {
+          this.thinning = true;
+          f.chordAt = beat + f.beats - cycle;
+          if (g) {
+            g.cancelScheduledValues(t0);
+            g.setValueAtTime(1, t0);
+            g.linearRampToValueAtTime(0.35, t0 + (f.beats - cycle) * secPerBeat);
+          }
         }
       }
-      if (this.finishing.startBeat !== null && beat >= this.finishing.startBeat + this.finishing.beats) {
-        const done = this.onFinished;
-        this.finishing = null;
-        this.onFinished = null;
-        done?.();
-        return;
+      if (f.startBeat !== null) {
+        if (beat >= f.startBeat + f.beats) {
+          const done = this.onFinished;
+          this.finishing = null;
+          this.onFinished = null;
+          this.thinning = false;
+          done?.();
+          return;
+        }
+        if (f.style === 'slow' && f.startBpm !== undefined) {
+          // A ritardando: down to a little over half speed by the end.
+          const k = Math.min(1, (beat - f.startBeat) / Math.max(1, f.beats));
+          this.setBpm(f.startBpm * (1 - 0.45 * k));
+        }
+        if (f.style === 'chord' && f.chordAt !== undefined) {
+          if (beat === f.chordAt) {
+            const g = this.endGain?.gain;
+            if (g) {
+              g.cancelScheduledValues(cellTime);
+              g.setValueAtTime(0.35, cellTime);
+              g.linearRampToValueAtTime(1, cellTime + 0.03);
+            }
+            this.playFinalChord(cellTime, cycle * secPerBeat * 1.5);
+          }
+          if (beat >= f.chordAt) return; // only the chord rings now
+        }
       }
     }
     // A launch lands on the pass boundary — the first beat of the whole cycle.
@@ -1383,7 +1456,7 @@ export class BoardSequencerEngine {
     } else if (this.bandFromLap !== null && lap > this.bandLastCounterLap) {
       this.bandFromLap = null; // the pass the last counter left in has finished
     }
-    const playing = this.band !== 'off' && this.bandFromLap !== null && lap >= this.bandFromLap;
+    const playing = this.band !== 'off' && !this.thinning && this.bandFromLap !== null && lap >= this.bandFromLap;
     this.bandPlaying = playing;
     this.bandPartsNow = playing ? bandParts(this.band, roles) : [];
     if (!playing || !this.bandVoices) return;
@@ -1476,7 +1549,7 @@ export class BoardSequencerEngine {
   private fireFill(
     beat: number, cellTime: number, secPerBeat: number, chord: BoardChord | null, cells: readonly ActiveCell[],
   ): void {
-    if (this.fillAmount <= 0) return;
+    if (this.fillAmount <= 0 || this.thinning) return;
     if (!this.fillKept) {
       const key = JSON.stringify([
         cells.map((c) => `${c.row},${c.col},${c.colour}`).sort(), this.fillAmount, this.fillSeed, this.evolveScene,

@@ -94,7 +94,8 @@ import {
   LAUNCH_SLOTS, loopLabel, nextSceneIndex, sceneFromNow, slotState, toggleSlot, type SceneSettings,
 } from '../../songs/performance/launcher';
 import {
-  clockView, cuesCrossed, cueText, endingDue, formatClock, parseClock, scenesDue, type ClockView, type EndingMode,
+  clockView, cuesCrossed, cueText, describeEnding, endingDue, endingPasses, formatClock, parseClock, scenesDue,
+  type ClockView, type EndingMode, type EndingStyle,
 } from '../../songs/performance/clock';
 import { DEFAULT_LOOP_COLOUR_OPTIONS, initialLoopColourState, stepLoopColours } from '../../songs/performance/loopColours';
 import { SessionLog, sessionFileName, type LogActor } from '../../songs/sessionLog';
@@ -2105,17 +2106,19 @@ export default function BoardSequencerScreen() {
     const c = configRef.current;
     if (!engine || !runningRef.current || endingRef.current) return;
     const cycle = c.cols * Math.max(1, c.numPages);
-    const beats = c.performance.ending === 'stop' ? 0 : c.performance.fadePasses * cycle;
+    const style = c.performance.style;
+    const beats = style === 'stop' ? 0 : c.performance.fadePasses * cycle;
     endingRef.current = true;
     setEnding(true);
     engine.finish(beats, () => {
       sessionLogRef.current.action('laptop', 'piece ended');
       stop();
       announce('The piece has ended.');
-    });
-    setBoardNotice(beats > 0 ? 'Ending…' : 'Ending at the end of this pass');
-    sessionLogRef.current.action(logActorRef.current, beats > 0 ? `end piece: fade over ${c.performance.fadePasses} passes` : 'end piece: stop at the end of the pass');
-    announce(beats > 0 ? `Ending: fading over ${c.performance.fadePasses} ${c.performance.fadePasses === 1 ? 'pass' : 'passes'}.` : 'Ending at the end of this pass.');
+    }, style);
+    const what = describeEnding(c.performance);
+    setBoardNotice(style === 'stop' ? 'Ending at the end of this pass' : `Ending: ${what}`);
+    sessionLogRef.current.action(logActorRef.current, `end piece: ${what}`);
+    announce(`Ending: ${what}.`);
   };
   const cancelEnding = (): void => {
     engineRef.current?.cancelFinish();
@@ -2951,24 +2954,43 @@ export default function BoardSequencerScreen() {
             options={[{ value: 'play', label: 'With Play' }, { value: 'manual', label: 'When I press Start clock' }]}
           />
         </div>
-        <SegmentedControl<EndingMode>
+        <span style={{ fontWeight: 600, fontSize: 13 }}>How it ends</span>
+        <SegmentedControl<EndingStyle>
           label="How it ends"
-          value={config.performance.ending}
-          onChange={(v) => update({ performance: { ...config.performance, ending: v } })}
+          value={config.performance.style}
+          onChange={(v) => update({ performance: { ...config.performance, style: v } })}
           options={[
-            { value: 'cue', label: 'End when I press it' },
-            { value: 'fade', label: 'Fade out at the time' },
+            { value: 'fade', label: 'Fade out' },
             { value: 'stop', label: 'Stop at the end of the pass' },
+            { value: 'slow', label: 'Slow down' },
+            { value: 'thin', label: 'Thin out' },
+            { value: 'chord', label: 'Final chord' },
           ]}
         />
-        {config.performance.ending !== 'stop' && (
+        <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
+          {config.performance.style === 'fade' ? 'Everything fades together.'
+            : config.performance.style === 'stop' ? 'A tidy stop on the one, at the end of the pass the time falls in.'
+              : config.performance.style === 'slow' ? 'A ritardando: the tempo eases down to a little over half, then a stop on the one.'
+                : config.performance.style === 'thin' ? 'The band and the fill leave first, so your own notes end the piece, fading over the last pass.'
+                  : 'The texture thins, then on the last beat a held chord in the key and a crash ring out for one more pass.'}
+        </span>
+        {config.performance.style !== 'stop' && (
           <SegmentedControl<number>
-            label="The ending fades over"
+            label="The ending takes"
             value={config.performance.fadePasses}
             onChange={(v) => update({ performance: { ...config.performance, fadePasses: v } })}
             options={[{ value: 1, label: '1 pass' }, { value: 2, label: '2 passes' }, { value: 4, label: '4 passes' }]}
           />
         )}
+        <SegmentedControl<EndingMode>
+          label="When it ends"
+          value={config.performance.ending}
+          onChange={(v) => update({ performance: { ...config.performance, ending: v } })}
+          options={[
+            { value: 'cue', label: 'When I press End' },
+            { value: 'auto', label: `At the time (it begins ${endingPasses(config.performance)} ${endingPasses(config.performance) === 1 ? 'pass' : 'passes'} early)` },
+          ]}
+        />
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
           {running && clock?.phase === 'idle' && (
             <Button tone="secondary" onClick={startClock}>⏱ Start clock</Button>
@@ -2978,7 +3000,7 @@ export default function BoardSequencerScreen() {
           )}
           {!ending ? (
             <Button tone="primary" onClick={endPiece} reason={running ? null : 'Press Play first.'}>
-              {config.performance.ending === 'stop' ? '⏹ End now (at the end of the pass)' : `⏹ End now (fade over ${config.performance.fadePasses} ${config.performance.fadePasses === 1 ? 'pass' : 'passes'})`}
+              {`⏹ End now (${describeEnding(config.performance)})`}
             </Button>
           ) : (
             <Button tone="secondary" onClick={cancelEnding}>Cancel the ending</Button>
