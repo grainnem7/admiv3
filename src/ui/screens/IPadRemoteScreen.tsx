@@ -37,7 +37,7 @@ const SEND_EVERY_MS = 40;
  * a tap that is thrown away is far worse than a palm that is not.
  */
 const PALM_PX = 160;
-const isPalm = (e: React.PointerEvent<Element>): boolean => isPalm(e) && e.height > PALM_PX;
+const isPalm = (e: React.PointerEvent<Element>): boolean => e.pointerType === 'touch' && e.width > PALM_PX && e.height > PALM_PX;
 /** How long the "touch seen" mark stays in the status row. */
 const TOUCH_MARK_MS = 700;
 /** Stop all takes two taps within this long: one brush must not end the piece. */
