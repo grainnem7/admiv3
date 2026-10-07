@@ -17,9 +17,15 @@ export const REMOTE_PATH = '/admi-remote';
 export const REMOTE_INFO_PATH = '/admi-remote-info';
 
 export type RemoteControlName = 'tempo' | 'dynamics' | 'fill' | 'evolve';
-export type RemoteTriggerName = 'newIdea' | 'newSound' | 'keep' | 'mute';
+export type RemoteTriggerName = 'newIdea' | 'newSound' | 'keep' | 'mute' | 'stopAll';
 export const REMOTE_CONTROLS: RemoteControlName[] = ['tempo', 'dynamics', 'fill', 'evolve'];
-export const REMOTE_TRIGGERS: RemoteTriggerName[] = ['newIdea', 'newSound', 'keep', 'mute'];
+export const REMOTE_TRIGGERS: RemoteTriggerName[] = ['newIdea', 'newSound', 'keep', 'mute', 'stopAll'];
+
+/** A launchable loop as the iPad shows it (the same words as performance/launcher). */
+export type RemoteLoopState = 'empty' | 'stopped' | 'playing' | 'starting' | 'stopping';
+export const REMOTE_LOOP_STATES: RemoteLoopState[] = ['empty', 'stopped', 'playing', 'starting', 'stopping'];
+export interface RemoteLoop { name: string; state: RemoteLoopState }
+export interface RemoteScene { name: string; active: boolean }
 
 /**
  * How far along a strip this player can comfortably reach, as fractions of its length:
@@ -45,6 +51,9 @@ export interface RemoteState {
   reach?: Record<RemoteControlName, Reach>;
   /** True while the laptop is learning the player's reach: strips report, not control. */
   learning?: boolean;
+  /** The launchable loops and the scenes, for the iPad's Loops page. */
+  loops?: RemoteLoop[];
+  scenes?: RemoteScene[];
 }
 
 export type RemoteMessage =
@@ -52,11 +61,33 @@ export type RemoteMessage =
   | { type: 'trigger'; name: RemoteTriggerName }
   /** While learning reach: where the finger is on a strip, before any mapping. */
   | { type: 'reach'; name: RemoteControlName; fraction: number }
+  /** Start or stop a launchable loop (it takes effect at the next pass). */
+  | { type: 'loop'; index: number }
+  /** Recall a scene, or the next one in the set list. */
+  | { type: 'scene'; index: number | 'next' }
   | { type: 'state'; state: RemoteState }
   /** From the relay: how many of each side are in this room. */
   | { type: 'peers'; hosts: number; remotes: number };
 
 const isUnit = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 1;
+const isIndex = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0 && v < 64;
+
+function sanitizeLoops(v: unknown[]): RemoteLoop[] {
+  return v.slice(0, 64).map((x) => {
+    const o = (typeof x === 'object' && x !== null ? x : {}) as Record<string, unknown>;
+    return {
+      name: typeof o.name === 'string' ? o.name.slice(0, 40) : '',
+      state: REMOTE_LOOP_STATES.includes(o.state as RemoteLoopState) ? (o.state as RemoteLoopState) : 'empty',
+    };
+  });
+}
+
+function sanitizeScenesList(v: unknown[]): RemoteScene[] {
+  return v.slice(0, 64).map((x) => {
+    const o = (typeof x === 'object' && x !== null ? x : {}) as Record<string, unknown>;
+    return { name: typeof o.name === 'string' ? o.name.slice(0, 40) : '', active: o.active === true };
+  });
+}
 
 /** Parse and check a message; anything malformed is ignored, never half-applied. */
 export function parseRemoteMessage(raw: unknown): RemoteMessage | null {
@@ -77,6 +108,8 @@ export function parseRemoteMessage(raw: unknown): RemoteMessage | null {
   if (o.type === 'reach' && REMOTE_CONTROLS.includes(o.name as RemoteControlName) && isUnit(o.fraction)) {
     return { type: 'reach', name: o.name as RemoteControlName, fraction: o.fraction };
   }
+  if (o.type === 'loop' && isIndex(o.index)) return { type: 'loop', index: o.index };
+  if (o.type === 'scene' && (o.index === 'next' || isIndex(o.index))) return { type: 'scene', index: o.index as number | 'next' };
   if (o.type === 'peers' && typeof o.hosts === 'number' && typeof o.remotes === 'number') {
     return { type: 'peers', hosts: o.hosts, remotes: o.remotes };
   }
@@ -96,6 +129,8 @@ export function parseRemoteMessage(raw: unknown): RemoteMessage | null {
         playing: s.playing === true,
         ...(reach ? { reach } : {}),
         ...(s.learning === true ? { learning: true } : {}),
+        ...(Array.isArray(s.loops) ? { loops: sanitizeLoops(s.loops) } : {}),
+        ...(Array.isArray(s.scenes) ? { scenes: sanitizeScenesList(s.scenes) } : {}),
       },
     };
   }

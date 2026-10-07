@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import {
   FULL_REACH, mapReach, REMOTE_CONTROLS, stripValue, STRIP_STEP, TAP_REPEAT_MS, unmapReach,
-  type RemoteControlName, type RemoteMessage, type RemoteState, type RemoteTriggerName,
+  type RemoteControlName, type RemoteLoopState, type RemoteMessage, type RemoteState, type RemoteTriggerName,
 } from '../../remote/protocol';
 import { useRemoteLink } from '../../remote/useRemoteLink';
 
@@ -20,7 +20,7 @@ const STRIP_NAMES: Record<RemoteControlName, string> = {
 const STRIP_COLOURS: Record<RemoteControlName, string> = {
   tempo: '#4fc3f7', dynamics: '#ffb74d', fill: '#81c784', evolve: '#ce93d8',
 };
-const PADS: { name: RemoteTriggerName; label: (s: RemoteState | null) => string; icon: string }[] = [
+const PADS: { name: Exclude<RemoteTriggerName, 'stopAll'>; label: (s: RemoteState | null) => string; icon: string }[] = [
   { name: 'newIdea', icon: '✨', label: () => 'New idea' },
   { name: 'newSound', icon: '🎨', label: () => 'New sound' },
   { name: 'keep', icon: '📌', label: (s) => (s?.kept ? 'Kept' : 'Keep') },
@@ -43,6 +43,16 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
   /** The finger's latest value per strip, read when it lifts (state may lag a move behind). */
   const latest = useRef(new Map<RemoteControlName, number>());
   const [flash, setFlash] = useState<RemoteTriggerName | null>(null);
+  // Two pages: the strips and pads, and the loops and scenes prepared for the performance.
+  const [tab, setTab] = useState<'play' | 'loops'>('play');
+  const lastPad = useRef(new Map<string, number>());
+  /** A loop or scene pad: acts on touch, repeat taps ignored for a moment. */
+  const padTap = (key: string, msg: RemoteMessage): void => {
+    const now = performance.now();
+    if (now - (lastPad.current.get(key) ?? -Infinity) < TAP_REPEAT_MS) return;
+    lastPad.current.set(key, now);
+    link.send(msg);
+  };
 
   const onMessage = useCallback((msg: RemoteMessage) => {
     if (msg.type === 'state') setState(msg.state);
@@ -160,6 +170,98 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
         <span style={{ marginLeft: 'auto', opacity: 0.6, fontSize: 16 }}>{`Code ${code}`}</span>
       </div>
 
+      <div role="tablist" aria-label="Page" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        {(['play', 'loops'] as const).map((p) => (
+          <button
+            key={p}
+            type="button"
+            role="tab"
+            aria-selected={tab === p}
+            onPointerDown={(e) => { e.preventDefault(); setTab(p); }}
+            style={{
+              minHeight: 56, borderRadius: 16, fontSize: 22, fontWeight: 800, color: '#eef1f7',
+              border: `3px solid ${tab === p ? '#ffffff' : '#3a4152'}`, background: tab === p ? '#3f4a63' : '#232836', touchAction: 'none',
+            }}
+          >
+            {p === 'play' ? 'Play' : 'Loops & scenes'}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'loops' && (
+        <div style={{ flex: '1 1 0', display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0, opacity: connected ? 1 : 0.4 }}>
+          <div style={{ flex: '3 1 0', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gridTemplateRows: 'repeat(2, 1fr)', gap: 12, minHeight: 0 }}>
+            {Array.from({ length: 8 }, (_, i) => {
+              const l = state?.loops?.[i] ?? { name: '', state: 'empty' as RemoteLoopState };
+              const on = l.state === 'playing' || l.state === 'starting';
+              const label = l.name || `Loop ${i + 1}`;
+              return (
+                <button
+                  key={`loop-${i}`}
+                  type="button"
+                  aria-pressed={on}
+                  aria-label={`${label}: ${l.state}`}
+                  disabled={l.state === 'empty'}
+                  onPointerDown={(e) => { e.preventDefault(); if (l.state !== 'empty') padTap(`loop${i}`, { type: 'loop', index: i }); }}
+                  style={{
+                    borderRadius: 20, touchAction: 'none', color: '#eef1f7', fontSize: 22, fontWeight: 800,
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4,
+                    border: `4px ${l.state === 'starting' || l.state === 'stopping' ? 'dashed' : 'solid'} ${on ? '#81c784' : l.state === 'stopping' ? '#ffb74d' : '#3a4152'}`,
+                    background: l.state === 'playing' ? '#2e5a37' : l.state === 'starting' ? '#2b4a33' : '#232836',
+                    opacity: l.state === 'empty' ? 0.35 : 1,
+                  }}
+                >
+                  <span>{label}</span>
+                  <span style={{ fontSize: 15, fontWeight: 600, opacity: 0.8 }}>
+                    {l.state === 'empty' ? 'empty' : l.state === 'playing' ? '▶ playing' : l.state === 'starting' ? 'starting…' : l.state === 'stopping' ? 'stopping…' : 'tap to play'}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          <div style={{ flex: '2 1 0', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, minHeight: 0 }}>
+            {Array.from({ length: 4 }, (_, i) => {
+              const sc = state?.scenes?.[i];
+              return (
+                <button
+                  key={`scene-${i}`}
+                  type="button"
+                  aria-pressed={sc?.active === true}
+                  disabled={!sc}
+                  onPointerDown={(e) => { e.preventDefault(); if (sc) padTap(`scene${i}`, { type: 'scene', index: i }); }}
+                  style={{
+                    borderRadius: 20, touchAction: 'none', color: '#eef1f7', fontSize: 20, fontWeight: 800,
+                    border: `4px solid ${sc?.active ? '#ce93d8' : '#3a4152'}`, background: sc?.active ? '#4a2f55' : '#232836',
+                    opacity: sc ? 1 : 0.35,
+                  }}
+                >
+                  {sc ? `Scene ${i + 1}: ${sc.name}` : `Scene ${i + 1}`}
+                </button>
+              );
+            })}
+          </div>
+          <div style={{ height: '18%', minHeight: 90, display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 12 }}>
+            <button
+              type="button"
+              disabled={!state?.scenes || state.scenes.length === 0}
+              onPointerDown={(e) => { e.preventDefault(); padTap('next', { type: 'scene', index: 'next' }); }}
+              style={{ borderRadius: 20, touchAction: 'none', color: '#eef1f7', fontSize: 26, fontWeight: 800, border: '4px solid #ce93d8', background: '#232836', opacity: state?.scenes?.length ? 1 : 0.35 }}
+            >
+              Next scene ▶
+            </button>
+            <button
+              type="button"
+              onPointerDown={(e) => { e.preventDefault(); padTap('stopAll', { type: 'trigger', name: 'stopAll' }); }}
+              style={{ borderRadius: 20, touchAction: 'none', color: '#eef1f7', fontSize: 24, fontWeight: 800, border: '4px solid #ef5350', background: '#4a2323' }}
+            >
+              ■ Stop all
+            </button>
+          </div>
+        </div>
+      )}
+
+      {tab === 'play' && (<>
+
       <div style={{ flex: '1 1 0', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, minHeight: 0, opacity: connected ? 1 : 0.4 }}>
         {REMOTE_CONTROLS.map((name) => {
           const v = valueOf(name);
@@ -197,7 +299,7 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
         })}
       </div>
 
-      <div style={{ height: '24%', minHeight: 110, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, opacity: connected && !learning ? 1 : 0.4 }}>
+      <div style={{ height: '22%', minHeight: 100, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, opacity: connected && !learning ? 1 : 0.4 }}>
         {PADS.map((p) => {
           const on = (p.name === 'keep' && state?.kept) || (p.name === 'mute' && state?.muted);
           return (
@@ -220,6 +322,7 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
           );
         })}
       </div>
+      </>)}
     </div>
   );
 }

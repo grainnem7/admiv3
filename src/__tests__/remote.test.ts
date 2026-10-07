@@ -185,3 +185,29 @@ describe('reach', () => {
     expect(parsed && parsed.type === 'state' ? parsed.state.reach?.tempo : null).toEqual({ low: 0, high: 1 });
   });
 });
+
+// ---- loops and scenes from the iPad ----
+describe('loops and scenes over the link', () => {
+  it('the iPad may launch a loop, recall a scene or the next one, and stop everything', () => {
+    expect(parseRemoteMessage({ type: 'loop', index: 3 })).toEqual({ type: 'loop', index: 3 });
+    expect(parseRemoteMessage({ type: 'loop', index: 2.5 })).toBeNull();
+    expect(parseRemoteMessage({ type: 'scene', index: 'next' })).toEqual({ type: 'scene', index: 'next' });
+    expect(parseRemoteMessage({ type: 'scene', index: 1 })).toEqual({ type: 'scene', index: 1 });
+    expect(parseRemoteMessage({ type: 'scene', index: 'previous' })).toBeNull();
+    expect(parseRemoteMessage({ type: 'trigger', name: 'stopAll' })).toEqual({ type: 'trigger', name: 'stopAll' });
+    expect(allowedFrom('remote', 'loop')).toBe(true);
+    expect(allowedFrom('remote', 'scene')).toBe(true);
+    expect(allowedFrom('host', 'loop')).toBe(false);
+  });
+
+  it('the laptop tells the iPad each loop\'s name and state, and which scene is on', () => {
+    const state = {
+      values: { tempo: 0, dynamics: 0, fill: 0, evolve: 0 }, labels: { tempo: '', dynamics: '', fill: '', evolve: '' },
+      loops: [{ name: 'Bass line', state: 'playing' }, { name: '', state: 'nonsense' }],
+      scenes: [{ name: 'Intro', active: true }, { name: 'Verse', active: false }],
+    };
+    const parsed = parseRemoteMessage({ type: 'state', state });
+    expect(parsed && parsed.type === 'state' ? parsed.state.loops : null).toEqual([{ name: 'Bass line', state: 'playing' }, { name: '', state: 'empty' }]);
+    expect(parsed && parsed.type === 'state' ? parsed.state.scenes : null).toEqual([{ name: 'Intro', active: true }, { name: 'Verse', active: false }]);
+  });
+});

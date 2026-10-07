@@ -228,6 +228,12 @@ export class BoardSequencerEngine {
   private active: ActiveCell[] = [];
   // Layered loops from the loop bank; each plays on top of the live pattern.
   private activeLoops: ActiveCell[][] = [];
+  // Loops launched from the laptop, the iPad or a scene (no counter on a pad). A launch
+  // or a stop takes effect at the next pass, so a tap is never off-beat; `pendingLaunch`
+  // holds what is wanted until then.
+  private launched: ActiveCell[][] = [];
+  private launchedSlots: number[] = [];
+  private pendingLaunch: { slots: number[]; loops: ActiveCell[][] } | null = null;
   // Pattern chaining: captured page snapshots (the selected page plays live from
   // `active`; other pages play from their stored snapshot here).
   private pages: ActiveCell[][] = [];
@@ -715,6 +721,31 @@ export class BoardSequencerEngine {
   }
 
   /**
+   * The loops wanted from the launcher, by slot. While the clock runs they take effect at
+   * the next pass (starting and stopping alike); while stopped, at once, so Play begins
+   * with them.
+   */
+  setLaunchedLoops(slots: number[], loops: ActiveCell[][]): void {
+    if (!this.timer) {
+      this.launched = loops;
+      this.launchedSlots = slots;
+      this.pendingLaunch = null;
+      return;
+    }
+    const same = slots.length === this.launchedSlots.length && slots.every((s, i) => s === this.launchedSlots[i]);
+    this.pendingLaunch = same ? null : { slots, loops };
+  }
+
+  /** The slots the engine is playing now (a pending launch is not yet among them). */
+  getLaunchedSlots(): number[] {
+    return this.launchedSlots;
+  }
+
+  isLaunchPending(): boolean {
+    return this.pendingLaunch !== null;
+  }
+
+  /**
    * Apply the values read from the control counters this frame. Already ranged and
    * debounced by `stepControls`, so this only routes them. A fader wins over its toggle,
    * so the two can never fight over the same parameter, and a control that isn't present
@@ -1088,6 +1119,15 @@ export class BoardSequencerEngine {
    * chord locks melodic pitch.
    */
   private fireStep(beat: number, cellTime: number, secPerBeat: number, chord: BoardChord | null): void {
+    // A launch lands on the pass boundary — the first beat of the whole cycle.
+    if (this.pendingLaunch) {
+      const cycle = Math.max(1, this.cfg.cols * Math.max(1, this.cfg.numPages));
+      if (((beat % cycle) + cycle) % cycle === 0) {
+        this.launched = this.pendingLaunch.loops;
+        this.launchedSlots = this.pendingLaunch.slots;
+        this.pendingLaunch = null;
+      }
+    }
     try {
       this.applyEvolve(beat);
     } catch (err) {
@@ -1112,6 +1152,7 @@ export class BoardSequencerEngine {
     const tagged: { cell: ActiveCell; source: FiredNote['source'] }[] = [
       ...cells.filter(onGrid).map((c) => ({ cell: c, source: liveSource })),
       ...this.activeLoops.flat().filter(onGrid).map((c) => ({ cell: c, source: 'loop' as const })),
+      ...this.launched.flat().filter(onGrid).map((c) => ({ cell: c, source: 'loop' as const })),
     ];
     const playCells = tagged.map((t) => t.cell);
     this.fireBand(beat, cellTime, secPerBeat, chord, playCells);

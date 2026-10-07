@@ -89,12 +89,16 @@ import type { FillSourceStatus } from '../../songs/BoardSequencerEngine';
 import type { BandLevel, BandPart } from '../../songs/band/band';
 import { BoardMidiPanel } from './boardSequencer/components/BoardMidiPanel';
 import { Disclosure } from './boardSequencer/ui/Disclosure';
+import { LoopEditor } from './boardSequencer/components/LoopEditor';
+import {
+  LAUNCH_SLOTS, loopLabel, nextSceneIndex, sceneFromNow, slotState, toggleSlot, type SceneSettings,
+} from '../../songs/performance/launcher';
 import { SessionLog, sessionFileName, type LogActor } from '../../songs/sessionLog';
 import { useRemoteLink } from '../../remote/useRemoteLink';
 import {
   dynamicsFromValue, fullReachMap, makeRemoteCode, reachFromSamples, REMOTE_CONTROLS, REMOTE_INFO_PATH,
   tempoFromValue, valueFromTempo, valueFromVelocity,
-  type RemoteControlName, type RemoteMessage, type RemoteState,
+  type RemoteControlName, type RemoteMessage, type RemoteState, type RemoteTriggerName,
 } from '../../remote/protocol';
 import { rotateCorners } from '../../tracking/boardDetect/orientation';
 import { applyDetectedColours } from './boardSequencer/applyDetectedColours';
@@ -231,8 +235,8 @@ const REMOTE_CODE_KEY = 'admi-remote-code';
 const REMOTE_CONTROL_WORDS: Record<RemoteControlName, string> = {
   tempo: 'Speed', dynamics: 'Dynamics', fill: 'Fill', evolve: 'Evolve',
 };
-const REMOTE_TRIGGER_WORDS: Record<'newIdea' | 'newSound' | 'keep' | 'mute', string> = {
-  newIdea: 'New idea', newSound: 'New sound', keep: 'Keep', mute: 'Mute',
+const REMOTE_TRIGGER_WORDS: Record<RemoteTriggerName, string> = {
+  newIdea: 'New idea', newSound: 'New sound', keep: 'Keep', mute: 'Mute', stopAll: 'Stop all loops',
 };
 /** How long "iPad: Speed 96 BPM" stays on screen. */
 const REMOTE_NOTE_MS = 2500;
@@ -419,6 +423,12 @@ export default function BoardSequencerScreen() {
   // A change that was only heard, shown on the board for a moment (deaf and HoH players).
   const [boardNotice, setBoardNotice] = useState<string | null>(null);
   const bandPlayingRef = useRef(false);
+  // Launched loops (no pad needed): what is wanted, and what the engine has applied so far.
+  const wantedRef = useRef<Set<number>>(new Set());
+  const [wantedSlots, setWantedSlots] = useState<number[]>([]);
+  const [appliedSlots, setAppliedSlots] = useState<number[]>([]);
+  const [editSlot, setEditSlot] = useState<number | null>(null);
+  const [sceneName, setSceneName] = useState('');
   // What each colour sounds like now (Evolve), and the seed before "New sound" (for Back).
   const [evolveLabels, setEvolveLabels] = useState<Map<string, { label: string; scene: number }>>(new Map());
   const evolveSigRef = useRef('');
@@ -479,11 +489,17 @@ export default function BoardSequencerScreen() {
       playing: running,
       reach: config.remoteReach,
       ...(reachLearning ? { learning: true } : {}),
+      loops: Array.from({ length: LAUNCH_SLOTS }, (_, i) => ({
+        name: config.loopNames[i] ?? '',
+        state: slotState(i, (config.loopSlots[i] ?? null) !== null, new Set(wantedSlots), new Set(appliedSlots)),
+      })),
+      scenes: config.scenes.map((s, i) => ({ name: s.name, active: config.currentScene === i })),
     };
     remoteLink.send({ type: 'state', state });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [remoteEnabled, remoteLink.others, config.bpm, config.velocity, config.fillAmount, config.evolveAmount,
-    config.fillKept, config.evolveHoldLap, muted, running, config.remoteReach, reachLearning]);
+    config.fillKept, config.evolveHoldLap, muted, running, config.remoteReach, reachLearning,
+    config.loopSlots, config.loopNames, config.scenes, config.currentScene, wantedSlots, appliedSlots]);
   const fillSigRef = useRef('');
   const [prevFillSeed, setPrevFillSeed] = useState<number | null>(null);
 
@@ -1096,6 +1112,8 @@ export default function BoardSequencerScreen() {
         const marks = new Map<string, { row: number; col: number; colour: ColourId }>();
         for (const n of fill) marks.set(`${n.cell.row},${n.cell.col}`, { row: n.cell.row, col: n.cell.col, colour: n.colour });
         setFillStatus(engine.getFillStatus());
+        const applied = engine.getLaunchedSlots();
+        setAppliedSlots((prev) => (prev.length === applied.length && prev.every((s, i) => s === applied[i]) ? prev : applied));
         const bs = engine.getBandStatus();
         setBandStatus((prev) => (prev.level === bs.level && prev.playing === bs.playing && prev.parts.join() === bs.parts.join() ? prev : bs));
         if (bandPlayingRef.current !== bs.playing) {
@@ -1410,6 +1428,10 @@ export default function BoardSequencerScreen() {
       zoneSlotCount(cfg.loopZone, cfg.rows, cfg.cols), cfg.loopSlots, loopBankRef.current,
     );
     engine.setActiveLoops([]);
+    {
+      const slots = [...wantedRef.current].filter((s) => (cfg.loopSlots[s] ?? null) !== null).sort((a, b) => a - b);
+      engine.setLaunchedLoops(slots, slots.map((s) => (cfg.loopSlots[s] ?? []) as ActiveCell[]));
+    }
     // Stop may have been pressed while the samples were loading; the engine that is no
     // longer wanted is disposed rather than left playing with nothing able to stop it.
     if (startingRef.current !== generation) {
@@ -1932,6 +1954,91 @@ export default function BoardSequencerScreen() {
     announce('Kept: the fill and the sounds stay as they are.');
   };
 
+  // ---- performing: loops launched without a pad, and scenes ----
+
+  /** Tell the engine which loops are wanted; it brings them in at the next pass. */
+  const pushLaunch = (): void => {
+    const cfg = configRef.current;
+    const slots = [...wantedRef.current].filter((s) => (cfg.loopSlots[s] ?? null) !== null).sort((a, b) => a - b);
+    setWantedSlots(slots);
+    engineRef.current?.setLaunchedLoops(slots, slots.map((s) => (cfg.loopSlots[s] ?? []) as ActiveCell[]));
+  };
+  const toggleLoop = (slot: number): void => {
+    const has = (configRef.current.loopSlots[slot] ?? null) !== null;
+    if (!has) return;
+    wantedRef.current = toggleSlot(wantedRef.current, slot, has);
+    pushLaunch();
+    const on = wantedRef.current.has(slot);
+    sessionLogRef.current.action(logActorRef.current, `${on ? 'launch' : 'stop'} loop ${slot + 1}`);
+    announce(`${loopLabel(configRef.current.loopNames, slot)} ${on ? 'starts' : 'stops'} on the next pass.`);
+  };
+  const stopAllLoops = (): void => {
+    if (wantedRef.current.size === 0) return;
+    wantedRef.current = new Set();
+    pushLaunch();
+    sessionLogRef.current.action(logActorRef.current, 'stop all loops');
+    announce('All loops stop on the next pass.');
+  };
+  /** The board as it is now (settled while playing, seen otherwise), into a slot. */
+  const saveBoardToSlot = (slot: number): void => {
+    const cfg = configRef.current;
+    const sequenced = new Set(cfg.channels.filter((c) => isSequencedRole(c.role)).map((c) => c.id));
+    const source = runningRef.current ? activeCellsRef.current : active;
+    const cells = source.filter((c) => sequenced.has(c.colour))
+      .map((c) => (c.conditional ? { ...storedCell(c), conditional: true as const } : storedCell(c)));
+    if (cells.length === 0) return;
+    setConfig((prev) => {
+      const loopSlots = prev.loopSlots.slice();
+      while (loopSlots.length <= slot) loopSlots.push(null);
+      loopSlots[slot] = cells;
+      return { ...prev, loopSlots };
+    });
+    // The pads' bank holds its own copy of the slots it covers.
+    if (slot < loopBankRef.current.saved.length) {
+      loopBankRef.current = { ...loopBankRef.current, saved: loopBankRef.current.saved.map((s, i) => (i === slot ? cells.map((c) => ({ ...c })) : s)) };
+    }
+    sessionLogRef.current.action(logActorRef.current, `save board to loop ${slot + 1}`);
+    announce(`Saved ${cells.length} notes to ${loopLabel(cfg.loopNames, slot)}.`);
+  };
+  const renameLoop = (slot: number, name: string): void => {
+    update({ loopNames: configRef.current.loopNames.map((n, i) => (i === slot ? name.slice(0, 24) : n)) });
+  };
+  const sceneSettingsNow = (c: BoardSequencerStored): SceneSettings => ({
+    soundWorld: c.soundWorld, band: c.band, phrases: c.phrases, fillAmount: c.fillAmount, evolveAmount: c.evolveAmount, bpm: c.bpm,
+  });
+  const saveScene = (): void => {
+    const c = configRef.current;
+    const scene = sceneFromNow(sceneName || `Scene ${c.scenes.length + 1}`, wantedRef.current, sceneSettingsNow(c));
+    update({ scenes: [...c.scenes, scene], currentScene: c.scenes.length });
+    setSceneName('');
+    sessionLogRef.current.action(logActorRef.current, `save scene ${scene.name}`);
+    announce(`Scene saved: ${scene.name}.`);
+  };
+  const goScene = (i: number): void => {
+    const c = configRef.current;
+    const scene = c.scenes[i];
+    if (!scene) return;
+    update({ ...scene.settings, currentScene: i });
+    engineRef.current?.setBpm(scene.settings.bpm);
+    wantedRef.current = new Set(scene.loops.filter((s) => (c.loopSlots[s] ?? null) !== null));
+    pushLaunch();
+    setBoardNotice(`Scene: ${scene.name}`);
+    sessionLogRef.current.action(logActorRef.current, `scene ${scene.name}`);
+    announce(`Scene ${scene.name}: ${scene.loops.length} ${scene.loops.length === 1 ? 'loop' : 'loops'}, from the next pass.`);
+  };
+  const nextScene = (): void => {
+    const c = configRef.current;
+    const i = nextSceneIndex(c.currentScene, c.scenes.length);
+    if (i !== null) goScene(i);
+  };
+  const deleteScene = (i: number): void => {
+    const c = configRef.current;
+    update({
+      scenes: c.scenes.filter((_, k) => k !== i),
+      currentScene: c.currentScene === null ? null : c.currentScene === i ? null : c.currentScene > i ? c.currentScene - 1 : c.currentScene,
+    });
+  };
+
   /** Hand the facilitator the session as a file. Nothing leaves the machine otherwise. */
   const saveSession = (ext: 'json' | 'csv'): void => {
     const log = sessionLogRef.current;
@@ -1988,11 +2095,19 @@ export default function BoardSequencerScreen() {
       setRemoteNote({ text: `iPad: ${REMOTE_CONTROL_WORDS[msg.name]} ${remoteLabels(next)[msg.name]}`, at: performance.now() });
     } else if (msg.type === 'reach') {
       reachSamplesRef.current[msg.name].push(msg.fraction);
+    } else if (msg.type === 'loop') {
+      toggleLoop(msg.index);
+      setRemoteNote({ text: `iPad: ${loopLabel(c.loopNames, msg.index)}`, at: performance.now() });
+    } else if (msg.type === 'scene') {
+      if (msg.index === 'next') nextScene();
+      else goScene(msg.index);
+      setRemoteNote({ text: 'iPad: scene', at: performance.now() });
     } else if (msg.type === 'trigger') {
       if (msg.name === 'newIdea') newFillIdea();
       else if (msg.name === 'newSound') newEvolveSound();
       else if (msg.name === 'keep') toggleKeepAll();
-      else toggleMuted();
+      else if (msg.name === 'mute') toggleMuted();
+      else stopAllLoops();
       setRemoteNote({ text: `iPad: ${REMOTE_TRIGGER_WORDS[msg.name]}`, at: performance.now() });
     }
   };
@@ -2573,6 +2688,66 @@ export default function BoardSequencerScreen() {
 
   const loopsTab = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 10 }}>
+      {/* Performing: loops prepared beforehand and launched without a pad, and scenes. */}
+      <div role="group" aria-label="Perform" style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 8, borderRadius: 'var(--bs-radius-md)', border: '1px solid var(--bs-border)' }}>
+        <span style={{ fontWeight: 600 }}>Perform — loops and scenes</span>
+        <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
+          Save the board into a slot, or draw a loop, before the performance. Loops start and
+          stop on the next pass, from here or from the iPad, with nothing on a pad.
+        </span>
+        {Array.from({ length: LAUNCH_SLOTS }, (_, slot) => {
+          const cells = config.loopSlots[slot] ?? null;
+          const st = slotState(slot, cells !== null, new Set(wantedSlots), new Set(appliedSlots));
+          const on = st === 'playing' || st === 'starting';
+          return (
+            <div key={`launch-${slot}`} style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <input
+                type="text"
+                value={config.loopNames[slot] ?? ''}
+                placeholder={`Loop ${slot + 1}`}
+                aria-label={`Name of loop ${slot + 1}`}
+                onChange={(e) => renameLoop(slot, e.target.value)}
+                style={{ width: 110 }}
+              />
+              <span style={{ fontSize: 12, minWidth: 72, color: on ? 'var(--bs-ok)' : 'var(--bs-fg2)' }}>
+                {st === 'empty' ? 'empty' : st === 'playing' ? '▶ playing' : st === 'starting' ? 'starting…' : st === 'stopping' ? 'stopping…' : `${cells?.length ?? 0} notes`}
+              </span>
+              <Button tone={on ? 'primary' : 'secondary'} onClick={() => toggleLoop(slot)} reason={cells === null ? 'Nothing saved here yet.' : null} aria-pressed={on}>
+                {on ? '■ Stop' : '▶ Play'}
+              </Button>
+              <Button tone="quiet" onClick={() => saveBoardToSlot(slot)} reason={(running ? activeCellsRef.current : active).length === 0 ? 'Put counters on the board first.' : null}>
+                Save board here
+              </Button>
+              <Button tone="quiet" onClick={() => setEditSlot(slot)}>Draw</Button>
+              <Button tone="quiet" onClick={() => setClearSlotTarget(slot)} reason={cells === null ? 'Already empty.' : null}>Clear</Button>
+            </div>
+          );
+        })}
+        <div>
+          <Button tone="secondary" onClick={stopAllLoops} reason={wantedSlots.length === 0 ? 'No loops playing.' : null}>■ Stop all loops</Button>
+        </div>
+        <span style={{ fontWeight: 600, marginTop: 4 }}>Scenes</span>
+        <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
+          A scene is the loops playing now plus the sound world, band, phrases, fill, Evolve and tempo. Go to one with a tap; Next scene walks the list in order.
+        </span>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+          <input type="text" value={sceneName} placeholder={`Scene ${config.scenes.length + 1}`} aria-label="Scene name" onChange={(e) => setSceneName(e.target.value)} style={{ width: 140 }} />
+          <Button tone="secondary" onClick={saveScene} reason={config.scenes.length >= 12 ? 'Twelve scenes is the most.' : null}>Save scene from now</Button>
+        </div>
+        {config.scenes.map((sc, i) => (
+          <div key={sc.id} style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <span style={{ fontWeight: 600, minWidth: 90 }}>{`${i + 1}. ${sc.name}`}</span>
+            <span style={{ fontSize: 12, color: 'var(--bs-fg2)', flex: 1 }}>
+              {`${sc.loops.length === 0 ? 'no loops' : sc.loops.map((s) => loopLabel(config.loopNames, s)).join(', ')} · ${sc.settings.soundWorld === 'none' ? 'my picks' : sc.settings.soundWorld} · band ${sc.settings.band} · ${sc.settings.bpm} BPM`}
+            </span>
+            <Button tone={config.currentScene === i ? 'primary' : 'secondary'} onClick={() => goScene(i)} aria-pressed={config.currentScene === i}>Go</Button>
+            <Button tone="quiet" onClick={() => deleteScene(i)}>Delete</Button>
+          </div>
+        ))}
+        <div>
+          <Button tone="primary" onClick={nextScene} reason={config.scenes.length === 0 ? 'Save a scene first.' : null}>Next scene ▶</Button>
+        </div>
+      </div>
       <Switch
         label="Where the counter sits matters"
         checked={config.boxDetailEnabled}
@@ -3303,6 +3478,30 @@ export default function BoardSequencerScreen() {
           )}
         />
 
+        {editSlot !== null && (
+          <Modal label={`Draw ${loopLabel(config.loopNames, editSlot)}`} onClose={() => setEditSlot(null)}>
+            <LoopEditor
+              rows={config.rows}
+              cols={config.cols}
+              channels={config.channels.filter((c) => isSequencedRole(c.role))}
+              cells={config.loopSlots[editSlot] ?? []}
+              palette={palette}
+              onChange={(cells) => {
+                const slot = editSlot;
+                setConfig((prev) => {
+                  const loopSlots = prev.loopSlots.slice();
+                  while (loopSlots.length <= slot) loopSlots.push(null);
+                  loopSlots[slot] = cells.length > 0 ? cells : null;
+                  return { ...prev, loopSlots };
+                });
+                if (slot < loopBankRef.current.saved.length) {
+                  loopBankRef.current = { ...loopBankRef.current, saved: loopBankRef.current.saved.map((s, i) => (i === slot ? (cells.length > 0 ? cells.map((c) => ({ ...c })) : null) : s)) };
+                }
+              }}
+            />
+            <div style={{ marginTop: 10 }}><Button tone="primary" onClick={() => setEditSlot(null)}>Done</Button></div>
+          </Modal>
+        )}
         {clearSlotTarget !== null && (
           <ConfirmDialog
             title={`Clear loop ${clearSlotTarget + 1}?`}

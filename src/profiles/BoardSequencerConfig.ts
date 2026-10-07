@@ -11,6 +11,7 @@ import type { FillNote } from '../songs/generative/rulesFill';
 import type { BandLevel } from '../songs/band/band';
 import type { MidiSends } from '../midi/boardMidi';
 import { fullReachMap, sanitizeReachMap, type Reach, type RemoteControlName } from '../remote/protocol';
+import { sanitizeLoopNames, sanitizeScenes, type Scene } from '../songs/performance/launcher';
 import { isSoundWorldChoice, type SoundWorldChoice } from '../audio/worlds/soundWorlds';
 import { quarterTurns, type QuarterTurns } from '../tracking/frameOrientation';
 import type { TrackedColor } from '../tracking/ColorTracker';
@@ -129,6 +130,12 @@ export interface BoardSequencerStored {
   band: BandLevel;
   /** How far along each iPad strip this player can comfortably reach (see remote/protocol). */
   remoteReach: Record<RemoteControlName, Reach>;
+  /** Names for the launchable loop slots ('' = "Loop n"). */
+  loopNames: string[];
+  /** Scenes: prepared sets of loops and settings, recalled with one tap (see performance/launcher). */
+  scenes: Scene[];
+  /** The scene recalled last, for "Next scene"; null = none yet. */
+  currentScene: number | null;
   /** Global transpose in octaves (applied to all melodic + bass notes). */
   octaveShift: number;
   /** Board output volume (0..1). */
@@ -348,6 +355,9 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   evolveHoldLap: null,
   band: 'gentle',
   remoteReach: fullReachMap(),
+  loopNames: sanitizeLoopNames([]),
+  scenes: [],
+  currentScene: null,
   loopStepsRed: 0,
   loopStepsBlack: 0,
   loopStepsBlue: 0,
@@ -670,6 +680,11 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     evolveHoldLap: isNum(o.evolveHoldLap) && o.evolveHoldLap >= 0 ? Math.round(o.evolveHoldLap) : null,
     band: o.band === 'gentle' || o.band === 'full' ? o.band : 'off',
     remoteReach: sanitizeReachMap(o.remoteReach),
+    loopNames: sanitizeLoopNames(o.loopNames),
+    scenes: sanitizeScenes(o.scenes, {
+      soundWorld: d.soundWorld, band: d.band, phrases: d.phrases, fillAmount: d.fillAmount, evolveAmount: d.evolveAmount, bpm: d.bpm,
+    }),
+    currentScene: isNum(o.currentScene) && o.currentScene >= 0 ? Math.round(o.currentScene) : null,
     // Whole counts. A stored 0, 2.5 or -1 used to survive: Array.from({length: numPages})
     // throws on a fraction, and the page picker showed nothing selected.
     loopStepsRed: wholeCount(o.loopStepsRed, 0, MAX_LOOP_STEPS, d.loopStepsRed),
