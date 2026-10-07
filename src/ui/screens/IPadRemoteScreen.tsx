@@ -31,8 +31,15 @@ const PADS: { name: Exclude<RemoteTriggerName, 'stopAll'>; label: (s: RemoteStat
 const TRUST_LAPTOP_AFTER_MS = 400;
 /** At most this often per strip while sliding. */
 const SEND_EVERY_MS = 40;
-/** A touch wider than this is a palm or a forearm resting on the glass, not a finger. */
-const PALM_PX = 60;
+/**
+ * A touch this wide AND this tall is a palm or a forearm resting on the glass, not a
+ * finger. Generous on purpose: an iPad reports a fingertip at anything up to ~80 px, and
+ * a tap that is thrown away is far worse than a palm that is not.
+ */
+const PALM_PX = 160;
+const isPalm = (e: React.PointerEvent<Element>): boolean => isPalm(e) && e.height > PALM_PX;
+/** How long the "touch seen" mark stays in the status row. */
+const TOUCH_MARK_MS = 700;
 /** Stop all takes two taps within this long: one brush must not end the piece. */
 const CONFIRM_MS = 3000;
 /** Room between targets, so a finger that strays does not land on the neighbour. */
@@ -53,6 +60,15 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
   const [tab, setTab] = useState<'play' | 'loops'>('play');
   const lastPad = useRef(new Map<string, number>());
   const [confirmStop, setConfirmStop] = useState(false);
+  // Shown for a moment whenever a touch reaches the page at all: with it, "nothing
+  // happens" can be told apart from "the laptop is not connected".
+  const [touchSeen, setTouchSeen] = useState(false);
+  const touchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const markTouch = (): void => {
+    setTouchSeen(true);
+    if (touchTimer.current) clearTimeout(touchTimer.current);
+    touchTimer.current = setTimeout(() => setTouchSeen(false), TOUCH_MARK_MS);
+  };
   const [confirmEnd, setConfirmEnd] = useState(false);
   const clock = state?.clock ?? null;
   // Follow mode: where the finger landed and what the value was, so sliding moves it from there.
@@ -120,7 +136,7 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
     onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => {
       e.preventDefault();
       if (locked(name)) return;
-      if (e.pointerType === 'touch' && e.width > PALM_PX) return; // a palm, not a finger
+      if (isPalm(e)) return; // a palm, not a finger
       e.currentTarget.setPointerCapture(e.pointerId);
       touching.current.set(name, e.pointerId);
       if (learning) { link.send({ type: 'reach', name, fraction: fractionAt(e.currentTarget, e.clientY) }); return; }
@@ -193,8 +209,9 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
   };
 
   return (
-    <div style={page}>
+    <div style={page} onPointerDownCapture={markTouch}>
       <div role="status" aria-live="polite" style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 20 }}>
+        <span aria-hidden="true" style={{ fontSize: 18, opacity: touchSeen ? 1 : 0.15, transition: 'opacity 150ms' }}>👆</span>
         <span style={{ width: 16, height: 16, borderRadius: 8, background: connected ? '#66bb6a' : '#ef5350' }} aria-hidden="true" />
         <span style={{ fontWeight: 700 }}>
           {learning
@@ -295,7 +312,7 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
             <button
               type="button"
               aria-label="Capture: save what is on the board as a loop and start it"
-              onPointerDown={(e) => { e.preventDefault(); if (e.pointerType === 'touch' && e.width > PALM_PX) return; padTap('capture', { type: 'trigger', name: 'capture' }); }}
+              onPointerDown={(e) => { e.preventDefault(); if (isPalm(e)) return; padTap('capture', { type: 'trigger', name: 'capture' }); }}
               style={{ borderRadius: 20, touchAction: 'none', color: '#eef1f7', fontSize: 22, fontWeight: 800, border: '4px solid #4fc3f7', background: '#1f3a4a' }}
             >
               ⏺ Capture
@@ -313,7 +330,7 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
               aria-label={confirmEnd ? 'Tap again to end the piece' : 'End the piece'}
               onPointerDown={(e) => {
                 e.preventDefault();
-                if (e.pointerType === 'touch' && e.width > PALM_PX) return;
+                if (isPalm(e)) return;
                 if (!confirmEnd) {
                   setConfirmEnd(true);
                   setTimeout(() => setConfirmEnd(false), CONFIRM_MS);
@@ -334,7 +351,7 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
               aria-label={confirmStop ? 'Tap again to stop all loops' : 'Stop all loops'}
               onPointerDown={(e) => {
                 e.preventDefault();
-                if (e.pointerType === 'touch' && e.width > PALM_PX) return;
+                if (isPalm(e)) return;
                 // Two taps: a brush against the pad must not end the piece.
                 if (!confirmStop) {
                   setConfirmStop(true);
@@ -408,7 +425,7 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
               key={p.name}
               type="button"
               aria-pressed={p.name === 'keep' || p.name === 'mute' ? !!on : undefined}
-              onPointerDown={(e) => { e.preventDefault(); if (e.pointerType === 'touch' && e.width > PALM_PX) return; if (!learning) tap(p.name); }}
+              onPointerDown={(e) => { e.preventDefault(); if (isPalm(e)) return; if (!learning) tap(p.name); }}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tap(p.name); } }}
               style={{
                 borderRadius: 20, border: `3px solid ${flash === p.name ? '#ffffff' : on ? '#ffd54f' : '#3a4152'}`,
