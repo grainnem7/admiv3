@@ -199,6 +199,24 @@ const HELP: HelpEntry[] = [
       + 'out over half a pass, a pass or two passes ("Loops fade", in Perform), or at once.',
   },
   {
+    title: 'The performance clock and the ending',
+    body: 'Loops tab → Perform → The performance. Set the length (7:00), and the countdown '
+      + 'shows in the status pill and big on the iPad, with cues at 1 minute, 30 and 10 '
+      + 'seconds. Choose how it ends: End when I press it (nothing stops by itself), Fade '
+      + 'out at the time, or Stop at the end of the pass. "End now" applies the ending at '
+      + 'once; the iPad has an End piece pad (two taps). The clock starts with Play, or '
+      + 'with Start clock so a sound check does not count.',
+  },
+  {
+    title: 'Using saved loops live',
+    body: 'Give each scene a time ("at 2:30") and the clock brings it in by itself; the '
+      + 'player plays over the top and can still take any part. Capture (laptop or iPad) '
+      + 'saves what is on the board into the first free slot and starts it — the looper '
+      + 'gesture. A colour can be given the job "Plays a loop": put that counter anywhere '
+      + 'on the board and its loop plays (Hold) or flips on and off (Toggle) — the green '
+      + 'counter is the chorus. A loop colour never plays a note of its own.',
+  },
+  {
     title: 'The iPad for a player without fine control',
     body: 'Sound tab → Connections → iPad controls. Untick the strips and pads this player '
       + 'will not use: fewer things means bigger things. Lock a strip (a speed that must not '

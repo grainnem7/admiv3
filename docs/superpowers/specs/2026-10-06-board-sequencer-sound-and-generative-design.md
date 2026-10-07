@@ -571,3 +571,15 @@ loops etc. maybe the ipad would be helpful for this."*
 - **iPad, per player:** which strips and pads are shown (fewer = bigger), locked strips,
   strip mode (jump / follow, with the reach as the follow gain), two-tap Stop all, palm
   rejection by touch width, wider gaps and a clear margin at the bottom edge.
+
+## The performance clock, endings, capture and loop colours (2026-10-07)
+
+- **Clock** (`src/songs/performance/clock.ts`): length, cues (60/30/10 s), three endings
+  (cue / fade / stop), start with Play or by hand. The engine's `finish(beats)` fades a
+  gain after the mix from the next pass boundary and reports when done; `cancelFinish`.
+- **Scenes at a time** (`Scene.at`): the clock recalls them. **Capture**: board → first
+  free slot, launched. **Loop colours** (`role: 'loop'`, `channel.loopSlot`;
+  `performance/loopColours.ts` debounce; the runtime reports presence per slot): a
+  counter anywhere on the board plays its loop, hold or toggle.
+- The iPad shows the countdown (amber in the last minute, red after), and has End piece
+  (two taps) and Capture on the Loops page.

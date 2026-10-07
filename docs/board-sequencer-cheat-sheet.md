@@ -86,6 +86,21 @@
 - Launched loops need no loop lane and no counter on a pad; the pads still work as before alongside them.
 - **Loops fade in and out** over **half a pass / 1 pass / 2 passes** (or at once) — Perform → *Loops fade in and out over*. The pad says "fading out…" until it has gone.
 
+## The performance clock — a 7-minute piece
+- Perform → **The performance**: **Length** (7:00), **The clock starts** (with Play, or **Start clock** so the sound check doesn't count), **How it ends**:
+  - **End when I press it** — nothing stops by itself; the countdown and the cues are the guide. **End now** (laptop) or **End piece** (iPad, two taps) fades over the chosen passes.
+  - **Fade out at the time** — the fade starts early enough to be silent at the end time.
+  - **Stop at the end of the pass** — a tidy stop at the end of the pass the time falls in.
+- **Cues** at 1 minute, 30 s and 10 s: announced and flashed on the board; the countdown turns amber then red on the iPad. **Cancel the ending** if the room wants more.
+- **Scenes at a time:** give a scene "at 2:30" and the clock brings it in on the next pass — pre-structure the piece (intro → build → solo → ending), then play over it.
+- **Capture** (laptop or iPad): what's on the board right now → the first free slot, starting on the next pass. The looper gesture.
+- **A counter as a loop:** Colours → give a colour the job **Plays a loop…** and pick the slot. That counter anywhere on the board = that loop (Hold / Toggle as the pads). It never plays a note itself. Name the loops so the legend reads "→ Chorus".
+
+### Using saved loops in a 7-minute piece — a plan that works
+1. **Before:** make 4–6 loops (Save board here / Draw), name them, set the fade to 1 pass. Make scenes: *Intro* (one soft loop, band Gentle), *Build* (+ drums, fill 30%), *Solo* (no loops, band Full, Evolve 50%), *Ending* (one loop, band Off). Give them times: 0:00, 1:30, 3:30, 6:00. Length 7:00, ending **End when I press it**, fade 2 passes.
+2. **During:** the player plays on the board; scenes change under them on time; the iPad's loop pads add or drop a loop; Capture grabs a good moment; the facilitator watches the countdown.
+3. **End:** at the 30-second cue, **End piece** — two passes of fade and it's over, on the beat.
+
 ## iPad controls (Tim)
 - Start ADMI with **`npm run dev:ipad`** (not `npm run dev`). Sound tab → **Connections** → tick **iPad controls** → open the link shown in **Safari on the iPad** (same Wi-Fi; allow Node through Windows Firewall on private networks the first time).
 - **Strips:** Speed · Dynamics · Fill · Evolve — slide anywhere on a strip; the ends are "all the way"; values move in 5% steps. **Pads:** New idea · New sound · Keep · Mute — act on touch, repeat taps ignored.
