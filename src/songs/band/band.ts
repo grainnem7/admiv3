@@ -14,8 +14,8 @@
  * Pure: same step, same answer.
  */
 
-import { degreeMidi } from '../boardSequencerScale';
-import { grooveFor, type DrumHit } from '../phrases/phrases';
+import { grooveFor, harmonyFromChord, type DrumHit, type Harmony as PhraseHarmony } from '../phrases/phrases';
+import { bassNote, chordOnDegree, voiceLead } from '../harmony/harmony';
 import type { SoundWorldId } from '../../audio/worlds/soundWorlds';
 import type { KitDrum } from '../../audio/instruments/RoundRobinDrumKit';
 
@@ -23,7 +23,7 @@ export type BandLevel = 'off' | 'gentle' | 'full';
 export type BandPart = 'pad' | 'bass' | 'groove';
 export const BAND_PARTS: BandPart[] = ['pad', 'bass', 'groove'];
 
-export interface Harmony { root: number; tones: number[] }
+export type Harmony = PhraseHarmony;
 
 export interface BandInput {
   level: BandLevel;
@@ -39,10 +39,14 @@ export interface BandInput {
   chordSpan: number;
   /** Roles the player has counters for: the band's part for each is silent. */
   playerRoles: ReadonlySet<'melody' | 'chord' | 'bass' | 'drums'>;
+  /** The pad's last voicing, so this chord moves to it by small steps. */
+  previousPad?: readonly number[] | null;
 }
 
 export interface BandEvent {
   part: BandPart;
+  /** For the pad: the voicing this chord took, to lead the next one from. */
+  voicing?: number[];
   /** Beats after the step starts (0 ≤ offset < 1). */
   offset: number;
   /** Length in beats. */
@@ -85,22 +89,12 @@ const PROGRESSION: Record<SoundWorldId, number[]> = {
 export function defaultHarmonyAt(
   style: SoundWorldId, step: number, loop: number, rootMidi: number, semitones: readonly number[],
 ): Harmony {
-  const len = Math.max(1, semitones.length);
   const prog = PROGRESSION[style];
   const span = Math.max(1, Math.floor(loop / prog.length));
   const i = Math.min(prog.length - 1, Math.floor((((step % loop) + loop) % loop) / span));
-  const degree = Math.round(prog[i] * len) % len;
-  const semis = [...semitones];
-  const tones = [0, 2, 4].map((o) => degreeMidi(degree + o, rootMidi, semis));
-  return { root: tones[0], tones };
-}
-
-/** Move a note into [lo, lo + 12). */
-function intoOctave(midi: number, lo: number): number {
-  let n = midi;
-  while (n >= lo + 12) n -= 12;
-  while (n < lo) n += 12;
-  return n;
+  // The progression is written in sevenths of the key, whatever the board's scale.
+  const degree = Math.round(prog[i] * 7) % 7;
+  return harmonyFromChord(chordOnDegree(degree, rootMidi, semitones, style));
 }
 
 /** The band's notes on one step. */
@@ -113,13 +107,14 @@ export function bandEventsAtStep(input: BandInput): BandEvent[] {
   const full = input.level === 'full';
 
   if (h && parts.includes('pad') && input.chordChange) {
-    // Voiced in the middle of the keyboard, held until the chord changes.
-    const voiced = h.tones.map((t) => intoOctave(t, 57)).sort((a, b) => a - b);
-    for (const midi of voiced) out.push({ part: 'pad', offset: 0, dur: span - 0.05, accent: full ? 0.7 : 0.55, midi });
+    // Led from the last voicing, so the pad moves by small steps and never jumps.
+    const pcs = [...new Set(h.tones.map((t) => ((t % 12) + 12) % 12))];
+    const voiced = voiceLead({ pcs }, input.previousPad ?? null, 52, 72);
+    for (const midi of voiced) out.push({ part: 'pad', offset: 0, dur: span - 0.05, accent: full ? 0.7 : 0.55, midi, voicing: voiced });
   }
 
   if (h && parts.includes('bass')) {
-    const root = intoOctave(h.root, 36);
+    const root = bassNote({ rootPc: ((h.root % 12) + 12) % 12 }, 36);
     if (input.chordChange) out.push({ part: 'bass', offset: 0, dur: full ? Math.min(span, 1.9) : span - 0.05, accent: 0.8, midi: root });
     if (full) {
       // A walk under the chord: the fifth halfway through, the octave leading into the next.

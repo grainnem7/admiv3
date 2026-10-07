@@ -45,6 +45,8 @@ export interface FillContext {
   semitones: readonly number[];
   /** Chord tones sounding at a step, when the board has a chord; else null. */
   harmonyAt?(step: number): readonly number[] | null;
+  /** The chord's symbol at a step ("Am7"), for a chord-conditioned model; null when unknown. */
+  chordSymbolAt?(step: number): string | null;
   /** 0 = nothing added, 1 = as much as the rules allow. */
   amount: number;
   seed: number;

@@ -593,3 +593,29 @@ the player's notes end it; fade over the last pass), final chord (thin, then a h
 chord on the band's pad and bass with a crash for one more pass). Engine
 `finish(beats, done, style)`; `cancelFinish` restores tempo and sound. Old saved
 `ending: 'fade' | 'stop'` migrate to `auto` + that style.
+
+## Music, sound and AI, second pass (2026-10-07)
+
+- **Harmony engine** (`src/songs/harmony/harmony.ts`): chords are built in real thirds
+  from the board scale's seven-note parent (major pentatonic → major, minor pentatonic →
+  natural minor, blues → minor, suspended → mixolydian), with each world's colour
+  (Lo-fi: sevenths and ninths; Ambient: sus2 on I and IV, add9 elsewhere; Warm: a
+  seventh on V; Electronic: triads), voiced near a register centre or voice-led from the
+  previous voicing. Every chord has a symbol Magenta parses, checked against tonal in a
+  test over every key, scale and world. Used by: chord counters (phrases and one-note
+  stabs), the band's progression and pad (voice-led, with the pad's last voicing kept
+  in the engine), the bass (chord thirds and fifths), the final chord.
+- **Phrases:** six motifs per world (was three); a drum fill in the last bar of every
+  fourth pass; bass lines use the chord's third.
+- **Sound:** synth layers rebuilt — plucks and basses on MonoSynth with a filter
+  envelope, pad and supersaw through a slow chorus, a sub with a soft click; the shared
+  reverb's length and pre-delay follow the world (Lo-fi 1.4 s plate, Ambient 6.5 s hall)
+  and are regenerated on a world change.
+- **AI:** Magenta's chord-conditioned `chord_pitches_improv` is used whenever the chords
+  are known (the progression spelt per beat over seed and continuation); three tries at
+  different temperatures, a small critic keeps the best (chord tones on the beat,
+  stepwise motion, no wild leaps, not far busier than the player); `mel_2bar_small`
+  (MusicVAE) loads in the background and every other New idea is a *variation* on the
+  player's tune rather than a continuation.
+- **Still open:** new samples (slice 3); GrooVAE humanisation of the drums; a preview
+  per world.

@@ -36,6 +36,9 @@ export interface SoundWorld {
   };
   /** Low-pass over the whole board mix; 20000 = open. Lo-fi's character lives here. */
   mixToneHz: number;
+  /** The room: how long the shared reverb rings, and the gap before it starts. */
+  reverbDecay: number;
+  reverbPreDelay: number;
   /** Reverb and delay send for a part that has no send of its own. */
   reverbSend: number;
   delaySend: number;
@@ -57,6 +60,8 @@ export const SOUND_WORLDS: Record<SoundWorldId, SoundWorld> = {
     },
     drums: { toneHz: 9000, level: 0.85 },
     mixToneHz: 20000,
+    reverbDecay: 2.2,
+    reverbPreDelay: 0.015,
     reverbSend: 0.22,
     delaySend: 0,
     duck: 0.2,
@@ -73,6 +78,8 @@ export const SOUND_WORLDS: Record<SoundWorldId, SoundWorld> = {
     },
     drums: { toneHz: 5200, level: 0.95 },
     mixToneHz: 6500,
+    reverbDecay: 1.4,
+    reverbPreDelay: 0.008,
     reverbSend: 0.14,
     delaySend: 0.1,
     duck: 0.35,
@@ -89,6 +96,8 @@ export const SOUND_WORLDS: Record<SoundWorldId, SoundWorld> = {
     },
     drums: { toneHz: 3800, level: 0.6 },
     mixToneHz: 20000,
+    reverbDecay: 6.5,
+    reverbPreDelay: 0.03,
     reverbSend: 0.45,
     delaySend: 0.25,
     duck: 0.15,
@@ -105,6 +114,8 @@ export const SOUND_WORLDS: Record<SoundWorldId, SoundWorld> = {
     },
     drums: { toneHz: 16000, level: 1 },
     mixToneHz: 20000,
+    reverbDecay: 1.3,
+    reverbPreDelay: 0.005,
     reverbSend: 0.12,
     delaySend: 0.14,
     duck: 0.5,

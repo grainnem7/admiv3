@@ -4,7 +4,8 @@ import {
 } from '../songs/band/band';
 
 const PENT = [0, 2, 4, 7, 9];
-const SCALE_PCS = new Set(PENT);
+// Chords are built from the pentatonic's seven-note parent (C major), so "in key" is that.
+const SCALE_PCS = new Set([0, 2, 4, 5, 7, 9, 11]);
 const C = { root: 60, tones: [60, 64, 67] };
 
 const input = (over: Partial<BandInput> = {}): BandInput => ({

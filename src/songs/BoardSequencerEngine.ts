@@ -34,6 +34,7 @@ import {
 } from './band/band';
 import { BoardMidiSender, type BoardMidiOptions } from '../midi/boardMidi';
 import type { EndingStyle } from './performance/clock';
+import { bassNote, chordOnDegree, degreeOfNote, voiceNear } from './harmony/harmony';
 
 /** A note the engine actually scheduled (drives note pops / "Now:" — never inferred from the playhead). */
 export interface FiredNote {
@@ -305,6 +306,8 @@ export class BoardSequencerEngine {
   private bandPlaying = false;
   private bandPartsNow: BandPart[] = [];
   private bandPrevHarmonyKey = '';
+  /** The band pad's last voicing, so each chord is led from the one before. */
+  private bandPadVoicing: number[] | null = null;
   // MIDI out: every logged note is also sent, when the player has switched it on.
   private midi: BoardMidiSender | null = null;
   private midiOpts: BoardMidiOptions = { enabled: false, sends: 'player' };
@@ -366,7 +369,7 @@ export class BoardSequencerEngine {
     duckBus.connect(mix);
     this.duckBus = duckBus;
 
-    const reverb = new Tone.Reverb({ decay: 2.5, wet: 1 });
+    const reverb = new Tone.Reverb({ decay: world?.reverbDecay ?? 2.5, preDelay: world?.reverbPreDelay ?? 0.01, wet: 1 });
     await reverb.ready;
     const reverbBus = ctx.createGain();
     Tone.connect(reverbBus, reverb);
@@ -516,6 +519,12 @@ export class BoardSequencerEngine {
     const world = worldOf(choice);
     const t = Tone.immediate();
     this.mixTone?.frequency.setTargetAtTime(world?.mixToneHz ?? 20000, t, MIX_SWITCH_TC);
+    // The room changes with the world: a short plate for Lo-fi, a long hall for Ambient.
+    if (this.reverb) {
+      this.reverb.decay = world?.reverbDecay ?? 2.5;
+      this.reverb.preDelay = world?.reverbPreDelay ?? 0.01;
+      void this.reverb.generate();
+    }
     this.applyDrumColour();
     for (const ch of this.cfg.channels) {
       const e = this.voiceByChannel.get(ch.id);
@@ -795,10 +804,11 @@ export class BoardSequencerEngine {
   private playFinalChord(time: number, durSec: number): void {
     if (!this.bandVoices) this.buildBandVoices();
     const semis = this.cfg.scaleSemitones;
-    const tones = [0, 2, 4].map((o) => degreeMidi(o, this.cfg.scaleRootMidi, semis));
+    const style = worldOf(this.cfg.soundWorld ?? 'none')?.id ?? 'warm';
+    const chord = chordOnDegree(0, this.cfg.scaleRootMidi, semis, style);
     const oct = this.cfg.octaveShift * 12;
-    const midis = tones.map((t) => { let n = t; while (n >= 69) n -= 12; while (n < 57) n += 12; return n + oct; });
-    const root = (() => { let n = tones[0]; while (n >= 48) n -= 12; while (n < 36) n += 12; return n + oct; })();
+    const midis = voiceNear(chord, 62).map((n) => n + oct);
+    const root = bassNote(chord, 36) + oct;
     this.bandVoices?.gain.gain.setTargetAtTime(1, time, 0.01);
     for (const m of midis) this.bandVoices?.pad.play(m, 0.9, durSec, time);
     this.bandVoices?.bass.play(root, 0.9, durSec, time);
@@ -1213,11 +1223,10 @@ export class BoardSequencerEngine {
     const degree = axis === 'row' ? this.cfg.rows - 1 - cell.row : cell.col;
     const root = this.cfg.scaleRootMidi;
     const semis = this.cfg.scaleSemitones;
-    return [
-      degreeMidi(degree, root, semis),
-      degreeMidi(degree + 2, root, semis),
-      degreeMidi(degree + 4, root, semis),
-    ];
+    // A real chord of the key on the row's note, voiced near where the row sits.
+    const note = degreeMidi(degree, root, semis);
+    const style = worldOf(this.cfg.soundWorld ?? 'none')?.id ?? 'warm';
+    return voiceNear(chordOnDegree(degreeOfNote(note, root, semis), root, semis, style), note);
   }
 
   /** A role's configured polyrhythm loop-length setting (0 = full grid width). */
@@ -1409,6 +1418,7 @@ export class BoardSequencerEngine {
       semitones: this.cfg.scaleSemitones,
       songChord: chord && chord.notes.length > 0 ? chord.notes : null,
       style: worldOf(this.cfg.soundWorld ?? 'none')?.id ?? 'warm',
+      lap: lapIndex(beat, Math.max(1, this.cfg.cols * Math.max(1, this.cfg.numPages))),
       evolveOf: (colour: string) => {
         const evo = this.roleFor(colour) === 'drums' ? this.drumEvo : this.evoFor(colour);
         return { variant: evo.variant, busy: evo.busy };
@@ -1471,8 +1481,10 @@ export class BoardSequencerEngine {
     while (step + chordSpan < loop && keyOf(this.harmonyForBand(step + chordSpan, cells, chord)) === key) chordSpan++;
     const events = bandEventsAtStep({
       level: this.band, step, loop, style: worldOf(this.cfg.soundWorld ?? 'none')?.id ?? 'warm',
-      harmony, chordChange, chordSpan, playerRoles: roles,
+      harmony, chordChange, chordSpan, playerRoles: roles, previousPad: this.bandPadVoicing,
     });
+    const padEvent = events.find((ev) => ev.part === 'pad' && ev.voicing);
+    if (padEvent?.voicing) this.bandPadVoicing = padEvent.voicing;
     const world = worldOf(this.cfg.soundWorld ?? 'none');
     const swing = Math.min(0.9, this.cfg.swing + (world?.phraseSwing ?? 0));
     const hits = new Set<string>();
@@ -1570,6 +1582,10 @@ export class BoardSequencerEngine {
           semitones: this.cfg.scaleSemitones,
           harmonyAt: this.cfg.phrases
             ? (step) => harmonyAt(this.phraseInput(pc, step, chord, false))?.tones ?? null
+            : undefined,
+          // The chord's name, for Magenta's chord-conditioned model.
+          chordSymbolAt: this.cfg.phrases
+            ? (step) => harmonyAt(this.phraseInput(pc, step, chord, false))?.symbol ?? null
             : undefined,
           amount: this.fillAmount,
           // Each Evolve scene brings a fresh idea, so the fill moves on with the sound.

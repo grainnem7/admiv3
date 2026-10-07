@@ -176,3 +176,36 @@ describe('engine — Magenta fill', () => {
     expect(e.getFillStatus()).toBe('rules');
   });
 });
+
+// ---- chord-aware generation: the progression, the critic, the fixed length ----
+import { bestCandidate, chordProgressionFor, fitLength } from '../songs/generative/magentaSequences';
+
+describe('the model is told the chords, and its tries are judged', () => {
+  it('spells the progression over the seed loop and the continuation, or gives up if a beat has no chord', () => {
+    expect(chordProgressionFor((s) => (s < 4 ? 'C' : 'G7'), 8)).toEqual(['C', 'C', 'C', 'C', 'G7', 'G7', 'G7', 'G7', 'C', 'C', 'C', 'C', 'G7', 'G7', 'G7', 'G7']);
+    expect(chordProgressionFor((s) => (s === 5 ? null : 'C'), 8)).toBeNull();
+  });
+
+  it('prefers chord tones on the beat and stepwise motion over leaps and clashes', () => {
+    const mk = (midis: number[]): FillCandidate[] => midis.map((midi, i) => ({ step: i, offset: 0, role: 'melody', colour: 'm', midi, dur: 0.5, accent: 0.7, rule: 'ai' }));
+    const chord = () => [60, 64, 67];
+    const smooth = mk([60, 62, 64, 65, 67, 65, 64, 62]);   // some non-chord tones on beats, but close steps
+    const jumpy = mk([60, 73, 61, 74, 62, 75, 63, 76]);    // leaps and clashes
+    const chordal = mk([60, 64, 67, 64, 60, 64, 67, 72]);  // all chord tones, small moves
+    expect(bestCandidate([smooth, jumpy, chordal], chord, 3)).toBe(2);
+    expect(bestCandidate([jumpy, smooth], chord, 3)).toBe(1);
+  });
+
+  it('a suggestion far busier than the player loses marks', () => {
+    const busy: FillCandidate[] = Array.from({ length: 24 }, (_, i) => ({ step: Math.floor(i / 4), offset: (i % 4) / 4, role: 'melody', colour: 'm', midi: 60 + (i % 3) * 2, dur: 0.25, accent: 0.6, rule: 'ai' }));
+    const calm: FillCandidate[] = [{ step: 1, offset: 0, role: 'melody', colour: 'm', midi: 64, dur: 0.5, accent: 0.6, rule: 'ai' }, { step: 3, offset: 0, role: 'melody', colour: 'm', midi: 67, dur: 0.5, accent: 0.6, rule: 'ai' }];
+    expect(bestCandidate([busy, calm], () => [60, 64, 67], 2)).toBe(1);
+  });
+
+  it('fits a sequence to a fixed length for the variation model', () => {
+    const seq = { notes: [{ pitch: 60, quantizedStartStep: 0, quantizedEndStep: 4 }, { pitch: 62, quantizedStartStep: 30, quantizedEndStep: 40 }, { pitch: 64, quantizedStartStep: 40, quantizedEndStep: 44 }], totalQuantizedSteps: 48, quantizationInfo: { stepsPerQuarter: 4 } };
+    const fitted = fitLength(seq, 32);
+    expect(fitted.totalQuantizedSteps).toBe(32);
+    expect(fitted.notes).toEqual([{ pitch: 60, quantizedStartStep: 0, quantizedEndStep: 4 }, { pitch: 62, quantizedStartStep: 30, quantizedEndStep: 32 }]);
+  });
+});

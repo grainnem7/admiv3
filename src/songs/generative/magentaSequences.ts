@@ -89,6 +89,67 @@ export function drumSeed(sounding: readonly SoundingNote[], loop: number): Quant
   return { notes, totalQuantizedSteps: total, quantizationInfo: { stepsPerQuarter: STEPS_PER_BEAT } };
 }
 
+/**
+ * The chord for every beat of the seed loop and the continuation loop, for Magenta's
+ * chord-conditioned model, which spreads the list evenly over seed + continuation. Null
+ * when any beat has no chord: the plain model is used instead.
+ */
+export function chordProgressionFor(symbolAt: (step: number) => string | null, loop: number): string[] | null {
+  const once: string[] = [];
+  for (let step = 0; step < loop; step++) {
+    const s = symbolAt(step);
+    if (!s) return null;
+    once.push(s);
+  }
+  return [...once, ...once];
+}
+
+/**
+ * Which of several suggestions fits best: chord tones on the beat, mostly stepwise
+ * motion, no wild leaps, and not far busier than the player. A small, honest critic —
+ * the model proposes, this chooses.
+ */
+export function bestCandidate(
+  candidates: readonly (readonly FillCandidate[])[],
+  chordTonesAt: ((step: number) => readonly number[] | null) | undefined,
+  playerNotes: number,
+): number {
+  let best = 0;
+  let bestScore = -Infinity;
+  candidates.forEach((cand, i) => {
+    const melody = cand.filter((c) => c.midi !== undefined).sort((a, b) => a.step - b.step || a.offset - b.offset);
+    let score = 0;
+    for (let k = 0; k < melody.length; k++) {
+      const n = melody[k];
+      const tones = chordTonesAt?.(n.step);
+      if (tones && n.offset === 0) score += tones.some((t) => ((t - n.midi!) % 12 + 12) % 12 === 0) ? 1 : -0.5;
+      if (k > 0) {
+        const leap = Math.abs(n.midi! - melody[k - 1].midi!);
+        if (leap <= 2) score += 0.5;
+        else if (leap > 7) score -= 0.75;
+      }
+    }
+    // Judged per note, so a long suggestion cannot win on volume; and one far busier than
+    // what the player placed crowds them out, whatever its notes.
+    const perNote = melody.length > 0 ? score / melody.length : -1;
+    const over = playerNotes > 0 ? Math.max(0, melody.length - 2 * playerNotes - 2) : 0;
+    const total = perNote - 0.25 * over;
+    if (total > bestScore) { bestScore = total; best = i; }
+  });
+  return best;
+}
+
+/** A sequence exactly `steps` long, for a model that takes a fixed length. */
+export function fitLength(seq: QuantizedSequence, steps: number): QuantizedSequence {
+  return {
+    ...seq,
+    totalQuantizedSteps: steps,
+    notes: seq.notes
+      .filter((n) => n.quantizedStartStep < steps)
+      .map((n) => ({ ...n, quantizedEndStep: Math.min(steps, n.quantizedEndStep) })),
+  };
+}
+
 /** What the model wrote, as fill suggestions on the loop's grid. */
 export function fromGenerated(
   generated: { notes?: readonly Partial<QuantizedNote>[] | null } | null | undefined,
