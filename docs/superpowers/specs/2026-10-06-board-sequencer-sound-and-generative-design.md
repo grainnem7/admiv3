@@ -562,3 +562,12 @@ loops etc. maybe the ipad would be helpful for this."*
   and scenes.
 - **Not done:** fading a loop out; a count-in; keyboard shortcuts for launching on the
   laptop; more than four scene pads on the iPad (the laptop list has them all).
+
+## Fades and the iPad for imprecise fingers (2026-10-07)
+
+- **Launched loops fade** in and out over 0 / 0.5 / 1 / 2 passes (`loopFadePasses`, per
+  player; engine `setLaunchFade`). The fade is in each note's loudness, so it works for
+  every part alike; a loop wanted again while fading comes straight back to full.
+- **iPad, per player:** which strips and pads are shown (fewer = bigger), locked strips,
+  strip mode (jump / follow, with the reach as the follow gain), two-tap Stop all, palm
+  rejection by touch width, wider gaps and a clear margin at the bottom edge.

@@ -84,11 +84,17 @@
 - **Scenes:** get the loops and sound how you want them, type a name, **Save scene from now**. Each scene keeps its loops + sound world + band + phrases + fill + Evolve + tempo. **Go** recalls one; **Next scene ▶** walks the list — a set list for the piece.
 - **On the iPad:** the **Loops & scenes** page has big pads for the 8 loops (green = playing, dashed = starting/stopping), 4 scene pads, **Next scene** and **Stop all**.
 - Launched loops need no loop lane and no counter on a pad; the pads still work as before alongside them.
+- **Loops fade in and out** over **half a pass / 1 pass / 2 passes** (or at once) — Perform → *Loops fade in and out over*. The pad says "fading out…" until it has gone.
 
 ## iPad controls (Tim)
 - Start ADMI with **`npm run dev:ipad`** (not `npm run dev`). Sound tab → **Connections** → tick **iPad controls** → open the link shown in **Safari on the iPad** (same Wi-Fi; allow Node through Windows Firewall on private networks the first time).
 - **Strips:** Speed · Dynamics · Fill · Evolve — slide anywhere on a strip; the ends are "all the way"; values move in 5% steps. **Pads:** New idea · New sound · Keep · Mute — act on touch, repeat taps ignored.
 - **Learn reach:** press it on the laptop, have the player slide each strip as far as is comfortable, press **Done**. Their reach is now the whole range. **Reset reach** undoes it. Per player.
+- **For a player without fine control (all per player, under iPad controls):**
+  - **What the iPad shows:** untick strips and pads they won't use — **fewer things means bigger things** (two strips fill the screen; no strips = four huge pads).
+  - **Locked strips:** 🔒 a strip and it ignores touch (lock Speed for a piece at a fixed tempo).
+  - **A touch on a strip — Jumps to the finger / Follows the movement.** *Follows*: landing does nothing, sliding moves the value from where it was — for a finger that lands roughly.
+  - On the iPad: a resting **palm is ignored**, **Stop all takes two taps**, and the gaps between targets are wide.
 - What the iPad does shows on the Play screen ("iPad: Speed 96 BPM").
 
 ## MIDI out — ADMI as a controller

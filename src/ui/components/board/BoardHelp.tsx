@@ -195,7 +195,18 @@ const HELP: HelpEntry[] = [
       + 'on the next pass, so a tap is never off-beat, with nothing on a pad. A scene is '
       + 'the loops playing now plus the sound world, band, phrases, fill, Evolve and tempo: '
       + '"Save scene from now", then Go, or "Next scene" to walk the set list. The iPad’s '
-      + '"Loops & scenes" page has big pads for all of it and a Stop all.',
+      + '"Loops & scenes" page has big pads for all of it and a Stop all. Loops fade in and '
+      + 'out over half a pass, a pass or two passes ("Loops fade", in Perform), or at once.',
+  },
+  {
+    title: 'The iPad for a player without fine control',
+    body: 'Sound tab → Connections → iPad controls. Untick the strips and pads this player '
+      + 'will not use: fewer things means bigger things. Lock a strip (a speed that must not '
+      + 'change mid-piece) and it ignores touch. "A touch on a strip": Jumps to the finger '
+      + '(like ThumbJam) or Follows the movement (landing changes nothing; sliding moves the '
+      + 'value from where it was — for a finger that lands roughly). Learn reach makes a '
+      + 'short slide the whole range. On the iPad, a resting palm is ignored and Stop all '
+      + 'takes two taps.',
   },
   {
     title: 'Keyboard',
