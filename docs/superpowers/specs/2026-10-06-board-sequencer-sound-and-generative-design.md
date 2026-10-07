@@ -543,3 +543,22 @@ moves. The code is `src/audio/evolve/evolve.ts` (pure).
   "Connections" section on the Sound tab.
 - **Still not built:** world Preview; slice 3 (new samples); the chord-aware Magenta
   model; naming phrases in the "Now:" line; Lo-fi crackle.
+
+## Performing (2026-10-07)
+
+User: *"improve as much as we can for a live performance and make it easier to presave
+loops etc. maybe the ipad would be helpful for this."*
+
+- **Launched loops** (`src/songs/performance/launcher.ts`, engine `setLaunchedLoops`):
+  a saved loop plays with nothing on a pad, from the laptop or the iPad, and starts or
+  stops **at the next pass** so a tap is never off-beat. Eight launchable slots; the pad
+  bank keeps working alongside.
+- **Pre-saving:** "Save board here" writes the counters as they are (while stopped too);
+  **Draw** opens an on-screen loop editor (no camera); loops have names.
+- **Scenes:** loops wanted + sound world, band, phrases, fill, Evolve, tempo. Save from
+  now, Go, Next scene (a set list). Stored per player, up to twelve.
+- **iPad "Loops & scenes" page:** eight loop pads with state, four scene pads, Next
+  scene, Stop all. New messages `loop`, `scene`, trigger `stopAll`; state carries loops
+  and scenes.
+- **Not done:** fading a loop out; a count-in; keyboard shortcuts for launching on the
+  laptop; more than four scene pads on the iPad (the laptop list has them all).

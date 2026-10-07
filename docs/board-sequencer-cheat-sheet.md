@@ -78,6 +78,13 @@
 - **Control counters for Fill and Evolve:** give a colour the *Fill amount* or *Evolve amount* job and its counter's position sets the amount.
 - **Studio mix** (tick box): the fuller mix. Untick to compare with the old sound.
 
+## Performing — prepare loops and scenes, launch with one tap
+- **Loops tab → Perform.** Eight slots. For each: **Save board here** (the counters as they are now — works while stopped, so set up before the show), **Draw** (draw a loop on screen, no camera needed), a **name**, **▶ Play / ■ Stop**, **Clear**.
+- **Play and Stop land on the next pass** — a tap early or late still comes in on the loop. **Stop all loops** too.
+- **Scenes:** get the loops and sound how you want them, type a name, **Save scene from now**. Each scene keeps its loops + sound world + band + phrases + fill + Evolve + tempo. **Go** recalls one; **Next scene ▶** walks the list — a set list for the piece.
+- **On the iPad:** the **Loops & scenes** page has big pads for the 8 loops (green = playing, dashed = starting/stopping), 4 scene pads, **Next scene** and **Stop all**.
+- Launched loops need no loop lane and no counter on a pad; the pads still work as before alongside them.
+
 ## iPad controls (Tim)
 - Start ADMI with **`npm run dev:ipad`** (not `npm run dev`). Sound tab → **Connections** → tick **iPad controls** → open the link shown in **Safari on the iPad** (same Wi-Fi; allow Node through Windows Firewall on private networks the first time).
 - **Strips:** Speed · Dynamics · Fill · Evolve — slide anywhere on a strip; the ends are "all the way"; values move in 5% steps. **Pads:** New idea · New sound · Keep · Mute — act on touch, repeat taps ignored.

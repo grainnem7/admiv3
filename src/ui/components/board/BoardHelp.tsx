@@ -189,6 +189,15 @@ const HELP: HelpEntry[] = [
       + 'and the wood is never offered as a colour.',
   },
   {
+    title: 'Performing — loops and scenes',
+    body: 'Loops tab → Perform. Save the board into a slot ("Save board here") or draw a '
+      + 'loop on screen ("Draw", no camera needed), and name it. Play and Stop take effect '
+      + 'on the next pass, so a tap is never off-beat, with nothing on a pad. A scene is '
+      + 'the loops playing now plus the sound world, band, phrases, fill, Evolve and tempo: '
+      + '"Save scene from now", then Go, or "Next scene" to walk the set list. The iPad’s '
+      + '"Loops & scenes" page has big pads for all of it and a Stop all.',
+  },
+  {
     title: 'Keyboard',
     body: 'Space starts and stops while playing (never during Set up, and never when a button '
       + 'or slider has focus). Tabs move with the arrow keys. Big board (⤢) fills the screen; '
