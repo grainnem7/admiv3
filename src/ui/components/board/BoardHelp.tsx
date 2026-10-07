@@ -202,10 +202,13 @@ const HELP: HelpEntry[] = [
     title: 'The performance clock and the ending',
     body: 'Loops tab → Perform → The performance. Set the length (7:00), and the countdown '
       + 'shows in the status pill and big on the iPad, with cues at 1 minute, 30 and 10 '
-      + 'seconds. Choose how it ends: End when I press it (nothing stops by itself), Fade '
-      + 'out at the time, or Stop at the end of the pass. "End now" applies the ending at '
-      + 'once; the iPad has an End piece pad (two taps). The clock starts with Play, or '
-      + 'with Start clock so a sound check does not count.',
+      + 'seconds. Choose the ending in advance — Fade out, Stop at the end of the pass, '
+      + 'Slow down (a ritardando), Thin out (the band and fill leave, your notes finish, '
+      + 'a fade over the last pass) or Final chord (a held chord in the key and a crash) '
+      + '— how many passes it takes, and whether it happens at the time or when End is '
+      + 'pressed. "End now" on the laptop and the iPad’s End piece pad (two taps) apply '
+      + 'it at once. The clock starts with Play, or with Start clock so a sound check does '
+      + 'not count.',
   },
   {
     title: 'Using saved loops live',

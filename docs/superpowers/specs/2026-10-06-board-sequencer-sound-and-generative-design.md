@@ -583,3 +583,13 @@ loops etc. maybe the ipad would be helpful for this."*
   counter anywhere on the board plays its loop, hold or toggle.
 - The iPad shows the countdown (amber in the last minute, red after), and has End piece
   (two taps) and Capture on the Loops page.
+
+## Endings chosen in advance (2026-10-07)
+
+User: *"Could we choose before the performance how it should end?"* The trigger (at the
+time / when End is pressed) and the musical style are now separate, saved settings:
+fade, stop, slow down (ritardando to ~55% then stop), thin out (band and fill leave;
+the player's notes end it; fade over the last pass), final chord (thin, then a held tonic
+chord on the band's pad and bass with a crash for one more pass). Engine
+`finish(beats, done, style)`; `cancelFinish` restores tempo and sound. Old saved
+`ending: 'fade' | 'stop'` migrate to `auto` + that style.

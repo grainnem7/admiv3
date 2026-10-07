@@ -87,10 +87,11 @@
 - **Loops fade in and out** over **half a pass / 1 pass / 2 passes** (or at once) — Perform → *Loops fade in and out over*. The pad says "fading out…" until it has gone.
 
 ## The performance clock — a 7-minute piece
-- Perform → **The performance**: **Length** (7:00), **The clock starts** (with Play, or **Start clock** so the sound check doesn't count), **How it ends**:
-  - **End when I press it** — nothing stops by itself; the countdown and the cues are the guide. **End now** (laptop) or **End piece** (iPad, two taps) fades over the chosen passes.
-  - **Fade out at the time** — the fade starts early enough to be silent at the end time.
-  - **Stop at the end of the pass** — a tidy stop at the end of the pass the time falls in.
+- Perform → **The performance**: **Length** (7:00), **The clock starts** (with Play, or **Start clock** so the sound check doesn't count).
+- **How it ends — chosen before the piece:**
+  - **Fade out** · **Stop at the end of the pass** · **Slow down** (a ritardando to a little over half speed, then a stop on the one) · **Thin out** (the band and the fill leave, the player's own notes end it, a fade over the last pass) · **Final chord** (the texture thins, then a held chord in the key and a crash ring out for one more pass).
+  - **The ending takes** 1, 2 or 4 passes.
+  - **When it ends:** **When I press End** — nothing stops by itself; the countdown and the cues are the guide; **End now** (laptop) or **End piece** (iPad, two taps) applies the chosen ending. Or **At the time** — it begins early enough to be finished on the dot.
 - **Cues** at 1 minute, 30 s and 10 s: announced and flashed on the board; the countdown turns amber then red on the iPad. **Cancel the ending** if the room wants more.
 - **Scenes at a time:** give a scene "at 2:30" and the clock brings it in on the next pass — pre-structure the piece (intro → build → solo → ending), then play over it.
 - **Capture** (laptop or iPad): what's on the board right now → the first free slot, starting on the next pass. The looper gesture.
