@@ -211,3 +211,17 @@ describe('loops and scenes over the link', () => {
     expect(parsed && parsed.type === 'state' ? parsed.state.scenes : null).toEqual([{ name: 'Intro', active: true }, { name: 'Verse', active: false }]);
   });
 });
+
+describe('what the iPad is told to show', () => {
+  it('carries which strips and pads to show, locks and the strip mode, made safe', () => {
+    const state = {
+      values: { tempo: 0, dynamics: 0, fill: 0, evolve: 0 }, labels: { tempo: '', dynamics: '', fill: '', evolve: '' },
+      shown: { strips: ['fill', 'bogus'], pads: ['keep', 'stopAll'], loopsPage: false },
+      locked: ['tempo', 'nope'], stripMode: 'follow', loopsFade: true,
+    };
+    const parsed = parseRemoteMessage({ type: 'state', state });
+    expect(parsed && parsed.type === 'state' ? parsed.state : null).toMatchObject({
+      shown: { strips: ['fill'], pads: ['keep'], loopsPage: false }, locked: ['tempo'], stripMode: 'follow', loopsFade: true,
+    });
+  });
+});

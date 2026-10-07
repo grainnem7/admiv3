@@ -494,12 +494,17 @@ export default function BoardSequencerScreen() {
         state: slotState(i, (config.loopSlots[i] ?? null) !== null, new Set(wantedSlots), new Set(appliedSlots)),
       })),
       scenes: config.scenes.map((s, i) => ({ name: s.name, active: config.currentScene === i })),
+      shown: { strips: config.remoteStrips, pads: config.remotePads, loopsPage: config.remoteLoopsPage },
+      locked: config.remoteLocked,
+      stripMode: config.remoteStripMode,
+      loopsFade: config.loopFadePasses > 0,
     };
     remoteLink.send({ type: 'state', state });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [remoteEnabled, remoteLink.others, config.bpm, config.velocity, config.fillAmount, config.evolveAmount,
     config.fillKept, config.evolveHoldLap, muted, running, config.remoteReach, reachLearning,
-    config.loopSlots, config.loopNames, config.scenes, config.currentScene, wantedSlots, appliedSlots]);
+    config.loopSlots, config.loopNames, config.scenes, config.currentScene, wantedSlots, appliedSlots,
+    config.remoteStrips, config.remotePads, config.remoteLoopsPage, config.remoteLocked, config.remoteStripMode, config.loopFadePasses]);
   const fillSigRef = useRef('');
   const [prevFillSeed, setPrevFillSeed] = useState<number | null>(null);
 
@@ -1429,6 +1434,7 @@ export default function BoardSequencerScreen() {
     );
     engine.setActiveLoops([]);
     {
+      engine.setLaunchFade(Math.round(cfg.loopFadePasses * cfg.cols * Math.max(1, cfg.numPages)));
       const slots = [...wantedRef.current].filter((s) => (cfg.loopSlots[s] ?? null) !== null).sort((a, b) => a - b);
       engine.setLaunchedLoops(slots, slots.map((s) => (cfg.loopSlots[s] ?? []) as ActiveCell[]));
     }
@@ -2073,6 +2079,7 @@ export default function BoardSequencerScreen() {
     }
   };
   const onRemoteMessageInner = (msg: RemoteMessage, c: BoardSequencerStored): void => {
+    if (msg.type === 'control' && c.remoteLocked.includes(msg.name)) return;
     if (msg.type === 'control') {
       if (msg.name === 'tempo') {
         const bpm = tempoFromValue(msg.value);
@@ -2208,6 +2215,62 @@ export default function BoardSequencerScreen() {
                 Reset reach
               </Button>
             </div>
+          </div>
+          {/* Fewer, bigger targets: the facilitator chooses what the iPad shows. */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
+            <span style={{ fontWeight: 600, fontSize: 13 }}>What the iPad shows</span>
+            <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>Fewer things means bigger things. Untick what this player will not use.</span>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              {REMOTE_CONTROLS.map((n) => (
+                <label key={`show-${n}`} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13 }}>
+                  <input
+                    type="checkbox" checked={config.remoteStrips.includes(n)}
+                    onChange={(e) => update({ remoteStrips: REMOTE_CONTROLS.filter((x) => (x === n ? e.target.checked : config.remoteStrips.includes(x))) })}
+                  />
+                  {REMOTE_CONTROL_WORDS[n]}
+                </label>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              {(['newIdea', 'newSound', 'keep', 'mute'] as RemoteTriggerName[]).map((n) => (
+                <label key={`showpad-${n}`} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13 }}>
+                  <input
+                    type="checkbox" checked={config.remotePads.includes(n)}
+                    onChange={(e) => update({ remotePads: (['newIdea', 'newSound', 'keep', 'mute'] as RemoteTriggerName[]).filter((x) => (x === n ? e.target.checked : config.remotePads.includes(x))) })}
+                  />
+                  {REMOTE_TRIGGER_WORDS[n]}
+                </label>
+              ))}
+              <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13 }}>
+                <input type="checkbox" checked={config.remoteLoopsPage} onChange={(e) => update({ remoteLoopsPage: e.target.checked })} />
+                Loops &amp; scenes page
+              </label>
+            </div>
+            <span style={{ fontWeight: 600, fontSize: 13, marginTop: 4 }}>Locked strips</span>
+            <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>A locked strip ignores touch — for a speed that must not change mid-piece.</span>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              {REMOTE_CONTROLS.map((n) => (
+                <label key={`lock-${n}`} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13 }}>
+                  <input
+                    type="checkbox" checked={config.remoteLocked.includes(n)}
+                    onChange={(e) => update({ remoteLocked: REMOTE_CONTROLS.filter((x) => (x === n ? e.target.checked : config.remoteLocked.includes(x))) })}
+                  />
+                  {`🔒 ${REMOTE_CONTROL_WORDS[n]}`}
+                </label>
+              ))}
+            </div>
+            <span style={{ fontWeight: 600, fontSize: 13, marginTop: 4 }}>A touch on a strip</span>
+            <SegmentedControl<'jump' | 'follow'>
+              label="A touch on a strip"
+              value={config.remoteStripMode}
+              onChange={(v) => update({ remoteStripMode: v })}
+              options={[{ value: 'jump', label: 'Jumps to the finger' }, { value: 'follow', label: 'Follows the movement' }]}
+            />
+            <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
+              {config.remoteStripMode === 'jump'
+                ? 'Like ThumbJam: where the finger lands is the value.'
+                : 'Landing changes nothing; sliding moves the value from where it was. For a finger that lands roughly.'}
+            </span>
           </div>
         </>
       )}
@@ -2710,7 +2773,7 @@ export default function BoardSequencerScreen() {
                 style={{ width: 110 }}
               />
               <span style={{ fontSize: 12, minWidth: 72, color: on ? 'var(--bs-ok)' : 'var(--bs-fg2)' }}>
-                {st === 'empty' ? 'empty' : st === 'playing' ? '▶ playing' : st === 'starting' ? 'starting…' : st === 'stopping' ? 'stopping…' : `${cells?.length ?? 0} notes`}
+                {st === 'empty' ? 'empty' : st === 'playing' ? '▶ playing' : st === 'starting' ? (config.loopFadePasses > 0 ? 'fading in…' : 'starting…') : st === 'stopping' ? (config.loopFadePasses > 0 ? 'fading out…' : 'stopping…') : `${cells?.length ?? 0} notes`}
               </span>
               <Button tone={on ? 'primary' : 'secondary'} onClick={() => toggleLoop(slot)} reason={cells === null ? 'Nothing saved here yet.' : null} aria-pressed={on}>
                 {on ? '■ Stop' : '▶ Play'}
@@ -2723,6 +2786,15 @@ export default function BoardSequencerScreen() {
             </div>
           );
         })}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <span style={{ fontWeight: 600, fontSize: 13 }}>Loops fade in and out over</span>
+          <SegmentedControl<number>
+            label="Loops fade in and out over"
+            value={config.loopFadePasses}
+            onChange={(v) => update({ loopFadePasses: v })}
+            options={[{ value: 0, label: 'Nothing (at once)' }, { value: 0.5, label: 'Half a pass' }, { value: 1, label: '1 pass' }, { value: 2, label: '2 passes' }]}
+          />
+        </div>
         <div>
           <Button tone="secondary" onClick={stopAllLoops} reason={wantedSlots.length === 0 ? 'No loops playing.' : null}>■ Stop all loops</Button>
         </div>

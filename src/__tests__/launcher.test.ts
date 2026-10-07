@@ -127,3 +127,67 @@ describe('engine — launched loops', () => {
     expect(loopNotes(e).length).toBe(2);
   });
 });
+
+describe('engine — launched loops fade', () => {
+  const four = [0, 1, 2, 3].map((col) => ({ row: 2, col, colour: 'm' }));
+  const vels = (p: Priv) => p.voiceByChannel.get('m')!.voice.play.mock.calls.map((c) => c[1] as number);
+
+  it('a stopped loop fades out over the fade length, then leaves', () => {
+    const { e, p } = engine();
+    p.timer = null;
+    e.setLaunchedLoops([0], [four]);
+    p.timer = 1;
+    e.setLaunchFade(4);
+    for (let b = 0; b < 4; b++) p.fireStep(b, b, 1, null);
+    p.voiceByChannel.get('m')!.voice.play.mockClear();
+    p.fireStep(4, 4, 1, null);
+    e.setLaunchedLoops([], []);                       // stop asked for mid-pass
+    for (let b = 5; b < 8; b++) p.fireStep(b, b, 1, null);
+    expect(vels(p)).toEqual([0.8, 0.8, 0.8, 0.8]);    // the pass it was stopped in: full
+    p.voiceByChannel.get('m')!.voice.play.mockClear();
+    for (let b = 8; b < 12; b++) p.fireStep(b, b, 1, null);
+    expect(vels(p).map((v) => Math.round(v * 100) / 100)).toEqual([0.8, 0.6, 0.4, 0.2]);
+    expect(e.getLaunchedSlots()).toEqual([0]);        // still "stopping" while it fades
+    p.voiceByChannel.get('m')!.voice.play.mockClear();
+    for (let b = 12; b < 16; b++) p.fireStep(b, b, 1, null);
+    expect(vels(p)).toEqual([]);
+    expect(e.getLaunchedSlots()).toEqual([]);
+  });
+
+  it('a launched loop fades in, and with no fade length starts at once', () => {
+    const { e, p } = engine();
+    e.setLaunchFade(4);
+    p.fireStep(0, 0, 1, null);
+    e.setLaunchedLoops([0], [four]);
+    for (let b = 1; b < 4; b++) p.fireStep(b, b, 1, null);
+    p.voiceByChannel.get('m')!.voice.play.mockClear();
+    for (let b = 4; b < 8; b++) p.fireStep(b, b, 1, null);
+    expect(vels(p).map((v) => Math.round(v * 100) / 100)).toEqual([0.2, 0.4, 0.6, 0.8]);
+    p.voiceByChannel.get('m')!.voice.play.mockClear();
+    for (let b = 8; b < 12; b++) p.fireStep(b, b, 1, null);
+    expect(vels(p)).toEqual([0.8, 0.8, 0.8, 0.8]);
+
+    const dead = engine();
+    dead.e.setLaunchFade(0);
+    dead.p.fireStep(0, 0, 1, null);
+    dead.e.setLaunchedLoops([0], [four]);
+    for (let b = 1; b < 8; b++) dead.p.fireStep(b, b, 1, null);
+    expect(vels(dead.p).slice(-4)).toEqual([0.8, 0.8, 0.8, 0.8]);
+  });
+
+  it('a loop wanted again while fading out comes straight back to full', () => {
+    const { e, p } = engine();
+    p.timer = null;
+    e.setLaunchedLoops([0], [four]);
+    p.timer = 1;
+    e.setLaunchFade(8);
+    for (let b = 0; b < 4; b++) p.fireStep(b, b, 1, null);
+    e.setLaunchedLoops([], []);
+    for (let b = 4; b < 9; b++) p.fireStep(b, b, 1, null); // fade began at 8
+    e.setLaunchedLoops([0], [four]);
+    for (let b = 9; b < 12; b++) p.fireStep(b, b, 1, null);
+    p.voiceByChannel.get('m')!.voice.play.mockClear();
+    for (let b = 12; b < 16; b++) p.fireStep(b, b, 1, null);
+    expect(vels(p)).toEqual([0.8, 0.8, 0.8, 0.8]);
+  });
+});

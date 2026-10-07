@@ -54,6 +54,14 @@ export interface RemoteState {
   /** The launchable loops and the scenes, for the iPad's Loops page. */
   loops?: RemoteLoop[];
   scenes?: RemoteScene[];
+  /** Which strips and pads the iPad shows (missing = all); fewer means bigger. */
+  shown?: { strips: RemoteControlName[]; pads: RemoteTriggerName[]; loopsPage: boolean };
+  /** Strips that ignore touch for now. */
+  locked?: RemoteControlName[];
+  /** Jump: a touch sets the value where the finger is. Follow: the value moves with the finger. */
+  stripMode?: 'jump' | 'follow';
+  /** Whether launched loops fade (the pads say "fading" rather than "stopping"). */
+  loopsFade?: boolean;
 }
 
 export type RemoteMessage =
@@ -80,6 +88,14 @@ function sanitizeLoops(v: unknown[]): RemoteLoop[] {
       state: REMOTE_LOOP_STATES.includes(o.state as RemoteLoopState) ? (o.state as RemoteLoopState) : 'empty',
     };
   });
+}
+
+function sanitizeShown(o: Record<string, unknown>): { strips: RemoteControlName[]; pads: RemoteTriggerName[]; loopsPage: boolean } {
+  return {
+    strips: Array.isArray(o.strips) ? REMOTE_CONTROLS.filter((n) => (o.strips as unknown[]).includes(n)) : [...REMOTE_CONTROLS],
+    pads: Array.isArray(o.pads) ? REMOTE_TRIGGERS.filter((n) => n !== 'stopAll' && (o.pads as unknown[]).includes(n)) : REMOTE_TRIGGERS.filter((n) => n !== 'stopAll'),
+    loopsPage: o.loopsPage !== false,
+  };
 }
 
 function sanitizeScenesList(v: unknown[]): RemoteScene[] {
@@ -131,6 +147,10 @@ export function parseRemoteMessage(raw: unknown): RemoteMessage | null {
         ...(s.learning === true ? { learning: true } : {}),
         ...(Array.isArray(s.loops) ? { loops: sanitizeLoops(s.loops) } : {}),
         ...(Array.isArray(s.scenes) ? { scenes: sanitizeScenesList(s.scenes) } : {}),
+        ...(typeof s.shown === 'object' && s.shown !== null ? { shown: sanitizeShown(s.shown as Record<string, unknown>) } : {}),
+        ...(Array.isArray(s.locked) ? { locked: REMOTE_CONTROLS.filter((n) => (s.locked as unknown[]).includes(n)) } : {}),
+        ...(s.stripMode === 'follow' || s.stripMode === 'jump' ? { stripMode: s.stripMode } : {}),
+        ...(typeof s.loopsFade === 'boolean' ? { loopsFade: s.loopsFade } : {}),
       },
     };
   }

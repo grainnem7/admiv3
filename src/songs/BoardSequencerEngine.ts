@@ -161,6 +161,13 @@ const EVOLVE_GLIDE_SEC = 0.8;
 /** How quickly the mix switch crossfades, so flipping it mid-loop never clicks. */
 const MIX_SWITCH_TC = 0.03;
 
+/** A loop launched without a pad, and the fade it is in, if any. */
+interface LaunchedLoop {
+  slot: number;
+  cells: ActiveCell[];
+  fade?: { dir: 'in' | 'out'; start: number; beats: number };
+}
+
 /** How long a replaced voice is kept so its last notes ring out. */
 const VOICE_RETIRE_MS = 4000;
 
@@ -231,9 +238,11 @@ export class BoardSequencerEngine {
   // Loops launched from the laptop, the iPad or a scene (no counter on a pad). A launch
   // or a stop takes effect at the next pass, so a tap is never off-beat; `pendingLaunch`
   // holds what is wanted until then.
-  private launched: ActiveCell[][] = [];
+  private launched: LaunchedLoop[] = [];
   private launchedSlots: number[] = [];
   private pendingLaunch: { slots: number[]; loops: ActiveCell[][] } | null = null;
+  /** How many beats a launched loop takes to fade in or out; 0 = it starts and stops dead. */
+  private launchFadeBeats = 0;
   // Pattern chaining: captured page snapshots (the selected page plays live from
   // `active`; other pages play from their stored snapshot here).
   private pages: ActiveCell[][] = [];
@@ -727,18 +736,57 @@ export class BoardSequencerEngine {
    */
   setLaunchedLoops(slots: number[], loops: ActiveCell[][]): void {
     if (!this.timer) {
-      this.launched = loops;
+      this.launched = slots.map((slot, i) => ({ slot, cells: loops[i] ?? [] }));
       this.launchedSlots = slots;
       this.pendingLaunch = null;
       return;
     }
-    const same = slots.length === this.launchedSlots.length && slots.every((s, i) => s === this.launchedSlots[i]);
+    const playing = this.launched.filter((l) => l.fade?.dir !== 'out').map((l) => l.slot);
+    const same = slots.length === playing.length && slots.every((s, i) => s === playing[i]);
     this.pendingLaunch = same ? null : { slots, loops };
   }
 
-  /** The slots the engine is playing now (a pending launch is not yet among them). */
+  /** How long a launched loop takes to come in and go out, in beats (0 = at once). */
+  setLaunchFade(beats: number): void {
+    this.launchFadeBeats = Math.max(0, Math.round(beats));
+  }
+
+  /** The slots the engine is playing now — a loop fading out is still among them. */
   getLaunchedSlots(): number[] {
     return this.launchedSlots;
+  }
+
+  /**
+   * Bring the wanted loops in at a pass boundary. A loop that was playing and is no longer
+   * wanted fades out over the fade length (or stops dead at 0); one that is new fades in.
+   */
+  private applyPendingLaunch(beat: number): void {
+    const next = this.pendingLaunch;
+    if (!next) return;
+    const fade = this.launchFadeBeats;
+    const out: LaunchedLoop[] = [];
+    for (const l of this.launched) {
+      if (next.slots.includes(l.slot)) continue;
+      if (l.fade?.dir === 'out') out.push(l); // already going: let it finish
+      else if (fade > 0) out.push({ slot: l.slot, cells: l.cells, fade: { dir: 'out', start: beat, beats: fade } });
+    }
+    next.slots.forEach((slot, i) => {
+      const was = this.launched.find((l) => l.slot === slot);
+      // Re-wanted while fading out, or still playing: carry on at full strength.
+      if (was) out.push({ slot, cells: next.loops[i] ?? was.cells });
+      else out.push({ slot, cells: next.loops[i] ?? [], fade: fade > 0 ? { dir: 'in', start: beat, beats: fade } : undefined });
+    });
+    this.launched = out;
+    this.launchedSlots = out.map((l) => l.slot);
+    this.pendingLaunch = null;
+  }
+
+  /** The loudness of a launched loop on this beat: 1, or where its fade has got to. */
+  private launchFactor(l: LaunchedLoop, beat: number): number {
+    if (!l.fade) return 1;
+    const k = beat - l.fade.start;
+    if (l.fade.dir === 'out') return Math.max(0, 1 - k / l.fade.beats);
+    return Math.min(1, (k + 1) / l.fade.beats);
   }
 
   isLaunchPending(): boolean {
@@ -1122,11 +1170,14 @@ export class BoardSequencerEngine {
     // A launch lands on the pass boundary — the first beat of the whole cycle.
     if (this.pendingLaunch) {
       const cycle = Math.max(1, this.cfg.cols * Math.max(1, this.cfg.numPages));
-      if (((beat % cycle) + cycle) % cycle === 0) {
-        this.launched = this.pendingLaunch.loops;
-        this.launchedSlots = this.pendingLaunch.slots;
-        this.pendingLaunch = null;
-      }
+      if (((beat % cycle) + cycle) % cycle === 0) this.applyPendingLaunch(beat);
+    }
+    // Fades that have run their course: a faded-out loop leaves, a faded-in one is simply playing.
+    if (this.launched.some((l) => l.fade)) {
+      this.launched = this.launched
+        .filter((l) => !(l.fade?.dir === 'out' && beat - l.fade.start >= l.fade.beats))
+        .map((l) => (l.fade?.dir === 'in' && beat - l.fade.start + 1 >= l.fade.beats ? { slot: l.slot, cells: l.cells } : l));
+      this.launchedSlots = this.launched.map((l) => l.slot);
     }
     try {
       this.applyEvolve(beat);
@@ -1152,7 +1203,13 @@ export class BoardSequencerEngine {
     const tagged: { cell: ActiveCell; source: FiredNote['source'] }[] = [
       ...cells.filter(onGrid).map((c) => ({ cell: c, source: liveSource })),
       ...this.activeLoops.flat().filter(onGrid).map((c) => ({ cell: c, source: 'loop' as const })),
-      ...this.launched.flat().filter(onGrid).map((c) => ({ cell: c, source: 'loop' as const })),
+      ...this.launched.flatMap((l) => {
+        // A fade is in the loudness of each note, so it works for every part alike.
+        const f = this.launchFactor(l, beat);
+        return l.cells.filter(onGrid).map((c) => ({
+          cell: f < 1 ? { ...c, velocity: (c.velocity ?? this.cfg.velocity) * f } : c, source: 'loop' as const,
+        }));
+      }),
     ];
     const playCells = tagged.map((t) => t.cell);
     this.fireBand(beat, cellTime, secPerBeat, chord, playCells);

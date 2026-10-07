@@ -31,6 +31,12 @@ const PADS: { name: Exclude<RemoteTriggerName, 'stopAll'>; label: (s: RemoteStat
 const TRUST_LAPTOP_AFTER_MS = 400;
 /** At most this often per strip while sliding. */
 const SEND_EVERY_MS = 40;
+/** A touch wider than this is a palm or a forearm resting on the glass, not a finger. */
+const PALM_PX = 60;
+/** Stop all takes two taps within this long: one brush must not end the piece. */
+const CONFIRM_MS = 3000;
+/** Room between targets, so a finger that strays does not land on the neighbour. */
+const GAP = 18;
 
 export default function IPadRemoteScreen({ code }: { code: string }): JSX.Element {
   const [state, setState] = useState<RemoteState | null>(null);
@@ -46,6 +52,9 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
   // Two pages: the strips and pads, and the loops and scenes prepared for the performance.
   const [tab, setTab] = useState<'play' | 'loops'>('play');
   const lastPad = useRef(new Map<string, number>());
+  const [confirmStop, setConfirmStop] = useState(false);
+  // Follow mode: where the finger landed and what the value was, so sliding moves it from there.
+  const followStart = useRef(new Map<RemoteControlName, { fraction: number; value: number }>());
   /** A loop or scene pad: acts on touch, repeat taps ignored for a moment. */
   const padTap = (key: string, msg: RemoteMessage): void => {
     const now = performance.now();
@@ -62,6 +71,13 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
   // This player's reach on each strip (from the laptop); while learning, strips only report.
   const reachOf = (name: RemoteControlName) => state?.reach?.[name] ?? FULL_REACH;
   const learning = state?.learning === true;
+  // What this player's iPad shows, and how its strips behave — chosen on the laptop.
+  const shownStrips = state?.shown?.strips ?? REMOTE_CONTROLS;
+  const shownPads = PADS.filter((p) => (state?.shown?.pads ?? PADS.map((x) => x.name)).includes(p.name));
+  const loopsPage = state?.shown?.loopsPage !== false;
+  const locked = (name: RemoteControlName): boolean => state?.locked?.includes(name) === true;
+  const follow = state?.stripMode === 'follow';
+  const big = shownStrips.length <= 2;
 
   // Keep the page still: no scroll, no zoom, no text selection, on the whole document.
   useEffect(() => {
@@ -101,9 +117,16 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
   const stripHandlers = (name: RemoteControlName) => ({
     onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => {
       e.preventDefault();
+      if (locked(name)) return;
+      if (e.pointerType === 'touch' && e.width > PALM_PX) return; // a palm, not a finger
       e.currentTarget.setPointerCapture(e.pointerId);
       touching.current.set(name, e.pointerId);
       if (learning) { link.send({ type: 'reach', name, fraction: fractionAt(e.currentTarget, e.clientY) }); return; }
+      if (follow) {
+        // Landing changes nothing: the value moves only when the finger does.
+        followStart.current.set(name, { fraction: fractionAt(e.currentTarget, e.clientY), value: valueOf(name) });
+        return;
+      }
       const v = fromPointer(e.currentTarget, e.clientY, name);
       latest.current.set(name, v);
       setLocal((l) => ({ ...l, [name]: v }));
@@ -112,7 +135,17 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
     onPointerMove: (e: React.PointerEvent<HTMLDivElement>) => {
       if (touching.current.get(name) !== e.pointerId) return;
       if (learning) { link.send({ type: 'reach', name, fraction: fractionAt(e.currentTarget, e.clientY) }); return; }
-      const v = fromPointer(e.currentTarget, e.clientY, name);
+      let v: number;
+      if (follow) {
+        const start = followStart.current.get(name);
+        if (!start) return;
+        // The player's reach is the whole range, so a short slide for a short reach.
+        const reach = reachOf(name);
+        const delta = (fractionAt(e.currentTarget, e.clientY) - start.fraction) / Math.max(0.2, reach.high - reach.low);
+        v = stripValue(Math.max(0, Math.min(1, start.value + delta)));
+      } else {
+        v = fromPointer(e.currentTarget, e.clientY, name);
+      }
       latest.current.set(name, v);
       setLocal((l) => (l[name] === v ? l : { ...l, [name]: v }));
       send(name, v);
@@ -120,6 +153,7 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
     onPointerUp: (e: React.PointerEvent<HTMLDivElement>) => {
       if (touching.current.get(name) !== e.pointerId) return;
       touching.current.delete(name);
+      followStart.current.delete(name);
       releasedAt.current.set(name, performance.now());
       if (learning) return;
       const v = latest.current.get(name);
@@ -132,7 +166,7 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
     // Keyboard and switch access: arrows step the value.
     onKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => {
       const dir = e.key === 'ArrowUp' || e.key === 'ArrowRight' ? 1 : e.key === 'ArrowDown' || e.key === 'ArrowLeft' ? -1 : 0;
-      if (!dir) return;
+      if (!dir || locked(name)) return;
       e.preventDefault();
       const v = Math.max(0, Math.min(1, Math.round((valueOf(name) + dir * STRIP_STEP) / STRIP_STEP) * STRIP_STEP));
       setLocal((l) => ({ ...l, [name]: v }));
@@ -151,7 +185,7 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
   };
 
   const page: CSSProperties = {
-    position: 'fixed', inset: 0, display: 'flex', flexDirection: 'column', gap: 12, padding: 12,
+    position: 'fixed', inset: 0, display: 'flex', flexDirection: 'column', gap: GAP, padding: `14px 18px 28px`,
     background: '#14171f', color: '#eef1f7', fontFamily: 'system-ui, -apple-system, sans-serif',
     touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', boxSizing: 'border-box',
   };
@@ -170,7 +204,8 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
         <span style={{ marginLeft: 'auto', opacity: 0.6, fontSize: 16 }}>{`Code ${code}`}</span>
       </div>
 
-      <div role="tablist" aria-label="Page" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+      {loopsPage && (
+      <div role="tablist" aria-label="Page" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: GAP }}>
         {(['play', 'loops'] as const).map((p) => (
           <button
             key={p}
@@ -187,10 +222,11 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
           </button>
         ))}
       </div>
+      )}
 
-      {tab === 'loops' && (
+      {tab === 'loops' && loopsPage && (
         <div style={{ flex: '1 1 0', display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0, opacity: connected ? 1 : 0.4 }}>
-          <div style={{ flex: '3 1 0', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gridTemplateRows: 'repeat(2, 1fr)', gap: 12, minHeight: 0 }}>
+          <div style={{ flex: '3 1 0', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gridTemplateRows: 'repeat(2, 1fr)', gap: GAP, minHeight: 0 }}>
             {Array.from({ length: 8 }, (_, i) => {
               const l = state?.loops?.[i] ?? { name: '', state: 'empty' as RemoteLoopState };
               const on = l.state === 'playing' || l.state === 'starting';
@@ -213,13 +249,13 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
                 >
                   <span>{label}</span>
                   <span style={{ fontSize: 15, fontWeight: 600, opacity: 0.8 }}>
-                    {l.state === 'empty' ? 'empty' : l.state === 'playing' ? '▶ playing' : l.state === 'starting' ? 'starting…' : l.state === 'stopping' ? 'stopping…' : 'tap to play'}
+                    {l.state === 'empty' ? 'empty' : l.state === 'playing' ? '▶ playing' : l.state === 'starting' ? (state?.loopsFade ? 'fading in…' : 'starting…') : l.state === 'stopping' ? (state?.loopsFade ? 'fading out…' : 'stopping…') : 'tap to play'}
                   </span>
                 </button>
               );
             })}
           </div>
-          <div style={{ flex: '2 1 0', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, minHeight: 0 }}>
+          <div style={{ flex: '2 1 0', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: GAP, minHeight: 0 }}>
             {Array.from({ length: 4 }, (_, i) => {
               const sc = state?.scenes?.[i];
               return (
@@ -240,7 +276,7 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
               );
             })}
           </div>
-          <div style={{ height: '18%', minHeight: 90, display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 12 }}>
+          <div style={{ height: '18%', minHeight: 90, display: 'grid', gridTemplateColumns: '2fr 1fr', gap: GAP }}>
             <button
               type="button"
               disabled={!state?.scenes || state.scenes.length === 0}
@@ -251,34 +287,53 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
             </button>
             <button
               type="button"
-              onPointerDown={(e) => { e.preventDefault(); padTap('stopAll', { type: 'trigger', name: 'stopAll' }); }}
-              style={{ borderRadius: 20, touchAction: 'none', color: '#eef1f7', fontSize: 24, fontWeight: 800, border: '4px solid #ef5350', background: '#4a2323' }}
+              aria-label={confirmStop ? 'Tap again to stop all loops' : 'Stop all loops'}
+              onPointerDown={(e) => {
+                e.preventDefault();
+                if (e.pointerType === 'touch' && e.width > PALM_PX) return;
+                // Two taps: a brush against the pad must not end the piece.
+                if (!confirmStop) {
+                  setConfirmStop(true);
+                  setTimeout(() => setConfirmStop(false), CONFIRM_MS);
+                  return;
+                }
+                setConfirmStop(false);
+                padTap('stopAll', { type: 'trigger', name: 'stopAll' });
+              }}
+              style={{
+                borderRadius: 20, touchAction: 'none', color: '#eef1f7', fontSize: confirmStop ? 20 : 24, fontWeight: 800,
+                border: `4px solid ${confirmStop ? '#ffffff' : '#ef5350'}`, background: confirmStop ? '#8a2a2a' : '#4a2323',
+              }}
             >
-              ■ Stop all
+              {confirmStop ? 'Tap again to stop all' : '■ Stop all'}
             </button>
           </div>
         </div>
       )}
 
-      {tab === 'play' && (<>
+      {(tab === 'play' || !loopsPage) && (<>
 
-      <div style={{ flex: '1 1 0', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, minHeight: 0, opacity: connected ? 1 : 0.4 }}>
-        {REMOTE_CONTROLS.map((name) => {
+      {shownStrips.length > 0 && (
+      <div style={{ flex: '1 1 0', display: 'grid', gridTemplateColumns: `repeat(${shownStrips.length}, 1fr)`, gap: GAP, minHeight: 0, opacity: connected ? 1 : 0.4 }}>
+        {shownStrips.map((name) => {
           const v = valueOf(name);
+          const isLocked = locked(name);
           return (
             <div
               key={name}
               role="slider"
-              tabIndex={0}
-              aria-label={STRIP_NAMES[name]}
+              tabIndex={isLocked ? -1 : 0}
+              aria-disabled={isLocked || undefined}
+              aria-label={`${STRIP_NAMES[name]}${isLocked ? ', locked' : ''}`}
               aria-valuemin={0}
               aria-valuemax={100}
               aria-valuenow={Math.round(v * 100)}
               aria-valuetext={state?.labels[name] ?? `${Math.round(v * 100)}%`}
               {...stripHandlers(name)}
               style={{
-                position: 'relative', borderRadius: 20, overflow: 'hidden', background: '#232836',
+                position: 'relative', borderRadius: 24, overflow: 'hidden', background: '#232836',
                 border: `3px solid ${touching.current.has(name) ? '#ffffff' : '#3a4152'}`, touchAction: 'none',
+                opacity: isLocked ? 0.45 : 1,
               }}
             >
               <div
@@ -289,8 +344,8 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
                 }}
               />
               <div style={{ position: 'absolute', top: 12, left: 0, right: 0, textAlign: 'center', pointerEvents: 'none' }}>
-                <div style={{ fontSize: 26, fontWeight: 800 }}>{STRIP_NAMES[name]}</div>
-                <div style={{ fontSize: 20, fontWeight: 600, marginTop: 4, textShadow: '0 1px 3px #000' }}>
+                <div style={{ fontSize: big ? 34 : 26, fontWeight: 800 }}>{`${isLocked ? '🔒 ' : ''}${STRIP_NAMES[name]}`}</div>
+                <div style={{ fontSize: big ? 26 : 20, fontWeight: 600, marginTop: 4, textShadow: '0 1px 3px #000' }}>
                   {state?.labels[name] ?? `${Math.round(v * 100)}%`}
                 </div>
               </div>
@@ -298,16 +353,18 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
           );
         })}
       </div>
+      )}
 
-      <div style={{ height: '22%', minHeight: 100, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, opacity: connected && !learning ? 1 : 0.4 }}>
-        {PADS.map((p) => {
+      {shownPads.length > 0 && (
+      <div style={{ height: shownStrips.length === 0 ? '100%' : '22%', minHeight: 100, display: 'grid', gridTemplateColumns: `repeat(${shownPads.length}, 1fr)`, gap: GAP, opacity: connected && !learning ? 1 : 0.4 }}>
+        {shownPads.map((p) => {
           const on = (p.name === 'keep' && state?.kept) || (p.name === 'mute' && state?.muted);
           return (
             <button
               key={p.name}
               type="button"
               aria-pressed={p.name === 'keep' || p.name === 'mute' ? !!on : undefined}
-              onPointerDown={(e) => { e.preventDefault(); if (!learning) tap(p.name); }}
+              onPointerDown={(e) => { e.preventDefault(); if (e.pointerType === 'touch' && e.width > PALM_PX) return; if (!learning) tap(p.name); }}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tap(p.name); } }}
               style={{
                 borderRadius: 20, border: `3px solid ${flash === p.name ? '#ffffff' : on ? '#ffd54f' : '#3a4152'}`,
@@ -316,12 +373,13 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
                 justifyContent: 'center', gap: 6, touchAction: 'none',
               }}
             >
-              <span aria-hidden="true" style={{ fontSize: 36 }}>{p.icon}</span>
+              <span aria-hidden="true" style={{ fontSize: shownStrips.length === 0 ? 56 : 36 }}>{p.icon}</span>
               {p.label(state)}
             </button>
           );
         })}
       </div>
+      )}
       </>)}
     </div>
   );

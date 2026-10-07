@@ -10,7 +10,9 @@
 import type { FillNote } from '../songs/generative/rulesFill';
 import type { BandLevel } from '../songs/band/band';
 import type { MidiSends } from '../midi/boardMidi';
-import { fullReachMap, sanitizeReachMap, type Reach, type RemoteControlName } from '../remote/protocol';
+import {
+  fullReachMap, REMOTE_CONTROLS, sanitizeReachMap, type Reach, type RemoteControlName, type RemoteTriggerName,
+} from '../remote/protocol';
 import { sanitizeLoopNames, sanitizeScenes, type Scene } from '../songs/performance/launcher';
 import { isSoundWorldChoice, type SoundWorldChoice } from '../audio/worlds/soundWorlds';
 import { quarterTurns, type QuarterTurns } from '../tracking/frameOrientation';
@@ -136,6 +138,16 @@ export interface BoardSequencerStored {
   scenes: Scene[];
   /** The scene recalled last, for "Next scene"; null = none yet. */
   currentScene: number | null;
+  /** How many passes a launched loop takes to come in and go out (0 = at once). */
+  loopFadePasses: number;
+  /** What the iPad shows: fewer things means bigger things. */
+  remoteStrips: RemoteControlName[];
+  remotePads: RemoteTriggerName[];
+  remoteLoopsPage: boolean;
+  /** Strips that ignore touch for now (a speed that must not change mid-piece). */
+  remoteLocked: RemoteControlName[];
+  /** Jump: the value goes to the finger. Follow: the value moves with the finger from where it was. */
+  remoteStripMode: 'jump' | 'follow';
   /** Global transpose in octaves (applied to all melodic + bass notes). */
   octaveShift: number;
   /** Board output volume (0..1). */
@@ -358,6 +370,12 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   loopNames: sanitizeLoopNames([]),
   scenes: [],
   currentScene: null,
+  loopFadePasses: 1,
+  remoteStrips: [...REMOTE_CONTROLS],
+  remotePads: ['newIdea', 'newSound', 'keep', 'mute'],
+  remoteLoopsPage: true,
+  remoteLocked: [],
+  remoteStripMode: 'jump',
   loopStepsRed: 0,
   loopStepsBlack: 0,
   loopStepsBlue: 0,
@@ -685,6 +703,16 @@ function sanitize(input: unknown): BoardSequencerStored | null {
       soundWorld: d.soundWorld, band: d.band, phrases: d.phrases, fillAmount: d.fillAmount, evolveAmount: d.evolveAmount, bpm: d.bpm,
     }),
     currentScene: isNum(o.currentScene) && o.currentScene >= 0 ? Math.round(o.currentScene) : null,
+    loopFadePasses: [0, 0.5, 1, 2].includes(num(o.loopFadePasses, 1)) ? num(o.loopFadePasses, 1) : 1,
+    remoteStrips: Array.isArray(o.remoteStrips)
+      ? REMOTE_CONTROLS.filter((n) => (o.remoteStrips as unknown[]).includes(n))
+      : [...REMOTE_CONTROLS],
+    remotePads: Array.isArray(o.remotePads)
+      ? (['newIdea', 'newSound', 'keep', 'mute'] as RemoteTriggerName[]).filter((n) => (o.remotePads as unknown[]).includes(n))
+      : ['newIdea', 'newSound', 'keep', 'mute'],
+    remoteLoopsPage: o.remoteLoopsPage !== false,
+    remoteLocked: Array.isArray(o.remoteLocked) ? REMOTE_CONTROLS.filter((n) => (o.remoteLocked as unknown[]).includes(n)) : [],
+    remoteStripMode: o.remoteStripMode === 'follow' ? 'follow' : 'jump',
     // Whole counts. A stored 0, 2.5 or -1 used to survive: Array.from({length: numPages})
     // throws on a fraction, and the page picker showed nothing selected.
     loopStepsRed: wholeCount(o.loopStepsRed, 0, MAX_LOOP_STEPS, d.loopStepsRed),
