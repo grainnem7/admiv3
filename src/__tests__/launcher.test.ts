@@ -191,3 +191,58 @@ describe('engine — launched loops fade', () => {
     expect(vels(p)).toEqual([0.8, 0.8, 0.8, 0.8]);
   });
 });
+
+describe('engine — the ending', () => {
+  const cells = [0, 1, 2, 3].map((col) => ({ row: 2, col, colour: 'm' }));
+  interface EndPriv extends Priv { endGain: { gain: { cancelScheduledValues: ReturnType<typeof vi.fn>; setValueAtTime: ReturnType<typeof vi.fn>; linearRampToValueAtTime: ReturnType<typeof vi.fn>; setTargetAtTime: ReturnType<typeof vi.fn> } } }
+  const endEngine = () => {
+    const { e, p } = engine();
+    const ep = p as EndPriv;
+    ep.endGain = { gain: { cancelScheduledValues: vi.fn(), setValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn(), setTargetAtTime: vi.fn() } };
+    e.setActiveCells(cells);
+    return { e, p: ep };
+  };
+
+  it('a fade begins at the next pass boundary, runs its beats, then says it has finished', () => {
+    const { e, p } = endEngine();
+    const finished = vi.fn();
+    p.fireStep(0, 0, 1, null);
+    p.fireStep(1, 1, 1, null);
+    e.finish(8, finished);                       // asked for mid-pass
+    expect(e.isFinishing()).toBe(true);
+    for (let b = 2; b < 4; b++) p.fireStep(b, b, 1, null);
+    expect(p.endGain.gain.linearRampToValueAtTime).not.toHaveBeenCalled();
+    p.fireStep(4, 4, 1, null);                   // the boundary: the ramp starts here
+    expect(p.endGain.gain.linearRampToValueAtTime).toHaveBeenCalledWith(0, 4 + 8);
+    for (let b = 5; b < 12; b++) p.fireStep(b, b, 1, null);
+    expect(finished).not.toHaveBeenCalled();
+    p.fireStep(12, 12, 1, null);                 // 8 beats after it began: over
+    expect(finished).toHaveBeenCalledTimes(1);
+    expect(e.isFinishing()).toBe(false);
+    expect(e.drainFiredNotes().some((f) => f.audioTime === 12)).toBe(false); // nothing played on the beat it ended
+  });
+
+  it('a stop ends at the next boundary without a ramp', () => {
+    const { e, p } = endEngine();
+    const finished = vi.fn();
+    p.fireStep(0, 0, 1, null);
+    e.finish(0, finished);
+    for (let b = 1; b < 4; b++) p.fireStep(b, b, 1, null);
+    expect(finished).not.toHaveBeenCalled();
+    p.fireStep(4, 4, 1, null);
+    expect(finished).toHaveBeenCalledTimes(1);
+    expect(p.endGain.gain.linearRampToValueAtTime).not.toHaveBeenCalled();
+  });
+
+  it('cancelling brings the sound back and the clock carries on', () => {
+    const { e, p } = endEngine();
+    const finished = vi.fn();
+    e.finish(8, finished);
+    p.fireStep(0, 0, 1, null);                   // boundary: ramp begins
+    e.cancelFinish();
+    expect(e.isFinishing()).toBe(false);
+    expect(p.endGain.gain.setTargetAtTime).toHaveBeenCalledWith(1, 0, expect.any(Number));
+    for (let b = 1; b < 20; b++) p.fireStep(b, b, 1, null);
+    expect(finished).not.toHaveBeenCalled();
+  });
+});

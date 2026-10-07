@@ -28,7 +28,8 @@ export type ColourRole =
   | 'melody' | 'bass' | 'drums' | 'chord'           // sequenced voices
   | 'volume' | 'reverb' | 'delay' | 'tone' | 'tempo' // position faders → 0..1
   | 'fill' | 'evolve'                                // faders for what the instrument adds
-  | 'reverbToggle' | 'delayToggle';                  // presence → on/off
+  | 'reverbToggle' | 'delayToggle'                   // presence → on/off
+  | 'loop';                                          // presence → a saved loop plays (channel.loopSlot)
 
 export const SEQUENCED_ROLES: ColourRole[] = ['melody', 'bass', 'drums', 'chord'];
 export const FADER_ROLES: ColourRole[] = ['volume', 'reverb', 'delay', 'tone', 'tempo', 'fill', 'evolve'];
@@ -45,6 +46,10 @@ export function isToggleRole(r: ColourRole): boolean {
 }
 export function isControlRole(r: ColourRole): boolean {
   return isFaderRole(r) || isToggleRole(r);
+}
+/** A colour that plays a saved loop while its counter is on the board. */
+export function isLoopRole(r: ColourRole): boolean {
+  return r === 'loop';
 }
 
 /** Human labels for the role picker. */
@@ -63,6 +68,7 @@ export const ROLE_LABELS: Record<ColourRole, string> = {
   evolve: 'Evolve amount (fader)',
   reverbToggle: 'Reverb on/off',
   delayToggle: 'Delay on/off',
+  loop: 'Plays a loop',
 };
 
 export interface BlackBand {
@@ -96,6 +102,8 @@ export interface ColourChannel {
   instrument?: string;
   /** Kit piece for the drums role ('' = vary by row, kick→crash bottom→top). */
   drum?: string;
+  /** For the 'loop' role: which saved loop this counter plays (0-based slot). */
+  loopSlot?: number;
   /** Per-channel mix (all 0..1): volume, tone/brightness, reverb-send, delay-send. */
   volume?: number;
   tone?: number;

@@ -225,3 +225,18 @@ describe('what the iPad is told to show', () => {
     });
   });
 });
+
+describe('the clock on the iPad, and the End and Capture pads', () => {
+  it('the laptop sends the countdown and its phase, made safe', () => {
+    const base = { values: { tempo: 0, dynamics: 0, fill: 0, evolve: 0 }, labels: { tempo: '', dynamics: '', fill: '', evolve: '' } };
+    const good = parseRemoteMessage({ type: 'state', state: { ...base, clock: { text: '6:42', phase: 'lastMinute' } } });
+    expect(good && good.type === 'state' ? good.state.clock : null).toEqual({ text: '6:42', phase: 'lastMinute' });
+    const bad = parseRemoteMessage({ type: 'state', state: { ...base, clock: { text: '6:42', phase: 'panic' } } });
+    expect(bad && bad.type === 'state' ? bad.state.clock : 'x').toBeUndefined();
+  });
+
+  it('End piece and Capture are triggers the iPad may send', () => {
+    expect(parseRemoteMessage({ type: 'trigger', name: 'endPiece' })).toEqual({ type: 'trigger', name: 'endPiece' });
+    expect(parseRemoteMessage({ type: 'trigger', name: 'capture' })).toEqual({ type: 'trigger', name: 'capture' });
+  });
+});

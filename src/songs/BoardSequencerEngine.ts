@@ -243,6 +243,11 @@ export class BoardSequencerEngine {
   private pendingLaunch: { slots: number[]; loops: ActiveCell[][] } | null = null;
   /** How many beats a launched loop takes to fade in or out; 0 = it starts and stops dead. */
   private launchFadeBeats = 0;
+  // The ending: everything fades over `beats` from the pass boundary after `finish()` is
+  // called, then `onFinished` fires so the screen can stop. 0 beats = stop at the boundary.
+  private endGain: GainNode | null = null;
+  private finishing: { beats: number; startBeat: number | null } | null = null;
+  private onFinished: (() => void) | null = null;
   // Pattern chaining: captured page snapshots (the selected page plays live from
   // `active`; other pages play from their stored snapshot here).
   private pages: ActiveCell[][] = [];
@@ -326,7 +331,12 @@ export class BoardSequencerEngine {
     mixTone.type = 'lowpass';
     mixTone.frequency.value = world?.mixToneHz ?? 20000;
     mixTone.Q.value = 0.5;
-    mix.connect(mixTone);
+    // The ending's fade sits after the mix, so Mute and volume keep working underneath it.
+    const endGain = ctx.createGain();
+    endGain.gain.value = 1;
+    mix.connect(endGain);
+    endGain.connect(mixTone);
+    this.endGain = endGain;
     this.mixTone = mixTone;
     const classicOut = ctx.createGain();
     classicOut.gain.value = studio ? 0 : 1;
@@ -744,6 +754,32 @@ export class BoardSequencerEngine {
     const playing = this.launched.filter((l) => l.fade?.dir !== 'out').map((l) => l.slot);
     const same = slots.length === playing.length && slots.every((s, i) => s === playing[i]);
     this.pendingLaunch = same ? null : { slots, loops };
+  }
+
+  /**
+   * End the piece: from the next pass boundary everything fades over `beats` (0 = stop at
+   * the boundary), then `onFinished` is called. Visuals and the log carry on through the
+   * fade — the lights go down with the sound.
+   */
+  finish(beats: number, onFinished: () => void): void {
+    this.finishing = { beats: Math.max(0, Math.round(beats)), startBeat: null };
+    this.onFinished = onFinished;
+  }
+
+  /** Change of mind: the ending is cancelled and the sound comes back. */
+  cancelFinish(): void {
+    this.finishing = null;
+    this.onFinished = null;
+    const g = this.endGain?.gain;
+    if (g) {
+      const t = Tone.immediate();
+      g.cancelScheduledValues(t);
+      g.setTargetAtTime(1, t, MUTE_GLIDE_SEC);
+    }
+  }
+
+  isFinishing(): boolean {
+    return this.finishing !== null;
   }
 
   /** How long a launched loop takes to come in and go out, in beats (0 = at once). */
@@ -1167,6 +1203,27 @@ export class BoardSequencerEngine {
    * chord locks melodic pitch.
    */
   private fireStep(beat: number, cellTime: number, secPerBeat: number, chord: BoardChord | null): void {
+    // The ending, aligned to the pass like everything else.
+    if (this.finishing) {
+      const cycle = Math.max(1, this.cfg.cols * Math.max(1, this.cfg.numPages));
+      const atBoundary = ((beat % cycle) + cycle) % cycle === 0;
+      if (this.finishing.startBeat === null && atBoundary) {
+        this.finishing.startBeat = beat;
+        if (this.finishing.beats > 0 && this.endGain) {
+          const g = this.endGain.gain;
+          g.cancelScheduledValues(cellTime);
+          g.setValueAtTime(1, cellTime);
+          g.linearRampToValueAtTime(0, cellTime + this.finishing.beats * secPerBeat);
+        }
+      }
+      if (this.finishing.startBeat !== null && beat >= this.finishing.startBeat + this.finishing.beats) {
+        const done = this.onFinished;
+        this.finishing = null;
+        this.onFinished = null;
+        done?.();
+        return;
+      }
+    }
     // A launch lands on the pass boundary — the first beat of the whole cycle.
     if (this.pendingLaunch) {
       const cycle = Math.max(1, this.cfg.cols * Math.max(1, this.cfg.numPages));
@@ -1706,6 +1763,8 @@ export class BoardSequencerEngine {
     this.masterChain = null;
     this.duckBus?.disconnect();
     this.duckBus = null;
+    this.endGain?.disconnect();
+    this.endGain = null;
     this.mixTone?.disconnect();
     this.mixTone = null;
     this.drumTone?.disconnect();

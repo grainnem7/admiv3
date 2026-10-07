@@ -53,6 +53,8 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
   const [tab, setTab] = useState<'play' | 'loops'>('play');
   const lastPad = useRef(new Map<string, number>());
   const [confirmStop, setConfirmStop] = useState(false);
+  const [confirmEnd, setConfirmEnd] = useState(false);
+  const clock = state?.clock ?? null;
   // Follow mode: where the finger landed and what the value was, so sliding moves it from there.
   const followStart = useRef(new Map<RemoteControlName, { fraction: number; value: number }>());
   /** A loop or scene pad: acts on touch, repeat taps ignored for a moment. */
@@ -201,7 +203,20 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
               ? (state?.playing ? 'Connected · playing' : 'Connected · press Play on the laptop')
               : link.status === 'open' ? 'Waiting for the laptop…' : 'Connecting…'}
         </span>
-        <span style={{ marginLeft: 'auto', opacity: 0.6, fontSize: 16 }}>{`Code ${code}`}</span>
+        {clock && clock.phase !== 'idle' && (
+          <span
+            role="timer"
+            aria-label={`${clock.text} left`}
+            style={{
+              marginLeft: 'auto', padding: '4px 16px', borderRadius: 14, fontSize: 30, fontWeight: 800, fontVariantNumeric: 'tabular-nums',
+              background: clock.phase === 'running' ? '#232836' : clock.phase === 'lastMinute' ? '#8a6d1a' : '#8a2a2a',
+              border: `3px solid ${clock.phase === 'running' ? '#3a4152' : clock.phase === 'lastMinute' ? '#ffd54f' : '#ef5350'}`,
+            }}
+          >
+            {clock.phase === 'ending' ? `ending ${clock.text}` : clock.phase === 'over' ? `over ${clock.text}` : `⏱ ${clock.text}`}
+          </span>
+        )}
+        <span style={{ marginLeft: clock && clock.phase !== 'idle' ? 12 : 'auto', opacity: 0.6, fontSize: 16 }}>{`Code ${code}`}</span>
       </div>
 
       {loopsPage && (
@@ -276,7 +291,15 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
               );
             })}
           </div>
-          <div style={{ height: '18%', minHeight: 90, display: 'grid', gridTemplateColumns: '2fr 1fr', gap: GAP }}>
+          <div style={{ height: '18%', minHeight: 90, display: 'grid', gridTemplateColumns: '1fr 1.4fr 1fr 1fr', gap: GAP }}>
+            <button
+              type="button"
+              aria-label="Capture: save what is on the board as a loop and start it"
+              onPointerDown={(e) => { e.preventDefault(); if (e.pointerType === 'touch' && e.width > PALM_PX) return; padTap('capture', { type: 'trigger', name: 'capture' }); }}
+              style={{ borderRadius: 20, touchAction: 'none', color: '#eef1f7', fontSize: 22, fontWeight: 800, border: '4px solid #4fc3f7', background: '#1f3a4a' }}
+            >
+              ⏺ Capture
+            </button>
             <button
               type="button"
               disabled={!state?.scenes || state.scenes.length === 0}
@@ -284,6 +307,27 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
               style={{ borderRadius: 20, touchAction: 'none', color: '#eef1f7', fontSize: 26, fontWeight: 800, border: '4px solid #ce93d8', background: '#232836', opacity: state?.scenes?.length ? 1 : 0.35 }}
             >
               Next scene ▶
+            </button>
+            <button
+              type="button"
+              aria-label={confirmEnd ? 'Tap again to end the piece' : 'End the piece'}
+              onPointerDown={(e) => {
+                e.preventDefault();
+                if (e.pointerType === 'touch' && e.width > PALM_PX) return;
+                if (!confirmEnd) {
+                  setConfirmEnd(true);
+                  setTimeout(() => setConfirmEnd(false), CONFIRM_MS);
+                  return;
+                }
+                setConfirmEnd(false);
+                padTap('endPiece', { type: 'trigger', name: 'endPiece' });
+              }}
+              style={{
+                borderRadius: 20, touchAction: 'none', color: '#eef1f7', fontSize: confirmEnd ? 18 : 22, fontWeight: 800,
+                border: `4px solid ${confirmEnd ? '#ffffff' : '#ce93d8'}`, background: confirmEnd ? '#6a3a7a' : '#2d2033',
+              }}
+            >
+              {confirmEnd ? 'Tap again to end' : '⏹ End piece'}
             </button>
             <button
               type="button"

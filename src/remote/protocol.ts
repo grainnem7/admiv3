@@ -17,9 +17,11 @@ export const REMOTE_PATH = '/admi-remote';
 export const REMOTE_INFO_PATH = '/admi-remote-info';
 
 export type RemoteControlName = 'tempo' | 'dynamics' | 'fill' | 'evolve';
-export type RemoteTriggerName = 'newIdea' | 'newSound' | 'keep' | 'mute' | 'stopAll';
+export type RemoteTriggerName = 'newIdea' | 'newSound' | 'keep' | 'mute' | 'stopAll' | 'endPiece' | 'capture';
 export const REMOTE_CONTROLS: RemoteControlName[] = ['tempo', 'dynamics', 'fill', 'evolve'];
-export const REMOTE_TRIGGERS: RemoteTriggerName[] = ['newIdea', 'newSound', 'keep', 'mute', 'stopAll'];
+export const REMOTE_TRIGGERS: RemoteTriggerName[] = ['newIdea', 'newSound', 'keep', 'mute', 'stopAll', 'endPiece', 'capture'];
+/** The pads of the Play page: the ones a facilitator can show or hide. */
+export const PLAY_PADS: RemoteTriggerName[] = ['newIdea', 'newSound', 'keep', 'mute'];
 
 /** A launchable loop as the iPad shows it (the same words as performance/launcher). */
 export type RemoteLoopState = 'empty' | 'stopped' | 'playing' | 'starting' | 'stopping';
@@ -62,6 +64,8 @@ export interface RemoteState {
   stripMode?: 'jump' | 'follow';
   /** Whether launched loops fade (the pads say "fading" rather than "stopping"). */
   loopsFade?: boolean;
+  /** The performance clock, for the big countdown. */
+  clock?: { text: string; phase: 'idle' | 'running' | 'lastMinute' | 'lastMoments' | 'ending' | 'over' };
 }
 
 export type RemoteMessage =
@@ -93,9 +97,17 @@ function sanitizeLoops(v: unknown[]): RemoteLoop[] {
 function sanitizeShown(o: Record<string, unknown>): { strips: RemoteControlName[]; pads: RemoteTriggerName[]; loopsPage: boolean } {
   return {
     strips: Array.isArray(o.strips) ? REMOTE_CONTROLS.filter((n) => (o.strips as unknown[]).includes(n)) : [...REMOTE_CONTROLS],
-    pads: Array.isArray(o.pads) ? REMOTE_TRIGGERS.filter((n) => n !== 'stopAll' && (o.pads as unknown[]).includes(n)) : REMOTE_TRIGGERS.filter((n) => n !== 'stopAll'),
+    pads: Array.isArray(o.pads) ? PLAY_PADS.filter((n) => (o.pads as unknown[]).includes(n)) : [...PLAY_PADS],
     loopsPage: o.loopsPage !== false,
   };
+}
+
+const CLOCK_PHASES = ['idle', 'running', 'lastMinute', 'lastMoments', 'ending', 'over'] as const;
+function sanitizeClock(v: unknown): RemoteState['clock'] | null {
+  if (typeof v !== 'object' || v === null) return null;
+  const o = v as Record<string, unknown>;
+  if (typeof o.text !== 'string' || !CLOCK_PHASES.includes(o.phase as (typeof CLOCK_PHASES)[number])) return null;
+  return { text: o.text.slice(0, 12), phase: o.phase as (typeof CLOCK_PHASES)[number] };
 }
 
 function sanitizeScenesList(v: unknown[]): RemoteScene[] {
@@ -151,6 +163,7 @@ export function parseRemoteMessage(raw: unknown): RemoteMessage | null {
         ...(Array.isArray(s.locked) ? { locked: REMOTE_CONTROLS.filter((n) => (s.locked as unknown[]).includes(n)) } : {}),
         ...(s.stripMode === 'follow' || s.stripMode === 'jump' ? { stripMode: s.stripMode } : {}),
         ...(typeof s.loopsFade === 'boolean' ? { loopsFade: s.loopsFade } : {}),
+        ...(sanitizeClock(s.clock) ? { clock: sanitizeClock(s.clock)! } : {}),
       },
     };
   }

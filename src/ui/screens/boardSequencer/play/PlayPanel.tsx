@@ -19,6 +19,8 @@ export interface PlayPanelProps {
   /** How many cells the hand guard is holding, and whether it has a clear view yet. */
   heldCount: number;
   handGuardWaiting: boolean;
+  /** The performance clock, when one is running: the countdown and how near the end is. */
+  clock?: { text: string; phase: 'idle' | 'running' | 'lastMinute' | 'lastMoments' | 'ending' | 'over' } | null;
   groove: ReactNode;
   sound: ReactNode;
   loops: ReactNode;
@@ -33,7 +35,7 @@ export interface PlayPanelProps {
  * room for it, so a focused control is never hidden behind the bar.
  */
 export function PlayPanel({
-  running, muted, onStart, onStop, onToggleMute, bpm, step, cols, variationLap, beatOn,
+  running, muted, onStart, onStop, onToggleMute, bpm, step, cols, variationLap, beatOn, clock = null,
   heldCount, handGuardWaiting, groove, sound, loops, stacked, transportAlign,
 }: PlayPanelProps): JSX.Element {
   const [tab, setTab] = useState('groove');
@@ -78,6 +80,20 @@ export function PlayPanel({
           {variationLap !== null && running && ` · lap ${variationLap ? 'B' : 'A'}`}
           {heldCount > 0 && ` · ✋ holding ${heldCount}`}
         </span>
+        {/* The countdown: a guide to where the piece is, louder in colour as the end nears. */}
+        {clock && clock.phase !== 'idle' && (
+          <span
+            aria-label={`${clock.text} left`}
+            style={{
+              marginLeft: 6, padding: '1px 8px', borderRadius: 'var(--bs-radius-sm)', fontWeight: 700,
+              fontVariantNumeric: 'tabular-nums',
+              background: clock.phase === 'running' ? 'var(--bs-elev)' : clock.phase === 'lastMinute' ? 'var(--bs-warn-tint)' : 'var(--bs-warn)',
+              color: clock.phase === 'lastMoments' || clock.phase === 'ending' || clock.phase === 'over' ? 'var(--bs-bg)' : 'inherit',
+            }}
+          >
+            {clock.phase === 'ending' ? `ending · ${clock.text}` : clock.phase === 'over' ? `time ${clock.text}` : `⏱ ${clock.text}`}
+          </span>
+        )}
       </span>
       {handGuardWaiting && (
         <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>

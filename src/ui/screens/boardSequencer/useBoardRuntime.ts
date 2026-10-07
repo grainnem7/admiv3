@@ -11,7 +11,7 @@ import { BoardReader } from '../../../tracking/BoardReader';
 import type { ActiveCell, BoardSequencerMode, CellReading } from '../../../tracking/BoardSequencerMode';
 import { ColourRecognizer } from '../../../tracking/PieceRecognizer';
 import {
-  buildChannelMatchers, channelPriority, isControlRole, isSequencedRole,
+  buildChannelMatchers, channelPriority, isControlRole, isLoopRole, isSequencedRole,
   type ColourId, type ColourMatcher,
 } from '../../../tracking/boardColours';
 import { initialControlState, stepControls, type ControlsResult } from '../../../tracking/controlCounters';
@@ -50,6 +50,8 @@ export interface RuntimeFrame {
   handGuardReady: boolean;
   /** performance.now() of the camera frame this came from. */
   atMs: number;
+  /** Per loop slot with a loop colour: whether such a counter is on the board this frame. */
+  loopColours: ReadonlyMap<number, boolean>;
 }
 
 export interface BoardRuntimeCallbacks {
@@ -229,7 +231,8 @@ export function useBoardRuntime(opts: {
         recognizer = new ColourRecognizer(cfg.minFilledFraction, channelPriority(cfg.channels));
         matchersFor = { channels: cfg.channels, minFill: cfg.minFilledFraction };
         sequencedColours = new Set(cfg.channels.filter((c) => isSequencedRole(c.role)).map((c) => c.id));
-        controlColours = new Set(cfg.channels.filter((c) => isControlRole(c.role)).map((c) => c.id));
+        // A loop colour's counter is a trigger, never a note and never a pad press.
+        controlColours = new Set(cfg.channels.filter((c) => isControlRole(c.role) || isLoopRole(c.role)).map((c) => c.id));
       }
       // One counter, one box: a counter on a grid line is seen by both cells, so the
       // spill is cleared before anything settles or plays.
@@ -443,9 +446,16 @@ export function useBoardRuntime(opts: {
       }, nowMs);
       nudgeRef.current = nudge.state;
 
+      // Counters as loops: per slot, is a counter of that colour anywhere on the board?
+      const loopColours = new Map<number, boolean>();
+      for (const c of cfg.channels) {
+        if (!isLoopRole(c.role) || c.loopSlot === undefined) continue;
+        const here = visible.some((r) => r.occupied && (r.colour === c.id || r.colours?.includes(c.id) === true));
+        loopColours.set(c.loopSlot, (loopColours.get(c.loopSlot) ?? false) || here);
+      }
       const rf: RuntimeFrame = {
         readings: visible, frame, controls: ctl, nudge: nudge.signal,
-        held, ghosts: knockRef.current.ghosts, handGuardReady, atMs: nowMs,
+        held, ghosts: knockRef.current.ghosts, handGuardReady, atMs: nowMs, loopColours,
       };
       latestFrameRef.current = rf;
       callbacksRef.current.onFrame?.(rf, dtMs);

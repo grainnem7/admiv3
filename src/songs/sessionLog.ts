@@ -55,7 +55,7 @@ const LOGGED_SETTINGS = [
   'noteLengthBeats', 'velocity', 'volume', 'soundWorld', 'phrases', 'band', 'fillAmount', 'fillSeed',
   'fillEngine', 'evolveAmount', 'evolveSceneLoops', 'evolveSeed', 'evolveHoldLap', 'studioMix',
   'midiEnabled', 'midiSends', 'loopStepsRed', 'loopStepsBlack', 'loopStepsBlue', 'variationEnabled',
-  'loopFadePasses', 'currentScene',
+  'loopFadePasses', 'currentScene', 'performance',
 ] as const;
 
 /** The part of a settings object the log keeps. */

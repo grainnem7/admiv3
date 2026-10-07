@@ -14,6 +14,7 @@ import {
   fullReachMap, REMOTE_CONTROLS, sanitizeReachMap, type Reach, type RemoteControlName, type RemoteTriggerName,
 } from '../remote/protocol';
 import { sanitizeLoopNames, sanitizeScenes, type Scene } from '../songs/performance/launcher';
+import { DEFAULT_PERFORMANCE, sanitizePerformance, type PerformanceSettings } from '../songs/performance/clock';
 import { isSoundWorldChoice, type SoundWorldChoice } from '../audio/worlds/soundWorlds';
 import { quarterTurns, type QuarterTurns } from '../tracking/frameOrientation';
 import type { TrackedColor } from '../tracking/ColorTracker';
@@ -140,6 +141,8 @@ export interface BoardSequencerStored {
   currentScene: number | null;
   /** How many passes a launched loop takes to come in and go out (0 = at once). */
   loopFadePasses: number;
+  /** The performance clock: length, ending, when it starts (see performance/clock). */
+  performance: PerformanceSettings;
   /** What the iPad shows: fewer things means bigger things. */
   remoteStrips: RemoteControlName[];
   remotePads: RemoteTriggerName[];
@@ -371,6 +374,7 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   scenes: [],
   currentScene: null,
   loopFadePasses: 1,
+  performance: DEFAULT_PERFORMANCE,
   remoteStrips: [...REMOTE_CONTROLS],
   remotePads: ['newIdea', 'newSound', 'keep', 'mute'],
   remoteLoopsPage: true,
@@ -580,6 +584,7 @@ function sanitizeChannel(v: unknown): ColourChannel | null {
   else ch.whiteBand = sanitizeWhiteBand(o.whiteBand);
   if (typeof o.instrument === 'string') ch.instrument = o.instrument;
   if (typeof o.drum === 'string') ch.drum = o.drum;
+  if (isNum(o.loopSlot) && Number.isInteger(o.loopSlot) && o.loopSlot >= 0) ch.loopSlot = o.loopSlot;
   if (isNum(o.volume)) ch.volume = o.volume;
   if (isNum(o.tone)) ch.tone = o.tone;
   if (isNum(o.reverbSend)) ch.reverbSend = o.reverbSend;
@@ -704,6 +709,7 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     }),
     currentScene: isNum(o.currentScene) && o.currentScene >= 0 ? Math.round(o.currentScene) : null,
     loopFadePasses: [0, 0.5, 1, 2].includes(num(o.loopFadePasses, 1)) ? num(o.loopFadePasses, 1) : 1,
+    performance: sanitizePerformance(o.performance),
     remoteStrips: Array.isArray(o.remoteStrips)
       ? REMOTE_CONTROLS.filter((n) => (o.remoteStrips as unknown[]).includes(n))
       : [...REMOTE_CONTROLS],

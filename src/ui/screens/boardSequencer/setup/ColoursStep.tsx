@@ -55,6 +55,10 @@ export interface ColoursStepProps {
   onDiscardPending(): void;
   onRecalibrate(id: ColourId): void;
   onRole(id: ColourId, role: ColourRole): void;
+  /** For the "Plays a loop" job: which saved loop this colour's counter plays. */
+  onLoopSlot(id: ColourId, slot: number): void;
+  /** The loop slots' names, for the loop picker ('' = "Loop n"). */
+  loopNames: string[];
   /**
    * A colour's JOB is read once, when the engine is built. Changing it while the board is
    * playing left the sound on the old job and the control counters on the new one — a
@@ -105,7 +109,7 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
   const {
     channels, counts, palette, arming, pending, boardLearnt, onLearnBoard, learnMessage,
     onFindColours, onArmTap, onCancelArm,
-    onAddPending, onDiscardPending, onRecalibrate, onRole, onRemove, onClearAll, isReferenced, running,
+    onAddPending, onDiscardPending, onRecalibrate, onRole, onLoopSlot, loopNames, onRemove, onClearAll, isReferenced, running,
     minFilledFraction, readSettingsCustom, onMinFill, onResetReadSettings,
     settleWindowMs, onSettleWindow, onBlackDarkness, picker, onMovePicker, onSampleSquare, hands,
     finding, onCancelFind, found, onUseFound, onDiscardFound,
@@ -312,7 +316,31 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
                 disabledReason={jobReason}
                 onClick={() => setControlOpen((id) => (id === c.id ? null : c.id))}
               />
+              <JobChip
+                label={c.role === 'loop' ? `Plays loop ${(c.loopSlot ?? 0) + 1}` : 'Plays a loop…'}
+                selected={c.role === 'loop'}
+                disabledReason={jobReason}
+                onClick={() => { onRole(c.id, 'loop'); if (c.loopSlot === undefined) onLoopSlot(c.id, 0); setControlOpen(null); }}
+              />
             </div>
+
+            {c.role === 'loop' && (
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 12 }}>
+                Which loop this counter plays
+                <select
+                  value={c.loopSlot ?? 0}
+                  disabled={running}
+                  onChange={(e) => onLoopSlot(c.id, Number(e.target.value))}
+                >
+                  {loopNames.map((name, slot) => (
+                    <option key={slot} value={slot}>{name && name.length > 0 ? `${slot + 1}. ${name}` : `Loop ${slot + 1}`}</option>
+                  ))}
+                </select>
+                <span style={{ color: 'var(--bs-fg2)' }}>
+                  Put this counter anywhere on the board and the loop plays (Hold) or flips on and off (Toggle) — the loop pads&rsquo; setting on the Loops tab. It never plays a note of its own.
+                </span>
+              </label>
+            )}
 
             {(controlOpen === c.id || isControl) && (
               <div role="radiogroup" aria-label={`Control job for ${describeChannel(c)}`} style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>

@@ -60,6 +60,8 @@ export interface Scene {
   /** Slots playing in this scene. */
   loops: number[];
   settings: SceneSettings;
+  /** When the clock brings this scene in by itself, in seconds from the start; null = only by hand. */
+  at?: number | null;
 }
 
 export const MAX_SCENES = 12;
@@ -116,7 +118,10 @@ export function sanitizeScenes(v: unknown, defaults: SceneSettings): Scene[] {
     const loops = Array.isArray(o.loops)
       ? [...new Set(o.loops.filter((s): s is number => isNum(s) && Number.isInteger(s) && s >= 0 && s < LAUNCH_SLOTS))].sort((a, b) => a - b)
       : [];
-    out.push({ id, name: cleanName(o.name) || `Scene ${out.length + 1}`, loops, settings: sanitizeSceneSettings(o.settings, defaults) });
+    out.push({
+      id, name: cleanName(o.name) || `Scene ${out.length + 1}`, loops, settings: sanitizeSceneSettings(o.settings, defaults),
+      ...(isNum(o.at) && o.at >= 0 ? { at: Math.round(o.at) } : {}),
+    });
   }
   return out;
 }

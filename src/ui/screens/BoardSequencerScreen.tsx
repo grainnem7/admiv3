@@ -93,6 +93,10 @@ import { LoopEditor } from './boardSequencer/components/LoopEditor';
 import {
   LAUNCH_SLOTS, loopLabel, nextSceneIndex, sceneFromNow, slotState, toggleSlot, type SceneSettings,
 } from '../../songs/performance/launcher';
+import {
+  clockView, cuesCrossed, cueText, endingDue, formatClock, parseClock, scenesDue, type ClockView, type EndingMode,
+} from '../../songs/performance/clock';
+import { DEFAULT_LOOP_COLOUR_OPTIONS, initialLoopColourState, stepLoopColours } from '../../songs/performance/loopColours';
 import { SessionLog, sessionFileName, type LogActor } from '../../songs/sessionLog';
 import { useRemoteLink } from '../../remote/useRemoteLink';
 import {
@@ -237,7 +241,10 @@ const REMOTE_CONTROL_WORDS: Record<RemoteControlName, string> = {
 };
 const REMOTE_TRIGGER_WORDS: Record<RemoteTriggerName, string> = {
   newIdea: 'New idea', newSound: 'New sound', keep: 'Keep', mute: 'Mute', stopAll: 'Stop all loops',
+  endPiece: 'End piece', capture: 'Capture',
 };
+/** How often the performance clock is read. */
+const CLOCK_TICK_MS = 250;
 /** How long "iPad: Speed 96 BPM" stays on screen. */
 const REMOTE_NOTE_MS = 2500;
 /** How long "New sounds" / "Band joins" stays on the board. */
@@ -429,6 +436,19 @@ export default function BoardSequencerScreen() {
   const [appliedSlots, setAppliedSlots] = useState<number[]>([]);
   const [editSlot, setEditSlot] = useState<number | null>(null);
   const [sceneName, setSceneName] = useState('');
+  // The performance clock: when it started (null = not running), what it shows, and what
+  // it has already done (cues given, scenes brought in, the ending triggered).
+  const clockStartRef = useRef<number | null>(null);
+  const [clock, setClock] = useState<ClockView | null>(null);
+  const clockPrevRef = useRef<{ remaining: number; elapsed: number }>({ remaining: Infinity, elapsed: 0 });
+  const endingRef = useRef(false);
+  const [ending, setEnding] = useState(false);
+  const clockTickRef = useRef<() => void>(() => {});
+  // Counters as loops: the debounced view of each loop colour, and the slots they want.
+  const loopColourRef = useRef(initialLoopColourState());
+  const counterWantedRef = useRef<Set<number>>(new Set());
+  const loopTickRef = useRef<number | null>(null);
+  const pushLaunchRef = useRef<() => void>(() => {});
   // What each colour sounds like now (Evolve), and the seed before "New sound" (for Back).
   const [evolveLabels, setEvolveLabels] = useState<Map<string, { label: string; scene: number }>>(new Map());
   const evolveSigRef = useRef('');
@@ -469,6 +489,11 @@ export default function BoardSequencerScreen() {
     return () => clearTimeout(id);
   }, [remoteNote]);
   useEffect(() => {
+    if (!running) return;
+    const id = setInterval(() => clockTickRef.current(), CLOCK_TICK_MS);
+    return () => clearInterval(id);
+  }, [running]);
+  useEffect(() => {
     if (!boardNotice) return;
     const id = setTimeout(() => setBoardNotice(null), BOARD_NOTICE_MS);
     return () => clearTimeout(id);
@@ -498,13 +523,14 @@ export default function BoardSequencerScreen() {
       locked: config.remoteLocked,
       stripMode: config.remoteStripMode,
       loopsFade: config.loopFadePasses > 0,
+      ...(clock ? { clock: { text: clock.text, phase: clock.phase } } : {}),
     };
     remoteLink.send({ type: 'state', state });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [remoteEnabled, remoteLink.others, config.bpm, config.velocity, config.fillAmount, config.evolveAmount,
     config.fillKept, config.evolveHoldLap, muted, running, config.remoteReach, reachLearning,
     config.loopSlots, config.loopNames, config.scenes, config.currentScene, wantedSlots, appliedSlots,
-    config.remoteStrips, config.remotePads, config.remoteLoopsPage, config.remoteLocked, config.remoteStripMode, config.loopFadePasses]);
+    config.remoteStrips, config.remotePads, config.remoteLoopsPage, config.remoteLocked, config.remoteStripMode, config.loopFadePasses, clock]);
   const fillSigRef = useRef('');
   const [prevFillSeed, setPrevFillSeed] = useState<number | null>(null);
 
@@ -1092,6 +1118,18 @@ export default function BoardSequencerScreen() {
       const { frame, controls } = rf;
       const cfg = configRef.current;
       const engine = engineRef.current;
+      // A counter of a loop colour on the board wants its loop (hold or toggle, like the pads).
+      if (runningRef.current && rf.loopColours.size > 0) {
+        const dt = loopTickRef.current === null ? 100 : Math.max(0, Math.min(1000, rf.atMs - loopTickRef.current));
+        loopTickRef.current = rf.atMs;
+        const r = stepLoopColours(loopColourRef.current, rf.loopColours, { ...DEFAULT_LOOP_COLOUR_OPTIONS, mode: cfg.loopPadMode }, dt);
+        loopColourRef.current = r.state;
+        const prev = counterWantedRef.current;
+        if (prev.size !== r.wanted.size || [...r.wanted].some((s) => !prev.has(s))) {
+          counterWantedRef.current = r.wanted;
+          pushLaunchRef.current();
+        }
+      }
       setLatestFrame(rf);
       setControlState(controls);
       // Settled pattern cells only exist while playing, so in Set up (and when stopped)
@@ -1327,6 +1365,10 @@ export default function BoardSequencerScreen() {
     songEngineRef.current?.stopPlayback();
     sessionLogRef.current.stop();
     setLogCounts(sessionLogRef.current.counts());
+    clockStartRef.current = null;
+    setClock(null);
+    endingRef.current = false;
+    setEnding(false);
     setRunning(false);
   }, []);
 
@@ -1447,6 +1489,14 @@ export default function BoardSequencerScreen() {
     }
     startSecRef.current = Tone.now();
     runningRef.current = true;
+    clockStartRef.current = cfg.performance.startOn === 'play' ? performance.now() : null;
+    clockPrevRef.current = { remaining: Infinity, elapsed: 0 };
+    endingRef.current = false;
+    setEnding(false);
+    setClock(clockView(clockStartRef.current, performance.now(), cfg.performance.lengthSec, false));
+    loopColourRef.current = initialLoopColourState();
+    counterWantedRef.current = new Set();
+    loopTickRef.current = null;
     sessionLogRef.current.start(activePlayer?.name ?? 'Player', cfg as unknown as Record<string, unknown>, engine.audibleNow());
     setLogCounts(sessionLogRef.current.counts());
     setRunning(true);
@@ -1963,12 +2013,16 @@ export default function BoardSequencerScreen() {
   // ---- performing: loops launched without a pad, and scenes ----
 
   /** Tell the engine which loops are wanted; it brings them in at the next pass. */
-  const pushLaunch = (): void => {
+  const pushLaunch = (extra?: { slot: number; cells: ActiveCell[] }): void => {
     const cfg = configRef.current;
-    const slots = [...wantedRef.current].filter((s) => (cfg.loopSlots[s] ?? null) !== null).sort((a, b) => a - b);
+    const want = new Set([...wantedRef.current, ...counterWantedRef.current]);
+    if (extra) want.add(extra.slot);
+    const cellsOf = (s: number): ActiveCell[] | null => (extra && extra.slot === s ? extra.cells : (cfg.loopSlots[s] ?? null) as ActiveCell[] | null);
+    const slots = [...want].filter((s) => cellsOf(s) !== null).sort((a, b) => a - b);
     setWantedSlots(slots);
-    engineRef.current?.setLaunchedLoops(slots, slots.map((s) => (cfg.loopSlots[s] ?? []) as ActiveCell[]));
+    engineRef.current?.setLaunchedLoops(slots, slots.map((s) => cellsOf(s) ?? []));
   };
+  pushLaunchRef.current = pushLaunch;
   const toggleLoop = (slot: number): void => {
     const has = (configRef.current.loopSlots[slot] ?? null) !== null;
     if (!has) return;
@@ -2037,6 +2091,82 @@ export default function BoardSequencerScreen() {
     const i = nextSceneIndex(c.currentScene, c.scenes.length);
     if (i !== null) goScene(i);
   };
+  /** Start the countdown by hand (when it is not set to start with Play). */
+  const startClock = (): void => {
+    if (!runningRef.current) return;
+    clockStartRef.current = performance.now();
+    clockPrevRef.current = { remaining: Infinity, elapsed: 0 };
+    sessionLogRef.current.action(logActorRef.current, 'start clock');
+    announce(`Clock started: ${formatClock(configRef.current.performance.lengthSec)}.`);
+  };
+  /** The chosen ending, now: a fade over the fade passes (or a stop at the end of the pass). */
+  const endPiece = (): void => {
+    const engine = engineRef.current;
+    const c = configRef.current;
+    if (!engine || !runningRef.current || endingRef.current) return;
+    const cycle = c.cols * Math.max(1, c.numPages);
+    const beats = c.performance.ending === 'stop' ? 0 : c.performance.fadePasses * cycle;
+    endingRef.current = true;
+    setEnding(true);
+    engine.finish(beats, () => {
+      sessionLogRef.current.action('laptop', 'piece ended');
+      stop();
+      announce('The piece has ended.');
+    });
+    setBoardNotice(beats > 0 ? 'Ending…' : 'Ending at the end of this pass');
+    sessionLogRef.current.action(logActorRef.current, beats > 0 ? `end piece: fade over ${c.performance.fadePasses} passes` : 'end piece: stop at the end of the pass');
+    announce(beats > 0 ? `Ending: fading over ${c.performance.fadePasses} ${c.performance.fadePasses === 1 ? 'pass' : 'passes'}.` : 'Ending at the end of this pass.');
+  };
+  const cancelEnding = (): void => {
+    engineRef.current?.cancelFinish();
+    endingRef.current = false;
+    setEnding(false);
+    sessionLogRef.current.action(logActorRef.current, 'ending cancelled');
+    announce('Ending cancelled: carrying on.');
+  };
+  /** Capture: what is on the board now into the first free slot, and start it. */
+  const captureLoop = (): void => {
+    const cfg = configRef.current;
+    const slot = Array.from({ length: LAUNCH_SLOTS }, (_, i) => i).find((i) => (cfg.loopSlots[i] ?? null) === null);
+    if (slot === undefined) { announce('All eight loops are full. Clear one first.'); return; }
+    const sequenced = new Set(cfg.channels.filter((c) => isSequencedRole(c.role)).map((c) => c.id));
+    const source = runningRef.current ? activeCellsRef.current : active;
+    const cells = source.filter((c) => sequenced.has(c.colour))
+      .map((c) => (c.conditional ? { ...storedCell(c), conditional: true as const } : storedCell(c)));
+    if (cells.length === 0) { announce('Nothing on the board to capture.'); return; }
+    setConfig((prev) => {
+      const loopSlots = prev.loopSlots.slice();
+      while (loopSlots.length <= slot) loopSlots.push(null);
+      loopSlots[slot] = cells;
+      return { ...prev, loopSlots };
+    });
+    wantedRef.current = new Set([...wantedRef.current, slot]);
+    pushLaunch({ slot, cells: cells as ActiveCell[] });
+    sessionLogRef.current.action(logActorRef.current, `capture to loop ${slot + 1}`);
+    setBoardNotice(`Captured: ${loopLabel(cfg.loopNames, slot)}`);
+    announce(`Captured ${cells.length} notes as ${loopLabel(cfg.loopNames, slot)}; it starts on the next pass.`);
+  };
+  // The clock, read every quarter second while running: cues, scheduled scenes, the ending.
+  clockTickRef.current = () => {
+    const c = configRef.current;
+    const engine = engineRef.current;
+    if (!engine || !runningRef.current) return;
+    const now = performance.now();
+    const view = clockView(clockStartRef.current, now, c.performance.lengthSec, engine.isFinishing());
+    setClock((prev) => (prev && prev.text === view.text && prev.phase === view.phase ? prev : view));
+    if (clockStartRef.current === null) return;
+    const prev = clockPrevRef.current;
+    clockPrevRef.current = { remaining: view.remainingSec, elapsed: view.elapsedSec };
+    for (const cue of cuesCrossed(prev.remaining, view.remainingSec)) {
+      setBoardNotice(cueText(cue));
+      announce(cueText(cue));
+    }
+    const due = scenesDue(prev.elapsed, view.elapsedSec, c.scenes);
+    if (due.length > 0) goScene(due[due.length - 1]);
+    const passSec = (c.cols * Math.max(1, c.numPages)) * 60 / Math.max(20, engine.getBpm());
+    if (!endingRef.current && endingDue(c.performance, view.remainingSec, passSec)) endPiece();
+  };
+
   const deleteScene = (i: number): void => {
     const c = configRef.current;
     update({
@@ -2114,7 +2244,9 @@ export default function BoardSequencerScreen() {
       else if (msg.name === 'newSound') newEvolveSound();
       else if (msg.name === 'keep') toggleKeepAll();
       else if (msg.name === 'mute') toggleMuted();
-      else stopAllLoops();
+      else if (msg.name === 'stopAll') stopAllLoops();
+      else if (msg.name === 'endPiece') endPiece();
+      else captureLoop();
       setRemoteNote({ text: `iPad: ${REMOTE_TRIGGER_WORDS[msg.name]}`, at: performance.now() });
     }
   };
@@ -2798,6 +2930,63 @@ export default function BoardSequencerScreen() {
         <div>
           <Button tone="secondary" onClick={stopAllLoops} reason={wantedSlots.length === 0 ? 'No loops playing.' : null}>■ Stop all loops</Button>
         </div>
+        <span style={{ fontWeight: 600, marginTop: 4 }}>The performance</span>
+        <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
+          A countdown for the piece, cues at 1 minute, 30 and 10 seconds, scenes that come in at a time, and a way to end.
+          The clock is a guide, not a guillotine: with &ldquo;End when I press it&rdquo; nothing stops by itself.
+        </span>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+            Length
+            <input
+              type="text" defaultValue={formatClock(config.performance.lengthSec)} key={`len-${config.performance.lengthSec}`}
+              aria-label="Length of the piece, minutes:seconds" style={{ width: 64 }}
+              onBlur={(e) => { const s = parseClock(e.target.value); if (s !== null) update({ performance: { ...config.performance, lengthSec: Math.max(30, s) } }); }}
+            />
+          </label>
+          <SegmentedControl<'play' | 'manual'>
+            label="The clock starts"
+            value={config.performance.startOn}
+            onChange={(v) => update({ performance: { ...config.performance, startOn: v } })}
+            options={[{ value: 'play', label: 'With Play' }, { value: 'manual', label: 'When I press Start clock' }]}
+          />
+        </div>
+        <SegmentedControl<EndingMode>
+          label="How it ends"
+          value={config.performance.ending}
+          onChange={(v) => update({ performance: { ...config.performance, ending: v } })}
+          options={[
+            { value: 'cue', label: 'End when I press it' },
+            { value: 'fade', label: 'Fade out at the time' },
+            { value: 'stop', label: 'Stop at the end of the pass' },
+          ]}
+        />
+        {config.performance.ending !== 'stop' && (
+          <SegmentedControl<number>
+            label="The ending fades over"
+            value={config.performance.fadePasses}
+            onChange={(v) => update({ performance: { ...config.performance, fadePasses: v } })}
+            options={[{ value: 1, label: '1 pass' }, { value: 2, label: '2 passes' }, { value: 4, label: '4 passes' }]}
+          />
+        )}
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+          {running && clock?.phase === 'idle' && (
+            <Button tone="secondary" onClick={startClock}>⏱ Start clock</Button>
+          )}
+          {running && clock && clock.phase !== 'idle' && (
+            <span role="timer" style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{`⏱ ${clock.text}`}</span>
+          )}
+          {!ending ? (
+            <Button tone="primary" onClick={endPiece} reason={running ? null : 'Press Play first.'}>
+              {config.performance.ending === 'stop' ? '⏹ End now (at the end of the pass)' : `⏹ End now (fade over ${config.performance.fadePasses} ${config.performance.fadePasses === 1 ? 'pass' : 'passes'})`}
+            </Button>
+          ) : (
+            <Button tone="secondary" onClick={cancelEnding}>Cancel the ending</Button>
+          )}
+          <Button tone="secondary" onClick={captureLoop} reason={(running ? activeCellsRef.current : active).length === 0 ? 'Put counters on the board first.' : null}>
+            ⏺ Capture the board as a loop
+          </Button>
+        </div>
         <span style={{ fontWeight: 600, marginTop: 4 }}>Scenes</span>
         <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
           A scene is the loops playing now plus the sound world, band, phrases, fill, Evolve and tempo. Go to one with a tap; Next scene walks the list in order.
@@ -2812,6 +3001,17 @@ export default function BoardSequencerScreen() {
             <span style={{ fontSize: 12, color: 'var(--bs-fg2)', flex: 1 }}>
               {`${sc.loops.length === 0 ? 'no loops' : sc.loops.map((s) => loopLabel(config.loopNames, s)).join(', ')} · ${sc.settings.soundWorld === 'none' ? 'my picks' : sc.settings.soundWorld} · band ${sc.settings.band} · ${sc.settings.bpm} BPM`}
             </span>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
+              at
+              <input
+                type="text" key={`at-${sc.id}-${sc.at ?? ''}`} defaultValue={sc.at !== undefined && sc.at !== null ? formatClock(sc.at) : ''}
+                placeholder="m:ss" aria-label={`When scene ${sc.name} comes in by itself`} style={{ width: 56 }}
+                onBlur={(e) => {
+                  const at = parseClock(e.target.value);
+                  update({ scenes: config.scenes.map((x, k) => (k === i ? { ...x, at } : x)) });
+                }}
+              />
+            </label>
             <Button tone={config.currentScene === i ? 'primary' : 'secondary'} onClick={() => goScene(i)} aria-pressed={config.currentScene === i}>Go</Button>
             <Button tone="quiet" onClick={() => deleteScene(i)}>Delete</Button>
           </div>
@@ -3072,6 +3272,8 @@ export default function BoardSequencerScreen() {
       onDiscardPending={() => setPendingColour(null)}
       onRecalibrate={recalibrateChannel}
       onRole={setChannelRole}
+      onLoopSlot={(id, slot) => patchChannel(id, { loopSlot: slot })}
+      loopNames={config.loopNames}
       running={running}
       onRemove={removeChannel}
       onClearAll={clearChannels}
@@ -3350,7 +3552,9 @@ export default function BoardSequencerScreen() {
               <strong>
                 {isFaderRole(c.role)
                   ? legendValue(c.role as FaderRole, controlState?.values[c.role as FaderRole], controlState?.held ?? new Set())
-                  : c.role === 'off' ? 'not used' : `${stats.byColour[c.id] ?? 0} playing`}
+                  : c.role === 'off' ? 'not used'
+                    : c.role === 'loop' ? `→ ${loopLabel(config.loopNames, c.loopSlot ?? 0)}${counterWantedRef.current.has(c.loopSlot ?? 0) ? ' ▶' : ''}`
+                      : `${stats.byColour[c.id] ?? 0} playing`}
               </strong>
             </span>
           ))}
@@ -3619,6 +3823,7 @@ export default function BoardSequencerScreen() {
                 beatOn={beatOn}
                 heldCount={heldCells.size}
                 handGuardWaiting={config.handGuardEnabled && running && latestFrame?.handGuardReady === false}
+                clock={clock}
                 groove={grooveTab}
                 sound={soundTab}
                 loops={loopsTab}
