@@ -101,7 +101,7 @@ import {
   clockView, cueText, describeEnding, endingTooLong, formatClock, CLOCK_NOT_STARTED,
   type ClockView,
 } from '../../songs/performance/clock';
-import { decideClockTick, nowNext, planScenes, sceneTimeProblem, sortScenes } from '../../songs/performance/piece';
+import { decideClockTick, nowNext, planScenes, sceneAt, sceneTimeProblem, sortScenes } from '../../songs/performance/piece';
 import { DEFAULT_LOOP_COLOUR_OPTIONS, initialLoopColourState, stepLoopColours } from '../../songs/performance/loopColours';
 import { SessionLog, sessionFileName, type LogActor } from '../../songs/sessionLog';
 import { diskState, onDiskState, restoreFromFile, scheduleDiskSave } from '../../storage/diskSync';
@@ -244,6 +244,24 @@ interface LastColourSample {
 
 /** No camera frame for this long while playing: the camera has stopped. */
 const CAMERA_STALL_MS = 1500;
+/** Where a running piece is remembered, so a reload can carry on from the right moment. */
+const PIECE_RUNNING_KEY = 'admi-piece-running';
+function rememberPieceRunning(startedAt: number, lengthSec: number): void {
+  try { sessionStorage.setItem(PIECE_RUNNING_KEY, JSON.stringify({ startedAt, lengthSec })); } catch { /* a reload just starts again */ }
+}
+function forgetPieceRunning(): void {
+  try { sessionStorage.removeItem(PIECE_RUNNING_KEY); } catch { /* nothing remembered */ }
+}
+/** A piece that was playing and is not over yet, or null. */
+function readPieceRunning(): { startedAt: number; lengthSec: number } | null {
+  try {
+    const o = JSON.parse(sessionStorage.getItem(PIECE_RUNNING_KEY) ?? 'null') as { startedAt?: unknown; lengthSec?: unknown } | null;
+    if (!o || typeof o.startedAt !== 'number' || typeof o.lengthSec !== 'number') return null;
+    return (Date.now() - o.startedAt) / 1000 < o.lengthSec ? { startedAt: o.startedAt, lengthSec: o.lengthSec } : null;
+  } catch {
+    return null;
+  }
+}
 /** How long a cue stays large in the Now / Next strip. */
 const CUE_SHOWN_MS = 5000;
 /** Config saves are gathered over this long (and written at once when the page closes). */
@@ -378,6 +396,9 @@ export default function BoardSequencerScreen() {
   // The camera stopped sending pictures mid-piece (unplugged, crashed, asleep): the music
   // plays on from the last pattern, but the board is no longer being read — say so.
   const [cameraStalled, setCameraStalled] = useState(false);
+  // The page reloaded (a crash, a mistaken refresh) while a piece was playing: offer to
+  // pick it up where the clock would be now, in the scene on at that moment.
+  const [resumeFrom, setResumeFrom] = useState<{ startedAt: number; lengthSec: number } | null>(() => readPieceRunning());
   // How the corner editor was opened: 'tap' starts from nothing, 'review' checks corners
   // that already exist. "Tap corners myself" must mean tapping, even for a board that is
   // already set up.
@@ -541,6 +562,8 @@ export default function BoardSequencerScreen() {
   const endingRef = useRef(false);
   // The automatic ending fires once per run: after "Cancel the ending" it must not fire again.
   const autoEndedRef = useRef(false);
+  /** Where the next Play starts the clock, when rehearsing from a scene (seconds; null = the top). */
+  const rehearseFromRef = useRef<number | null>(null);
   // The player's own settings from before the piece began. Scenes change tempo, sound
   // and band as the piece runs; when it is over they come back, so a rehearsal never
   // leaves the player's settings wherever the last scene put them.
@@ -1491,6 +1514,7 @@ export default function BoardSequencerScreen() {
     setClock(null);
     endingRef.current = false;
     setEnding(false);
+    forgetPieceRunning();
     // The piece is over (or stopped): the player's own settings come back.
     const home = homeSettingsRef.current;
     homeSettingsRef.current = null;
@@ -1551,7 +1575,12 @@ export default function BoardSequencerScreen() {
     // first note: its loops play from the first beat and its sound is the one the engine
     // is built with. Applied on the first clock tick instead, its loops waited a whole pass.
     const home = configRef.current;
-    const openingIndex = home.performance.startOn === 'play' ? home.scenes.findIndex((sc) => sc.at === 0) : -1;
+    // Rehearsing from a scene: the clock starts part-way, in the scene on at that moment.
+    const from = rehearseFromRef.current;
+    rehearseFromRef.current = null;
+    const clockOn = from !== null || home.performance.startOn === 'play';
+    const startSec = from ?? 0;
+    const openingIndex = clockOn ? sceneAt(home.scenes, startSec) : -1;
     const opening = openingIndex >= 0 ? home.scenes[openingIndex] : null;
     const cfg: BoardSequencerStored = opening ? { ...home, ...opening.settings, currentScene: openingIndex } : home;
     if (opening) wantedRef.current = new Set(opening.loops.filter((sl) => (home.loopSlots[sl] ?? null) !== null));
@@ -1627,10 +1656,14 @@ export default function BoardSequencerScreen() {
     }
     startSecRef.current = Tone.now();
     runningRef.current = true;
-    clockStartRef.current = cfg.performance.startOn === 'play' ? performance.now() : null;
+    clockStartRef.current = clockOn ? performance.now() - startSec * 1000 : null;
+    if (clockOn) rememberPieceRunning(Date.now() - startSec * 1000, home.performance.lengthSec);
     if (clockStartRef.current !== null) homeSettingsRef.current = { soundWorld: home.soundWorld, band: home.band, phrases: home.phrases, fillAmount: home.fillAmount, evolveAmount: home.evolveAmount, bpm: home.bpm };
     // The opening scene is already in: the clock must not bring it in again.
-    clockPrevRef.current = { remaining: Infinity, elapsed: opening ? 0 : CLOCK_NOT_STARTED };
+    // From part-way: the scenes and cues before that moment are already past, not due.
+    clockPrevRef.current = startSec > 0
+      ? { remaining: home.performance.lengthSec - startSec, elapsed: startSec }
+      : { remaining: Infinity, elapsed: opening ? 0 : CLOCK_NOT_STARTED };
     if (opening) {
       setConfig((prev) => ({ ...prev, ...opening.settings, currentScene: openingIndex }));
       setWantedSlots([...wantedRef.current].sort((a, b) => a - b));
@@ -1648,6 +1681,14 @@ export default function BoardSequencerScreen() {
     setLogCounts(sessionLogRef.current.counts());
     setRunning(true);
   }, [engineRef, homographyRef, loopBankRef, modeRef, runningRef, startingRef, videoRef]);
+
+  /** Rehearse from a point in the piece: Play, with the clock already at `sec`. */
+  const rehearseFrom = (sec: number): void => {
+    if (runningRef.current) return;
+    rehearseFromRef.current = sec;
+    announce(`Rehearsing from ${formatClock(sec)}.`);
+    void start();
+  };
 
   const start = useCallback(async () => {
     if (startingRef.current) return;
@@ -2351,6 +2392,7 @@ export default function BoardSequencerScreen() {
   const startClock = (): void => {
     if (!runningRef.current) return;
     clockStartRef.current = performance.now();
+    rememberPieceRunning(Date.now(), configRef.current.performance.lengthSec);
     homeSettingsRef.current = sceneSettingsNow(configRef.current);
     clockPrevRef.current = { remaining: Infinity, elapsed: CLOCK_NOT_STARTED };
     autoEndedRef.current = false;
@@ -3302,6 +3344,7 @@ export default function BoardSequencerScreen() {
       onStopAllLoops={stopAllLoops}
       onLoopFade={(loopFadePasses) => update({ loopFadePasses })}
       onGoScene={goScene}
+      onRehearseFrom={rehearseFrom}
       onNextScene={nextScene}
       onSaveSceneFromNow={saveScene}
       onUpdateSceneFromNow={updateSceneFromNow}
@@ -3824,6 +3867,18 @@ export default function BoardSequencerScreen() {
 
   const stage = (
     <div style={{ flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
+      {resumeFrom && !running && (() => {
+        const at = Math.round((Date.now() - resumeFrom.startedAt) / 1000);
+        return (
+          <div role="alert" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', padding: '8px 12px', borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-warn)', color: 'var(--bs-bg)', fontWeight: 600 }}>
+            <span style={{ flex: '1 1 240px' }}>{`The piece was playing when the page reloaded. The clock would be at ${formatClock(Math.min(at, resumeFrom.lengthSec))} now.`}</span>
+            <Button tone="primary" onClick={() => { const now = Math.round((Date.now() - resumeFrom.startedAt) / 1000); setResumeFrom(null); rehearseFrom(Math.max(0, now)); }}>
+              {`▶ Carry on from ${formatClock(Math.min(at, resumeFrom.lengthSec))}`}
+            </Button>
+            <Button tone="secondary" onClick={() => { setResumeFrom(null); forgetPieceRunning(); }}>No</Button>
+          </div>
+        );
+      })()}
       {cameraStalled && running && !laptop && (
         <div role="alert" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', padding: '8px 12px', borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-danger)', color: 'var(--bs-danger-fg)', fontWeight: 600 }}>
           <span style={{ flex: '1 1 240px' }}>The camera has stopped — the board isn&apos;t being read. The music carries on with the last pattern.</span>

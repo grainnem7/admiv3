@@ -123,3 +123,34 @@ test('the iPad joins with the code, shows the piece, and its End piece reaches t
   await expect(page.getByRole('button', { name: 'Cancel the ending' }).first()).toBeVisible();
   expect(pageErrors(page)).toEqual([]);
 });
+
+test('rehearse from a scene: the clock starts there, in that scene', async ({ page }) => {
+  await openLaptopBoard(page);
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1]]);
+  await page.getByRole('button', { name: /Make my plan/ }).click();
+  await page.getByRole('button', { name: /Rehearse from Home/ }).click();
+  const strip = page.getByRole('region', { name: 'Now and next' });
+  await expect(strip).toContainText('Now: Home');
+  // 7:00 piece from 6:00: about a minute left.
+  await expect(strip.getByRole('timer')).toHaveText(/^(1:00|0:5\d)$/);
+  await expect.poll(() => notesPlayed(page), { timeout: 20_000 }).toBeGreaterThan(0);
+  expect(pageErrors(page)).toEqual([]);
+});
+
+test('a reload mid-piece offers to carry on from where the clock would be', async ({ page }) => {
+  await openLaptopBoard(page);
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1]]);
+  await page.getByRole('button', { name: /Make my plan/ }).click();
+  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await expect(page.getByRole('region', { name: 'Now and next' })).toContainText('Now: Arrival');
+  await page.waitForTimeout(1500); // let the board be saved
+  await page.reload();
+  await page.getByRole('button', { name: /Board Sequencer/ }).click();
+  const offer = page.getByRole('alert').filter({ hasText: 'The piece was playing when the page reloaded' });
+  await expect(offer).toBeVisible();
+  await offer.getByRole('button', { name: /Carry on from/ }).click();
+  await expect(page.getByRole('region', { name: 'Now and next' })).toContainText('Now: Arrival');
+  expect(pageErrors(page)).toEqual([]);
+});

@@ -27,21 +27,70 @@ export interface SamplerPlayerOptions {
 // SamplerPlayer
 // ============================================
 
+/**
+ * Decoded samples, kept for the whole session and shared by every instrument that uses
+ * them. Without this every Stop and Play, every sound-world change and every Evolve swap
+ * fetched and decoded the same files again — a gap before the new sound, and work on the
+ * main thread at exactly the moment a scene changes.
+ */
+const bufferCache = new Map<string, Promise<Tone.ToneAudioBuffer>>();
+
+/** Tone's buffer loader, when there is one (test doubles of Tone have none). */
+function bufferLoader(): ((url: string) => Promise<Tone.ToneAudioBuffer>) | null {
+  try {
+    const f = Tone.ToneAudioBuffer?.fromUrl;
+    return typeof f === 'function' ? (url: string) => f.call(Tone.ToneAudioBuffer, url) : null;
+  } catch {
+    return null;
+  }
+}
+
+function cachedBuffer(url: string, load: (url: string) => Promise<Tone.ToneAudioBuffer>): Promise<Tone.ToneAudioBuffer> {
+  let p = bufferCache.get(url);
+  if (!p) {
+    p = load(url);
+    bufferCache.set(url, p);
+    p.catch(() => bufferCache.delete(url)); // a failed fetch is tried again next time
+  }
+  return p;
+}
+
 export class SamplerPlayer implements Player {
-  private sampler: Tone.Sampler;
+  private sampler: Tone.Sampler | null = null;
   private ready = false;
+  private disposed = false;
 
   constructor(opts: SamplerPlayerOptions, destination: AudioNode) {
-    this.sampler = new Tone.Sampler({
-      urls: opts.urls,
-      baseUrl: opts.baseUrl,
-      attack: opts.attack ?? 0.005,
-      release: opts.release ?? 0.3,
-      onload: () => { this.ready = true; },
-    });
-    // Connect Tone.Sampler to the raw AudioNode filter chain.
-    // Tone.js v15 ToneAudioNode.connect() accepts AudioNode as InputNode.
-    this.sampler.connect(destination);
+    const make = (urls: Record<string, string | Tone.ToneAudioBuffer>, baseUrl?: string): Tone.Sampler => {
+      const sampler = new Tone.Sampler({
+        urls,
+        ...(baseUrl !== undefined ? { baseUrl } : {}),
+        attack: opts.attack ?? 0.005,
+        release: opts.release ?? 0.3,
+        onload: () => { if (!this.disposed) this.ready = true; },
+      });
+      // Connect Tone.Sampler to the raw AudioNode filter chain.
+      // Tone.js v15 ToneAudioNode.connect() accepts AudioNode as InputNode.
+      sampler.connect(destination);
+      return sampler;
+    };
+    const load = bufferLoader();
+    if (!load) {
+      this.sampler = make(opts.urls, opts.baseUrl);
+      return;
+    }
+    // Every sample from the shared cache; the instrument is ready as soon as they are.
+    const notes = Object.entries(opts.urls);
+    Promise.all(notes.map(([note, file]) => cachedBuffer(opts.baseUrl + file, load).then((buf) => [note, buf] as const)))
+      .then((pairs) => {
+        if (this.disposed) return;
+        this.sampler = make(Object.fromEntries(pairs));
+        this.ready = true;
+      })
+      .catch(() => {
+        // The cache could not load them: let Tone fetch them itself, as before.
+        if (!this.disposed) this.sampler = make(opts.urls, opts.baseUrl);
+      });
   }
 
   isReady(): boolean { return this.ready; }
@@ -53,26 +102,28 @@ export class SamplerPlayer implements Player {
     time?: number,
     velocity = 0.8,
   ): void {
-    if (!this.ready) return;
+    if (!this.ready || !this.sampler) return;
     const note = Tone.Frequency(midi, 'midi').toNote();
     this.sampler.triggerAttackRelease(note, duration, time ?? Tone.now(), velocity);
   }
 
   /** Sustain-mode attack — for chord pads. Call releaseAll() to stop. */
   triggerAttack(midi: number, velocity = 0.8): void {
-    if (!this.ready) return;
+    if (!this.ready || !this.sampler) return;
     const note = Tone.Frequency(midi, 'midi').toNote();
     this.sampler.triggerAttack(note, Tone.now(), velocity);
   }
 
   /** Release all currently held notes. */
   releaseAll(): void {
-    if (!this.ready) return;
+    if (!this.ready || !this.sampler) return;
     this.sampler.releaseAll();
   }
 
   dispose(): void {
-    this.sampler.dispose();
+    this.disposed = true;
+    this.sampler?.dispose();
+    this.sampler = null;
     this.ready = false;
   }
 }

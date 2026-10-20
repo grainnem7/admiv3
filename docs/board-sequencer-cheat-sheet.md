@@ -113,6 +113,9 @@
 - **During the piece** a strip above the board shows the **time left** in big type, **Now:** the scene, **Next:** the next one and how long until it, the loops playing, and **Next ▶ / End**. It shows on Big board too.
 - **The opening scene (at 0:00) is in place before the first note** when the clock starts with Play: its loops play from the first beat.
 - **When the piece ends or is stopped, the player's own settings come back** (tempo, sound world, band, Fill, Evolve) — a rehearsal never leaves them where the last scene put them.
+- **Rehearse from a scene:** while stopped, **▶ From here** on a scene plays from its time — the clock starts there, in that scene, with the cues still to come (practise the ending without playing six minutes first).
+- **A reload mid-piece** (a crash, a refresh by mistake) offers **Carry on from m:ss** — where the clock would be now, in the scene on at that moment.
+- Samples load once a session: changing sound world, Evolve and Stop/Play don't fetch them again.
 - **✓ Ready check** (Perform): the board, the colours, every loop the scenes use, a scene at 0:00, the ending fits, the iPad, saved on the laptop, backed up, and the show build.
 - **How it ends — chosen before the piece:**
   - **Fade out** · **Stop at the end of the pass** · **Slow down** (a ritardando to a little over half speed, then a stop on the one) · **Thin out** (the band and the fill leave, the player's own notes end it, a fade over the last pass) · **Final chord** (the texture thins, then a held chord in the key and a crash ring out for one more pass).

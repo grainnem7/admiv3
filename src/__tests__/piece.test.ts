@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { decideClockTick, nowNext, planScenes, sceneTimeProblem, sortScenes } from '../songs/performance/piece';
+import { decideClockTick, nowNext, planScenes, sceneAt, sceneTimeProblem, sortScenes } from '../songs/performance/piece';
 import { CLOCK_NOT_STARTED, DEFAULT_PERFORMANCE } from '../songs/performance/clock';
 import type { Scene, SceneSettings } from '../songs/performance/launcher';
 
@@ -70,5 +70,16 @@ describe('the piece — make my plan', () => {
     expect(plan[2].settings).toMatchObject({ band: 'full', fillAmount: 0.4, evolveAmount: 0.5, soundWorld: 'warm', bpm: 96 });
     expect(planScenes(300, loops, settings, 't').map((p) => p.at)).toEqual([0, 64, 150, 257]);
     expect(new Set(plan.map((p) => p.id)).size).toBe(4);
+  });
+});
+
+describe('the piece — the scene on at a moment', () => {
+  it('is the latest one timed at or before it, for rehearsing from part-way', () => {
+    const scenes = [scene('home', 360), scene('arrival', 0), scene('spare', null), scene('build', 90)];
+    expect(sceneAt(scenes, 0)).toBe(1);
+    expect(sceneAt(scenes, 89)).toBe(1);
+    expect(sceneAt(scenes, 90)).toBe(3);
+    expect(sceneAt(scenes, 400)).toBe(0);
+    expect(sceneAt([scene('late', 30)], 10)).toBe(-1);
   });
 });

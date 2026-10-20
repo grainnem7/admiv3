@@ -47,6 +47,8 @@ export interface PerformPanelProps {
   onStopAllLoops(): void;
   onLoopFade(passes: number): void;
   onGoScene(i: number): void;
+  /** While stopped: play from this moment in the piece, the clock already there. */
+  onRehearseFrom(sec: number): void;
   onNextScene(): void;
   onSaveSceneFromNow(name: string): void;
   onUpdateSceneFromNow(i: number): void;
@@ -191,6 +193,7 @@ export function PerformPanel(p: PerformPanelProps): JSX.Element {
             worldOptions={p.worldOptions}
             onToggleOpen={() => setSelected(selected === i ? null : i)}
             onGo={() => p.onGoScene(i)}
+            onRehearse={!p.running && typeof s.at === 'number' ? () => p.onRehearseFrom(s.at as number) : undefined}
             onUpdateFromNow={() => p.onUpdateSceneFromNow(i)}
             onEdit={(patch) => p.onEditScene(i, patch)}
             onDelete={() => { setSelected(null); p.onDeleteScene(i); }}
@@ -392,6 +395,8 @@ interface SceneRowProps {
   worldOptions: { value: SoundWorldChoice; label: string }[];
   onToggleOpen(): void;
   onGo(): void;
+  /** Play from this scene's time (only while stopped). */
+  onRehearse?(): void;
   onUpdateFromNow(): void;
   onEdit(patch: Partial<Scene>): void;
   onDelete(): void;
@@ -427,6 +432,11 @@ function SceneRow(r: SceneRowProps): JSX.Element {
           <span style={{ fontWeight: 700 }}>{`${typeof s.at === 'number' ? formatClock(s.at) : 'by hand'} · ${s.name}${r.current ? ' · on now' : ''}`}</span>
           <span style={{ display: 'block', fontSize: 12, color: 'var(--bs-fg2)' }}>{summary}</span>
         </button>
+        {r.onRehearse && (
+          <Button tone="secondary" onClick={r.onRehearse} aria-label={`Rehearse from ${s.name}: play from ${typeof s.at === 'number' ? formatClock(s.at) : ''}`}>
+            ▶ From here
+          </Button>
+        )}
         <Button tone={r.current ? 'primary' : 'secondary'} aria-pressed={r.current} onClick={r.onGo}>Go</Button>
       </div>
       {r.open && (

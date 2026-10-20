@@ -20,6 +20,15 @@ export function sortScenes(scenes: readonly Scene[], current: number | null): { 
   return { scenes: order.map((o) => o.s), current: cur === null || cur < 0 ? null : cur };
 }
 
+/** The scene on at `sec` into the piece: the latest one timed at or before it (-1 = none). */
+export function sceneAt(scenes: readonly Scene[], sec: number): number {
+  let best = -1;
+  scenes.forEach((s, i) => {
+    if (typeof s.at === 'number' && s.at <= sec && (best < 0 || (scenes[best].at as number) <= s.at)) best = i;
+  });
+  return best;
+}
+
 /** What is wrong with a scene's time, in words, or null when it is fine. */
 export function sceneTimeProblem(at: number | null, lengthSec: number, others: readonly (number | null | undefined)[]): string | null {
   if (at === null) return null;
