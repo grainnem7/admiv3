@@ -36,7 +36,15 @@ describe('the piece — one tick of the clock', () => {
 
   it('the opening scene on the first tick', () => {
     const d = decideClockTick({ ...base, prev: { remaining: Infinity, elapsed: CLOCK_NOT_STARTED }, now: { remaining: 419.75, elapsed: 0.25 } });
-    expect(d).toEqual({ cues: [], scene: 0, end: false });
+    expect(d).toEqual({ cues: [], scene: 0, end: false, hardStop: false });
+  });
+
+  it('at the end time nothing is left playing: the backstop stops it', () => {
+    const at = (remaining: number, extra = {}) => decideClockTick({ ...base, prev: { remaining: remaining + 0.25, elapsed: 420 - remaining - 0.25 }, now: { remaining, elapsed: 420 - remaining }, ...extra });
+    expect(at(1).hardStop).toBe(false);
+    expect(at(0).hardStop).toBe(true);
+    // Even with an ending running (cancelled, or slowed past its time) or already auto-ended.
+    expect(at(0, { ending: true, autoEnded: true }).hardStop).toBe(true);
   });
 
   it('a scene at its time; none while ending', () => {

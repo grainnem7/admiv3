@@ -210,31 +210,33 @@ const HELP: HelpEntry[] = [
       + 'and the wood is never offered as a colour.',
   },
   {
-    title: 'Performing — loops and scenes',
-    body: 'The Perform tab. Make my plan gives four scenes across the piece; tap a scene to '
-      + 'change it where it is. Under a loop pad, "more" saves the board into it ("Save board here") or draws a '
-      + 'loop on screen ("Draw", no camera needed), and name it. Play and Stop take effect '
-      + 'on the next pass, so a tap is never off-beat, with nothing on a pad. A scene is '
-      + 'the loops playing now plus the sound world, band, phrases, fill, Evolve and tempo: '
-      + '"Save scene from now", then Go, or "Next scene" to walk the set list. The iPad’s '
-      + '"Loops & scenes" page has big pads for all of it and a Stop all. Loops fade in and '
-      + 'out over half a pass, a pass or two passes ("Loops fade", in Perform), or at once. '
-      + 'Loops layer under the player: a loop tune keeps playing under your counters of the '
-      + 'same colour; your bass, chord or drum counter takes that part over while it is down. '
-      + 'Playing loops show on the board as outlined counters. Scenes leave alone a strip the '
-      + 'player moved on the iPad since the last scene.',
+    title: 'Play, Make a piece, Show',
+    body: 'Three buttons at the top. Play: just play the board, with the Sound, Groove, Board '
+      + 'and Connections tabs — no loops or scenes needed. Make a piece: three steps. '
+      + '1 Loops: put counters down and press "Save the board here" on an empty loop, then '
+      + 'name it. 2 Scenes: "Make my plan" gives four scenes across the piece; tap one to '
+      + 'change it; ▶ From here rehearses from it. 3 Ending & check: the length, how it ends, '
+      + 'and a check of everything. Each step is optional. Show: the board full screen with '
+      + 'the clock and Now / Next, for the performance — Start the piece, Next, End, '
+      + 'Capture; Stop needs two presses.',
+  },
+  {
+    title: 'Loops and scenes while playing',
+    body: 'A loop comes in or goes out on the next pass, fading over the time set in step 1 '
+      + '(More). Loops layer under the player: a loop tune keeps playing under your '
+      + 'counters of the same colour; your bass, chord or drum counter takes that part '
+      + 'over while it is down. Playing loops show on the board as outlined counters. '
+      + 'Scenes come in at their times; they leave alone a strip the player moved on the '
+      + 'iPad since the last scene. The iPad’s "Loops & scenes" page has pads for them.',
   },
   {
     title: 'The performance clock and the ending',
-    body: 'Perform → Length and ending. Set the length (7:00), and the countdown '
-      + 'shows in the status pill and big on the iPad, with cues at 1 minute, 30 and 10 '
-      + 'seconds. Choose the ending in advance — Fade out, Stop at the end of the pass, '
-      + 'Slow down (a ritardando), Thin out (the band and fill leave, your notes finish, '
-      + 'a fade over the last pass) or Final chord (a held chord in the key and a crash) '
-      + '— how many passes it takes, and whether it happens at the time or when End is '
-      + 'pressed. "End now" on the laptop and the iPad’s End piece pad (two taps) apply '
-      + 'it at once. The clock starts with Play, or with Start clock so a sound check does '
-      + 'not count.',
+    body: 'Make a piece, step 3. Set the length (7:00), and the countdown shows above the '
+      + 'board and big on the iPad, with cues at 1 minute, 30 and 10 seconds. Choose the '
+      + 'ending in advance — Final chord, Fade out, Slow down, Thin out or Stop — how many '
+      + 'passes it takes, and whether it ends by itself at the time or when End is pressed. '
+      + 'End (laptop) or End piece (iPad, two taps) applies it; Cancel the ending brings the '
+      + 'music back.',
   },
   {
     title: 'Using saved loops live',

@@ -13,6 +13,8 @@ export interface NowNextStripProps {
   onNext(): void;
   onEnd(): void;
   onCancelEnding(): void;
+  /** Save the board as it is now into a free loop, and start it. */
+  onCapture?(): void;
   /** Bigger type for the Big board view, read from across the room. */
   big?: boolean;
   /** A cue just given ("1 minute left"), shown large for a few seconds. */
@@ -71,6 +73,7 @@ export function NowNextStrip(p: NowNextStripProps): JSX.Element {
         </span>
       )}
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        {p.onCapture && <Button tone="secondary" onClick={p.onCapture} aria-label="Capture: save the board now as a loop and start it">⏺ Capture</Button>}
         <Button tone="secondary" onClick={p.onNext} disabled={p.ending}>Next ▶</Button>
         {!p.ending
           ? <Button tone="primary" onClick={p.onEnd}>⏹ End</Button>

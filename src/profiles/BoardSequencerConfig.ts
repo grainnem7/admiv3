@@ -96,6 +96,12 @@ export interface BoardSequencerStored {
   loopSlots: (StoredLoopCell[] | null)[];
   noteLengthBeats: number;
   velocity: number;
+  /** Overall feel, 0..1 (0.5 = as set): how hard notes play and how busy the drums are. */
+  energy: number;
+  /** Overall room, 0..1 (0.5 = the world's own): reverb and echo when no counter sets them. */
+  space: number;
+  /** How much saved loops vary by themselves from pass to pass, 0..1 (0 = exactly as saved). */
+  loopVary: number;
   tickEnabled: boolean;
   /**
    * The studio mix (shared master chain, stereo placement, kick ducking, notes that ring
@@ -365,6 +371,9 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   loopSlots: [],
   noteLengthBeats: 0.9,
   velocity: 0.7,
+  energy: 0.5,
+  space: 0.5,
+  loopVary: 0.35,
   octaveShift: 0,
   volume: 0.6,
   tickEnabled: true,
@@ -607,6 +616,8 @@ function sanitizeChannel(v: unknown): ColourChannel | null {
   if (isNum(o.tone)) ch.tone = o.tone;
   if (isNum(o.reverbSend)) ch.reverbSend = o.reverbSend;
   if (isNum(o.delaySend)) ch.delaySend = o.delaySend;
+  if (o.plays === 'note' || o.plays === 'tune') ch.plays = o.plays;
+  if (o.changes === false) ch.changes = false;
   return ch;
 }
 
@@ -705,6 +716,9 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     loopSlots: sanitizeLoopSlots(o.loopSlots),
     noteLengthBeats: num(o.noteLengthBeats, d.noteLengthBeats),
     velocity: num(o.velocity, d.velocity),
+    energy: Math.max(0, Math.min(1, num(o.energy, d.energy))),
+    space: Math.max(0, Math.min(1, num(o.space, d.space))),
+    loopVary: Math.max(0, Math.min(1, num(o.loopVary, d.loopVary))),
     octaveShift: num(o.octaveShift, d.octaveShift),
     volume: num(o.volume, d.volume),
     tickEnabled: o.tickEnabled !== false,

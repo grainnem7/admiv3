@@ -23,8 +23,8 @@ export interface PlayPanelProps {
   handGuardWaiting: boolean;
   /** The performance clock, when one is running: the countdown and how near the end is. */
   clock?: { text: string; phase: 'idle' | 'running' | 'lastMinute' | 'lastMoments' | 'ending' | 'over' } | null;
-  /** The piece: scenes, loops, the ending — the first tab, where a performance is made. */
-  perform: ReactNode;
+  /** Make a piece: the guided steps, shown instead of the tabs while making a piece. */
+  piece: ReactNode | null;
   /** The iPad and MIDI out: set up once per rig. */
   connections: ReactNode;
   groove: ReactNode;
@@ -43,9 +43,9 @@ export interface PlayPanelProps {
  */
 export function PlayPanel({
   running, muted, onStart, onStop, stopArmed = false, onToggleMute, bpm, step, cols, variationLap, beatOn, clock = null,
-  heldCount, handGuardWaiting, perform, connections, groove, sound, loops, stacked, transportAlign,
+  heldCount, handGuardWaiting, piece, connections, groove, sound, loops, stacked, transportAlign,
 }: PlayPanelProps): JSX.Element {
-  const [tab, setTab] = useState('perform');
+  const [tab, setTab] = useState('sound');
 
   const transport = (
     <div
@@ -122,18 +122,17 @@ export function PlayPanel({
           scrollPaddingBottom: stacked ? 'calc(var(--bs-target) + 12px)' : undefined,
         }}
       >
-        <Tabs
+        {piece ?? <Tabs
           label="Play settings"
           active={tab}
           onChange={setTab}
           tabs={[
-            { id: 'perform', label: 'Perform', content: perform },
             { id: 'sound', label: 'Sound', content: sound },
             { id: 'groove', label: 'Groove', content: groove },
             { id: 'loops', label: 'Board', content: loops },
             { id: 'connections', label: 'Connections', content: connections },
           ]}
-        />
+        />}
       </div>
       {stacked && transport}
     </div>

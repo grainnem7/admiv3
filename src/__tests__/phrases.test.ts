@@ -107,24 +107,56 @@ describe('phrases — loops layer under the player', () => {
   it('a loop tune and the player tune of the same colour both play, each its own phrase', () => {
     // The loop's red counter at step 0; the player's red counter at step 4.
     const cells = layerPhraseCells([loopCell('melody', 2, 0, 'slot4'), cell('melody', 5, 4)]);
-    const at6 = phraseEventsAtStep(input(cells, 6));
+    const all = loopEvents(cells).flat();
     // Before layers, the player's counter took over from step 4 and the loop went quiet.
-    expect(at6.some((e) => e.layer === 'slot4' && e.owner.col === 0)).toBe(true);
-    expect(at6.some((e) => e.layer === undefined && e.owner.col === 4)).toBe(true);
+    // Now both play — the player leads, the loop answers in the player's gaps.
+    expect(all.some((e) => e.layer === 'slot4' && e.owner.col === 0)).toBe(true);
+    expect(all.some((e) => e.layer === undefined && e.owner.col === 4)).toBe(true);
   });
 
-  it('the player takes the bass, the chords or the drums over from the loops while their counter is down', () => {
-    const loops = [loopCell('bass', 7, 0, 'slot1'), loopCell('drums', 4, 0, 'slot2'), loopCell('chord', 5, 0, 'slot0')];
-    expect(layerPhraseCells(loops)).toHaveLength(3);
-    const withPlayerBass = layerPhraseCells([...loops, cell('bass', 6, 2)]);
-    expect(withPlayerBass.filter((c) => c.role === 'bass')).toEqual([cell('bass', 6, 2)]);
-    expect(withPlayerBass.some((c) => c.role === 'drums')).toBe(true);   // drums still the loop's
-    expect(withPlayerBass.some((c) => c.role === 'chord')).toBe(true);
+  // Seen in rehearsal: chord or drum counters put down over a loop that had that part
+  // took it over and played the same comp or groove, so they sounded like nothing.
+  it("the player's chords ADD to a loop's chords: heard on top, the loop's under and on the player's chord", () => {
+    const loopChord = loopCell('chord', 2, 0, 'slot0');
+    const mine: PhraseCell = { ...cell('chord', 6, 0), colour: 'yellow' };
+    const both = loopEvents(layerPhraseCells([loopChord, mine]), { style: 'electronic' }).flat();
+    const fromLoop = both.filter((e) => e.layer === 'slot0');
+    const fromMe = both.filter((e) => e.layer === undefined);
+    expect(fromMe.length).toBeGreaterThan(0);
+    expect(fromLoop.length).toBeGreaterThan(0);
+    // The loop goes under.
+    expect(Math.max(...fromLoop.map((e) => e.accent))).toBeLessThan(Math.max(...fromMe.map((e) => e.accent)));
+    // Same chord: every loop note is a note of the player's chord.
+    const myPcs = new Set(fromMe.map((e) => e.midi! % 12));
+    for (const e of fromLoop) expect(myPcs.has(e.midi! % 12)).toBe(true);
+    // Its own rhythm: the player's comp is not the loop's comp played again.
+    const at = (es: typeof both) => new Set(es.map((e) => e.offset));
+    const alone = loopEvents([loopChord], { style: 'electronic' }).map((es) => [...at(es)].join()).join('|');
+    const mineTimes = loopEvents(layerPhraseCells([loopChord, mine]), { style: 'electronic' })
+      .map((es) => [...at(es.filter((e) => e.layer === undefined))].join()).join('|');
+    expect(mineTimes).not.toBe(alone);
+  });
+
+  it("the player's drums play a busier groove on top of a drum loop, which goes under", () => {
+    const loopDrums = loopCell('drums', 4, 0, 'slot2');
+    const mine: PhraseCell = { ...cell('drums', 4, 0), colour: 'green' };
+    const alone = loopEvents([mine]).flat().length;
+    const both = loopEvents(layerPhraseCells([loopDrums, mine])).flat();
+    expect(both.filter((e) => e.layer === undefined).length).toBeGreaterThan(alone);
+    const loopAcc = both.filter((e) => e.layer === 'slot2').map((e) => e.accent);
+    expect(loopAcc.length).toBeGreaterThan(0);
+    expect(Math.max(...loopAcc)).toBeLessThanOrEqual(0.5);
+  });
+
+  it('a loop alone still plays its part at full level', () => {
+    const es = loopEvents(layerPhraseCells([loopCell('bass', 7, 0, 'slot1')])).flat();
+    expect(Math.max(...es.map((e) => e.accent))).toBe(1);
   });
 
   it('two loops of the same colour are two tunes', () => {
     const cells = layerPhraseCells([loopCell('melody', 2, 0, 'slot0'), loopCell('melody', 4, 0, 'slot3')]);
-    const owners = new Set(phraseEventsAtStep(input(cells, 1)).map((e) => e.layer));
+    // Over two passes each leads once, and each is heard.
+    const owners = new Set([0, 1].flatMap((lap) => loopEvents(cells, { lap }).flat().map((e) => e.layer)));
     expect(owners).toEqual(new Set(['slot0', 'slot3']));
   });
 });

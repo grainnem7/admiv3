@@ -18,7 +18,7 @@ const WORD: Record<CheckState, string> = { ok: 'ready', warn: 'check', problem: 
  * can be — the board, the colours, the loops the scenes use, the times, the ending, the
  * iPad, the AI, and whether the work is saved on the laptop and backed up.
  */
-export function ReadyCheck({ items, onClose }: { items: ReadyItem[]; onClose(): void }): JSX.Element {
+export function ReadyList({ items }: { items: ReadyItem[] }): JSX.Element {
   const problems = items.filter((i) => i.state === 'problem').length;
   const warns = items.filter((i) => i.state === 'warn').length;
   return (
@@ -39,6 +39,15 @@ export function ReadyCheck({ items, onClose }: { items: ReadyItem[]; onClose(): 
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+/** The same list in a window, with a Close button. */
+export function ReadyCheck({ items, onClose }: { items: ReadyItem[]; onClose(): void }): JSX.Element {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
+      <ReadyList items={items} />
       <div><Button tone="primary" autoFocus onClick={onClose}>Close</Button></div>
     </div>
   );

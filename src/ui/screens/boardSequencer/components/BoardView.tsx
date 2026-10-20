@@ -282,11 +282,13 @@ export function BoardView({
       }
     }
 
-    // The band's pulse: a soft bar along the bottom edge, brighter on the beat.
+    // The band's strip: a bar along the bottom edge, brighter on the beat. The legend
+    // under the board names it, so nothing here covers a counter.
     if (band?.playing) {
+      const barH = 7;
       ctx.fillStyle = palette.accent;
-      ctx.globalAlpha = band.beatOn || reducedMotion ? 0.55 : 0.2;
-      ctx.fillRect(0, h - 5, w, 5);
+      ctx.globalAlpha = band.beatOn || reducedMotion ? 0.6 : 0.25;
+      ctx.fillRect(0, h - barH, w, barH);
       ctx.globalAlpha = 1;
     }
 
@@ -298,15 +300,17 @@ export function BoardView({
         if (frame.settled.has(key) || frame.detected.has(key)) continue;
         const cx = m.col * cw + cw / 2;
         const cy = m.row * ch + ch / 2;
-        const r = Math.min(cw, ch) * 0.2;
+        // Big enough to read from the player's chair: a dotted ring with a faint centre,
+        // filling in while its note sounds.
+        const r = Math.min(cw, ch) / 2 - pad - 5;
         ctx.beginPath();
         ctx.arc(cx, cy, r, 0, Math.PI * 2);
-        if (fillPopAt.has(key)) {
-          ctx.fillStyle = swatchFor(m.colour);
-          ctx.fill();
-        }
-        ctx.setLineDash([2, 3]);
-        ctx.lineWidth = 2;
+        ctx.fillStyle = swatchFor(m.colour);
+        ctx.globalAlpha = fillPopAt.has(key) ? 0.85 : 0.15;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.setLineDash([3, 4]);
+        ctx.lineWidth = 3;
         ctx.strokeStyle = swatchFor(m.colour);
         ctx.stroke();
         ctx.setLineDash([]);

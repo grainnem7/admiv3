@@ -1,0 +1,307 @@
+<title>Board Sequencer Guide</title>
+<meta name="description" content="Facilitator's guide to the ADMI Board Sequencer: show day, building a performance, the music, the iPad and the board.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: one reading column with a section index; a numbered show-day run at the top, then reference sections by tab. */
+:root {
+  --bg: #eef1f4; --surface: #ffffff; --ink: #15202c; --ink2: #4a5868; --line: #d3dae2; --accent: #1f4fd8;
+  --tab: #2f9a62; --warn: #b8322a;
+  --font-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #0f151c; --surface: #17202a; --ink: #e6ebf1; --ink2: #9fb0c2; --line: #2a3644; --accent: #7fa2ff; --tab: #4fc287; --warn: #ff7a66; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --bg: #0f151c; --surface: #17202a; --ink: #e6ebf1; --ink2: #9fb0c2; --line: #2a3644; --accent: #7fa2ff; --tab: #4fc287; --warn: #ff7a66; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 17px; line-height: 1.55; }
+.wrap { max-width: 920px; margin: 0 auto; padding-inline: 20px; padding-block: 40px 80px; display: grid; gap: 44px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.15; margin: 0; }
+h1 { font-size: clamp(2.1rem, 5.5vw, 3.2rem); font-weight: 800; letter-spacing: -0.02em; }
+h2 { font-size: 1.6rem; font-weight: 800; }
+h3 { font-size: 1.08rem; font-weight: 600; }
+p { margin: 0; max-width: 68ch; }
+section { display: grid; gap: 14px; min-width: 0; scroll-margin-top: 16px; }
+.eyebrow { font-family: var(--font-mono); font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink2); }
+.lede { font-size: 1.1rem; color: var(--ink2); }
+code, .key { font-family: var(--font-mono); font-size: 0.86em; background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; overflow-wrap: anywhere; }
+.tabname { font-family: var(--font-mono); font-size: 0.78rem; font-weight: 700; color: var(--tab); border: 1.5px solid var(--tab); border-radius: 999px; padding: 1px 9px; white-space: nowrap; }
+ul { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; max-width: 72ch; }
+li::marker { color: var(--ink2); }
+a { color: var(--accent); }
+a:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+nav ul { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 16px; max-width: none; }
+nav a { font-weight: 700; text-decoration: none; }
+nav a:hover { text-decoration: underline; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; display: grid; gap: 10px; min-width: 0; }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 14px; }
+ol.run { list-style: none; counter-reset: s; margin: 0; padding: 0; display: grid; gap: 8px; }
+ol.run li { counter-increment: s; display: grid; grid-template-columns: 34px 1fr; gap: 10px; align-items: start; }
+ol.run li::before { content: counter(s); width: 28px; height: 28px; border-radius: 50%; background: var(--accent); color: var(--surface); font-family: var(--font-mono); font-weight: 700; font-size: 0.85rem; display: grid; place-items: center; }
+.note { border-left: 4px solid var(--accent); padding: 4px 0 4px 14px; color: var(--ink2); max-width: 72ch; }
+.warn { border-left-color: var(--warn); }
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; min-width: 560px; font-size: 0.95rem; }
+th, td { text-align: left; vertical-align: top; padding: 9px 13px; border-bottom: 1px solid var(--line); }
+th { font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink2); }
+tr:last-child td { border-bottom: 0; }
+td.k { font-weight: 700; }
+dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; }
+dt { font-weight: 700; }
+dd { margin: 0; color: var(--ink2); }
+@media (max-width: 560px) { dl { grid-template-columns: 1fr; } dd { margin-bottom: 6px; } }
+</style>
+
+<div class="wrap">
+
+<header style="display:grid; gap:14px">
+  <span class="eyebrow">ADMI Board Sequencer · Facilitator guide · 20 October 2026</span>
+  <h1>Board Sequencer Guide</h1>
+  <p class="lede">Everything saves by itself, and nothing in the app changes the music unless you, the player, a scene or the clock does. Start with show day; the rest is reference, arranged by the tabs on the Play screen.</p>
+  <nav aria-label="Sections"><ul>
+    <li><a href="#showday">Show day</a></li>
+    <li><a href="#perform">Play, Make a piece, Show</a></li>
+    <li><a href="#during">During the piece</a></li>
+    <li><a href="#sound">The music</a></li>
+    <li><a href="#ipad">The iPad</a></li>
+    <li><a href="#setup">Set up</a></li>
+    <li><a href="#board">The board's rules</a></li>
+    <li><a href="#laptop">Laptop board</a></li>
+    <li><a href="#saving">Saving</a></li>
+    <li><a href="#more">MIDI and session log</a></li>
+    <li><a href="#words">Words</a></li>
+    <li><a href="#wrong">If something goes wrong</a></li>
+  </ul></nav>
+</header>
+
+<section id="showday" aria-labelledby="h-show">
+  <span class="eyebrow">Start here</span>
+  <h2 id="h-show">Show day, in order</h2>
+  <ol class="run">
+    <li><span>Close any other ADMI windows and terminals. Start ADMI with <code>npm run show</code>. It builds the app and serves it on port 3001, and unlike the development server it cannot reload itself mid-piece.</span></li>
+    <li><span>Open <code>http://localhost:3001</code> in Chrome on the laptop. Press <b>Board Sequencer</b> and pick the player.</span></li>
+    <li><span>Check the <b>Board</b> switch at the top shows <b>📷 Camera</b>. Do <b>Set up</b>: camera, board (<b>Skip, board hasn't moved</b> if it hasn't), then colours.</span></li>
+    <li><span>Go to the <span class="tabname">Connections</span> tab, tick <b>iPad controls</b>, and open the link it shows in Safari on the iPad. The 👆 mark lights when the iPad is touched.</span></li>
+    <li><span>Press <b>Make a piece</b> → <b>3 · Ending &amp; check</b>, and look at the Ready check. Fix anything marked ✕.</span></li>
+    <li><span>On the same step, press <b>⤓ Back up to a file</b> and copy the file to a USB stick.</span></li>
+    <li><span>Sound check: ▶ Play, set the level, then ■ Stop (press it twice, since the clock is running). Stopping resets the clock.</span></li>
+    <li><span>Press <b>▶ Show</b>, then <b>▶ Start the piece</b>. The opening scene is already in place, and the top shows the time left and Now / Next.</span></li>
+    <li><span>At the 30-second cue, Tim taps <b>End piece</b> twice (or you press <b>⏹ End</b>).</span></li>
+    <li><span>Afterwards, press <b>Save session</b> (and <b>CSV</b>) for the research log.</span></li>
+  </ol>
+  <p class="note">The full plan for the 7-minute piece, with the scenes and the run sheet, is in the separate performance plan.</p>
+</section>
+
+<section id="perform" aria-labelledby="h-perform">
+  <span class="eyebrow">The three buttons at the top</span>
+  <h2 id="h-perform">Play, Make a piece, Show</h2>
+  <ul>
+    <li><b>Play</b>: just play the board, with the <span class="tabname">Sound</span>, <span class="tabname">Groove</span>, <span class="tabname">Board</span> and <span class="tabname">Connections</span> tabs. No loops or scenes are needed.</li>
+    <li><b>Make a piece</b>: three steps on one panel, <b>1 Loops</b>, <b>2 Scenes</b> and <b>3 Ending &amp; check</b>. Each step is optional, and any step can be opened at any time.</li>
+    <li><b>▶ Show</b>: the board full screen for the performance, with the clock and Now / Next. The only buttons are <b>Start the piece</b>, <b>Capture</b>, <b>Next</b>, <b>End</b>, <b>Stop</b> (two presses), <b>Mute</b> and <b>Leave Show</b>.</li>
+  </ul>
+  <div class="cols">
+    <div class="card">
+      <h3>1 · Loops</h3>
+      <ul>
+        <li>Put counters on the board, then press <b>Save the board here</b> on an empty loop and type its name.</li>
+        <li>A saved loop has <b>▶ Play</b> (it starts on the next pass), <b>Replace</b> (press twice; it takes the board as it is now), ✎ (draw on screen) and ✕ (clear).</li>
+        <li><b>More</b> has the fade time (½, 1 or 2 passes, or at once) and Stop all loops.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>2 · Scenes</h3>
+      <ul>
+        <li><b>✦ Make my plan</b> makes four scenes, Arrival, Build, Open and Home, across the length (0:00, 1:30, 3:30 and 6:00 of 7:00), from your loops.</li>
+        <li><b>Tap a scene</b> to change its time, loops, sound world, band, Fill, Evolve and tempo. <b>Update from now</b> copies what's playing into it. <b>Delete</b> can be undone for 15 seconds.</li>
+        <li><b>▶ From here</b> (while stopped) rehearses from that scene's time. <b>Go</b> brings a scene in by hand.</li>
+        <li><b>Scenes leave the player's strips alone</b> (on): a strip Tim moved on the iPad keeps his setting.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>3 · Ending &amp; check</h3>
+      <ul>
+        <li><b>Length</b>, and <b>How it ends</b>: Final chord, Fade out, Slow down, Thin out or Stop, each described where you choose it.</li>
+        <li><b>The ending takes</b> 1, 2 or 4 passes. <b>When it ends</b>: when you press End, or by itself at the time. <b>The clock starts</b> with Play, or with Start clock.</li>
+        <li>The <b>Ready check</b> is listed below the ending, with <b>⤓ Back up to a file</b> and <b>⤒ Restore</b>.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>A counter as a loop</h3>
+      <ul>
+        <li>In Set up → Colours, give a colour the job <b>Plays a loop…</b>. That counter anywhere on the board plays that loop. It never plays a note itself.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="during" aria-labelledby="h-during">
+  <span class="eyebrow">Live</span>
+  <h2 id="h-during">During the piece</h2>
+  <ul>
+    <li><b>The Now / Next strip</b>, above the board and on Big board, shows the time left in big type, the scene that's on, the next one and how long until it, the loops playing, and <b>Next ▶</b> and <b>⏹ End</b> buttons.</li>
+    <li><b>Cues</b> at 1 minute, 30 seconds and 10 seconds are spoken, flashed on the board, and shown large in the strip for 5 seconds. The countdown turns amber, then red.</li>
+    <li><b>Scenes come in by themselves</b> at their times, on the next pass. <b>Next ▶</b> moves on by hand. It stops at the last scene and never jumps back to the first.</li>
+    <li><b>Stop (or Space) needs a second press</b> within 4 seconds while the clock runs. The first press only says "Press again to stop".</li>
+    <li><b>⏹ End</b> (or End piece on the iPad, two taps) starts the chosen ending. <b>Cancel the ending</b> brings the music back if the room wants more.</li>
+    <li><b>⏺ Capture</b> saves what's on the board right now into the first free loop and starts it on the next pass.</li>
+    <li><b>Loops on the board:</b> a playing loop is drawn as outlined counters (a ring with a dot) that pulse as they sound.</li>
+    <li><b>When the piece ends or is stopped</b>, the player's own settings come back (tempo, sound world, band, Fill, Evolve), no loops stay armed, and the next Play starts from the opening scene.</li>
+  </ul>
+</section>
+
+<section id="sound" aria-labelledby="h-sound">
+  <span class="eyebrow"><span class="tabname">Sound</span> tab</span>
+  <h2 id="h-sound">The music</h2>
+  <dl>
+    <dt>Sound world</dt><dd>Warm, Lo-fi, Ambient or Electronic. One choice sets every part's instrument, the drums and the room. A colour given its own instrument keeps it. <b>My picks</b> means each colour plays its own chosen instrument.</dd>
+    <dt>Each counter plays</dt><dd><b>A phrase</b>, or <b>One note</b>. With phrases, a drum counter plays a whole groove (higher rows are busier), bass plays a bassline, melody plays a tune, and chord counters set the chords. One counter fills the loop until the next counter of the same colour takes over. Leave polyrhythm (Groove tab) Off with phrases; the app warns.</dd>
+    <dt>Loops and the player</dt><dd>A loop's melody keeps playing under Tim's counters of the same colour. For bass, chords and drums, Tim's counter takes that part over from the loops while it's down. A note played by a loop and the board at the same moment sounds once.</dd>
+    <dt>Band</dt><dd>Off, Gentle or Full: a pad, a bass and a groove. They come in on the pass after Tim's first counter, follow the chords, and stop after the pass his last counter left in. Tim putting down a bass, chord or drum counter takes that part from the band. The band answers Tim, not the loops. The bottom edge of the board pulses with its beat.</dd>
+    <dt>Fill</dt><dd>0–100%. In-key notes added around Tim's, never on his notes and never louder. 30% lets about half of the possible notes through. Ideas come from <b>Magenta AI</b>, which downloads once and needs internet the first time; without it, it uses <b>Simple rules</b>. Buttons: <b>New idea</b>, <b>Back</b>, <b>Keep</b>, <b>Clear</b>. Added notes show as dotted rings.</dd>
+    <dt>Evolve</dt><dd>0–100%. Each colour's sound slowly changes. Every 4, 8 or 16 loops it changes instrument, pattern or kit, one colour at a time; each starts on its own sound. Buttons: <b>New sound</b>, <b>Back</b>, <b>Hold</b>. "New sounds" flashes on the board.</dd>
+    <dt>Instruments while playing</dt><dd>A colour's instrument or drum can be changed during play. The new instrument comes in once it has loaded, with no gap. Changing what a colour does still needs a stop.</dd>
+    <dt>Studio mix</dt><dd>The fuller mix. Untick it to compare with the plain sound.</dd>
+  </dl>
+  <p class="note">The <span class="tabname">Groove</span> tab has tempo, swing, humanize, key and scale, the grid (rows, steps, pages), polyrhythm and an optional backing song.</p>
+</section>
+
+<section id="ipad" aria-labelledby="h-ipad">
+  <span class="eyebrow"><span class="tabname">Connections</span> tab</span>
+  <h2 id="h-ipad">The iPad (Tim)</h2>
+  <ul>
+    <li><b>Connect:</b> tick <b>iPad controls</b> and open the link it shows in Safari on the iPad, which must be on the same Wi-Fi. The first time, allow Node through Windows Firewall on private networks. The pairing code is kept, so a laptop reload doesn't break the link.</li>
+    <li><b>Strips:</b> Speed, Dynamics, Fill and Evolve. Slide anywhere on a strip. The ends mean "all the way", and values move in 5% steps.</li>
+    <li><b>Pads:</b> New idea, New sound, Keep and Mute. Repeat taps are ignored for a moment. From the iPad, <b>Keep only keeps</b>; letting go is done on the laptop.</li>
+    <li><b>Loops &amp; scenes page:</b> the 8 loop pads, scene pads that follow the current scene, Capture, Next scene, End piece and Stop all.</li>
+    <li><b>The iPad shows</b> the clock, <b>Now: / Next: … in m:ss</b>, and a beat light while playing.</li>
+  </ul>
+  <h3>Settings for Tim (all per player)</h3>
+  <ul>
+    <li><b>What the iPad shows:</b> untick strips and pads he won't use. Fewer things means bigger things.</li>
+    <li><b>Also on the Play page:</b> tick End piece, Next scene, Capture, Stop all and any saved loops. They appear as big pads on the page he plays on, so he never switches page mid-piece.</li>
+    <li><b>A touch on a strip:</b>
+      <ul>
+        <li><b>Jumps to the finger</b>: like ThumbJam.</li>
+        <li><b>Follows the movement</b>: landing does nothing, and sliding moves the value from where it was.</li>
+      </ul>
+    </li>
+    <li><b>A pad acts:</b>
+      <ul>
+        <li><b>When the finger lands</b>: quickest.</li>
+        <li><b>When the finger lifts</b>: nothing happens unless the finger comes off the same pad it started on.</li>
+      </ul>
+    </li>
+    <li><b>Time for the second tap</b> on End piece and Stop all: 3, 6 or 10 seconds.</li>
+    <li><b>Locked strips</b> (🔒) ignore touch, for example Speed in a fixed-tempo piece.</li>
+    <li><b>Show Next scene on the iPad:</b> untick it if a brush against it could change the whole sound.</li>
+    <li><b>Learn reach:</b> Tim slides each strip as far as is comfortable, then you press Done, and that reach becomes the whole range. <b>Reset reach</b> undoes it.</li>
+    <li>A resting palm is ignored on every pad. Every pad also works from a keyboard or switch (Enter or Space).</li>
+  </ul>
+</section>
+
+<section id="setup" aria-labelledby="h-setup">
+  <span class="eyebrow">⚙ Set up</span>
+  <h2 id="h-setup">Set up: four steps</h2>
+  <ol class="run">
+    <li><span><b>Camera.</b> Pick the camera and check it says "Picture has colour". Set Mirror and Flip; changing them asks for the corners again but keeps the colours. If the camera is on its side, use <b>Turn 90°</b>, which keeps the corners and colours. For a phone used as a camera, keep <b>Picture size 1280 × 720</b>.</span></li>
+    <li><span><b>Board.</b> <b>Find board</b> finds the board, works out 8 × 8 or 10 × 10, and shows what it found. Nothing is saved until <b>Looks right</b>. Or <b>Tap corners myself</b>, using the outside corners of the squares rather than the wooden edge. If the board hasn't moved since last time, use <b>Skip, board hasn't moved</b>.</span></li>
+    <li><span><b>Colours.</b> With every counter off the board, press <b>Learn the empty board</b>. Then put one of each counter down and press <b>Find colours</b>; a colour that would light up the wood starts Off. Press <b>Use these colours</b>. Give each colour a job: melody, bass, chords, drums, a control, or Plays a loop.</span></li>
+    <li><span><b>Ready.</b> Check the counts, then ▶ Play.</span></li>
+  </ol>
+  <ul>
+    <li><b>Players:</b> with more than one player, the screen opens with <b>Who's playing?</b> Each player has their own grid, jobs, sounds, loops, scenes and iPad settings. The board, camera and colours are shared. New players start on an 8 × 8 grid.</li>
+    <li><b>Counters not detected?</b> Go to Colours → Detection sensitivity and lower Piece coverage. <b>Reset to suggested</b> puts it back.</li>
+  </ul>
+</section>
+
+<section id="board" aria-labelledby="h-board">
+  <span class="eyebrow"><span class="tabname">Board</span> tab</span>
+  <h2 id="h-board">The board's rules</h2>
+  <dl>
+    <dt>Playing</dt><dd>The playhead sweeps left to right, and higher rows play higher notes. A square only lights when its note is heard. <b>Space</b> starts and stops. <b>⤢ Big board</b> shows just the board (Esc leaves it). <b>Describe board</b> reads the layout out loud.</dd>
+    <dt>Control counters</dt><dd>A colour with a control job is a fader: its value follows where it sits on the board, and the ends snap to the lowest and highest values. Lifting it holds the last value; this can be set per control (Hold, Drop or Return), and each control has its own range.</dd>
+    <dt>Lanes</dt><dd>Controls and loop pads can live anywhere, or in their own row or step. A lane never plays notes. On a loop pad, <b>Hold</b> plays while the counter is on it; <b>Toggle</b> starts on one placement and stops on the next.</dd>
+    <dt>Loop bank</dt><dd>The bottom row becomes save slots. Put a counter on an empty slot once the board is still, and it saves and loops; lift the counter to pause. It's single-page.</dd>
+    <dt>Variation</dt><dd>A counter shoved off the centre of its square plays every other pass, shown by a long-dash ring. The A/B letter shows the lap.</dd>
+    <dt>Ping-pong</dt><dd>The playhead goes right, then back left.</dd>
+    <dt>Where the counter sits</dt><dd>Off by default. Higher in the square plays louder; right of centre plays later.</dd>
+    <dt>Hands, knocks, nudges</dt><dd>Squares under a hand are held, not read. If several counters are knocked at once, the pattern plays on as ghosts (↺) until you press <b>Let go</b> or <b>Save as loop</b>, or put them back. A small nudge of the board is followed automatically.</dd>
+    <dt>Hints</dt><dd>"Has the board moved?" and "&lt;Colour&gt; is matching the board". These only inform. <b>Not now</b> hides one.</dd>
+  </dl>
+</section>
+
+<section id="laptop" aria-labelledby="h-laptop">
+  <span class="eyebrow">No board today</span>
+  <h2 id="h-laptop">The laptop board</h2>
+  <ul>
+    <li><b>Board: 💻 Laptop</b> (top right) plays without the camera or the real board. Pick a colour above the board, click a square to put a counter down, and click again to lift it. Arrow keys and Enter work too.</li>
+    <li>It plays exactly like the real board: phrases, the band, loops, scenes, the clock and the iPad. Use it to test and plan at home. The counters stay there next time.</li>
+    <li>On a laptop that has never seen the board, <b>Add four colours</b> gives red melody, blue bass, yellow chords and green drums.</li>
+    <li><b>📷 Camera</b> switches back. The Ready check warns if the laptop board is still on.</li>
+  </ul>
+</section>
+
+<section id="saving" aria-labelledby="h-saving">
+  <span class="eyebrow">Keeping work safe</span>
+  <h2 id="h-saving">Saving and backups</h2>
+  <ul>
+    <li>Everything saves by itself: in the browser, and in a copy on the laptop in the <code>.admi-data</code> folder next to the app. Each browser and each address (<code>:3000</code>, <code>:3001</code>) has its own store; when the app opens, the newer of the two is used, and whatever it replaces goes into <code>.admi-data/backups</code>.</li>
+    <li>Make a piece → step 3 says when the laptop copy was last saved.</li>
+    <li><b>⤓ Back up to a file</b> saves every player, loop, scene and the board setup in one file. <b>⤒ Restore from a file</b> puts one back; it asks first, and the page reloads.</li>
+    <li>A warning shows if ADMI is open in two tabs, since they would save over each other, or if the browser refuses to save.</li>
+    <li>If the page reloads mid-piece, it offers <b>Carry on from m:ss</b>.</li>
+  </ul>
+</section>
+
+<section id="more" aria-labelledby="h-more">
+  <span class="eyebrow">Research and other gear</span>
+  <h2 id="h-more">MIDI out and the session log</h2>
+  <ul>
+    <li><b>MIDI out</b> (Connections tab), in Chrome or Edge: melody on channel 1, bass 2, chords 3, drums 10. Choose <b>My notes only</b> or <b>Everything</b>. A DAW on the same laptop needs a virtual port (loopMIDI).</li>
+    <li><b>Session log:</b> while the board plays, it records every note with where it came from (placed, phrase, fill or band), every change to the board, and every setting change with who made it. Save it with <b>Save session</b> (JSON) or <b>CSV</b>. It's never sent anywhere.</li>
+    <li><b>Checking the app after a change:</b> <code>npm run test:run</code> runs the unit tests (about 30 s). <code>npm run test:e2e</code> runs the performance in a real browser (about 2 minutes). Neither touches your saved work.</li>
+  </ul>
+</section>
+
+<section id="words" aria-labelledby="h-words">
+  <span class="eyebrow">Glossary</span>
+  <h2 id="h-words">Words used here</h2>
+  <dl>
+    <dt>Pass</dt><dd>One time round the loop, left to right. Scenes, loops and the ending land on a pass.</dd>
+    <dt>Phrase</dt><dd>The idea one counter plays until the next counter of its colour.</dd>
+    <dt>Scene</dt><dd>A set of loops and a sound, brought in by the clock or with Go.</dd>
+    <dt>Loop</dt><dd>A saved board that plays on its own; there are eight, in Make a piece → 1 Loops.</dd>
+    <dt>Band</dt><dd>A pad, bass and groove that answer the player.</dd>
+    <dt>Fill</dt><dd>Notes the instrument adds around the player's.</dd>
+    <dt>Evolve</dt><dd>Each colour's sound slowly changing.</dd>
+    <dt>Lane</dt><dd>A row or step kept for controls or loop pads, never notes.</dd>
+    <dt>Hold / Toggle</dt><dd>A loop pad plays while its counter is on it, or starts and stops with each placement.</dd>
+  </dl>
+</section>
+
+<section id="wrong" aria-labelledby="h-wrong">
+  <span class="eyebrow">Contingency</span>
+  <h2 id="h-wrong">If something goes wrong</h2>
+  <div class="tablewrap"><table>
+    <thead><tr><th>What you see</th><th>What to do</th></tr></thead>
+    <tbody>
+      <tr><td class="k">iPad says "Link lost — reconnecting…"</td><td>Wait a few seconds. If it stays, reload the iPad page. Both screens must show the same code, from one ADMI server.</td></tr>
+      <tr><td class="k">iPad shows but nothing happens</td><td>Check the 👆 mark lights when it's touched. Check the strip isn't 🔒 locked or hidden for this player.</td></tr>
+      <tr><td class="k">Red banner: "The camera has stopped"</td><td>The music carries on with the last pattern. Check the USB cable, then press <b>Try the camera again</b>.</td></tr>
+      <tr><td class="k">A counter isn't heard</td><td>Move it to the centre of its square, and make sure no hand is over it. As a last resort, lower Piece coverage.</td></tr>
+      <tr><td class="k">Counters knocked over</td><td>Do nothing: the pattern plays on as ghosts until you put them back.</td></tr>
+      <tr><td class="k">Stop pressed by mistake</td><td>While the clock runs, the first press only says "Press again to stop". Don't press it again.</td></tr>
+      <tr><td class="k">End pressed too early</td><td>Press <b>Cancel the ending</b>.</td></tr>
+      <tr><td class="k">The page reloaded mid-piece</td><td>Press <b>Carry on from m:ss</b>.</td></tr>
+      <tr><td class="k">Loops or scenes missing</td><td>Check the address is <code>localhost:3001</code> and the right player is picked. If they're still missing, use <b>⤒ Restore from a file</b>, or a file from <code>.admi-data/backups</code>.</td></tr>
+      <tr><td class="k">"ADMI is open in another tab"</td><td>Close every ADMI tab but one.</td></tr>
+      <tr><td class="k">Something sounds awful</td><td><b>Mute</b> stops the sound without losing anything.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+</div>

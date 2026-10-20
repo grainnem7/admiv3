@@ -134,6 +134,9 @@ export function applyEngineSettings(engine: BoardSequencerEngine, cfg: BoardSequ
     amount: cfg.evolveAmount, sceneLoops: cfg.evolveSceneLoops, seed: cfg.evolveSeed, holdLap: cfg.evolveHoldLap,
   });
   engine.setVariationEnabled(cfg.variationEnabled);
+  engine.setEnergy(cfg.energy);
+  engine.setSpace(cfg.space);
+  engine.setLoopVary(cfg.loopVary);
 }
 
 export function useBoardRuntime(opts: {

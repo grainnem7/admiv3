@@ -109,6 +109,14 @@ export interface ColourChannel {
   tone?: number;
   reverbSend?: number;
   delaySend?: number;
+  /**
+   * With phrases on: 'note' = one note per counter, exactly where it sits; 'tune' = the
+   * counter starts a phrase (a groove, a bassline, the chords). Unset = by part: the
+   * melody plays notes, the others play tunes.
+   */
+  plays?: 'note' | 'tune';
+  /** false = this colour keeps its sound while "Sounds change" moves the others. */
+  changes?: boolean;
 }
 
 /** A colour reduced to "does this HSV pixel match?", tagged with its id. */

@@ -24,20 +24,27 @@ describe('the performance clock', () => {
     expect(cueText(30)).toBe('30 seconds left');
   });
 
-  it('an automatic ending begins early enough to be finished at the end; "when I press" never', () => {
+  it('the ending begins early enough to be finished, rung out, at the end time', () => {
     const passSec = 8 * 60 / 90; // 8 beats at 90 BPM
     const fade = { ...DEFAULT_PERFORMANCE, ending: 'auto' as const, style: 'fade' as const, fadePasses: 2 };
-    // It waits for the next pass boundary (up to one pass), then runs its two passes.
-    expect(endingLeadSec(fade, passSec)).toBeCloseTo(3 * passSec, 9);
+    // It waits for the next pass boundary (up to one pass), runs its two passes, rings out.
+    expect(endingLeadSec(fade, passSec)).toBeCloseTo(3 * passSec + 0.8, 9);
     expect(endingDue(fade, 3 * passSec + 1, passSec)).toBe(false);
-    expect(endingDue(fade, 3 * passSec - 0.1, passSec)).toBe(true);
+    expect(endingDue(fade, 3 * passSec + 0.7, passSec)).toBe(true);
     // A stop happens at the end of the pass it is asked in.
-    expect(endingLeadSec({ ...fade, style: 'stop' }, passSec)).toBeCloseTo(passSec, 9);
-    // The chord rings for one more pass, so it starts one pass earlier still.
-    expect(endingLeadSec({ ...fade, style: 'chord' }, passSec)).toBeCloseTo(4 * passSec, 9);
+    expect(endingLeadSec({ ...fade, style: 'stop' }, passSec)).toBeCloseTo(passSec + 0.8, 9);
+    // The chord's extra pass AND its ring (half a pass and a little) are counted.
+    expect(endingLeadSec({ ...fade, style: 'chord' }, passSec)).toBeCloseTo(4.5 * passSec + 1.2, 9);
     // A ritardando slows to about half speed, so its passes take longer.
-    expect(endingLeadSec({ ...fade, style: 'slow' }, passSec)).toBeCloseTo(passSec + 2 * passSec * 1.3, 9);
-    expect(endingDue({ ...fade, ending: 'cue' }, -100, passSec)).toBe(false);
+    expect(endingLeadSec({ ...fade, style: 'slow' }, passSec)).toBeCloseTo(passSec + 2 * passSec * 1.3 + 0.8, 9);
+  });
+
+  it('"When I press End" still ends by itself in time if End is never pressed', () => {
+    const passSec = 8 * 60 / 90;
+    const cue = { ...DEFAULT_PERFORMANCE, ending: 'cue' as const, style: 'fade' as const, fadePasses: 2 };
+    expect(endingLeadSec(cue, passSec)).toBeCloseTo(endingLeadSec({ ...cue, ending: 'auto' }, passSec), 9);
+    expect(endingDue(cue, 60, passSec)).toBe(false);
+    expect(endingDue(cue, 3 * passSec, passSec)).toBe(true);
   });
 
   it('warns when the piece is too short for its ending', () => {

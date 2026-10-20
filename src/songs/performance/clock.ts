@@ -109,19 +109,21 @@ const SLOW_STRETCH = 1.3;
 
 /**
  * How long an ending takes once it is asked for, in seconds: it waits for the next pass
- * boundary (up to one pass), then runs its passes — longer for a ritardando.
+ * boundary (up to one pass), then runs its passes — longer for a ritardando — and then
+ * rings out (the final chord for half a pass more).
  */
 export function endingDurationSec(settings: Pick<PerformanceSettings, 'style' | 'fadePasses'>, passSec: number): number {
   const run = endingPasses(settings) * passSec * (settings.style === 'slow' ? SLOW_STRETCH : 1);
-  return passSec + run;
+  const ring = settings.style === 'chord' ? 0.5 * passSec + 1.2 : 0.8;
+  return passSec + run + ring;
 }
 
 /**
- * For an automatic ending: how many seconds before the end time the ending has to begin
- * so that it is finished AT the end time.
+ * How many seconds before the end time the ending has to begin so that it is finished
+ * AT the end time. The same for both ways of ending: "When I press End" only lets it
+ * start earlier — the piece can never run over its length.
  */
 export function endingLeadSec(settings: PerformanceSettings, passSec: number): number {
-  if (settings.ending === 'cue') return Number.POSITIVE_INFINITY; // never by itself
   return endingDurationSec(settings, passSec);
 }
 
@@ -131,11 +133,11 @@ export function endingTooLong(settings: PerformanceSettings, passSec: number): b
 }
 
 /**
- * Whether the automatic ending should be triggered now: the clock has reached the lead
- * time and it has not been triggered yet. Pure; the caller remembers that it has.
+ * Whether the ending should start by itself now: the clock has reached the lead time and
+ * it has not been triggered yet. With "When I press End" too — if End hasn't been pressed
+ * by then, the piece still ends on time. Pure; the caller remembers that it has.
  */
 export function endingDue(settings: PerformanceSettings, remainingSec: number, passSec: number): boolean {
-  if (settings.ending === 'cue') return false;
   return remainingSec <= endingLeadSec(settings, passSec);
 }
 

@@ -49,10 +49,13 @@ import { describeBoard, phraseSpans, popsAt, pruneFired, type Pop } from './boar
 import { isSequencedRole, isControlRole, isLoopRole } from '../../tracking/boardColours';
 import { placeLaptopCounter } from '../../tracking/laptopBoard';
 import { LaptopBoardBar } from './boardSequencer/components/LaptopBoardBar';
-import { PerformPanel, type PerformLoop } from './boardSequencer/play/PerformPanel';
+import { LoopThumb, PieceSteps, type PieceLoop, type PieceStep } from './boardSequencer/play/PieceSteps';
 import { NowNextStrip } from './boardSequencer/play/NowNextStrip';
-import { ReadyCheck, type ReadyItem } from './boardSequencer/play/ReadyCheck';
+import type { ReadyItem } from './boardSequencer/play/ReadyCheck';
 import { PlayPanel } from './boardSequencer/play/PlayPanel';
+import { BoardLegend } from './boardSequencer/components/BoardLegend';
+import { soundNameFor } from './boardSequencer/soundOptions';
+import { SoundTab, type ChannelSoundPatch } from './boardSequencer/play/SoundTab';
 import { NudgeBanner } from './boardSequencer/play/NudgeBanner';
 import { SwatchChip } from './boardSequencer/ui/SwatchChip';
 import { Switch } from './boardSequencer/ui/Switch';
@@ -89,7 +92,7 @@ import {
 import { layoutFor } from './boardSequencer/layout';
 import { isConvexQuad, squareCentreToImage } from './boardSequencer/cornerEditor';
 import { drawOriented, orientedSize, reorientPoints, type FrameOrientation, type QuarterTurns } from '../../tracking/frameOrientation';
-import { SOUND_WORLDS, SOUND_WORLD_IDS, worldOf, type SoundWorldChoice } from '../../audio/worlds/soundWorlds';
+import { SOUND_WORLDS, SOUND_WORLD_IDS, worldOf } from '../../audio/worlds/soundWorlds';
 import type { FillSourceStatus } from '../../songs/BoardSequencerEngine';
 import type { BandLevel, BandPart } from '../../songs/band/band';
 import { BoardMidiPanel } from './boardSequencer/components/BoardMidiPanel';
@@ -160,35 +163,6 @@ import {
 } from '../../profiles/BoardProfiles';
 import LoopBankView from '../components/board/LoopBankView';
 import BoardHelp from '../components/board/BoardHelp';
-
-// Sound options — real sample sets (mapped straight to SAMPLE_CONFIGS) plus the
-// sustained pad. These are the better-quality instruments available to us.
-const INSTRUMENT_OPTIONS: { key: string; name: string }[] = [
-  { key: 'piano', name: 'Piano' },
-  { key: 'electricPiano', name: 'Electric piano' },
-  { key: 'harp', name: 'Harp' },
-  { key: 'organ', name: 'Organ' },
-  { key: 'clarinet', name: 'Clarinet' },
-  { key: 'frenchHorn', name: 'French horn' },
-  { key: 'cello', name: 'Cello' },
-  { key: 'guitarNylon', name: 'Nylon guitar' },
-  { key: 'bassElectric', name: 'Electric bass' },
-  { key: 'pad', name: 'Pad (sustained)' },
-  { key: 'chord', name: 'Chord stab' },
-];
-
-// Per-row drum choices (kit pieces the RoundRobinDrumKit can play). '' keeps the
-// default bottom→top mapping (kick, snare, hat, crash) for that row.
-const DRUM_OPTIONS: { key: string; name: string }[] = [
-  { key: 'kick', name: 'Kick' },
-  { key: 'snare', name: 'Snare' },
-  { key: 'hat', name: 'Hi-hat' },
-  { key: 'crash', name: 'Crash' },
-  { key: 'kickCrash', name: 'Kick + crash' },
-  { key: 'tom', name: 'Tom' },
-  { key: 'clap', name: 'Clap' },
-  { key: 'rim', name: 'Rim' },
-];
 
 // Polyrhythm roles: each colour/role can loop at its own length (0 = full grid).
 const POLY_ROLES: {
@@ -536,6 +510,8 @@ export default function BoardSequencerScreen() {
   const [wantedSlots, setWantedSlots] = useState<number[]>([]);
   const [appliedSlots, setAppliedSlots] = useState<number[]>([]);
   const [editSlot, setEditSlot] = useState<number | null>(null);
+  /** The edit window's Copy the board button, pressed once over a loop that has notes. */
+  const [copyArmed, setCopyArmed] = useState(false);
   // The laptop's copy of the saved loops (src/storage/diskSync.ts), and a backup file
   // waiting for "Restore" to be confirmed.
   const [disk, setDisk] = useState(diskState);
@@ -562,6 +538,8 @@ export default function BoardSequencerScreen() {
   const endingRef = useRef(false);
   // The automatic ending fires once per run: after "Cancel the ending" it must not fire again.
   const autoEndedRef = useRef(false);
+  /** The end-time backstop has fired this run. */
+  const hardStoppedRef = useRef(false);
   /** Where the next Play starts the clock, when rehearsing from a scene (seconds; null = the top). */
   const rehearseFromRef = useRef<number | null>(null);
   // The player's own settings from before the piece began. Scenes change tempo, sound
@@ -726,6 +704,19 @@ export default function BoardSequencerScreen() {
     else if (field === 'tone') eng.setChannelTone(id, value);
     else if (field === 'reverbSend') eng.setChannelReverbSend(id, value);
     else eng.setChannelDelaySend(id, value);
+  }, [patchChannel]);
+
+  /** A colour card's change: saved for the player, and heard straight away. */
+  const setChannelSound = useCallback((id: string, patch: ChannelSoundPatch) => {
+    patchChannel(id, patch);
+    const eng = engineRef.current;
+    if (!eng) return;
+    const w = worldOf(configRef.current.soundWorld);
+    // Back to the world's own level when a card is reset.
+    if ('volume' in patch) eng.setChannelVolume(id, patch.volume ?? 1);
+    if ('tone' in patch) eng.setChannelTone(id, patch.tone ?? 1);
+    if ('reverbSend' in patch) eng.setChannelReverbSend(id, patch.reverbSend ?? w?.reverbSend ?? 0.18);
+    if ('delaySend' in patch) eng.setChannelDelaySend(id, patch.delaySend ?? w?.delaySend ?? 0);
   }, [patchChannel]);
 
   // Pattern chaining: select which page the live camera edits.
@@ -1670,6 +1661,7 @@ export default function BoardSequencerScreen() {
       setBoardNotice(`Scene: ${opening.name}`);
     }
     autoEndedRef.current = false;
+    hardStoppedRef.current = false;
     endingRef.current = false;
     setEnding(false);
     setClock(clockView(clockStartRef.current, performance.now(), cfg.performance.lengthSec, false));
@@ -2026,7 +2018,7 @@ export default function BoardSequencerScreen() {
   const setupCfg = { enabled: config.enabled || laptop, channels: config.channels };
   const cameraGate: typeof camera = laptop ? { phase: 'running', colourless: false } : camera;
   const headerNotice: HeaderNotice | null = saveFailed
-    ? { kind: 'error', text: 'Changes are not being saved — the browser refused. Use Back up to a file (Perform tab) now.' }
+    ? { kind: 'error', text: 'Changes are not being saved — the browser refused. Use Back up to a file (Make a piece, step 3) now.' }
     : otherTab
       ? { kind: 'error', text: 'ADMI is open in another tab or window. Close all but one, or they will save over each other.' }
       : error
@@ -2197,7 +2189,6 @@ export default function BoardSequencerScreen() {
     </div>
   );
 
-  const world = worldOf(config.soundWorld);
 
   // ---- actions shared by the Sound tab and the iPad remote ----
 
@@ -2345,7 +2336,9 @@ export default function BoardSequencerScreen() {
     const t = window.setTimeout(() => setCueShown(null), CUE_SHOWN_MS);
     return () => window.clearTimeout(t);
   }, [cueShown]);
-  const [readyOpen, setReadyOpen] = useState(false);
+  // Play (just play the board) or Make a piece (the guided steps); Show is the big board.
+  const [workspace, setWorkspace] = useState<'play' | 'piece'>('play');
+  const [pieceStep, setPieceStep] = useState<PieceStep>('loops');
   /** "Make my plan": the four-scene plan across the piece's length, from the saved loops. */
   const makePlan = (): void => {
     const c = configRef.current;
@@ -2396,6 +2389,7 @@ export default function BoardSequencerScreen() {
     homeSettingsRef.current = sceneSettingsNow(configRef.current);
     clockPrevRef.current = { remaining: Infinity, elapsed: CLOCK_NOT_STARTED };
     autoEndedRef.current = false;
+    hardStoppedRef.current = false;
     sessionLogRef.current.action(logActorRef.current, 'start clock');
     announce(`Clock started: ${formatClock(configRef.current.performance.lengthSec)}.`);
   };
@@ -2481,6 +2475,21 @@ export default function BoardSequencerScreen() {
     if (d.end) {
       autoEndedRef.current = true;
       endPiece();
+    }
+    if (d.hardStop && !hardStoppedRef.current) {
+      // The piece cannot run over its length: fade whatever is left and stop.
+      hardStoppedRef.current = true;
+      engine.fadeOutNow(0.8);
+      sessionLogRef.current.action('laptop', 'end time reached: stopped');
+      setBoardNotice('The end time: stopped');
+      setTimeout(() => {
+        if (engineRef.current !== engine) return;
+        stop();
+        wantedRef.current = new Set();
+        setWantedSlots([]);
+        update({ currentScene: null });
+        announce('The piece has reached its end time and stopped.');
+      }, 900);
     }
   };
 
@@ -2642,8 +2651,9 @@ export default function BoardSequencerScreen() {
           </span>
           {remoteLink.others > 0 ? null : remoteInfo && !remoteInfo.lan ? (
             <span style={{ fontSize: 12, color: 'var(--bs-warn)' }}>
-              The iPad can&apos;t reach this laptop yet. Close ADMI&apos;s server and start it with
-              {' '}<code>npm run dev:ipad</code>, then turn this on again.
+              The iPad can&apos;t reach this laptop yet: ADMI was started without the local
+              network. Close ADMI&apos;s server and start it with <code>npm run show</code> (for a
+              performance) or <code>npm run dev:ipad</code> (for testing), then turn this on again.
             </span>
           ) : (
             <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
@@ -2836,266 +2846,40 @@ export default function BoardSequencerScreen() {
     </div>
   );
 
-  const soundTab = (
-
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 10 }}>
-    {/* The two biggest choices about how the board sounds, first. Both work while playing. */}
+  /** Advanced sound: what most sessions never change, under the Sound tab's last fold. */
+  const soundAdvanced = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <span style={{ fontWeight: 600 }}>Sound world</span>
-      <SegmentedControl<SoundWorldChoice>
-        label="Sound world"
-        value={config.soundWorld}
-        onChange={(v) => update({ soundWorld: v })}
-        options={[
-          ...SOUND_WORLD_IDS.map((id) => ({ value: id as SoundWorldChoice, label: SOUND_WORLDS[id].name })),
-          { value: 'none' as SoundWorldChoice, label: 'My picks' },
-        ]}
+      <span style={{ fontWeight: 600 }}>Counters play tunes</span>
+      <SegmentedControl<'phrase' | 'note'>
+        label="Counters play tunes"
+        value={config.phrases ? 'phrase' : 'note'}
+        onChange={(v) => update({ phrases: v === 'phrase' })}
+        options={[{ value: 'phrase', label: 'Each colour chooses' }, { value: 'note', label: 'Always one note' }]}
       />
       <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
-        {world ? world.description : 'Each colour plays the instrument chosen for it below.'}
+        {config.phrases
+          ? 'Each colour card says whether its counters play one note or a tune (a groove, a bassline, the chords).'
+          : 'Every counter plays one note on its step, whatever the cards say.'}
       </span>
     </div>
-    {/* Fill: the instrument adds notes around the player's, and the player decides. */}
-    <div
-      role="group"
-      aria-label="Fill"
-      style={{ display: 'flex', flexDirection: 'column', gap: 6 }}
-    >
-      <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <span style={{ fontWeight: 600 }}>
-          {`Fill ${config.fillAmount <= 0 ? 'off' : `${Math.round(config.fillAmount * 100)}%`}`}
-        </span>
-        <input
-          type="range" min={0} max={100} value={Math.round(config.fillAmount * 100)}
-          aria-label="How much the instrument adds"
-          disabled={fillReason !== null}
-          onChange={(e) => update({ fillAmount: Number(e.target.value) / 100 })}
-        />
-        <span style={REASON_STYLE}>{fillReason ?? ''}</span>
-      </label>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <span style={{ fontWeight: 600 }}>Extra notes come from</span>
       <SegmentedControl<'magenta' | 'rules'>
-        label="Ideas from"
+        label="Extra notes come from"
         value={config.fillEngine}
         onChange={(v) => update({ fillEngine: v })}
         options={[{ value: 'magenta', label: 'Magenta AI' }, { value: 'rules', label: 'Simple rules' }]}
       />
-      {config.fillEngine === 'magenta' && config.fillAmount > 0 && running && (
-        <span role="status" aria-live="polite" style={{ fontSize: 12, color: fillStatus === 'offline' ? 'var(--bs-warn)' : 'var(--bs-fg2)' }}>
-          {FILL_STATUS_TEXT[fillStatus]}
-        </span>
-      )}
-      <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
-        {config.fillAmount <= 0
-          ? 'Turn this up and the instrument adds notes around yours: passing notes, echoes, softer drum hits. It never plays over a note you put down.'
-          : `${fillCount} added ${fillCount === 1 ? 'note' : 'notes'}, shown as dotted rings. ${config.fillKept ? 'Kept: it stays as it is, whatever you move.' : 'It follows the board as you move counters.'}`}
-      </span>
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-        <Button
-          tone="primary"
-          onClick={newFillIdea}
-        >
-          New idea
-        </Button>
-        <Button
-          tone="secondary"
-          onClick={() => {
-            if (prevFillSeed === null) return;
-            update({ fillSeed: prevFillSeed, fillKept: null });
-            setPrevFillSeed(null);
-            announce('Back to the previous idea.');
-          }}
-          reason={prevFillSeed === null ? 'Nothing to go back to yet.' : null}
-        >
-          Back
-        </Button>
-        <Button
-          tone="secondary"
-          aria-pressed={config.fillKept !== null}
-          onClick={() => {
-            if (config.fillKept) {
-              update({ fillKept: null });
-              announce('Fill follows the board again.');
-              return;
-            }
-            const notes = engineRef.current?.getFillNotes() ?? [];
-            if (notes.length === 0) return;
-            update({ fillKept: notes });
-            announce('Fill kept.');
-          }}
-          reason={!config.fillKept && (!running || fillCount === 0) ? 'Play with some fill to keep it.' : null}
-        >
-          {config.fillKept ? 'Kept ✓' : 'Keep'}
-        </Button>
-        <Button
-          tone="quiet"
-          onClick={() => { update({ fillAmount: 0, fillKept: null }); announce('Fill off.'); }}
-          reason={config.fillAmount <= 0 ? 'The fill is already off.' : null}
-        >
-          Clear
-        </Button>
-      </div>
     </div>
-    {/* Evolve: the sound of each colour keeps moving while the notes stay the player's. */}
-    <div role="group" aria-label="Evolve" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <span style={{ fontWeight: 600 }}>
-          {`Evolve ${config.evolveAmount <= 0 ? 'off' : `${Math.round(config.evolveAmount * 100)}%`}`}
-        </span>
-        <input
-          type="range" min={0} max={100} value={Math.round(config.evolveAmount * 100)}
-          aria-label="How much the sounds change as they play"
-          disabled={evolveReason !== null}
-          onChange={(e) => update({ evolveAmount: Number(e.target.value) / 100 })}
-        />
-        <span style={REASON_STYLE}>{evolveReason ?? ''}</span>
-      </label>
-      <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
-        {config.evolveAmount <= 0
-          ? 'Turn this up and each colour\'s sound slowly changes as it plays — brighter, darker, more space, echoes — and every few loops moves to another instrument. Your notes stay the same.'
-          : config.evolveHoldLap !== null
-            ? 'Held: the sounds stay as they are now.'
-            : `Sounds drift every loop and change instrument every ${config.evolveSceneLoops} loops.`}
-      </span>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <span style={{ fontWeight: 600 }}>Sounds change instrument every</span>
       <SegmentedControl<number>
-        label="New instrument every"
+        label="Sounds change instrument every"
         value={config.evolveSceneLoops}
         onChange={(v) => update({ evolveSceneLoops: v })}
-        options={[{ value: 4, label: 'Every 4 loops' }, { value: 8, label: '8 loops' }, { value: 16, label: '16 loops' }]}
+        options={[{ value: 4, label: '4 loops' }, { value: 8, label: '8 loops' }, { value: 16, label: '16 loops' }]}
       />
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-        <Button
-          tone="primary"
-          onClick={newEvolveSound}
-        >
-          New sound
-        </Button>
-        <Button
-          tone="secondary"
-          onClick={() => {
-            if (prevEvolveSeed === null) return;
-            update({ evolveSeed: prevEvolveSeed, evolveHoldLap: null });
-            setPrevEvolveSeed(null);
-            announce('Back to the previous sound.');
-          }}
-          reason={prevEvolveSeed === null ? 'Nothing to go back to yet.' : null}
-        >
-          Back
-        </Button>
-        <Button
-          tone="secondary"
-          aria-pressed={config.evolveHoldLap !== null}
-          onClick={() => {
-            if (config.evolveHoldLap !== null) {
-              update({ evolveHoldLap: null });
-              announce('Sounds evolve again.');
-              return;
-            }
-            update({ evolveHoldLap: engineRef.current?.getEvolveLap() ?? 0 });
-            announce('Sounds held.');
-          }}
-          reason={config.evolveAmount <= 0 ? 'Turn Evolve up first.' : null}
-        >
-          {config.evolveHoldLap !== null ? 'Held ✓' : 'Hold'}
-        </Button>
-      </div>
-      {running && config.evolveAmount > 0 && evolveLabels.size > 0 && (
-        <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: 'var(--bs-fg2)' }}>
-          {config.channels.filter((c) => evolveLabels.has(c.id)).map((c) => (
-            <li key={`evo-${c.id}`}>{`${describeChannel(c)}: ${evolveLabels.get(c.id)!.label}`}</li>
-          ))}
-        </ul>
-      )}
-    </div>
-    {/* The band waits for the player, then plays under them and makes room for them. */}
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <span style={{ fontWeight: 600 }}>Band</span>
-      <SegmentedControl<BandLevel>
-        label="Band"
-        value={config.band}
-        onChange={(v) => update({ band: v })}
-        options={[{ value: 'off', label: 'Off' }, { value: 'gentle', label: 'Gentle' }, { value: 'full', label: 'Full' }]}
-      />
-      <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
-        {config.band === 'off'
-          ? 'A pad, a bass and a groove that join in once your first counter is down, and follow your chords. Nothing plays on an empty board.'
-          : config.band === 'gentle'
-            ? 'A pad holds the chord, a bass plays the root, a soft pulse keeps time. Put down a bass, chord or drum counter and the band hands that part to you.'
-            : 'The whole band: chords, a walking bass and the full kit. Put down a bass, chord or drum counter and the band hands that part to you.'}
-      </span>
-    </div>
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <span style={{ fontWeight: 600 }}>Each counter plays</span>
-      <SegmentedControl<'phrase' | 'note'>
-        label="Each counter plays"
-        value={config.phrases ? 'phrase' : 'note'}
-        onChange={(v) => update({ phrases: v === 'phrase' })}
-        options={[{ value: 'phrase', label: 'A phrase' }, { value: 'note', label: 'One note' }]}
-      />
-      <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
-        {config.phrases
-          ? 'One counter fills the loop: drums play a groove (higher = busier), bass a bassline, melody a tune, and chord counters set the chords. The next counter of the same colour takes over from its step.'
-          : 'Each counter plays one note on its step.'}
-      </span>
-    </div>
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {config.channels.map((c, i) => {
-        const melodic = c.role === 'melody' || c.role === 'chord' || c.role === 'bass';
-        return (
-          <div
-            key={`sound-${c.id}`}
-            style={{
-              display: 'flex', flexDirection: 'column', gap: 6, padding: 8,
-              borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-raised)',
-              border: '1px solid var(--bs-border)',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <SwatchChip swatch={c.swatch} palette={palette} number={i + 1} size={22} />
-              <span style={{ flex: 1 }}>{describeChannel(c)}</span>
-              <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>{ROLE_LABELS[c.role]}</span>
-            </div>
-            {melodic && (
-              <label style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 12 }}>
-                Instrument
-                <select
-                  value={c.instrument ?? ''}
-                  onChange={(e) => patchChannel(c.id, { instrument: e.target.value })}
-                >
-                  <option value="">
-                    {world
-                      ? `${world.name} sound world`
-                      : (c.role === 'bass' ? 'Default (electric bass)' : 'Default (electric piano)')}
-                  </option>
-                  {INSTRUMENT_OPTIONS.map((o) => <option key={o.key} value={o.key}>{o.name}</option>)}
-                </select>
-                <span style={{ minHeight: 14, fontSize: 11, color: 'var(--bs-fg2)' }}>
-                  {running ? 'Changes from the next notes, once it has loaded.' : ''}
-                </span>
-              </label>
-            )}
-            {c.role === 'drums' && (
-              <label style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 12 }}>
-                Drum
-                <select
-                  value={c.drum ?? ''}
-                  onChange={(e) => patchChannel(c.id, { drum: e.target.value })}
-                >
-                  <option value="">Vary by row (kick → crash)</option>
-                  {DRUM_OPTIONS.map((o) => <option key={o.key} value={o.key}>{o.name}</option>)}
-                </select>
-                <span style={{ minHeight: 14, fontSize: 11, color: 'var(--bs-fg2)' }}>
-                  Drums use the main volume.
-                </span>
-              </label>
-            )}
-            {isFaderRole(c.role) && (
-              <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
-                {`Live value: ${legendValue(c.role as FaderRole, controlState?.values[c.role as FaderRole], controlState?.held ?? new Set())}`}
-              </span>
-            )}
-          </div>
-        );
-      })}
     </div>
               <label>
                 Key
@@ -3285,6 +3069,77 @@ export default function BoardSequencerScreen() {
     </div>
   );
 
+  const soundTab = (
+    <SoundTab
+      config={config}
+      palette={palette}
+      running={running}
+      update={update}
+      setChannelSound={setChannelSound}
+      setGroove={(swing, humanize) => {
+        update({ swing, humanize });
+        engineRef.current?.setSwing(swing);
+        engineRef.current?.setHumanize(humanize);
+      }}
+      fill={{
+        reason: fillReason,
+        count: fillCount,
+        status: config.fillEngine === 'magenta' && config.fillAmount > 0 && running ? FILL_STATUS_TEXT[fillStatus] : null,
+        onTry: newFillIdea,
+        onPrevious: () => {
+          if (prevFillSeed === null) return;
+          update({ fillSeed: prevFillSeed, fillKept: null });
+          setPrevFillSeed(null);
+          announce('Back to the previous extra notes.');
+        },
+        canPrevious: prevFillSeed !== null,
+        frozen: config.fillKept !== null,
+        freezeReason: !running || fillCount === 0 ? 'Play with some extra notes to freeze them.' : null,
+        onFreeze: () => {
+          if (config.fillKept) {
+            update({ fillKept: null });
+            announce('The extra notes follow the board again.');
+            return;
+          }
+          const notes = engineRef.current?.getFillNotes() ?? [];
+          if (notes.length === 0) return;
+          update({ fillKept: notes });
+          announce('Extra notes frozen.');
+        },
+      }}
+      evolve={{
+        reason: evolveReason,
+        lastChange: running && config.evolveAmount > 0 && evolveLabels.size > 0
+          ? `Now: ${config.channels.filter((c) => evolveLabels.has(c.id)).map((c) => `${describeChannel(c)} ${evolveLabels.get(c.id)!.label}`).join(' · ')}`
+          : null,
+        onTry: newEvolveSound,
+        onPrevious: () => {
+          if (prevEvolveSeed === null) return;
+          update({ evolveSeed: prevEvolveSeed, evolveHoldLap: null });
+          setPrevEvolveSeed(null);
+          announce('Back to the previous sounds.');
+        },
+        canPrevious: prevEvolveSeed !== null,
+        frozen: config.evolveHoldLap !== null,
+        freezeReason: config.evolveAmount <= 0 ? 'Turn "Sounds change" on first.' : null,
+        onFreeze: () => {
+          if (config.evolveHoldLap !== null) {
+            update({ evolveHoldLap: null });
+            announce('The sounds change again.');
+            return;
+          }
+          update({ evolveHoldLap: engineRef.current?.getEvolveLap() ?? 0 });
+          announce('Sounds frozen.');
+        },
+      }}
+      band={{ playing: bandStatus.playing, parts: bandStatus.parts }}
+      liveValue={(c) => (isFaderRole(c.role)
+        ? `Now: ${legendValue(c.role as FaderRole, controlState?.values[c.role as FaderRole], controlState?.held ?? new Set())}`
+        : null)}
+      advanced={soundAdvanced}
+    />
+  );
+
   /**
    * Move a lane, refusing a move that would put it over the other one. Controls win that
    * argument, so an overlapping loop lane is simply dead pads — better to say why than to
@@ -3305,10 +3160,10 @@ export default function BoardSequencerScreen() {
 
   // ---- the Perform tab: the whole piece in one place ----
   const passSecNow = (config.cols * Math.max(1, config.numPages) * 60) / Math.max(20, config.bpm);
-  const performLoops: PerformLoop[] = Array.from({ length: LAUNCH_SLOTS }, (_, slot) => {
+  const performLoops: PieceLoop[] = Array.from({ length: LAUNCH_SLOTS }, (_, slot) => {
     const cells = config.loopSlots[slot] ?? null;
     return {
-      slot, name: config.loopNames[slot] ?? '', notes: cells?.length ?? 0,
+      slot, name: config.loopNames[slot] ?? '', notes: cells?.length ?? 0, cells: cells ?? [],
       state: slotState(slot, cells !== null && cells.length > 0, new Set(wantedSlots), new Set(appliedSlots)),
     };
   });
@@ -3316,52 +3171,6 @@ export default function BoardSequencerScreen() {
     ...SOUND_WORLD_IDS.map((id) => ({ value: id, label: SOUND_WORLDS[id].name })),
     { value: 'none', label: 'My picks' },
   ];
-  const performTab = (
-    <PerformPanel
-      running={running}
-      lengthSec={config.performance.lengthSec}
-      passSec={passSecNow}
-      clock={clock}
-      scenes={config.scenes}
-      currentScene={config.currentScene}
-      loops={performLoops}
-      loopFadePasses={config.loopFadePasses}
-      performance={config.performance}
-      ending={ending}
-      respectPlayer={config.sceneRespectsPlayer}
-      canSaveBoard={boardCellsNow().length > 0}
-      deletedSceneName={deletedScene?.scene.name ?? null}
-      diskLine={diskLine}
-      restoreError={restoreError}
-      worldOptions={worldOptions}
-      onToggleLoop={toggleLoop}
-      onSaveBoardToLoop={saveBoardToSlot}
-      onDrawLoop={(slot) => setEditSlot(slot)}
-      onClearLoop={(slot) => setClearSlotTarget(slot)}
-      onRenameLoop={renameLoop}
-      onStopAllLoops={stopAllLoops}
-      onLoopFade={(loopFadePasses) => update({ loopFadePasses })}
-      onGoScene={goScene}
-      onRehearseFrom={rehearseFrom}
-      onNextScene={nextScene}
-      onSaveSceneFromNow={saveScene}
-      onUpdateSceneFromNow={updateSceneFromNow}
-      onEditScene={editScene}
-      onDeleteScene={deleteScene}
-      onUndoDelete={undoDeleteScene}
-      onMakePlan={() => { if (configRef.current.scenes.length > 0) setPlanConfirm(true); else makePlan(); }}
-      onRespectPlayer={(on) => update({ sceneRespectsPlayer: on })}
-      onPerformance={(patch) => update({ performance: { ...configRef.current.performance, ...patch } })}
-      onStartClock={startClock}
-      onEndNow={endPiece}
-      onCancelEnding={cancelEnding}
-      onCapture={captureLoop}
-      onReadyCheck={() => setReadyOpen(true)}
-      onBackup={backupToFile}
-      onRestore={() => restoreInputRef.current?.click()}
-    />
-  );
-
   /** The pre-show checklist, checked by the app wherever it can be. */
   const readyItems = (): ReadyItem[] => {
     const c = config;
@@ -3380,7 +3189,7 @@ export default function BoardSequencerScreen() {
       : { label: `${emptyUsed.map((sc) => sc.name).join(', ')} ${emptyUsed.length === 1 ? 'uses' : 'use'} an empty loop`, state: 'problem', fix: 'Save the board into that loop, or take it out of the scene.' });
     const timed = c.scenes.filter((sc) => typeof sc.at === 'number');
     items.push(c.scenes.length === 0
-      ? { label: 'No scenes yet', state: 'warn', fix: 'Perform: Make my plan, or save scenes from now. Without scenes the piece does not change by itself.' }
+      ? { label: 'No scenes yet', state: 'warn', fix: 'Optional. Make a piece, step 2: Make my plan. Without scenes the piece does not change by itself.' }
       : timed.some((sc) => sc.at === 0)
         ? { label: `${timed.length} ${timed.length === 1 ? 'scene comes' : 'scenes come'} in on the clock, one at 0:00`, state: 'ok' }
         : { label: 'No scene at 0:00', state: 'warn', fix: 'Give the opening scene the time 0:00, so the piece starts in it.' });
@@ -3402,10 +3211,56 @@ export default function BoardSequencerScreen() {
       : { label: 'Not saved on this laptop', state: 'warn', fix: 'Open ADMI at http://localhost:3001 from npm run show, or back up to a file.' });
     items.push(backedUpRef.current
       ? { label: 'Backed up to a file this session', state: 'ok' }
-      : { label: 'Not backed up to a file yet', state: 'warn', fix: 'Perform: Back up to a file, and keep it off the laptop.' });
+      : { label: 'Not backed up to a file yet', state: 'warn', fix: 'Press Back up to a file below, and keep the file off the laptop.' });
     if ((import.meta as { env?: { DEV?: boolean } }).env?.DEV) items.push({ label: 'Running the development server', state: 'warn', fix: 'For the performance start ADMI with npm run show: it cannot reload itself mid-piece.' });
     return items;
   };
+
+  const pieceTab = (
+    <PieceSteps
+      rows={config.rows}
+      cols={config.cols}
+      swatchFor={(id) => channelById.get(id)?.swatch ?? '#888'}
+      step={pieceStep}
+      onStep={setPieceStep}
+      running={running}
+      lengthSec={config.performance.lengthSec}
+      passSec={passSecNow}
+      clock={clock}
+      scenes={config.scenes}
+      currentScene={config.currentScene}
+      loops={performLoops}
+      loopFadePasses={config.loopFadePasses}
+      performance={config.performance}
+      respectPlayer={config.sceneRespectsPlayer}
+      canSaveBoard={boardCellsNow().length > 0}
+      deletedSceneName={deletedScene?.scene.name ?? null}
+      diskLine={diskLine}
+      restoreError={restoreError}
+      worldOptions={worldOptions}
+      readyItems={pieceStep === 'ending' ? readyItems() : []}
+      onToggleLoop={toggleLoop}
+      onSaveBoardToLoop={saveBoardToSlot}
+      onDrawLoop={(slot) => setEditSlot(slot)}
+      onClearLoop={(slot) => setClearSlotTarget(slot)}
+      onRenameLoop={renameLoop}
+      onStopAllLoops={stopAllLoops}
+      onLoopFade={(loopFadePasses) => update({ loopFadePasses })}
+      onGoScene={goScene}
+      onRehearseFrom={rehearseFrom}
+      onSaveSceneFromNow={saveScene}
+      onUpdateSceneFromNow={updateSceneFromNow}
+      onEditScene={editScene}
+      onDeleteScene={deleteScene}
+      onUndoDelete={undoDeleteScene}
+      onMakePlan={() => { if (configRef.current.scenes.length > 0) setPlanConfirm(true); else makePlan(); }}
+      onRespectPlayer={(on) => update({ sceneRespectsPlayer: on })}
+      onPerformance={(patch) => update({ performance: { ...configRef.current.performance, ...patch } })}
+      onBackup={backupToFile}
+      onRestore={() => restoreInputRef.current?.click()}
+      onShow={() => setView('bigBoard')}
+    />
+  );
 
   const loopsTab = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 10 }}>
@@ -3763,6 +3618,47 @@ export default function BoardSequencerScreen() {
     const ch = c ? channelById.get(c.colour) : undefined;
     return ch ? `${describeChannel(ch)}, ${ROLE_LABELS[ch.role]}` : 'empty';
   };
+  /**
+   * Colours a laptop can add one at a time, each a clearly different hue so its name
+   * (taken from the hue) is its own. The four of "Add four colours" come first.
+   */
+  const LAPTOP_COLOURS: { hsv: { h: number; s: number; v: number }; swatch: string }[] = [
+    { hsv: { h: 2, s: 80, v: 80 }, swatch: '#d93a3a' },
+    { hsv: { h: 215, s: 75, v: 75 }, swatch: '#2f6fd6' },
+    { hsv: { h: 50, s: 85, v: 90 }, swatch: '#e8c21e' },
+    { hsv: { h: 135, s: 70, v: 65 }, swatch: '#2f9a52' },
+    { hsv: { h: 28, s: 85, v: 92 }, swatch: '#ea7a1f' },
+    { hsv: { h: 275, s: 60, v: 70 }, swatch: '#8a4fc0' },
+    { hsv: { h: 325, s: 65, v: 88 }, swatch: '#e04fa0' },
+    { hsv: { h: 185, s: 75, v: 78 }, swatch: '#1fb5c4' },
+    { hsv: { h: 0, s: 5, v: 95 }, swatch: '#f2f2f2' },
+    { hsv: { h: 0, s: 10, v: 12 }, swatch: '#1c1c1c' },
+  ];
+  /** The first ready-made colour not already used by a colour of the same name. */
+  const nextLaptopColour = (): typeof LAPTOP_COLOURS[number] | null => {
+    const names = new Set(config.channels.map((c) => describeChannel(c)));
+    for (const p of LAPTOP_COLOURS) {
+      const cal = calibrationFromHsv(p.hsv);
+      const probe: ColourChannel = { id: 'probe', kind: cal.kind, role: 'off', swatch: p.swatch, band: cal.band, blackBand: cal.blackBand, whiteBand: cal.whiteBand };
+      if (!names.has(describeChannel(probe))) return p;
+    }
+    return null;
+  };
+  const addLaptopColour = (role: ColourRole): void => {
+    const p = nextLaptopColour();
+    if (!p) return;
+    const cal = calibrationFromHsv(p.hsv);
+    setConfig((prev) => {
+      const id = freshChannelId(prev.channels.map((c) => c.id), allReferencedChannelIds());
+      const used = new Set(prev.channels.filter((c) => c.role === 'loop').map((c) => c.loopSlot ?? 0));
+      const loopSlot = role === 'loop' ? Array.from({ length: LAUNCH_SLOTS }, (_, i) => i).find((i) => !used.has(i)) ?? 0 : undefined;
+      const added: ColourChannel = { id, kind: cal.kind, role, swatch: p.swatch, band: cal.band, blackBand: cal.blackBand, whiteBand: cal.whiteBand, ...(loopSlot !== undefined ? { loopSlot } : {}) };
+      return { ...prev, channels: [...prev.channels, added] };
+    });
+    setLaptopColour('');
+    const probe: ColourChannel = { id: 'probe', kind: cal.kind, role, swatch: p.swatch, band: cal.band, blackBand: cal.blackBand, whiteBand: cal.whiteBand };
+    announce(`Added ${describeChannel(probe)}: ${ROLE_LABELS[role]}. Its sound is on the Sound tab; its job can be changed in Set up → Colours.`);
+  };
   /** Four ready-made colours for a laptop that has never seen the board. */
   const addLaptopColours = (): void => {
     const presets: { hsv: { h: number; s: number; v: number }; swatch: string; role: ColourRole }[] = [
@@ -3791,6 +3687,7 @@ export default function BoardSequencerScreen() {
       count={config.laptopBoard.filter((x) => x.row < config.rows && x.col < config.cols && channelById.has(x.colour)).length}
       onClear={() => update({ laptopBoard: [] })}
       onAddColours={addLaptopColours}
+      onAddColour={nextLaptopColour() ? addLaptopColour : null}
       palette={palette}
     />
   );
@@ -3846,6 +3743,15 @@ export default function BoardSequencerScreen() {
     />
   );
 
+  const boardLegend = (
+    <BoardLegend
+      tunes={config.phrases && config.channels.some((c) => c.role === 'drums' || c.role === 'bass' || c.role === 'chord' ? c.plays !== 'note' : c.role === 'melody' && c.plays === 'tune')}
+      loops={appliedSlots.length > 0 || (latestFrame?.frame.activeLoops ?? []).length > 0}
+      extra={config.fillAmount > 0}
+      band={config.band !== 'off'}
+    />
+  );
+
   // Now / Next: during a piece, the structure in large type above the board.
   const nn = nowNext(config.scenes, config.currentScene, clock && clock.phase !== 'idle' ? clock.elapsedSec : null);
   const nowNextProps = {
@@ -3859,6 +3765,7 @@ export default function BoardSequencerScreen() {
     onNext: nextScene,
     onEnd: endPiece,
     onCancelEnding: cancelEnding,
+    onCapture: captureLoop,
   };
   const nowNextStrip = <NowNextStrip {...nowNextProps} />;
   const bigNowNextStrip = <NowNextStrip {...nowNextProps} big />;
@@ -3899,6 +3806,7 @@ export default function BoardSequencerScreen() {
       {laptop && view !== 'bigBoard' && laptopBar}
       {view === 'play' && running && nowNextStrip}
       {(view === 'play' || laptop) && <div style={{ flex: 1, minHeight: 200 }}>{boardView}</div>}
+      {(view === 'play' || laptop) && running && boardLegend}
       <div style={view === 'play'
         ? { width: 220, alignSelf: layout.pip === 'bottom-left' ? 'flex-start' : 'flex-end' }
         : undefined}
@@ -4053,6 +3961,9 @@ export default function BoardSequencerScreen() {
             <span key={c.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
               <SwatchChip swatch={c.swatch} palette={palette} number={i + 1} size={20} />
               <span>{describeChannel(c)}</span>
+              {soundNameFor(c, config.soundWorld) && (
+                <span style={{ color: 'var(--bs-fg2)' }}>{soundNameFor(c, config.soundWorld)}</span>
+              )}
               <strong>
                 {isFaderRole(c.role)
                   ? legendValue(c.role as FaderRole, controlState?.values[c.role as FaderRole], controlState?.held ?? new Set())
@@ -4151,7 +4062,14 @@ export default function BoardSequencerScreen() {
         if (e.key === 'Escape' && document.fullscreenElement === null) setView('play');
       }}
     >
-      {running && bigNowNextStrip}
+      {running ? bigNowNextStrip : (
+        <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap', padding: '10px 14px', borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-elev)' }}>
+          <Button tone="primary" onClick={() => void start()} style={{ fontSize: 22, padding: '10px 26px' }}>▶ Start the piece</Button>
+          <span style={{ fontSize: 16 }}>
+            {`${formatClock(config.performance.lengthSec)} · ${config.scenes.length === 0 ? 'no scenes' : `${config.scenes.length} ${config.scenes.length === 1 ? 'scene' : 'scenes'}`} · ${describeEnding(config.performance)}`}
+          </span>
+        </div>
+      )}
       <div style={{ flex: 1, minHeight: 0 }}>{boardView}</div>
       <div
         style={{
@@ -4159,13 +4077,11 @@ export default function BoardSequencerScreen() {
           justifyContent: layout.bigBoardControls === 'left' ? 'flex-start' : 'flex-end',
         }}
       >
-        {running
-          ? <Button tone="primary" onClick={requestStop}>{stopArmed ? '■ Press again to stop' : '■ Stop'}</Button>
-          : <Button tone="primary" onClick={() => void start()}>▶ Play</Button>}
+        {running && <Button tone="secondary" onClick={requestStop}>{stopArmed ? '■ Press again to stop' : '■ Stop'}</Button>}
         <Button tone="secondary" aria-pressed={muted} disabled={!running} onClick={toggleMuted}>
           {muted ? 'Sound off' : 'Mute'}
         </Button>
-        <Button tone="secondary" onClick={() => setView('play')}>Exit big board</Button>
+        <Button tone="secondary" onClick={() => setView('play')}>Leave Show</Button>
       </div>
     </div>
   ) : null;
@@ -4251,22 +4167,64 @@ export default function BoardSequencerScreen() {
               <span style={{ color: 'var(--bs-fg2)', fontSize: 13 }}>
                 {running ? 'Playing' : 'Stopped'}
               </span>
+              <div role="group" aria-label="What you are doing" style={{ display: 'flex' }}>
+                <Button tone={workspace === 'play' ? 'primary' : 'secondary'} aria-pressed={workspace === 'play'} onClick={() => setWorkspace('play')}>
+                  Play
+                </Button>
+                <Button tone={workspace === 'piece' ? 'primary' : 'secondary'} aria-pressed={workspace === 'piece'} onClick={() => setWorkspace('piece')}>
+                  Make a piece
+                </Button>
+              </div>
+              <Button ref={bigBoardButtonRef} tone="secondary" onClick={() => setView('bigBoard')} aria-label="Show: the board, the clock and Now / Next, full screen, for the performance">
+                ▶ Show
+              </Button>
               <Button
-                tone="secondary"
+                tone="quiet"
                 onClick={() => { if (running) stop(); setView('setup'); if (laptop) setStep('colours'); }}
               >
                 ⚙ Set up
               </Button>
               {boardSourceButton}
-              <Button ref={bigBoardButtonRef} tone="secondary" aria-label="Big board" onClick={() => setView('bigBoard')}>
-                <span aria-hidden="true">⤢</span>
-              </Button>
             </div>
           )}
         />
 
         {editSlot !== null && (
-          <Modal label={`Draw ${loopLabel(config.loopNames, editSlot)}`} onClose={() => setEditSlot(null)}>
+          <Modal label={`Edit the notes of ${loopLabel(config.loopNames, editSlot)}`} onClose={() => { setEditSlot(null); setCopyArmed(false); }}>
+            {/* The board and the loop side by side, each named: a loop saved earlier, shown
+                alone, looked like the board showing counters that weren't there. */}
+            <h2 style={{ margin: '0 0 4px', fontSize: 18 }}>{`Loop ${editSlot + 1}${config.loopNames[editSlot] ? `: ${config.loopNames[editSlot]}` : ''}`}</h2>
+            <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+            {(() => {
+              const sequenced = new Set(config.channels.filter((c) => isSequencedRole(c.role)).map((c) => c.id));
+              const boardNow = boardCellsNow().filter((c) => sequenced.has(c.colour));
+              const loopHasNotes = (config.loopSlots[editSlot]?.length ?? 0) > 0;
+              return (
+                <section aria-labelledby="edit-board-now" style={{ display: 'flex', flexDirection: 'column', gap: 6, maxWidth: 240 }}>
+                  <h3 id="edit-board-now" style={{ margin: 0, fontSize: 14 }}>{`The board now · ${boardNow.length} ${boardNow.length === 1 ? 'counter' : 'counters'}`}</h3>
+                  <LoopThumb cells={boardNow} rows={config.rows} cols={config.cols} swatchFor={(id) => channelById.get(id)?.swatch ?? '#888'} width={220} />
+                  <Button
+                    tone="secondary"
+                    reason={boardNow.length === 0 ? 'The board is empty.' : null}
+                    onClick={() => {
+                      if (loopHasNotes && !copyArmed) { setCopyArmed(true); return; }
+                      setCopyArmed(false);
+                      saveBoardToSlot(editSlot);
+                    }}
+                    onBlur={() => setCopyArmed(false)}
+                  >
+                    {copyArmed ? 'Press again: the loop\'s notes are replaced' : 'Copy the board into this loop →'}
+                  </Button>
+                </section>
+              );
+            })()}
+            <section aria-labelledby="edit-loop-saved" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <h3 id="edit-loop-saved" style={{ margin: 0, fontSize: 14 }}>{`Loop ${editSlot + 1} as saved`}</h3>
+            <p style={{ margin: 0, fontSize: 13, color: 'var(--bs-fg2)', maxWidth: 380 }}>
+              {(config.loopSlots[editSlot]?.length ?? 0) > 0
+                ? 'Click squares to change the loop; it saves as you click. The board is not changed.'
+                : 'This loop is empty. Click squares to draw one, or copy the board into it.'}
+            </p>
             <LoopEditor
               rows={config.rows}
               cols={config.cols}
@@ -4286,7 +4244,9 @@ export default function BoardSequencerScreen() {
                 }
               }}
             />
-            <div style={{ marginTop: 10 }}><Button tone="primary" onClick={() => setEditSlot(null)}>Done</Button></div>
+            </section>
+            </div>
+            <div style={{ marginTop: 10 }}><Button tone="primary" onClick={() => { setEditSlot(null); setCopyArmed(false); }}>Done</Button></div>
           </Modal>
         )}
         {clearSlotTarget !== null && (
@@ -4304,11 +4264,6 @@ export default function BoardSequencerScreen() {
           ref={restoreInputRef} type="file" accept=".json,application/json" hidden aria-label="Backup file to restore"
           onChange={(e) => { void pickRestoreFile(e.target.files?.[0]); e.target.value = ''; }}
         />
-        {readyOpen && (
-          <Modal label="Ready check" onClose={() => setReadyOpen(false)}>
-            <ReadyCheck items={readyItems()} onClose={() => setReadyOpen(false)} />
-          </Modal>
-        )}
         {planConfirm && (
           <ConfirmDialog
             title="Make my plan?"
@@ -4352,7 +4307,7 @@ export default function BoardSequencerScreen() {
         >
           {stage}
           {/* The panel keeps its place in the DOM for both hands; only the row flips. */}
-          <div style={{ width: layout.mode === 'stacked' ? '100%' : 320, flexShrink: 0, display: 'flex', flexDirection: 'column', minHeight: 0, overflowY: 'auto' }}>
+          <div style={{ width: layout.mode === 'stacked' ? '100%' : view === 'play' && workspace === 'piece' ? 540 : 320, flexShrink: 0, display: 'flex', flexDirection: 'column', minHeight: 0, overflowY: 'auto' }}>
             {view === 'setup' ? setupPanel : (
               <PlayPanel
                 running={running}
@@ -4369,7 +4324,7 @@ export default function BoardSequencerScreen() {
                 heldCount={heldCells.size}
                 handGuardWaiting={config.handGuardEnabled && running && latestFrame?.handGuardReady === false}
                 clock={clock}
-                perform={performTab}
+                piece={workspace === 'piece' ? pieceTab : null}
                 connections={connectionsTab}
                 groove={grooveTab}
                 sound={soundTab}

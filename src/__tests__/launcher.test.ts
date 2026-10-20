@@ -90,6 +90,7 @@ function engine() {
   p.voiceByChannel = new Map([['m', fakeVoiceEntry()]]);
   p.drumKit = null;
   p.timer = 1; // "running": launches wait for the pass boundary
+  e.setLoopVary(0); // these tests are about launching and fading, not about variation
   return { e, p };
 }
 const loop = [{ row: 2, col: 1, colour: 'm' }, { row: 3, col: 3, colour: 'm' }];

@@ -64,6 +64,8 @@ export interface ClockDecision {
   scene: number | null;
   /** Start the automatic ending now. */
   end: boolean;
+  /** The end time has been reached: whatever is still sounding fades out at once. */
+  hardStop: boolean;
 }
 
 /**
@@ -85,7 +87,10 @@ export function decideClockTick(input: {
   const scene = due.length > 0 && !input.ending ? due[due.length - 1] : null;
   const end = !input.ending && !input.autoEnded && input.now.elapsed >= 5
     && endingDue(input.performance, input.now.remaining, input.passSec);
-  return { cues, scene, end };
+  // The backstop: at the end time nothing may still be playing — an ending cancelled, a
+  // tempo slowed after the ending was timed, End pressed too late. Fade out now.
+  const hardStop = input.now.elapsed >= 5 && input.now.remaining <= 0;
+  return { cues, scene, end, hardStop };
 }
 
 /** The plan's four sections, in proportion to the piece: 0:00, 1:30, 3:30, 6:00 of 7:00. */

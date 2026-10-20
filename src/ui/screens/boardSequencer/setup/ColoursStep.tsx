@@ -337,7 +337,7 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
                   ))}
                 </select>
                 <span style={{ color: 'var(--bs-fg2)' }}>
-                  Put this counter anywhere on the board and the loop plays (Hold) or flips on and off (Toggle) — the loop pads&rsquo; setting on the Loops tab. It never plays a note of its own.
+                  Put this counter anywhere on the board and the loop plays (Hold) or flips on and off (Toggle) — the loop pads&rsquo; setting on the Board tab. It never plays a note of its own.
                 </span>
               </label>
             )}

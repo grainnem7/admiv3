@@ -39,7 +39,9 @@ const SIMPLE: Partial<Record<SynthLayerId, { options: SynthOptions; volume: numb
       oscillator: { type: 'fatsawtooth', count: 7, spread: 40 },
       envelope: { attack: 0.015, decay: 0.35, sustain: 0.5, release: 0.7 },
     },
-    volume: -23,
+    // Measured against the other worlds' chords: at -23 it sat ~20 dB under the bass and
+    // drums, and chord counters in Electronic could not be heard in a full mix.
+    volume: -11,
     chorus: true,
   },
   // Soft electric-piano body under the sampled EP: rounds off its thin top end.
@@ -56,9 +58,10 @@ const FILTERED: Partial<Record<SynthLayerId, { options: MonoOptions; volume: num
       oscillator: { type: 'fattriangle', count: 2, spread: 10 },
       envelope: { attack: 0.002, decay: 0.35, sustain: 0.05, release: 0.4 },
       filter: { type: 'lowpass', Q: 1.2, rolloff: -24 },
-      filterEnvelope: { attack: 0.003, decay: 0.25, sustain: 0.15, release: 0.3, baseFrequency: 300, octaves: 3.5 },
+      filterEnvelope: { attack: 0.003, decay: 0.25, sustain: 0.15, release: 0.3, baseFrequency: 450, octaves: 3.5 },
     },
-    volume: -10,
+    // Likewise the melody: brighter and louder, to sit with the sampled worlds' melodies.
+    volume: 0,
   },
   sawBass: {
     options: {

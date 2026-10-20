@@ -43,15 +43,53 @@ export interface PhraseCell {
 export const LIVE_LAYER = 'live';
 
 /**
- * Put loops and the player's board together. A melody from a loop plays alongside the
- * player's (each its own phrase). The bass, the chords and the drums are one part each:
- * when the player puts down a counter for one of those, it takes that part over from
- * the loops while it is down — two basslines or two grooves at once is mud, and the
- * player's choice is the one that counts.
+ * Put loops and the player's board together. Everything plays: the player's counters
+ * ADD to the loops. (They used to take a part over from the loops — but a chord or drum
+ * counter then played the same comp or groove the loop had been playing, so putting one
+ * down over a loop sounded like nothing at all.) What keeps a shared part from being mud
+ * is in phraseEventsAtStep: the loop's part goes under the player's, follows the
+ * player's chord, and the player's part plays its own line on top.
  */
 export function layerPhraseCells(cells: readonly PhraseCell[]): PhraseCell[] {
-  const liveRoles = new Set(cells.filter((c) => (c.layer ?? LIVE_LAYER) === LIVE_LAYER).map((c) => c.role));
-  return cells.filter((c) => (c.layer ?? LIVE_LAYER) === LIVE_LAYER || c.role === 'melody' || !liveRoles.has(c.role));
+  return [...cells];
+}
+
+const isLive = (c: { layer?: string }): boolean => (c.layer ?? LIVE_LAYER) === LIVE_LAYER;
+
+/** How loud a loop's bass, chords or drums play while the player has that part too. */
+export const UNDER_PLAYER = 0.5;
+
+/**
+ * When two or more melodies are layered, which one leads this pass: the player's own
+ * counters always; otherwise the loops take it in turns, one pass each. The others
+ * answer in its gaps (see takeTurns), so layered loops talk to each other instead of
+ * playing over each other. Null when there is only one melody.
+ */
+export function melodyLeader(melodyLayers: readonly string[], lap: number): string | null {
+  const layers = [...new Set(melodyLayers)];
+  if (layers.length < 2) return null;
+  if (layers.includes(LIVE_LAYER)) return LIVE_LAYER;
+  const loops = layers.sort();
+  return loops[((lap % loops.length) + loops.length) % loops.length];
+}
+
+/** How loud an answering melody plays when the leader is resting. */
+export const ANSWER_LEVEL = 0.8;
+
+/**
+ * Call and response on one step: a melody that isn't leading never starts a note at the
+ * same moment as the leader — it waits for the leader's gaps — and plays a little softer.
+ * (Resting for the leader's whole beat was too much: a leading tune plays on most beats,
+ * and the other melody all but disappeared.)
+ */
+export function takeTurns<T extends { role: string; layer?: string; accent: number; offset: number }>(events: readonly T[], leader: string | null): T[] {
+  if (leader === null) return [...events];
+  const layerOf = (e: T): string => e.layer ?? LIVE_LAYER;
+  const leaderAt = events.filter((e) => e.role === 'melody' && layerOf(e) === leader).map((e) => e.offset);
+  const clashes = (e: T): boolean => leaderAt.some((o) => Math.abs(o - e.offset) < 0.05);
+  return events
+    .filter((e) => e.role !== 'melody' || layerOf(e) === leader || !clashes(e))
+    .map((e) => (e.role === 'melody' && layerOf(e) !== leader ? { ...e, accent: e.accent * ANSWER_LEVEL } : e));
 }
 
 export interface PhraseEvent {
@@ -87,7 +125,7 @@ export interface PhraseInput {
    * Evolve's variation for a colour this scene: `variant` picks another motif and the
    * other bassline / chord rhythm; `busy` moves the drum groove a step busier or sparser.
    */
-  evolveOf?(colour: string): { variant: number; busy: number };
+  evolveOf?(colour: string, layer?: string): { variant: number; busy: number };
   /**
    * The harmony when no chord counter and no song sets one — the band's own progression,
    * so melody and bass fit what the band is playing. Without it, no chord counter means
@@ -137,13 +175,15 @@ const DRUMS: Record<SoundWorldId, DrumBank> = {
     [h(0, 'kick'), h(3, 'kick', 0.5), h(7, 'kick', 0.65), h(10, 'kick', 0.8), h(4, 'snare'), h(9, 'snare', 0.25), h(12, 'snare'), h(14, 'rim', 0.4), ...sixteenthHats(0.35)],
   ],
   ambient: [
-    [h(0, 'kick', 0.7)],
+    // Even the sparsest groove has something above the kick: a kick alone is all but
+    // silent on laptop speakers, so a low drum counter sounded like no drums at all.
+    [h(0, 'kick', 0.7), h(8, 'rim', 0.35), h(4, 'hat', 0.3), h(12, 'hat', 0.3)],
     [h(0, 'kick', 0.7), h(8, 'kick', 0.55), ...eighthHats(0.25)],
     [h(0, 'kick', 0.7), h(8, 'kick', 0.55), h(6, 'rim', 0.3), h(14, 'rim', 0.3), ...eighthHats(0.3)],
     [h(0, 'kick', 0.7), h(8, 'kick', 0.55), h(6, 'rim', 0.3), h(14, 'rim', 0.3), ...sixteenthHats(0.25)],
   ],
   electronic: [
-    [h(0, 'kick'), h(4, 'kick'), h(8, 'kick'), h(12, 'kick')],
+    [h(0, 'kick'), h(4, 'kick'), h(8, 'kick'), h(12, 'kick'), h(4, 'clap', 0.7), h(12, 'clap', 0.7)],
     [h(0, 'kick'), h(4, 'kick'), h(8, 'kick'), h(12, 'kick'), h(2, 'hat', 0.6), h(6, 'hat', 0.6), h(10, 'hat', 0.6), h(14, 'hat', 0.6)],
     [h(0, 'kick'), h(4, 'kick'), h(8, 'kick'), h(12, 'kick'), h(4, 'clap', 0.85), h(12, 'clap', 0.85), h(2, 'hat', 0.6), h(6, 'hat', 0.6), h(10, 'hat', 0.6), h(14, 'hat', 0.6)],
     [h(0, 'kick'), h(4, 'kick'), h(8, 'kick'), h(12, 'kick'), h(14, 'kick', 0.5), h(4, 'clap', 0.85), h(12, 'clap', 0.85), ...sixteenthHats(0.45)],
@@ -292,7 +332,10 @@ export function harmonyAt(input: PhraseInput): Harmony | null {
     return { root: tones[0], tones };
   }
   const loop = input.loopFor('chord');
-  const chords = input.cells.filter((c) => c.role === 'chord' && c.col < loop);
+  const allChords = input.cells.filter((c) => c.role === 'chord' && c.col < loop);
+  // The player's chord counters name the chord; a loop's only when the player has none.
+  const liveChords = allChords.filter(isLive);
+  const chords = liveChords.length > 0 ? liveChords : allChords;
   const owner = ownerCol(chords.map((c) => c.col), input.stepFor('chord'));
   if (owner === null) return input.defaultHarmony?.(input.stepFor('chord')) ?? null;
   // Two chord counters in one column: the lower one names the chord. The row is a note
@@ -316,23 +359,31 @@ export function phraseEventsAtStep(input: PhraseInput): PhraseEvent[] {
     else byColour.set(key, [c]);
   }
 
+  const liveRoles = new Set(input.cells.filter(isLive).map((c) => c.role));
+  const loopRoles = new Set(input.cells.filter((c) => !isLive(c)).map((c) => c.role));
+
   for (const cells of byColour.values()) {
     const role = cells[0].role;
     const colour = cells[0].colour;
+    // A part both the player and a loop play (not the melody, which is two tunes anyway):
+    // the loop's goes under, and the player's plays another line so it is heard coming in.
+    const shared = role !== 'melody' && liveRoles.has(role) && loopRoles.has(role);
+    const under = shared && !isLive(cells[0]) ? UNDER_PLAYER : 1;
+    const ownLine = shared && isLive(cells[0]) ? 1 : 0;
     const loop = input.loopFor(role);
     const inLoop = cells.filter((c) => c.col < loop);
     const step = input.stepFor(role);
     const col = ownerCol(inLoop.map((c) => c.col), step);
     if (col === null) continue;
     const k = (step - col + loop) % loop;        // beats into this counter's phrase
-    const evo = input.evolveOf?.(colour) ?? { variant: 0, busy: 0 };
-    const alt = evo.variant % 2;
+    const evo = input.evolveOf?.(colour, cells[0].layer) ?? { variant: 0, busy: 0 };
+    const alt = (evo.variant + ownLine) % 2;
     for (const owner of inLoop.filter((c) => c.col === col)) {
       const who = { row: owner.row, col: owner.col, conditional: owner.conditional ?? false };
       const base = { role, colour, owner: who, ...(owner.layer && owner.layer !== LIVE_LAYER ? { layer: owner.layer } : {}) };
       const degree = input.rows - 1 - owner.row;
       if (role === 'drums') {
-        const level = Math.max(0, Math.min(3, Math.floor((degree / Math.max(1, input.rows)) * 4) + evo.busy));
+        const level = Math.max(0, Math.min(3, Math.floor((degree / Math.max(1, input.rows)) * 4) + evo.busy + ownLine));
         const beat = k % 4;
         // The last bar of every fourth time round gets a fill instead of the groove's
         // second half — the thing that tells the ear a phrase is ending.
@@ -342,11 +393,11 @@ export function phraseEventsAtStep(input: PhraseInput): PhraseEvent[] {
         for (const hit of DRUMS[input.style][level]) {
           if (Math.floor(hit.at / 4) !== beat) continue;
           if (lastBar && hit.at >= fillStart && hit.drum !== 'kick') continue;
-          out.push({ ...base, offset: (hit.at % 4) / 4, dur: 0.25, accent: hit.accent, drum: hit.drum });
+          out.push({ ...base, offset: (hit.at % 4) / 4, dur: 0.25, accent: hit.accent * under, drum: hit.drum });
         }
         for (const hit of fill) {
           if (Math.floor(hit.at / 4) !== (step - (loop - 4)) % 4) continue;
-          out.push({ ...base, offset: (hit.at % 4) / 4, dur: 0.25, accent: hit.accent, drum: hit.drum });
+          out.push({ ...base, offset: (hit.at % 4) / 4, dur: 0.25, accent: hit.accent * under, drum: hit.drum });
         }
       } else if (role === 'bass') {
         const root = intoOctave(
@@ -358,18 +409,20 @@ export function phraseEventsAtStep(input: PhraseInput): PhraseEvent[] {
         const fifth = harmony ? nearestTone(root + 7, harmony.tones) : root + 7;
         for (const n of inBeat(BASS[input.style][alt], k)) {
           const midi = n.n === 'root' ? root : n.n === 'third' ? third : n.n === 'fifth' ? fifth : root + 12;
-          out.push({ ...base, offset: n.t % 1, dur: n.d, accent: n.accent, midi });
+          out.push({ ...base, offset: n.t % 1, dur: n.d, accent: n.accent * under, midi });
         }
       } else if (role === 'chord') {
         // The chord this counter names (or the song's), voiced near the middle of the keyboard.
         const voiced = input.songChord && input.songChord.length > 0
           ? [...input.songChord].map((t) => intoOctave(t, 55)).sort((x, y) => x - y)
+          // A loop's chords under the player's play the player's chord, so the two never clash.
+          : under < 1 && harmony ? [...harmony.tones]
           : voiceNear(chordOnDegree(
             degreeOfNote(degreeMidi(degree, input.rootMidi, [...input.semitones]), input.rootMidi, input.semitones),
             input.rootMidi, input.semitones, input.style,
           ), 62);
         for (const hit of inBeat(COMP[input.style][alt], k)) {
-          for (const midi of voiced) out.push({ ...base, offset: hit.t % 1, dur: hit.d, accent: hit.accent, midi });
+          for (const midi of voiced) out.push({ ...base, offset: hit.t % 1, dur: hit.d, accent: hit.accent * under, midi });
         }
       } else {
         const bank = MOTIFS[input.style];
@@ -387,5 +440,7 @@ export function phraseEventsAtStep(input: PhraseInput): PhraseEvent[] {
       }
     }
   }
-  return out;
+  // Layered melodies take turns: one leads this pass, the others answer in its gaps.
+  const leader = melodyLeader(input.cells.filter((c) => c.role === 'melody').map((c) => c.layer ?? LIVE_LAYER), input.lap ?? 0);
+  return takeTurns(out, leader);
 }

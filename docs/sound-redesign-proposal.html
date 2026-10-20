@@ -1,0 +1,296 @@
+<title>Sound and AI Redesign</title>
+<meta name="description" content="Proposal from a UI/UX designer, an instrument designer and a researcher: per-colour sound cards, plainly named AI helpers you can see on the board, clearer loop editing, and musical fixes.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: a reading column of proposals; each proposal pairs the reasoning with a drawn mock of the screen, in the app's own dark palette so it reads as "the app". */
+:root {
+  --bg: #eef1f4; --surface: #ffffff; --ink: #15202c; --ink2: #4a5868; --line: #d3dae2; --accent: #1f4fd8;
+  --app: #1b212b; --app2: #252d39; --app3: #2f3846; --appfg: #e7e9ee; --appfg2: #9aa6b6; --mint: #9fdcc6; --mintfg: #0f2a22;
+  --red: #e04848; --blue: #3b78e0; --yellow: #e8c21e; --green: #33a35b;
+  --font-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #0f151c; --surface: #17202a; --ink: #e6ebf1; --ink2: #9fb0c2; --line: #2a3644; --accent: #7fa2ff; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --bg: #0f151c; --surface: #17202a; --ink: #e6ebf1; --ink2: #9fb0c2; --line: #2a3644; --accent: #7fa2ff; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 17px; line-height: 1.55; }
+.wrap { max-width: 1060px; margin: 0 auto; padding-inline: 20px; padding-block: 40px 80px; display: grid; gap: 46px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.15; margin: 0; }
+h1 { font-size: clamp(2.1rem, 5.5vw, 3.1rem); font-weight: 800; letter-spacing: -0.02em; }
+h2 { font-size: 1.6rem; font-weight: 800; }
+h3 { font-size: 1.1rem; font-weight: 600; }
+p { margin: 0; max-width: 68ch; }
+ul { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; max-width: 72ch; }
+.eyebrow { font-family: var(--font-mono); font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink2); }
+.lede { font-size: 1.1rem; color: var(--ink2); }
+section { display: grid; gap: 16px; min-width: 0; }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 22px; align-items: start; }
+@media (max-width: 820px) { .pair { grid-template-columns: 1fr; } }
+.why { display: grid; gap: 10px; min-width: 0; }
+.who { font-family: var(--font-mono); font-size: 0.72rem; color: var(--ink2); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; display: grid; gap: 10px; }
+.note { border-left: 4px solid var(--accent); padding: 4px 0 4px 14px; color: var(--ink2); max-width: 72ch; }
+
+/* mock of the app */
+.mock { background: var(--app); color: var(--appfg); border-radius: 12px; padding: 14px; display: grid; gap: 10px; font-size: 14px; min-width: 0; overflow: hidden; box-shadow: 0 6px 22px rgba(0,0,0,.18); }
+.mock .h { font-family: var(--font-display); font-weight: 800; font-size: 15px; letter-spacing: .02em; color: var(--appfg2); text-transform: uppercase; }
+.mock .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.mock .b { border: 1.5px solid #4a5568; border-radius: 8px; padding: 4px 10px; font-weight: 700; font-size: 13px; white-space: nowrap; }
+.mock .b.on { background: var(--mint); color: var(--mintfg); border-color: var(--mint); }
+.mock .q { color: var(--appfg2); font-size: 12.5px; }
+.mock .sc { background: var(--app2); border-radius: 10px; padding: 10px 12px; display: grid; gap: 8px; border-left: 6px solid var(--c); }
+.mock .sc.closed { padding: 8px 12px; }
+.mock .sc .top { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.mock .dot { width: 14px; height: 14px; border-radius: 50%; background: var(--c); display: inline-block; flex: none; }
+.mock .name { font-weight: 800; }
+.mock .snd { margin-left: auto; color: var(--appfg); font-weight: 700; }
+.mock .steps { display: inline-flex; gap: 3px; vertical-align: middle; }
+.mock .steps i { width: 14px; height: 10px; border-radius: 3px; background: #46505f; display: inline-block; }
+.mock .steps i.f { background: var(--mint); }
+.mock .macro { display: inline-flex; gap: 6px; align-items: center; margin-right: 14px; }
+.mock .tag { font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid #5a6474; color: var(--appfg2); }
+.mock .board { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; width: 100%; max-width: 300px; }
+.mock .board span { aspect-ratio: 1; border-radius: 5px; background: var(--app3); position: relative; }
+.mock .you::after, .mock .ai::after, .mock .loop::after { content: ''; position: absolute; inset: 14%; border-radius: 50%; }
+.mock .you::after { background: var(--c); }
+.mock .ai::after { border: 2.5px dotted var(--c); }
+.mock .loop::after { border: 2.5px solid var(--c); background: radial-gradient(circle, var(--c) 0 22%, transparent 24%); }
+.mock .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12.5px; color: var(--appfg2); align-items: center; }
+.mock .legend .k { width: 14px; height: 14px; border-radius: 50%; display: inline-block; vertical-align: -2px; margin-right: 5px; }
+.mock .bandbar { height: 18px; border-radius: 5px; background: #2b3a36; color: var(--mint); font-size: 11px; display: flex; align-items: center; padding: 0 8px; gap: 8px; max-width: 300px; }
+.mock .thumb { display: grid; grid-template-columns: repeat(8, 5px); gap: 1px; padding: 3px; background: var(--app3); border-radius: 4px; }
+.mock .thumb i { width: 5px; height: 5px; background: #3a4352; display: block; }
+.mock .thumb i.n { background: var(--c); }
+.mock .split { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.mock .pill { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: #3a2f12; color: #ffd36a; }
+
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; min-width: 600px; font-size: 0.95rem; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink2); }
+tr:last-child td { border-bottom: 0; }
+td.k { font-weight: 700; white-space: nowrap; }
+.phase { display: grid; grid-template-columns: 110px 1fr; gap: 14px; }
+.phase .p { font-family: var(--font-mono); font-weight: 700; color: var(--accent); }
+@media (max-width: 560px) { .phase { grid-template-columns: 1fr; gap: 4px; } }
+</style>
+
+<div class="wrap">
+
+<header style="display:grid; gap:14px">
+  <span class="eyebrow">ADMI Board Sequencer · Proposal · 20 October 2026</span>
+  <h1>Sound and AI Redesign</h1>
+  <p class="lede">Your feedback: "I don't see how to adjust the sounds really or adjust the generative stuff — this still seems super unintuitive." A UI/UX designer, a digital-instrument designer and a researcher reviewed the app and studied about 25 similar instruments. They agree on the cause and on most of the cure.</p>
+  <div class="card">
+    <h3>The cause, in one line</h3>
+    <p>The instrument can already do almost everything needed, but the Sound tab is in the order features were built, not the order a musician thinks. The world, two AI processes, the band, a playing mode, then the colours eight screens down, with a mixer of unlabelled 48-pixel sliders at the bottom. And nothing on the board shows what the AI added.</p>
+  </div>
+</header>
+
+<!-- 1 -->
+<section aria-labelledby="h1s">
+  <span class="eyebrow">1 · The biggest change</span>
+  <h2 id="h1s">One sound card per colour</h2>
+  <div class="pair">
+    <div class="why">
+      <p>Every colour gets a card that answers "what does this colour sound like, and how do I change it?" in one place, at the top of the Sound tab:</p>
+      <ul>
+        <li><b>Its sound, by name</b> ("Soft piano"), with ‹ › to step through 4–6 sounds chosen for the sound world. <b>▶ Hear</b> plays a short taste. "More sounds…" has the full list.</li>
+        <li><b>Three simple controls</b> in big steps instead of sliders: <b>Loud</b>, <b>Bright</b>, <b>Space</b>. Volume, tone and reverb or echo are behind those words.</li>
+        <li><b>Plays: one note / a tune</b>, set per colour. Drums default to a groove, and melody can be one note.</li>
+        <li><b>Changes over time ✓</b> lets each colour opt in or out.</li>
+        <li>A <b>"customised" dot</b> with <b>Reset to world</b>: changing the sound world never silently overwrites a colour you chose.</li>
+      </ul>
+      <p>The colour chips above the board also say the sound: <b>● Red · Melody · Soft piano</b>. Tapping one opens its card.</p>
+      <p class="who">From: UX designer · instrument designer · research (Ableton Note's 8 macros, Novation Circuit, OP-Z's colour-coded dials, Orba's roles)</p>
+    </div>
+    <div class="mock" role="img" aria-label="Sketch of the Sound tab: Red melody card open with Soft piano, Hear, Loud Bright Space step controls, plays one note or a tune, changes over time; Blue, Yellow and Green cards closed.">
+      <div class="h">Sound · your colours</div>
+      <div class="sc" style="--c: var(--red)">
+        <div class="top"><span class="dot"></span><span class="name">Red</span><span class="q">Melody</span><span class="snd">‹ Soft piano ›</span><span class="b">▶ Hear</span></div>
+        <div class="row">
+          <span class="macro">Loud <span class="steps"><i class="f"></i><i class="f"></i><i class="f"></i><i></i></span></span>
+          <span class="macro">Bright <span class="steps"><i class="f"></i><i class="f"></i><i></i><i></i></span></span>
+          <span class="macro">Space <span class="steps"><i class="f"></i><i class="f"></i><i></i><i></i></span></span>
+        </div>
+        <div class="row"><span class="q">Plays</span><span class="b on">One note</span><span class="b">A tune</span><span class="b on">✓ Changes over time</span><span class="q">More sounds…</span></div>
+      </div>
+      <div class="sc closed" style="--c: var(--blue)"><div class="top"><span class="dot"></span><span class="name">Blue</span><span class="q">Bass</span><span class="snd">Upright bass</span><span class="b">▶</span></div></div>
+      <div class="sc closed" style="--c: var(--yellow)"><div class="top"><span class="dot"></span><span class="name">Yellow</span><span class="q">Chords</span><span class="snd">Piano + strings <span class="tag">customised</span></span><span class="b">▶</span></div></div>
+      <div class="sc closed" style="--c: var(--green)"><div class="top"><span class="dot"></span><span class="name">Green</span><span class="q">Drums</span><span class="snd">Brushed kit · row picks drum</span><span class="b">▶</span></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 2 -->
+<section aria-labelledby="h2s">
+  <span class="eyebrow">2 · The whole piece</span>
+  <h2 id="h2s">The overall feel: World, Energy, Space, Groove</h2>
+  <div class="pair">
+    <div class="why">
+      <p>Under the colour cards are four controls for the whole instrument:</p>
+      <ul>
+        <li><b>World</b>: Warm, Lo-fi, Ambient or Electronic, with a line saying what it sets ("Blue → upright bass, room: medium").</li>
+        <li><b>Energy</b>: one control for how much is going on. It turns up the dynamics, brings the band from quiet to full, and makes the drums busier. Tim can play it as one big gesture: a counter slid up the board, or a strip on the iPad.</li>
+        <li><b>Space</b>: dry to roomy, using the reverb and echo.</li>
+        <li><b>Groove</b>: Straight, Swung or Lazy.</li>
+      </ul>
+      <p>Scenes store these too, so "Arrival → Build → Open → Home" becomes four Energy levels rather than live re-mixing.</p>
+      <p class="who">From: instrument designer · research (Logic Drummer's one-puck control, Circuit's master filter, Skoog's "one gesture, whole response")</p>
+    </div>
+    <div class="mock" role="img" aria-label="Sketch: World buttons Warm Lo-fi Ambient Electronic; Energy, Space step controls; Groove Straight Swung Lazy.">
+      <div class="h">Overall feel</div>
+      <div class="row"><span class="b on">Warm</span><span class="b">Lo-fi</span><span class="b">Ambient</span><span class="b">Electronic</span></div>
+      <div class="q">Piano, soft strings and an upright bass, in a room.</div>
+      <div class="row">
+        <span class="macro">Energy <span class="steps"><i class="f"></i><i class="f"></i><i></i><i></i><i></i></span></span>
+        <span class="macro">Space <span class="steps"><i class="f"></i><i class="f"></i><i class="f"></i><i></i><i></i></span></span>
+      </div>
+      <div class="row"><span class="q">Groove</span><span class="b">Straight</span><span class="b on">Swung</span><span class="b">Lazy</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- 3 -->
+<section aria-labelledby="h3s">
+  <span class="eyebrow">3 · The generative parts</span>
+  <h2 id="h3s">Three helpers, in plain words, with the same buttons</h2>
+  <div class="pair">
+    <div class="why">
+      <p>Today, "Fill", "Evolve", "Band", "New idea", "New sound", "Keep", "Hold" and "Magenta / Simple rules" all compete. They become <b>three helpers</b>, named by what you'll hear, each with the same three buttons:</p>
+      <ul>
+        <li><b>Band</b> plays along: Off · Quiet · Full. It says what it's playing ("pad · bass, you have melody and drums").</li>
+        <li><b>Extra notes</b> (today's Fill) are added around Tim's: Off · A few · Some · Lots. It shows a live count ("◌ 8 now").</li>
+        <li><b>Sounds change</b> (today's Evolve): Off · Slowly · More. It says what changed ("Red → Rhodes").</li>
+        <li>The same three buttons on each helper: <b>↻ Try another</b>, <b>↶ Previous</b> and <b>📌 Freeze</b>. Keep and Hold become one word, and the iPad uses the same words.</li>
+        <li><b>Hear the extra notes alone / without them</b>, to judge what the AI is adding.</li>
+        <li>"Magenta or Simple rules" moves to Advanced as "AI engine", with automatic fallback.</li>
+      </ul>
+      <p class="who">From: all three (BandLab Regenerate, Bloom's moods, Polyend's Fill vs Randomize, Logic's named axes; anti-pattern: "generators named by algorithm")</p>
+    </div>
+    <div class="mock" role="img" aria-label="Sketch: What the instrument adds — Band Off Quiet Full with what it plays; Extra notes Off A few Some Lots with count and Try another, Previous, Freeze, Hear alone; Sounds change Off Slowly More with Try another, Previous, Freeze.">
+      <div class="h">What the instrument adds</div>
+      <div class="row"><b style="width:110px">Band</b><span class="b">Off</span><span class="b on">Quiet</span><span class="b">Full</span></div>
+      <div class="q" style="padding-left:116px">playing pad · bass &nbsp;(you have melody and drums)</div>
+      <div class="row"><b style="width:110px">Extra notes ◌</b><span class="b">Off</span><span class="b on">A few</span><span class="b">Some</span><span class="b">Lots</span><span class="q">◌ 8 now</span></div>
+      <div class="row" style="padding-left:116px"><span class="b">↻ Try another</span><span class="b">↶ Previous</span><span class="b">📌 Freeze</span><span class="b">Hear alone</span></div>
+      <div class="row"><b style="width:110px">Sounds change</b><span class="b">Off</span><span class="b on">Slowly</span><span class="b">More</span></div>
+      <div class="row" style="padding-left:116px"><span class="b">↻ Try another</span><span class="b">↶ Previous</span><span class="b">📌 Freeze</span></div>
+      <div class="q" style="padding-left:116px">last change: Red → Rhodes · next in 3 loops</div>
+    </div>
+  </div>
+  <div class="note"><b>A trust problem the instrument designer found:</b> above 20%, "Evolve" changes Tim's notes and rhythms (other tunes, other basslines, busier drums), although the screen says "your notes stay the same". Proposal: <b>Sounds change</b> only ever changes the sound. Changing the patterns becomes a separate, clearly labelled opt-in ("☐ Also vary the patterns").</div>
+</section>
+
+<!-- 4 -->
+<section aria-labelledby="h4s">
+  <span class="eyebrow">4 · Seeing it</span>
+  <h2 id="h4s">The board shows who played what</h2>
+  <div class="pair">
+    <div class="why">
+      <ul>
+        <li><b>A key under the board</b>: ● Tim's counters · ◌ extra notes added by the AI · ◎ a loop · ▬ the band.</li>
+        <li><b>Extra notes drawn larger</b>, as dotted rings in the colour's swatch that light when they sound, with a <b>Show extra notes</b> switch. Freeze turns them solid.</li>
+        <li><b>A band strip</b> under the board: "Band: pad · bass", lighting on the beat.</li>
+        <li>When a sound changes, the colour chip reads "Red · now Rhodes" for a moment.</li>
+      </ul>
+      <p>This makes the AI's contribution something you can see and judge, and it meets the "visual feedback for every sound" principle for deaf and hard-of-hearing players.</p>
+      <p class="who">From: UX designer · research (Reactable's visible sound, Polyend and Ableton's visible chance)</p>
+    </div>
+    <div class="mock" role="img" aria-label="Sketch of the board with Tim's solid counters, dotted AI notes, ringed loop notes, a band strip and a legend.">
+      <div class="board">
+        <span></span><span></span><span></span><span class="ai" style="--c: var(--red)"></span><span></span><span></span><span></span><span></span>
+        <span class="you" style="--c: var(--red)"></span><span></span><span></span><span></span><span></span><span class="ai" style="--c: var(--red)"></span><span></span><span></span>
+        <span></span><span></span><span></span><span></span><span class="you" style="--c: var(--red)"></span><span></span><span></span><span></span>
+        <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+        <span class="loop" style="--c: var(--yellow)"></span><span></span><span></span><span></span><span class="loop" style="--c: var(--yellow)"></span><span></span><span></span><span></span>
+        <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+        <span class="you" style="--c: var(--green)"></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+        <span></span><span></span><span class="you" style="--c: var(--blue)"></span><span></span><span></span><span></span><span></span><span></span>
+      </div>
+      <div class="bandbar">▬ Band: pad · bass</div>
+      <div class="legend">
+        <span><span class="k" style="background: var(--appfg)"></span>you</span>
+        <span><span class="k" style="border: 2px dotted var(--appfg)"></span>extra notes (AI)</span>
+        <span><span class="k" style="border: 2px solid var(--appfg)"></span>loop</span>
+        <span>▬ band</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 5 -->
+<section aria-labelledby="h5s">
+  <span class="eyebrow">5 · Loops</span>
+  <h2 id="h5s">Loops you can recognise, and an editor that can't be mistaken for the board</h2>
+  <div class="pair">
+    <div class="why">
+      <ul>
+        <li><b>A small picture of each loop</b> next to its name, instead of only "2 notes".</li>
+        <li><b>The edit window shows both</b>, side by side: "On the board now" and "In this loop". It has a <b>Copy the board into this loop</b> button, a ▶ preview, and a different look (dashed border, "Saved loop, not the board" tag). This answers "why does it show two?".</li>
+        <li>Plainer words: "✎" becomes <b>Edit notes</b>, "Replace" becomes <b>Overwrite with board</b>, and in scenes "Go" and "From here" become <b>Jump here now</b> and <b>Rehearse from here</b>.</li>
+        <li>Scenes use the same simple steps (Band Quiet, Extra notes A few, Sounds change Slowly) instead of 0–100% sliders, which also fixes the sliders with no visible track.</li>
+      </ul>
+      <p class="who">From: UX designer · research (Blocs Wave, Ableton clip thumbnails)</p>
+    </div>
+    <div class="mock" role="img" aria-label="Sketch: loop rows with small thumbnails; the edit window showing On the board now and In this loop side by side with a Copy the board into this loop button.">
+      <div class="h">Loops</div>
+      <div class="row"><b>1</b><span class="thumb" style="--c: var(--yellow)"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="n"></i><i></i><i></i><i></i><i class="n"></i><i></i><i></i><i></i></span><b>Bed</b><span class="b">▶ Play</span><span class="b">Edit notes</span></div>
+      <div class="sc" style="--c: #8a94a6; border: 2px dashed #6a7486; border-left: 6px solid #8a94a6">
+        <div class="top"><b>✎ Edit loop 1 "Bed"</b><span class="pill">Saved loop, not the board</span></div>
+        <div class="split">
+          <div><div class="q">On the board now: 1 note</div><div class="thumb" style="--c: var(--red); margin-top:4px"><i class="n"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+          <div><div class="q">In this loop: 2 notes</div><div class="thumb" style="--c: var(--yellow); margin-top:4px"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="n"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="n"></i></div></div>
+        </div>
+        <div class="row"><span class="b on">Copy the board into this loop</span><span class="b">▶ Hear</span><span class="b">Done</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 6 -->
+<section aria-labelledby="h6s">
+  <span class="eyebrow">6 · The music itself</span>
+  <h2 id="h6s">Musical fixes the instrument designer found in the code</h2>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Problem</th><th>What you hear</th><th>Fix</th></tr></thead>
+    <tbody>
+      <tr><td class="k">A wrong chord in Electronic</td><td>Its built-in progression loops a diminished chord every 8 beats, which sounds like a mistake.</td><td>Use a progression without it (I–V–vi–IV), or only use that chord in minor keys.</td></tr>
+      <tr><td class="k">Chords change too fast</td><td>Four chords per 8-beat loop: the same 2 bars about 80 times in 7 minutes.</td><td>Slower chord changes spanning two loops, with a "chords change every: 2 beats / bar / 2 bars" choice.</td></tr>
+      <tr><td class="k">One square changes the whole tune</td><td>Moving a melody counter one square left picks a completely different tune, the opposite of "tolerance over precision".</td><td>The colour (and scene) picks the tune, and the square only sets when and how high. A near-miss gives the same idea a step later.</td></tr>
+      <tr><td class="k">Chord counters jump</td><td>Tim's chord counters jump between voicings, while the band's chords glide.</td><td>Voice-lead them like the band does.</td></tr>
+      <tr><td class="k">Evolve changes notes</td><td>See section 3.</td><td>Sound only, unless "vary the patterns" is ticked.</td></tr>
+      <tr><td class="k">Swing is uneven</td><td>The swing setting moves both sixteenths, which smears the hi-hats.</td><td>Proper eighth-note swing; cap the combined amount.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- 7 -->
+<section aria-labelledby="h7s">
+  <span class="eyebrow">7 · Tim's hands</span>
+  <h2 id="h7s">On the iPad and the board</h2>
+  <ul>
+    <li><b>Energy as one gesture:</b> an iPad strip (replacing Dynamics), and a counter colour that can be an Energy fader on the board. One slide raises the band, the drums and the dynamics together.</li>
+    <li><b>The same words as the laptop:</b> Extra notes and Sounds change strips, each with its own "↻ Try another" and "📌 Freeze" pads placed under it, so the button sits under the thing it acts on.</li>
+    <li><b>Later: "Moments" pads</b>, such as <i>Drop</i> (filter sweep), <i>Break</i> (drums only) and <i>Big</i>. Each latches for 1, 2 or 4 bars and lets go by itself, so nothing needs holding.</li>
+  </ul>
+</section>
+
+<!-- plan -->
+<section aria-labelledby="h8s">
+  <span class="eyebrow">If you agree</span>
+  <h2 id="h8s">The order I'd build it in</h2>
+  <div class="card" style="gap:14px">
+    <div class="phase"><span class="p">Round 1</span><div><b>The Sound tab rebuilt:</b> colour sound cards, Overall feel (World, Energy, Space, Groove), the three helpers with the same buttons, Advanced for the rest. <b>The board key</b> and larger AI notes. <b>Loop thumbnails and the new edit window.</b> Plain words throughout. <b>Evolve stops changing notes</b> unless asked.</div></div>
+    <div class="phase"><span class="p">Round 2</span><div><b>The musical fixes</b> in section 6, with before and after you can hear. Scenes store Energy, Space and Groove.</div></div>
+    <div class="phase"><span class="p">Round 3</span><div><b>The iPad:</b> Energy strip, matching words and pads, an Energy fader counter. Then Moments, "Hear alone", and a "sometimes" chance per colour.</div></div>
+  </div>
+  <p class="note">Nothing here removes a feature. Everything that exists stays reachable; it is regrouped, renamed, and the rarely used parts move into "Advanced".</p>
+</section>
+
+</div>

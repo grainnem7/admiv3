@@ -1,0 +1,307 @@
+<title>Rehearsal Setup Guide</title>
+<meta name="description" content="Step-by-step, with screenshots: making the loops, building the 7-minute piece, setting up the iPad, and a full run — over three rehearsals.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: one column of numbered steps, grouped into three rehearsals; each step pairs instructions with a screenshot (side by side when wide, stacked on a phone). */
+:root {
+  --bg: #eef1f4; --surface: #ffffff; --ink: #15202c; --ink2: #4a5868; --line: #d3dae2; --accent: #1f4fd8;
+  --r1: #3b7bd9; --r2: #d68a12; --r3: #2f9a62; --warn: #b8322a; --shot-bg: #14181f;
+  --font-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #0f151c; --surface: #17202a; --ink: #e6ebf1; --ink2: #9fb0c2; --line: #2a3644; --accent: #7fa2ff; --r1: #6aa2f0; --r2: #f0aa3c; --r3: #4fc287; --warn: #ff7a66; --shot-bg: #0b0e13; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --bg: #0f151c; --surface: #17202a; --ink: #e6ebf1; --ink2: #9fb0c2; --line: #2a3644; --accent: #7fa2ff; --r1: #6aa2f0; --r2: #f0aa3c; --r3: #4fc287; --warn: #ff7a66; --shot-bg: #0b0e13; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 17px; line-height: 1.55; }
+.wrap { max-width: 1040px; margin: 0 auto; padding-inline: 20px; padding-block: 40px 80px; display: grid; gap: 48px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.15; margin: 0; }
+h1 { font-size: clamp(2.1rem, 5.5vw, 3.2rem); font-weight: 800; letter-spacing: -0.02em; }
+h2 { font-size: 1.7rem; font-weight: 800; }
+h3 { font-size: 1.15rem; font-weight: 600; }
+p { margin: 0; max-width: 66ch; }
+ul, ol { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; }
+.eyebrow { font-family: var(--font-mono); font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink2); }
+.lede { font-size: 1.1rem; color: var(--ink2); }
+code { font-family: var(--font-mono); font-size: 0.86em; background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; overflow-wrap: anywhere; }
+.btn { font-weight: 700; white-space: nowrap; border: 1.5px solid var(--ink2); border-radius: 6px; padding: 0 6px; }
+a { color: var(--accent); }
+a:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+nav ul { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: 8px 18px; }
+nav a { font-weight: 700; text-decoration: none; }
+.rehearsal { display: grid; gap: 22px; border-top: 6px solid var(--c); padding-top: 18px; }
+.rehearsal > header { display: grid; gap: 6px; }
+.rehearsal > header .eyebrow { color: var(--c); }
+.step { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); gap: 20px; align-items: start; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
+.step.noshot { grid-template-columns: 1fr; }
+.step .text { display: grid; gap: 10px; min-width: 0; }
+.step .num { font-family: var(--font-mono); font-weight: 700; color: var(--c); font-size: 0.9rem; }
+.step figure { margin: 0; display: grid; gap: 6px; min-width: 0; }
+.step img { display: block; max-width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--line); background: var(--shot-bg); margin-inline: auto; }
+.step img.narrow { max-width: 330px; }
+.step figcaption { font-size: 0.85rem; color: var(--ink2); }
+.see { border-left: 4px solid var(--r3); padding: 2px 0 2px 12px; color: var(--ink2); }
+.tip { border-left: 4px solid var(--accent); padding: 2px 0 2px 12px; color: var(--ink2); }
+.caution { border-left: 4px solid var(--warn); padding: 2px 0 2px 12px; color: var(--ink2); }
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; min-width: 600px; font-size: 0.95rem; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink2); }
+tr:last-child td { border-bottom: 0; }
+td.k { font-weight: 700; }
+.swatch { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; border: 1px solid rgba(0,0,0,.2); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; display: grid; gap: 10px; }
+@media (max-width: 760px) { .step { grid-template-columns: 1fr; } }
+</style>
+
+<div class="wrap">
+
+<header style="display:grid; gap:14px">
+  <span class="eyebrow">ADMI Board Sequencer · Before the performance</span>
+  <h1>Rehearsal Setup Guide</h1>
+  <p class="lede">Three rehearsals, one step at a time, with a picture of each screen. By the end the loops are made with Tim, the 7-minute piece is built, the iPad is set up for him, and you've done a full run.</p>
+  <nav aria-label="Rehearsals"><ul>
+    <li><a href="#modes">The three buttons</a></li>
+    <li><a href="#r1">Rehearsal 1: loops</a></li>
+    <li><a href="#r2">Rehearsal 2: the piece</a></li>
+    <li><a href="#r3">Rehearsal 3: iPad and a full run</a></li>
+    <li><a href="#after">After each rehearsal</a></li>
+  </ul></nav>
+  <p class="tip">The pictures use the <b>laptop board</b> (squares clicked on screen). With the real board you put the counters on the board instead; everything else is the same.</p>
+</header>
+
+<section id="modes" class="card" aria-labelledby="h-modes">
+  <h2 id="h-modes">First: the three buttons at the top</h2>
+  <ul>
+    <li><span class="btn">Play</span>: just play the board. Sound, Groove, Board and Connections are here. Nothing else is needed: no loops, no scenes.</li>
+    <li><span class="btn">Make a piece</span>: three steps, <b>1 Loops</b>, <b>2 Scenes</b> and <b>3 Ending &amp; check</b>, all on one panel. Each step is optional, and you can open any step at any time.</li>
+    <li><span class="btn">▶ Show</span>: for the performance. The board fills the screen with the clock and "Now / Next", and only the buttons you need during the piece.</li>
+  </ul>
+  <p>To start ADMI: in a terminal in the ADMIv3 folder, type <code>npm run show</code>. Open <b>http://localhost:3001</b> in Chrome, press <span class="btn">Board Sequencer</span>, and pick Tim. With the real board, do <span class="btn">⚙ Set up</span> as usual, with the colours' jobs: <b>yellow chords</b>, <b>blue bass</b>, <b>green drums</b>, <b>red melody</b>.</p>
+</section>
+
+<section id="r1" class="rehearsal" style="--c: var(--r1)" aria-labelledby="h-r1">
+  <header>
+    <span class="eyebrow">Rehearsal 1 · about 45 minutes</span>
+    <h2 id="h-r1">Make the loops with Tim</h2>
+    <p>Each loop is one board that Tim makes, saved once. It then plays on its own.</p>
+  </header>
+
+  <div class="tablewrap"><table>
+    <thead><tr><th>Loop</th><th>Name</th><th>Tim puts down</th><th>Used for</th></tr></thead>
+    <tbody>
+      <tr><td class="k">1</td><td class="k">Bed</td><td><span class="swatch" style="background:#e8c21e"></span>2–3 <b>yellow</b> counters, in the lower half</td><td>Calm chords at the start and the end</td></tr>
+      <tr><td class="k">2</td><td class="k">Pulse</td><td><span class="swatch" style="background:#2f6fd6"></span>1–2 <b>blue</b> counters, low</td><td>The bassline</td></tr>
+      <tr><td class="k">3</td><td class="k">Beat</td><td><span class="swatch" style="background:#2f9a52"></span>1 <b>green</b> counter in a middle row</td><td>A medium drum groove</td></tr>
+      <tr><td class="k">4</td><td class="k">Beat+</td><td><span class="swatch" style="background:#2f9a52"></span>1 <b>green</b> counter near the top</td><td>A busier groove</td></tr>
+      <tr><td class="k">5</td><td class="k">Shine</td><td><span class="swatch" style="background:#d93a3a"></span>3–4 <b>red</b> counters at different heights</td><td>A tune Tim can bring in</td></tr>
+    </tbody>
+  </table></div>
+
+  <article class="step" aria-labelledby="s1">
+    <div class="text">
+      <span class="num">Step 1</span>
+      <h3 id="s1">Press "Make a piece"</h3>
+      <p>Press <span class="btn">Make a piece</span> at the top. The right side becomes the three steps, starting on <b>1 · Loops</b>, which has eight empty loops.</p>
+      <p class="see">Each empty loop has a <b>Save the board here</b> button.</p>
+    </div>
+    <figure>
+      <img src="guide-shots/01-make-a-piece.png" alt="Make a piece selected at the top; on the right, the three steps (1 Loops, 2 Scenes, 3 Ending and check) and the Loops step with eight empty loops, each with a Save the board here button." width="1440" height="900">
+      <figcaption>Make a piece, step 1: Loops.</figcaption>
+    </figure>
+  </article>
+
+  <article class="step" aria-labelledby="s2">
+    <div class="text">
+      <span class="num">Step 2</span>
+      <h3 id="s2">Tim puts the counters down and listens</h3>
+      <p>For <b>Bed</b>, Tim puts two or three yellow counters in the lower half of the board.</p>
+      <p>To hear it, press <span class="btn">▶ Play</span> at the top right. Higher rows are higher notes, and left to right is time. Move counters until he likes it.</p>
+    </div>
+    <figure>
+      <img src="guide-shots/02-counters-down.png" alt="Two yellow counters on the board." width="1440" height="900">
+      <figcaption>Two yellow counters: this will be "Bed".</figcaption>
+    </figure>
+  </article>
+
+  <article class="step" aria-labelledby="s3">
+    <div class="text">
+      <span class="num">Step 3</span>
+      <h3 id="s3">Save it, and name it</h3>
+      <ol>
+        <li>On loop 1, press <span class="btn">Save the board here</span>.</li>
+        <li>Type the name in the box: <code>Bed</code>.</li>
+        <li>Lift the counters off the board. On the laptop board, press <span class="btn">Clear the board</span>.</li>
+      </ol>
+      <p class="see">Loop 1 now shows its name, how many notes it has, and <b>▶ Play</b>, <b>Replace</b>, ✎ (draw) and ✕ (clear).</p>
+    </div>
+    <figure>
+      <img class="narrow" src="guide-shots/03-saved-named.png" alt="Loop 1 saved and named Bed, 2 notes, with Play, Replace, draw and clear buttons; the other loops still empty." width="540" height="863">
+      <figcaption>Loop 1 saved as "Bed".</figcaption>
+    </figure>
+  </article>
+
+  <article class="step" aria-labelledby="s4">
+    <div class="text">
+      <span class="num">Step 4</span>
+      <h3 id="s4">Make the other four the same way</h3>
+      <p>Counters down, listen, <span class="btn">Save the board here</span> on the next empty loop, name it, clear. Use the table above for Pulse, Beat, Beat+ and Shine.</p>
+      <ul>
+        <li><b>To hear a loop on its own:</b> clear the board, press ▶ Play, then press that loop's <span class="btn">▶ Play</span>. It comes in on the next time round.</li>
+        <li><b>To redo a loop:</b> put the new counters down, press <span class="btn">Replace</span>, then press it again to confirm.</li>
+        <li><b>To fix one note without the board:</b> press ✎ to draw on screen.</li>
+      </ul>
+      <p class="tip">Leave loops 6 to 8 empty. During the piece, <b>Capture</b> saves into them.</p>
+    </div>
+    <figure>
+      <img class="narrow" src="guide-shots/04-loops-saved.png" alt="Loops 1 to 5 named Bed, Pulse, Beat, Beat+ and Shine, each with Play, Replace, draw and clear; loops 6 to 8 empty." width="540" height="894">
+      <figcaption>All five loops made.</figcaption>
+    </figure>
+  </article>
+
+  <p class="tip"><b>End of rehearsal 1:</b> open step <b>3 · Ending &amp; check</b> and press <span class="btn">⤓ Back up to a file</span>. Keep the file on a USB stick.</p>
+</section>
+
+<section id="r2" class="rehearsal" style="--c: var(--r2)" aria-labelledby="h-r2">
+  <header>
+    <span class="eyebrow">Rehearsal 2 · about 30 minutes</span>
+    <h2 id="h-r2">Build the 7-minute piece</h2>
+    <p>Scenes change the loops and the sound at set times while Tim plays on top. The plan has four scenes: <b>Arrival</b> at 0:00, <b>Build</b> at 1:30, <b>Open</b> at 3:30 and <b>Home</b> at 6:00.</p>
+  </header>
+
+  <article class="step" aria-labelledby="s5">
+    <div class="text">
+      <span class="num">Step 5</span>
+      <h3 id="s5">Make my plan</h3>
+      <p>Press <span class="btn">Next: Scenes →</span> (or <b>2 · Scenes</b> at the top), then press <span class="btn">✦ Make my plan</span>.</p>
+      <p class="see">Four coloured scenes across 7:00, using your loops: Arrival plays Bed; Build adds Pulse and Beat; Open is Tim's solo, with no loops; Home brings Bed back.</p>
+      <p class="tip">Every scene has <span class="btn">▶ From here</span>. While stopped, it plays the piece from that scene's time, so you can rehearse one part without playing seven minutes. When you stop, Tim's own settings come back.</p>
+    </div>
+    <figure>
+      <img class="narrow" src="guide-shots/07-scenes-plan.png" alt="Step 2 Scenes: a timeline with Arrival 0:00, Build 1:30, Open 3:30 and Home 6:00, and the four scenes listed with From here and Go buttons." width="540" height="769">
+      <figcaption>The plan: four scenes over seven minutes.</figcaption>
+    </figure>
+  </article>
+
+  <article class="step" aria-labelledby="s6">
+    <div class="text">
+      <span class="num">Step 6</span>
+      <h3 id="s6">Change a scene if you want to</h3>
+      <p><b>Tap a scene's name</b> to open it. You can change:</p>
+      <ul>
+        <li><b>which loops play</b>: tap to tick or untick;</li>
+        <li><b>the time</b> it comes in, written like <code>1:30</code>;</li>
+        <li><b>the sound world, the band, Fill, Evolve and the tempo</b>.</li>
+      </ul>
+      <p>Tap the name again to close it.</p>
+      <p class="tip">Keep the same sound world and tempo in every scene, so the piece sounds like one instrument.</p>
+    </div>
+    <figure>
+      <img class="narrow" src="guide-shots/08-scene-editor.png" alt="The Build scene opened: name, comes in at 1:30, loop chips with Bed, Pulse and Beat ticked, sound world, band, Fill, Evolve and Tempo." width="540" height="1349">
+      <figcaption>Build, opened. Bed, Pulse and Beat are ticked.</figcaption>
+    </figure>
+  </article>
+
+  <article class="step" aria-labelledby="s8">
+    <div class="text">
+      <span class="num">Step 7</span>
+      <h3 id="s8">Choose the ending, and check</h3>
+      <p>Press <span class="btn">Next: Ending &amp; check →</span>, then:</p>
+      <ul>
+        <li><b>Length of the piece:</b> <code>7:00</code>.</li>
+        <li><b>How it ends:</b> tap one. <b>Final chord</b> is a clear end; try <b>Slow down</b> with Tim too.</li>
+        <li><b>The ending takes</b> 2 passes. <b>When it ends:</b> When I press End.</li>
+      </ul>
+      <p>The <b>Ready check</b> below lists what's ready (✓), what to check (!) and what to fix (✕).</p>
+      <p class="see">In the picture, the three "!" are expected while testing on the laptop board. On the day, with the real board, <code>npm run show</code> and a backup made, they turn to ✓.</p>
+    </div>
+    <figure>
+      <img class="narrow" src="guide-shots/09-ending.png" alt="Step 3: the summary line, length 7:00, the five endings with Final chord chosen, 2 passes, When I press End, With Play, and the Ready check list." width="540" height="1306">
+      <figcaption>Step 3: the ending and the Ready check.</figcaption>
+    </figure>
+  </article>
+</section>
+
+<section id="r3" class="rehearsal" style="--c: var(--r3)" aria-labelledby="h-r3">
+  <header>
+    <span class="eyebrow">Rehearsal 3 · about 45 minutes</span>
+    <h2 id="h-r3">The iPad for Tim, then a full run</h2>
+  </header>
+
+  <article class="step" aria-labelledby="s9">
+    <div class="text">
+      <span class="num">Step 8</span>
+      <h3 id="s9">Set up the iPad</h3>
+      <ol>
+        <li>Press <span class="btn">Play</span> at the top, then the <b>Connections</b> tab, and tick <b>iPad controls</b>.</li>
+        <li>Open the link it shows in <b>Safari on the iPad</b>; it needs to be on the same Wi-Fi.</li>
+        <li><b>Also on the Play page:</b> tick <b>End piece</b>, and <b>Shine</b> if he brings it in.</li>
+        <li><b>A pad acts:</b> start with <i>When the finger lands</i>. If pads get pressed by accident, switch to <i>When the finger lifts</i>.</li>
+        <li><b>Learn reach:</b> press it, have Tim slide each strip as far as is comfortable, then press <b>Done</b>.</li>
+      </ol>
+      <p class="caution">If it says "The iPad can't reach this laptop yet", start ADMI again with <code>npm run show</code>.</p>
+    </div>
+    <figure>
+      <img class="narrow" src="guide-shots/10-ipad-settings.png" alt="The iPad controls settings: what it shows, locked strips, a touch on a strip, a pad acts, time for the second tap, also on the Play page with End piece ticked." width="320" height="1155">
+      <figcaption>Tim's iPad settings, kept with his player.</figcaption>
+    </figure>
+  </article>
+
+  <article class="step" aria-labelledby="s10">
+    <div class="text">
+      <span class="num">Step 9</span>
+      <h3 id="s10">What Tim sees</h3>
+      <p>The clock, <b>Now / Next</b>, a beat light, his strips and pads, and a big <b>End piece</b>, which needs two taps.</p>
+      <p class="tip">The 👆 mark at the top left lights whenever the iPad is touched, so you can tell "not touched" from "not working".</p>
+    </div>
+    <figure>
+      <img src="guide-shots/13-ipad.png" alt="The iPad page during the piece: clock, Now Arrival, Next Build, four strips, four pads and a wide End piece pad." width="1180" height="820">
+      <figcaption>The iPad during the piece.</figcaption>
+    </figure>
+  </article>
+
+  <article class="step" aria-labelledby="s11">
+    <div class="text">
+      <span class="num">Step 10</span>
+      <h3 id="s11">Show, and the full run</h3>
+      <p>Press <span class="btn">▶ Show</span> at the top. The board fills the screen. Press <span class="btn">▶ Start the piece</span>.</p>
+    </div>
+    <figure>
+      <img src="guide-shots/11-show-ready.png" alt="Show: a big Start the piece button with 7:00, 4 scenes and the ending, above the board." width="1440" height="900">
+      <figcaption>Show, before starting.</figcaption>
+    </figure>
+  </article>
+
+  <article class="step" aria-labelledby="s12">
+    <div class="text">
+      <span class="num">Step 11</span>
+      <h3 id="s12">During the piece</h3>
+      <ul>
+        <li>The top shows the <b>time left</b>, <b>Now</b> and <b>Next</b>, and the loops playing.</li>
+        <li>Scenes change by themselves. Playing loops show on the board as rings.</li>
+        <li>Cues at 1 minute, 30 seconds and 10 seconds show large. At <b>30 seconds</b>, Tim taps End piece twice, or you press <span class="btn">⏹ End</span>.</li>
+        <li>When the chord has rung out it stops by itself. Press <span class="btn">Leave Show</span>, then <b>Save session</b>.</li>
+      </ul>
+      <p class="caution"><b>Stop needs two presses</b> during the piece, so one stray tap can't end it. <b>Cancel the ending</b> brings the music back if End was pressed too soon.</p>
+    </div>
+    <figure>
+      <img src="guide-shots/12-show-playing.png" alt="Show during the piece: clock, Now Arrival, Next Build, Bed playing; Capture, Next and End buttons; the board with Tim's red counter and the yellow loop rings." width="1440" height="900">
+      <figcaption>Show during the piece.</figcaption>
+    </figure>
+  </article>
+</section>
+
+<section id="after" class="card" aria-labelledby="h-after">
+  <h2 id="h-after">After each rehearsal</h2>
+  <ul>
+    <li><b>⤓ Back up to a file</b> (Make a piece, step 3), and copy it off the laptop.</li>
+    <li><b>Save session</b> and <b>CSV</b> if it was a run you want for the research.</li>
+    <li>Note what Tim liked and what felt wrong. Next time: <b>Replace</b> a loop, tap a scene to change it, or change an iPad setting.</li>
+  </ul>
+</section>
+
+</div>

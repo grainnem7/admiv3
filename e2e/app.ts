@@ -41,3 +41,16 @@ export async function notesPlayed(page: Page): Promise<number> {
 export function pageErrors(page: Page): string[] {
   return (page as Page & { admiErrors?: string[] }).admiErrors ?? [];
 }
+
+/** Open Make a piece at a step: 'Loops', 'Scenes' or 'Ending & check'. */
+export async function pieceStep(page: Page, step: 'Loops' | 'Scenes' | 'Ending & check'): Promise<void> {
+  await page.getByRole('button', { name: 'Make a piece', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Make a piece: steps' }).getByRole('button', { name: new RegExp(step.replace('&', '&')) }).click();
+}
+
+/** Make a piece → Scenes → Make my plan (four scenes over the length). */
+export async function makePlan(page: Page): Promise<void> {
+  await pieceStep(page, 'Scenes');
+  await page.getByRole('button', { name: /Make my plan/ }).click();
+}
+

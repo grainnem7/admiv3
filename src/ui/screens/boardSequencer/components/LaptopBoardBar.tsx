@@ -1,7 +1,8 @@
+import { useState } from 'react';
 import { SwatchChip } from '../ui/SwatchChip';
 import { Button } from '../ui/Button';
 import type { BoardPalette } from '../theme/boardTokens';
-import { describeChannel, ROLE_LABELS, type ColourChannel } from '../../../../tracking/boardColours';
+import { describeChannel, ROLE_LABELS, type ColourChannel, type ColourRole } from '../../../../tracking/boardColours';
 
 export interface LaptopBoardBarProps {
   /** The colours with a job: the counters there are to put down. */
@@ -13,8 +14,19 @@ export interface LaptopBoardBarProps {
   count: number;
   onClear(): void;
   onAddColours(): void;
+  /** Add one more colour with this job; null when every ready-made colour is in use. */
+  onAddColour: ((role: ColourRole) => void) | null;
   palette: BoardPalette;
 }
+
+/** The jobs a new laptop colour can be given straight away; the rest are in Set up → Colours. */
+const NEW_JOBS: { role: ColourRole; label: string }[] = [
+  { role: 'melody', label: 'Melody' },
+  { role: 'bass', label: 'Bass' },
+  { role: 'chord', label: 'Chords' },
+  { role: 'drums', label: 'Drums' },
+  { role: 'loop', label: 'Plays a loop' },
+];
 
 /**
  * Above the laptop board: which counter a click puts down, how many are down, and a way
@@ -22,8 +34,9 @@ export interface LaptopBoardBarProps {
  * adds four ready-made ones so there is something to play straight away.
  */
 export function LaptopBoardBar({
-  channels, knownColours, selected, onSelect, count, onClear, onAddColours, palette,
+  channels, knownColours, selected, onSelect, count, onClear, onAddColours, onAddColour, palette,
 }: LaptopBoardBarProps): JSX.Element {
+  const [adding, setAdding] = useState(false);
   if (channels.length === 0) {
     return (
       <div role="group" aria-label="Laptop board" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -58,6 +71,23 @@ export function LaptopBoardBar({
           </button>
         ))}
       </div>
+      <Button
+        tone="secondary"
+        aria-expanded={adding}
+        onClick={() => setAdding((a) => !a)}
+        reason={onAddColour ? null : 'Every ready-made colour is in use.'}
+      >
+        + Add a colour
+      </Button>
+      {adding && onAddColour && (
+        <div role="group" aria-label="The new colour's job" style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center', flexBasis: '100%' }}>
+          <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>The new colour plays:</span>
+          {NEW_JOBS.map((j) => (
+            <Button key={j.role} onClick={() => { onAddColour(j.role); setAdding(false); }}>{j.label}</Button>
+          ))}
+          <Button tone="quiet" onClick={() => setAdding(false)}>Cancel</Button>
+        </div>
+      )}
       <span style={{ fontSize: 12, color: 'var(--bs-fg2)', flex: '1 1 160px' }}>
         {`${count} on the board. Click a square to put a counter down, click it again to lift it.`}
       </span>

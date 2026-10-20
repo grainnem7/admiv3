@@ -252,7 +252,7 @@ button.primary { background: var(--accent); color: var(--surface); border-color:
 <section id="prepare" aria-labelledby="h-prep">
   <span class="eyebrow">Days before</span>
   <h2 id="h-prep">Prepare the loops and scenes</h2>
-  <p>Do all of this while stopped, with Tim, so the loops are his material. Everything saves to his player profile, in the browser and in a copy on the laptop. When it's ready, press <b>⤓ Back up to a file</b> as well. Make these in the <b>Perform</b> tab: put counters down, then <b>⋯ more</b> under a loop pad → <b>Save board here</b>, or <b>Draw</b> on screen.</p>
+  <p>Do all of this while stopped, with Tim, so the loops are his material. Everything saves to his player profile, in the browser and in a copy on the laptop. When it's ready, press <b>⤓ Back up to a file</b> as well. Make these in <b>Make a piece → 1 · Loops</b>: put counters down, press <b>Save the board here</b> on an empty loop, and type its name. The rehearsal guide shows each step.</p>
   <div class="tablewrap"><table>
     <thead><tr><th>Slot</th><th>Name</th><th>What's in it</th><th>Used in</th></tr></thead>
     <tbody>
@@ -266,7 +266,7 @@ button.primary { background: var(--accent); color: var(--surface); border-color:
   </table></div>
 
   <h3>The four scenes</h3>
-  <p>Once the loops are saved, press <b>✦ Make my plan</b> in Perform: it makes these four scenes at these times, using your loops. Then tap each scene to check it against the table (loops, band, Fill, Evolve) and change anything right there. Keep one sound world and one tempo in all four so the piece sounds like one instrument.</p>
+  <p>Once the loops are saved, press <b>✦ Make my plan</b> in <b>Make a piece → 2 · Scenes</b>: it makes these four scenes at these times, using your loops. Then tap each scene to check it against the table (loops, band, Fill, Evolve) and change anything right there. Keep one sound world and one tempo in all four so the piece sounds like one instrument.</p>
   <div class="tablewrap"><table>
     <thead><tr><th>Scene</th><th>At</th><th>Loops playing</th><th>Band</th><th>Fill</th><th>Evolve</th></tr></thead>
     <tbody>
@@ -284,7 +284,7 @@ button.primary { background: var(--accent); color: var(--surface); border-color:
   <h2 id="h-set">Settings to check before the piece</h2>
   <div class="cols">
     <div class="card">
-      <h3>Perform → Length and ending</h3>
+      <h3>Make a piece → 3 · Ending &amp; check</h3>
       <ul>
         <li><b>Length</b> <span class="mono">7:00</span></li>
         <li><b>The clock starts</b>: With Play</li>
@@ -362,15 +362,15 @@ button.primary { background: var(--accent); color: var(--surface); border-color:
       <li><input type="checkbox" id="k12"><label for="k12"><b>Learn reach</b> with Tim in his seat, iPad on his left.</label></li>
     </ul></div></div>
     <div class="phase"><span class="when">−20 min</span><div><ul class="check">
-      <li><input type="checkbox" id="k13"><label for="k13">Perform: the five loops are there and named. Play each one once.</label></li>
+      <li><input type="checkbox" id="k13"><label for="k13">Make a piece → 1 · Loops: the five loops are there and named. Play each one once.</label></li>
       <li><input type="checkbox" id="k14"><label for="k14">Scenes: Arrival 0:00, Build 1:30, Open 3:30, Home 6:00.</label></li>
-      <li><input type="checkbox" id="k20"><label for="k20">Perform: the line at the top says there's a copy on this laptop. Press <b>⤓ Back up to a file</b> and put the file on a USB stick too.</label></li>
+      <li><input type="checkbox" id="k20"><label for="k20">Make a piece → 3: it says there's a copy on this laptop. Press <b>⤓ Back up to a file</b> and put the file on a USB stick too.</label></li>
       <li><input type="checkbox" id="k15"><label for="k15">The performance: 7:00, With Play, Final chord, 2 passes, When I press End.</label></li>
       <li><input type="checkbox" id="k16"><label for="k16">Sound check through the PA: ▶ Play, Tim places counters, set the level, then ■ Stop. Stopping resets the clock, so the check doesn't count.</label></li>
     </ul></div></div>
     <div class="phase"><span class="when">−2 min</span><div><ul class="check">
       <li><input type="checkbox" id="k17"><label for="k17">Board clear, counters within Tim's reach.</label></li>
-      <li><input type="checkbox" id="k18"><label for="k18">Perform → <b>✓ Ready check</b>: fix anything marked ✕. (Arrival, at 0:00, comes in by itself the moment Play is pressed.)</label></li>
+      <li><input type="checkbox" id="k18"><label for="k18">Make a piece → <b>3 · Ending &amp; check</b>: the Ready check shows nothing marked ✕. Then press <b>▶ Show</b>. (Arrival, at 0:00, comes in by itself the moment the piece starts.)</label></li>
       <li><input type="checkbox" id="k19"><label for="k19">Laptop on the Play screen. Hand ready on ▶ Play. Look at Tim and nod.</label></li>
     </ul></div></div>
   </div>
@@ -414,7 +414,7 @@ button.primary { background: var(--accent); color: var(--surface); border-color:
       <tr><td class="k">Stop pressed by accident</td><td>While the clock runs, the first press only says "Press again to stop" — just don't press again.</td></tr>
       <tr><td class="k">End pressed too early</td><td><b>Cancel the ending</b> on the laptop.</td></tr>
       <tr><td class="k">Something awful</td><td><b>Mute</b> on the laptop, which stops the sound without losing anything. Unmute when ready.</td></tr>
-      <tr><td class="k">Loops or scenes missing</td><td>Check the address is <code>localhost:3001</code> and Tim is picked on Who's playing. Still missing: Perform → <b>⤒ Restore from a file</b> with your backup, or a file from <code>.admi-data/backups</code> in the ADMIv3 folder.</td></tr>
+      <tr><td class="k">Loops or scenes missing</td><td>Check the address is <code>localhost:3001</code> and Tim is picked on Who's playing. Still missing: Make a piece → 3 → <b>⤒ Restore from a file</b> with your backup, or a file from <code>.admi-data/backups</code> in the ADMIv3 folder.</td></tr>
       <tr><td class="k">Magenta not responding</td><td>Fill falls back to Simple rules by itself. Carry on.</td></tr>
     </tbody>
   </table></div>
