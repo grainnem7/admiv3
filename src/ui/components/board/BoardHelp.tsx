@@ -17,6 +17,15 @@ const HELP: HelpEntry[] = [
       + 'and says why when it is not.',
   },
   {
+    title: 'The laptop board — no camera, no board',
+    body: 'Board: 💻 Laptop (top right) plays without the camera or the real board: pick a '
+      + 'colour above the board and click squares to put counters down; click again to lift. '
+      + 'Everything else is the same — phrases, the band, Fill, Evolve, loops, scenes, the '
+      + 'performance clock and the iPad — so a piece can be tested and planned at home. '
+      + 'The counters stay there next time. A laptop that has never seen the board can add '
+      + 'four ready-made colours. 📷 Camera goes back to the real board.',
+  },
+  {
     title: 'Finding the board for you',
     body: 'Press Find board and hold still for a second. It looks for the crossings where '
       + 'four squares meet, works out whether the board is 8 x 8 or 10 x 10, and shows you '

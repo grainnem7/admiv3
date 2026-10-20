@@ -6,7 +6,7 @@ import {
   dynamicsFromValue, isRemoteCode, makeRemoteCode, parseRemoteMessage, REMOTE_PATH, stripValue,
   STRIP_STEP, tempoFromValue, TEMPO_MAX, TEMPO_MIN, valueFromTempo, valueFromVelocity,
 } from '../remote/protocol';
-import { allowedFrom, attachRemoteRelay } from '../remote/relay';
+import { allowedFrom, attachRemoteRelay, MAX_MESSAGE_BYTES } from '../remote/relay';
 
 describe('finger → value, for imprecise fingers', () => {
   it('the ends of a strip are generous "all the way" zones', () => {
@@ -131,6 +131,43 @@ describe('relay', () => {
     ipad.ws.send(JSON.stringify({ type: 'state', state: {} }));
     await settle();
     expect(host.got.filter((m) => (m as { type: string }).type !== 'peers')).toEqual([]);
+  });
+
+  it('an oversized message closes only that connection; the server and the others carry on', async () => {
+    const port = await relay();
+    const host = await join(port, '4821', 'host');
+    const bully = await join(port, '4821', 'remote');
+    await settle();
+    const closed = new Promise<void>((r) => bully.ws.on('close', () => r()));
+    bully.ws.on('error', () => {});
+    bully.ws.send('x'.repeat(MAX_MESSAGE_BYTES + 10));
+    await closed;
+    // Still serving: a fresh iPad joins and its taps reach the laptop.
+    const ipad = await join(port, '4821', 'remote');
+    await settle();
+    ipad.ws.send(JSON.stringify({ type: 'trigger', name: 'keep' }));
+    await settle();
+    expect(host.got).toContainEqual({ type: 'trigger', name: 'keep' });
+    expect(host.got).toContainEqual({ type: 'peers', hosts: 1, remotes: 1 });
+  });
+
+  it('a long set list fits: the laptop state with every name is passed on', async () => {
+    const port = await relay();
+    const host = await join(port, '4821', 'host');
+    const ipad = await join(port, '4821', 'remote');
+    await settle();
+    const name = 'A long loop name here!!';
+    const state = {
+      values: { tempo: 0.5, dynamics: 0.5, fill: 0, evolve: 0 }, labels: { tempo: '100 BPM', dynamics: '50%', fill: 'Off', evolve: 'Off' },
+      kept: false, muted: false, playing: true,
+      loops: Array.from({ length: 8 }, () => ({ name, state: 'stopped' })),
+      scenes: Array.from({ length: 12 }, () => ({ name, current: false })),
+    };
+    const text = JSON.stringify({ type: 'state', state });
+    expect(text.length).toBeGreaterThan(1000);
+    host.ws.send(text);
+    await settle();
+    expect(ipad.got.some((m) => (m as { type: string }).type === 'state')).toBe(true);
   });
 
   it('refuses a connection without a proper code', async () => {

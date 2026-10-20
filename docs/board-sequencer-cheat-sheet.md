@@ -7,6 +7,13 @@
 - Each player has their own **grid, jobs, sounds, loops and settings.** The **board, camera and counter colours are shared**, so a second player never re-finds the board.
 - Switch later with the **Player** button in the header (stop playing first).
 
+## No board today? The laptop board
+- **Board: 📷 Camera | 💻 Laptop** (top right; the one in use is highlighted). **💻 Laptop** = no camera, no physical board. Pick a colour above the board, **click a square** to put a counter down, click it again to lift it. **Clear the board** empties it.
+- It plays exactly like the real board: phrases, band, Fill, Evolve, loops (**Save board here** saves the laptop board), scenes, the clock, the iPad. Use it to test sounds and plan a performance at home.
+- The counters are still there next time. On a laptop that has never seen the board, **Add four colours** gives red melody, blue bass, yellow chords and green drums.
+- A control or loop colour is one counter: clicking somewhere else moves it.
+- **📷 Camera** goes back to the camera and the real board. Camera warnings are hidden on the laptop board.
+
 ## Set up — four steps
 1. **Camera.** Pick the camera, check it says **"Picture has colour"**, set Mirror/Flip. *Changing mirror or flip asks for the corners again; colours are kept.* Camera on its side? **Turn 90°** until the board is the right way up — corners and colours are kept. A phone used as a camera: keep **Picture size 1280 × 720**.
 2. **Board.** **Find board** looks for the crossings where four squares meet, works out 8 × 8 or 10 × 10, and shows you what it found — **nothing is saved until Looks right**. Not sure? It hands you the editor with its best guess. Or **Tap corners myself**: corners are the **outside corners of the squares**, not the wooden edge. Set Rows and Steps, and where the player sits.
@@ -81,12 +88,18 @@
 ## Performing — prepare loops and scenes, launch with one tap
 - **Loops tab → Perform.** Eight slots. For each: **Save board here** (the counters as they are now — works while stopped, so set up before the show), **Draw** (draw a loop on screen, no camera needed), a **name**, **▶ Play / ■ Stop**, **Clear**.
 - **Play and Stop land on the next pass** — a tap early or late still comes in on the loop. **Stop all loops** too.
-- **Scenes:** get the loops and sound how you want them, type a name, **Save scene from now**. Each scene keeps its loops + sound world + band + phrases + fill + Evolve + tempo. **Go** recalls one; **Next scene ▶** walks the list — a set list for the piece.
+- **Scenes:** get the loops and sound how you want them, type a name, **Save scene from now**. Each scene keeps its loops + sound world + band + phrases + fill + Evolve + tempo. **Go** recalls one; **Next scene ▶** walks the list — a set list for the piece. It stops at the last scene (it never jumps back to the first). **Delete** can be undone for 15 seconds.
 - **On the iPad:** the **Loops & scenes** page has big pads for the 8 loops (green = playing, dashed = starting/stopping), 4 scene pads, **Next scene** and **Stop all**.
 - Launched loops need no loop lane and no counter on a pad; the pads still work as before alongside them.
+- **Loops are kept between sessions** in the browser **and** in a copy on the laptop (the `.admi-data` folder next to the app, written by the server as you save). The browser keeps its own store per address — `localhost:3000`, `:3001` and another browser each start empty — so when the app opens, the newer of the two is used, and whatever it replaces goes into `.admi-data/backups`. The line at the top of Perform says where the copy is.
+- **⤓ Back up to a file** saves every player, loop, scene and the board setup to one file — do it before a performance and keep it on a USB stick. **⤒ Restore from a file** puts one back (it asks first; the page reloads).
 - **Loops fade in and out** over **half a pass / 1 pass / 2 passes** (or at once) — Perform → *Loops fade in and out over*. The pad says "fading out…" until it has gone.
 
 ## The performance clock — a 7-minute piece
+- **A scene at 0:00 is the opening:** it is applied the moment the clock starts.
+- **While the clock runs, ■ Stop (or Space) needs a second press** within 4 seconds — the first says "Press again to stop". A stray key can't end the show.
+- **If the camera stops** (unplugged, asleep), a red banner says so; the music carries on with the last pattern. **Try the camera again**.
+- After the piece ends, no loops stay armed and the next Play starts from the opening scene. Stopped loops say **ready · starts with Play**.
 - Perform → **The performance**: **Length** (7:00), **The clock starts** (with Play, or **Start clock** so the sound check doesn't count).
 - **How it ends — chosen before the piece:**
   - **Fade out** · **Stop at the end of the pass** · **Slow down** (a ritardando to a little over half speed, then a stop on the one) · **Thin out** (the band and the fill leave, the player's own notes end it, a fade over the last pass) · **Final chord** (the texture thins, then a held chord in the key and a crash ring out for one more pass).
@@ -103,7 +116,7 @@
 3. **End:** at the 30-second cue, **End piece** — two passes of fade and it's over, on the beat.
 
 ## iPad controls (Tim)
-- Start ADMI with **`npm run dev:ipad`** (not `npm run dev`). Sound tab → **Connections** → tick **iPad controls** → open the link shown in **Safari on the iPad** (same Wi-Fi; allow Node through Windows Firewall on private networks the first time).
+- **For a performance, start ADMI with `npm run show`** (a fixed build on port 3001 — it can't reload itself mid-piece if a file changes). For testing, `npm run dev:ipad`. Never `npm run dev` with the iPad. Sound tab → **Connections** → tick **iPad controls** → open the link shown in **Safari on the iPad** (same Wi-Fi; allow Node through Windows Firewall on private networks the first time).
 - **Strips:** Speed · Dynamics · Fill · Evolve — slide anywhere on a strip; the ends are "all the way"; values move in 5% steps. **Pads:** New idea · New sound · Keep · Mute — act on touch, repeat taps ignored.
 - **Learn reach:** press it on the laptop, have the player slide each strip as far as is comfortable, press **Done**. Their reach is now the whole range. **Reset reach** undoes it. Per player.
 - **For a player without fine control (all per player, under iPad controls):**

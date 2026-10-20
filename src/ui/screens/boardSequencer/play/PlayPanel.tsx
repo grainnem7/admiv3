@@ -7,6 +7,8 @@ export interface PlayPanelProps {
   muted: boolean;
   onStart(): void;
   onStop(): void;
+  /** Stop was pressed once while the clock runs: the next press stops the piece. */
+  stopArmed?: boolean;
   onToggleMute(): void;
   /** The tempo actually in effect: the engine's while playing, the saved one when stopped. */
   bpm: number;
@@ -35,7 +37,7 @@ export interface PlayPanelProps {
  * room for it, so a focused control is never hidden behind the bar.
  */
 export function PlayPanel({
-  running, muted, onStart, onStop, onToggleMute, bpm, step, cols, variationLap, beatOn, clock = null,
+  running, muted, onStart, onStop, stopArmed = false, onToggleMute, bpm, step, cols, variationLap, beatOn, clock = null,
   heldCount, handGuardWaiting, groove, sound, loops, stacked, transportAlign,
 }: PlayPanelProps): JSX.Element {
   const [tab, setTab] = useState('groove');
@@ -53,7 +55,7 @@ export function PlayPanel({
       }}
     >
       {running
-        ? <Button tone="primary" onClick={onStop}>■ Stop</Button>
+        ? <Button tone="primary" onClick={onStop}>{stopArmed ? '■ Press again to stop' : '■ Stop'}</Button>
         : <Button tone="primary" onClick={onStart}>▶ Play</Button>}
       <Button tone="secondary" aria-pressed={muted} onClick={onToggleMute} disabled={!running}>
         {muted ? 'Sound off' : 'Mute'}

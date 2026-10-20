@@ -172,6 +172,9 @@ interface LaunchedLoop {
 
 /** How long a replaced voice is kept so its last notes ring out. */
 const VOICE_RETIRE_MS = 4000;
+/** How often a loading instrument is checked, and how long it is waited for at most. */
+const VOICE_READY_POLL_MS = 100;
+const VOICE_READY_MAX_MS = 15000;
 
 const LOOKAHEAD_SEC = 0.1;
 const TICK_INTERVAL_MS = 25;
@@ -206,6 +209,8 @@ export class BoardSequencerEngine {
     pan?: StereoPannerNode | null; panBase?: number;
     /** What Evolve has this colour sounding like now, and which instrument that is. */
     evo?: EvolveState; voiceName?: string | null;
+    /** A new instrument still loading its samples; the old one plays until it is ready. */
+    pending?: { voice: BoardSequencerVoice; timer: ReturnType<typeof setInterval> } | null;
   }>();
   /**
    * How much of each effect is returned to the mix, when a control counter owns it.
@@ -256,6 +261,8 @@ export class BoardSequencerEngine {
   private onFinished: (() => void) | null = null;
   /** 'thin' and 'chord': the band and the fill are out for the rest of the piece. */
   private thinning = false;
+  /** The ending has run its course: nothing more is scheduled while the last sound rings. */
+  private ended = false;
   // Pattern chaining: captured page snapshots (the selected page plays live from
   // `active`; other pages play from their stored snapshot here).
   private pages: ActiveCell[][] = [];
@@ -533,11 +540,8 @@ export class BoardSequencerEngine {
         const next = new BoardSequencerVoice(this.ctx, voiceSpecFor(ch, choice));
         next.setBrightness(e.toneBase * this.toneScale);
         next.connect(e.gain);
-        const old = e.voice;
-        e.voice = next;
         e.voiceName = null;
-        // Let anything still sounding finish before the old voice is freed.
-        setTimeout(() => old.dispose(), VOICE_RETIRE_MS);
+        this.swapVoiceWhenReady(e, next);
       }
       if (ch.reverbSend === undefined) {
         e.revBase = world?.reverbSend ?? 0.18;
@@ -661,10 +665,8 @@ export class BoardSequencerEngine {
       if (wanted !== (e.voiceName ?? null)) {
         const next = new BoardSequencerVoice(this.ctx, state.voice?.spec ?? voiceSpecFor(ch, world));
         next.connect(e.gain);
-        const old = e.voice;
-        e.voice = next;
         e.voiceName = wanted;
-        setTimeout(() => old.dispose(), VOICE_RETIRE_MS);
+        this.swapVoiceWhenReady(e, next);
       }
       e.evo = state;
       e.voice.setBrightness(e.toneBase * this.toneScale * state.brightness);
@@ -672,6 +674,36 @@ export class BoardSequencerEngine {
       e.del.gain.setTargetAtTime(e.delBase + state.delay, t, EVOLVE_GLIDE_SEC);
       if (studio && e.pan) e.pan.pan.setTargetAtTime(Math.max(-1, Math.min(1, (e.panBase ?? 0) + state.pan)), t, EVOLVE_GLIDE_SEC);
     }
+  }
+
+  /**
+   * Change a part's instrument without a gap. A sampled instrument is silent until its
+   * samples have loaded, so the old one keeps playing until the new one can sound; then
+   * the new one takes over and the old one rings out before it is freed. A newer change
+   * replaces one still loading.
+   */
+  private swapVoiceWhenReady(
+    e: { voice: BoardSequencerVoice; pending?: { voice: BoardSequencerVoice; timer: ReturnType<typeof setInterval> } | null },
+    next: BoardSequencerVoice,
+  ): void {
+    if (e.pending) {
+      clearInterval(e.pending.timer);
+      e.pending.voice.dispose();
+      e.pending = null;
+    }
+    const take = (): void => {
+      if (e.pending) clearInterval(e.pending.timer);
+      e.pending = null;
+      const old = e.voice;
+      e.voice = next;
+      setTimeout(() => old.dispose(), VOICE_RETIRE_MS);
+    };
+    if (next.isReady()) { take(); return; }
+    const started = Date.now();
+    const timer = setInterval(() => {
+      if (next.isReady() || Date.now() - started > VOICE_READY_MAX_MS) take();
+    }, VOICE_READY_POLL_MS);
+    e.pending = { voice: next, timer };
   }
 
   /** Counters play phrases (on) or one note each (off), from the next beat. */
@@ -783,6 +815,7 @@ export class BoardSequencerEngine {
     // The chord rings for one more pass after the texture has thinned.
     this.finishing = { beats: style === 'chord' ? n + cycle : n, style, startBeat: null };
     this.onFinished = onFinished;
+    this.ended = false;
   }
 
   /** Change of mind: the ending is cancelled and the sound comes back. */
@@ -791,7 +824,7 @@ export class BoardSequencerEngine {
     this.finishing = null;
     this.onFinished = null;
     this.thinning = false;
-    if (f?.style === 'slow' && f.startBpm !== undefined) this.setBpm(f.startBpm);
+    if (f?.style === 'slow' && f.startBpm !== undefined) this.applyBpm(f.startBpm);
     const g = this.endGain?.gain;
     if (g) {
       const t = Tone.immediate();
@@ -917,6 +950,13 @@ export class BoardSequencerEngine {
    * beats (the song owns tempo).
    */
   setBpm(bpm: number): void {
+    // Once an ending has begun its timing is fixed — the fade is scheduled in seconds and
+    // the ritardando owns the tempo — so a scene or the iPad cannot pull it out of shape.
+    if (this.finishing && this.finishing.startBeat !== null) return;
+    this.applyBpm(bpm);
+  }
+
+  private applyBpm(bpm: number): void {
     if (this.syncSource && this.syncSource.beats.length > 0) return;
     const clamped = Math.max(20, Math.min(400, bpm));
     if (Math.abs(clamped - this.cfg.bpm) < 0.05) return;
@@ -1243,6 +1283,7 @@ export class BoardSequencerEngine {
    * chord locks melodic pitch.
    */
   private fireStep(beat: number, cellTime: number, secPerBeat: number, chord: BoardChord | null): void {
+    if (this.ended) return;
     // The ending, aligned to the pass like everything else.
     if (this.finishing) {
       const f = this.finishing;
@@ -1284,13 +1325,20 @@ export class BoardSequencerEngine {
           this.finishing = null;
           this.onFinished = null;
           this.thinning = false;
-          done?.();
+          this.ended = true;
+          // This beat is scheduled ahead of the sound. Hand over only once the piece has
+          // really finished sounding — the final chord rings half a pass past the end —
+          // or stopping would cut the last notes off.
+          const cycle = Math.max(1, this.cfg.cols * Math.max(1, this.cfg.numPages));
+          const ringSec = f.style === 'chord' ? 0.5 * cycle * secPerBeat + 1.2 : 0.8;
+          const waitMs = Math.max(0, (cellTime - Tone.now() + ringSec) * 1000);
+          setTimeout(() => done?.(), waitMs);
           return;
         }
         if (f.style === 'slow' && f.startBpm !== undefined) {
           // A ritardando: down to a little over half speed by the end.
           const k = Math.min(1, (beat - f.startBeat) / Math.max(1, f.beats));
-          this.setBpm(f.startBpm * (1 - 0.45 * k));
+          this.applyBpm(f.startBpm * (1 - 0.45 * k));
         }
         if (f.style === 'chord' && f.chordAt !== undefined) {
           if (beat === f.chordAt) {
@@ -1834,6 +1882,7 @@ export class BoardSequencerEngine {
   dispose(): void {
     this.stop();
     this.voiceByChannel.forEach((e) => {
+      if (e.pending) { clearInterval(e.pending.timer); e.pending.voice.dispose(); e.pending = null; }
       e.voice.dispose();
       e.gain.disconnect();
       e.rev.disconnect();

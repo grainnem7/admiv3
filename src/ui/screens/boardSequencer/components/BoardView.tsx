@@ -48,6 +48,10 @@ export interface BoardViewProps {
   /** Page label ("Page A · live"), when there is more than one page. */
   pageLabel?: string | null;
   reducedMotion?: boolean;
+  /** The laptop board: squares are buttons, and a click places or lifts a counter. */
+  onCellTap?(row: number, col: number): void;
+  /** What a square is called for a screen reader on the laptop board ("Red, melody"). */
+  describeCell?(row: number, col: number): string;
 }
 
 const keyOf = (row: number, col: number): string => `${row},${col}`;
@@ -67,7 +71,7 @@ function ghostsBySquare(ghosts: ReadonlyMap<string, ActiveCell> | undefined): Ma
  */
 export function BoardView({
   rows, cols, frame, pops, playheadCol, playing, pingPongDirection, swatchFor, palette,
-  pageLabel, reducedMotion = false, fillMarks, band, spans, notice,
+  pageLabel, reducedMotion = false, fillMarks, band, spans, notice, onCellTap, describeCell,
 }: BoardViewProps): JSX.Element {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -331,6 +335,34 @@ export function BoardView({
           : boardSummary(rows, cols, playheadCol, pieces)}
         style={{ width: dims.w, height: dims.h, borderRadius: 'var(--bs-radius-lg)' }}
       />
+      {onCellTap && (
+        <div
+          role="grid"
+          aria-label={`Laptop board, ${rows} rows by ${cols} steps`}
+          style={{
+            position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
+            width: dims.w, height: dims.h, display: 'grid',
+            gridTemplateColumns: `repeat(${cols}, 1fr)`, gridTemplateRows: `repeat(${rows}, 1fr)`,
+          }}
+        >
+          {Array.from({ length: rows * cols }, (_, k) => {
+            const row = Math.floor(k / cols);
+            const col = k % cols;
+            const what = describeCell?.(row, col) ?? '';
+            return (
+              <button
+                key={k}
+                type="button"
+                role="gridcell"
+                className="bs-laptop-cell"
+                aria-label={`Row ${rows - row} from the bottom, step ${col + 1}${what ? `: ${what}` : ''}`}
+                onClick={() => onCellTap(row, col)}
+                style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', borderRadius: 6 }}
+              />
+            );
+          })}
+        </div>
+      )}
       {pageLabel && (
         <span style={{
           position: 'absolute', top: 6, left: 6, fontSize: 12, color: 'var(--bs-fg2)',

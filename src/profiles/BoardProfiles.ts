@@ -16,7 +16,7 @@ export const PLAYERS_KEY = 'admi-board-players';
 export const ACTIVE_PLAYER_KEY = 'admi-board-active-player';
 export const LEGACY_KEY = 'admi-board-sequencer';
 
-const RIG_FIELDS = ['version', 'enabled', 'corners', 'boardSquares', 'cameraDeviceId', 'cameraLabel', 'mirrorX', 'mirrorY', 'cameraRotation', 'midiEnabled', 'midiDeviceId', 'midiSends', 'midiKeepSound'] as const;
+const RIG_FIELDS = ['version', 'enabled', 'corners', 'boardSquares', 'cameraDeviceId', 'cameraLabel', 'mirrorX', 'mirrorY', 'cameraRotation', 'midiEnabled', 'midiDeviceId', 'midiSends', 'midiKeepSound', 'boardSource'] as const;
 export type RigField = (typeof RIG_FIELDS)[number];
 
 export type RigChannel = Pick<ColourChannel, 'id' | 'kind' | 'swatch' | 'band' | 'blackBand' | 'whiteBand'>;
@@ -43,11 +43,13 @@ function readJson(key: string): unknown {
   }
 }
 
-function writeJson(key: string, value: unknown): void {
+function writeJson(key: string, value: unknown): boolean {
   try {
     localStorage.setItem(key, JSON.stringify(value));
+    return true;
   } catch (error) {
     console.warn(`[BoardProfiles] Failed to save ${key}:`, error);
+    return false;
   }
 }
 
@@ -116,8 +118,8 @@ export function listBoardPlayers(): BoardPlayerProfile[] {
   return Array.isArray(raw) ? raw.map(sanitizePlayer).filter((p): p is BoardPlayerProfile => p !== null) : [];
 }
 
-function savePlayers(players: BoardPlayerProfile[]): void {
-  writeJson(PLAYERS_KEY, players);
+function savePlayers(players: BoardPlayerProfile[]): boolean {
+  return writeJson(PLAYERS_KEY, players);
 }
 
 function freshPlayerId(players: BoardPlayerProfile[]): string {
@@ -158,25 +160,33 @@ export function loadActiveBoardConfig(): BoardSequencerStored | null {
   }
 }
 
-export function saveActiveBoardConfig(cfg: BoardSequencerStored): void {
+/**
+ * Save the config for a player: `playerId` is the player this screen is showing. Without
+ * it the stored "active player" is used — but that can be changed by another tab, and
+ * then this tab's next save would land on someone else's loops.
+ */
+/** Returns false when the browser refused to save (storage full or blocked). */
+export function saveActiveBoardConfig(cfg: BoardSequencerStored, playerId?: string | null): boolean {
   try {
     migrateLegacy();
     const clean = sanitizeBoardSequencerConfig(cfg);
-    if (!clean) return;
+    if (!clean) return false;
     const { rig, settings, channelSettings } = splitBoardConfig(clean);
-    writeJson(RIG_KEY, rig);
+    const rigOk = writeJson(RIG_KEY, rig);
     const players = listBoardPlayers();
-    const active = getActiveBoardPlayer();
+    const active = (playerId ? players.find((p) => p.id === playerId) : undefined) ?? getActiveBoardPlayer();
     if (!active) {
       const p1: BoardPlayerProfile = { id: 'p1', name: 'Player 1', settings, channelSettings };
-      savePlayers([p1]);
+      const ok = savePlayers([p1]);
       localStorage.setItem(ACTIVE_PLAYER_KEY, p1.id);
-      return;
+      return rigOk && ok;
     }
-    savePlayers(players.map((p) => (p.id === active.id ? { ...p, settings, channelSettings } : p)));
+    const ok = savePlayers(players.map((p) => (p.id === active.id ? { ...p, settings, channelSettings } : p)));
     localStorage.setItem(ACTIVE_PLAYER_KEY, active.id);
+    return rigOk && ok;
   } catch (error) {
     console.warn('[BoardProfiles] Failed to save:', error);
+    return false;
   }
 }
 

@@ -77,11 +77,15 @@ export function sceneFromNow(name: string, wanted: ReadonlySet<number>, settings
   };
 }
 
-/** The scene after this one in the set list, wrapping; null when there are none. */
+/**
+ * The scene after this one in the set list; null when there are none, or at the last
+ * one. It does not wrap: a stray "Next" at the end of a piece must not throw the whole
+ * sound back to the opening.
+ */
 export function nextSceneIndex(current: number | null, count: number): number | null {
   if (count <= 0) return null;
   if (current === null || current < 0 || current >= count) return 0;
-  return (current + 1) % count;
+  return current + 1 < count ? current + 1 : null;
 }
 
 export function cleanName(v: unknown): string {

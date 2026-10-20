@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   clockView, cuesCrossed, cueText, DEFAULT_PERFORMANCE, describeEnding, endingDue, endingLeadSec, endingPasses, formatClock,
-  parseClock, sanitizePerformance, scenesDue,
+  parseClock, sanitizePerformance, scenesDue, endingTooLong, CLOCK_NOT_STARTED,
 } from '../songs/performance/clock';
 import { DEFAULT_LOOP_COLOUR_OPTIONS, initialLoopColourState, stepLoopColours } from '../songs/performance/loopColours';
 
@@ -24,17 +24,38 @@ describe('the performance clock', () => {
     expect(cueText(30)).toBe('30 seconds left');
   });
 
-  it('an automatic ending begins its passes before the end; a stop at the end; "when I press" never', () => {
+  it('an automatic ending begins early enough to be finished at the end; "when I press" never', () => {
     const passSec = 8 * 60 / 90; // 8 beats at 90 BPM
     const fade = { ...DEFAULT_PERFORMANCE, ending: 'auto' as const, style: 'fade' as const, fadePasses: 2 };
-    expect(endingLeadSec(fade, passSec)).toBeCloseTo(2 * passSec, 9);
-    expect(endingDue(fade, 2 * passSec + 1, passSec)).toBe(false);
-    expect(endingDue(fade, 2 * passSec - 0.1, passSec)).toBe(true);
-    expect(endingDue({ ...fade, style: 'stop' }, 0.5, passSec)).toBe(false);
-    expect(endingDue({ ...fade, style: 'stop' }, 0, passSec)).toBe(true);
+    // It waits for the next pass boundary (up to one pass), then runs its two passes.
+    expect(endingLeadSec(fade, passSec)).toBeCloseTo(3 * passSec, 9);
+    expect(endingDue(fade, 3 * passSec + 1, passSec)).toBe(false);
+    expect(endingDue(fade, 3 * passSec - 0.1, passSec)).toBe(true);
+    // A stop happens at the end of the pass it is asked in.
+    expect(endingLeadSec({ ...fade, style: 'stop' }, passSec)).toBeCloseTo(passSec, 9);
     // The chord rings for one more pass, so it starts one pass earlier still.
-    expect(endingLeadSec({ ...fade, style: 'chord' }, passSec)).toBeCloseTo(3 * passSec, 9);
+    expect(endingLeadSec({ ...fade, style: 'chord' }, passSec)).toBeCloseTo(4 * passSec, 9);
+    // A ritardando slows to about half speed, so its passes take longer.
+    expect(endingLeadSec({ ...fade, style: 'slow' }, passSec)).toBeCloseTo(passSec + 2 * passSec * 1.3, 9);
     expect(endingDue({ ...fade, ending: 'cue' }, -100, passSec)).toBe(false);
+  });
+
+  it('warns when the piece is too short for its ending', () => {
+    const passSec = 16 * 60 / 60; // 16 beats at 60 BPM: 16 s a pass
+    const long = { ...DEFAULT_PERFORMANCE, ending: 'auto' as const, style: 'fade' as const, fadePasses: 4, lengthSec: 60 };
+    expect(endingTooLong(long, passSec)).toBe(true);
+    expect(endingTooLong({ ...long, lengthSec: 420 }, passSec)).toBe(false);
+  });
+
+  it('the opening scene at 0:00 comes in on the first tick', () => {
+    const scenes = [{ at: 0 }, { at: 90 }];
+    expect(scenesDue(CLOCK_NOT_STARTED, 0.25, scenes)).toEqual([0]);
+    expect(scenesDue(0.25, 0.5, scenes)).toEqual([]);
+  });
+
+  it('a finished clock reads 0:00, not -0:00', () => {
+    expect(formatClock(-0.3)).toBe('0:00');
+    expect(formatClock(-15)).toBe('-0:15');
   });
 
   it('each ending has a length and a name', () => {

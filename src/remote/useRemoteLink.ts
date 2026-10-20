@@ -5,6 +5,12 @@ export type RemoteLinkStatus = 'off' | 'connecting' | 'open' | 'lost';
 
 /** Wait this long before trying again after the link drops (Wi-Fi blip, laptop asleep). */
 const RETRY_MS = 1500;
+/**
+ * The relay sends the head-count every 5 s. Hearing nothing for this long means the link
+ * is dead even though the browser still calls it open (a sleeping iPad, a Wi-Fi roam):
+ * say so, and connect again.
+ */
+export const SILENCE_MS = 12000;
 
 /**
  * One end of the iPad link. Connects while `enabled`, reconnects by itself if the link
@@ -31,23 +37,33 @@ export function useRemoteLink(
     }
     let stopped = false;
     let retry: ReturnType<typeof setTimeout> | null = null;
+    let lastHeard = Date.now();
+    const watchdog = setInterval(() => {
+      const ws = wsRef.current;
+      if (!stopped && ws && ws.readyState === WebSocket.OPEN && Date.now() - lastHeard > SILENCE_MS) ws.close();
+    }, 2000);
     const open = (): void => {
       if (stopped) return;
       setStatus('connecting');
       const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
       const ws = new WebSocket(`${proto}://${window.location.host}${REMOTE_PATH}?code=${encodeURIComponent(code)}&role=${role}`);
       wsRef.current = ws;
-      ws.onopen = () => setStatus('open');
+      ws.onopen = () => { lastHeard = Date.now(); if (!stopped) setStatus('open'); };
       ws.onmessage = (ev) => {
+        if (stopped || wsRef.current !== ws) return;
+        lastHeard = Date.now();
         const msg = parseRemoteMessage(typeof ev.data === 'string' ? ev.data : '');
         if (!msg) return;
         if (msg.type === 'peers') setOthers(role === 'host' ? msg.remotes : msg.hosts);
         else onMessageRef.current(msg);
       };
       ws.onclose = () => {
-        if (wsRef.current === ws) wsRef.current = null;
+        // A socket closing after this effect was replaced (a new code, a remount) must not
+        // reset the head-count the new socket already has: that left the laptop saying
+        // "Waiting for the iPad" with the iPad connected.
+        if (stopped || wsRef.current !== ws) return;
+        wsRef.current = null;
         setOthers(0);
-        if (stopped) return;
         setStatus('lost');
         retry = setTimeout(open, RETRY_MS);
       };
@@ -55,6 +71,7 @@ export function useRemoteLink(
     open();
     return () => {
       stopped = true;
+      clearInterval(watchdog);
       if (retry) clearTimeout(retry);
       wsRef.current?.close();
       wsRef.current = null;

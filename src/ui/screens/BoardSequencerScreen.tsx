@@ -26,7 +26,7 @@ import { CameraManager, type CameraTrackInfo } from '../../tracking/CameraManage
 import { nextColourlessState } from '../../tracking/cameraCheck';
 import { describeLighting, nextLightingProblem, type LightingProblem } from '../../tracking/lightingCheck';
 import {
-  useBoardRuntime, NOOP_RUNTIME_CALLBACKS, type BoardRuntimeCallbacks, type RuntimeFrame,
+  useBoardRuntime, applyEngineSettings, NOOP_RUNTIME_CALLBACKS, type BoardRuntimeCallbacks, type RuntimeFrame,
 } from './boardSequencer/useBoardRuntime';
 import { homographyForCorners } from './boardSequencer/homographyForCorners';
 import { applyGridChange } from '../../tracking/boardGrid';
@@ -46,7 +46,9 @@ import { ReadyStep } from './boardSequencer/setup/ReadyStep';
 import { BoardCornerEditor } from './boardSequencer/components/BoardCornerEditor';
 import { BoardView, cellMap } from './boardSequencer/components/BoardView';
 import { describeBoard, phraseSpans, popsAt, pruneFired, type Pop } from './boardSequencer/components/boardViewModel';
-import { isSequencedRole } from '../../tracking/boardColours';
+import { isSequencedRole, isControlRole, isLoopRole } from '../../tracking/boardColours';
+import { placeLaptopCounter } from '../../tracking/laptopBoard';
+import { LaptopBoardBar } from './boardSequencer/components/LaptopBoardBar';
 import { PlayPanel } from './boardSequencer/play/PlayPanel';
 import { NudgeBanner } from './boardSequencer/play/NudgeBanner';
 import { SwatchChip } from './boardSequencer/ui/SwatchChip';
@@ -91,14 +93,16 @@ import { BoardMidiPanel } from './boardSequencer/components/BoardMidiPanel';
 import { Disclosure } from './boardSequencer/ui/Disclosure';
 import { LoopEditor } from './boardSequencer/components/LoopEditor';
 import {
-  LAUNCH_SLOTS, loopLabel, nextSceneIndex, sceneFromNow, slotState, toggleSlot, type SceneSettings,
+  LAUNCH_SLOTS, MAX_SCENES, loopLabel, nextSceneIndex, sceneFromNow, slotState, toggleSlot, type SceneSettings,
 } from '../../songs/performance/launcher';
 import {
-  clockView, cuesCrossed, cueText, describeEnding, endingDue, endingPasses, formatClock, parseClock, scenesDue,
+  clockView, cuesCrossed, cueText, describeEnding, endingDue, endingPasses, endingTooLong, formatClock, parseClock, scenesDue, CLOCK_NOT_STARTED,
   type ClockView, type EndingMode, type EndingStyle,
 } from '../../songs/performance/clock';
 import { DEFAULT_LOOP_COLOUR_OPTIONS, initialLoopColourState, stepLoopColours } from '../../songs/performance/loopColours';
 import { SessionLog, sessionFileName, type LogActor } from '../../songs/sessionLog';
+import { diskState, onDiskState, restoreFromFile, scheduleDiskSave } from '../../storage/diskSync';
+import { backupFileName, parseBoardBackup, snapshotStorage, summariseBackup, type BoardBackup } from '../../storage/boardBackup';
 import { useRemoteLink } from '../../remote/useRemoteLink';
 import {
   dynamicsFromValue, fullReachMap, makeRemoteCode, reachFromSamples, REMOTE_CONTROLS, REMOTE_INFO_PATH,
@@ -235,6 +239,12 @@ interface LastColourSample {
   keeps?: number;
 }
 
+/** No camera frame for this long while playing: the camera has stopped. */
+const CAMERA_STALL_MS = 1500;
+/** Config saves are gathered over this long (and written at once when the page closes). */
+const SAVE_GATHER_MS = 400;
+/** How long the first press of Stop during a piece waits for the second. */
+const STOP_CONFIRM_MS = 4000;
 const REMOTE_ENABLED_KEY = 'admi-remote-enabled';
 const REMOTE_CODE_KEY = 'admi-remote-code';
 const REMOTE_CONTROL_WORDS: Record<RemoteControlName, string> = {
@@ -294,11 +304,53 @@ export default function BoardSequencerScreen() {
   // impure — React may run an updater twice, or discard its result, and the write would
   // happen anyway.
   const savedConfigRef = useRef(config);
+  // Set while a backup file is being restored: the page reloads into it, and saving the
+  // config still on screen in the meantime would write the old setup back over it.
+  const restoringRef = useRef(false);
+  // Which player this screen shows, set during render, so a save always lands on them.
+  const activePlayerIdRef = useRef<string | null>(getActiveBoardPlayer()?.id ?? null);
+  // Saves are gathered: an iPad strip changes the config many times a second, and writing
+  // every player's loops each time competed with the sound for the main thread.
+  const pendingSaveRef = useRef<{ config: BoardSequencerStored; playerId: string | null } | null>(null);
+  const saveTimerRef = useRef<number | null>(null);
+  const [saveFailed, setSaveFailed] = useState(false);
+  const flushSave = useCallback((): void => {
+    if (saveTimerRef.current !== null) { window.clearTimeout(saveTimerRef.current); saveTimerRef.current = null; }
+    const p = pendingSaveRef.current;
+    pendingSaveRef.current = null;
+    if (!p || restoringRef.current) return;
+    setSaveFailed(!saveBoardSequencerConfig(p.config, p.playerId));
+    scheduleDiskSave();
+  }, []);
   useEffect(() => {
-    if (savedConfigRef.current === config) return;
+    if (savedConfigRef.current === config || restoringRef.current) return;
     savedConfigRef.current = config;
-    saveBoardSequencerConfig(config);
-  }, [config]);
+    const playerId = activePlayerIdRef.current;
+    // A change for a different player (a switch) writes the last one's first.
+    if (pendingSaveRef.current && pendingSaveRef.current.playerId !== playerId) flushSave();
+    pendingSaveRef.current = { config, playerId };
+    if (saveTimerRef.current === null) saveTimerRef.current = window.setTimeout(flushSave, SAVE_GATHER_MS);
+  }, [config, flushSave]);
+  // Two tabs on the same address save over each other. Each tab says hello on a shared
+  // channel; any tab that hears another says so on screen.
+  const [otherTab, setOtherTab] = useState(false);
+  useEffect(() => {
+    if (typeof BroadcastChannel === 'undefined') return;
+    const ch = new BroadcastChannel('admi-board-tabs');
+    ch.onmessage = (e: MessageEvent) => {
+      if (e.data === 'hello') { setOtherTab(true); ch.postMessage('here'); }
+      else if (e.data === 'here') setOtherTab(true);
+      else if (e.data === 'bye') setOtherTab(false);
+    };
+    ch.postMessage('hello');
+    const bye = (): void => ch.postMessage('bye');
+    window.addEventListener('pagehide', bye);
+    return () => { window.removeEventListener('pagehide', bye); bye(); ch.close(); };
+  }, []);
+  useEffect(() => {
+    window.addEventListener('pagehide', flushSave);
+    return () => { window.removeEventListener('pagehide', flushSave); flushSave(); };
+  }, [flushSave]);
 
   // True while the chosen camera couldn't be found and the default is standing in.
   const fellBackRef = useRef(false);
@@ -316,6 +368,11 @@ export default function BoardSequencerScreen() {
   // (`enabled` is only true once corners have been clicked and saved), so a
   // setting saved before calibrating can't make the board look ready.
   const calibrated = config.enabled;
+  // The laptop board: counters placed by clicking, no camera and no physical board.
+  const laptop = config.boardSource === 'laptop';
+  // The camera stopped sending pictures mid-piece (unplugged, crashed, asleep): the music
+  // plays on from the last pattern, but the board is no longer being read — say so.
+  const [cameraStalled, setCameraStalled] = useState(false);
   // How the corner editor was opened: 'tap' starts from nothing, 'review' checks corners
   // that already exist. "Tap corners myself" must mean tapping, even for a board that is
   // already set up.
@@ -326,8 +383,8 @@ export default function BoardSequencerScreen() {
   const callbacksRef = useRef<BoardRuntimeCallbacks>(NOOP_RUNTIME_CALLBACKS);
   const {
     videoRef, cameraRef, homographyRef, modeRef, engineRef, runningRef, loopBankRef, activeCellsRef,
-    dismiss, letGoGhosts, knockRef, latestFrameRef,
-  } = useBoardRuntime({ cameraDeviceId: config.cameraDeviceId, cameraRetry, calibrated, configRef, callbacksRef });
+    dismiss, letGoGhosts, knockRef, latestFrameRef, lastFrameAtRef,
+  } = useBoardRuntime({ cameraDeviceId: config.cameraDeviceId, cameraRetry, calibrated, laptop, configRef, callbacksRef });
   // Colour calibration armed for the next camera click: add a new channel, or
   // recalibrate an existing one (null = not calibrating).
   const [colourCalib, setColourCalib] = useState<ColourCalibTarget | null>(null);
@@ -339,13 +396,16 @@ export default function BoardSequencerScreen() {
 
   // Guided Set up vs Play. The entry step is resolved once, from the config alone:
   // routing never moves the player on its own.
-  const [view, setView] = useState<BoardScreenView>('setup');
+  const [view, setView] = useState<BoardScreenView>(() => (storedRef.current?.boardSource === 'laptop' ? 'play' : 'setup'));
+  // The counter a click on the laptop board puts down.
+  const [laptopColour, setLaptopColour] = useState('');
   const [step, setStep] = useState<SetupStep>(() => resolveEntry(
     { enabled: storedRef.current?.enabled ?? false, channels: storedRef.current?.channels ?? [] },
     storedRef.current !== null,
   ));
   const [players, setPlayers] = useState<BoardPlayerProfile[]>(() => listBoardPlayers());
   const [activePlayer, setActivePlayerState] = useState<BoardPlayerProfile | null>(() => getActiveBoardPlayer());
+  activePlayerIdRef.current = activePlayer?.id ?? activePlayerIdRef.current;
   // Ask who's playing only when there is a real choice to make.
   const [chooserOpen, setChooserOpen] = useState(() => listBoardPlayers().length > 1);
   // The first save creates an implicit "Player 1". Without picking it up, the Player button
@@ -400,6 +460,20 @@ export default function BoardSequencerScreen() {
   selectedPageRef.current = selectedPage;
   const [playingPage, setPlayingPage] = useState(0);
   const [running, setRunning] = useState(false);
+  // The running engine follows the config whenever it changes — a scene, the iPad, a
+  // tab — whether or not camera frames are arriving.
+  useEffect(() => {
+    if (engineRef.current) applyEngineSettings(engineRef.current, configRef.current);
+  }, [config, running, engineRef, configRef]);
+  // Watchdog: no camera frame for a moment while playing means the camera has stopped.
+  useEffect(() => {
+    if (!running || laptop) { setCameraStalled(false); return; }
+    lastFrameAtRef.current = performance.now();
+    const id = window.setInterval(() => {
+      setCameraStalled(performance.now() - lastFrameAtRef.current > CAMERA_STALL_MS);
+    }, 500);
+    return () => window.clearInterval(id);
+  }, [running, laptop, lastFrameAtRef]);
   const [muted, setMuted] = useState(false);
   const mutedRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
@@ -436,6 +510,20 @@ export default function BoardSequencerScreen() {
   const [wantedSlots, setWantedSlots] = useState<number[]>([]);
   const [appliedSlots, setAppliedSlots] = useState<number[]>([]);
   const [editSlot, setEditSlot] = useState<number | null>(null);
+  // The laptop's copy of the saved loops (src/storage/diskSync.ts), and a backup file
+  // waiting for "Restore" to be confirmed.
+  const [disk, setDisk] = useState(diskState);
+  useEffect(() => onDiskState(() => setDisk(diskState())), []);
+  const [restoreTarget, setRestoreTarget] = useState<BoardBackup | null>(null);
+  // The scene just deleted, for Undo: one tap next to Go must be reversible.
+  const [deletedScene, setDeletedScene] = useState<{ scene: BoardSequencerStored['scenes'][number]; index: number; wasCurrent: boolean } | null>(null);
+  useEffect(() => {
+    if (!deletedScene) return;
+    const id = window.setTimeout(() => setDeletedScene(null), 15000);
+    return () => window.clearTimeout(id);
+  }, [deletedScene]);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
+  const restoreInputRef = useRef<HTMLInputElement | null>(null);
   const [sceneName, setSceneName] = useState('');
   // The performance clock: when it started (null = not running), what it shows, and what
   // it has already done (cues given, scenes brought in, the ending triggered).
@@ -443,6 +531,8 @@ export default function BoardSequencerScreen() {
   const [clock, setClock] = useState<ClockView | null>(null);
   const clockPrevRef = useRef<{ remaining: number; elapsed: number }>({ remaining: Infinity, elapsed: 0 });
   const endingRef = useRef(false);
+  // The automatic ending fires once per run: after "Cancel the ending" it must not fire again.
+  const autoEndedRef = useRef(false);
   const [ending, setEnding] = useState(false);
   const clockTickRef = useRef<() => void>(() => {});
   // Counters as loops: the debounced view of each loop colour, and the slots they want.
@@ -462,6 +552,10 @@ export default function BoardSequencerScreen() {
     try {
       const saved = localStorage.getItem(REMOTE_CODE_KEY);
       if (saved && /^\d{4}$/.test(saved)) return saved;
+      // Kept from the first moment: a reload making a new code broke the iPad's link.
+      const fresh = makeRemoteCode();
+      localStorage.setItem(REMOTE_CODE_KEY, fresh);
+      return fresh;
     } catch { /* storage unavailable: a fresh code each time */ }
     return makeRemoteCode();
   });
@@ -566,7 +660,9 @@ export default function BoardSequencerScreen() {
       // row 6 both become row 3 on a 4-row grid. Storage resolves that by switching the
       // pads off, so resolving it the same way here keeps the screen and the saved config
       // telling the player the same story.
-      return { ...grid, controlZone, loopZone: zonesCollide(controlZone, loopZone) ? NO_ZONE : loopZone };
+      // Laptop-board counters off the new grid are lifted, not kept out of sight.
+      const laptopBoard = prev.laptopBoard.filter((c) => c.row < grid.rows && c.col < grid.cols);
+      return { ...grid, controlZone, loopZone: zonesCollide(controlZone, loopZone) ? NO_ZONE : loopZone, laptopBoard };
     });
   }, []);
 
@@ -1061,6 +1157,8 @@ export default function BoardSequencerScreen() {
       void refreshCameras();
     },
     onCameraError: (message) => {
+      // On the laptop board there is no camera to complain about.
+      if (configRef.current.boardSource === 'laptop') return;
       setError(message);
       // Permission may be granted even though this camera is busy/broken, so load the
       // list — the user can then pick a different camera.
@@ -1370,6 +1468,8 @@ export default function BoardSequencerScreen() {
     setClock(null);
     endingRef.current = false;
     setEnding(false);
+    // Nothing is playing any more: a loop still wanted is "ready", not "playing".
+    setAppliedSlots([]);
     setRunning(false);
   }, []);
 
@@ -1422,7 +1522,9 @@ export default function BoardSequencerScreen() {
     }
     const cfg = configRef.current;
     const video = videoRef.current;
-    if (video && !homographyRef.current) {
+    // The laptop board has no camera picture to map, and a laptop that has never seen
+    // the real board has no corners to map it with.
+    if (cfg.boardSource !== 'laptop' && video && !homographyRef.current) {
       const shown = orientedSize(video.videoWidth, video.videoHeight, cfg.cameraRotation);
       homographyRef.current = homographyForCorners(cfg.corners, shown.width, shown.height);
     }
@@ -1471,6 +1573,7 @@ export default function BoardSequencerScreen() {
     }
     engine.start();
     engineRef.current = engine;
+    applyEngineSettings(engine, cfg);
     // One pad per cell of the loop lane — a row of steps or a column of rows.
     loopBankRef.current = seedLoopBank(
       zoneSlotCount(cfg.loopZone, cfg.rows, cfg.cols), cfg.loopSlots, loopBankRef.current,
@@ -1491,7 +1594,8 @@ export default function BoardSequencerScreen() {
     startSecRef.current = Tone.now();
     runningRef.current = true;
     clockStartRef.current = cfg.performance.startOn === 'play' ? performance.now() : null;
-    clockPrevRef.current = { remaining: Infinity, elapsed: 0 };
+    clockPrevRef.current = { remaining: Infinity, elapsed: CLOCK_NOT_STARTED };
+    autoEndedRef.current = false;
     endingRef.current = false;
     setEnding(false);
     setClock(clockView(clockStartRef.current, performance.now(), cfg.performance.lengthSec, false));
@@ -1522,6 +1626,31 @@ export default function BoardSequencerScreen() {
     }
   }, [startEngine, startingRef, stop, announce]);
 
+  // Stop during a piece: while the performance clock runs, one press (or one Space) only
+  // arms it, and a second press within a few seconds stops. A stray key or tap must not
+  // end the show.
+  const [stopArmed, setStopArmed] = useState(false);
+  const stopArmedRef = useRef<number | null>(null);
+  const requestStop = useCallback((): void => {
+    const armedAt = stopArmedRef.current;
+    const pieceRunning = runningRef.current && clockStartRef.current !== null;
+    if (pieceRunning && (armedAt === null || performance.now() - armedAt > STOP_CONFIRM_MS)) {
+      stopArmedRef.current = performance.now();
+      setStopArmed(true);
+      announce('The piece is running. Press Stop again to stop it.');
+      window.setTimeout(() => {
+        if (stopArmedRef.current !== null && performance.now() - stopArmedRef.current >= STOP_CONFIRM_MS) {
+          stopArmedRef.current = null;
+          setStopArmed(false);
+        }
+      }, STOP_CONFIRM_MS);
+      return;
+    }
+    stopArmedRef.current = null;
+    setStopArmed(false);
+    stop();
+  }, [stop, announce, runningRef]);
+
   // Space starts and stops the board in Play and Big board. The global handler in
   // App.tsx stands down on this screen, so this is the only one listening.
   useEffect(() => {
@@ -1529,12 +1658,12 @@ export default function BoardSequencerScreen() {
       if (e.key !== ' ' || e.repeat) return;
       if (!spaceTogglesPlay(view, e.target)) return;
       e.preventDefault();
-      if (runningRef.current) stop();
+      if (runningRef.current) requestStop();
       else void start();
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [view, start, stop, runningRef]);
+  }, [view, start, requestStop, runningRef]);
 
   // Changing orientation or camera invalidates calibration (it was captured in the
   // old view), so force a fresh corner click in the new space.
@@ -1810,15 +1939,21 @@ export default function BoardSequencerScreen() {
         : camInfo !== null ? 'running' : 'starting',
     colourless: feedSaturation === null ? null : feedColourless,
   };
-  const setupCfg = { enabled: config.enabled, channels: config.channels };
-  const headerNotice: HeaderNotice | null = error
+  // On the laptop board there is no camera or board to find: both count as done.
+  const setupCfg = { enabled: config.enabled || laptop, channels: config.channels };
+  const cameraGate: typeof camera = laptop ? { phase: 'running', colourless: false } : camera;
+  const headerNotice: HeaderNotice | null = saveFailed
+    ? { kind: 'error', text: 'Changes are not being saved — the browser refused. Use Back up to a file (Loops → Perform) now.' }
+    : otherTab
+      ? { kind: 'error', text: 'ADMI is open in another tab or window. Close all but one, or they will save over each other.' }
+      : error
     ? { kind: 'error', text: error }
     : soundError
       ? { kind: 'error', text: soundError }
-      : camNotice;
+      : laptop ? null : camNotice;
 
 
-  const playReason = canPlay(setupCfg, camera)
+  const playReason = canPlay(setupCfg, cameraGate)
     ? null
     : !config.enabled ? 'Find the board first.'
       : camera.phase === 'error' ? "The camera isn't working."
@@ -2011,6 +2146,21 @@ export default function BoardSequencerScreen() {
     announce('Kept: the fill and the sounds stay as they are.');
   };
 
+  /**
+   * The counters on the board right now. Playing: what the engine is playing. Stopped on
+   * the laptop board: the counters as placed — a click is certain, it needn't wait for
+   * the settle like a camera reading (Save was refused for half a second after a click).
+   */
+  const boardCellsNow = (): ActiveCell[] => {
+    if (runningRef.current) return activeCellsRef.current;
+    const c = configRef.current;
+    if (c.boardSource === 'laptop') {
+      const known = new Set(c.channels.map((ch) => ch.id));
+      return c.laptopBoard.filter((x) => x.row < c.rows && x.col < c.cols && known.has(x.colour)).map((x) => ({ ...x }));
+    }
+    return active;
+  };
+
   // ---- performing: loops launched without a pad, and scenes ----
 
   /** Tell the engine which loops are wanted; it brings them in at the next pass. */
@@ -2044,7 +2194,7 @@ export default function BoardSequencerScreen() {
   const saveBoardToSlot = (slot: number): void => {
     const cfg = configRef.current;
     const sequenced = new Set(cfg.channels.filter((c) => isSequencedRole(c.role)).map((c) => c.id));
-    const source = runningRef.current ? activeCellsRef.current : active;
+    const source = boardCellsNow();
     const cells = source.filter((c) => sequenced.has(c.colour))
       .map((c) => (c.conditional ? { ...storedCell(c), conditional: true as const } : storedCell(c)));
     if (cells.length === 0) return;
@@ -2069,6 +2219,8 @@ export default function BoardSequencerScreen() {
   });
   const saveScene = (): void => {
     const c = configRef.current;
+    // Storage keeps twelve; a thirteenth would play now and vanish on the next reload.
+    if (c.scenes.length >= MAX_SCENES) { announce('Twelve scenes is the most. Delete one first.'); return; }
     const scene = sceneFromNow(sceneName || `Scene ${c.scenes.length + 1}`, wantedRef.current, sceneSettingsNow(c));
     update({ scenes: [...c.scenes, scene], currentScene: c.scenes.length });
     setSceneName('');
@@ -2091,12 +2243,14 @@ export default function BoardSequencerScreen() {
     const c = configRef.current;
     const i = nextSceneIndex(c.currentScene, c.scenes.length);
     if (i !== null) goScene(i);
+    else if (c.scenes.length > 0) { setBoardNotice('Last scene'); announce('That was the last scene.'); }
   };
   /** Start the countdown by hand (when it is not set to start with Play). */
   const startClock = (): void => {
     if (!runningRef.current) return;
     clockStartRef.current = performance.now();
-    clockPrevRef.current = { remaining: Infinity, elapsed: 0 };
+    clockPrevRef.current = { remaining: Infinity, elapsed: CLOCK_NOT_STARTED };
+    autoEndedRef.current = false;
     sessionLogRef.current.action(logActorRef.current, 'start clock');
     announce(`Clock started: ${formatClock(configRef.current.performance.lengthSec)}.`);
   };
@@ -2111,8 +2265,15 @@ export default function BoardSequencerScreen() {
     endingRef.current = true;
     setEnding(true);
     engine.finish(beats, () => {
+      // Said once the sound has rung out; by then the player may have pressed Stop and
+      // Play again, and a new run must not be stopped by the old one finishing.
+      if (engineRef.current !== engine) return;
       sessionLogRef.current.action('laptop', 'piece ended');
       stop();
+      // The piece is over: nothing stays armed, and the next run starts from the top.
+      wantedRef.current = new Set();
+      setWantedSlots([]);
+      update({ currentScene: null });
       announce('The piece has ended.');
     }, style);
     const what = describeEnding(c.performance);
@@ -2133,7 +2294,7 @@ export default function BoardSequencerScreen() {
     const slot = Array.from({ length: LAUNCH_SLOTS }, (_, i) => i).find((i) => (cfg.loopSlots[i] ?? null) === null);
     if (slot === undefined) { announce('All eight loops are full. Clear one first.'); return; }
     const sequenced = new Set(cfg.channels.filter((c) => isSequencedRole(c.role)).map((c) => c.id));
-    const source = runningRef.current ? activeCellsRef.current : active;
+    const source = boardCellsNow();
     const cells = source.filter((c) => sequenced.has(c.colour))
       .map((c) => (c.conditional ? { ...storedCell(c), conditional: true as const } : storedCell(c)));
     if (cells.length === 0) { announce('Nothing on the board to capture.'); return; }
@@ -2164,14 +2325,23 @@ export default function BoardSequencerScreen() {
       setBoardNotice(cueText(cue));
       announce(cueText(cue));
     }
+    // Scenes don't change the stage while the piece is ending.
     const due = scenesDue(prev.elapsed, view.elapsedSec, c.scenes);
-    if (due.length > 0) goScene(due[due.length - 1]);
+    if (due.length > 0 && !endingRef.current) goScene(due[due.length - 1]);
     const passSec = (c.cols * Math.max(1, c.numPages)) * 60 / Math.max(20, engine.getBpm());
-    if (!endingRef.current && endingDue(c.performance, view.remainingSec, passSec)) endPiece();
+    // Never in the first seconds: a piece shorter than its ending would otherwise end the
+    // moment it starts (the panel warns about that instead).
+    if (!endingRef.current && !autoEndedRef.current && view.elapsedSec >= 5
+      && endingDue(c.performance, view.remainingSec, passSec)) {
+      autoEndedRef.current = true;
+      endPiece();
+    }
   };
 
   const deleteScene = (i: number): void => {
     const c = configRef.current;
+    const gone = c.scenes[i];
+    if (gone) setDeletedScene({ scene: gone, index: i, wasCurrent: c.currentScene === i });
     update({
       scenes: c.scenes.filter((_, k) => k !== i),
       currentScene: c.currentScene === null ? null : c.currentScene === i ? null : c.currentScene > i ? c.currentScene - 1 : c.currentScene,
@@ -2194,6 +2364,48 @@ export default function BoardSequencerScreen() {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     announce(`Session saved: ${data.notes.length} notes.`);
   };
+
+  /** Every player, loop, scene and the board setup, as a file to keep somewhere safe. */
+  const backupToFile = (): void => {
+    const b = snapshotStorage(localStorage);
+    const blob = new Blob([JSON.stringify(b)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = backupFileName(new Date());
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    const sum = summariseBackup(b);
+    announce(`Backed up ${sum.loops} loops and ${sum.scenes} scenes for ${sum.players} ${sum.players === 1 ? 'player' : 'players'}.`);
+  };
+  const pickRestoreFile = async (file: File | undefined): Promise<void> => {
+    setRestoreError(null);
+    if (!file) return;
+    let parsed: BoardBackup | null = null;
+    try { parsed = parseBoardBackup(JSON.parse(await file.text())); } catch { parsed = null; }
+    if (!parsed) { setRestoreError(`${file.name} is not an ADMI board backup.`); return; }
+    setRestoreTarget(parsed);
+  };
+  const confirmRestore = async (b: BoardBackup): Promise<void> => {
+    restoringRef.current = true;
+    stop();
+    try {
+      await restoreFromFile(b);
+      window.location.reload();
+    } catch (err) {
+      // Nothing was changed (the restore puts everything back if it fails part-way), so
+      // saving carries on as before.
+      restoringRef.current = false;
+      setRestoreError(`The backup could not be restored: ${err instanceof Error ? err.message : 'the browser refused'}. Nothing was changed.`);
+    }
+  };
+  const diskLine = disk.state === 'saved' && disk.savedAt > 0
+    ? `Saved in this browser, with a copy on this laptop (the .admi-data folder), last at ${new Date(disk.savedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`
+    : disk.state === 'unavailable'
+      ? 'Saved in this browser only — this page has no laptop copy. Back up to a file before the performance.'
+      : 'Saved in this browser. A copy goes to this laptop at the next change.';
 
   const remoteLabels = (c: BoardSequencerStored): Record<RemoteControlName, string> => ({
     tempo: `${Math.round(c.bpm)} BPM`,
@@ -2275,9 +2487,11 @@ export default function BoardSequencerScreen() {
       {remoteEnabled && (
         <>
           <span role="status" style={{ fontSize: 13, fontWeight: 600, color: remoteLink.others > 0 ? 'var(--bs-ok)' : 'var(--bs-fg2)' }}>
-            {remoteLink.others > 0 ? '✓ iPad connected' : remoteLink.status === 'open' ? 'Waiting for the iPad…' : 'Starting…'}
+            {remoteLink.others > 0 ? '✓ iPad connected'
+              : remoteLink.status === 'open' ? 'Waiting for the iPad…'
+                : remoteLink.status === 'lost' ? 'Link lost — reconnecting…' : 'Starting…'}
           </span>
-          {remoteInfo && !remoteInfo.lan ? (
+          {remoteLink.others > 0 ? null : remoteInfo && !remoteInfo.lan ? (
             <span style={{ fontSize: 12, color: 'var(--bs-warn)' }}>
               The iPad can&apos;t reach this laptop yet. Close ADMI&apos;s server and start it with
               {' '}<code>npm run dev:ipad</code>, then turn this on again.
@@ -2893,6 +3107,16 @@ export default function BoardSequencerScreen() {
           Save the board into a slot, or draw a loop, before the performance. Loops start and
           stop on the next pass, from here or from the iPad, with nothing on a pad.
         </span>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span role="status" style={{ fontSize: 12, color: 'var(--bs-fg2)', flex: '1 1 220px' }}>{diskLine}</span>
+          <Button tone="secondary" onClick={backupToFile}>⤓ Back up to a file</Button>
+          <Button tone="secondary" onClick={() => restoreInputRef.current?.click()}>⤒ Restore from a file</Button>
+          <input
+            ref={restoreInputRef} type="file" accept=".json,application/json" hidden aria-label="Backup file to restore"
+            onChange={(e) => { void pickRestoreFile(e.target.files?.[0]); e.target.value = ''; }}
+          />
+        </div>
+        {restoreError && <span role="alert" style={{ fontSize: 12, color: 'var(--bs-danger)' }}>{restoreError}</span>}
         {Array.from({ length: LAUNCH_SLOTS }, (_, slot) => {
           const cells = config.loopSlots[slot] ?? null;
           const st = slotState(slot, cells !== null, new Set(wantedSlots), new Set(appliedSlots));
@@ -2908,12 +3132,12 @@ export default function BoardSequencerScreen() {
                 style={{ width: 110 }}
               />
               <span style={{ fontSize: 12, minWidth: 72, color: on ? 'var(--bs-ok)' : 'var(--bs-fg2)' }}>
-                {st === 'empty' ? 'empty' : st === 'playing' ? '▶ playing' : st === 'starting' ? (config.loopFadePasses > 0 ? 'fading in…' : 'starting…') : st === 'stopping' ? (config.loopFadePasses > 0 ? 'fading out…' : 'stopping…') : `${cells?.length ?? 0} notes`}
+                {st === 'empty' ? 'empty' : !running && (st === 'playing' || st === 'starting') ? 'ready · starts with Play' : st === 'stopping' && !running ? `${cells?.length ?? 0} notes` : st === 'playing' ? '▶ playing' : st === 'starting' ? (config.loopFadePasses > 0 ? 'fading in…' : 'starting…') : st === 'stopping' ? (config.loopFadePasses > 0 ? 'fading out…' : 'stopping…') : `${cells?.length ?? 0} notes`}
               </span>
               <Button tone={on ? 'primary' : 'secondary'} onClick={() => toggleLoop(slot)} reason={cells === null ? 'Nothing saved here yet.' : null} aria-pressed={on}>
                 {on ? '■ Stop' : '▶ Play'}
               </Button>
-              <Button tone="quiet" onClick={() => saveBoardToSlot(slot)} reason={(running ? activeCellsRef.current : active).length === 0 ? 'Put counters on the board first.' : null}>
+              <Button tone="quiet" onClick={() => saveBoardToSlot(slot)} reason={boardCellsNow().length === 0 ? 'Put counters on the board first.' : null}>
                 Save board here
               </Button>
               <Button tone="quiet" onClick={() => setEditSlot(slot)}>Draw</Button>
@@ -2991,6 +3215,11 @@ export default function BoardSequencerScreen() {
             { value: 'auto', label: `At the time (it begins ${endingPasses(config.performance)} ${endingPasses(config.performance) === 1 ? 'pass' : 'passes'} early)` },
           ]}
         />
+        {endingTooLong(config.performance, (config.cols * Math.max(1, config.numPages) * 60) / Math.max(20, config.bpm)) && (
+          <span role="alert" style={{ fontSize: 12, color: 'var(--bs-warn)' }}>
+            The ending takes as long as half the piece at this tempo. Choose fewer passes or a longer length.
+          </span>
+        )}
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
           {running && clock?.phase === 'idle' && (
             <Button tone="secondary" onClick={startClock}>⏱ Start clock</Button>
@@ -3005,7 +3234,7 @@ export default function BoardSequencerScreen() {
           ) : (
             <Button tone="secondary" onClick={cancelEnding}>Cancel the ending</Button>
           )}
-          <Button tone="secondary" onClick={captureLoop} reason={(running ? activeCellsRef.current : active).length === 0 ? 'Put counters on the board first.' : null}>
+          <Button tone="secondary" onClick={captureLoop} reason={boardCellsNow().length === 0 ? 'Put counters on the board first.' : null}>
             ⏺ Capture the board as a loop
           </Button>
         </div>
@@ -3015,7 +3244,7 @@ export default function BoardSequencerScreen() {
         </span>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
           <input type="text" value={sceneName} placeholder={`Scene ${config.scenes.length + 1}`} aria-label="Scene name" onChange={(e) => setSceneName(e.target.value)} style={{ width: 140 }} />
-          <Button tone="secondary" onClick={saveScene} reason={config.scenes.length >= 12 ? 'Twelve scenes is the most.' : null}>Save scene from now</Button>
+          <Button tone="secondary" onClick={saveScene} reason={config.scenes.length >= MAX_SCENES ? 'Twelve scenes is the most.' : null}>Save scene from now</Button>
         </div>
         {config.scenes.map((sc, i) => (
           <div key={sc.id} style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
@@ -3038,6 +3267,29 @@ export default function BoardSequencerScreen() {
             <Button tone="quiet" onClick={() => deleteScene(i)}>Delete</Button>
           </div>
         ))}
+        {deletedScene && (
+          <div role="status" style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 }}>
+            <span>{`Deleted “${deletedScene.scene.name}”.`}</span>
+            <Button
+              tone="secondary"
+              onClick={() => {
+                const d = deletedScene;
+                const c = configRef.current;
+                const scenes = [...c.scenes];
+                scenes.splice(Math.min(d.index, scenes.length), 0, d.scene);
+                const at = Math.min(d.index, scenes.length - 1);
+                update({
+                  scenes,
+                  currentScene: d.wasCurrent ? at : c.currentScene !== null && c.currentScene >= at ? c.currentScene + 1 : c.currentScene,
+                });
+                setDeletedScene(null);
+                announce(`Scene ${d.scene.name} is back.`);
+              }}
+            >
+              Undo
+            </Button>
+          </div>
+        )}
         <div>
           <Button tone="primary" onClick={nextScene} reason={config.scenes.length === 0 ? 'Save a scene first.' : null}>Next scene ▶</Button>
         </div>
@@ -3381,6 +3633,78 @@ export default function BoardSequencerScreen() {
   const emptyLoopSlot = loopSlotCount > 0
     && loopBankRef.current.saved.slice(0, loopSlotCount).some((sl) => sl == null);
 
+  // The laptop board's counters: the colours with a job, and what a click does.
+  const laptopChannels = config.channels.filter((c) => c.role !== 'off');
+  const laptopPick = laptopChannels.some((c) => c.id === laptopColour) ? laptopColour : (laptopChannels[0]?.id ?? '');
+  const tapLaptopCell = (row: number, col: number): void => {
+    const ch = laptopChannels.find((c) => c.id === laptopPick);
+    if (!ch) { announce('Choose a colour above the board first.'); return; }
+    const single = isControlRole(ch.role) || isLoopRole(ch.role);
+    // From the latest state, not the last render: two quick clicks must both land.
+    setConfig((prev) => ({ ...prev, laptopBoard: placeLaptopCounter(prev.laptopBoard, row, col, ch.id, single) }));
+  };
+  const describeLaptopCell = (row: number, col: number): string => {
+    const c = config.laptopBoard.find((x) => x.row === row && x.col === col);
+    const ch = c ? channelById.get(c.colour) : undefined;
+    return ch ? `${describeChannel(ch)}, ${ROLE_LABELS[ch.role]}` : 'empty';
+  };
+  /** Four ready-made colours for a laptop that has never seen the board. */
+  const addLaptopColours = (): void => {
+    const presets: { hsv: { h: number; s: number; v: number }; swatch: string; role: ColourRole }[] = [
+      { hsv: { h: 2, s: 80, v: 80 }, swatch: '#d93a3a', role: 'melody' },
+      { hsv: { h: 215, s: 75, v: 75 }, swatch: '#2f6fd6', role: 'bass' },
+      { hsv: { h: 50, s: 85, v: 90 }, swatch: '#e8c21e', role: 'chord' },
+      { hsv: { h: 135, s: 70, v: 65 }, swatch: '#2f9a52', role: 'drums' },
+    ];
+    setConfig((prev) => {
+      const channels = [...prev.channels];
+      for (const p of presets) {
+        const id = freshChannelId(channels.map((c) => c.id), allReferencedChannelIds());
+        const cal = calibrationFromHsv(p.hsv);
+        channels.push({ id, kind: cal.kind, role: p.role, swatch: p.swatch, band: cal.band, blackBand: cal.blackBand, whiteBand: cal.whiteBand });
+      }
+      return { ...prev, channels };
+    });
+    announce('Added red melody, blue bass, yellow chords and green drums.');
+  };
+  const laptopBar = (
+    <LaptopBoardBar
+      channels={laptopChannels}
+      knownColours={config.channels.length}
+      selected={laptopPick}
+      onSelect={setLaptopColour}
+      count={config.laptopBoard.filter((x) => x.row < config.rows && x.col < config.cols && channelById.has(x.colour)).length}
+      onClear={() => update({ laptopBoard: [] })}
+      onAddColours={addLaptopColours}
+      palette={palette}
+    />
+  );
+  const switchBoardSource = (to: 'camera' | 'laptop'): void => {
+    if (running) stop();
+    update({ boardSource: to });
+    if (to === 'laptop') { setError(null); setCamNotice(null); }
+    if (to === 'laptop') setView('play');
+    else { setView('setup'); setStep(resolveEntry({ enabled: config.enabled, channels: config.channels }, storedRef.current !== null)); }
+    announce(to === 'laptop' ? 'Laptop board: click squares to place counters. No camera needed.' : 'Back to the camera and the real board.');
+  };
+  // Which board is in use, always visible: a planning session left on the laptop board
+  // must not surprise anyone on the day.
+  const boardSourceButton = (
+    <div role="group" aria-label="Board" style={{ display: 'flex', gap: 0, alignItems: 'center' }}>
+      {(['camera', 'laptop'] as const).map((src) => (
+        <Button
+          key={src}
+          tone={config.boardSource === src ? 'primary' : 'secondary'}
+          aria-pressed={config.boardSource === src}
+          onClick={() => { if (config.boardSource !== src) switchBoardSource(src); }}
+          aria-label={src === 'laptop' ? 'Laptop board: play on the laptop, without the camera or board' : 'Camera board: the camera and the real board'}
+        >
+          {src === 'laptop' ? '💻 Laptop' : '📷 Camera'}
+        </Button>
+      ))}
+    </div>
+  );
+
   const boardView = (
     <BoardView
       rows={config.rows}
@@ -3398,11 +3722,19 @@ export default function BoardSequencerScreen() {
       band={running && bandStatus.playing ? { playing: true, beatOn } : null}
       spans={running && config.phrases ? spans : undefined}
       notice={running ? boardNotice : null}
+      onCellTap={laptop ? tapLaptopCell : undefined}
+      describeCell={laptop ? describeLaptopCell : undefined}
     />
   );
 
   const stage = (
     <div style={{ flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
+      {cameraStalled && running && !laptop && (
+        <div role="alert" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', padding: '8px 12px', borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-danger)', color: 'var(--bs-danger-fg)', fontWeight: 600 }}>
+          <span style={{ flex: '1 1 240px' }}>The camera has stopped — the board isn&apos;t being read. The music carries on with the last pattern.</span>
+          <Button tone="secondary" onClick={() => setCameraRetry((n) => n + 1)}>Try the camera again</Button>
+        </div>
+      )}
       {view === 'play' && (
         <NudgeBanner
           signal={nudge}
@@ -3416,7 +3748,8 @@ export default function BoardSequencerScreen() {
           saveReason={emptyLoopSlot ? null : 'Turn the loop bank on and leave a slot free to save it.'}
         />
       )}
-      {view === 'play' && <div style={{ flex: 1, minHeight: 200 }}>{boardView}</div>}
+      {laptop && view !== 'bigBoard' && laptopBar}
+      {(view === 'play' || laptop) && <div style={{ flex: 1, minHeight: 200 }}>{boardView}</div>}
       <div style={view === 'play'
         ? { width: 220, alignSelf: layout.pip === 'bottom-left' ? 'flex-start' : 'flex-end' }
         : undefined}
@@ -3424,7 +3757,7 @@ export default function BoardSequencerScreen() {
       <CameraSurface
         videoRef={videoRef}
         overlayRef={overlayRef}
-        hidden={view === 'bigBoard'}
+        hidden={view === 'bigBoard' || laptop}
         mirrorX={config.mirrorX}
         mirrorY={config.mirrorY}
         rotation={config.cameraRotation}
@@ -3593,6 +3926,7 @@ export default function BoardSequencerScreen() {
           {/* Which way round the board reads. A player sitting at a different edge sees the
               screen turned relative to their board; this turns it back, without moving the
               camera or asking for the corners again. */}
+          {!laptop && (
           <Button
             tone="quiet"
             onClick={turnBoard}
@@ -3601,6 +3935,7 @@ export default function BoardSequencerScreen() {
           >
             ⟲ Turn board
           </Button>
+          )}
           <Button tone="quiet" onClick={() => announce(describeBoard(active, config.channels, config.rows, config.cols, config.velocity))}>
             Describe board
           </Button>
@@ -3675,7 +4010,7 @@ export default function BoardSequencerScreen() {
         }}
       >
         {running
-          ? <Button tone="primary" onClick={stop}>■ Stop</Button>
+          ? <Button tone="primary" onClick={requestStop}>{stopArmed ? '■ Press again to stop' : '■ Stop'}</Button>
           : <Button tone="primary" onClick={() => void start()}>▶ Play</Button>}
         <Button tone="secondary" aria-pressed={muted} disabled={!running} onClick={toggleMuted}>
           {muted ? 'Sound off' : 'Mute'}
@@ -3749,15 +4084,18 @@ export default function BoardSequencerScreen() {
           notice={headerNotice}
           onChangeCamera={() => { stop(); setView('setup'); setStep('camera'); }}
           right={view === 'setup' ? (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            {boardSourceButton}
             <StepIndicator
               steps={SETUP_STEPS.map((id) => ({
                 id,
                 label: STEP_LABELS[id],
-                state: stepIndicator(id, step, setupCfg, camera, storedRef.current !== null),
+                state: stepIndicator(id, step, setupCfg, cameraGate, storedRef.current !== null),
               }))}
-              canOpen={(id: SetupStep) => canOpenStep(id, setupCfg, camera, storedRef.current !== null)}
+              canOpen={(id: SetupStep) => canOpenStep(id, setupCfg, cameraGate, storedRef.current !== null)}
               onOpen={(id: SetupStep) => setStep(id)}
             />
+            </div>
           ) : (
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <span style={{ color: 'var(--bs-fg2)', fontSize: 13 }}>
@@ -3765,10 +4103,11 @@ export default function BoardSequencerScreen() {
               </span>
               <Button
                 tone="secondary"
-                onClick={() => { if (running) stop(); setView('setup'); }}
+                onClick={() => { if (running) stop(); setView('setup'); if (laptop) setStep('colours'); }}
               >
                 ⚙ Set up
               </Button>
+              {boardSourceButton}
               <Button ref={bigBoardButtonRef} tone="secondary" aria-label="Big board" onClick={() => setView('bigBoard')}>
                 <span aria-hidden="true">⤢</span>
               </Button>
@@ -3810,6 +4149,20 @@ export default function BoardSequencerScreen() {
           />
         )}
 
+        {restoreTarget && (() => {
+          const sum = summariseBackup(restoreTarget);
+          const when = restoreTarget.savedAt > 0 ? ` from ${new Date(restoreTarget.savedAt).toLocaleString()}` : '';
+          return (
+            <ConfirmDialog
+              title="Restore this backup?"
+              body={`The backup${when} has ${sum.players} ${sum.players === 1 ? 'player' : 'players'}, ${sum.loops} saved loops and ${sum.scenes} scenes. It replaces every player, loop and scene here, and the board setup. What is here now is kept in the laptop's backups folder (.admi-data/backups). The page reloads.`}
+              confirmLabel="Restore"
+              onConfirm={() => { const b = restoreTarget; setRestoreTarget(null); void confirmRestore(b); }}
+              onCancel={() => setRestoreTarget(null)}
+            />
+          );
+        })()}
+
         {showHelp && (
           <Modal label="How to play" onClose={() => setShowHelp(false)}>
             {helpContent}
@@ -3836,7 +4189,8 @@ export default function BoardSequencerScreen() {
                 running={running}
                 muted={muted}
                 onStart={() => void start()}
-                onStop={stop}
+                onStop={requestStop}
+                stopArmed={stopArmed}
                 onToggleMute={toggleMuted}
                 bpm={liveBpm}
                 step={playheadCol}

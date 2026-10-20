@@ -15,6 +15,7 @@ vi.mock('../songs/voices/BoardSequencerVoice', () => ({
     connect = vi.fn();
     dispose = vi.fn();
     play = vi.fn();
+    isReady = () => true;
   },
 }));
 vi.mock('../audio/instruments/RoundRobinDrumKit', () => ({ RoundRobinDrumKit: vi.fn() }));
@@ -90,7 +91,7 @@ function engine(over: Partial<BoardEngineConfig> = {}) {
   });
   const p = e as unknown as Priv;
   p.channelById = new Map(channels.map((c) => [c.id, c]));
-  const entry = () => ({ voice: { play: vi.fn() }, gain: fakeGain(), rev: fakeGain(), del: fakeGain(), revBase: 0.18, delBase: 0, toneBase: 1 });
+  const entry = () => ({ voice: { play: vi.fn(), setBrightness: vi.fn(), connect: vi.fn(), dispose: vi.fn(), isReady: () => true }, gain: fakeGain(), rev: fakeGain(), del: fakeGain(), revBase: 0.18, delBase: 0, toneBase: 1 });
   p.voiceByChannel = new Map([['m', entry()], ['p', entry()]]);
   p.drumKit = { play: vi.fn() };
   p.duckBus = fakeGain();

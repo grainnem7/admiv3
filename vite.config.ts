@@ -4,6 +4,7 @@ import { resolve } from 'path'
 import type { Server } from 'node:http'
 import { attachRemoteRelay, lanAddresses } from './src/remote/relay'
 import { REMOTE_INFO_PATH } from './src/remote/protocol'
+import { createDiskStore, diskStoreHandler, STORE_PATH } from './src/storage/diskStore'
 
 /**
  * The iPad remote's link (see src/remote/relay.ts), on the same local server as the app,
@@ -17,15 +18,20 @@ function admiRemote(): Plugin {
     res.setHeader('Content-Type', 'application/json')
     res.end(JSON.stringify({ addresses: lanAddresses(), port: req.socket.localPort ?? null, lan }))
   }
+  // The laptop's copy of the Board Sequencer's loops, scenes and setup (src/storage/diskStore.ts).
+  // ADMI_DATA_DIR points a test server somewhere else, so it never touches the real copy.
+  const store = createDiskStore(process.env.ADMI_DATA_DIR || resolve(__dirname, '.admi-data'))
   return {
     name: 'admi-remote',
     configureServer(server) {
       if (server.httpServer) attachRemoteRelay(server.httpServer as Server)
       server.middlewares.use(REMOTE_INFO_PATH, info(!!server.config.server.host))
+      server.middlewares.use(STORE_PATH, diskStoreHandler(store))
     },
     configurePreviewServer(server) {
       if (server.httpServer) attachRemoteRelay(server.httpServer as Server)
       server.middlewares.use(REMOTE_INFO_PATH, info(!!server.config.preview.host))
+      server.middlewares.use(STORE_PATH, diskStoreHandler(store))
     },
   }
 }

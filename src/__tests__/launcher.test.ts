@@ -1,4 +1,5 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { fakeVoiceEntry } from './helpers/fakeVoiceEntry';
 import {
   LAUNCH_SLOTS, loopLabel, nextSceneIndex, sanitizeLoopNames, sanitizeScenes, sceneFromNow, slotState, toggleSlot,
   type SceneSettings,
@@ -28,10 +29,10 @@ describe('scenes', () => {
     expect(s).toEqual({ id: 'id1', name: 'Verse one', loops: [1, 4], settings });
   });
 
-  it('walks the set list and wraps', () => {
+  it('walks the set list and stops at the last scene', () => {
     expect(nextSceneIndex(null, 3)).toBe(0);
     expect(nextSceneIndex(0, 3)).toBe(1);
-    expect(nextSceneIndex(2, 3)).toBe(0);
+    expect(nextSceneIndex(2, 3)).toBeNull();
     expect(nextSceneIndex(0, 0)).toBeNull();
   });
 
@@ -64,7 +65,7 @@ vi.mock('tone', () => ({
   MembraneSynth: vi.fn(), Limiter: vi.fn(), Reverb: vi.fn(), FeedbackDelay: vi.fn(), connect: vi.fn(),
 }));
 vi.mock('../effects', () => ({ getEffectChainManager: () => ({ initialize: vi.fn(), getInput: () => null }) }));
-vi.mock('../songs/voices/BoardSequencerVoice', () => ({ BoardSequencerVoice: vi.fn() }));
+vi.mock('../songs/voices/BoardSequencerVoice', () => ({ BoardSequencerVoice: class { setBrightness = vi.fn(); connect = vi.fn(); dispose = vi.fn(); play = vi.fn(); isReady = () => true; } }));
 vi.mock('../audio/instruments/RoundRobinDrumKit', () => ({ RoundRobinDrumKit: vi.fn() }));
 
 import { BoardSequencerEngine } from '../songs/BoardSequencerEngine';
@@ -86,7 +87,7 @@ function engine() {
   });
   const p = e as unknown as Priv;
   p.channelById = new Map(channels.map((c) => [c.id, c]));
-  p.voiceByChannel = new Map([['m', { voice: { play: vi.fn() } }]]);
+  p.voiceByChannel = new Map([['m', fakeVoiceEntry()]]);
   p.drumKit = null;
   p.timer = 1; // "running": launches wait for the pass boundary
   return { e, p };
@@ -193,6 +194,9 @@ describe('engine — launched loops fade', () => {
 });
 
 describe('engine — the ending', () => {
+  // "Finished" is said once the last sound has rung out, a moment after the last beat.
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
   const cells = [0, 1, 2, 3].map((col) => ({ row: 2, col, colour: 'm' }));
   interface EndPriv extends Priv { endGain: { gain: { cancelScheduledValues: ReturnType<typeof vi.fn>; setValueAtTime: ReturnType<typeof vi.fn>; linearRampToValueAtTime: ReturnType<typeof vi.fn>; setTargetAtTime: ReturnType<typeof vi.fn> } } }
   const endEngine = () => {
@@ -217,9 +221,20 @@ describe('engine — the ending', () => {
     for (let b = 5; b < 12; b++) p.fireStep(b, b, 1, null);
     expect(finished).not.toHaveBeenCalled();
     p.fireStep(12, 12, 1, null);                 // 8 beats after it began: over
+    vi.runAllTimers();
     expect(finished).toHaveBeenCalledTimes(1);
     expect(e.isFinishing()).toBe(false);
     expect(e.drainFiredNotes().some((f) => f.audioTime === 12)).toBe(false); // nothing played on the beat it ended
+  });
+
+  it('once the ending has begun, a tempo change from a scene or the iPad is ignored', () => {
+    const { e, p } = endEngine();
+    e.finish(8, vi.fn(), 'fade');
+    e.setBpm(90);                                // before the boundary: still allowed
+    expect(e.getBpm()).toBe(90);
+    p.fireStep(0, 0, 1, null);                   // the ending begins
+    e.setBpm(120);
+    expect(e.getBpm()).toBe(90);
   });
 
   it('a stop ends at the next boundary without a ramp', () => {
@@ -230,6 +245,7 @@ describe('engine — the ending', () => {
     for (let b = 1; b < 4; b++) p.fireStep(b, b, 1, null);
     expect(finished).not.toHaveBeenCalled();
     p.fireStep(4, 4, 1, null);
+    vi.runAllTimers();
     expect(finished).toHaveBeenCalledTimes(1);
     expect(p.endGain.gain.linearRampToValueAtTime).not.toHaveBeenCalled();
   });
@@ -248,6 +264,9 @@ describe('engine — the ending', () => {
 });
 
 describe('engine — the musical endings', () => {
+  // "Finished" is said once the last sound has rung out, a moment after the last beat.
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
   const cells = [0, 1, 2, 3].map((col) => ({ row: 2, col, colour: 'm' }));
   interface EndPriv extends Priv { cfg: { bpm: number }; endGain: { gain: Record<string, ReturnType<typeof vi.fn>> } }
   const endEngine = () => {
@@ -270,6 +289,7 @@ describe('engine — the musical endings', () => {
     const again = endEngine();
     again.e.finish(8, finished, 'slow');
     for (let b = 0; b < 9; b++) again.p.fireStep(b, b, 1, null);
+    vi.runAllTimers();
     expect(finished).toHaveBeenCalledTimes(1);
     expect(again.p.cfg.bpm).toBeLessThan(40);
   });
@@ -307,6 +327,14 @@ describe('engine — the musical endings', () => {
     expect(e.drainFiredNotes()).toEqual([]);       // the chord rings alone
     expect(finished).not.toHaveBeenCalled();
     p.fireStep(8, 8, 1, null);
+    // Not yet: the chord is still ringing (half a pass past the end, plus its release).
+    vi.advanceTimersByTime(8000);
+    expect(finished).not.toHaveBeenCalled();
+    vi.runAllTimers();
     expect(finished).toHaveBeenCalledTimes(1);
+    // And nothing more is scheduled meanwhile.
+    e.drainFiredNotes();
+    p.fireStep(9, 9, 1, null);
+    expect(e.drainFiredNotes()).toEqual([]);
   });
 });

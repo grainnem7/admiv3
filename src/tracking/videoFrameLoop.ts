@@ -29,7 +29,13 @@ export function startVideoFrameLoop(
   const emit = (now: number): void => {
     const dtMs = last < 0 ? FIRST_DT_MS : Math.min(MAX_DT_MS, Math.max(1, now - last));
     last = now;
-    onFrame({ nowMs: now, dtMs });
+    // One bad frame must not end the loop: the next frame is asked for whatever happens,
+    // or the board would stop being read for good with nothing on screen saying so.
+    try {
+      onFrame({ nowMs: now, dtMs });
+    } catch (err) {
+      console.error('[videoFrameLoop] frame failed:', err);
+    }
   };
 
   const rvfc = video.requestVideoFrameCallback;

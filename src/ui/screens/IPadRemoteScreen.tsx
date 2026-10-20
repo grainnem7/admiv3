@@ -210,15 +210,17 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
 
   return (
     <div style={page} onPointerDownCapture={markTouch}>
-      <div role="status" aria-live="polite" style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 20 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 20 }}>
         <span aria-hidden="true" style={{ fontSize: 18, opacity: touchSeen ? 1 : 0.15, transition: 'opacity 150ms' }}>👆</span>
         <span style={{ width: 16, height: 16, borderRadius: 8, background: connected ? '#66bb6a' : '#ef5350' }} aria-hidden="true" />
-        <span style={{ fontWeight: 700 }}>
+        {/* Only the words are announced; the clock beside them changes every second. */}
+        <span role="status" aria-live="polite" style={{ fontWeight: 700 }}>
           {learning
             ? 'Learning your reach: slide each strip as far as is comfortable'
             : connected
               ? (state?.playing ? 'Connected · playing' : 'Connected · press Play on the laptop')
-              : link.status === 'open' ? 'Waiting for the laptop…' : 'Connecting…'}
+              : link.status === 'open' ? 'Waiting for the laptop…'
+                : link.status === 'lost' ? 'Link lost — reconnecting…' : 'Connecting…'}
         </span>
         {clock && clock.phase !== 'idle' && (
           <span
@@ -281,7 +283,7 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
                 >
                   <span>{label}</span>
                   <span style={{ fontSize: 15, fontWeight: 600, opacity: 0.8 }}>
-                    {l.state === 'empty' ? 'empty' : l.state === 'playing' ? '▶ playing' : l.state === 'starting' ? (state?.loopsFade ? 'fading in…' : 'starting…') : l.state === 'stopping' ? (state?.loopsFade ? 'fading out…' : 'stopping…') : 'tap to play'}
+                    {l.state === 'empty' ? 'empty' : !state?.playing && (l.state === 'playing' || l.state === 'starting') ? 'ready' : l.state === 'playing' ? '▶ playing' : l.state === 'starting' ? (state?.loopsFade ? 'fading in…' : 'starting…') : l.state === 'stopping' ? (state?.loopsFade ? 'fading out…' : 'stopping…') : 'tap to play'}
                   </span>
                 </button>
               );

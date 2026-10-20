@@ -78,7 +78,7 @@ vi.mock('../songs/voices/BoardSequencerVoice', () => ({
   BoardSequencerVoice: class {
     sound: unknown;
     constructor(_c: unknown, sound: unknown) { this.sound = sound; }
-    setBrightness = vi.fn(); connect = vi.fn(); dispose = vi.fn(); play = vi.fn();
+    setBrightness = vi.fn(); connect = vi.fn(); dispose = vi.fn(); play = vi.fn(); isReady = () => true;
   },
 }));
 vi.mock('../audio/instruments/RoundRobinDrumKit', () => ({ RoundRobinDrumKit: vi.fn() }));

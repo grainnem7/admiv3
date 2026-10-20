@@ -35,6 +35,7 @@ import { emptyLoopBank, seedLoopBank, type LoopBankState } from '../../../songs/
 import type { Mat3 } from '../../../utils/homography';
 import type { BoardSequencerStored } from '../../../profiles/BoardSequencerConfig';
 import { homographyForCorners } from './homographyForCorners';
+import { laptopReadings } from '../../../tracking/laptopBoard';
 
 export interface RuntimeFrame {
   readings: CellReading[];
@@ -88,6 +89,7 @@ export interface BoardRuntimeRefs {
   runningRef: MutableRefObject<boolean>;
   loopBankRef: MutableRefObject<LoopBankState>;
   activeCellsRef: MutableRefObject<ActiveCell[]>;
+  lastFrameAtRef: MutableRefObject<number>;
   latestFrameRef: MutableRefObject<RuntimeFrame | null>;
   /** "Not now" on a hint: it stays hidden until its condition clears and comes back. */
   dismiss(kind: NudgeKind): void;
@@ -105,15 +107,44 @@ function watchKey(
 
 const CAMERA_CHECK_MS = 1000;
 const STATE_THROTTLE_MS = 100;
+/** The laptop board has no camera frames to wait for: it is read at about 30 a second. */
+const LAPTOP_FRAME_MS = 33;
+/** A click is a deliberate placement; it only needs a moment to settle, not a hand's. */
+const LAPTOP_SETTLE_MS = 120;
+
+/**
+ * Every setting the running engine takes from the config. Called whenever the config
+ * changes and when the engine starts — independent of camera frames. Each setter is
+ * cheap and does nothing when the value is unchanged.
+ */
+export function applyEngineSettings(engine: BoardSequencerEngine, cfg: BoardSequencerStored): void {
+  engine.setPingPong(cfg.pingPong);
+  engine.setTickEnabled(cfg.tickEnabled);
+  engine.setStudioMix(cfg.studioMix);
+  engine.setSoundWorld(cfg.soundWorld);
+  engine.setPhrases(cfg.phrases);
+  engine.setFill(cfg.fillAmount, cfg.fillSeed, cfg.fillKept);
+  engine.setFillEngine(cfg.fillEngine);
+  engine.setBand(cfg.band);
+  engine.setLaunchFade(Math.round(cfg.loopFadePasses * cfg.cols * Math.max(1, cfg.numPages)));
+  engine.setMidiOut({ enabled: cfg.midiEnabled && cfg.midiDeviceId !== '', sends: cfg.midiSends });
+  engine.setInternalSound(!cfg.midiEnabled || cfg.midiKeepSound);
+  engine.setEvolve({
+    amount: cfg.evolveAmount, sceneLoops: cfg.evolveSceneLoops, seed: cfg.evolveSeed, holdLap: cfg.evolveHoldLap,
+  });
+  engine.setVariationEnabled(cfg.variationEnabled);
+}
 
 export function useBoardRuntime(opts: {
   cameraDeviceId: string;
   cameraRetry: number;
   calibrated: boolean;
+  /** Counters come from the laptop board (config.laptopBoard), not the camera. */
+  laptop: boolean;
   configRef: MutableRefObject<BoardSequencerStored>;
   callbacksRef: MutableRefObject<BoardRuntimeCallbacks>;
 }): BoardRuntimeRefs {
-  const { cameraDeviceId, cameraRetry, calibrated, configRef, callbacksRef } = opts;
+  const { cameraDeviceId, cameraRetry, calibrated, laptop, configRef, callbacksRef } = opts;
   const videoRef = useRef<HTMLVideoElement>(null);
   const cameraRef = useRef<CameraManager | null>(null);
   const readerRef = useRef<BoardReader | null>(null);
@@ -124,6 +155,8 @@ export function useBoardRuntime(opts: {
   const loopBankRef = useRef<LoopBankState>(emptyLoopBank(0));
   const activeCellsRef = useRef<ActiveCell[]>([]);
   const latestFrameRef = useRef<RuntimeFrame | null>(null);
+  /** performance.now() of the last frame read without error: the screen's watchdog. */
+  const lastFrameAtRef = useRef(0);
   const nudgeRef = useRef<NudgeState>(initialNudgeState());
   const watchRef = useRef<WatchState>(initialWatchState());
   const watchGridRef = useRef<{ grid: WatchGrid; key: string } | null>(null);
@@ -135,6 +168,8 @@ export function useBoardRuntime(opts: {
 
   // Camera lifecycle — (re)opens whenever the chosen camera changes or Try again is pressed.
   useEffect(() => {
+    // The laptop board needs no camera, and a laptop without one shouldn't be asked for it.
+    if (laptop) return;
     const cam = new CameraManager();
     cameraRef.current = cam;
     readerRef.current = new BoardReader();
@@ -162,7 +197,7 @@ export function useBoardRuntime(opts: {
       cancelAnimationFrame(raf);
       cam.stop();
     };
-  }, [cameraDeviceId, cameraRetry, callbacksRef]);
+  }, [cameraDeviceId, cameraRetry, callbacksRef, laptop]);
 
   // Camera check: how colourful the frames the app READS are, plus live track settings.
   useEffect(() => {
@@ -187,9 +222,9 @@ export function useBoardRuntime(opts: {
 
   // Detection once per camera frame + drawing on rAF, while calibrated.
   useEffect(() => {
-    if (!calibrated) return;
+    if (!calibrated && !laptop) return;
     const video = videoRef.current;
-    if (!video) return;
+    if (!laptop && !video) return;
     let matchersFor: { channels: BoardSequencerStored['channels']; minFill: number } | null = null;
     let matchers: ColourMatcher[] = [];
     let recognizer = new ColourRecognizer(0.1, []);
@@ -204,28 +239,8 @@ export function useBoardRuntime(opts: {
     // The last colour each cell showed while it was still visible, so a covered control
     // counter can be recognised through the hand that is covering it.
     const lastColourAt = new Map<string, ColourId>();
-    const stopFrames = startVideoFrameLoop(video, ({ nowMs, dtMs }) => {
-      const reader = readerRef.current;
+    const tick = ({ nowMs, dtMs }: { nowMs: number; dtMs: number }): void => {
       const cfg = configRef.current;
-      if (!reader || video.videoWidth <= 0) return;
-      // The homography maps the board into full-resolution pixels, so it is only valid for
-      // the size the stream was when it was built. Some cameras renegotiate mid-session;
-      // keeping the old matrix would read every cell from the wrong part of the picture.
-      // Sizes are in DISPLAYED orientation: a quarter turn swaps width and height.
-      const shown = orientedSize(video.videoWidth, video.videoHeight, cfg.cameraRotation);
-      if (homographyRef.current
-        && (hSize.w !== shown.width || hSize.h !== shown.height)) {
-        homographyRef.current = null;
-        watchGridRef.current = null;
-      }
-      if (!homographyRef.current) {
-        try {
-          homographyRef.current = homographyForCorners(cfg.corners, shown.width, shown.height);
-          hSize = { w: shown.width, h: shown.height };
-        } catch {
-          return; // degenerate corners — wait for recalibration
-        }
-      }
       if (!matchersFor || matchersFor.channels !== cfg.channels || matchersFor.minFill !== cfg.minFilledFraction) {
         matchers = buildChannelMatchers(cfg.channels);
         recognizer = new ColourRecognizer(cfg.minFilledFraction, channelPriority(cfg.channels));
@@ -234,21 +249,48 @@ export function useBoardRuntime(opts: {
         // A loop colour's counter is a trigger, never a note and never a pad press.
         controlColours = new Set(cfg.channels.filter((c) => isControlRole(c.role) || isLoopRole(c.role)).map((c) => c.id));
       }
-      // One counter, one box: a counter on a grid line is seen by both cells, so the
-      // spill is cleared before anything settles or plays.
-      const readings = suppressSpill(reader.read(video, {
-        homography: homographyRef.current, rows: cfg.rows, cols: cfg.cols, colours: matchers, recognizer,
-        mirrorX: cfg.mirrorX, mirrorY: cfg.mirrorY, rotation: cfg.cameraRotation,
-        samplesPerAxis: cfg.samplesPerAxis,
-        boardSquares: cfg.boardSquares, dtMs,
-      }), cfg);
+      let readings: CellReading[];
+      let lastFrame: ReturnType<BoardReader['lastFrame']> = null;
+      let shown = { width: 0, height: 0 };
+      if (laptop) {
+        readings = laptopReadings(cfg.laptopBoard, cfg.rows, cfg.cols);
+      } else {
+        const reader = readerRef.current;
+        if (!reader || !video || video.videoWidth <= 0) return;
+        // The homography maps the board into full-resolution pixels, so it is only valid for
+        // the size the stream was when it was built. Some cameras renegotiate mid-session;
+        // keeping the old matrix would read every cell from the wrong part of the picture.
+        // Sizes are in DISPLAYED orientation: a quarter turn swaps width and height.
+        shown = orientedSize(video.videoWidth, video.videoHeight, cfg.cameraRotation);
+        if (homographyRef.current
+          && (hSize.w !== shown.width || hSize.h !== shown.height)) {
+          homographyRef.current = null;
+          watchGridRef.current = null;
+        }
+        if (!homographyRef.current) {
+          try {
+            homographyRef.current = homographyForCorners(cfg.corners, shown.width, shown.height);
+            hSize = { w: shown.width, h: shown.height };
+          } catch {
+            return; // degenerate corners — wait for recalibration
+          }
+        }
+        // One counter, one box: a counter on a grid line is seen by both cells, so the
+        // spill is cleared before anything settles or plays.
+        readings = suppressSpill(reader.read(video, {
+          homography: homographyRef.current, rows: cfg.rows, cols: cfg.cols, colours: matchers, recognizer,
+          mirrorX: cfg.mirrorX, mirrorY: cfg.mirrorY, rotation: cfg.cameraRotation,
+          samplesPerAxis: cfg.samplesPerAxis,
+          boardSquares: cfg.boardSquares, dtMs,
+        }), cfg);
+        lastFrame = reader.lastFrame();
+      }
       // The hand guard: find what is reaching over the board before anything is read.
       let held = new Set<string>();
       let resting = false;
       let globalChange = false;
       let handGuardReady = false;
-      const lastFrame = reader.lastFrame();
-      if (cfg.handGuardEnabled && lastFrame) {
+      if (cfg.handGuardEnabled && lastFrame && homographyRef.current) {
         const gridKey = watchKey(homographyRef.current, cfg, lastFrame);
         if (watchGridRef.current?.key !== gridKey) {
           watchGridRef.current = {
@@ -281,8 +323,8 @@ export function useBoardRuntime(opts: {
       // Follow a nudge: a small rigid move of a board we have already learnt. Never while
       // a hand is over it, never during a whole-picture change, and never more than the
       // limit — a real move is the hint's job, not a guess.
-      if (cfg.boardTrackingEnabled && cfg.handGuardEnabled && handGuardReady && !globalChange
-        && held.size === 0 && watchRef.current.bg && watchGridRef.current && lastFrame
+      if (!laptop && cfg.boardTrackingEnabled && cfg.handGuardEnabled && handGuardReady && !globalChange
+        && held.size === 0 && watchRef.current.bg && watchGridRef.current && lastFrame && homographyRef.current
         && nowMs - lastTrackMs >= TRACK_INTERVAL_MS) {
         lastTrackMs = nowMs;
         const track = estimateBoardShift(
@@ -342,24 +384,11 @@ export function useBoardRuntime(opts: {
         baseVelocity: cfg.velocity,
       });
       // With hands excluded, a counter no longer needs the long window to prove itself.
-      modeRef.current?.setSettleWindow(
-        cfg.handGuardEnabled && handGuardReady && !globalChange ? cfg.settleAfterHandMs : cfg.settleWindowMs,
-      );
-      engineRef.current?.setPingPong(cfg.pingPong);
-      engineRef.current?.setTickEnabled(cfg.tickEnabled);
-      engineRef.current?.setStudioMix(cfg.studioMix);
-      engineRef.current?.setSoundWorld(cfg.soundWorld);
-      engineRef.current?.setPhrases(cfg.phrases);
-      engineRef.current?.setFill(cfg.fillAmount, cfg.fillSeed, cfg.fillKept);
-      engineRef.current?.setFillEngine(cfg.fillEngine);
-      engineRef.current?.setBand(cfg.band);
-      engineRef.current?.setLaunchFade(Math.round(cfg.loopFadePasses * cfg.cols * Math.max(1, cfg.numPages)));
-      engineRef.current?.setMidiOut({ enabled: cfg.midiEnabled && cfg.midiDeviceId !== '', sends: cfg.midiSends });
-      engineRef.current?.setInternalSound(!cfg.midiEnabled || cfg.midiKeepSound);
-      engineRef.current?.setEvolve({
-        amount: cfg.evolveAmount, sceneLoops: cfg.evolveSceneLoops, seed: cfg.evolveSeed, holdLap: cfg.evolveHoldLap,
-      });
-      engineRef.current?.setVariationEnabled(cfg.variationEnabled);
+      modeRef.current?.setSettleWindow(laptop ? LAPTOP_SETTLE_MS
+        : cfg.handGuardEnabled && handGuardReady && !globalChange ? cfg.settleAfterHandMs : cfg.settleWindowMs);
+      // The engine's settings are applied by the screen whenever they change
+      // (applyEngineSettings), not from here: a camera that stalls must not stop a scene
+      // change or an iPad strip reaching the sound.
       const running = runningRef.current && !!modeRef.current && !!engineRef.current;
       const modeResult = running && modeRef.current ? modeRef.current.step(visible, dtMs, nowMs) : null;
       // The pads are a lane the player can move at any time, so the bank is kept the
@@ -374,7 +403,8 @@ export function useBoardRuntime(opts: {
       // off a control or loop lane is not a knock, and which cells those are comes from
       // the lanes — the same rule the pattern itself uses.
       let knocked = false;
-      if (running && modeResult && cfg.knockGuardEnabled) {
+      // A click that empties the laptop board is a choice, not a knock.
+      if (running && modeResult && cfg.knockGuardEnabled && !laptop) {
         const notes = (cells: ActiveCell[]): ActiveCell[] =>
           splitByZone(cells, cfg.controlZone, cfg.loopZone).pattern
             .filter((c) => sequencedColours.has(c.colour));
@@ -438,7 +468,7 @@ export function useBoardRuntime(opts: {
         cols: cfg.cols,
         variationEnabled: cfg.variationEnabled,
         variationOffsetThreshold: cfg.variationOffsetThreshold,
-        enabled: cfg.boardNudgesEnabled,
+        enabled: cfg.boardNudgesEnabled && !laptop,
         ignoreColours: controlColours,
         resting,
         global: globalChange,
@@ -458,31 +488,49 @@ export function useBoardRuntime(opts: {
         held, ghosts: knockRef.current.ghosts, handGuardReady, atMs: nowMs, loopColours,
       };
       latestFrameRef.current = rf;
+      lastFrameAtRef.current = performance.now();
       callbacksRef.current.onFrame?.(rf, dtMs);
-    });
+    };
+    let stopFrames: () => void;
+    if (laptop) {
+      let last = performance.now();
+      const id = window.setInterval(() => {
+        const nowMs = performance.now();
+        try { tick({ nowMs, dtMs: nowMs - last }); } catch (err) { console.error('[laptop board] frame failed:', err); }
+        last = nowMs;
+      }, LAPTOP_FRAME_MS);
+      stopFrames = () => window.clearInterval(id);
+    } else {
+      stopFrames = startVideoFrameLoop(video!, tick);
+    }
 
     let raf = 0;
     let lastStateMs = 0;
     const draw = (now: number): void => {
+      // The next frame is asked for first: an error drawing this one must not freeze the
+      // picture for the rest of the piece.
+      raf = requestAnimationFrame(draw);
       const f = latestFrameRef.current;
-      if (f) {
+      if (!f) return;
+      try {
         callbacksRef.current.draw(f);
         if (now - lastStateMs > STATE_THROTTLE_MS) {
           lastStateMs = now;
           callbacksRef.current.onThrottledState(f);
         }
+      } catch (err) {
+        console.error('[board] draw failed:', err);
       }
-      raf = requestAnimationFrame(draw);
     };
     raf = requestAnimationFrame(draw);
     return () => {
       stopFrames();
       cancelAnimationFrame(raf);
     };
-  }, [calibrated, cameraDeviceId, cameraRetry, configRef, callbacksRef]);
+  }, [calibrated, laptop, cameraDeviceId, cameraRetry, configRef, callbacksRef]);
 
   return {
     videoRef, cameraRef, readerRef, homographyRef, modeRef, engineRef, runningRef, loopBankRef,
-    activeCellsRef, latestFrameRef, dismiss, letGoGhosts, knockRef,
+    activeCellsRef, latestFrameRef, lastFrameAtRef, dismiss, letGoGhosts, knockRef,
   };
 }

@@ -143,6 +143,13 @@ export interface BoardSequencerStored {
   loopFadePasses: number;
   /** The performance clock: length, ending, when it starts (see performance/clock). */
   performance: PerformanceSettings;
+  /**
+   * Where the counters come from: the camera watching the real board, or a board on the
+   * laptop screen (click to place), for testing and planning without setting up the rig.
+   */
+  boardSource: 'camera' | 'laptop';
+  /** The counters on the laptop board, kept so a plan is still there next time. */
+  laptopBoard: StoredLoopCell[];
   /** What the iPad shows: fewer things means bigger things. */
   remoteStrips: RemoteControlName[];
   remotePads: RemoteTriggerName[];
@@ -375,6 +382,8 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   currentScene: null,
   loopFadePasses: 1,
   performance: DEFAULT_PERFORMANCE,
+  boardSource: 'camera',
+  laptopBoard: [],
   remoteStrips: [...REMOTE_CONTROLS],
   remotePads: ['newIdea', 'newSound', 'keep', 'mute'],
   remoteLoopsPage: true,
@@ -710,6 +719,8 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     currentScene: isNum(o.currentScene) && o.currentScene >= 0 ? Math.round(o.currentScene) : null,
     loopFadePasses: [0, 0.5, 1, 2].includes(num(o.loopFadePasses, 1)) ? num(o.loopFadePasses, 1) : 1,
     performance: sanitizePerformance(o.performance),
+    boardSource: o.boardSource === 'laptop' ? 'laptop' : 'camera',
+    laptopBoard: Array.isArray(o.laptopBoard) ? (sanitizeLoopSlots([o.laptopBoard])[0] ?? []) : [],
     remoteStrips: Array.isArray(o.remoteStrips)
       ? REMOTE_CONTROLS.filter((n) => (o.remoteStrips as unknown[]).includes(n))
       : [...REMOTE_CONTROLS],
@@ -788,10 +799,13 @@ export function sanitizeBoardSequencerConfig(input: unknown): BoardSequencerStor
 }
 
 /** Channel ids referenced by saved pages and loop slots (never reuse these for new colours). */
-export function referencedChannelIds(cfg: Pick<BoardSequencerStored, 'pages' | 'loopSlots'>): Set<string> {
+export function referencedChannelIds(cfg: Pick<BoardSequencerStored, 'pages' | 'loopSlots'> & Partial<Pick<BoardSequencerStored, 'laptopBoard'>>): Set<string> {
   const ids = new Set<string>();
   for (const page of cfg.pages) for (const c of page) ids.add(c.colour);
   for (const slot of cfg.loopSlots) if (slot) for (const c of slot) ids.add(c.colour);
+  // Counters on the laptop board too: reusing a deleted colour's id would turn them into
+  // the new colour, with its job.
+  for (const c of cfg.laptopBoard ?? []) ids.add(c.colour);
   return ids;
 }
 

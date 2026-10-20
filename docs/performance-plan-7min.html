@@ -1,0 +1,532 @@
+<title>Seven Minutes on the Board</title>
+<meta name="description" content="Performance plan and guide for a 7-minute ADMI Board Sequencer piece.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: a single score-like column; a proportional 7:00 bar at the top is the map, every section below hangs off it. */
+:root {
+  --bg: #eef1f4;
+  --surface: #ffffff;
+  --ink: #15202c;
+  --ink2: #4a5868;
+  --line: #d3dae2;
+  --accent: #1f4fd8;
+  /* the four sections, in the board's counter colours */
+  --s1: #3b7bd9; --s2: #d68a12; --s3: #c2399a; --s4: #2f9a62;
+  --cue: #c23b2a;
+  --font-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f151c; --surface: #17202a; --ink: #e6ebf1; --ink2: #9fb0c2; --line: #2a3644; --accent: #7fa2ff;
+    --s1: #6aa2f0; --s2: #f0aa3c; --s3: #e46cbf; --s4: #4fc287; --cue: #ff7a66; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f151c; --surface: #17202a; --ink: #e6ebf1; --ink2: #9fb0c2; --line: #2a3644; --accent: #7fa2ff;
+  --s1: #6aa2f0; --s2: #f0aa3c; --s3: #e46cbf; --s4: #4fc287; --cue: #ff7a66; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 17px; line-height: 1.55; }
+.wrap { max-width: 980px; margin: 0 auto; padding-inline: 20px; padding-block: 40px 80px; display: grid; gap: 56px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.12; margin: 0; }
+h1 { font-size: clamp(2.2rem, 6vw, 3.6rem); font-weight: 800; letter-spacing: -0.02em; }
+h2 { font-size: 1.75rem; font-weight: 700; }
+h3 { font-size: 1.15rem; font-weight: 700; }
+p { margin: 0; max-width: 66ch; }
+.eyebrow { font-family: var(--font-mono); font-size: 0.75rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink2); }
+.mono, time { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+section { display: grid; gap: 18px; min-width: 0; }
+.lede { font-size: 1.15rem; color: var(--ink2); }
+code { font-family: var(--font-mono); font-size: 0.88em; background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; overflow-wrap: anywhere; }
+b { font-weight: 700; }
+nav ul { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 8px 18px; }
+nav a { color: var(--accent); text-decoration: none; font-weight: 700; }
+nav a:hover, nav a:focus-visible { text-decoration: underline; }
+a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+/* the 7:00 bar */
+.score { display: grid; gap: 8px; }
+.bar { display: grid; grid-template-columns: 90fr 120fr 150fr 60fr; border-radius: 10px; overflow: hidden; min-height: 92px; position: relative; }
+.bar > div { padding: 10px 12px; color: #fff; display: grid; align-content: space-between; gap: 6px; min-width: 0; }
+.bar .n { font-family: var(--font-display); font-weight: 800; font-size: 1.15rem; line-height: 1.1; }
+.bar .t { font-family: var(--font-mono); font-size: 0.78rem; opacity: 0.92; }
+.b1 { background: var(--s1); } .b2 { background: var(--s2); } .b3 { background: var(--s3); } .b4 { background: var(--s4); }
+.ticks { position: relative; height: 22px; font-family: var(--font-mono); font-size: 0.72rem; color: var(--ink2); }
+.ticks span { position: absolute; transform: translateX(-50%); }
+.ticks span:first-child { transform: none; } .ticks span:last-child { transform: translateX(-100%); }
+.cues { position: relative; height: 26px; font-family: var(--font-mono); font-size: 0.72rem; color: var(--cue); font-weight: 700; }
+.cues span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+.cues span::before { content: "▲ "; }
+@media (max-width: 620px) {
+  .bar { grid-template-columns: 1fr; min-height: 0; }
+  .bar > div { grid-template-columns: 1fr auto; align-items: baseline; }
+  .ticks, .cues { display: none; }
+}
+
+/* sections of the piece */
+.parts { display: grid; gap: 14px; }
+.part { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; display: grid; grid-template-columns: 110px 1fr; gap: 16px; border-left: 8px solid var(--c); }
+.part .when { font-family: var(--font-mono); font-weight: 700; color: var(--c); }
+.part .when small { display: block; font-weight: 500; color: var(--ink2); font-size: 0.78rem; }
+.part .body { display: grid; gap: 10px; min-width: 0; }
+.who { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 22px; }
+.who div { min-width: 0; }
+.who h4 { margin: 0 0 2px; font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink2); font-weight: 700; }
+.who ul { margin: 0; padding-left: 1.1em; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-family: var(--font-mono); font-size: 0.75rem; border: 1px solid var(--line); border-radius: 999px; padding: 2px 9px; color: var(--ink2); background: var(--bg); }
+@media (max-width: 620px) { .part { grid-template-columns: 1fr; gap: 8px; } }
+
+/* tables */
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; min-width: 620px; font-size: 0.95rem; }
+th, td { text-align: left; vertical-align: top; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+th { font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink2); font-weight: 700; }
+tr:last-child td { border-bottom: 0; }
+td.k { font-weight: 700; white-space: nowrap; }
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--c); margin-right: 6px; vertical-align: 1px; }
+
+/* checklists */
+.check { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.check li { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; }
+.check input { width: 22px; height: 22px; margin-top: 2px; accent-color: var(--accent); }
+.check label { min-width: 0; }
+.check input:checked + label { color: var(--ink2); text-decoration: line-through; text-decoration-color: var(--line); }
+.phase { display: grid; grid-template-columns: 90px 1fr; gap: 14px; }
+.phase .when { font-family: var(--font-mono); font-weight: 700; color: var(--accent); padding-top: 2px; }
+.steps { display: grid; gap: 22px; }
+@media (max-width: 620px) { .phase { grid-template-columns: 1fr; gap: 4px; } }
+
+/* two-column notes */
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.card ul { margin: 0; padding-left: 1.1em; display: grid; gap: 4px; }
+.note { border-left: 4px solid var(--accent); padding: 4px 0 4px 14px; color: var(--ink2); max-width: 70ch; }
+
+/* tools */
+.tool { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 20px; display: grid; gap: 16px; }
+.fields { display: flex; flex-wrap: wrap; gap: 14px 20px; align-items: end; }
+.fields label { display: grid; gap: 4px; font-size: 0.85rem; color: var(--ink2); }
+.fields input, .fields select { font: inherit; font-size: 1rem; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; width: 9rem; }
+.out { font-size: 1.05rem; display: grid; gap: 4px; }
+.out b { font-family: var(--font-mono); }
+.clockface { display: grid; grid-template-columns: auto 1fr; gap: 20px; align-items: center; }
+.big { font-family: var(--font-mono); font-weight: 700; font-size: clamp(3rem, 12vw, 5.5rem); line-height: 1; font-variant-numeric: tabular-nums; }
+.big.amber { color: var(--s2); } .big.red { color: var(--cue); }
+.now { display: grid; gap: 4px; min-width: 0; }
+.now .sec { font-family: var(--font-display); font-weight: 800; font-size: 1.6rem; }
+.now .do { color: var(--ink2); }
+.progress { height: 10px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line); overflow: hidden; }
+.progress div { height: 100%; width: 0; background: var(--accent); }
+.btns { display: flex; flex-wrap: wrap; gap: 10px; }
+button { font: inherit; font-weight: 700; border-radius: 8px; padding: 10px 18px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); cursor: pointer; }
+button.primary { background: var(--accent); color: var(--surface); border-color: var(--accent); }
+@media (max-width: 620px) { .clockface { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+<div class="wrap">
+
+<header style="display:grid; gap:16px">
+  <span class="eyebrow">ADMI Board Sequencer · Performance plan</span>
+  <h1>Seven Minutes on the Board</h1>
+  <p class="lede">A plan for a seven-minute live piece: Tim plays the board and the iPad, the facilitator runs the laptop. The structure is set in advance so the scenes change on time underneath Tim, and everything Tim does on top is his own.</p>
+  <nav aria-label="On this page"><ul>
+    <li><a href="#shape">The shape</a></li>
+    <li><a href="#roles">Who does what</a></li>
+    <li><a href="#prepare">Prepare</a></li>
+    <li><a href="#settings">Settings</a></li>
+    <li><a href="#rehearse">Rehearse</a></li>
+    <li><a href="#day">On the day</a></li>
+    <li><a href="#run">Run sheet</a></li>
+    <li><a href="#wrong">If it goes wrong</a></li>
+    <li><a href="#clock">Rehearsal clock</a></li>
+    <li><a href="#after">Afterwards</a></li>
+  </ul></nav>
+</header>
+
+<section id="shape" aria-labelledby="h-shape">
+  <span class="eyebrow">The piece</span>
+  <h2 id="h-shape">The shape: four scenes in seven minutes</h2>
+  <p>Four scenes, one for each scene pad on the iPad. Each one comes in by itself at its time, on the next pass of the loop, so nobody has to remember to press anything. The audience hears the instrument arrive, grow, open up, and come home.</p>
+  <div class="score" role="img" aria-label="Timeline: Arrival 0:00 to 1:30, Build 1:30 to 3:30, Open 3:30 to 6:00, Home 6:00 to 7:00. Cues at 6:00, 6:30 and 6:50.">
+    <div class="bar">
+      <div class="b1"><span class="n">Arrival</span><span class="t">0:00–1:30</span></div>
+      <div class="b2"><span class="n">Build</span><span class="t">1:30–3:30</span></div>
+      <div class="b3"><span class="n">Open</span><span class="t">3:30–6:00</span></div>
+      <div class="b4"><span class="n">Home</span><span class="t">6:00–7:00</span></div>
+    </div>
+    <div class="ticks" aria-hidden="true">
+      <span style="left:0">0:00</span><span style="left:21.43%">1:30</span><span style="left:50%">3:30</span><span style="left:85.71%">6:00</span><span style="left:100%">7:00</span>
+    </div>
+    <div class="cues" aria-hidden="true">
+      <span style="left:85.71%">1 min</span><span style="left:92.86%">30 s · End</span>
+    </div>
+  </div>
+
+  <div class="parts">
+    <article class="part" style="--c: var(--s1)">
+      <div class="when">0:00<small>1 min 30</small></div>
+      <div class="body">
+        <h3>1 · Arrival</h3>
+        <p>Quiet and sparse so the audience can see that a counter makes a sound. One soft loop holds the room while Tim places his first counters, slowly, one at a time.</p>
+        <div class="chips"><span class="chip">Loop: Bed</span><span class="chip">Band Gentle</span><span class="chip">Fill 0%</span><span class="chip">Evolve 0%</span><span class="chip">Phrases on</span></div>
+        <div class="who">
+          <div><h4>Tim</h4><ul><li>Places two or three melody counters, leaving space between them.</li><li>Moves one counter up or down a row and listens to the change.</li></ul></div>
+          <div><h4>Facilitator</h4><ul><li>Watches the board and the countdown, and does nothing else.</li><li>Checks the 👆 mark lights on the iPad when Tim touches it.</li></ul></div>
+        </div>
+      </div>
+    </article>
+
+    <article class="part" style="--c: var(--s2)">
+      <div class="when">1:30<small>2 min</small></div>
+      <div class="body">
+        <h3>2 · Build</h3>
+        <p>The groove arrives: bass and drums loops fade in over a pass. Fill starts adding a few notes around Tim's. This is where the piece gets its pulse.</p>
+        <div class="chips"><span class="chip">Loops: Bed + Pulse + Beat</span><span class="chip">Band Gentle</span><span class="chip">Fill 30%</span><span class="chip">Evolve 0%</span></div>
+        <div class="who">
+          <div><h4>Tim</h4><ul><li>Adds counters as the beat comes in, including a drum or bass counter, which the band hands over to him.</li><li>Uses the <b>Fill</b> strip on the iPad to bring more or fewer added notes.</li><li>Taps <b>Shine</b> on the Loops page when he wants the hook.</li></ul></div>
+          <div><h4>Facilitator</h4><ul><li>If Tim plays something good, taps <b>Capture</b> so it's kept in a free slot.</li></ul></div>
+        </div>
+      </div>
+    </article>
+
+    <article class="part" style="--c: var(--s3)">
+      <div class="when">3:30<small>2 min 30</small></div>
+      <div class="body">
+        <h3>3 · Open</h3>
+        <p>The loops step back and the full band and Evolve take over. This is Tim's solo, the loudest and freest part: the sounds change under his hands and he decides when.</p>
+        <div class="chips"><span class="chip">No loops</span><span class="chip">Band Full</span><span class="chip">Fill 40%</span><span class="chip">Evolve 50%</span></div>
+        <div class="who">
+          <div><h4>Tim</h4><ul><li>Rearranges the board freely.</li><li>Uses the <b>Evolve</b> strip, <b>New sound</b> and <b>New idea</b>. Taps <b>Keep</b> when he likes one.</li><li>Can bring back any loop, or the captured one, from the Loops page.</li></ul></div>
+          <div><h4>Facilitator</h4><ul><li>At about 5:30, signals "nearly home" to Tim, using whatever signal you agreed in rehearsal.</li></ul></div>
+        </div>
+      </div>
+    </article>
+
+    <article class="part" style="--c: var(--s4)">
+      <div class="when">6:00<small>1 min</small></div>
+      <div class="body">
+        <h3>4 · Home</h3>
+        <p>Back to the opening loop, and the band leaves, so Tim's own counters are clearly in front. At the 30-second cue Tim taps <b>End piece</b>: the texture thins and a final chord rings out.</p>
+        <div class="chips"><span class="chip">Loop: Bed</span><span class="chip">Band Off</span><span class="chip">Fill 0%</span><span class="chip">Evolve 0%</span><span class="chip">End: Final chord, 2 passes</span></div>
+        <div class="who">
+          <div><h4>Tim</h4><ul><li>Lifts counters until two or three are left.</li><li>At the 30 s cue, taps <b>End piece</b> twice on the iPad.</li><li>Takes his hands off the board and lets the chord ring.</li></ul></div>
+          <div><h4>Facilitator</h4><ul><li>If End hasn't been pressed by the 10 s cue, presses <b>End now</b> on the laptop.</li><li>After the chord has rung out, presses ■ Stop, then <b>Save session</b>.</li></ul></div>
+        </div>
+      </div>
+    </article>
+  </div>
+  <p class="note">The times are a guide. With "When I press End" nothing stops by itself, so if the room wants more you can let the Home scene run on, and if a scene isn't working the facilitator can tap <b>Next scene</b> early.</p>
+</section>
+
+<section id="roles" aria-labelledby="h-roles">
+  <span class="eyebrow">People</span>
+  <h2 id="h-roles">Who does what</h2>
+  <div class="cols">
+    <div class="card">
+      <h3>Tim: the board and the iPad</h3>
+      <ul>
+        <li>Plays every note the audience hears from the board.</li>
+        <li>On the iPad: <b>Fill</b> and <b>Evolve</b> strips, <b>New idea</b>, <b>New sound</b> and <b>Keep</b>, the loop pads, and <b>End piece</b>.</li>
+        <li>Plays left-handed. Put the iPad on his left and the board within his comfortable reach.</li>
+        <li>Has nothing to hold down or keep still. Every control acts on a touch.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Facilitator: the laptop</h3>
+      <ul>
+        <li>Starts the piece (▶ Play) and stops it afterwards.</li>
+        <li>Watches the countdown and gives Tim the agreed signal at 5:30.</li>
+        <li>Backup for everything: Capture, Next scene, End now, Cancel the ending, Mute.</li>
+        <li>Does not change the music during the piece unless something goes wrong. The music is Tim's.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="prepare" aria-labelledby="h-prep">
+  <span class="eyebrow">Days before</span>
+  <h2 id="h-prep">Prepare the loops and scenes</h2>
+  <p>Do all of this while stopped, with Tim, so the loops are his material. Everything saves to his player profile, in the browser and in a copy on the laptop. When it's ready, press <b>⤓ Back up to a file</b> as well. Make these in <b>Loops tab → Perform</b>, using <b>Save board here</b> with counters on the board or <b>Draw</b> on screen.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Slot</th><th>Name</th><th>What's in it</th><th>Used in</th></tr></thead>
+    <tbody>
+      <tr><td class="k mono">1</td><td class="k">Bed</td><td>Two or three chord counters, low and soft. It should be calm enough to sit under anything.</td><td>Arrival, Home</td></tr>
+      <tr><td class="k mono">2</td><td class="k">Pulse</td><td>One or two bass counters (a phrase fills the loop).</td><td>Build</td></tr>
+      <tr><td class="k mono">3</td><td class="k">Beat</td><td>A drum counter in a middle row for a medium groove (higher rows are busier).</td><td>Build</td></tr>
+      <tr><td class="k mono">4</td><td class="k">Beat+</td><td>The same drums placed higher, for a busier groove Tim can swap in.</td><td>Build or Open, Tim's choice</td></tr>
+      <tr><td class="k mono">5</td><td class="k">Shine</td><td>A short melody hook Tim likes.</td><td>Anywhere, from the iPad</td></tr>
+      <tr><td class="k mono">6–8</td><td class="k">(empty)</td><td>Leave these empty. <b>Capture</b> puts the live board into the first free slot.</td><td>Captures</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>The four scenes</h3>
+  <p>For each one, set the loops and sound as listed, type the name, press <b>Save scene from now</b>, then give it its time. Use the same sound world for all four (for example <b>Warm</b>) so the piece sounds like one instrument, and keep the tempo the same in all four.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Scene</th><th>At</th><th>Loops playing</th><th>Band</th><th>Fill</th><th>Evolve</th></tr></thead>
+    <tbody>
+      <tr><td class="k"><span class="dot" style="--c:var(--s1)"></span>Arrival</td><td class="mono">0:00</td><td>Bed</td><td>Gentle</td><td class="mono">0%</td><td class="mono">0%</td></tr>
+      <tr><td class="k"><span class="dot" style="--c:var(--s2)"></span>Build</td><td class="mono">1:30</td><td>Bed, Pulse, Beat</td><td>Gentle</td><td class="mono">30%</td><td class="mono">0%</td></tr>
+      <tr><td class="k"><span class="dot" style="--c:var(--s3)"></span>Open</td><td class="mono">3:30</td><td>none</td><td>Full</td><td class="mono">40%</td><td class="mono">50%</td></tr>
+      <tr><td class="k"><span class="dot" style="--c:var(--s4)"></span>Home</td><td class="mono">6:00</td><td>Bed</td><td>Off</td><td class="mono">0%</td><td class="mono">0%</td></tr>
+    </tbody>
+  </table></div>
+  <p class="note">Optional: in <b>Colours</b>, give one counter colour the job <b>Plays a loop… → Shine</b>. Then Tim can bring the hook in by putting that counter anywhere on the board, without the iPad. Only do this if you have a colour spare, because that counter won't play notes.</p>
+</section>
+
+<section id="settings" aria-labelledby="h-set">
+  <span class="eyebrow">Settings</span>
+  <h2 id="h-set">Settings to check before the piece</h2>
+  <div class="cols">
+    <div class="card">
+      <h3>Loops tab → Perform → The performance</h3>
+      <ul>
+        <li><b>Length</b> <span class="mono">7:00</span></li>
+        <li><b>The clock starts</b>: With Play</li>
+        <li><b>How it ends</b>: Final chord (or Slow down, if Tim prefers it in rehearsal)</li>
+        <li><b>The ending takes</b>: 2 passes</li>
+        <li><b>When it ends</b>: When I press End</li>
+        <li><b>Loops fade in and out over</b>: 1 pass</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Sound tab</h3>
+      <ul>
+        <li><b>Sound world</b>: the same one in all four scenes</li>
+        <li><b>Each counter plays</b>: A phrase</li>
+        <li><b>Studio mix</b> ticked</li>
+        <li>Groove tab: <b>polyrhythm loop lengths Off</b>, because they fight phrases</li>
+        <li>Fill ideas from <b>Magenta AI</b>: press New idea once while online beforehand so it has downloaded. Without internet it uses Simple rules.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Sound → Connections → iPad controls (Tim's profile)</h3>
+      <ul>
+        <li><b>What the iPad shows</b>: Fill and Evolve strips only, so they're big. New idea, New sound and Keep pads. Untick Mute so it can't be hit by accident.</li>
+        <li><b>Speed</b> hidden or 🔒 locked: the tempo stays fixed for the piece.</li>
+        <li><b>A touch on a strip</b>: Follows the movement, so a rough landing changes nothing.</li>
+        <li><b>Learn reach</b> with Tim at the venue, in the seat he'll play from.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="tool" aria-labelledby="h-calc">
+    <h3 id="h-calc">How long is a pass, and how long does the ending take?</h3>
+    <p>One step on the board is one beat, so a pass is <i>steps × 60 ÷ tempo</i> seconds. Scenes, loop starts and the ending all land on pass boundaries.</p>
+    <div class="fields">
+      <label for="c-bpm">Tempo (BPM)<input id="c-bpm" type="number" min="40" max="200" value="90"></label>
+      <label for="c-steps">Steps on the board<select id="c-steps"><option value="8" selected>8</option><option value="10">10</option><option value="16">16</option></select></label>
+      <label for="c-style">How it ends<select id="c-style"><option value="chord" selected>Final chord</option><option value="fade">Fade out</option><option value="slow">Slow down</option><option value="thin">Thin out</option><option value="stop">Stop at the end of the pass</option></select></label>
+      <label for="c-passes">The ending takes<select id="c-passes"><option value="1">1 pass</option><option value="2" selected>2 passes</option><option value="4">4 passes</option></select></label>
+    </div>
+    <div class="out" id="c-out" aria-live="polite"></div>
+  </div>
+</section>
+
+<section id="rehearse" aria-labelledby="h-reh">
+  <span class="eyebrow">Before the day</span>
+  <h2 id="h-reh">Three rehearsals</h2>
+  <div class="steps">
+    <div class="phase"><span class="when">First</span><div><h3>Explore, no clock</h3><p>Go to each scene with <b>Go</b> and let Tim play in it for a few minutes. Find out which loops he likes, whether Final chord or Slow down feels better as an ending, and how much Fill and Evolve he enjoys. Adjust the scenes and save them again.</p></div></div>
+    <div class="phase"><span class="when">Second</span><div><h3>Full run with the clock</h3><p>Play all seven minutes with the scenes at their times. Agree the "nearly home" signal for 5:30 (a touch on the arm, a nod, a card). Practise <b>End piece</b> at the 30 s cue. Afterwards, <b>Save session</b> and look at what happened.</p></div></div>
+    <div class="phase"><span class="when">Dress</span><div><h3>In the room, the whole chain</h3><p>Same laptop, iPad, camera, lighting, speakers and seat as the performance. Do the setup below from scratch, then a full run. Note the iPad link and the camera position so the day is a repeat.</p></div></div>
+  </div>
+</section>
+
+<section id="day" aria-labelledby="h-day">
+  <span class="eyebrow">Setup</span>
+  <h2 id="h-day">On the day: one hour before</h2>
+  <p>Tick these off as you go. The ticks are remembered in this browser only.</p>
+  <div class="steps" id="checklist">
+    <div class="phase"><span class="when">−60 min</span><div><ul class="check">
+      <li><input type="checkbox" id="k1"><label for="k1">Laptop on mains power. Sleep and notifications off (Windows: Focus on).</label></li>
+      <li><input type="checkbox" id="k2"><label for="k2">Laptop and iPad on the <b>same network</b> (the phone hotspot worked before).</label></li>
+      <li><input type="checkbox" id="k3"><label for="k3">Close any other ADMI terminals, then start <b>one</b> server: <code>npm run show</code> (a fixed build on port 3001 that can't reload mid-piece; wait for "Local: http://localhost:3001")</label></li>
+      <li><input type="checkbox" id="k4"><label for="k4">Laptop in Chrome at <code>http://localhost:3001</code>. Pick Tim on <b>Who's playing?</b></label></li>
+    </ul></div></div>
+    <div class="phase"><span class="when">−50 min</span><div><ul class="check">
+      <li><input type="checkbox" id="k5"><label for="k5">Camera fixed in place, <b>Picture size 1280 × 720</b>, and it says <b>"Picture has colour"</b>.</label></li>
+      <li><input type="checkbox" id="k6"><label for="k6">Board: <b>Skip, board hasn't moved</b>, or <b>Find board</b> then <b>Looks right</b>.</label></li>
+      <li><input type="checkbox" id="k7"><label for="k7">All counters off, then <b>Learn the empty board</b>. One of each counter on, then <b>Find colours</b>, then <b>Use these colours</b>.</label></li>
+      <li><input type="checkbox" id="k8"><label for="k8"><b>Ready</b>: the counts match what's on the board.</label></li>
+    </ul></div></div>
+    <div class="phase"><span class="when">−40 min</span><div><ul class="check">
+      <li><input type="checkbox" id="k9"><label for="k9">Sound → Connections → <b>iPad controls</b> ticked. Open the link it shows in <b>Safari on the iPad</b>. It looks like <code>http://172.20.10.8:3001/?remote=4821</code>, but the address and code can change, so use the one on screen.</label></li>
+      <li><input type="checkbox" id="k10"><label for="k10">Both screens stop saying "waiting". A touch on the iPad shows the 👆 mark, and a strip moves the value on the laptop.</label></li>
+      <li><input type="checkbox" id="k11"><label for="k11">iPad: Auto-Lock <b>Never</b>, brightness up, Do Not Disturb on. Consider <b>Guided Access</b> so a stray swipe can't leave Safari.</label></li>
+      <li><input type="checkbox" id="k12"><label for="k12"><b>Learn reach</b> with Tim in his seat, iPad on his left.</label></li>
+    </ul></div></div>
+    <div class="phase"><span class="when">−20 min</span><div><ul class="check">
+      <li><input type="checkbox" id="k13"><label for="k13">Perform: the five loops are there and named. Play each one once.</label></li>
+      <li><input type="checkbox" id="k14"><label for="k14">Scenes: Arrival 0:00, Build 1:30, Open 3:30, Home 6:00.</label></li>
+      <li><input type="checkbox" id="k20"><label for="k20">Perform: the line at the top says there's a copy on this laptop. Press <b>⤓ Back up to a file</b> and put the file on a USB stick too.</label></li>
+      <li><input type="checkbox" id="k15"><label for="k15">The performance: 7:00, With Play, Final chord, 2 passes, When I press End.</label></li>
+      <li><input type="checkbox" id="k16"><label for="k16">Sound check through the PA: ▶ Play, Tim places counters, set the level, then ■ Stop. Stopping resets the clock, so the check doesn't count.</label></li>
+    </ul></div></div>
+    <div class="phase"><span class="when">−2 min</span><div><ul class="check">
+      <li><input type="checkbox" id="k17"><label for="k17">Board clear, counters within Tim's reach.</label></li>
+      <li><input type="checkbox" id="k18"><label for="k18">Press <b>Go</b> on <b>Arrival</b>, so the first scene is already set when Play is pressed.</label></li>
+      <li><input type="checkbox" id="k19"><label for="k19">Laptop on the Play screen. Hand ready on ▶ Play. Look at Tim and nod.</label></li>
+    </ul></div></div>
+  </div>
+  <div class="btns"><button type="button" id="k-reset">Clear all ticks</button></div>
+</section>
+
+<section id="run" aria-labelledby="h-run">
+  <span class="eyebrow">During</span>
+  <h2 id="h-run">Run sheet</h2>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Clock shows</th><th>Time in</th><th>What happens</th><th>Tim</th><th>Facilitator</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">7:00</td><td class="mono">0:00</td><td><span class="dot" style="--c:var(--s1)"></span><b>Arrival.</b> Bed loop, gentle band.</td><td>First counter, then wait and listen.</td><td>▶ Play.</td></tr>
+      <tr><td class="mono">5:30</td><td class="mono">1:30</td><td><span class="dot" style="--c:var(--s2)"></span><b>Build.</b> Pulse and Beat fade in over a pass. Fill 30%.</td><td>More counters. Fill strip. Shine pad.</td><td>Capture if something great happens.</td></tr>
+      <tr><td class="mono">3:30</td><td class="mono">3:30</td><td><span class="dot" style="--c:var(--s3)"></span><b>Open.</b> Loops out, band Full, Evolve 50%.</td><td>Solo: Evolve strip, New sound, New idea, Keep.</td><td>Watch.</td></tr>
+      <tr><td class="mono">1:30</td><td class="mono">5:30</td><td>Still Open.</td><td>Starts to calm down.</td><td>"Nearly home" signal.</td></tr>
+      <tr><td class="mono">1:00</td><td class="mono">6:00</td><td><span class="dot" style="--c:var(--s4)"></span><b>Home.</b> Bed returns, band leaves. <b>1-minute cue</b> flashes on the board.</td><td>Lifts counters down to two or three.</td><td>Watch.</td></tr>
+      <tr><td class="mono">0:30</td><td class="mono">6:30</td><td><b>30-second cue.</b> iPad countdown turns red.</td><td><b>End piece</b>, two taps.</td><td>Check the laptop shows the ending started.</td></tr>
+      <tr><td class="mono">0:10</td><td class="mono">6:50</td><td><b>10-second cue.</b> The final chord rings out.</td><td>Hands off.</td><td>If End wasn't pressed: <b>End now</b>.</td></tr>
+      <tr><td class="mono">—</td><td class="mono">~7:00</td><td>Silence.</td><td>Bow.</td><td>■ Stop, then <b>Save session</b>.</td></tr>
+    </tbody>
+  </table></div>
+  <p class="note">At 90 BPM on an 8-step board, the Final chord over 2 passes takes about 16 seconds, so pressing End at 6:30 finishes around 6:46. Use the calculator above for your actual tempo.</p>
+</section>
+
+<section id="wrong" aria-labelledby="h-wrong">
+  <span class="eyebrow">Contingency</span>
+  <h2 id="h-wrong">If something goes wrong</h2>
+  <p>The music never stops by itself, so take your time. The audience can't tell a pause from a choice.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>What you notice</th><th>What to do</th></tr></thead>
+    <tbody>
+      <tr><td class="k">iPad and laptop both say "waiting"</td><td>Two servers are running. Close every ADMI terminal, start one with <code>npm run show</code>, and reopen both pages using the same code.</td></tr>
+      <tr><td class="k">iPad shows but doesn't react</td><td>Look for the 👆 mark when Tim touches it. If there's no mark, reload the iPad page. If there's a mark but nothing changes, check the strip isn't 🔒 locked or hidden for this player.</td></tr>
+      <tr><td class="k">A counter isn't heard</td><td>Nudge it to the centre of its square. If a hand or sleeve is over it, it's held and will come back when the hand moves. As a last resort: Colours → lower <b>Piece coverage</b>.</td></tr>
+      <tr><td class="k">Counters knocked over</td><td>Do nothing. The pattern carries on as ghosts (↺) until the counters are put back.</td></tr>
+      <tr><td class="k">Board bumped</td><td>A small nudge is followed automatically. A big move asks for the board again, so keep the loops running and re-find the board.</td></tr>
+      <tr><td class="k">Too busy or too loud</td><td>Tim brings the Fill strip down. The facilitator taps <b>Stop all loops</b> (two taps on the iPad).</td></tr>
+      <tr><td class="k">A scene isn't working</td><td>Tap <b>Next scene</b>, or <b>Go</b> on the one you want. Deleted one by mistake? <b>Undo</b> appears for 15 seconds.</td></tr>
+      <tr><td class="k">Red banner: "The camera has stopped"</td><td>The music carries on with the last pattern. Press <b>Try the camera again</b>; check the USB cable.</td></tr>
+      <tr><td class="k">Stop pressed by accident</td><td>While the clock runs, the first press only says "Press again to stop" — just don't press again.</td></tr>
+      <tr><td class="k">End pressed too early</td><td><b>Cancel the ending</b> on the laptop.</td></tr>
+      <tr><td class="k">Something awful</td><td><b>Mute</b> on the laptop, which stops the sound without losing anything. Unmute when ready.</td></tr>
+      <tr><td class="k">Loops or scenes missing</td><td>Check the address is <code>localhost:3001</code> and Tim is picked on Who's playing. Still missing: Perform → <b>⤒ Restore from a file</b> with your backup, or a file from <code>.admi-data/backups</code> in the ADMIv3 folder.</td></tr>
+      <tr><td class="k">Magenta not responding</td><td>Fill falls back to Simple rules by itself. Carry on.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="clock" aria-labelledby="h-clock">
+  <span class="eyebrow">Rehearsal tool</span>
+  <h2 id="h-clock">Rehearsal clock</h2>
+  <p>A stand-in for the app's countdown, for walking through the structure without the rig, for example with Tim and a sheet of paper. It shows the scene you're in and what to do next.</p>
+  <div class="tool">
+    <div class="clockface">
+      <div class="big" id="r-time" role="timer" aria-live="off">7:00</div>
+      <div class="now"><span class="eyebrow" id="r-elapsed">0:00 in</span><span class="sec" id="r-sec">Arrival</span><span class="do" id="r-do">Press Start.</span></div>
+    </div>
+    <div class="progress" aria-hidden="true"><div id="r-bar"></div></div>
+    <div class="btns">
+      <button type="button" class="primary" id="r-start">Start</button>
+      <button type="button" id="r-reset">Reset</button>
+    </div>
+  </div>
+</section>
+
+<section id="after" aria-labelledby="h-after">
+  <span class="eyebrow">Afterwards</span>
+  <h2 id="h-after">After the piece</h2>
+  <ul class="check">
+    <li><input type="checkbox" id="a1"><label for="a1">Play screen → <b>Save session</b> (JSON, everything) and <b>CSV</b> (the notes). Each note is marked placed, phrase, fill or band, so you can show how much of the piece was Tim's own.</label></li>
+    <li><input type="checkbox" id="a2"><label for="a2">Ask Tim straight away what felt good and what didn't, and write it down with the session file.</label></li>
+    <li><input type="checkbox" id="a3"><label for="a3">Close the server terminal (Ctrl+C) when you're done.</label></li>
+  </ul>
+</section>
+
+</div>
+
+<script>
+(function () {
+  // Pass calculator
+  var bpm = document.getElementById('c-bpm'), steps = document.getElementById('c-steps'),
+      style = document.getElementById('c-style'), passes = document.getElementById('c-passes'),
+      out = document.getElementById('c-out');
+  function fmt(s) { s = Math.round(s); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
+  function calc() {
+    var b = Math.min(200, Math.max(40, Number(bpm.value) || 90));
+    var pass = Number(steps.value) * 60 / b;
+    var n = style.value === 'stop' ? 0 : Number(passes.value) + (style.value === 'chord' ? 1 : 0);
+    var endLen = style.value === 'stop' ? pass : n * pass;
+    passes.disabled = style.value === 'stop';
+    out.innerHTML =
+      '<span>One pass: <b>' + pass.toFixed(1) + ' s</b> &middot; passes in 7 minutes: <b>' + Math.floor(420 / pass) + '</b></span>' +
+      '<span>The ending takes about <b>' + Math.round(endLen) + ' s</b>' + (style.value === 'stop' ? ' at most (to the end of the pass)' : ' (' + n + ' passes)') + '.</span>' +
+      '<span>Press End at the 30 s cue and it finishes around <b>' + fmt(390 + endLen) + '</b>. For an exact 7:00, press it at <b>' + fmt(Math.max(0, 420 - endLen)) + '</b>.</span>';
+  }
+  [bpm, steps, style, passes].forEach(function (el) { el.addEventListener('input', calc); });
+  calc();
+
+  // Checklist ticks, remembered per browser
+  var KEY = 'admi-7min-ticks';
+  var boxes = Array.prototype.slice.call(document.querySelectorAll('.check input[type=checkbox]'));
+  var saved = {};
+  try { saved = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { saved = {}; }
+  boxes.forEach(function (b) {
+    b.checked = !!saved[b.id];
+    b.addEventListener('change', function () {
+      saved[b.id] = b.checked;
+      try { localStorage.setItem(KEY, JSON.stringify(saved)); } catch (e) {}
+    });
+  });
+  document.getElementById('k-reset').addEventListener('click', function () {
+    boxes.forEach(function (b) { b.checked = false; });
+    saved = {};
+    try { localStorage.removeItem(KEY); } catch (e) {}
+  });
+
+  // Rehearsal clock
+  var PLAN = [
+    { at: 0, name: 'Arrival', do: 'First counters, slowly. Listen.' },
+    { at: 90, name: 'Build', do: 'Bass and drums come in. Add counters, use the Fill strip.' },
+    { at: 210, name: 'Open', do: 'Solo: Evolve strip, New sound, New idea, Keep.' },
+    { at: 330, name: 'Open', do: 'Nearly home: start to calm down.' },
+    { at: 360, name: 'Home', do: 'Bed returns. Lift counters down to two or three.' },
+    { at: 390, name: 'Home', do: 'End piece: two taps.' },
+    { at: 410, name: 'Ending', do: 'Hands off. Let the chord ring.' },
+    { at: 420, name: 'Over', do: 'Stop, then Save session.' }
+  ];
+  var tEl = document.getElementById('r-time'), eEl = document.getElementById('r-elapsed'),
+      sEl = document.getElementById('r-sec'), dEl = document.getElementById('r-do'),
+      bar = document.getElementById('r-bar'), startBtn = document.getElementById('r-start');
+  var startAt = null, timer = null, wake = null;
+  function render(el) {
+    var left = 420 - el;
+    tEl.textContent = (left < 0 ? '-' : '') + fmt(Math.abs(left));
+    tEl.className = 'big' + (left <= 30 ? ' red' : left <= 60 ? ' amber' : '');
+    eEl.textContent = fmt(Math.max(0, el)) + ' in';
+    var cur = PLAN[0];
+    PLAN.forEach(function (p) { if (el >= p.at) cur = p; });
+    sEl.textContent = cur.name;
+    dEl.textContent = startAt === null && el === 0 ? 'Press Start.' : cur.do;
+    bar.style.width = Math.min(100, el / 420 * 100) + '%';
+  }
+  function tick() { render((Date.now() - startAt) / 1000); }
+  startBtn.addEventListener('click', function () {
+    if (timer) { clearInterval(timer); timer = null; startBtn.textContent = 'Resume'; startAt = Date.now() - startAt; if (wake) { wake.release().catch(function () {}); wake = null; } return; }
+    startAt = startAt === null ? Date.now() : Date.now() - startAt;
+    timer = setInterval(tick, 250); tick();
+    startBtn.textContent = 'Pause';
+    try { if (navigator.wakeLock) navigator.wakeLock.request('screen').then(function (w) { wake = w; }).catch(function () {}); } catch (e) {}
+  });
+  document.getElementById('r-reset').addEventListener('click', function () {
+    if (timer) clearInterval(timer);
+    timer = null; startAt = null; startBtn.textContent = 'Start'; render(0);
+    if (wake) { wake.release().catch(function () {}); wake = null; }
+  });
+  render(0);
+})();
+</script>

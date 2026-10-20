@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
+import { fakeVoiceEntry } from './helpers/fakeVoiceEntry';
 
 vi.mock('tone', () => ({
   getContext: vi.fn(() => ({ rawContext: { currentTime: 0 } })),
@@ -6,7 +7,7 @@ vi.mock('tone', () => ({
   MembraneSynth: vi.fn(), Limiter: vi.fn(), Reverb: vi.fn(), FeedbackDelay: vi.fn(), connect: vi.fn(),
 }));
 vi.mock('../effects', () => ({ getEffectChainManager: () => ({ initialize: vi.fn(), getInput: () => null }) }));
-vi.mock('../songs/voices/BoardSequencerVoice', () => ({ BoardSequencerVoice: vi.fn() }));
+vi.mock('../songs/voices/BoardSequencerVoice', () => ({ BoardSequencerVoice: class { setBrightness = vi.fn(); connect = vi.fn(); dispose = vi.fn(); play = vi.fn(); isReady = () => true; } }));
 vi.mock('../audio/instruments/RoundRobinDrumKit', () => ({ RoundRobinDrumKit: vi.fn() }));
 
 import { BoardSequencerEngine, FIRED_NOTE_CAP, type BoardEngineConfig } from '../songs/BoardSequencerEngine';
@@ -35,7 +36,7 @@ function engine(over: Partial<BoardEngineConfig> = {}) {
   const p = e as unknown as Priv;
   p.channelById = new Map(channels.map((c) => [c.id, c]));
   const play = vi.fn();
-  p.voiceByChannel = new Map([['m', { voice: { play } }]]);
+  p.voiceByChannel = new Map([['m', fakeVoiceEntry(play)]]);
   p.drumKit = { play: vi.fn() };
   return { e, p, play };
 }

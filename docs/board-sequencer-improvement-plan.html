@@ -1,0 +1,280 @@
+<title>Board Sequencer Improvement Plan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: one reading column. A phase map up top, then each phase as a numbered work list; chips say who found each item. */
+:root {
+  --bg: #eef1f4; --surface: #ffffff; --ink: #15202c; --ink2: #4a5868; --line: #d3dae2; --accent: #1f4fd8;
+  --crit: #b8322a; --high: #c06a0e; --med: #6b6f12; --low: #5b6676;
+  --p0: #b8322a; --p1: #c2399a; --p2: #1f4fd8; --p3: #2f9a62; --p4: #6a4fc9; --p5: #4a5868;
+  --font-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f151c; --surface: #17202a; --ink: #e6ebf1; --ink2: #9fb0c2; --line: #2a3644; --accent: #7fa2ff;
+    --crit: #ff7a66; --high: #f0aa3c; --med: #cdd36a; --low: #9fb0c2;
+    --p0: #ff7a66; --p1: #e46cbf; --p2: #7fa2ff; --p3: #4fc287; --p4: #a991ff; --p5: #9fb0c2; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f151c; --surface: #17202a; --ink: #e6ebf1; --ink2: #9fb0c2; --line: #2a3644; --accent: #7fa2ff;
+  --crit: #ff7a66; --high: #f0aa3c; --med: #cdd36a; --low: #9fb0c2;
+  --p0: #ff7a66; --p1: #e46cbf; --p2: #7fa2ff; --p3: #4fc287; --p4: #a991ff; --p5: #9fb0c2; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 17px; line-height: 1.55; }
+.wrap { max-width: 980px; margin: 0 auto; padding-inline: 20px; padding-block: 40px 80px; display: grid; gap: 52px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.12; margin: 0; }
+h1 { font-size: clamp(2.1rem, 5.5vw, 3.3rem); font-weight: 800; letter-spacing: -0.02em; }
+h2 { font-size: 1.7rem; font-weight: 800; }
+h3 { font-size: 1.1rem; font-weight: 600; }
+p { margin: 0; max-width: 68ch; }
+section { display: grid; gap: 16px; min-width: 0; }
+.eyebrow { font-family: var(--font-mono); font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink2); }
+.lede { font-size: 1.12rem; color: var(--ink2); }
+code { font-family: var(--font-mono); font-size: 0.86em; background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; overflow-wrap: anywhere; }
+a { color: var(--accent); }
+a:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+.team { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+.member { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: grid; gap: 4px; align-content: start; min-width: 0; }
+.member b { font-family: var(--font-display); font-size: 1rem; }
+.member span { font-size: 0.85rem; color: var(--ink2); }
+
+.map { display: grid; gap: 8px; }
+.map a { display: grid; grid-template-columns: 54px 1fr auto; gap: 14px; align-items: center; padding: 12px 16px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); border-left: 8px solid var(--c); text-decoration: none; color: var(--ink); }
+.map a:hover { border-color: var(--c); }
+.map .n { font-family: var(--font-mono); font-weight: 700; color: var(--c); }
+.map .t { font-weight: 700; }
+.map .t small { display: block; font-weight: 400; color: var(--ink2); font-size: 0.88rem; }
+.map .w { font-family: var(--font-mono); font-size: 0.78rem; color: var(--ink2); white-space: nowrap; }
+@media (max-width: 620px) { .map a { grid-template-columns: 40px 1fr; } .map .w { grid-column: 2; } }
+
+.themes { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 14px; }
+.theme { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; display: grid; gap: 8px; align-content: start; min-width: 0; }
+.theme p { font-size: 0.95rem; color: var(--ink2); }
+
+.phase-head { display: grid; gap: 8px; border-top: 6px solid var(--c); padding-top: 18px; }
+.phase-head .eyebrow { color: var(--c); }
+ol.items { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; counter-reset: it; }
+ol.items > li { counter-increment: it; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px 14px 56px; position: relative; display: grid; gap: 6px; min-width: 0; }
+ol.items > li::before { content: counter(it); position: absolute; left: 16px; top: 14px; font-family: var(--font-mono); font-weight: 700; color: var(--c); font-size: 1rem; }
+.it-title { font-weight: 700; }
+.it-body { color: var(--ink2); font-size: 0.95rem; max-width: 72ch; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.chip { font-family: var(--font-mono); font-size: 0.7rem; border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; color: var(--ink2); background: var(--bg); white-space: nowrap; }
+.sev { font-family: var(--font-mono); font-size: 0.7rem; font-weight: 700; border-radius: 999px; padding: 1px 8px; color: var(--surface); white-space: nowrap; }
+.sev.crit { background: var(--crit); } .sev.high { background: var(--high); } .sev.med { background: var(--med); } .sev.low { background: var(--low); }
+
+.flow { counter-reset: st; list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.flow li { counter-increment: st; display: grid; grid-template-columns: 34px 1fr; gap: 12px; align-items: start; }
+.flow li::before { content: counter(st); font-family: var(--font-mono); font-weight: 700; color: var(--surface); background: var(--p2); border-radius: 50%; width: 28px; height: 28px; display: grid; place-items: center; font-size: 0.85rem; }
+.note { border-left: 4px solid var(--accent); padding: 4px 0 4px 14px; color: var(--ink2); max-width: 72ch; }
+.good { display: flex; flex-wrap: wrap; gap: 8px; }
+.good span { background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; font-size: 0.9rem; }
+.decide { display: grid; gap: 10px; }
+.decide div { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 4px; }
+.decide b { font-family: var(--font-display); }
+</style>
+
+<div class="wrap">
+
+<header style="display:grid; gap:14px">
+  <span class="eyebrow">ADMI Board Sequencer · Review · 20 October 2026</span>
+  <h1>Board Sequencer Improvement Plan</h1>
+  <p class="lede">Five reviewers each looked at the Board Sequencer from a different angle and reported about 60 findings. This plan merges them into six phases. Phase 0 makes the 7-minute performance safe. Phases 1–3 make it sound right and make building a performance easy. Phases 4–5 tidy the app and protect it with tests.</p>
+</header>
+
+<section aria-labelledby="h-team">
+  <span class="eyebrow">Who reviewed</span>
+  <h2 id="h-team">The team</h2>
+  <div class="team">
+    <div class="member"><b>Senior engineer</b><span>Opus · architecture, live-show risk, timing</span></div>
+    <div class="member"><b>UI/UX QA</b><span>Opus · ran the app, screenshots, WCAG 2.2</span></div>
+    <div class="member"><b>Test performer</b><span>Opus · built and ran the full 7:00 piece in real time</span></div>
+    <div class="member"><b>QA</b><span>Sonnet · defect hunt, reproduced a server crash</span></div>
+    <div class="member"><b>Tester</b><span>Sonnet · suite, coverage, end-to-end in a browser</span></div>
+  </div>
+  <p class="note">Each item below is tagged with the reviewers who found it. Items found by several reviewers independently are the most certain.</p>
+</section>
+
+<section aria-labelledby="h-works">
+  <span class="eyebrow">Keep</span>
+  <h2 id="h-works">What already works</h2>
+  <div class="good">
+    <span>All 1,322 tests and typecheck pass</span>
+    <span>Loops land on the pass and fade audibly</span>
+    <span>Timed scenes arrive on time</span>
+    <span>All five endings finish the piece</span>
+    <span>Final chord landed at ~6:58 in the real-time run</span>
+    <span>Cues on laptop and iPad</span>
+    <span>Two-tap End piece</span>
+    <span>iPad loop and scene pads drive the laptop</span>
+    <span>Loops, scenes and clock survive a reload</span>
+    <span>Disk copy and backups written</span>
+    <span>Session log with note origins</span>
+  </div>
+</section>
+
+<section aria-labelledby="h-themes">
+  <span class="eyebrow">The picture</span>
+  <h2 id="h-themes">Five things the reviews agree on</h2>
+  <div class="themes">
+    <div class="theme"><h3>The show can fail quietly</h3><p>A single error freezes the board, the iPad link can drop without anyone noticing, and one oversized message crashes the server. The music keeps playing while the controls stop working, and nothing on screen says so.</p></div>
+    <div class="theme"><h3>Building a piece is hard work</h3><p>A 7-minute piece takes about 40–70 clicks across three tabs. Scenes are snapshots of whatever is playing live, cannot be edited, and the tools for them sit about 2,600 px down the Loops tab.</p></div>
+    <div class="theme"><h3>During the show there's no overview</h3><p>The clock is a small chip. The current scene, the next scene and the time to it are not shown anywhere prominent, and Big board hides them. Deaf and hard-of-hearing performers lose the structure of the piece.</p></div>
+    <div class="theme"><h3>The music works against Tim</h3><p>Loops merge with Tim's counters instead of layering. The band goes silent when loops play. Fill is barely heard. Scenes reset Tim's own Fill and Evolve.</p></div>
+    <div class="theme"><h3>One file does everything</h3><p><code>BoardSequencerScreen.tsx</code> is 4,000 lines, with 72 pieces of state, and re-renders on every frame. The performance logic lives inside it, so it is untested and can't resume after a reload.</p></div>
+  </div>
+</section>
+
+<section aria-labelledby="h-map">
+  <span class="eyebrow">Plan</span>
+  <h2 id="h-map">The six phases</h2>
+  <div class="map">
+    <a href="#p0" style="--c: var(--p0)"><span class="n">0</span><span class="t">Make the show safe<small>Crashes, silent failures, wrong-scene start, endings, data loss</small></span><span class="w">before the show · S each</span></a>
+    <a href="#p1" style="--c: var(--p1)"><span class="n">1</span><span class="t">Make the music serve Tim<small>Layered loops, the band, Fill, scenes that respect his choices, visible loops</small></span><span class="w">before the show · M</span></a>
+    <a href="#p2" style="--c: var(--p2)"><span class="n">2</span><span class="t">The performance builder<small>A Performance document, a timeline, editable scenes, a template, a show view</small></span><span class="w">next · L</span></a>
+    <a href="#p3" style="--c: var(--p3)"><span class="n">3</span><span class="t">The iPad, made for Tim<small>One performance page, palm-proof pads, adjustable timing, scene and beat visible</small></span><span class="w">next · M</span></a>
+    <a href="#p4" style="--c: var(--p4)"><span class="n">4</span><span class="t">Simpler screens and accessibility<small>Clear tabs, setup apart from play, glossary, WCAG fixes, performance of the screen</small></span><span class="w">after · M–L</span></a>
+    <a href="#p5" style="--c: var(--p5)"><span class="n">5</span><span class="t">Tests that guard the show<small>Performance logic under test, iPad messages, saving, Playwright end-to-end, pre-show check</small></span><span class="w">alongside · M</span></a>
+  </div>
+  <p class="note">If the performance is soon, do Phase 0 and the first four items of Phase 1, then rehearse with the existing Perform panel. Phase 2 is the change that makes performances easy to build, but it is a larger rebuild and should not happen in the week of a show.</p>
+</section>
+
+<!-- PHASE 0 -->
+<section id="p0" aria-labelledby="h-p0" style="--c: var(--p0)">
+  <div class="phase-head"><span class="eyebrow">Phase 0 · before the show</span><h2 id="h-p0">Make the show safe</h2>
+  <p>Each item is small. Together they remove every known way for a live performance to stop, go silent, start wrong or lose saved work.</p>
+  <p class="note"><b>Done 20 October 2026.</b> All 14 items are built and tested (1,331 tests passing, plus a browser check). Not yet tried on the real rig. One part is deferred: instruments now wait until they have loaded before taking over, but loaded samples are not yet cached, so changing world still downloads them again.</p></div>
+  <ol class="items">
+    <li><span class="it-title">An oversized iPad-link message crashes the whole server</span><span class="it-body">The relay has no error handler, so any message over 4 KB kills Vite, which also serves the sound, the iPad and saving. QA reproduced it. Add the error handler, a try/catch around messages, and keep the laptop's own state message well under the limit.</span><span class="meta"><span class="sev crit">critical</span><span class="chip">QA</span><span class="chip">relay.ts</span></span></li>
+    <li><span class="it-title">The opening scene never plays</span><span class="it-body">A scene at 0:00 is never applied, because the check needs a time <em>after</em> the start. The piece opens in whichever scene was saved last; in the run it was Home, with the band off. On Play, apply the earliest scene.</span><span class="meta"><span class="sev high">high</span><span class="chip">Performer</span><span class="chip">QA</span><span class="chip">clock.ts scenesDue</span></span></li>
+    <li><span class="it-title">The board can freeze silently</span><span class="it-body">One uncaught error stops the frame loop or the draw loop for good, and an unplugged camera just stops sending frames. The music keeps looping, so no one notices. Catch and count errors, keep the loops running, and show a "Camera stopped · Try again" banner when no frame has come for one second.</span><span class="meta"><span class="sev crit">critical</span><span class="chip">Engineer</span><span class="chip">useBoardRuntime.ts</span></span></li>
+    <li><span class="it-title">Settings only reach the sound while camera frames arrive</span><span class="it-body">Sound world, band, Fill and Evolve are pushed to the engine from inside the camera loop. If the camera stalls, scene changes and iPad strips are saved but never heard. Apply each setting when it changes, independent of the camera. As a first step, <code>goScene</code> should apply every setting directly.</span><span class="meta"><span class="sev crit">critical</span><span class="chip">Engineer</span></span></li>
+    <li><span class="it-title">Run the show from a build, not the dev server</span><span class="it-body">During a show, the dev server can reload the page if any file is saved, which would end the piece. Add <code>npm run show</code> (build, then preview with LAN access, which already carries the iPad link and the disk copy) and make it the only way to run a performance.</span><span class="meta"><span class="sev high">high</span><span class="chip">Engineer</span><span class="chip">S</span></span></li>
+    <li><span class="it-title">Cancelling an automatic ending doesn't work</span><span class="it-body">With "At the time", Cancel the ending is undone a quarter of a second later. Remember that the automatic ending has fired.</span><span class="meta"><span class="sev high">high</span><span class="chip">QA</span></span></li>
+    <li><span class="it-title">Endings run late, clip, or fight tempo changes</span><span class="it-body">The ending begins up to a pass late, so the piece runs over its length. The final chord is cut off about a third of the way through its ring. A tempo change during the fade or slow-down breaks it. A length shorter than the ending ends the piece at once. Fixes: add a pass to the lead time, delay the stop until the sound has ended, hold the tempo during an ending, and warn when the length is too short.</span><span class="meta"><span class="sev high">high</span><span class="chip">QA</span><span class="chip">Tester</span></span></li>
+    <li><span class="it-title">One press of Space, or one brush of a pad, can wreck the piece</span><span class="it-body">Space or ■ Stop resets the clock with no confirmation. Next scene wraps from the last scene back to the first. Delete scene has no undo. While the clock runs, make Stop need a second press, stop Next at the last scene, and add an undo for Delete.</span><span class="meta"><span class="sev high">high</span><span class="chip">UX</span><span class="chip">Engineer</span></span></li>
+    <li><span class="it-title">Loops say "playing" when nothing is</span><span class="it-body">After Stop or the end of the piece, slots still say "▶ playing" on the laptop and the iPad, and they start again on the next Play. When stopped, show "ready" or clear them. After the piece ends, reset to the first scene.</span><span class="meta"><span class="sev med">medium</span><span class="chip">Tester</span><span class="chip">Performer</span></span></li>
+    <li><span class="it-title">Saved work can be lost</span><span class="it-body">
+      <ul>
+        <li>Two tabs open at once can write one player's settings over another player's loops.</li>
+        <li>If a restore fails, saving stays off for the rest of the session.</li>
+        <li>A 13th scene disappears on reload.</li>
+        <li>The laptop copy accepts writes from any web page, and accepts older or empty data.</li>
+      </ul>
+      Fixes: keep the active player in memory, add a second-tab warning, catch restore failures and roll back, cap scenes at 12, check the request's origin, and reject older or empty writes.</span><span class="meta"><span class="sev high">high</span><span class="chip">QA</span></span></li>
+    <li><span class="it-title">Every iPad strip move saves everything, many times a second</span><span class="it-body">Dragging a strip saves every player's loops tens of times a second. That competes with the sound scheduler, which only looks 100 ms ahead. Throttle saves to about twice a second, save immediately when the page is closed, and show "not saved" if a save fails.</span><span class="meta"><span class="sev med">medium</span><span class="chip">Engineer</span><span class="chip">QA</span></span></li>
+    <li><span class="it-title">The iPad link fails silently</span><span class="it-body">A sleeping iPad leaves a dead connection that still reads "connected". A late disconnect can reset the laptop to "waiting". The code is only remembered after "New code" is pressed, so a reload breaks pairing. The panel can show "connected" and "can't reach" at the same time. Add a heartbeat with a "lost" warning, guard against stale disconnects, save the code on first use, and show one clear connection status.</span><span class="meta"><span class="sev high">high</span><span class="chip">Engineer</span><span class="chip">QA</span><span class="chip">Performer</span><span class="chip">Tester</span></span></li>
+    <li><span class="it-title">The laptop board still shows camera warnings</span><span class="it-body">"Camera error: Not supported", "Change camera" and "Find the board first" all appear in laptop mode, and nothing says which board is in use. Hide the camera warnings, show a clear "Board: Camera | Laptop" switch, and clean out laptop counters that fall off the grid or whose colour is deleted. "Save board here" also lags half a second behind a click.</span><span class="meta"><span class="sev med">medium</span><span class="chip">UX</span><span class="chip">Tester</span><span class="chip">QA</span></span></li>
+    <li><span class="it-title">Changing sound mid-piece can drop notes</span><span class="it-body">Changing sound world or Evolve swaps in sampled instruments before their samples load, so their notes are silent for a moment. Load first, then crossfade, and keep loaded samples in a cache. This matters at every scene change.</span><span class="meta"><span class="sev high">high</span><span class="chip">Engineer</span><span class="chip">M</span></span></li>
+  </ol>
+</section>
+
+<!-- PHASE 1 -->
+<section id="p1" aria-labelledby="h-p1" style="--c: var(--p1)">
+  <div class="phase-head"><span class="eyebrow">Phase 1 · before the show</span><h2 id="h-p1">Make the music serve Tim</h2>
+  <p>These come mostly from the test performer, who ran the piece and read the session log. Today the instrument quietly works against the player.</p></div>
+  <ol class="items">
+    <li><span class="it-title">Loops should layer, not merge</span><span class="it-body">A red counter of Tim's cuts into the Shine loop's red melody, and a yellow counter rewrites Bed's chords. Give each launched loop its own phrase group, so Tim plays <em>over</em> Bed instead of into it. After Capture, stop the captured counters doubling the loop.</span><span class="meta"><span class="sev high">high</span><span class="chip">Performer</span><span class="chip">M</span></span></li>
+    <li><span class="it-title">The band should only give way to Tim</span><span class="it-body">Loops count as "the player's parts", so the band hands them over and is silent for the whole Build section. Only Tim's live counters should take a part from the band.</span><span class="meta"><span class="sev high">high</span><span class="chip">Performer</span><span class="chip">S–M</span></span></li>
+    <li><span class="it-title">Scenes should set the stage, not take over Tim's controls</span><span class="it-body">At 3:30 a scene resets Tim's Fill and Evolve under his finger. Each scene should be able to say what it changes, with "leave Tim's strips alone" as the default.</span><span class="meta"><span class="sev med">medium</span><span class="chip">Performer</span><span class="chip">Engineer</span></span></li>
+    <li><span class="it-title">Draw the playing loops on the board</span><span class="it-body">Loops are invisible: with Bed playing, the board looks empty. Draw loop notes as outlined counters in the slot's colour, pulsing when they sound. This follows the visual-feedback principle, and lets Tim and the audience see what is sounding.</span><span class="meta"><span class="sev med">medium</span><span class="chip">Performer</span><span class="chip">UX</span></span></li>
+    <li><span class="it-title">Fill should be heard</span><span class="it-body">At 30–40%, Fill added only 4–14 notes every 30 seconds, because phrases leave it no space. Let Fill add notes on beats a phrase owns but isn't sounding, scale it to how dense the phrases are, and show "+N added" on the iPad. Confirm Magenta actually loads on the show laptop.</span><span class="meta"><span class="sev med">medium</span><span class="chip">Performer</span></span></li>
+    <li><span class="it-title">Evolve should change one colour at a time</span><span class="it-body">At 50%, every instrument changed at once, about every 43 seconds. Stagger the changes by colour, keep instruments inside the sound world, and set the rate in seconds rather than loops.</span><span class="meta"><span class="sev med">medium</span><span class="chip">Performer</span></span></li>
+    <li><span class="it-title">A grid that suits a piece</span><span class="it-body">New players start on 4 steps, which at 90 BPM is a 2.7-second loop. Default to 8 steps and show "1 pass = 5.3 s" wherever passes are chosen.</span><span class="meta"><span class="sev med">medium</span><span class="chip">Performer</span><span class="chip">S</span></span></li>
+    <li><span class="it-title">An ending Tim leads</span><span class="it-body">When End piece is pressed, show a "landing" ring on the board, and let the final chord follow the harmony Tim is actually on rather than always the home chord.</span><span class="meta"><span class="sev low">idea</span><span class="chip">Performer</span></span></li>
+  </ol>
+</section>
+
+<!-- PHASE 2 -->
+<section id="p2" aria-labelledby="h-p2" style="--c: var(--p2)">
+  <div class="phase-head"><span class="eyebrow">Phase 2 · the big one</span><h2 id="h-p2">The performance builder</h2>
+  <p>The engineer, UX and performer reviews all proposed the same thing from different directions. A performance should be one thing you open, edit and play: one saved document holding the loops, scenes, times and ending, edited on a timeline and played from a dedicated show view.</p></div>
+
+  <h3>How making a 7-minute piece should feel</h3>
+  <ol class="flow">
+    <li><span><b>Perform → New piece.</b> Choose the length (7:00) and a template, "Arrival · Build · Open · Home" or blank. A 7:00 timeline appears with the four scenes already placed.</span></li>
+    <li><span><b>Loops shelf:</b> 8 pads along the top. Put counters down (camera or laptop) and press <b>Save to pad</b>, or <b>Draw</b>. Name each one in one field. Saving over a loop asks first.</span></li>
+    <li><span><b>Click a scene on the timeline.</b> An editor opens beside it: tick which loops play, then set sound world, band, Fill, Evolve and what the scene leaves to Tim. Edits save as you make them. Drag a scene's edge to move its time, which snaps to whole passes.</span></li>
+    <li><span><b>Ending</b> is the last block on the timeline: style, how many passes, and whether you press End or it ends at the time.</span></li>
+    <li><span><b>Rehearse:</b> "Preview this scene" and "Run from 3:30".</span></li>
+    <li><span><b>Ready check:</b> iPad connected and touch seen, backup saved, camera colours OK, no empty loops, Magenta loaded, clock set to start by hand.</span></li>
+    <li><span><b>Show mode:</b> Big board plus a strip showing Now and Next. The only controls are ⏱ Start, Next, Capture, End and Cancel; Stop needs a second press.</span></li>
+  </ol>
+
+  <ol class="items">
+    <li><span class="it-title">A Performance document, separate from the player's settings</span><span class="it-body">Today a scene overwrites the player's saved tempo, sound and band, so after a rehearsal their "home" settings are whatever the last scene set. Add <code>{name, lengthSec, loops[8], cues[], ending}</code>, with scenes as overrides. A player can own several pieces and export them. Move today's scenes, loops and clock into a default piece when the app loads.</span><span class="meta"><span class="sev high">high</span><span class="chip">Engineer</span><span class="chip">M</span></span></li>
+    <li><span class="it-title">A PerformanceRunner outside the screen</span><span class="it-body">Move the clock, scenes, cues, endings, loop launching and iPad actions out of the 4,000-line screen into a plain class that can be tested with fake timers. It can also save its position, so a reload offers "Resume at 3:12". Rehearsing on the laptop board uses exactly the same runner as the show.</span><span class="meta"><span class="sev high">high</span><span class="chip">Engineer</span><span class="chip">Tester</span><span class="chip">M</span></span></li>
+    <li><span class="it-title">Perform as its own place, with a Now / Next strip</span><span class="it-body">Take Perform out of the Loops tab. A fixed strip shows a large clock, the current scene, "Next: Build in 0:42", the playing loops as chips, and End. It appears on Play, Big board and Show mode.</span><span class="meta"><span class="sev crit">critical</span><span class="chip">UX</span><span class="chip">Performer</span><span class="chip">M</span></span></li>
+    <li><span class="it-title">Timeline editor with editable scenes</span><span class="it-body">Scenes are sorted by time, edited in place, and show every setting they carry. Times are checked as you type ("must be before 7:00"). This replaces "Save scene from now", the free-text time box, and delete-and-save-again.</span><span class="meta"><span class="sev high">high</span><span class="chip">UX</span><span class="chip">Performer</span><span class="chip">L</span></span></li>
+    <li><span class="it-title">"Make my plan" template</span><span class="it-body">One button creates the four scenes, their times, the ending and the iPad layout from the current performance plan. The facilitator then only records the five loops with Tim, about 25 clicks instead of about 70.</span><span class="meta"><span class="sev med">medium</span><span class="chip">Performer</span><span class="chip">UX</span><span class="chip">M</span></span></li>
+    <li><span class="it-title">Compact loops and simpler clock settings</span><span class="it-body">Show loops as a 4×2 pad grid, or one row per slot with Save, Draw and Clear behind a "⋯" menu. Show disabled reasons as tooltips, not repeated lines. The clock starts by hand by default. Sum up the settings in one line: "7:00 · Final chord over 2 passes · I press End".</span><span class="meta"><span class="sev high">high</span><span class="chip">UX</span><span class="chip">S–M</span></span></li>
+    <li><span class="it-title">Ready-check screen</span><span class="it-body">An automated version of the pre-show checklist: camera running, iPad connected, Magenta loaded (or rules in use), last disk save, backup file saved, loops not empty.</span><span class="meta"><span class="sev med">medium</span><span class="chip">Engineer</span><span class="chip">Tester</span><span class="chip">UX</span></span></li>
+  </ol>
+</section>
+
+<!-- PHASE 3 -->
+<section id="p3" aria-labelledby="h-p3" style="--c: var(--p3)">
+  <div class="phase-head"><span class="eyebrow">Phase 3</span><h2 id="h-p3">The iPad, made for Tim</h2>
+  <p>Tim has cerebral palsy, plays left-handed, and cannot dwell-hold or shake fast. The iPad currently splits his controls across two pages, and some pads act on any brush of the screen.</p></div>
+  <ol class="items">
+    <li><span class="it-title">One performance page per player</span><span class="it-body">The facilitator picks the strips and pads Tim needs for this piece, for example Fill, New sound, Keep, Shine and End piece, and they all appear on one screen. No page switching at the 30-second cue.</span><span class="meta"><span class="sev high">high</span><span class="chip">Performer</span><span class="chip">UX</span><span class="chip">M</span></span></li>
+    <li><span class="it-title">Every pad ignores a resting palm, and can act on lift</span><span class="it-body">Loop pads, scene pads, Next scene and the page tabs act on touch-down with no palm check. Check for a palm on every pad, and make "act on touch / act on lift" a per-player setting. Let the facilitator hide Next scene on the iPad.</span><span class="meta"><span class="sev high">high</span><span class="chip">UX</span></span></li>
+    <li><span class="it-title">Adjustable timing</span><span class="it-body">The second-tap window is fixed at 3 seconds. Make it 3, 6 or 10 seconds per player. Make Keep keep, with a separate "Let go", so a repeat tap doesn't undo it.</span><span class="meta"><span class="sev med">medium</span><span class="chip">UX</span><span class="chip">Performer</span></span></li>
+    <li><span class="it-title">Show the music on the iPad</span><span class="it-body">Add a header with the scene name, "next: Home at 6:00" and a beat pulse, so there is a visual stand-in for the sound. Page through the scene pads, which currently stop at 4. Respect reduced motion, and stop the screen reader announcing the clock every second.</span><span class="meta"><span class="sev med">medium</span><span class="chip">UX</span></span></li>
+    <li><span class="it-title">Switch and keyboard access</span><span class="it-body">Every pad responds to pointer-down only, so switch and keyboard users can't activate them. Add Enter, Space and click activation, and guard <code>setPointerCapture</code>.</span><span class="meta"><span class="sev med">medium</span><span class="chip">UX</span><span class="chip">Tester</span><span class="chip">Performer</span></span></li>
+  </ol>
+</section>
+
+<!-- PHASE 4 -->
+<section id="p4" aria-labelledby="h-p4" style="--c: var(--p4)">
+  <div class="phase-head"><span class="eyebrow">Phase 4</span><h2 id="h-p4">Simpler screens and accessibility</h2></div>
+  <ol class="items">
+    <li><span class="it-title">Tabs by what you're doing</span><span class="it-body">Play opens on Perform. The tabs are Perform · Sound · Groove · Connections · Session. Everything structural moves to Set up: grid size, pages, lanes, variation, loop bank, box detail and backing song. Hide polyrhythm while phrases are on, or warn that it fights them.</span><span class="meta"><span class="sev med">medium</span><span class="chip">UX</span></span></li>
+    <li><span class="it-title">Fewer words to learn</span><span class="it-body">A "?" glossary next to pass, lane, phrase, band, Fill, Evolve and Hold/Toggle. One name for the three loop systems ("Loop 3 · started by iPad / red counter / pad"). Move Back up and Restore into a file menu.</span><span class="meta"><span class="sev med">medium</span><span class="chip">UX</span></span></li>
+    <li><span class="it-title">WCAG 2.2 AA fixes</span><span class="it-body">
+      <ul>
+        <li>Header title contrast about 1.1:1, and grey slider labels about 2.4:1 in light theme.</li>
+        <li>Board grids lack rows and announce gridcells instead of buttons.</li>
+        <li>100 tab stops on a 10×10 board: use one tab stop with arrow keys.</li>
+        <li>Inputs about 23 px tall: make them full targets.</li>
+        <li>Wrong times and lengths are ignored without saying so.</li>
+        <li>Perform's sections need real headings.</li>
+        <li>Cues and scene changes need larger, longer visual signals.</li>
+      </ul>
+    </span><span class="meta"><span class="sev high">high</span><span class="chip">UX</span></span></li>
+    <li><span class="it-title">Stop re-rendering the whole screen every frame</span><span class="it-body">Draw note pops on the canvas, skip unchanged state, and move live readouts into a small store. This frees the main thread for detection, Magenta and the scheduler, which supports the 20 ms latency goal.</span><span class="meta"><span class="sev high">high</span><span class="chip">Engineer</span><span class="chip">M</span></span></li>
+    <li><span class="it-title">Split the screen</span><span class="it-body">Split it into SetupScreen, PlayScreen and ShowScreen, each reading a small store, with board input behind one interface (camera, laptop, and later iPad). Do it step by step once the runner exists, not all at once. Allow colour changes while playing.</span><span class="meta"><span class="sev med">medium</span><span class="chip">Engineer</span><span class="chip">L</span></span></li>
+  </ol>
+</section>
+
+<!-- PHASE 5 -->
+<section id="p5" aria-labelledby="h-p5" style="--c: var(--p5)">
+  <div class="phase-head"><span class="eyebrow">Phase 5 · alongside every phase</span><h2 id="h-p5">Tests that guard the show</h2>
+  <p>The building blocks are well tested (the clock, loop launcher and laptop board are fully covered), but the screen that runs the performance has no tests.</p></div>
+  <ol class="items">
+    <li><span class="it-title">Test the performance logic</span><span class="it-body">Once the PerformanceRunner exists, test it with fake timers: a scene fires at its time, each ending style, Stop resets, Cancel restores, Capture takes a free slot, Next stops at the last scene, Delete adjusts the current scene, resume works.</span><span class="meta"><span class="chip">Tester</span><span class="chip">Engineer</span></span></li>
+    <li><span class="it-title">Test every iPad message, the relay, and saving</span><span class="it-body">Write one table-driven test covering every iPad message: locked strips, loop and scene numbers out of range, Stop all with nothing playing. Test that oversized or malformed messages don't crash the relay and that dead connections are detected. Test the disk copy with a fake fetch and failures. Round-trip two players through backup and restore.</span><span class="meta"><span class="chip">Tester</span><span class="chip">QA</span></span></li>
+    <li><span class="it-title">Make test noise fail the suite</span><span class="it-body">Evolve throws in 5 test files without failing them, because the test instruments lack <code>setBrightness</code>, and the iPad test lacks React's act setup. Fix both, then fail the suite on "could not change the sound".</span><span class="meta"><span class="chip">Tester</span><span class="chip">S</span></span></li>
+    <li><span class="it-title">Playwright end-to-end tests</span><span class="it-body">Add <code>@playwright/test</code>; Chromium is already installed. The test server always uses a temporary data folder, so the isolation becomes automatic. A second page plays the iPad, and the clock can be fast-forwarded through 7:00. Eight specs: laptop play, loops persist, launch and Stop all, timed scenes, every ending, player isolation, iPad pairing, backup and restore. Fail on any console error.</span><span class="meta"><span class="chip">Tester</span><span class="chip">M</span></span></li>
+    <li><span class="it-title">A 5-minute pre-show smoke check on the real rig</span><span class="it-body">Run the show build, save a backup off the laptop, sound check, play each loop once, Go through each scene, do a 0:40 run with the real ending, pair the iPad, reload and check everything survives, check the console is clean. This gets added to the performance plan.</span><span class="meta"><span class="chip">Tester</span><span class="chip">S</span></span></li>
+  </ol>
+</section>
+
+<section aria-labelledby="h-decide">
+  <span class="eyebrow">Your call</span>
+  <h2 id="h-decide">Decisions before starting</h2>
+  <div class="decide">
+    <div><b>When is the performance?</b><span>If it's within a few weeks: Phase 0, Phase 1 items 1–4, and the pre-show check, then rehearse. Start the Phase 2 builder after the show.</span></div>
+    <div><b>Should scenes leave Tim's strips alone by default?</b><span>The performer recommends yes, for Tim's agency. The alternative is that scenes always set Fill and Evolve, as now.</span></div>
+    <div><b>Laptop board for rehearsal only, or on stage as well?</b><span>If it is also used on stage, it needs the visible-loop drawing and Show mode as much as the camera board does.</span></div>
+    <div><b>Playwright as a dev dependency?</b><span>Recommended; it replaces the hand-written browser scripts and protects the show flows.</span></div>
+  </div>
+</section>
+
+</div>

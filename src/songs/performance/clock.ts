@@ -76,7 +76,7 @@ export function formatClock(sec: number): string {
   const neg = sec < 0;
   const s = Math.round(Math.abs(sec));
   const m = Math.floor(s / 60);
-  return `${neg ? '-' : ''}${m}:${String(s % 60).padStart(2, '0')}`;
+  return `${neg && s > 0 ? '-' : ''}${m}:${String(s % 60).padStart(2, '0')}`;
 }
 
 /** What the clock shows, given when it started (null = not running). */
@@ -104,14 +104,30 @@ export function cueText(sec: number): string {
   return sec >= 60 ? `${Math.round(sec / 60)} minute${sec >= 120 ? 's' : ''} left` : `${sec} seconds left`;
 }
 
+/** A ritardando down to a little over half speed takes about this much longer. */
+const SLOW_STRETCH = 1.3;
+
+/**
+ * How long an ending takes once it is asked for, in seconds: it waits for the next pass
+ * boundary (up to one pass), then runs its passes — longer for a ritardando.
+ */
+export function endingDurationSec(settings: Pick<PerformanceSettings, 'style' | 'fadePasses'>, passSec: number): number {
+  const run = endingPasses(settings) * passSec * (settings.style === 'slow' ? SLOW_STRETCH : 1);
+  return passSec + run;
+}
+
 /**
  * For an automatic ending: how many seconds before the end time the ending has to begin
- * so that it is finished AT the end time. A fade takes its passes; a stop happens at the
- * end of a pass, so it begins at the start of the last whole pass.
+ * so that it is finished AT the end time.
  */
 export function endingLeadSec(settings: PerformanceSettings, passSec: number): number {
   if (settings.ending === 'cue') return Number.POSITIVE_INFINITY; // never by itself
-  return endingPasses(settings) * passSec;
+  return endingDurationSec(settings, passSec);
+}
+
+/** The piece is too short for its ending to finish in time (shown as a warning). */
+export function endingTooLong(settings: PerformanceSettings, passSec: number): boolean {
+  return endingDurationSec(settings, passSec) >= settings.lengthSec * 0.5;
 }
 
 /**
@@ -122,6 +138,12 @@ export function endingDue(settings: PerformanceSettings, remainingSec: number, p
   if (settings.ending === 'cue') return false;
   return remainingSec <= endingLeadSec(settings, passSec);
 }
+
+/**
+ * Where the clock "was" before its first reading, so a scene at 0:00 counts as crossed
+ * on the first tick — the piece opens in its opening scene, not in whatever was last.
+ */
+export const CLOCK_NOT_STARTED = -1;
 
 /** The scheduled scenes whose time was crossed between two readings of the clock, in order. */
 export function scenesDue<T extends { at?: number | null }>(prevElapsedSec: number, elapsedSec: number, scenes: readonly T[]): number[] {

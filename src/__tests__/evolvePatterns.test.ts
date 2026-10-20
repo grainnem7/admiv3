@@ -44,7 +44,7 @@ vi.mock('tone', () => ({
 vi.mock('../effects', () => ({ getEffectChainManager: () => ({ initialize: vi.fn(), getInput: () => null }) }));
 vi.mock('../songs/voices/BoardSequencerVoice', () => ({
   BoardSequencerVoice: class {
-    setBrightness = vi.fn(); connect = vi.fn(); dispose = vi.fn(); play = vi.fn();
+    setBrightness = vi.fn(); connect = vi.fn(); dispose = vi.fn(); play = vi.fn(); isReady = () => true;
   },
 }));
 vi.mock('../audio/instruments/RoundRobinDrumKit', () => ({ RoundRobinDrumKit: vi.fn() }));
