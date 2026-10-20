@@ -36,6 +36,7 @@ import type { Mat3 } from '../../../utils/homography';
 import type { BoardSequencerStored } from '../../../profiles/BoardSequencerConfig';
 import { homographyForCorners } from './homographyForCorners';
 import { laptopReadings } from '../../../tracking/laptopBoard';
+import { detectionSetup, type DetectionSetup } from '../../../tracking/boardReference/detectionSetup';
 
 export interface RuntimeFrame {
   readings: CellReading[];
@@ -229,7 +230,11 @@ export function useBoardRuntime(opts: {
     if (!calibrated && !laptop) return;
     const video = videoRef.current;
     if (!laptop && !video) return;
-    let matchersFor: { channels: BoardSequencerStored['channels']; minFill: number } | null = null;
+    let matchersFor: {
+      channels: BoardSequencerStored['channels']; minFill: number;
+      reference: BoardSequencerStored['boardReference']; detection: BoardSequencerStored['counterDetection']; squares: number;
+    } | null = null;
+    let detection: DetectionSetup | null = null;
     let matchers: ColourMatcher[] = [];
     let recognizer = new ColourRecognizer(0.1, []);
     let sequencedColours = new Set<ColourId>();
@@ -245,10 +250,16 @@ export function useBoardRuntime(opts: {
     const lastColourAt = new Map<string, ColourId>();
     const tick = ({ nowMs, dtMs }: { nowMs: number; dtMs: number }): void => {
       const cfg = configRef.current;
-      if (!matchersFor || matchersFor.channels !== cfg.channels || matchersFor.minFill !== cfg.minFilledFraction) {
+      if (!matchersFor || matchersFor.channels !== cfg.channels || matchersFor.minFill !== cfg.minFilledFraction
+        || matchersFor.reference !== cfg.boardReference || matchersFor.detection !== cfg.counterDetection
+        || matchersFor.squares !== cfg.boardSquares) {
         matchers = buildChannelMatchers(cfg.channels);
-        recognizer = new ColourRecognizer(cfg.minFilledFraction, channelPriority(cfg.channels));
-        matchersFor = { channels: cfg.channels, minFill: cfg.minFilledFraction };
+        detection = detectionSetup(cfg);
+        recognizer = new ColourRecognizer(cfg.minFilledFraction, channelPriority(cfg.channels), detection.achromatic);
+        matchersFor = {
+          channels: cfg.channels, minFill: cfg.minFilledFraction,
+          reference: cfg.boardReference, detection: cfg.counterDetection, squares: cfg.boardSquares,
+        };
         sequencedColours = new Set(cfg.channels.filter((c) => isSequencedRole(c.role)).map((c) => c.id));
         // A loop colour's counter is a trigger, never a note and never a pad press.
         controlColours = new Set(cfg.channels.filter((c) => isControlRole(c.role) || isLoopRole(c.role)).map((c) => c.id));
@@ -286,6 +297,8 @@ export function useBoardRuntime(opts: {
           mirrorX: cfg.mirrorX, mirrorY: cfg.mirrorY, rotation: cfg.cameraRotation,
           samplesPerAxis: cfg.samplesPerAxis,
           boardSquares: cfg.boardSquares, dtMs,
+          // Against the learnt board when there is one (the colour ranges otherwise).
+          ...(detection?.mode === 'board' ? { reference: detection.reference, prototypes: detection.prototypes } : {}),
         }), cfg);
         lastFrame = reader.lastFrame();
       }

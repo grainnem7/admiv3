@@ -36,6 +36,13 @@ export interface BoardStepProps {
   boardLearnt: number;
   onLearnBoard(): void;
   learnMessage: string | null;
+  /** How counters are being found now, and why not against the board when they aren't. */
+  detection: { mode: 'board' | 'bands'; reason: string | null };
+  counterDetection: 'board' | 'bands';
+  onCounterDetection(mode: 'board' | 'bands'): void;
+  /** Save camera pictures to a file, with a note of what is on the board, for testing. */
+  onSaveTestPictures(note: string): void;
+  testPicturesMessage: string | null;
 }
 
 // NOTE: "Where does <player> sit?" used to be asked here. The answer was saved and then
@@ -49,8 +56,10 @@ export function BoardStep({
   running, editing,
   onFindBoard, onTapCorners, onBoardSquares, onGrid, onNudgesEnabled, usingFallbackCamera,
   finding, onCancelFind, findMessage,
-  boardLearnt, onLearnBoard, learnMessage,
+  boardLearnt, onLearnBoard, learnMessage, detection, counterDetection, onCounterDetection,
+  onSaveTestPictures, testPicturesMessage,
 }: BoardStepProps): JSX.Element {
+  const [testNote, setTestNote] = useState('');
   const options = gridSizeOptions(boardSquares, { rows, cols });
   const [moreOpen, setMoreOpen] = useState(options.rowsIsMore || options.colsIsMore);
   const offNearest = options.rowsIsMore || options.colsIsMore;
@@ -95,9 +104,11 @@ export function BoardStep({
         >
           <span style={{ fontWeight: 600 }}>Learn this board</span>
           <p style={{ margin: 0, color: 'var(--bs-fg2)', fontSize: 13 }}>
-            With nothing on the board, this learns what its own squares look like. The
-            counters are then found by being unlike it &mdash; so wood and shadow stop
-            being offered as colours.
+            With nothing on the board, this learns what every part of its squares looks
+            like, over about a second. While playing, a counter is then found by being
+            unlike the board where it sits, with the light corrected from the board
+            itself &mdash; so wood grain, shadows and the camera adjusting itself stop
+            looking like counters. Learn it again if the light in the room changes a lot.
           </p>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <Button tone="primary" onClick={onLearnBoard} reason={running ? 'Stop the board first.' : null}>
@@ -116,6 +127,38 @@ export function BoardStep({
               {learnMessage}
             </p>
           )}
+          <span role="status" style={{ fontSize: 13, color: detection.mode === 'board' ? 'var(--bs-ok)' : 'var(--bs-warn)' }}>
+            {detection.mode === 'board'
+              ? '✓ Counters are found against the learnt board'
+              : detection.reason ?? 'Counters are found by their colour ranges (the old way).'}
+          </span>
+          <SegmentedControl<'board' | 'bands'>
+            label="Counter detection"
+            value={counterDetection}
+            onChange={onCounterDetection}
+            options={[
+              { value: 'board', label: 'Against the learnt board' },
+              { value: 'bands', label: 'Colour ranges (old)' },
+            ]}
+          />
+          <details>
+            <summary style={{ cursor: 'pointer', fontSize: 13, color: 'var(--bs-fg2)' }}>For testing: save pictures of the board</summary>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 6 }}>
+              <p style={{ margin: 0, fontSize: 13, color: 'var(--bs-fg2)' }}>
+                Saves ten camera pictures to a file, with the corners and colours, so counter
+                detection can be tested on this real board. Say what is on the board (for
+                example &ldquo;empty&rdquo;, &ldquo;one of each colour&rdquo;, &ldquo;hand over the left side&rdquo;).
+              </p>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 13 }}>
+                What is on the board
+                <input type="text" value={testNote} onChange={(e) => setTestNote(e.target.value)} style={{ minHeight: 'var(--bs-target)' }} />
+              </label>
+              <div>
+                <Button tone="secondary" onClick={() => onSaveTestPictures(testNote)}>Save 10 test pictures</Button>
+              </div>
+              {testPicturesMessage && <span role="status" style={{ fontSize: 13 }}>{testPicturesMessage}</span>}
+            </div>
+          </details>
         </div>
       )}
 

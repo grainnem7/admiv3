@@ -4,7 +4,7 @@
 
 ## Show day
 1. Close other ADMI windows. Start with **`npm run show`** and open **http://localhost:3001**. Press **Board Sequencer** and pick the player.
-2. **Board: 📷 Camera** at the top. **Set up**: camera, board (**Skip, board hasn't moved**), colours.
+2. **Board: 📷 Camera** at the top. **Set up**: camera, board (**Skip, board hasn't moved**; with the board empty, **Learn it again** in this room's light), colours.
 3. **Connections** tab: tick **iPad controls** and open the link in Safari on the iPad. The 👆 mark lights on touch.
 4. **Make a piece → 3 · Ending & check**: look at the Ready check and fix anything marked ✕. **⤓ Back up to a file** and copy it to a USB stick.
 5. Sound check: ▶ Play, then ■ Stop twice. Then **▶ Show** → **▶ Start the piece**: it starts in its opening scene.
@@ -49,7 +49,7 @@ Strips and pads shown · **Also on the Play page** (End piece, Next scene, Captu
 |---|---|
 | iPad "Link lost — reconnecting…" | Wait; reload the iPad page; check one server, same code |
 | Red "The camera has stopped" | The music carries on — check the USB cable, **Try the camera again** |
-| A counter isn't heard | Centre it; no hand over it; lower Piece coverage last |
+| A counter isn't heard, or one appears that isn't there | Empty the board → Set up → Board → **Learn it again** (especially after the light changes); then centre the counter, no hand over it |
 | Knocked counters | Do nothing — ghosts play until they're back |
 | Page reloaded mid-piece | **Carry on from m:ss** |
 | Loops/scenes missing | `localhost:3001`, right player; **⤒ Restore from a file** or `.admi-data/backups` |

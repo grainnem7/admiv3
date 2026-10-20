@@ -23,6 +23,7 @@ import type {
   ColourChannel, ColourId, ColourKind, ColourRole, BlackBand, WhiteBand,
 } from '../tracking/boardColours';
 import { ROLE_LABELS, DEFAULT_BLACK_BAND, DEFAULT_WHITE_BAND } from '../tracking/boardColours';
+import { isStoredBoardReference, type StoredBoardReference } from '../tracking/boardReference/boardReference';
 import { suggestReadSettings, type BoardSquares } from '../tracking/boardGrid';
 import { ANYWHERE, clampZone, NO_ZONE, zoneSlotCount, zonesCollide, type Zone } from '../tracking/zones';
 
@@ -265,6 +266,18 @@ export interface BoardSequencerStored {
   boardSquareRgb: number[];
   /** The board size it was learnt at; learning is discarded if that changes. */
   boardLearntSquares: number;
+  /**
+   * The empty board, learnt from many frames exactly as the reader sees them: each spot's
+   * colour and how much it naturally varies. With it, counters are found by how they
+   * differ from the board (see tracking/boardReference). Belongs to the rig: the camera
+   * and the board, not the player.
+   */
+  boardReference: StoredBoardReference | null;
+  /**
+   * 'board' = find counters against the learnt board (falls back to the colour ranges
+   * until the board is learnt); 'bands' = the colour ranges only, as before.
+   */
+  counterDetection: 'board' | 'bands';
   handGuardEnabled: boolean;
   /** Set once the one-time clearing of an inherited "hand guard on" has happened. */
   handGuardReset?: boolean;
@@ -439,6 +452,8 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   boardColours: [],
   boardSquareRgb: [],
   boardLearntSquares: 0,
+  boardReference: null,
+  counterDetection: 'board',
   handGuardEnabled: false,
   handGuardReset: true,
   handMarginSquares: 0.75,
@@ -795,6 +810,8 @@ function sanitize(input: unknown): BoardSequencerStored | null {
       ? (o.boardSquareRgb as number[]).slice(0, 10 * 10 * 3)
       : [],
     boardLearntSquares: isNum(o.boardLearntSquares) ? Math.round(o.boardLearntSquares) : 0,
+    boardReference: isStoredBoardReference(o.boardReference) ? o.boardReference : null,
+    counterDetection: o.counterDetection === 'bands' ? 'bands' : 'board',
     handGuardEnabled: o.handGuardEnabled === true && o.handGuardReset === true,
     handGuardReset: true,
     handMarginSquares: clampNum(o.handMarginSquares, 0.25, 2, d.handMarginSquares),

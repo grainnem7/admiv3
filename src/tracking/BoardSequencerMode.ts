@@ -381,8 +381,20 @@ export class BoardSequencerMode {
             st.pendingColourMs = 0;
             justDeactivated.push({ row: r.row, col: r.col });
           }
+        } else if (st.stillMs > 0) {
+          // A counter still settling, missed for a moment (a noisy frame, a counter near
+          // the threshold, a hand passing): pause its settle clock rather than starting it
+          // over. One bad frame used to send it back to zero, and a counter that dropped
+          // out every second or so could never settle at all. Only a real absence — as
+          // long as a settled counter's grace — resets it.
+          st.lostMs += dtMs;
+          if (st.lostMs >= occupancyGraceMs) {
+            st.stillMs = 0;
+            st.lostMs = 0;
+            st.offsets = [];
+            st.positions = [];
+          }
         } else {
-          st.stillMs = 0;
           st.lostMs = 0;
           st.offsets = [];
           st.positions = [];

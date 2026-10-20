@@ -19,6 +19,10 @@ import { gridDividesBoard, offsetFromSquare } from './boardGrid';
 import { boxPosition, MAX_CELL_COLOURS, type BoxPosition } from './boxDetail';
 import type { CellReading } from './BoardSequencerMode';
 import type { PieceRecognizer } from './PieceRecognizer';
+import {
+  counterAt, estimateGain, estimateLightField, lightAt, refIndex, sample2x2, NO_GAIN,
+  type BoardReference, type CounterPrototype, type Gain, type LightField,
+} from './boardReference/boardReference';
 
 export interface Rgb {
   r: number;
@@ -225,47 +229,52 @@ export interface BoardReaderOptions {
   mirrorY?: boolean;
   /** Clockwise quarter turns, applied before the mirrors (see frameOrientation). */
   rotation?: QuarterTurns;
+  /**
+   * Read against the learnt empty board: with a reference and the counters' colours, a
+   * pixel counts for a colour only when it is NOT the board at that spot (after correcting
+   * the light from the board itself) and is clearly nearest that counter colour. Without
+   * them the colour bands in `colours` are used, as before.
+   */
+  reference?: BoardReference | null;
+  prototypes?: readonly CounterPrototype[];
+}
+
+/** A frame already in memory: what the reader needs, with no DOM. */
+export interface ReaderFrame {
+  data: Uint8ClampedArray;
+  width: number;
+  height: number;
+  /** Video pixels per frame pixel (the homography is in video pixels). */
+  downscale: number;
+}
+
+/** How the last frame was read, for the facilitator's diagnostics. */
+export interface ReaderDiagnostics {
+  mode: 'board' | 'bands';
+  /** The light correction applied (1,1,1 = as when the board was learnt). */
+  gain: Gain;
 }
 
 /**
- * Reads the full board matrix from a video element each frame. Owns its own
- * canvas (willReadFrequently) like ColorTracker.
+ * The reader without a camera: turns a frame in memory into cell readings. Holds the
+ * per-cell history (smoothing, and which cells were occupied for the hysteresis), so the
+ * same instance must see consecutive frames. The app wraps it in BoardReader; the
+ * reliability benchmark drives it directly.
  */
-export class BoardReader {
-  private canvas: HTMLCanvasElement;
-  private ctx: CanvasRenderingContext2D;
-  // Per-cell EMA of colour fractions (keyed "row,col") for temporal smoothing.
+export class BoardPixelReader {
   private prevFractions = new Map<string, Partial<Record<ColourId, number>>>();
+  private wasOccupied = new Set<string>();
   private lattices: Float64Array[] = [];
   private latticeKey = '';
-  private last: { data: Uint8ClampedArray; width: number; height: number; downscale: number } | null = null;
+  private diag: ReaderDiagnostics = { mode: 'bands', gain: NO_GAIN };
 
-  constructor() {
-    this.canvas = document.createElement('canvas');
-    const ctx = this.canvas.getContext('2d', { willReadFrequently: true });
-    if (!ctx) throw new Error('BoardReader: 2D context unavailable');
-    this.ctx = ctx;
+  diagnostics(): ReaderDiagnostics {
+    return this.diag;
   }
 
-  /** The downscaled, orientation-corrected RGBA frame read last (for other per-frame guards). */
-  lastFrame(): { data: Uint8ClampedArray; width: number; height: number; downscale: number } | null {
-    return this.last;
-  }
-
-  read(video: HTMLVideoElement, opts: BoardReaderOptions): CellReading[] {
-    const downscale = opts.downscale ?? 4;
+  read(frame: ReaderFrame, opts: BoardReaderOptions): CellReading[] {
+    const { data, width: w, height: h, downscale } = frame;
     const samples = opts.samplesPerAxis ?? 5;
-    const shown = orientedSize(video.videoWidth, video.videoHeight, opts.rotation ?? 0);
-    const w = Math.max(1, Math.floor(shown.width / downscale));
-    const h = Math.max(1, Math.floor(shown.height / downscale));
-    if (this.canvas.width !== w) this.canvas.width = w;
-    if (this.canvas.height !== h) this.canvas.height = h;
-    drawOriented(this.ctx, video, w, h, {
-      mirrorX: opts.mirrorX ?? false, mirrorY: opts.mirrorY ?? false, rotation: opts.rotation ?? 0,
-    });
-    const data = this.ctx.getImageData(0, 0, w, h).data;
-    this.last = { data, width: w, height: h, downscale };
-
     const latticeKey = `${opts.homography.join(',')}|${opts.rows}|${opts.cols}|${samples}`;
     if (latticeKey !== this.latticeKey) {
       this.lattices = [];
@@ -282,20 +291,52 @@ export class BoardReader {
     const squareOffsets = opts.boardSquares !== undefined
       && gridDividesBoard(opts.boardSquares, opts.rows, opts.cols);
 
+    // A 2×2 average rather than one pixel: a single pixel carries the sensor's noise. The
+    // same function learns the board, so the two always see the board alike.
     const sampler: RgbSampler = (x, y) => {
-      const sx = Math.min(w - 1, Math.max(0, Math.round(x / downscale)));
-      const sy = Math.min(h - 1, Math.max(0, Math.round(y / downscale)));
-      const i = (sy * w + sx) * 4;
-      return { r: data[i], g: data[i + 1], b: data[i + 2] };
+      const [r, g, b] = sample2x2({ data, width: w, height: h }, x, y, downscale);
+      return { r, g, b };
     };
+
+    const ref = opts.reference ?? null;
+    const protos = opts.prototypes ?? [];
+    const boardMode = ref !== null && protos.length > 0;
+    // Against the board: read every sample once, correct the light from the board as a
+    // whole, then judge each sample against its own spot on the learnt board.
+    let cellPixels: { obs: Float32Array; refK: Int32Array }[] = [];
+    let gain: Gain = NO_GAIN;
+    let field: LightField | null = null;
+    if (boardMode) {
+      const allObs: number[] = [];
+      const allRef: number[] = [];
+      const allUv: number[] = [];
+      cellPixels = this.lattices.map((lat) => {
+        const n = lat.length / 4;
+        const obs = new Float32Array(n * 3);
+        const refK = new Int32Array(n);
+        for (let k = 0, i = 0; k < lat.length; k += 4, i++) {
+          const { r, g, b } = sampler(lat[k + 2], lat[k + 3]);
+          obs[i * 3] = r; obs[i * 3 + 1] = g; obs[i * 3 + 2] = b;
+          const rk = refIndex(ref, lat[k], lat[k + 1]);
+          refK[i] = rk;
+          allObs.push(r, g, b);
+          allRef.push(ref.mean[rk * 3], ref.mean[rk * 3 + 1], ref.mean[rk * 3 + 2]);
+          allUv.push(lat[k], lat[k + 1]);
+        }
+        return { obs, refK };
+      });
+      gain = estimateGain(allObs, allRef);
+      field = estimateLightField(allObs, allRef, allUv, gain);
+    }
+    this.diag = { mode: boardMode ? 'board' : 'bands', gain };
 
     const readings: CellReading[] = [];
     for (let row = 0; row < opts.rows; row++) {
       for (let col = 0; col < opts.cols; col++) {
-        const { fractions, centroid, centroids, offset } = sampleRegion(
-          sampler, opts.homography, row, col, opts.rows, opts.cols, opts.colours, samples,
-          this.lattices[row * opts.cols + col],
-        );
+        const idx = row * opts.cols + col;
+        const { fractions, centroid, centroids, offset } = boardMode
+          ? sampleAgainstBoard(this.lattices[idx], cellPixels[idx], gain, field, ref, protos, row, col, opts.rows, opts.cols)
+          : sampleRegion(sampler, opts.homography, row, col, opts.rows, opts.cols, opts.colours, samples, this.lattices[idx]);
         // Temporal smoothing: blend this frame's fractions with the cell's history
         // so a single flickery frame can't flip its occupancy/colour on or off.
         const key = `${row},${col}`;
@@ -304,7 +345,9 @@ export class BoardReader {
         );
         this.prevFractions.set(key, smoothed);
         const filledFraction = Math.max(0, ...Object.values(smoothed).filter((v): v is number => v !== undefined));
-        const cls = opts.recognizer.classify({ filledFraction, fractions: smoothed });
+        const cls = opts.recognizer.classify({ filledFraction, fractions: smoothed, wasOccupied: this.wasOccupied.has(key) });
+        if (cls.occupied) this.wasOccupied.add(key);
+        else this.wasOccupied.delete(key);
         // Measure position on the colour actually played, which may not be the dominant one.
         const playedCentroid = (cls.colour ? centroids[cls.colour] : null) ?? centroid;
         const offsetOf = (pt: { x: number; y: number }): number => (squareOffsets
@@ -338,5 +381,88 @@ export class BoardReader {
       }
     }
     return readings;
+  }
+}
+
+/**
+ * One cell, judged against the learnt board: the share of its samples that are not the
+ * board AND clearly one counter colour. The same shape as sampleRegion's answer, so
+ * everything after the reader is unchanged.
+ */
+function sampleAgainstBoard(
+  lat: Float64Array, px: { obs: Float32Array; refK: Int32Array }, gain: Gain, field: LightField | null,
+  ref: BoardReference, protos: readonly CounterPrototype[],
+  row: number, col: number, rows: number, cols: number,
+): RegionSample {
+  const counts = new Map<ColourId, number>();
+  const sumX = new Map<ColourId, number>();
+  const sumY = new Map<ColourId, number>();
+  const n = px.refK.length;
+  for (let i = 0; i < n; i++) {
+    const local = field ? lightAt(field, lat[i * 4], lat[i * 4 + 1]) : 1;
+    const rgb: [number, number, number] = [
+      px.obs[i * 3] / (gain[0] * local), px.obs[i * 3 + 1] / (gain[1] * local), px.obs[i * 3 + 2] / (gain[2] * local),
+    ];
+    const id = counterAt(rgb, ref, px.refK[i], protos);
+    if (id === null) continue;
+    counts.set(id, (counts.get(id) ?? 0) + 1);
+    sumX.set(id, (sumX.get(id) ?? 0) + lat[i * 4]);
+    sumY.set(id, (sumY.get(id) ?? 0) + lat[i * 4 + 1]);
+  }
+  const fractions: Partial<Record<ColourId, number>> = {};
+  const centroids: Partial<Record<ColourId, { x: number; y: number }>> = {};
+  let dominantId: ColourId | null = null;
+  let best = 0;
+  for (const p of protos) {
+    const c = counts.get(p.id) ?? 0;
+    fractions[p.id] = n === 0 ? 0 : c / n;
+    if (c > 0) centroids[p.id] = { x: (sumX.get(p.id) ?? 0) / c, y: (sumY.get(p.id) ?? 0) / c };
+    if (c > best) { best = c; dominantId = p.id; }
+  }
+  const centroid = dominantId ? centroids[dominantId] ?? null : null;
+  const offset = centroid ? offsetFromCellCentre(centroid, row, col, rows, cols) : null;
+  return { fractions, dominantId, centroid, centroids, offset };
+}
+
+/**
+ * Reads the full board matrix from a video element each frame: draws the picture to its
+ * own canvas (willReadFrequently, like ColorTracker) and hands the pixels to a
+ * BoardPixelReader.
+ */
+export class BoardReader {
+  private canvas: HTMLCanvasElement;
+  private ctx: CanvasRenderingContext2D;
+  private pixels = new BoardPixelReader();
+  private last: { data: Uint8ClampedArray; width: number; height: number; downscale: number } | null = null;
+
+  constructor() {
+    this.canvas = document.createElement('canvas');
+    const ctx = this.canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) throw new Error('BoardReader: 2D context unavailable');
+    this.ctx = ctx;
+  }
+
+  /** The downscaled, orientation-corrected RGBA frame read last (for other per-frame guards). */
+  lastFrame(): { data: Uint8ClampedArray; width: number; height: number; downscale: number } | null {
+    return this.last;
+  }
+
+  diagnostics(): ReaderDiagnostics {
+    return this.pixels.diagnostics();
+  }
+
+  read(video: HTMLVideoElement, opts: BoardReaderOptions): CellReading[] {
+    const downscale = opts.downscale ?? 4;
+    const shown = orientedSize(video.videoWidth, video.videoHeight, opts.rotation ?? 0);
+    const w = Math.max(1, Math.floor(shown.width / downscale));
+    const h = Math.max(1, Math.floor(shown.height / downscale));
+    if (this.canvas.width !== w) this.canvas.width = w;
+    if (this.canvas.height !== h) this.canvas.height = h;
+    drawOriented(this.ctx, video, w, h, {
+      mirrorX: opts.mirrorX ?? false, mirrorY: opts.mirrorY ?? false, rotation: opts.rotation ?? 0,
+    });
+    const data = this.ctx.getImageData(0, 0, w, h).data;
+    this.last = { data, width: w, height: h, downscale };
+    return this.pixels.read(this.last, opts);
   }
 }

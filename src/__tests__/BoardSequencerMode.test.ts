@@ -45,6 +45,32 @@ describe('BoardSequencerMode slide-and-settle', () => {
     expect(settledCount).toBe(1);
   });
 
+  // Seen on the rig: a counter near the detection threshold dropped out for a frame every
+  // second or so, and each dropout restarted its settle window, so it never played.
+  it('a counter missed for an odd frame still settles: a brief gap pauses, not restarts', () => {
+    const m = new BoardSequencerMode(cfg);
+    let res = m.step([redAt(0, 0, 0.5, 0.5)], 16, 0);
+    let settledAt = -1;
+    for (let t = 16, f = 1; t <= 2000; t += 16, f++) {
+      res = m.step([f % 8 === 0 ? empty(0, 0) : redAt(0, 0, 0.5, 0.5)], 16, t);
+      if (settledAt < 0 && res.justSettled.length > 0) settledAt = t;
+    }
+    expect(settledAt).toBeGreaterThan(0);
+    expect(settledAt).toBeLessThanOrEqual(800);
+    expect(res.activeCells).toEqual([{ row: 0, col: 0, colour: 'red' }]);
+  });
+
+  it('a counter really taken away before it settles starts over when it comes back', () => {
+    const m = new BoardSequencerMode(cfg);
+    let t = 0;
+    for (; t <= 400; t += 16) m.step([redAt(0, 0, 0.5, 0.5)], 16, t);
+    for (; t <= 700; t += 16) m.step([empty(0, 0)], 16, t); // gone for 300 ms (> grace)
+    let settled = 0;
+    const back = t;
+    for (; t <= back + 500; t += 16) settled += m.step([redAt(0, 0, 0.5, 0.5)], 16, t).justSettled.length;
+    expect(settled).toBe(0); // 500 ms back is less than a fresh 600 ms window
+  });
+
   it('a still BLACK piece settles too, carrying its colour', () => {
     const m = new BoardSequencerMode(cfg);
     let res = m.step([blackAt(0, 0, 0.5, 0.5)], 16, 0);

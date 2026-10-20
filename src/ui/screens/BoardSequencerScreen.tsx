@@ -49,6 +49,8 @@ import { describeBoard, phraseSpans, popsAt, pruneFired, type Pop } from './boar
 import { isSequencedRole, isControlRole, isLoopRole } from '../../tracking/boardColours';
 import { placeLaptopCounter } from '../../tracking/laptopBoard';
 import { LaptopBoardBar } from './boardSequencer/components/LaptopBoardBar';
+import { learnBoardReference, storeBoardReference, type FrameRGBA } from '../../tracking/boardReference/boardReference';
+import { detectionSetup } from '../../tracking/boardReference/detectionSetup';
 import { LoopThumb, PieceSteps, type PieceLoop, type PieceStep } from './boardSequencer/play/PieceSteps';
 import { NowNextStrip } from './boardSequencer/play/NowNextStrip';
 import type { ReadyItem } from './boardSequencer/play/ReadyCheck';
@@ -129,6 +131,9 @@ import type { FaderRole, ControlRemoval } from '../../profiles/BoardSequencerCon
 
 /** Reserved space under a control, so a disabled reason never shifts the layout. */
 /** How the camera picture is turned and flipped, from the saved settings. */
+/** The reader's frame size (BoardReader's default): the board is learnt at the same size it is read. */
+const READER_DOWNSCALE = 4;
+
 const orientationOf = (c: Pick<BoardSequencerStored, 'mirrorX' | 'mirrorY' | 'cameraRotation'>): FrameOrientation => ({
   mirrorX: c.mirrorX, mirrorY: c.mirrorY, rotation: c.cameraRotation,
 });
@@ -1387,6 +1392,58 @@ export default function BoardSequencerScreen() {
 
 
   const [learnMessage, setLearnMessage] = useState<string | null>(null);
+  const [testPicturesMessage, setTestPicturesMessage] = useState<string | null>(null);
+  /**
+   * Real pictures of the board, for testing counter detection away from the rig: ten
+   * frames over about three seconds at half size, with everything needed to read them
+   * the way the app does (corners, orientation, board size, colours, the learnt board).
+   */
+  const saveTestPictures = useCallback((note: string) => {
+    const cfg = configRef.current;
+    const video = videoRef.current;
+    if (!video || video.videoWidth <= 0) { setTestPicturesMessage('No camera picture yet.'); return; }
+    setTestPicturesMessage('Taking pictures… keep still.');
+    void (async () => {
+      const shown = orientedSize(video.videoWidth, video.videoHeight, cfg.cameraRotation);
+      const cv = document.createElement('canvas');
+      cv.width = Math.floor(shown.width / 2);
+      cv.height = Math.floor(shown.height / 2);
+      const ctx = cv.getContext('2d');
+      const pictures: string[] = [];
+      for (let i = 0; ctx && i < 10; i++) {
+        drawOriented(ctx, video, cv.width, cv.height, orientationOf(cfg));
+        pictures.push(cv.toDataURL('image/png'));
+        await new Promise((r) => { setTimeout(r, 300); });
+      }
+      const file = {
+        kind: 'admi-board-test-pictures',
+        version: 1,
+        takenAt: new Date().toISOString(),
+        note,
+        video: { width: shown.width, height: shown.height, pictureScale: 2 },
+        camera: cfg.cameraLabel,
+        corners: cfg.corners,
+        boardSquares: cfg.boardSquares,
+        rows: cfg.rows,
+        cols: cfg.cols,
+        channels: cfg.channels.map((c) => ({ id: c.id, kind: c.kind, role: c.role, swatch: c.swatch, band: c.band, blackBand: c.blackBand, whiteBand: c.whiteBand })),
+        boardReference: cfg.boardReference,
+        counterDetection: cfg.counterDetection,
+        pictures,
+      };
+      const blob = new Blob([JSON.stringify(file)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+      a.download = `admi-board-pictures-${stamp}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setTestPicturesMessage(`Saved ${pictures.length} pictures${note ? ` (“${note}”)` : ''}.`);
+    })();
+  }, [configRef, videoRef]);
 
   /**
    * Learn what the EMPTY board looks like.
@@ -1425,13 +1482,42 @@ export default function BoardSequencerScreen() {
       boardSquareRgb: Array.from(model.rgb),
       boardLearntSquares: model.squares,
     });
-    // Say so, with the time on it. Learning a second time usually finds the same number
-    // of squares, so a bare count is indistinguishable from the button doing nothing —
-    // and a control that gives no sign it ran is a control you cannot trust.
-    const at = new Date().toLocaleTimeString();
-    setLearnMessage(`Learnt from ${colours.length} squares at ${at}.`);
-    announce(`Board learnt from ${colours.length} squares.`);
-  }, [configRef, boardModelNow, update, announce]);
+    setLearnMessage('Learning the board… keep hands off it for a second.');
+    // The reference counters are found against: about a second of frames, taken exactly
+    // as the reader will see them (the same size, the same orientation), so the board's
+    // own grain, noise and flicker are what counts as "the board".
+    const video = videoRef.current;
+    void (async () => {
+      const frames: FrameRGBA[] = [];
+      if (video && video.videoWidth > 0) {
+        const shown = orientedSize(video.videoWidth, video.videoHeight, cfg.cameraRotation);
+        const w = Math.max(1, Math.floor(shown.width / READER_DOWNSCALE));
+        const hgt = Math.max(1, Math.floor(shown.height / READER_DOWNSCALE));
+        const cv = document.createElement('canvas');
+        cv.width = w;
+        cv.height = hgt;
+        const ctx = cv.getContext('2d', { willReadFrequently: true });
+        for (let i = 0; ctx && i < 12; i++) {
+          drawOriented(ctx, video, w, hgt, orientationOf(cfg));
+          frames.push({ data: ctx.getImageData(0, 0, w, hgt).data, width: w, height: hgt });
+          await new Promise((r) => { setTimeout(r, 90); });
+        }
+        try {
+          const hm = homographyForCorners(cfg.corners, shown.width, shown.height);
+          const ref = learnBoardReference(frames, hm, cfg.boardSquares, READER_DOWNSCALE);
+          if (ref) update({ boardReference: storeBoardReference(ref) });
+        } catch {
+          // Degenerate corners: the colour model above still stands.
+        }
+      }
+      // Say so, with the time on it. Learning a second time usually finds the same number
+      // of squares, so a bare count is indistinguishable from the button doing nothing —
+      // and a control that gives no sign it ran is a control you cannot trust.
+      const at = new Date().toLocaleTimeString();
+      setLearnMessage(`Learnt from ${colours.length} squares and ${frames.length} pictures at ${at}.`);
+      announce(`Board learnt from ${colours.length} squares.`);
+    })();
+  }, [configRef, boardModelNow, update, announce, videoRef]);
 
   const handleCalibrated = useCallback(
     (corners: [BoardPoint, BoardPoint, BoardPoint, BoardPoint], patch: Partial<BoardSequencerStored> = {}) => {
@@ -3180,6 +3266,14 @@ export default function BoardSequencerScreen() {
       : c.enabled && (camera.phase === 'running' || camera.phase === 'fallback')
         ? { label: 'Board: camera running and the board found', state: 'ok' }
         : { label: 'Board: camera or board not ready', state: 'problem', fix: 'Set up: Camera and Board.' });
+    if (!laptop) {
+      const det = detectionSetup(c);
+      items.push(det.mode === 'board'
+        ? { label: 'Counters are found against the learnt board', state: 'ok' }
+        : c.counterDetection === 'bands'
+          ? { label: 'Counters are found by colour ranges (the old way)', state: 'warn', fix: 'Set up → Board: switch Counter detection to "Against the learnt board".' }
+          : { label: 'Counters are found by colour ranges for now', state: 'warn', fix: det.reason ?? 'Learn the board in Set up → Board.' });
+    }
     items.push(c.channels.some((ch) => ch.role !== 'off')
       ? { label: 'Counter colours have jobs', state: 'ok' }
       : { label: 'No counter colour has a job', state: 'problem', fix: 'Set up: Colours.' });
@@ -3473,6 +3567,11 @@ export default function BoardSequencerScreen() {
       boardLearnt={config.boardColours.length}
       onLearnBoard={learnBoard}
       learnMessage={learnMessage}
+      detection={detectionSetup(config)}
+      counterDetection={config.counterDetection}
+      onCounterDetection={(counterDetection) => update({ counterDetection })}
+      onSaveTestPictures={saveTestPictures}
+      testPicturesMessage={testPicturesMessage}
       onFindBoard={() => void findBoard()}
       onTapCorners={() => { setProposal(null); setCalibrating('tap'); }}
       finding={finding}
