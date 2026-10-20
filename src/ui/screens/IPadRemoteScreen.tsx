@@ -23,7 +23,7 @@ const STRIP_COLOURS: Record<RemoteControlName, string> = {
 const PADS: { name: Exclude<RemoteTriggerName, 'stopAll'>; label: (s: RemoteState | null) => string; icon: string }[] = [
   { name: 'newIdea', icon: '✨', label: () => 'New idea' },
   { name: 'newSound', icon: '🎨', label: () => 'New sound' },
-  { name: 'keep', icon: '📌', label: (s) => (s?.kept ? 'Kept' : 'Keep') },
+  { name: 'keep', icon: '📌', label: (s) => (s?.kept ? 'Kept ✓' : 'Keep') },
   { name: 'mute', icon: '🔇', label: (s) => (s?.muted ? 'Muted' : 'Mute') },
 ];
 
@@ -40,8 +40,10 @@ const PALM_PX = 160;
 const isPalm = (e: React.PointerEvent<Element>): boolean => e.pointerType === 'touch' && e.width > PALM_PX && e.height > PALM_PX;
 /** How long the "touch seen" mark stays in the status row. */
 const TOUCH_MARK_MS = 700;
-/** Stop all takes two taps within this long: one brush must not end the piece. */
-const CONFIRM_MS = 3000;
+/** The second tap of End piece and Stop all is waited for this long, unless the laptop says otherwise (per player). */
+const DEFAULT_CONFIRM_MS = 6000;
+/** The beat light stays on this long after each beat. */
+const BEAT_FLASH_MS = 140;
 /** Room between targets, so a finger that strays does not land on the neighbour. */
 const GAP = 18;
 
@@ -73,6 +75,66 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
   const clock = state?.clock ?? null;
   // Follow mode: where the finger landed and what the value was, so sliding moves it from there.
   const followStart = useRef(new Map<RemoteControlName, { fraction: number; value: number }>());
+  // How pads respond for this player (set on the laptop): on touch or on lift, and how long
+  // the second tap of End piece and Stop all is waited for.
+  const actOn = state?.touch?.actOn ?? 'touch';
+  const confirmMs = state?.touch ? state.touch.confirmSec * 1000 : DEFAULT_CONFIRM_MS;
+  /** Pads a finger came down on, for "act on lift": the pad acts only if it lifts there. */
+  const downOn = useRef(new Map<string, number>());
+  /**
+   * Every pad's behaviour in one place: a resting palm is ignored on all of them, it acts on
+   * touch or on lift as set for the player, and Enter or Space work it from a keyboard or
+   * a switch.
+   */
+  const padProps = (key: string, fire: () => void) => ({
+    onPointerDown: (e: React.PointerEvent<HTMLButtonElement>) => {
+      e.preventDefault();
+      if (isPalm(e)) return;
+      if (actOn === 'touch') { fire(); return; }
+      downOn.current.set(key, e.pointerId);
+    },
+    onPointerUp: (e: React.PointerEvent<HTMLButtonElement>) => {
+      if (actOn !== 'lift' || downOn.current.get(key) !== e.pointerId) return;
+      downOn.current.delete(key);
+      fire();
+    },
+    // Slid off before lifting: not a press of this pad.
+    onPointerLeave: () => { downOn.current.delete(key); },
+    onPointerCancel: () => { downOn.current.delete(key); },
+    onKeyDown: (e: React.KeyboardEvent<HTMLButtonElement>) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fire(); }
+    },
+  });
+  // The beat, seen: a light that comes on at each beat the laptop reports.
+  const [beatLit, setBeatLit] = useState(false);
+  const beat = state?.beat;
+  useEffect(() => {
+    if (beat === undefined || !state?.playing) return;
+    setBeatLit(true);
+    const t = setTimeout(() => setBeatLit(false), BEAT_FLASH_MS);
+    return () => clearTimeout(t);
+  }, [beat, state?.playing]);
+  const reducedMotion = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
+  const showNext = state?.touch?.showNext !== false;
+  /** End piece and Stop all: two taps, the second within the player's window. */
+  const endTap = (): void => {
+    if (!confirmEnd) {
+      setConfirmEnd(true);
+      setTimeout(() => setConfirmEnd(false), confirmMs);
+      return;
+    }
+    setConfirmEnd(false);
+    padTap('endPiece', { type: 'trigger', name: 'endPiece' });
+  };
+  const stopTap = (): void => {
+    if (!confirmStop) {
+      setConfirmStop(true);
+      setTimeout(() => setConfirmStop(false), confirmMs);
+      return;
+    }
+    setConfirmStop(false);
+    padTap('stopAll', { type: 'trigger', name: 'stopAll' });
+  };
   /** A loop or scene pad: acts on touch, repeat taps ignored for a moment. */
   const padTap = (key: string, msg: RemoteMessage): void => {
     const now = performance.now();
@@ -137,7 +199,7 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
       e.preventDefault();
       if (locked(name)) return;
       if (isPalm(e)) return; // a palm, not a finger
-      e.currentTarget.setPointerCapture(e.pointerId);
+      try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* the finger is already gone */ }
       touching.current.set(name, e.pointerId);
       if (learning) { link.send({ type: 'reach', name, fraction: fractionAt(e.currentTarget, e.clientY) }); return; }
       if (follow) {
@@ -237,6 +299,18 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
         )}
         <span style={{ marginLeft: clock && clock.phase !== 'idle' ? 12 : 'auto', opacity: 0.6, fontSize: 16 }}>{`Code ${code}`}</span>
       </div>
+      {connected && state?.playing && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, fontSize: 22, minHeight: 34 }}>
+          <span
+            aria-hidden="true"
+            style={{ width: 26, height: 26, borderRadius: 13, flexShrink: 0, background: beatLit ? '#ffd54f' : '#3a4152', boxShadow: beatLit && !reducedMotion ? '0 0 12px #ffd54f' : 'none' }}
+          />
+          <span style={{ fontWeight: 800 }}>{state.piece?.now ? `Now: ${state.piece.now}` : 'Playing'}</span>
+          {state.piece?.next && (
+            <span style={{ opacity: 0.75 }}>{`Next: ${state.piece.next}${state.piece.nextIn ? ` in ${state.piece.nextIn}` : ''}`}</span>
+          )}
+        </div>
+      )}
 
       {loopsPage && (
       <div role="tablist" aria-label="Page" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: GAP }}>
@@ -246,7 +320,7 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
             type="button"
             role="tab"
             aria-selected={tab === p}
-            onPointerDown={(e) => { e.preventDefault(); setTab(p); }}
+            {...padProps(`tab-${p}`, () => setTab(p))}
             style={{
               minHeight: 56, borderRadius: 16, fontSize: 22, fontWeight: 800, color: '#eef1f7',
               border: `3px solid ${tab === p ? '#ffffff' : '#3a4152'}`, background: tab === p ? '#3f4a63' : '#232836', touchAction: 'none',
@@ -272,7 +346,7 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
                   aria-pressed={on}
                   aria-label={`${label}: ${l.state}`}
                   disabled={l.state === 'empty'}
-                  onPointerDown={(e) => { e.preventDefault(); if (l.state !== 'empty') padTap(`loop${i}`, { type: 'loop', index: i }); }}
+                  {...padProps(`loop${i}`, () => { if (l.state !== 'empty') padTap(`loop${i}`, { type: 'loop', index: i }); })}
                   style={{
                     borderRadius: 20, touchAction: 'none', color: '#eef1f7', fontSize: 22, fontWeight: 800,
                     display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4,
@@ -290,15 +364,21 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
             })}
           </div>
           <div style={{ flex: '2 1 0', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: GAP, minHeight: 0 }}>
-            {Array.from({ length: 4 }, (_, i) => {
-              const sc = state?.scenes?.[i];
+            {Array.from({ length: 4 }, (_, k) => {
+              // Four pads that follow the piece: the scene before the current one, the
+              // current one and the next two — however many scenes there are.
+              const all = state?.scenes ?? [];
+              const cur = all.findIndex((x) => x.active);
+              const first = Math.max(0, Math.min(all.length - 4, cur - 1));
+              const i = first + k;
+              const sc = all[i];
               return (
                 <button
-                  key={`scene-${i}`}
+                  key={`scene-${k}`}
                   type="button"
                   aria-pressed={sc?.active === true}
                   disabled={!sc}
-                  onPointerDown={(e) => { e.preventDefault(); if (sc) padTap(`scene${i}`, { type: 'scene', index: i }); }}
+                  {...padProps(`scene${k}`, () => { if (sc) padTap(`scene${i}`, { type: 'scene', index: i }); })}
                   style={{
                     borderRadius: 20, touchAction: 'none', color: '#eef1f7', fontSize: 20, fontWeight: 800,
                     border: `4px solid ${sc?.active ? '#ce93d8' : '#3a4152'}`, background: sc?.active ? '#4a2f55' : '#232836',
@@ -314,33 +394,23 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
             <button
               type="button"
               aria-label="Capture: save what is on the board as a loop and start it"
-              onPointerDown={(e) => { e.preventDefault(); if (isPalm(e)) return; padTap('capture', { type: 'trigger', name: 'capture' }); }}
+              {...padProps('capture', () => padTap('capture', { type: 'trigger', name: 'capture' }))}
               style={{ borderRadius: 20, touchAction: 'none', color: '#eef1f7', fontSize: 22, fontWeight: 800, border: '4px solid #4fc3f7', background: '#1f3a4a' }}
             >
               ⏺ Capture
             </button>
-            <button
+            {showNext ? <button
               type="button"
               disabled={!state?.scenes || state.scenes.length === 0}
-              onPointerDown={(e) => { e.preventDefault(); padTap('next', { type: 'scene', index: 'next' }); }}
+              {...padProps('next', () => padTap('next', { type: 'scene', index: 'next' }))}
               style={{ borderRadius: 20, touchAction: 'none', color: '#eef1f7', fontSize: 26, fontWeight: 800, border: '4px solid #ce93d8', background: '#232836', opacity: state?.scenes?.length ? 1 : 0.35 }}
             >
               Next scene ▶
-            </button>
+            </button> : <span />}
             <button
               type="button"
               aria-label={confirmEnd ? 'Tap again to end the piece' : 'End the piece'}
-              onPointerDown={(e) => {
-                e.preventDefault();
-                if (isPalm(e)) return;
-                if (!confirmEnd) {
-                  setConfirmEnd(true);
-                  setTimeout(() => setConfirmEnd(false), CONFIRM_MS);
-                  return;
-                }
-                setConfirmEnd(false);
-                padTap('endPiece', { type: 'trigger', name: 'endPiece' });
-              }}
+              {...padProps('endPiece', endTap)}
               style={{
                 borderRadius: 20, touchAction: 'none', color: '#eef1f7', fontSize: confirmEnd ? 18 : 22, fontWeight: 800,
                 border: `4px solid ${confirmEnd ? '#ffffff' : '#ce93d8'}`, background: confirmEnd ? '#6a3a7a' : '#2d2033',
@@ -351,18 +421,7 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
             <button
               type="button"
               aria-label={confirmStop ? 'Tap again to stop all loops' : 'Stop all loops'}
-              onPointerDown={(e) => {
-                e.preventDefault();
-                if (isPalm(e)) return;
-                // Two taps: a brush against the pad must not end the piece.
-                if (!confirmStop) {
-                  setConfirmStop(true);
-                  setTimeout(() => setConfirmStop(false), CONFIRM_MS);
-                  return;
-                }
-                setConfirmStop(false);
-                padTap('stopAll', { type: 'trigger', name: 'stopAll' });
-              }}
+              {...padProps('stopAll', stopTap)}
               style={{
                 borderRadius: 20, touchAction: 'none', color: '#eef1f7', fontSize: confirmStop ? 20 : 24, fontWeight: 800,
                 border: `4px solid ${confirmStop ? '#ffffff' : '#ef5350'}`, background: confirmStop ? '#8a2a2a' : '#4a2323',
@@ -403,7 +462,7 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
                 aria-hidden="true"
                 style={{
                   position: 'absolute', left: 0, right: 0, bottom: 0, height: `${unmapReach(v, reachOf(name)) * 100}%`,
-                  background: STRIP_COLOURS[name], opacity: 0.85, transition: 'height 60ms linear',
+                  background: STRIP_COLOURS[name], opacity: 0.85, transition: reducedMotion ? 'none' : 'height 60ms linear',
                 }}
               />
               <div style={{ position: 'absolute', top: 12, left: 0, right: 0, textAlign: 'center', pointerEvents: 'none' }}>
@@ -427,8 +486,7 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
               key={p.name}
               type="button"
               aria-pressed={p.name === 'keep' || p.name === 'mute' ? !!on : undefined}
-              onPointerDown={(e) => { e.preventDefault(); if (isPalm(e)) return; if (!learning) tap(p.name); }}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tap(p.name); } }}
+              {...padProps(`pad-${p.name}`, () => { if (!learning && !(p.name === 'keep' && state?.kept)) tap(p.name); })}
               style={{
                 borderRadius: 20, border: `3px solid ${flash === p.name ? '#ffffff' : on ? '#ffd54f' : '#3a4152'}`,
                 background: flash === p.name ? '#3f4a63' : on ? '#4a3f1f' : '#232836', color: '#eef1f7',
@@ -442,6 +500,67 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
           );
         })}
       </div>
+      )}
+
+      {/* What the facilitator added to the Play page: loops and performance pads, so the
+          player never has to switch page mid-piece. */}
+      {((state?.touch?.playExtras.length ?? 0) > 0 || (state?.touch?.playLoops.length ?? 0) > 0) && (
+        <div style={{ height: '18%', minHeight: 90, display: 'grid', gridAutoFlow: 'column', gridAutoColumns: '1fr', gap: GAP, opacity: connected && !learning ? 1 : 0.4 }}>
+          {(state?.touch?.playLoops ?? []).map((i) => {
+            const l = state?.loops?.[i] ?? { name: '', state: 'empty' as RemoteLoopState };
+            const on = l.state === 'playing' || l.state === 'starting';
+            const label = l.name || `Loop ${i + 1}`;
+            return (
+              <button
+                key={`play-loop-${i}`}
+                type="button"
+                aria-pressed={on}
+                aria-label={`${label}: ${l.state}`}
+                disabled={l.state === 'empty'}
+                {...padProps(`play-loop${i}`, () => { if (l.state !== 'empty') padTap(`loop${i}`, { type: 'loop', index: i }); })}
+                style={{
+                  borderRadius: 20, touchAction: 'none', color: '#eef1f7', fontSize: 22, fontWeight: 800,
+                  border: `4px ${l.state === 'starting' || l.state === 'stopping' ? 'dashed' : 'solid'} ${on ? '#81c784' : '#3a4152'}`,
+                  background: on ? '#2e5a37' : '#232836', opacity: l.state === 'empty' ? 0.35 : 1,
+                }}
+              >
+                {label}
+              </button>
+            );
+          })}
+          {(state?.touch?.playExtras ?? []).map((x) => {
+            if (x === 'nextScene') {
+              return showNext ? (
+                <button key="x-next" type="button" disabled={!state?.scenes?.length} {...padProps('x-next', () => padTap('next', { type: 'scene', index: 'next' }))}
+                  style={{ borderRadius: 20, touchAction: 'none', color: '#eef1f7', fontSize: 24, fontWeight: 800, border: '4px solid #ce93d8', background: '#232836' }}>
+                  Next scene ▶
+                </button>
+              ) : null;
+            }
+            if (x === 'capture') {
+              return (
+                <button key="x-capture" type="button" aria-label="Capture: save what is on the board as a loop and start it" {...padProps('x-capture', () => padTap('capture', { type: 'trigger', name: 'capture' }))}
+                  style={{ borderRadius: 20, touchAction: 'none', color: '#eef1f7', fontSize: 22, fontWeight: 800, border: '4px solid #4fc3f7', background: '#1f3a4a' }}>
+                  ⏺ Capture
+                </button>
+              );
+            }
+            if (x === 'endPiece') {
+              return (
+                <button key="x-end" type="button" aria-label={confirmEnd ? 'Tap again to end the piece' : 'End the piece'} {...padProps('x-end', endTap)}
+                  style={{ borderRadius: 20, touchAction: 'none', color: '#eef1f7', fontSize: confirmEnd ? 18 : 22, fontWeight: 800, border: `4px solid ${confirmEnd ? '#ffffff' : '#ce93d8'}`, background: confirmEnd ? '#6a3a7a' : '#2d2033' }}>
+                  {confirmEnd ? 'Tap again to end' : '⏹ End piece'}
+                </button>
+              );
+            }
+            return (
+              <button key="x-stop" type="button" aria-label={confirmStop ? 'Tap again to stop all loops' : 'Stop all loops'} {...padProps('x-stop', stopTap)}
+                style={{ borderRadius: 20, touchAction: 'none', color: '#eef1f7', fontSize: confirmStop ? 20 : 24, fontWeight: 800, border: `4px solid ${confirmStop ? '#ffffff' : '#ef5350'}`, background: confirmStop ? '#8a2a2a' : '#4a2323' }}>
+                {confirmStop ? 'Tap again to stop all' : '■ Stop all'}
+              </button>
+            );
+          })}
+        </div>
       )}
       </>)}
     </div>

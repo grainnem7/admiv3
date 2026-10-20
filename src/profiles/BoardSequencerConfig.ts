@@ -12,6 +12,7 @@ import type { BandLevel } from '../songs/band/band';
 import type { MidiSends } from '../midi/boardMidi';
 import {
   fullReachMap, REMOTE_CONTROLS, sanitizeReachMap, type Reach, type RemoteControlName, type RemoteTriggerName,
+  DEFAULT_REMOTE_TOUCH, sanitizeRemoteTouch, type RemoteTouch,
 } from '../remote/protocol';
 import { sanitizeLoopNames, sanitizeScenes, type Scene } from '../songs/performance/launcher';
 import { DEFAULT_PERFORMANCE, sanitizePerformance, type PerformanceSettings } from '../songs/performance/clock';
@@ -160,6 +161,8 @@ export interface BoardSequencerStored {
   remoteLocked: RemoteControlName[];
   /** Jump: the value goes to the finger. Follow: the value moves with the finger from where it was. */
   remoteStripMode: 'jump' | 'follow';
+  /** How the iPad responds to this player's touch: act on touch or lift, the two-tap window, the Play page's extra pads. */
+  remoteTouch: RemoteTouch;
   /** Global transpose in octaves (applied to all melodic + bass notes). */
   octaveShift: number;
   /** Board output volume (0..1). */
@@ -394,6 +397,7 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   remoteLoopsPage: true,
   remoteLocked: [],
   remoteStripMode: 'jump',
+  remoteTouch: DEFAULT_REMOTE_TOUCH,
   loopStepsRed: 0,
   loopStepsBlack: 0,
   loopStepsBlue: 0,
@@ -736,6 +740,7 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     remoteLoopsPage: o.remoteLoopsPage !== false,
     remoteLocked: Array.isArray(o.remoteLocked) ? REMOTE_CONTROLS.filter((n) => (o.remoteLocked as unknown[]).includes(n)) : [],
     remoteStripMode: o.remoteStripMode === 'follow' ? 'follow' : 'jump',
+    remoteTouch: sanitizeRemoteTouch(o.remoteTouch),
     // Whole counts. A stored 0, 2.5 or -1 used to survive: Array.from({length: numPages})
     // throws on a fraction, and the page picker showed nothing selected.
     loopStepsRed: wholeCount(o.loopStepsRed, 0, MAX_LOOP_STEPS, d.loopStepsRed),

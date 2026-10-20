@@ -630,13 +630,20 @@ export default function BoardSequencerScreen() {
       stripMode: config.remoteStripMode,
       loopsFade: config.loopFadePasses > 0,
       ...(clock ? { clock: { text: clock.text, phase: clock.phase } } : {}),
+      touch: config.remoteTouch,
+      piece: (() => {
+        const nn = nowNext(config.scenes, config.currentScene, clock && clock.phase !== 'idle' ? clock.elapsedSec : null);
+        return { now: nn.now?.name ?? null, next: nn.next?.scene.name ?? null, nextIn: nn.next ? formatClock(nn.next.inSec) : null };
+      })(),
+      beat: running ? beatOn : false,
     };
     remoteLink.send({ type: 'state', state });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [remoteEnabled, remoteLink.others, config.bpm, config.velocity, config.fillAmount, config.evolveAmount,
     config.fillKept, config.evolveHoldLap, muted, running, config.remoteReach, reachLearning,
     config.loopSlots, config.loopNames, config.scenes, config.currentScene, wantedSlots, appliedSlots,
-    config.remoteStrips, config.remotePads, config.remoteLoopsPage, config.remoteLocked, config.remoteStripMode, config.loopFadePasses, clock]);
+    config.remoteStrips, config.remotePads, config.remoteLoopsPage, config.remoteLocked, config.remoteStripMode, config.loopFadePasses, clock,
+    config.remoteTouch, beatOn]);
   const fillSigRef = useRef('');
   const [prevFillSeed, setPrevFillSeed] = useState<number | null>(null);
 
@@ -2537,7 +2544,9 @@ export default function BoardSequencerScreen() {
     } else if (msg.type === 'trigger') {
       if (msg.name === 'newIdea') newFillIdea();
       else if (msg.name === 'newSound') newEvolveSound();
-      else if (msg.name === 'keep') toggleKeepAll();
+      // From the iPad, Keep only keeps: a second, accidental tap must not let go of what
+      // the player chose to keep. Letting go is on the laptop.
+      else if (msg.name === 'keep') { if (c.fillKept === null && c.evolveHoldLap === null) toggleKeepAll(); }
       else if (msg.name === 'mute') toggleMuted();
       else if (msg.name === 'stopAll') stopAllLoops();
       else if (msg.name === 'endPiece') endPiece();
@@ -2700,6 +2709,59 @@ export default function BoardSequencerScreen() {
                 ? 'Like ThumbJam: where the finger lands is the value.'
                 : 'Landing changes nothing; sliding moves the value from where it was. For a finger that lands roughly.'}
             </span>
+            <span style={{ fontWeight: 600, fontSize: 13, marginTop: 4 }}>A pad acts</span>
+            <SegmentedControl<'touch' | 'lift'>
+              label="A pad acts"
+              value={config.remoteTouch.actOn}
+              onChange={(actOn) => update({ remoteTouch: { ...config.remoteTouch, actOn } })}
+              options={[{ value: 'touch', label: 'When the finger lands' }, { value: 'lift', label: 'When the finger lifts' }]}
+            />
+            <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
+              {config.remoteTouch.actOn === 'touch'
+                ? 'Quickest. A resting palm is always ignored.'
+                : 'Nothing happens until the finger comes off the pad it started on, so sliding onto a pad by accident does nothing.'}
+            </span>
+            <span style={{ fontWeight: 600, fontSize: 13, marginTop: 4 }}>Time for the second tap (End piece, Stop all)</span>
+            <SegmentedControl<number>
+              label="Time for the second tap"
+              value={config.remoteTouch.confirmSec}
+              onChange={(confirmSec) => update({ remoteTouch: { ...config.remoteTouch, confirmSec } })}
+              options={[{ value: 3, label: '3 seconds' }, { value: 6, label: '6 seconds' }, { value: 10, label: '10 seconds' }]}
+            />
+            <span style={{ fontWeight: 600, fontSize: 13, marginTop: 4 }}>Also on the Play page</span>
+            <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
+              Put what the player needs during the piece on the page they play on, so they never have to switch page.
+            </span>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              {([['endPiece', 'End piece'], ['nextScene', 'Next scene'], ['capture', 'Capture'], ['stopAll', 'Stop all']] as const).map(([x, word]) => (
+                <label key={x} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+                  <input
+                    type="checkbox"
+                    checked={config.remoteTouch.playExtras.includes(x)}
+                    onChange={(e) => update({ remoteTouch: { ...config.remoteTouch, playExtras: e.target.checked ? [...config.remoteTouch.playExtras, x] : config.remoteTouch.playExtras.filter((y) => y !== x) } })}
+                  />
+                  {word}
+                </label>
+              ))}
+              {Array.from({ length: LAUNCH_SLOTS }, (_, slot) => slot).filter((slot) => (config.loopSlots[slot]?.length ?? 0) > 0).map((slot) => (
+                <label key={`pl${slot}`} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+                  <input
+                    type="checkbox"
+                    checked={config.remoteTouch.playLoops.includes(slot)}
+                    onChange={(e) => update({ remoteTouch: { ...config.remoteTouch, playLoops: e.target.checked ? [...config.remoteTouch.playLoops, slot].sort((a, b) => a - b) : config.remoteTouch.playLoops.filter((y) => y !== slot) } })}
+                  />
+                  {loopLabel(config.loopNames, slot)}
+                </label>
+              ))}
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+              <input
+                type="checkbox"
+                checked={config.remoteTouch.showNext}
+                onChange={(e) => update({ remoteTouch: { ...config.remoteTouch, showNext: e.target.checked } })}
+              />
+              Show Next scene on the iPad (untick if a brush against it could change the whole sound)
+            </label>
           </div>
         </>
       )}

@@ -241,8 +241,11 @@ const HELP: HelpEntry[] = [
       + 'change mid-piece) and it ignores touch. "A touch on a strip": Jumps to the finger '
       + '(like ThumbJam) or Follows the movement (landing changes nothing; sliding moves the '
       + 'value from where it was — for a finger that lands roughly). Learn reach makes a '
-      + 'short slide the whole range. On the iPad, a resting palm is ignored and Stop all '
-      + 'takes two taps.',
+      + 'short slide the whole range. "A pad acts" when the finger lands or when it lifts '
+      + '(sliding onto a pad then does nothing). "Time for the second tap" for End piece and '
+      + 'Stop all: 3, 6 or 10 seconds. "Also on the Play page" puts End piece, Next scene, '
+      + 'Capture, Stop all or loops on the page the player plays on. A resting palm is '
+      + 'ignored on every pad, and from the iPad Keep only keeps.',
   },
   {
     title: 'Keyboard',

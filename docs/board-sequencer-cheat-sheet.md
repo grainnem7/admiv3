@@ -133,7 +133,13 @@
   - **What the iPad shows:** untick strips and pads they won't use — **fewer things means bigger things** (two strips fill the screen; no strips = four huge pads).
   - **Locked strips:** 🔒 a strip and it ignores touch (lock Speed for a piece at a fixed tempo).
   - **A touch on a strip — Jumps to the finger / Follows the movement.** *Follows*: landing does nothing, sliding moves the value from where it was — for a finger that lands roughly.
-  - On the iPad: a resting **palm is ignored**, **Stop all takes two taps**, and the gaps between targets are wide.
+  - On the iPad: a resting **palm is ignored on every pad**, **End piece and Stop all take two taps**, and the gaps between targets are wide.
+  - **A pad acts — When the finger lands / When the finger lifts.** *Lifts*: nothing happens until the finger comes off the pad it started on, so sliding onto a pad does nothing.
+  - **Time for the second tap:** 3, 6 (default) or 10 seconds.
+  - **Also on the Play page:** tick End piece, Next scene, Capture, Stop all and any saved loops — they appear as big pads on the page the player plays on, so they never switch page mid-piece.
+  - **Show Next scene on the iPad:** untick if a brush against it could change the whole sound.
+  - From the iPad, **Keep only keeps** (a second tap does nothing); let go on the laptop.
+  - The iPad shows **Now: / Next: … in m:ss** and a **beat light** while playing; scene pads follow the current scene, however many scenes there are; every pad works from a keyboard or a switch (Enter/Space).
 - What the iPad does shows on the Play screen ("iPad: Speed 96 BPM").
 
 ## MIDI out — ADMI as a controller

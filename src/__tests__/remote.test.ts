@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { WebSocket } from 'ws';
+import { DEFAULT_REMOTE_TOUCH, sanitizeRemoteTouch } from '../remote/protocol';
 import {
   dynamicsFromValue, isRemoteCode, makeRemoteCode, parseRemoteMessage, REMOTE_PATH, stripValue,
   STRIP_STEP, tempoFromValue, TEMPO_MAX, TEMPO_MIN, valueFromTempo, valueFromVelocity,
@@ -275,5 +276,14 @@ describe('the clock on the iPad, and the End and Capture pads', () => {
   it('End piece and Capture are triggers the iPad may send', () => {
     expect(parseRemoteMessage({ type: 'trigger', name: 'endPiece' })).toEqual({ type: 'trigger', name: 'endPiece' });
     expect(parseRemoteMessage({ type: 'trigger', name: 'capture' })).toEqual({ type: 'trigger', name: 'capture' });
+  });
+});
+
+describe('the player touch settings', () => {
+  it('are made safe: unknown pads dropped, loops in range, the second-tap window one of the choices', () => {
+    expect(sanitizeRemoteTouch(null)).toEqual(DEFAULT_REMOTE_TOUCH);
+    expect(sanitizeRemoteTouch({ actOn: 'lift', confirmSec: 10, playExtras: ['endPiece', 'explode'], playLoops: [3, 3, 9, -1, 1], showNext: false }))
+      .toEqual({ actOn: 'lift', confirmSec: 10, playExtras: ['endPiece'], playLoops: [1, 3], showNext: false });
+    expect(sanitizeRemoteTouch({ confirmSec: 4 }).confirmSec).toBe(DEFAULT_REMOTE_TOUCH.confirmSec);
   });
 });

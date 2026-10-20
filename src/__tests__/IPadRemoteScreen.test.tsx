@@ -101,3 +101,64 @@ describe('the iPad page, touched', () => {
     expect(sent).toContainEqual({ type: 'loop', index: 0 });
   });
 });
+
+describe('the iPad page, set up for the player', () => {
+  const withTouch = (touch: Record<string, unknown>, extra: Record<string, unknown> = {}) =>
+    ({ ...STATE, state: { ...STATE.state, touch: { actOn: 'touch', confirmSec: 6, playExtras: [], playLoops: [], showNext: true, ...touch }, ...extra } });
+  const button = (text: string) => [...el.querySelectorAll('button')].find((b) => (b.textContent ?? '').includes(text) || (b.getAttribute('aria-label') ?? '').includes(text))!;
+
+  it('acting on lift: nothing on landing, the pad acts when the finger lifts on it — not if it slid off', async () => {
+    await act(async () => { onMsg?.(withTouch({ actOn: 'lift' })); });
+    const pad = button('New idea');
+    await act(async () => { pointer('pointerdown', pad, 300); });
+    expect(sent).toEqual([]);
+    await act(async () => { pointer('pointerup', pad, 300); });
+    expect(sent).toContainEqual({ type: 'trigger', name: 'newIdea' });
+    sent.length = 0;
+    const other = button('New sound');
+    await act(async () => { pointer('pointerdown', other, 300); });
+    await act(async () => { other.dispatchEvent(new MouseEvent('pointerout', { bubbles: true, relatedTarget: document.body })); });
+    await act(async () => { pointer('pointerup', other, 300); });
+    expect(sent).toEqual([]);
+  });
+
+  it('every pad works from a keyboard or a switch', async () => {
+    const pad = button('New sound');
+    await act(async () => { pad.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); });
+    expect(sent).toContainEqual({ type: 'trigger', name: 'newSound' });
+  });
+
+  it('Keep only keeps: once kept, another tap sends nothing', async () => {
+    await act(async () => { onMsg?.({ ...STATE, state: { ...STATE.state, kept: true } }); });
+    await act(async () => { pointer('pointerdown', button('Kept'), 300); });
+    expect(sent).toEqual([]);
+  });
+
+  it('pads the facilitator chose appear on the Play page; End piece takes two taps', async () => {
+    await act(async () => { onMsg?.(withTouch({ playExtras: ['endPiece'], playLoops: [0] })); });
+    const loop = [...el.querySelectorAll('button')].find((b) => b.getAttribute('aria-label')?.startsWith('Bass:'))!;
+    expect(loop).toBeTruthy();
+    await act(async () => { pointer('pointerdown', loop, 300); });
+    expect(sent).toContainEqual({ type: 'loop', index: 0 });
+    const end = button('End the piece');
+    await act(async () => { pointer('pointerdown', end, 300); });
+    expect(sent).not.toContainEqual({ type: 'trigger', name: 'endPiece' });
+    await act(async () => { pointer('pointerdown', button('Tap again to end'), 300); });
+    expect(sent).toContainEqual({ type: 'trigger', name: 'endPiece' });
+  });
+
+  it('scene pads follow the piece, however many scenes there are', async () => {
+    const scenes = Array.from({ length: 8 }, (_, i) => ({ name: `S${i + 1}`, active: i === 5 }));
+    await act(async () => { onMsg?.({ ...STATE, state: { ...STATE.state, scenes } }); });
+    const tab = [...el.querySelectorAll('[role="tab"]')].find((b) => b.textContent?.includes('Loops'))!;
+    await act(async () => { pointer('pointerdown', tab, 10); });
+    const labels = [...el.querySelectorAll('button')].map((b) => b.textContent ?? '').filter((t) => t.startsWith('Scene '));
+    expect(labels).toEqual(['Scene 5: S5', 'Scene 6: S6', 'Scene 7: S7', 'Scene 8: S8']);
+  });
+
+  it('shows what is on, what comes next, and when', async () => {
+    await act(async () => { onMsg?.({ ...STATE, state: { ...STATE.state, piece: { now: 'Build', next: 'Open', nextIn: '1:12' }, beat: true } }); });
+    expect(el.textContent).toContain('Now: Build');
+    expect(el.textContent).toContain('Next: Open in 1:12');
+  });
+});

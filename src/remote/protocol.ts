@@ -27,6 +27,40 @@ export const PLAY_PADS: RemoteTriggerName[] = ['newIdea', 'newSound', 'keep', 'm
 export type RemoteLoopState = 'empty' | 'stopped' | 'playing' | 'starting' | 'stopping';
 export const REMOTE_LOOP_STATES: RemoteLoopState[] = ['empty', 'stopped', 'playing', 'starting', 'stopping'];
 export interface RemoteLoop { name: string; state: RemoteLoopState }
+
+/** Pads from the Loops page a facilitator can also put on the Play page, so the player never has to switch page. */
+export type RemotePlayExtra = 'endPiece' | 'nextScene' | 'capture' | 'stopAll';
+export const REMOTE_PLAY_EXTRAS: RemotePlayExtra[] = ['endPiece', 'nextScene', 'capture', 'stopAll'];
+
+/** How this player's iPad responds to touch — all set on the laptop, per player. */
+export interface RemoteTouch {
+  /** A pad acts when the finger lands, or only when it lifts (for a finger that lands roughly). */
+  actOn: 'touch' | 'lift';
+  /** How long the second tap of a two-tap pad (End piece, Stop all) is waited for, in seconds. */
+  confirmSec: number;
+  /** Pads added to the Play page. */
+  playExtras: RemotePlayExtra[];
+  /** Loops (by slot) with a pad on the Play page. */
+  playLoops: number[];
+  /** Show Next scene on the iPad at all. */
+  showNext: boolean;
+}
+export const DEFAULT_REMOTE_TOUCH: RemoteTouch = { actOn: 'touch', confirmSec: 6, playExtras: [], playLoops: [], showNext: true };
+export const CONFIRM_SECONDS = [3, 6, 10] as const;
+
+export function sanitizeRemoteTouch(v: unknown): RemoteTouch {
+  const o = (typeof v === 'object' && v !== null ? v : {}) as Record<string, unknown>;
+  const d = DEFAULT_REMOTE_TOUCH;
+  return {
+    actOn: o.actOn === 'lift' ? 'lift' : 'touch',
+    confirmSec: (CONFIRM_SECONDS as readonly number[]).includes(o.confirmSec as number) ? (o.confirmSec as number) : d.confirmSec,
+    playExtras: Array.isArray(o.playExtras) ? REMOTE_PLAY_EXTRAS.filter((x) => (o.playExtras as unknown[]).includes(x)) : [],
+    playLoops: Array.isArray(o.playLoops)
+      ? [...new Set((o.playLoops as unknown[]).filter((x): x is number => typeof x === 'number' && Number.isInteger(x) && x >= 0 && x < 8))].sort((a, b) => a - b)
+      : [],
+    showNext: o.showNext !== false,
+  };
+}
 export interface RemoteScene { name: string; active: boolean }
 
 /**
@@ -66,6 +100,12 @@ export interface RemoteState {
   loopsFade?: boolean;
   /** The performance clock, for the big countdown. */
   clock?: { text: string; phase: 'idle' | 'running' | 'lastMinute' | 'lastMoments' | 'ending' | 'over' };
+  /** How this player's iPad responds to touch. */
+  touch?: RemoteTouch;
+  /** Where the piece is: the scene on now, the next one and how soon. */
+  piece?: { now: string | null; next: string | null; nextIn: string | null };
+  /** Flips each beat while playing: the iPad shows the pulse, so the beat is seen as well as heard. */
+  beat?: boolean;
 }
 
 export type RemoteMessage =
@@ -117,6 +157,11 @@ function sanitizeScenesList(v: unknown[]): RemoteScene[] {
   });
 }
 
+function sanitizePiece(o: Record<string, unknown>): { now: string | null; next: string | null; nextIn: string | null } {
+  const str = (v: unknown, n: number): string | null => (typeof v === 'string' ? v.slice(0, n) : null);
+  return { now: str(o.now, 40), next: str(o.next, 40), nextIn: str(o.nextIn, 12) };
+}
+
 /** Parse and check a message; anything malformed is ignored, never half-applied. */
 export function parseRemoteMessage(raw: unknown): RemoteMessage | null {
   let m: unknown;
@@ -164,6 +209,9 @@ export function parseRemoteMessage(raw: unknown): RemoteMessage | null {
         ...(s.stripMode === 'follow' || s.stripMode === 'jump' ? { stripMode: s.stripMode } : {}),
         ...(typeof s.loopsFade === 'boolean' ? { loopsFade: s.loopsFade } : {}),
         ...(sanitizeClock(s.clock) ? { clock: sanitizeClock(s.clock)! } : {}),
+        ...(typeof s.touch === 'object' && s.touch !== null ? { touch: sanitizeRemoteTouch(s.touch) } : {}),
+        ...(typeof s.piece === 'object' && s.piece !== null ? { piece: sanitizePiece(s.piece as Record<string, unknown>) } : {}),
+        ...(typeof s.beat === 'boolean' ? { beat: s.beat } : {}),
       },
     };
   }
