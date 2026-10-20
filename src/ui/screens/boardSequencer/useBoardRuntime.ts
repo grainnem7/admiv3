@@ -118,6 +118,7 @@ const LAPTOP_SETTLE_MS = 120;
  * cheap and does nothing when the value is unchanged.
  */
 export function applyEngineSettings(engine: BoardSequencerEngine, cfg: BoardSequencerStored): void {
+  engine.setChannels(cfg.channels);
   engine.setPingPong(cfg.pingPong);
   engine.setTickEnabled(cfg.tickEnabled);
   engine.setStudioMix(cfg.studioMix);

@@ -709,6 +709,29 @@ export class BoardSequencerEngine {
     e.pending = { voice: next, timer };
   }
 
+  /**
+   * The colours changed while playing: a part's instrument or a drum colour's kit piece.
+   * The drum choice is read note by note, so it applies at once; a new instrument comes
+   * in without a gap, once its samples have loaded. Jobs (roles) don't change while
+   * playing — the screen stops first — so no part appears or disappears here.
+   */
+  setChannels(channels: ColourChannel[]): void {
+    if (channels === this.cfg.channels) return;
+    const before = this.channelById;
+    this.cfg.channels = channels;
+    this.channelById = new Map(channels.map((c) => [c.id, c]));
+    for (const ch of channels) {
+      const e = this.voiceByChannel.get(ch.id);
+      const old = before.get(ch.id);
+      if (!e || !old || (old.instrument ?? '') === (ch.instrument ?? '')) continue;
+      const next = new BoardSequencerVoice(this.ctx, voiceSpecFor(ch, this.cfg.soundWorld ?? 'none'));
+      next.setBrightness(e.toneBase * this.toneScale);
+      next.connect(e.gain);
+      e.voiceName = null;
+      this.swapVoiceWhenReady(e, next);
+    }
+  }
+
   /** Counters play phrases (on) or one note each (off), from the next beat. */
   setPhrases(on: boolean): void {
     this.cfg.phrases = on;

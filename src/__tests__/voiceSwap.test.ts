@@ -69,3 +69,31 @@ describe('engine — changing instrument without a gap', () => {
     expect(entry.voice).toBe(made[1]);
   });
 });
+
+describe('engine — changing a colour while playing', () => {
+  beforeEach(() => { vi.useFakeTimers(); made.length = 0; });
+  afterEach(() => { vi.useRealTimers(); });
+
+  it('a new instrument for a colour comes in once loaded; the same colours change nothing', () => {
+    const channels: ColourChannel[] = [{ id: 'm', kind: 'hue', role: 'melody', swatch: '#f00' }];
+    const e = new BoardSequencerEngine({
+      bpm: 60, rows: 8, cols: 4, scaleRootMidi: 60, scaleSemitones: [0, 2, 4, 7, 9], swing: 0, humanize: 0,
+      noteLengthBeats: 0.5, velocity: 0.8, tickEnabled: false, octaveShift: 0, volume: 0.6, channels,
+      faderAxis: 'row', loopStepsRed: 0, loopStepsBlack: 0, loopStepsBlue: 0, numPages: 1, soundWorld: 'warm',
+    });
+    const p = e as unknown as { channelById: Map<string, ColourChannel>; voiceByChannel: Map<string, ReturnType<typeof fakeVoiceEntry>> };
+    p.channelById = new Map(channels.map((c) => [c.id, c]));
+    const entry = fakeVoiceEntry();
+    p.voiceByChannel = new Map([['m', entry]]);
+    const old = entry.voice;
+    e.setChannels(channels);
+    expect(made).toHaveLength(0);
+    e.setChannels([{ ...channels[0], instrument: 'clarinet' }]);
+    expect(made).toHaveLength(1);
+    expect(entry.voice).toBe(old);
+    made[0].loaded = true;
+    vi.advanceTimersByTime(200);
+    expect(entry.voice).toBe(made[0]);
+    expect(p.channelById.get('m')?.instrument).toBe('clarinet');
+  });
+});

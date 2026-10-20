@@ -3059,7 +3059,6 @@ export default function BoardSequencerScreen() {
                 Instrument
                 <select
                   value={c.instrument ?? ''}
-                  disabled={running}
                   onChange={(e) => patchChannel(c.id, { instrument: e.target.value })}
                 >
                   <option value="">
@@ -3070,7 +3069,7 @@ export default function BoardSequencerScreen() {
                   {INSTRUMENT_OPTIONS.map((o) => <option key={o.key} value={o.key}>{o.name}</option>)}
                 </select>
                 <span style={{ minHeight: 14, fontSize: 11, color: 'var(--bs-fg2)' }}>
-                  {running ? 'Stop to change the instrument' : ''}
+                  {running ? 'Changes from the next notes, once it has loaded.' : ''}
                 </span>
               </label>
             )}
@@ -3079,14 +3078,13 @@ export default function BoardSequencerScreen() {
                 Drum
                 <select
                   value={c.drum ?? ''}
-                  disabled={running}
                   onChange={(e) => patchChannel(c.id, { drum: e.target.value })}
                 >
                   <option value="">Vary by row (kick → crash)</option>
                   {DRUM_OPTIONS.map((o) => <option key={o.key} value={o.key}>{o.name}</option>)}
                 </select>
                 <span style={{ minHeight: 14, fontSize: 11, color: 'var(--bs-fg2)' }}>
-                  {running ? 'Stop to change the drum' : 'Drums use the main volume.'}
+                  Drums use the main volume.
                 </span>
               </label>
             )}

@@ -159,4 +159,4 @@
 ## Good to know
 - **Checking the app still works** (after a change): `npm run test:run` (unit tests, about 30 s) and `npm run test:e2e` (the performance in a real browser on the laptop board, about 3 minutes). Neither touches your saved loops.
 - **Variation** and **Loop bank** are single-page: set Pages to 1 to use them.
-- While playing you can change tempo, key, scale, swing, volume, mix, loops and pages. Instruments, the grid and the camera need a stop first — the app says so.
+- While playing you can change tempo, key, scale, swing, volume, mix, loops, pages, and a colour's instrument or drum (the new instrument comes in once it has loaded). What a colour does, the grid and the camera need a stop first — the app says so.
