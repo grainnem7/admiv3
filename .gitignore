@@ -49,3 +49,7 @@ public/songs/*/analysis.*.bak.json
 
 # The Board Sequencer's saved loops and setup, kept on this laptop by the dev server
 .admi-data/
+
+# Playwright
+/test-results/
+/playwright-report/

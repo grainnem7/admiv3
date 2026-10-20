@@ -101,6 +101,9 @@
 - **⤓ Back up to a file** saves every player, loop, scene and the board setup to one file — do it before a performance and keep it on a USB stick. **⤒ Restore from a file** puts one back (it asks first; the page reloads).
 - **Loops fade in and out** over **half a pass / 1 pass / 2 passes** (or at once) — Perform → Loops → *Loops fade in and out over*. The pad says "fading out…" until it has gone.
 
+## Play tabs
+**Perform** (the piece: scenes, loops, ending, Ready check) · **Sound** (world, phrases, band, Fill, Evolve) · **Groove** (tempo, swing, key, grid) · **Board** (lanes, loop bank, Variation, where a counter sits) · **Connections** (iPad, MIDI out). The **?** help starts with the words used here (pass, phrase, scene, loop, band, Fill, Evolve, lane, Hold/Toggle).
+
 ## The performance clock — a 7-minute piece
 - **A scene at 0:00 is the opening:** it is applied the moment the clock starts.
 - **While the clock runs, ■ Stop (or Space) needs a second press** within 4 seconds — the first says "Press again to stop". A stray key can't end the show.
@@ -126,7 +129,7 @@
 3. **End:** at the 30-second cue, **End piece** — two passes of fade and it's over, on the beat.
 
 ## iPad controls (Tim)
-- **For a performance, start ADMI with `npm run show`** (a fixed build on port 3001 — it can't reload itself mid-piece if a file changes). For testing, `npm run dev:ipad`. Never `npm run dev` with the iPad. Sound tab → **Connections** → tick **iPad controls** → open the link shown in **Safari on the iPad** (same Wi-Fi; allow Node through Windows Firewall on private networks the first time).
+- **For a performance, start ADMI with `npm run show`** (a fixed build on port 3001 — it can't reload itself mid-piece if a file changes). For testing, `npm run dev:ipad`. Never `npm run dev` with the iPad. **Connections** tab → tick **iPad controls** → open the link shown in **Safari on the iPad** (same Wi-Fi; allow Node through Windows Firewall on private networks the first time).
 - **Strips:** Speed · Dynamics · Fill · Evolve — slide anywhere on a strip; the ends are "all the way"; values move in 5% steps. **Pads:** New idea · New sound · Keep · Mute — act on touch, repeat taps ignored.
 - **Learn reach:** press it on the laptop, have the player slide each strip as far as is comfortable, press **Done**. Their reach is now the whole range. **Reset reach** undoes it. Per player.
 - **For a player without fine control (all per player, under iPad controls):**
@@ -143,7 +146,7 @@
 - What the iPad does shows on the Play screen ("iPad: Speed 96 BPM").
 
 ## MIDI out — ADMI as a controller
-- Sound tab → **Connections** → **MIDI out** → choose an output. Melody **ch 1**, bass **ch 2**, chords **ch 3**, drums **ch 10** (General MIDI). **My notes only** or **Everything** (fill and band too). Untick **Keep the built-in sound** for MIDI only.
+- **Connections** tab → **MIDI out** → choose an output. Melody **ch 1**, bass **ch 2**, chords **ch 3**, drums **ch 10** (General MIDI). **My notes only** or **Everything** (fill and band too). Untick **Keep the built-in sound** for MIDI only.
 - Chrome/Edge only. A DAW on the same laptop needs a virtual port (**loopMIDI** on Windows).
 
 ## Session log — for the research
@@ -151,5 +154,6 @@
 - Play screen → **Save session** (JSON, everything) or **CSV** (notes). Named after the player and the time. Nothing leaves the machine otherwise.
 
 ## Good to know
+- **Checking the app still works** (after a change): `npm run test:run` (unit tests, about 30 s) and `npm run test:e2e` (the performance in a real browser on the laptop board, about 3 minutes). Neither touches your saved loops.
 - **Variation** and **Loop bank** are single-page: set Pages to 1 to use them.
 - While playing you can change tempo, key, scale, swing, volume, mix, loops and pages. Instruments, the grid and the camera need a stop first — the app says so.

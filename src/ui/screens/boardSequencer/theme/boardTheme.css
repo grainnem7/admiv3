@@ -128,3 +128,13 @@
     transition-duration: 0.001ms !important;
   }
 }
+
+/*
+ * The app-wide stylesheet colours headings and labels for its own dark look. Inside the
+ * Board Sequencer they take the board's text colour instead: in the light theme the
+ * title was near-white on white (about 1.1:1) and slider labels a pale grey (about
+ * 2.4:1) — both below WCAG 1.4.3.
+ */
+.bs-root h1, .bs-root h2, .bs-root h3, .bs-root h4, .bs-root label {
+  color: var(--bs-fg);
+}

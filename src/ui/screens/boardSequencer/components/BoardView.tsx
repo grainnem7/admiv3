@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ActiveCell, PieceColour } from '../../../../tracking/BoardSequencerMode';
 import type { ColourId } from '../../../../tracking/boardColours';
+import { CellGrid } from './CellGrid';
 import { swatchRingFor, type BoardPalette } from '../theme/boardTokens';
 import { boardSummary, type PhraseSpan, type Pop } from './boardViewModel';
 import type { BankSlotState } from '../../../../tracking/boardFrame';
@@ -367,32 +368,18 @@ export function BoardView({
         style={{ width: dims.w, height: dims.h, borderRadius: 'var(--bs-radius-lg)' }}
       />
       {onCellTap && (
-        <div
-          role="grid"
-          aria-label={`Laptop board, ${rows} rows by ${cols} steps`}
-          style={{
-            position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
-            width: dims.w, height: dims.h, display: 'grid',
-            gridTemplateColumns: `repeat(${cols}, 1fr)`, gridTemplateRows: `repeat(${rows}, 1fr)`,
-          }}
-        >
-          {Array.from({ length: rows * cols }, (_, k) => {
-            const row = Math.floor(k / cols);
-            const col = k % cols;
+        <CellGrid
+          rows={rows}
+          cols={cols}
+          label={`Laptop board, ${rows} rows by ${cols} steps. Arrow keys move; Enter places or lifts.`}
+          cellLabel={(row, col) => {
             const what = describeCell?.(row, col) ?? '';
-            return (
-              <button
-                key={k}
-                type="button"
-                role="gridcell"
-                className="bs-laptop-cell"
-                aria-label={`Row ${rows - row} from the bottom, step ${col + 1}${what ? `: ${what}` : ''}`}
-                onClick={() => onCellTap(row, col)}
-                style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', borderRadius: 6 }}
-              />
-            );
-          })}
-        </div>
+            return `Row ${rows - row} from the bottom, step ${col + 1}${what ? `: ${what}` : ''}`;
+          }}
+          onActivate={onCellTap}
+          cellStyle={() => ({ background: 'transparent', border: 'none', borderRadius: 6 })}
+          style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: dims.w, height: dims.h }}
+        />
       )}
       {pageLabel && (
         <span style={{

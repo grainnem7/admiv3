@@ -11,6 +11,17 @@ interface HelpEntry {
 
 const HELP: HelpEntry[] = [
   {
+    title: 'Words used here',
+    body: 'Pass: one time round the loop, left to right — scenes, loops and the ending all '
+      + 'land on a pass. Phrase: the idea one counter plays until the next counter of its '
+      + 'colour. Scene: a set of loops and a sound, brought in by the clock or with Go. '
+      + 'Loop: a saved board that plays on its own (eight pads in Perform). Band: a pad, '
+      + 'bass and groove that answer the player. Fill: notes the instrument adds around '
+      + 'yours. Evolve: the sound of each colour slowly changing. Lane: a row or step kept '
+      + 'for controls or loop pads, never notes. Hold / Toggle: a loop pad plays while its '
+      + 'counter is on it, or starts and stops with each placement.',
+  },
+  {
     title: 'Setting up',
     body: 'Set up walks through four steps: Camera, Board, Colours, Ready. Each step says '
       + 'what to do with the real board; Continue is only offered once that step is done, '
@@ -167,7 +178,7 @@ const HELP: HelpEntry[] = [
   },
   {
     title: 'iPad controls',
-    body: 'Start ADMI with "npm run dev:ipad", tick iPad controls on the Sound tab, and open '
+    body: 'Start ADMI with "npm run show" (or "npm run dev:ipad" for testing), tick iPad controls on the Connections tab, and open '
       + 'the link it shows in Safari on an iPad on the same Wi-Fi. Four strips (Speed, '
       + 'Dynamics, Fill, Evolve) slide like ThumbJam — the whole strip is the target, the '
       + 'ends are generous, values move in steps — and four pads (New idea, New sound, Keep, '
@@ -236,7 +247,7 @@ const HELP: HelpEntry[] = [
   },
   {
     title: 'The iPad for a player without fine control',
-    body: 'Sound tab → Connections → iPad controls. Untick the strips and pads this player '
+    body: 'Connections tab → iPad controls. Untick the strips and pads this player '
       + 'will not use: fewer things means bigger things. Lock a strip (a speed that must not '
       + 'change mid-piece) and it ignores touch. "A touch on a strip": Jumps to the finger '
       + '(like ThumbJam) or Follows the movement (landing changes nothing; sliding moves the '

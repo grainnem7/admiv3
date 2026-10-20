@@ -93,7 +93,6 @@ import { SOUND_WORLDS, SOUND_WORLD_IDS, worldOf, type SoundWorldChoice } from '.
 import type { FillSourceStatus } from '../../songs/BoardSequencerEngine';
 import type { BandLevel, BandPart } from '../../songs/band/band';
 import { BoardMidiPanel } from './boardSequencer/components/BoardMidiPanel';
-import { Disclosure } from './boardSequencer/ui/Disclosure';
 import { LoopEditor } from './boardSequencer/components/LoopEditor';
 import {
   LAUNCH_SLOTS, MAX_SCENES, loopLabel, nextSceneIndex, sceneFromNow, sceneSettingsToApply, slotState, toggleSlot, type PlayerStrip, type SceneSettings,
@@ -245,6 +244,8 @@ interface LastColourSample {
 
 /** No camera frame for this long while playing: the camera has stopped. */
 const CAMERA_STALL_MS = 1500;
+/** How long a cue stays large in the Now / Next strip. */
+const CUE_SHOWN_MS = 5000;
 /** Config saves are gathered over this long (and written at once when the page closes). */
 const SAVE_GATHER_MS = 400;
 /** How long the first press of Stop during a piece waits for the second. */
@@ -1224,12 +1225,16 @@ export default function BoardSequencerScreen() {
         const drained = engine.drainFiredNotes();
         sessionLogRef.current.addNotes(drained);
         firedRef.current = pruneFired([...firedRef.current, ...drained], audible);
-        setPops(popsAt(firedRef.current, audible));
+        // Only when something is sounding (or just stopped): an empty list every frame
+        // re-rendered this whole screen 60 times a second for nothing, on the same thread
+        // as the colour detection and the sound scheduler.
+        const next = popsAt(firedRef.current, audible);
+        setPops((prev) => (prev.length === 0 && next.length === 0 ? prev : next));
       } else if (firedRef.current.length > 0) {
         firedRef.current = [];
-        setPops([]);
+        setPops((prev) => (prev.length === 0 ? prev : []));
       }
-      setNudge(signal);
+      setNudge((prev) => (prev === signal || (prev !== null && signal !== null && JSON.stringify(prev) === JSON.stringify(signal)) ? prev : signal));
     },
     onThrottledState: (rf: RuntimeFrame) => {
       const { frame, controls } = rf;
@@ -2048,6 +2053,11 @@ export default function BoardSequencerScreen() {
                 <span style={{ fontSize: 11, opacity: 0.65 }}>
                   Polyrhythm — loop length per role (Off = full {config.cols} steps; shorter values drift)
                 </span>
+                {config.phrases && (
+                  <span role="note" style={{ fontSize: 12, color: 'var(--bs-warn)' }}>
+                    Counters are playing phrases (Sound tab), which fill the whole loop: leave polyrhythm Off, or the parts fight each other.
+                  </span>
+                )}
                 {POLY_ROLES.map(({ role, field, label }) => (
                   <label key={role} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
                     <span style={{ width: 64 }}>{label}</span>
@@ -2286,6 +2296,14 @@ export default function BoardSequencerScreen() {
     announce(`${old.name} now has the loops and the sound playing now.`);
   };
   const [planConfirm, setPlanConfirm] = useState(false);
+  // A cue ("30 seconds left") stays large in the Now / Next strip for a few seconds, so
+  // it is seen by anyone who can't hear it.
+  const [cueShown, setCueShown] = useState<string | null>(null);
+  useEffect(() => {
+    if (!cueShown) return;
+    const t = window.setTimeout(() => setCueShown(null), CUE_SHOWN_MS);
+    return () => window.clearTimeout(t);
+  }, [cueShown]);
   const [readyOpen, setReadyOpen] = useState(false);
   /** "Make my plan": the four-scene plan across the piece's length, from the saved loops. */
   const makePlan = (): void => {
@@ -2414,6 +2432,7 @@ export default function BoardSequencerScreen() {
     });
     for (const cue of d.cues) {
       setBoardNotice(cueText(cue));
+      setCueShown(cueText(cue));
       announce(cueText(cue));
     }
     if (d.scene !== null) goScene(d.scene);
@@ -2556,11 +2575,10 @@ export default function BoardSequencerScreen() {
   };
   remoteMsgRef.current = onRemoteMessage;
 
-  const soundTab = (
-
+  // Connections: the iPad and MIDI out, set up once per rig — their own tab, so the Sound
+  // tab is about the sound.
+  const connectionsTab = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 10 }}>
-    {/* The iPad and MIDI: set up once per rig, so they fold away under the music. */}
-    <Disclosure summary="Connections: iPad controls and MIDI out" defaultOpen={remoteEnabled || config.midiEnabled}>
     {/* The iPad remote: a second controller in the performance (see src/remote). */}
     <div role="group" aria-label="iPad controls" style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 8, borderRadius: 'var(--bs-radius-md)', border: '1px solid var(--bs-border)' }}>
       <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600 }}>
@@ -2773,7 +2791,12 @@ export default function BoardSequencerScreen() {
       keepSound={config.midiKeepSound}
       onChange={(patch) => update(patch)}
     />
-    </Disclosure>
+    </div>
+  );
+
+  const soundTab = (
+
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 10 }}>
     {/* The two biggest choices about how the board sounds, first. Both work while playing. */}
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       <span style={{ fontWeight: 600 }}>Sound world</span>
@@ -3329,7 +3352,7 @@ export default function BoardSequencerScreen() {
       ? { label: 'iPad not in use', state: 'ok' }
       : remoteLink.others > 0
         ? { label: 'iPad connected', state: 'ok' }
-        : { label: 'iPad not connected', state: 'warn', fix: 'Open the link from Sound, Connections in Safari on the iPad.' });
+        : { label: 'iPad not connected', state: 'warn', fix: 'Open the link from the Connections tab in Safari on the iPad.' });
     if (c.fillEngine === 'magenta' && typeof navigator !== 'undefined' && navigator.onLine === false) {
       items.push({ label: 'Offline: the AI fill uses simple rules', state: 'warn', fix: 'Fine for the piece; connect once beforehand to load Magenta.' });
     }
@@ -3786,6 +3809,7 @@ export default function BoardSequencerScreen() {
   const nn = nowNext(config.scenes, config.currentScene, clock && clock.phase !== 'idle' ? clock.elapsedSec : null);
   const nowNextProps = {
     clock,
+    cue: cueShown,
     nowName: nn.now?.name ?? null,
     next: nn.next ? { name: nn.next.scene.name, inSec: nn.next.inSec } : null,
     loops: performLoops.filter((l) => l.state === 'playing' || l.state === 'starting').map((l) => (l.name.length > 0 ? l.name : `Loop ${l.slot + 1}`)),
@@ -4293,6 +4317,7 @@ export default function BoardSequencerScreen() {
                 handGuardWaiting={config.handGuardEnabled && running && latestFrame?.handGuardReady === false}
                 clock={clock}
                 perform={performTab}
+                connections={connectionsTab}
                 groove={grooveTab}
                 sound={soundTab}
                 loops={loopsTab}

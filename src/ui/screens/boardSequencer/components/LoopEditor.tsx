@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { SwatchChip } from '../ui/SwatchChip';
 import { Button } from '../ui/Button';
+import { CellGrid } from './CellGrid';
 import type { BoardPalette } from '../theme/boardTokens';
 import { describeChannel, type ColourChannel } from '../../../../tracking/boardColours';
 import type { StoredLoopCell } from '../../../../profiles/BoardSequencerConfig';
@@ -60,32 +61,26 @@ export function LoopEditor({ rows, cols, channels, cells, palette, onChange }: L
           </button>
         ))}
       </div>
-      <div
-        role="grid"
-        aria-label={`Loop, ${rows} rows by ${cols} steps`}
-        style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, ${size}px)`, gap: 3 }}
-      >
-        {Array.from({ length: rows * cols }, (_, k) => {
-          const row = Math.floor(k / cols);
-          const col = k % cols;
+      <CellGrid
+        rows={rows}
+        cols={cols}
+        label={`Loop, ${rows} rows by ${cols} steps. Arrow keys move; Enter places or lifts.`}
+        cellLabel={(row, col) => {
           const here = at.get(`${row},${col}`);
-          return (
-            <button
-              key={k}
-              type="button"
-              role="gridcell"
-              aria-label={`Row ${row + 1}, step ${col + 1}${here ? `: ${nameOf(here.colour)}` : ''}`}
-              aria-pressed={here !== undefined}
-              onClick={() => tap(row, col)}
-              style={{
-                width: size, height: size, padding: 0, borderRadius: 6,
-                border: `1px solid ${here ? '#fff' : 'var(--bs-border)'}`,
-                background: here ? swatchOf(here.colour) : 'var(--bs-raised)',
-              }}
-            />
-          );
-        })}
-      </div>
+          return `Row ${rows - row} from the bottom, step ${col + 1}${here ? `: ${nameOf(here.colour)}` : ''}`;
+        }}
+        pressed={(row, col) => at.has(`${row},${col}`)}
+        onActivate={tap}
+        cellStyle={(row, col) => {
+          const here = at.get(`${row},${col}`);
+          return {
+            width: size, height: size, flex: 'none', borderRadius: 6,
+            border: `1px solid ${here ? '#fff' : 'var(--bs-border)'}`,
+            background: here ? swatchOf(here.colour) : 'var(--bs-raised)',
+          };
+        }}
+        style={{ gridTemplateColumns: `repeat(${cols}, ${size}px)`, gridTemplateRows: `repeat(${rows}, ${size}px)`, gap: 3 }}
+      />
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <span style={{ fontSize: 12, color: 'var(--bs-fg2)', flex: 1 }}>
           {`${cells.length} ${cells.length === 1 ? 'note' : 'notes'}. Bottom row is the lowest note; left to right is time.`}

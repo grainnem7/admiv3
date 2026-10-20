@@ -15,6 +15,8 @@ export interface NowNextStripProps {
   onCancelEnding(): void;
   /** Bigger type for the Big board view, read from across the room. */
   big?: boolean;
+  /** A cue just given ("1 minute left"), shown large for a few seconds. */
+  cue?: string | null;
 }
 
 /**
@@ -59,6 +61,15 @@ export function NowNextStrip(p: NowNextStripProps): JSX.Element {
           </span>
         )}
       </div>
+      {p.cue && (
+        // Seen here; spoken by the screen's own announcement, so not announced twice.
+        <span
+          aria-hidden="true"
+          style={{ fontSize: 24 * size, fontWeight: 800, padding: '4px 14px', borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-warn)', color: 'var(--bs-bg)' }}
+        >
+          {p.cue}
+        </span>
+      )}
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         <Button tone="secondary" onClick={p.onNext} disabled={p.ending}>Next ▶</Button>
         {!p.ending
