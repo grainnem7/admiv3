@@ -40,7 +40,7 @@
 - Each control has a **Lowest/Highest** range you can set.
 
 ## Variation — "every other time round"
-- Turn on **Variation** (Loops tab). **Shove a piece off the centre of its square** → it plays every OTHER pass (**long-dash ring**).
+- Turn on **Variation** (Board tab). **Shove a piece off the centre of its square** → it plays every OTHER pass (**long-dash ring**).
 - The **A / B** letter in the status pill shows the lap. **Push needed** sets how big a shove counts.
 - Measured from the **physical square**, so counters placed normally on a coarse grid are not mistaken for shoved.
 
@@ -62,12 +62,12 @@
 - **A small nudge is followed automatically** — the grid moves with the board, the music carries on, nothing is announced. A bigger move asks you to find the board again. Switch it off in Board → Details.
 
 ## Where the counter sits (optional, off by default)
-- Loops tab → **"Where the counter sits matters"**: higher in the square = **louder**, right of centre = **later** ("the and").
+- Board tab → **"Where the counter sits matters"**: higher in the square = **louder**, right of centre = **later** ("the and").
 - There's a dead zone in the middle, so "just in the square" stays easy, and the value is fixed when the counter settles — a wobble afterwards changes nothing.
 - **"Two counters in a box both play"** lets one box hold two counters, each with its own place and loudness.
 
 ## Lanes — where controls and loops live
-- Loops tab → **Controls live** and **Loop pads live**: **Anywhere**, **a row**, or **a step** — per player.
+- Board tab → **Controls live** and **Loop pads live**: **Anywhere**, **a row**, or **a step** — per player.
 - A lane **never plays notes**, so it can't make stray sounds. A fader in a lane reads **along** the lane.
 - **Hold** = the counter stays on the pad while the loop plays. **Toggle** = place it to start, place it again to stop.
 
@@ -86,9 +86,11 @@
 - **Studio mix** (tick box): the fuller mix. Untick to compare with the old sound.
 
 ## Performing — prepare loops and scenes, launch with one tap
-- **Loops tab → Perform.** Eight slots. For each: **Save board here** (the counters as they are now — works while stopped, so set up before the show), **Draw** (draw a loop on screen, no camera needed), a **name**, **▶ Play / ■ Stop**, **Clear**.
+- **The Perform tab** (the first tab in Play) is the whole piece in one place: **Ready check**, **Make my plan**, a **timeline** of the scenes across the piece, the **scenes**, the **loops** as pads, the **length and ending**, and **back up**.
+- **Make my plan:** four scenes, **Arrival · Build · Open · Home**, placed across the length (0:00, 1:30, 3:30, 6:00 of 7:00), using the loops you have saved. Then open any scene to change it.
+- **Loops:** eight pads — tap one to play or stop it. **⋯ more** under a pad: **Name**, **Save board here** (works while stopped), **Draw** (no camera needed), **Clear**.
 - **Play and Stop land on the next pass** — a tap early or late still comes in on the loop. **Stop all loops** too.
-- **Scenes:** get the loops and sound how you want them, type a name, **Save scene from now**. Each scene keeps its loops + sound world + band + phrases + fill + Evolve + tempo. **Go** recalls one; **Next scene ▶** walks the list — a set list for the piece. It stops at the last scene (it never jumps back to the first). **Delete** can be undone for 15 seconds.
+- **Scenes:** tap a scene to open it and change it where it is — name, **comes in at** (m:ss; checked as you type), which loops (tap to tick), sound world, band, Fill, Evolve, tempo. **Update from now** takes what is playing. **+ Save scene from now** adds one. Scenes are always listed in time order. **Go** recalls one; **Next scene ▶** walks the list — a set list for the piece. It stops at the last scene (it never jumps back to the first). **Delete** can be undone for 15 seconds.
 - **On the iPad:** the **Loops & scenes** page has big pads for the 8 loops (green = playing, dashed = starting/stopping), 4 scene pads, **Next scene** and **Stop all**.
 - Launched loops need no loop lane and no counter on a pad; the pads still work as before alongside them.
 - **Loops layer under the player.** A loop's melody keeps playing under the player's counters of the same colour. For **bass, chords and drums**, a counter the player puts down **takes that part over** from the loops while it is down. A note that a loop and the board play at the same moment sounds once.
@@ -97,14 +99,18 @@
 - **1 pass = … s** is shown in Perform. Everything in a performance is counted in passes; under 4 seconds is flagged as very short.
 - **Loops are kept between sessions** in the browser **and** in a copy on the laptop (the `.admi-data` folder next to the app, written by the server as you save). The browser keeps its own store per address — `localhost:3000`, `:3001` and another browser each start empty — so when the app opens, the newer of the two is used, and whatever it replaces goes into `.admi-data/backups`. The line at the top of Perform says where the copy is.
 - **⤓ Back up to a file** saves every player, loop, scene and the board setup to one file — do it before a performance and keep it on a USB stick. **⤒ Restore from a file** puts one back (it asks first; the page reloads).
-- **Loops fade in and out** over **half a pass / 1 pass / 2 passes** (or at once) — Perform → *Loops fade in and out over*. The pad says "fading out…" until it has gone.
+- **Loops fade in and out** over **half a pass / 1 pass / 2 passes** (or at once) — Perform → Loops → *Loops fade in and out over*. The pad says "fading out…" until it has gone.
 
 ## The performance clock — a 7-minute piece
 - **A scene at 0:00 is the opening:** it is applied the moment the clock starts.
 - **While the clock runs, ■ Stop (or Space) needs a second press** within 4 seconds — the first says "Press again to stop". A stray key can't end the show.
 - **If the camera stops** (unplugged, asleep), a red banner says so; the music carries on with the last pattern. **Try the camera again**.
 - After the piece ends, no loops stay armed and the next Play starts from the opening scene. Stopped loops say **ready · starts with Play**.
-- Perform → **The performance**: **Length** (7:00), **The clock starts** (with Play, or **Start clock** so the sound check doesn't count).
+- Perform → **Length and ending** shows it all in one line ("7:00 · fade over 2 passes · I press End"); **Change…** opens **Length**, **The clock starts** (With Play, or When I press Start clock), and the ending.
+- **During the piece** a strip above the board shows the **time left** in big type, **Now:** the scene, **Next:** the next one and how long until it, the loops playing, and **Next ▶ / End**. It shows on Big board too.
+- **The opening scene (at 0:00) is in place before the first note** when the clock starts with Play: its loops play from the first beat.
+- **When the piece ends or is stopped, the player's own settings come back** (tempo, sound world, band, Fill, Evolve) — a rehearsal never leaves them where the last scene put them.
+- **✓ Ready check** (Perform): the board, the colours, every loop the scenes use, a scene at 0:00, the ending fits, the iPad, saved on the laptop, backed up, and the show build.
 - **How it ends — chosen before the piece:**
   - **Fade out** · **Stop at the end of the pass** · **Slow down** (a ritardando to a little over half speed, then a stop on the one) · **Thin out** (the band and the fill leave, the player's own notes end it, a fade over the last pass) · **Final chord** (the texture thins, then a held chord in the key and a crash ring out for one more pass).
   - **The ending takes** 1, 2 or 4 passes.

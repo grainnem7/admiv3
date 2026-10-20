@@ -23,8 +23,11 @@ export interface PlayPanelProps {
   handGuardWaiting: boolean;
   /** The performance clock, when one is running: the countdown and how near the end is. */
   clock?: { text: string; phase: 'idle' | 'running' | 'lastMinute' | 'lastMoments' | 'ending' | 'over' } | null;
+  /** The piece: scenes, loops, the ending — the first tab, where a performance is made. */
+  perform: ReactNode;
   groove: ReactNode;
   sound: ReactNode;
+  /** The board's own rules: lanes, the loop bank, Variation, where a counter sits. */
   loops: ReactNode;
   /** Stacked layouts pin the transport to the bottom; the player's side comes first. */
   stacked: boolean;
@@ -38,9 +41,9 @@ export interface PlayPanelProps {
  */
 export function PlayPanel({
   running, muted, onStart, onStop, stopArmed = false, onToggleMute, bpm, step, cols, variationLap, beatOn, clock = null,
-  heldCount, handGuardWaiting, groove, sound, loops, stacked, transportAlign,
+  heldCount, handGuardWaiting, perform, groove, sound, loops, stacked, transportAlign,
 }: PlayPanelProps): JSX.Element {
-  const [tab, setTab] = useState('groove');
+  const [tab, setTab] = useState('perform');
 
   const transport = (
     <div
@@ -122,9 +125,10 @@ export function PlayPanel({
           active={tab}
           onChange={setTab}
           tabs={[
-            { id: 'groove', label: 'Groove', content: groove },
+            { id: 'perform', label: 'Perform', content: perform },
             { id: 'sound', label: 'Sound', content: sound },
-            { id: 'loops', label: 'Loops', content: loops },
+            { id: 'groove', label: 'Groove', content: groove },
+            { id: 'loops', label: 'Board', content: loops },
           ]}
         />
       </div>

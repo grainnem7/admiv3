@@ -49,6 +49,9 @@ import { describeBoard, phraseSpans, popsAt, pruneFired, type Pop } from './boar
 import { isSequencedRole, isControlRole, isLoopRole } from '../../tracking/boardColours';
 import { placeLaptopCounter } from '../../tracking/laptopBoard';
 import { LaptopBoardBar } from './boardSequencer/components/LaptopBoardBar';
+import { PerformPanel, type PerformLoop } from './boardSequencer/play/PerformPanel';
+import { NowNextStrip } from './boardSequencer/play/NowNextStrip';
+import { ReadyCheck, type ReadyItem } from './boardSequencer/play/ReadyCheck';
 import { PlayPanel } from './boardSequencer/play/PlayPanel';
 import { NudgeBanner } from './boardSequencer/play/NudgeBanner';
 import { SwatchChip } from './boardSequencer/ui/SwatchChip';
@@ -96,9 +99,10 @@ import {
   LAUNCH_SLOTS, MAX_SCENES, loopLabel, nextSceneIndex, sceneFromNow, sceneSettingsToApply, slotState, toggleSlot, type PlayerStrip, type SceneSettings,
 } from '../../songs/performance/launcher';
 import {
-  clockView, cuesCrossed, cueText, describeEnding, endingDue, endingPasses, endingTooLong, formatClock, parseClock, scenesDue, CLOCK_NOT_STARTED,
-  type ClockView, type EndingMode, type EndingStyle,
+  clockView, cueText, describeEnding, endingTooLong, formatClock, CLOCK_NOT_STARTED,
+  type ClockView,
 } from '../../songs/performance/clock';
+import { decideClockTick, nowNext, planScenes, sceneTimeProblem, sortScenes } from '../../songs/performance/piece';
 import { DEFAULT_LOOP_COLOUR_OPTIONS, initialLoopColourState, stepLoopColours } from '../../songs/performance/loopColours';
 import { SessionLog, sessionFileName, type LogActor } from '../../songs/sessionLog';
 import { diskState, onDiskState, restoreFromFile, scheduleDiskSave } from '../../storage/diskSync';
@@ -523,8 +527,9 @@ export default function BoardSequencerScreen() {
     return () => window.clearTimeout(id);
   }, [deletedScene]);
   const [restoreError, setRestoreError] = useState<string | null>(null);
+  /** A backup file was saved this session (for the Ready check). */
+  const backedUpRef = useRef(false);
   const restoreInputRef = useRef<HTMLInputElement | null>(null);
-  const [sceneName, setSceneName] = useState('');
   // The iPad strips the player has moved since the last scene: theirs until then.
   const stripsTouchedRef = useRef<Set<PlayerStrip>>(new Set());
   // The performance clock: when it started (null = not running), what it shows, and what
@@ -535,6 +540,10 @@ export default function BoardSequencerScreen() {
   const endingRef = useRef(false);
   // The automatic ending fires once per run: after "Cancel the ending" it must not fire again.
   const autoEndedRef = useRef(false);
+  // The player's own settings from before the piece began. Scenes change tempo, sound
+  // and band as the piece runs; when it is over they come back, so a rehearsal never
+  // leaves the player's settings wherever the last scene put them.
+  const homeSettingsRef = useRef<{ soundWorld: BoardSequencerStored['soundWorld']; band: BoardSequencerStored['band']; phrases: boolean; fillAmount: number; evolveAmount: number; bpm: number } | null>(null);
   const [ending, setEnding] = useState(false);
   const clockTickRef = useRef<() => void>(() => {});
   // Counters as loops: the debounced view of each loop colour, and the slots they want.
@@ -1470,6 +1479,10 @@ export default function BoardSequencerScreen() {
     setClock(null);
     endingRef.current = false;
     setEnding(false);
+    // The piece is over (or stopped): the player's own settings come back.
+    const home = homeSettingsRef.current;
+    homeSettingsRef.current = null;
+    if (home) setConfig((prev) => ({ ...prev, ...home, currentScene: null }));
     // Nothing is playing any more: a loop still wanted is "ready", not "playing".
     setAppliedSlots([]);
     setRunning(false);
@@ -1522,7 +1535,14 @@ export default function BoardSequencerScreen() {
       engineRef.current.dispose();
       engineRef.current = null;
     }
-    const cfg = configRef.current;
+    // The opening scene (at 0:00), when the clock starts with Play, is in place BEFORE the
+    // first note: its loops play from the first beat and its sound is the one the engine
+    // is built with. Applied on the first clock tick instead, its loops waited a whole pass.
+    const home = configRef.current;
+    const openingIndex = home.performance.startOn === 'play' ? home.scenes.findIndex((sc) => sc.at === 0) : -1;
+    const opening = openingIndex >= 0 ? home.scenes[openingIndex] : null;
+    const cfg: BoardSequencerStored = opening ? { ...home, ...opening.settings, currentScene: openingIndex } : home;
+    if (opening) wantedRef.current = new Set(opening.loops.filter((sl) => (home.loopSlots[sl] ?? null) !== null));
     const video = videoRef.current;
     // The laptop board has no camera picture to map, and a laptop that has never seen
     // the real board has no corners to map it with.
@@ -1596,7 +1616,14 @@ export default function BoardSequencerScreen() {
     startSecRef.current = Tone.now();
     runningRef.current = true;
     clockStartRef.current = cfg.performance.startOn === 'play' ? performance.now() : null;
-    clockPrevRef.current = { remaining: Infinity, elapsed: CLOCK_NOT_STARTED };
+    if (clockStartRef.current !== null) homeSettingsRef.current = { soundWorld: home.soundWorld, band: home.band, phrases: home.phrases, fillAmount: home.fillAmount, evolveAmount: home.evolveAmount, bpm: home.bpm };
+    // The opening scene is already in: the clock must not bring it in again.
+    clockPrevRef.current = { remaining: Infinity, elapsed: opening ? 0 : CLOCK_NOT_STARTED };
+    if (opening) {
+      setConfig((prev) => ({ ...prev, ...opening.settings, currentScene: openingIndex }));
+      setWantedSlots([...wantedRef.current].sort((a, b) => a - b));
+      setBoardNotice(`Scene: ${opening.name}`);
+    }
     autoEndedRef.current = false;
     endingRef.current = false;
     setEnding(false);
@@ -1605,6 +1632,7 @@ export default function BoardSequencerScreen() {
     counterWantedRef.current = new Set();
     loopTickRef.current = null;
     sessionLogRef.current.start(activePlayer?.name ?? 'Player', cfg as unknown as Record<string, unknown>, engine.audibleNow());
+    if (opening) sessionLogRef.current.action(logActorRef.current, `scene ${opening.name}`);
     setLogCounts(sessionLogRef.current.counts());
     setRunning(true);
   }, [engineRef, homographyRef, loopBankRef, modeRef, runningRef, startingRef, videoRef]);
@@ -1945,7 +1973,7 @@ export default function BoardSequencerScreen() {
   const setupCfg = { enabled: config.enabled || laptop, channels: config.channels };
   const cameraGate: typeof camera = laptop ? { phase: 'running', colourless: false } : camera;
   const headerNotice: HeaderNotice | null = saveFailed
-    ? { kind: 'error', text: 'Changes are not being saved — the browser refused. Use Back up to a file (Loops → Perform) now.' }
+    ? { kind: 'error', text: 'Changes are not being saved — the browser refused. Use Back up to a file (Perform tab) now.' }
     : otherTab
       ? { kind: 'error', text: 'ADMI is open in another tab or window. Close all but one, or they will save over each other.' }
       : error
@@ -2219,15 +2247,58 @@ export default function BoardSequencerScreen() {
   const sceneSettingsNow = (c: BoardSequencerStored): SceneSettings => ({
     soundWorld: c.soundWorld, band: c.band, phrases: c.phrases, fillAmount: c.fillAmount, evolveAmount: c.evolveAmount, bpm: c.bpm,
   });
-  const saveScene = (): void => {
+  const saveScene = (name: string): void => {
     const c = configRef.current;
     // Storage keeps twelve; a thirteenth would play now and vanish on the next reload.
     if (c.scenes.length >= MAX_SCENES) { announce('Twelve scenes is the most. Delete one first.'); return; }
-    const scene = sceneFromNow(sceneName || `Scene ${c.scenes.length + 1}`, wantedRef.current, sceneSettingsNow(c));
-    update({ scenes: [...c.scenes, scene], currentScene: c.scenes.length });
-    setSceneName('');
+    const scene = sceneFromNow(name || `Scene ${c.scenes.length + 1}`, wantedRef.current, sceneSettingsNow(c));
+    update(scenesInOrder([...c.scenes, scene], c.scenes.length));
     sessionLogRef.current.action(logActorRef.current, `save scene ${scene.name}`);
     announce(`Scene saved: ${scene.name}.`);
+  };
+  /** The scenes in time order, with the scene that is on still pointed at. */
+  const scenesInOrder = (scenes: BoardSequencerStored['scenes'], current: number | null): Pick<BoardSequencerStored, 'scenes' | 'currentScene'> => {
+    const r = sortScenes(scenes, current);
+    return { scenes: r.scenes, currentScene: r.current };
+  };
+  /** A change to one scene, made where it is listed. The list stays in time order. */
+  const editScene = (i: number, patch: Partial<BoardSequencerStored['scenes'][number]>): void => {
+    const c = configRef.current;
+    if (!c.scenes[i]) return;
+    const scenes = c.scenes.map((x, k) => (k === i ? { ...x, ...patch, ...(patch.at === null ? { at: undefined } : {}) } : x));
+    update(scenesInOrder(scenes, c.currentScene));
+    sessionLogRef.current.action(logActorRef.current, `edit scene ${scenes[i].name}`);
+  };
+  /** Replace a scene's loops and sound with what is playing now. */
+  const updateSceneFromNow = (i: number): void => {
+    const c = configRef.current;
+    const old = c.scenes[i];
+    if (!old) return;
+    const fresh = sceneFromNow(old.name, wantedRef.current, sceneSettingsNow(c), old.id);
+    editScene(i, { loops: fresh.loops, settings: fresh.settings });
+    announce(`${old.name} now has the loops and the sound playing now.`);
+  };
+  const [planConfirm, setPlanConfirm] = useState(false);
+  const [readyOpen, setReadyOpen] = useState(false);
+  /** "Make my plan": the four-scene plan across the piece's length, from the saved loops. */
+  const makePlan = (): void => {
+    const c = configRef.current;
+    const scenes = planScenes(c.performance.lengthSec, c.loopSlots, sceneSettingsNow(c));
+    update({ scenes, currentScene: null });
+    setPlanConfirm(false);
+    sessionLogRef.current.action(logActorRef.current, 'make my plan');
+    announce('Plan made: Arrival, Build, Open and Home, placed across the piece. Open a scene to change it.');
+  };
+  const undoDeleteScene = (): void => {
+    const d = deletedScene;
+    if (!d) return;
+    const c = configRef.current;
+    const scenes = [...c.scenes];
+    scenes.splice(Math.min(d.index, scenes.length), 0, d.scene);
+    const at = Math.min(d.index, scenes.length - 1);
+    update(scenesInOrder(scenes, d.wasCurrent ? at : c.currentScene !== null && c.currentScene >= at ? c.currentScene + 1 : c.currentScene));
+    setDeletedScene(null);
+    announce(`Scene ${d.scene.name} is back.`);
   };
   const goScene = (i: number): void => {
     const c = configRef.current;
@@ -2255,6 +2326,7 @@ export default function BoardSequencerScreen() {
   const startClock = (): void => {
     if (!runningRef.current) return;
     clockStartRef.current = performance.now();
+    homeSettingsRef.current = sceneSettingsNow(configRef.current);
     clockPrevRef.current = { remaining: Infinity, elapsed: CLOCK_NOT_STARTED };
     autoEndedRef.current = false;
     sessionLogRef.current.action(logActorRef.current, 'start clock');
@@ -2327,18 +2399,18 @@ export default function BoardSequencerScreen() {
     if (clockStartRef.current === null) return;
     const prev = clockPrevRef.current;
     clockPrevRef.current = { remaining: view.remainingSec, elapsed: view.elapsedSec };
-    for (const cue of cuesCrossed(prev.remaining, view.remainingSec)) {
+    // What to do is decided by one tested rule (performance/piece.ts); this only does it.
+    const d = decideClockTick({
+      prev, now: { remaining: view.remainingSec, elapsed: view.elapsedSec }, scenes: c.scenes,
+      performance: c.performance, passSec: (c.cols * Math.max(1, c.numPages)) * 60 / Math.max(20, engine.getBpm()),
+      ending: endingRef.current, autoEnded: autoEndedRef.current,
+    });
+    for (const cue of d.cues) {
       setBoardNotice(cueText(cue));
       announce(cueText(cue));
     }
-    // Scenes don't change the stage while the piece is ending.
-    const due = scenesDue(prev.elapsed, view.elapsedSec, c.scenes);
-    if (due.length > 0 && !endingRef.current) goScene(due[due.length - 1]);
-    const passSec = (c.cols * Math.max(1, c.numPages)) * 60 / Math.max(20, engine.getBpm());
-    // Never in the first seconds: a piece shorter than its ending would otherwise end the
-    // moment it starts (the panel warns about that instead).
-    if (!endingRef.current && !autoEndedRef.current && view.elapsedSec >= 5
-      && endingDue(c.performance, view.remainingSec, passSec)) {
+    if (d.scene !== null) goScene(d.scene);
+    if (d.end) {
       autoEndedRef.current = true;
       endPiece();
     }
@@ -2373,6 +2445,7 @@ export default function BoardSequencerScreen() {
 
   /** Every player, loop, scene and the board setup, as a file to keep somewhere safe. */
   const backupToFile = (): void => {
+    backedUpRef.current = true;
     const b = snapshotStorage(localStorage);
     const blob = new Blob([JSON.stringify(b)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -3105,219 +3178,111 @@ export default function BoardSequencerScreen() {
 
   const loopSlotCount = zoneSlotCount(config.loopZone, config.rows, config.cols);
 
+  // ---- the Perform tab: the whole piece in one place ----
+  const passSecNow = (config.cols * Math.max(1, config.numPages) * 60) / Math.max(20, config.bpm);
+  const performLoops: PerformLoop[] = Array.from({ length: LAUNCH_SLOTS }, (_, slot) => {
+    const cells = config.loopSlots[slot] ?? null;
+    return {
+      slot, name: config.loopNames[slot] ?? '', notes: cells?.length ?? 0,
+      state: slotState(slot, cells !== null && cells.length > 0, new Set(wantedSlots), new Set(appliedSlots)),
+    };
+  });
+  const worldOptions: { value: BoardSequencerStored['soundWorld']; label: string }[] = [
+    ...SOUND_WORLD_IDS.map((id) => ({ value: id, label: SOUND_WORLDS[id].name })),
+    { value: 'none', label: 'My picks' },
+  ];
+  const performTab = (
+    <PerformPanel
+      running={running}
+      lengthSec={config.performance.lengthSec}
+      passSec={passSecNow}
+      clock={clock}
+      scenes={config.scenes}
+      currentScene={config.currentScene}
+      loops={performLoops}
+      loopFadePasses={config.loopFadePasses}
+      performance={config.performance}
+      ending={ending}
+      respectPlayer={config.sceneRespectsPlayer}
+      canSaveBoard={boardCellsNow().length > 0}
+      deletedSceneName={deletedScene?.scene.name ?? null}
+      diskLine={diskLine}
+      restoreError={restoreError}
+      worldOptions={worldOptions}
+      onToggleLoop={toggleLoop}
+      onSaveBoardToLoop={saveBoardToSlot}
+      onDrawLoop={(slot) => setEditSlot(slot)}
+      onClearLoop={(slot) => setClearSlotTarget(slot)}
+      onRenameLoop={renameLoop}
+      onStopAllLoops={stopAllLoops}
+      onLoopFade={(loopFadePasses) => update({ loopFadePasses })}
+      onGoScene={goScene}
+      onNextScene={nextScene}
+      onSaveSceneFromNow={saveScene}
+      onUpdateSceneFromNow={updateSceneFromNow}
+      onEditScene={editScene}
+      onDeleteScene={deleteScene}
+      onUndoDelete={undoDeleteScene}
+      onMakePlan={() => { if (configRef.current.scenes.length > 0) setPlanConfirm(true); else makePlan(); }}
+      onRespectPlayer={(on) => update({ sceneRespectsPlayer: on })}
+      onPerformance={(patch) => update({ performance: { ...configRef.current.performance, ...patch } })}
+      onStartClock={startClock}
+      onEndNow={endPiece}
+      onCancelEnding={cancelEnding}
+      onCapture={captureLoop}
+      onReadyCheck={() => setReadyOpen(true)}
+      onBackup={backupToFile}
+      onRestore={() => restoreInputRef.current?.click()}
+    />
+  );
+
+  /** The pre-show checklist, checked by the app wherever it can be. */
+  const readyItems = (): ReadyItem[] => {
+    const c = config;
+    const items: ReadyItem[] = [];
+    items.push(laptop
+      ? { label: 'Board: the laptop board', state: 'warn', fix: 'For the performance with the real board, switch Board to Camera.' }
+      : c.enabled && (camera.phase === 'running' || camera.phase === 'fallback')
+        ? { label: 'Board: camera running and the board found', state: 'ok' }
+        : { label: 'Board: camera or board not ready', state: 'problem', fix: 'Set up: Camera and Board.' });
+    items.push(c.channels.some((ch) => ch.role !== 'off')
+      ? { label: 'Counter colours have jobs', state: 'ok' }
+      : { label: 'No counter colour has a job', state: 'problem', fix: 'Set up: Colours.' });
+    const emptyUsed = c.scenes.filter((sc) => sc.loops.some((slot) => (c.loopSlots[slot]?.length ?? 0) === 0));
+    items.push(emptyUsed.length === 0
+      ? { label: 'Every loop the scenes use is saved', state: 'ok' }
+      : { label: `${emptyUsed.map((sc) => sc.name).join(', ')} ${emptyUsed.length === 1 ? 'uses' : 'use'} an empty loop`, state: 'problem', fix: 'Save the board into that loop, or take it out of the scene.' });
+    const timed = c.scenes.filter((sc) => typeof sc.at === 'number');
+    items.push(c.scenes.length === 0
+      ? { label: 'No scenes yet', state: 'warn', fix: 'Perform: Make my plan, or save scenes from now. Without scenes the piece does not change by itself.' }
+      : timed.some((sc) => sc.at === 0)
+        ? { label: `${timed.length} ${timed.length === 1 ? 'scene comes' : 'scenes come'} in on the clock, one at 0:00`, state: 'ok' }
+        : { label: 'No scene at 0:00', state: 'warn', fix: 'Give the opening scene the time 0:00, so the piece starts in it.' });
+    const badTimes = c.scenes.filter((sc, i) => sceneTimeProblem(typeof sc.at === 'number' ? sc.at : null, c.performance.lengthSec, c.scenes.filter((_, k) => k !== i).map((x) => x.at)) !== null);
+    if (badTimes.length > 0) items.push({ label: `Check the time of ${badTimes.map((sc) => sc.name).join(', ')}`, state: 'problem', fix: 'After the end of the piece, or two scenes at the same moment.' });
+    items.push(endingTooLong(c.performance, passSecNow)
+      ? { label: 'The ending is too long for the piece', state: 'problem', fix: 'Fewer passes, or a longer piece.' }
+      : { label: `Ending: ${describeEnding(c.performance)}, ${c.performance.ending === 'cue' ? 'when you press End' : 'at the time'}`, state: 'ok' });
+    items.push(!remoteEnabled
+      ? { label: 'iPad not in use', state: 'ok' }
+      : remoteLink.others > 0
+        ? { label: 'iPad connected', state: 'ok' }
+        : { label: 'iPad not connected', state: 'warn', fix: 'Open the link from Sound, Connections in Safari on the iPad.' });
+    if (c.fillEngine === 'magenta' && typeof navigator !== 'undefined' && navigator.onLine === false) {
+      items.push({ label: 'Offline: the AI fill uses simple rules', state: 'warn', fix: 'Fine for the piece; connect once beforehand to load Magenta.' });
+    }
+    items.push(disk.state === 'saved'
+      ? { label: 'Saved on this laptop', state: 'ok' }
+      : { label: 'Not saved on this laptop', state: 'warn', fix: 'Open ADMI at http://localhost:3001 from npm run show, or back up to a file.' });
+    items.push(backedUpRef.current
+      ? { label: 'Backed up to a file this session', state: 'ok' }
+      : { label: 'Not backed up to a file yet', state: 'warn', fix: 'Perform: Back up to a file, and keep it off the laptop.' });
+    if ((import.meta as { env?: { DEV?: boolean } }).env?.DEV) items.push({ label: 'Running the development server', state: 'warn', fix: 'For the performance start ADMI with npm run show: it cannot reload itself mid-piece.' });
+    return items;
+  };
+
   const loopsTab = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 10 }}>
-      {/* Performing: loops prepared beforehand and launched without a pad, and scenes. */}
-      <div role="group" aria-label="Perform" style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 8, borderRadius: 'var(--bs-radius-md)', border: '1px solid var(--bs-border)' }}>
-        <span style={{ fontWeight: 600 }}>Perform — loops and scenes</span>
-        <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
-          Save the board into a slot, or draw a loop, before the performance. Loops start and
-          stop on the next pass, from here or from the iPad, with nothing on a pad.
-        </span>
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-          <span role="status" style={{ fontSize: 12, color: 'var(--bs-fg2)', flex: '1 1 220px' }}>{diskLine}</span>
-          <Button tone="secondary" onClick={backupToFile}>⤓ Back up to a file</Button>
-          <Button tone="secondary" onClick={() => restoreInputRef.current?.click()}>⤒ Restore from a file</Button>
-          <input
-            ref={restoreInputRef} type="file" accept=".json,application/json" hidden aria-label="Backup file to restore"
-            onChange={(e) => { void pickRestoreFile(e.target.files?.[0]); e.target.value = ''; }}
-          />
-        </div>
-        {restoreError && <span role="alert" style={{ fontSize: 12, color: 'var(--bs-danger)' }}>{restoreError}</span>}
-        {Array.from({ length: LAUNCH_SLOTS }, (_, slot) => {
-          const cells = config.loopSlots[slot] ?? null;
-          const st = slotState(slot, cells !== null, new Set(wantedSlots), new Set(appliedSlots));
-          const on = st === 'playing' || st === 'starting';
-          return (
-            <div key={`launch-${slot}`} style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-              <input
-                type="text"
-                value={config.loopNames[slot] ?? ''}
-                placeholder={`Loop ${slot + 1}`}
-                aria-label={`Name of loop ${slot + 1}`}
-                onChange={(e) => renameLoop(slot, e.target.value)}
-                style={{ width: 110 }}
-              />
-              <span style={{ fontSize: 12, minWidth: 72, color: on ? 'var(--bs-ok)' : 'var(--bs-fg2)' }}>
-                {st === 'empty' ? 'empty' : !running && (st === 'playing' || st === 'starting') ? 'ready · starts with Play' : st === 'stopping' && !running ? `${cells?.length ?? 0} notes` : st === 'playing' ? '▶ playing' : st === 'starting' ? (config.loopFadePasses > 0 ? 'fading in…' : 'starting…') : st === 'stopping' ? (config.loopFadePasses > 0 ? 'fading out…' : 'stopping…') : `${cells?.length ?? 0} notes`}
-              </span>
-              <Button tone={on ? 'primary' : 'secondary'} onClick={() => toggleLoop(slot)} reason={cells === null ? 'Nothing saved here yet.' : null} aria-pressed={on}>
-                {on ? '■ Stop' : '▶ Play'}
-              </Button>
-              <Button tone="quiet" onClick={() => saveBoardToSlot(slot)} reason={boardCellsNow().length === 0 ? 'Put counters on the board first.' : null}>
-                Save board here
-              </Button>
-              <Button tone="quiet" onClick={() => setEditSlot(slot)}>Draw</Button>
-              <Button tone="quiet" onClick={() => setClearSlotTarget(slot)} reason={cells === null ? 'Already empty.' : null}>Clear</Button>
-            </div>
-          );
-        })}
-        {(() => {
-          // Every timing in a performance — fades, scene changes, the ending — is counted
-          // in passes, so how long one pass lasts is the thing to know.
-          const passSec = (config.cols * Math.max(1, config.numPages) * 60) / Math.max(20, config.bpm);
-          return (
-            <span style={{ fontSize: 12, color: passSec < 4 ? 'var(--bs-warn)' : 'var(--bs-fg2)' }}>
-              {`1 pass = ${passSec.toFixed(1)} s (${config.cols * Math.max(1, config.numPages)} steps at ${Math.round(config.bpm)} BPM).`}
-              {passSec < 4 ? ' A very short loop: scenes and endings land often. More steps (Groove tab) or a slower tempo give a piece more room.' : ''}
-            </span>
-          );
-        })()}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <span style={{ fontWeight: 600, fontSize: 13 }}>Loops fade in and out over</span>
-          <SegmentedControl<number>
-            label="Loops fade in and out over"
-            value={config.loopFadePasses}
-            onChange={(v) => update({ loopFadePasses: v })}
-            options={[{ value: 0, label: 'Nothing (at once)' }, { value: 0.5, label: 'Half a pass' }, { value: 1, label: '1 pass' }, { value: 2, label: '2 passes' }]}
-          />
-        </div>
-        <div>
-          <Button tone="secondary" onClick={stopAllLoops} reason={wantedSlots.length === 0 ? 'No loops playing.' : null}>■ Stop all loops</Button>
-        </div>
-        <span style={{ fontWeight: 600, marginTop: 4 }}>The performance</span>
-        <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
-          A countdown for the piece, cues at 1 minute, 30 and 10 seconds, scenes that come in at a time, and a way to end.
-          The clock is a guide, not a guillotine: with &ldquo;End when I press it&rdquo; nothing stops by itself.
-        </span>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
-            Length
-            <input
-              type="text" defaultValue={formatClock(config.performance.lengthSec)} key={`len-${config.performance.lengthSec}`}
-              aria-label="Length of the piece, minutes:seconds" style={{ width: 64 }}
-              onBlur={(e) => { const s = parseClock(e.target.value); if (s !== null) update({ performance: { ...config.performance, lengthSec: Math.max(30, s) } }); }}
-            />
-          </label>
-          <SegmentedControl<'play' | 'manual'>
-            label="The clock starts"
-            value={config.performance.startOn}
-            onChange={(v) => update({ performance: { ...config.performance, startOn: v } })}
-            options={[{ value: 'play', label: 'With Play' }, { value: 'manual', label: 'When I press Start clock' }]}
-          />
-        </div>
-        <span style={{ fontWeight: 600, fontSize: 13 }}>How it ends</span>
-        <SegmentedControl<EndingStyle>
-          label="How it ends"
-          value={config.performance.style}
-          onChange={(v) => update({ performance: { ...config.performance, style: v } })}
-          options={[
-            { value: 'fade', label: 'Fade out' },
-            { value: 'stop', label: 'Stop at the end of the pass' },
-            { value: 'slow', label: 'Slow down' },
-            { value: 'thin', label: 'Thin out' },
-            { value: 'chord', label: 'Final chord' },
-          ]}
-        />
-        <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
-          {config.performance.style === 'fade' ? 'Everything fades together.'
-            : config.performance.style === 'stop' ? 'A tidy stop on the one, at the end of the pass the time falls in.'
-              : config.performance.style === 'slow' ? 'A ritardando: the tempo eases down to a little over half, then a stop on the one.'
-                : config.performance.style === 'thin' ? 'The band and the fill leave first, so your own notes end the piece, fading over the last pass.'
-                  : 'The texture thins, then on the last beat a held chord in the key and a crash ring out for one more pass.'}
-        </span>
-        {config.performance.style !== 'stop' && (
-          <SegmentedControl<number>
-            label="The ending takes"
-            value={config.performance.fadePasses}
-            onChange={(v) => update({ performance: { ...config.performance, fadePasses: v } })}
-            options={[{ value: 1, label: '1 pass' }, { value: 2, label: '2 passes' }, { value: 4, label: '4 passes' }]}
-          />
-        )}
-        <SegmentedControl<EndingMode>
-          label="When it ends"
-          value={config.performance.ending}
-          onChange={(v) => update({ performance: { ...config.performance, ending: v } })}
-          options={[
-            { value: 'cue', label: 'When I press End' },
-            { value: 'auto', label: `At the time (it begins ${endingPasses(config.performance)} ${endingPasses(config.performance) === 1 ? 'pass' : 'passes'} early)` },
-          ]}
-        />
-        {endingTooLong(config.performance, (config.cols * Math.max(1, config.numPages) * 60) / Math.max(20, config.bpm)) && (
-          <span role="alert" style={{ fontSize: 12, color: 'var(--bs-warn)' }}>
-            The ending takes as long as half the piece at this tempo. Choose fewer passes or a longer length.
-          </span>
-        )}
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-          {running && clock?.phase === 'idle' && (
-            <Button tone="secondary" onClick={startClock}>⏱ Start clock</Button>
-          )}
-          {running && clock && clock.phase !== 'idle' && (
-            <span role="timer" style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{`⏱ ${clock.text}`}</span>
-          )}
-          {!ending ? (
-            <Button tone="primary" onClick={endPiece} reason={running ? null : 'Press Play first.'}>
-              {`⏹ End now (${describeEnding(config.performance)})`}
-            </Button>
-          ) : (
-            <Button tone="secondary" onClick={cancelEnding}>Cancel the ending</Button>
-          )}
-          <Button tone="secondary" onClick={captureLoop} reason={boardCellsNow().length === 0 ? 'Put counters on the board first.' : null}>
-            ⏺ Capture the board as a loop
-          </Button>
-        </div>
-        <span style={{ fontWeight: 600, marginTop: 4 }}>Scenes</span>
-        <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
-          A scene is the loops playing now plus the sound world, band, phrases, fill, Evolve and tempo. Go to one with a tap; Next scene walks the list in order.
-        </span>
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-          <input type="text" value={sceneName} placeholder={`Scene ${config.scenes.length + 1}`} aria-label="Scene name" onChange={(e) => setSceneName(e.target.value)} style={{ width: 140 }} />
-          <Button tone="secondary" onClick={saveScene} reason={config.scenes.length >= MAX_SCENES ? 'Twelve scenes is the most.' : null}>Save scene from now</Button>
-        </div>
-        <Switch
-          label="Scenes leave the player's strips alone"
-          checked={config.sceneRespectsPlayer}
-          onChange={(on) => update({ sceneRespectsPlayer: on })}
-          hint="If the player moved Speed, Fill or Evolve on the iPad since the last scene, the next scene keeps their setting. Everything else in the scene still changes."
-        />
-        {config.scenes.map((sc, i) => (
-          <div key={sc.id} style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-            <span style={{ fontWeight: 600, minWidth: 90 }}>{`${i + 1}. ${sc.name}`}</span>
-            <span style={{ fontSize: 12, color: 'var(--bs-fg2)', flex: 1 }}>
-              {`${sc.loops.length === 0 ? 'no loops' : sc.loops.map((s) => loopLabel(config.loopNames, s)).join(', ')} · ${sc.settings.soundWorld === 'none' ? 'my picks' : sc.settings.soundWorld} · band ${sc.settings.band} · ${sc.settings.bpm} BPM`}
-            </span>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
-              at
-              <input
-                type="text" key={`at-${sc.id}-${sc.at ?? ''}`} defaultValue={sc.at !== undefined && sc.at !== null ? formatClock(sc.at) : ''}
-                placeholder="m:ss" aria-label={`When scene ${sc.name} comes in by itself`} style={{ width: 56 }}
-                onBlur={(e) => {
-                  const at = parseClock(e.target.value);
-                  update({ scenes: config.scenes.map((x, k) => (k === i ? { ...x, at } : x)) });
-                }}
-              />
-            </label>
-            <Button tone={config.currentScene === i ? 'primary' : 'secondary'} onClick={() => goScene(i)} aria-pressed={config.currentScene === i}>Go</Button>
-            <Button tone="quiet" onClick={() => deleteScene(i)}>Delete</Button>
-          </div>
-        ))}
-        {deletedScene && (
-          <div role="status" style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 }}>
-            <span>{`Deleted “${deletedScene.scene.name}”.`}</span>
-            <Button
-              tone="secondary"
-              onClick={() => {
-                const d = deletedScene;
-                const c = configRef.current;
-                const scenes = [...c.scenes];
-                scenes.splice(Math.min(d.index, scenes.length), 0, d.scene);
-                const at = Math.min(d.index, scenes.length - 1);
-                update({
-                  scenes,
-                  currentScene: d.wasCurrent ? at : c.currentScene !== null && c.currentScene >= at ? c.currentScene + 1 : c.currentScene,
-                });
-                setDeletedScene(null);
-                announce(`Scene ${d.scene.name} is back.`);
-              }}
-            >
-              Undo
-            </Button>
-          </div>
-        )}
-        <div>
-          <Button tone="primary" onClick={nextScene} reason={config.scenes.length === 0 ? 'Save a scene first.' : null}>Next scene ▶</Button>
-        </div>
-      </div>
       <Switch
         label="Where the counter sits matters"
         checked={config.boxDetailEnabled}
@@ -3755,6 +3720,22 @@ export default function BoardSequencerScreen() {
     />
   );
 
+  // Now / Next: during a piece, the structure in large type above the board.
+  const nn = nowNext(config.scenes, config.currentScene, clock && clock.phase !== 'idle' ? clock.elapsedSec : null);
+  const nowNextProps = {
+    clock,
+    nowName: nn.now?.name ?? null,
+    next: nn.next ? { name: nn.next.scene.name, inSec: nn.next.inSec } : null,
+    loops: performLoops.filter((l) => l.state === 'playing' || l.state === 'starting').map((l) => (l.name.length > 0 ? l.name : `Loop ${l.slot + 1}`)),
+    ending,
+    onStartClock: startClock,
+    onNext: nextScene,
+    onEnd: endPiece,
+    onCancelEnding: cancelEnding,
+  };
+  const nowNextStrip = <NowNextStrip {...nowNextProps} />;
+  const bigNowNextStrip = <NowNextStrip {...nowNextProps} big />;
+
   const stage = (
     <div style={{ flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
       {cameraStalled && running && !laptop && (
@@ -3777,6 +3758,7 @@ export default function BoardSequencerScreen() {
         />
       )}
       {laptop && view !== 'bigBoard' && laptopBar}
+      {view === 'play' && running && nowNextStrip}
       {(view === 'play' || laptop) && <div style={{ flex: 1, minHeight: 200 }}>{boardView}</div>}
       <div style={view === 'play'
         ? { width: 220, alignSelf: layout.pip === 'bottom-left' ? 'flex-start' : 'flex-end' }
@@ -4030,6 +4012,7 @@ export default function BoardSequencerScreen() {
         if (e.key === 'Escape' && document.fullscreenElement === null) setView('play');
       }}
     >
+      {running && bigNowNextStrip}
       <div style={{ flex: 1, minHeight: 0 }}>{boardView}</div>
       <div
         style={{
@@ -4177,6 +4160,25 @@ export default function BoardSequencerScreen() {
           />
         )}
 
+        {/* The file picker behind "Restore from a file" (Perform). */}
+        <input
+          ref={restoreInputRef} type="file" accept=".json,application/json" hidden aria-label="Backup file to restore"
+          onChange={(e) => { void pickRestoreFile(e.target.files?.[0]); e.target.value = ''; }}
+        />
+        {readyOpen && (
+          <Modal label="Ready check" onClose={() => setReadyOpen(false)}>
+            <ReadyCheck items={readyItems()} onClose={() => setReadyOpen(false)} />
+          </Modal>
+        )}
+        {planConfirm && (
+          <ConfirmDialog
+            title="Make my plan?"
+            body={`This replaces the ${config.scenes.length} ${config.scenes.length === 1 ? 'scene' : 'scenes'} you have with four: Arrival, Build, Open and Home, placed across ${formatClock(config.performance.lengthSec)} and using your saved loops. Your loops are not changed.`}
+            confirmLabel="Make the plan"
+            onConfirm={makePlan}
+            onCancel={() => setPlanConfirm(false)}
+          />
+        )}
         {restoreTarget && (() => {
           const sum = summariseBackup(restoreTarget);
           const when = restoreTarget.savedAt > 0 ? ` from ${new Date(restoreTarget.savedAt).toLocaleString()}` : '';
@@ -4228,6 +4230,7 @@ export default function BoardSequencerScreen() {
                 heldCount={heldCells.size}
                 handGuardWaiting={config.handGuardEnabled && running && latestFrame?.handGuardReady === false}
                 clock={clock}
+                perform={performTab}
                 groove={grooveTab}
                 sound={soundTab}
                 loops={loopsTab}

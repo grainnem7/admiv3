@@ -200,7 +200,8 @@ const HELP: HelpEntry[] = [
   },
   {
     title: 'Performing — loops and scenes',
-    body: 'Loops tab → Perform. Save the board into a slot ("Save board here") or draw a '
+    body: 'The Perform tab. Make my plan gives four scenes across the piece; tap a scene to '
+      + 'change it where it is. Under a loop pad, "more" saves the board into it ("Save board here") or draws a '
       + 'loop on screen ("Draw", no camera needed), and name it. Play and Stop take effect '
       + 'on the next pass, so a tap is never off-beat, with nothing on a pad. A scene is '
       + 'the loops playing now plus the sound world, band, phrases, fill, Evolve and tempo: '
@@ -214,7 +215,7 @@ const HELP: HelpEntry[] = [
   },
   {
     title: 'The performance clock and the ending',
-    body: 'Loops tab → Perform → The performance. Set the length (7:00), and the countdown '
+    body: 'Perform → Length and ending. Set the length (7:00), and the countdown '
       + 'shows in the status pill and big on the iPad, with cues at 1 minute, 30 and 10 '
       + 'seconds. Choose the ending in advance — Fade out, Stop at the end of the pass, '
       + 'Slow down (a ritardando), Thin out (the band and fill leave, your notes finish, '
