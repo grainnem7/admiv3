@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { fakeVoiceEntry } from './helpers/fakeVoiceEntry';
 import {
-  LAUNCH_SLOTS, loopLabel, nextSceneIndex, sanitizeLoopNames, sanitizeScenes, sceneFromNow, slotState, toggleSlot,
+  LAUNCH_SLOTS, loopLabel, nextSceneIndex, sanitizeLoopNames, sanitizeScenes, sceneFromNow, sceneSettingsToApply, slotState, toggleSlot,
   type SceneSettings,
 } from '../songs/performance/launcher';
 
@@ -336,5 +336,16 @@ describe('engine — the musical endings', () => {
     e.drainFiredNotes();
     p.fireStep(9, 9, 1, null);
     expect(e.drainFiredNotes()).toEqual([]);
+  });
+});
+
+describe('scenes and the player', () => {
+  it('a scene leaves a strip the player moved since the last scene, and sets everything else', () => {
+    const touched = new Set(['fill'] as const);
+    const out = sceneSettingsToApply(settings, touched, true);
+    expect(out.fillAmount).toBeUndefined();
+    expect(out).toMatchObject({ soundWorld: 'warm', band: 'gentle', evolveAmount: 0.4, bpm: 96 });
+    // Switched off: the scene sets everything, as before.
+    expect(sceneSettingsToApply(settings, touched, false)).toEqual(settings);
   });
 });

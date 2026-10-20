@@ -13,7 +13,7 @@
 
 import { degreeMidi } from '../boardSequencerScale';
 import {
-  degreeOf, MAX_FILL_PER_BEAT, rowForDrum, seededRandom, type FillContext, type FillNote,
+  degreeOf, fillDensity, MAX_FILL_PER_BEAT, rowForDrum, seededRandom, type FillContext, type FillNote,
 } from './rulesFill';
 
 /** A suggestion before it has been checked: no board cell yet. */
@@ -22,7 +22,7 @@ export type FillCandidate = Omit<FillNote, 'cell'>;
 const SLOTS = 4;
 
 export function fitFill(candidates: readonly FillCandidate[], ctx: FillContext): FillNote[] {
-  const amount = Math.max(0, Math.min(1, ctx.amount));
+  const amount = fillDensity(ctx.amount);
   if (amount <= 0) return [];
   const total = ctx.loop * SLOTS;
   const taken = { melody: new Set<number>(), bass: new Set<number>(), drums: new Set<number>() };

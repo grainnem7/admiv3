@@ -25,7 +25,7 @@ import { MasterChain } from '../audio/MasterChain';
 import { DEFAULT_BOARD_MIX } from '../audio/audioConfig';
 import { channelPan, ducksForKick, legatoBeats } from '../audio/boardMix';
 import { voiceSpecFor, worldOf, type SoundWorldChoice } from '../audio/worlds/soundWorlds';
-import { harmonyAt, phraseEventsAtStep, type PhraseCell, type PhraseInput, type PhraseRole } from './phrases/phrases';
+import { harmonyAt, layerPhraseCells, phraseEventsAtStep, type PhraseCell, type PhraseInput, type PhraseRole } from './phrases/phrases';
 import { generateFill, type FillContext, type FillNote, type SoundingNote } from './generative/rulesFill';
 import { loadMagenta, magentaFill, magentaStatus } from './generative/magentaFill';
 import { describeEvolve, evolveState, NEUTRAL, type EvolveState } from '../audio/evolve/evolve';
@@ -164,6 +164,9 @@ const EVOLVE_GLIDE_SEC = 0.8;
 const MIX_SWITCH_TC = 0.03;
 
 /** A loop launched without a pad, and the fade it is in, if any. */
+/** A cell on its way to being played, with the layer it belongs to (absent = the player's board). */
+type LayeredCell = ActiveCell & { layer?: string };
+
 interface LaunchedLoop {
   slot: number;
   cells: ActiveCell[];
@@ -1387,19 +1390,26 @@ export class BoardSequencerEngine {
     // a note nobody ever placed.
     const onGrid = (c: ActiveCell): boolean =>
       c.row >= 0 && c.row < this.cfg.rows && c.col >= 0 && c.col < this.cfg.cols;
-    const tagged: { cell: ActiveCell; source: FiredNote['source'] }[] = [
+    // Each cell knows its layer — the player's board, or which loop — so a loop's phrase
+    // plays under the player's instead of being cut into by it (see layerPhraseCells).
+    const tagged: { cell: LayeredCell; source: FiredNote['source'] }[] = [
       ...cells.filter(onGrid).map((c) => ({ cell: c, source: liveSource })),
-      ...this.activeLoops.flat().filter(onGrid).map((c) => ({ cell: c, source: 'loop' as const })),
+      ...this.activeLoops.flatMap((loopCells, i) => loopCells.filter(onGrid).map((c) => ({ cell: { ...c, layer: `bank${i}` }, source: 'loop' as const }))),
       ...this.launched.flatMap((l) => {
         // A fade is in the loudness of each note, so it works for every part alike.
         const f = this.launchFactor(l, beat);
         return l.cells.filter(onGrid).map((c) => ({
-          cell: f < 1 ? { ...c, velocity: (c.velocity ?? this.cfg.velocity) * f } : c, source: 'loop' as const,
+          cell: { ...c, layer: `slot${l.slot}`, ...(f < 1 ? { velocity: (c.velocity ?? this.cfg.velocity) * f } : {}) },
+          source: 'loop' as const,
         }));
       }),
     ];
     const playCells = tagged.map((t) => t.cell);
-    this.fireBand(beat, cellTime, secPerBeat, chord, playCells);
+    // The band answers the PLAYER: it comes in after their first counter and hands them
+    // a part when they take it. Loops don't count — with loops covering every part the
+    // band fell silent for a whole section, and a loop alone brought it in before the
+    // player had touched the board.
+    this.fireBand(beat, cellTime, secPerBeat, chord, playCells, playCells.filter((c) => !c.layer));
     this.fireFill(beat, cellTime, secPerBeat, chord, playCells);
     if (this.cfg.phrases) {
       this.firePhrases(beat, cellTime, secPerBeat, chord, tagged);
@@ -1445,15 +1455,15 @@ export class BoardSequencerEngine {
   }
 
   /** The phrase engine's view of the cells, for both playing and fitting a fill around. */
-  private phraseCells(cells: readonly ActiveCell[]): PhraseCell[] {
+  private phraseCells(cells: readonly LayeredCell[]): PhraseCell[] {
     const out: PhraseCell[] = [];
     for (const c of cells) {
       const role = this.roleFor(c.colour);
       if (role !== 'melody' && role !== 'chord' && role !== 'drums' && role !== 'bass') continue;
       if (role !== 'drums' && !this.voiceByChannel.has(c.colour)) continue;
-      out.push({ row: c.row, col: c.col, colour: c.colour, role, conditional: c.conditional });
+      out.push({ row: c.row, col: c.col, colour: c.colour, role, conditional: c.conditional, ...(c.layer ? { layer: c.layer } : {}) });
     }
-    return out;
+    return layerPhraseCells(out);
   }
 
   private phraseInput(cells: PhraseCell[], beat: number, chord: BoardChord | null, pingPong: boolean): PhraseInput {
@@ -1499,12 +1509,13 @@ export class BoardSequencerEngine {
    * finished. A part whose role the player has taken over is left out.
    */
   private fireBand(
-    beat: number, cellTime: number, secPerBeat: number, chord: BoardChord | null, cells: readonly ActiveCell[],
+    beat: number, cellTime: number, secPerBeat: number, chord: BoardChord | null, cells: readonly LayeredCell[],
+    playerCells: readonly ActiveCell[] = cells,
   ): void {
     const cycle = Math.max(1, this.cfg.cols * Math.max(1, this.cfg.numPages));
     const lap = lapIndex(beat, cycle);
     const roles = new Set<'melody' | 'chord' | 'bass' | 'drums'>();
-    for (const c of cells) {
+    for (const c of playerCells) {
       const r = this.roleFor(c.colour);
       if (r === 'melody' || r === 'chord' || r === 'bass' || r === 'drums') roles.add(r);
     }
@@ -1720,24 +1731,25 @@ export class BoardSequencerEngine {
    */
   private firePhrases(
     beat: number, cellTime: number, secPerBeat: number, chord: BoardChord | null,
-    tagged: { cell: ActiveCell; source: FiredNote['source'] }[],
+    tagged: { cell: LayeredCell; source: FiredNote['source'] }[],
   ): void {
     const world = worldOf(this.cfg.soundWorld ?? 'none');
     const cells = this.phraseCells(tagged.map((t) => t.cell));
     if (cells.length === 0) return;
-    const byKey = new Map<string, { cell: ActiveCell; source: FiredNote['source'] }>();
-    for (const t of tagged) byKey.set(`${t.cell.row},${t.cell.col},${t.cell.colour}`, t);
+    const byKey = new Map<string, { cell: LayeredCell; source: FiredNote['source'] }>();
+    for (const t of tagged) byKey.set(`${t.cell.layer ?? ''}|${t.cell.row},${t.cell.col},${t.cell.colour}`, t);
     const events = phraseEventsAtStep(this.phraseInput(cells, beat, chord, this.cfg.pingPong ?? false));
     const oct = this.cfg.octaveShift * 12;
     const h = this.cfg.humanize;
     // Swing on the off-beats inside the beat: the player's own plus the world's feel.
     const swing = Math.min(0.9, this.cfg.swing + (world?.phraseSwing ?? 0));
     const drumHits = new Set<string>();
+    const notesHere = new Set<string>();
     for (const ev of events) {
       try {
         const varies = ev.owner.conditional && this.cfg.variationEnabled !== false;
         if (!firesThisLapPaged(varies, beat, this.cfg.cols, this.cfg.numPages)) continue;
-        const tag = byKey.get(`${ev.owner.row},${ev.owner.col},${ev.colour}`);
+        const tag = byKey.get(`${ev.layer ?? ''}|${ev.owner.row},${ev.owner.col},${ev.colour}`);
         const base = tag?.cell.velocity ?? this.cfg.velocity;
         const vel = Math.max(0, Math.min(1, base * ev.accent * (h > 0 ? 1 - Math.random() * h * 0.3 : 1)));
         const shifted = ev.offset === 0.5 ? ev.offset + swing / 6
@@ -1757,6 +1769,12 @@ export class BoardSequencerEngine {
           if (!voice) continue;
           const evo = this.evoFor(ev.colour);
           midi = ev.midi + oct + 12 * evo.octave;
+          // The same note on the same instrument at the same moment from two layers (a
+          // loop just captured from counters still on the board) is one note, not a
+          // doubled, louder one.
+          const same = `${ev.colour}:${midi}@${time}`;
+          if (notesHere.has(same)) continue;
+          notesHere.add(same);
           durSec *= evo.length;
           voice.play(midi, vel, durSec, time);
         } else continue;

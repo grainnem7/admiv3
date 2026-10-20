@@ -55,7 +55,7 @@ describe('BoardProfiles', () => {
     expect(getActiveBoardPlayer()?.id).toBe(tim.id);
     const timCfg = loadActiveBoardConfig()!;
     // New player on the same rig: same board + colours, all jobs Off, default grid.
-    expect(timCfg).toMatchObject({ enabled: true, cameraDeviceId: 'usb-1', rows: 4, cols: 4, handedness: 'left' });
+    expect(timCfg).toMatchObject({ enabled: true, cameraDeviceId: 'usb-1', rows: 8, cols: 8, handedness: 'left' });
     expect(timCfg.channels.map((c) => c.role)).toEqual(['off', 'off']);
     saveActiveBoardConfig({ ...timCfg, bpm: 70, mirrorX: true, channels: timCfg.channels.map((c) => ({ ...c, role: 'bass' })) });
     const first = listBoardPlayers().find((p) => p.name === 'Player 1')!;
@@ -140,8 +140,9 @@ describe('BoardProfiles', () => {
     createBoardPlayer('Tim', 'left');
     const timCfg = loadActiveBoardConfig()!;
     expect(timCfg.boardSquares).toBe(10);
-    expect(timCfg.minFilledFraction).toBeCloseTo(suggestReadSettings(10, 4, 4).minFilledFraction, 10);
-    expect(timCfg.samplesPerAxis).toBe(suggestReadSettings(10, 4, 4).samplesPerAxis);
+    // A new player starts on the default 8 x 8 grid, read for this 10 x 10 board.
+    expect(timCfg.minFilledFraction).toBeCloseTo(suggestReadSettings(10, 8, 8).minFilledFraction, 10);
+    expect(timCfg.samplesPerAxis).toBe(suggestReadSettings(10, 8, 8).samplesPerAxis);
   });
 
   it('first run with nothing stored: saving creates the rig and Player 1', () => {

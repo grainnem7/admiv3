@@ -93,7 +93,7 @@ import { BoardMidiPanel } from './boardSequencer/components/BoardMidiPanel';
 import { Disclosure } from './boardSequencer/ui/Disclosure';
 import { LoopEditor } from './boardSequencer/components/LoopEditor';
 import {
-  LAUNCH_SLOTS, MAX_SCENES, loopLabel, nextSceneIndex, sceneFromNow, slotState, toggleSlot, type SceneSettings,
+  LAUNCH_SLOTS, MAX_SCENES, loopLabel, nextSceneIndex, sceneFromNow, sceneSettingsToApply, slotState, toggleSlot, type PlayerStrip, type SceneSettings,
 } from '../../songs/performance/launcher';
 import {
   clockView, cuesCrossed, cueText, describeEnding, endingDue, endingPasses, endingTooLong, formatClock, parseClock, scenesDue, CLOCK_NOT_STARTED,
@@ -525,6 +525,8 @@ export default function BoardSequencerScreen() {
   const [restoreError, setRestoreError] = useState<string | null>(null);
   const restoreInputRef = useRef<HTMLInputElement | null>(null);
   const [sceneName, setSceneName] = useState('');
+  // The iPad strips the player has moved since the last scene: theirs until then.
+  const stripsTouchedRef = useRef<Set<PlayerStrip>>(new Set());
   // The performance clock: when it started (null = not running), what it shows, and what
   // it has already done (cues given, scenes brought in, the ending triggered).
   const clockStartRef = useRef<number | null>(null);
@@ -2231,8 +2233,12 @@ export default function BoardSequencerScreen() {
     const c = configRef.current;
     const scene = c.scenes[i];
     if (!scene) return;
-    update({ ...scene.settings, currentScene: i });
-    engineRef.current?.setBpm(scene.settings.bpm);
+    const apply = sceneSettingsToApply(scene.settings, stripsTouchedRef.current, c.sceneRespectsPlayer);
+    const kept = [...stripsTouchedRef.current].filter(() => c.sceneRespectsPlayer);
+    stripsTouchedRef.current = new Set();
+    update({ ...apply, currentScene: i });
+    if (apply.bpm !== undefined) engineRef.current?.setBpm(apply.bpm);
+    if (kept.length > 0) sessionLogRef.current.action(logActorRef.current, `scene ${scene.name} left the player's ${kept.join(', ')}`);
     wantedRef.current = new Set(scene.loops.filter((s) => (c.loopSlots[s] ?? null) !== null));
     pushLaunch();
     setBoardNotice(`Scene: ${scene.name}`);
@@ -2426,6 +2432,7 @@ export default function BoardSequencerScreen() {
   const onRemoteMessageInner = (msg: RemoteMessage, c: BoardSequencerStored): void => {
     if (msg.type === 'control' && c.remoteLocked.includes(msg.name)) return;
     if (msg.type === 'control') {
+      if (msg.name !== 'dynamics') stripsTouchedRef.current.add(msg.name as PlayerStrip);
       if (msg.name === 'tempo') {
         const bpm = tempoFromValue(msg.value);
         update({ bpm });
@@ -3145,6 +3152,17 @@ export default function BoardSequencerScreen() {
             </div>
           );
         })}
+        {(() => {
+          // Every timing in a performance — fades, scene changes, the ending — is counted
+          // in passes, so how long one pass lasts is the thing to know.
+          const passSec = (config.cols * Math.max(1, config.numPages) * 60) / Math.max(20, config.bpm);
+          return (
+            <span style={{ fontSize: 12, color: passSec < 4 ? 'var(--bs-warn)' : 'var(--bs-fg2)' }}>
+              {`1 pass = ${passSec.toFixed(1)} s (${config.cols * Math.max(1, config.numPages)} steps at ${Math.round(config.bpm)} BPM).`}
+              {passSec < 4 ? ' A very short loop: scenes and endings land often. More steps (Groove tab) or a slower tempo give a piece more room.' : ''}
+            </span>
+          );
+        })()}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <span style={{ fontWeight: 600, fontSize: 13 }}>Loops fade in and out over</span>
           <SegmentedControl<number>
@@ -3246,6 +3264,12 @@ export default function BoardSequencerScreen() {
           <input type="text" value={sceneName} placeholder={`Scene ${config.scenes.length + 1}`} aria-label="Scene name" onChange={(e) => setSceneName(e.target.value)} style={{ width: 140 }} />
           <Button tone="secondary" onClick={saveScene} reason={config.scenes.length >= MAX_SCENES ? 'Twelve scenes is the most.' : null}>Save scene from now</Button>
         </div>
+        <Switch
+          label="Scenes leave the player's strips alone"
+          checked={config.sceneRespectsPlayer}
+          onChange={(on) => update({ sceneRespectsPlayer: on })}
+          hint="If the player moved Speed, Fill or Evolve on the iPad since the last scene, the next scene keeps their setting. Everything else in the scene still changes."
+        />
         {config.scenes.map((sc, i) => (
           <div key={sc.id} style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             <span style={{ fontWeight: 600, minWidth: 90 }}>{`${i + 1}. ${sc.name}`}</span>
@@ -3719,6 +3743,10 @@ export default function BoardSequencerScreen() {
       pageLabel={config.numPages > 1 ? `Page ${String.fromCharCode(65 + playingPage)} · live` : null}
       reducedMotion={reducedMotion}
       fillMarks={running ? fillMarks : undefined}
+      loopCells={running ? [
+        ...appliedSlots.flatMap((slot) => config.loopSlots[slot] ?? []),
+        ...(latestFrame?.frame.activeLoops ?? []).flat(),
+      ] : undefined}
       band={running && bandStatus.playing ? { playing: true, beatOn } : null}
       spans={running && config.phrases ? spans : undefined}
       notice={running ? boardNotice : null}

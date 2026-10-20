@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { fakeVoiceEntry } from './helpers/fakeVoiceEntry';
-import { generateFill, MAX_FILL_PER_BEAT, type FillContext, type SoundingNote } from '../songs/generative/rulesFill';
+import { fillDensity, generateFill, MAX_FILL_PER_BEAT, type FillContext, type SoundingNote } from '../songs/generative/rulesFill';
 
 const PENT = [0, 2, 4, 7, 9];
 const SCALE_PCS = new Set(PENT.map((s) => s % 12));
@@ -149,5 +149,15 @@ describe('engine — fill', () => {
     e.setActiveCells([{ row: 7, col: 0, colour: 'm' }, { row: 2, col: 4, colour: 'm' }]);
     for (let beat = 0; beat < 8; beat++) p.fireStep(beat, beat, 1, null);
     expect(e.drainFiredNotes().some((f) => f.origin === 'fill')).toBe(false);
+  });
+});
+
+describe('fill amount', () => {
+  it('keeps the ends and lifts the middle, so a little Fill is heard', () => {
+    expect(fillDensity(0)).toBe(0);
+    expect(fillDensity(1)).toBe(1);
+    expect(fillDensity(0.3)).toBeCloseTo(0.51, 9);
+    expect(fillDensity(0.5)).toBeCloseTo(0.75, 9);
+    for (let i = 0; i < 10; i++) expect(fillDensity((i + 1) / 10)).toBeGreaterThan(fillDensity(i / 10));
   });
 });

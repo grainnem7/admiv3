@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import { suggestReadSettings } from '../tracking/boardGrid';
 import {
   loadBoardSequencerConfig,
   saveBoardSequencerConfig,
@@ -52,7 +53,7 @@ describe('BoardSequencerConfig', () => {
     saveBoardSequencerConfig(cfg);
     const loaded = loadBoardSequencerConfig();
     expect(loaded?.bpm).toBe(110);
-    expect(loaded?.rows).toBe(4);
+    expect(loaded?.rows).toBe(8);
     expect(loaded?.scaleSemitones).toEqual([0, 2, 4, 7, 9]);
   });
 
@@ -147,9 +148,10 @@ describe('BoardSequencerConfig', () => {
 describe('BoardSequencerConfig — redesign fields', () => {
   beforeEach(() => localStorage.clear());
 
-  it('brand-new default grid is square 4 × 4 with suggested read settings', () => {
-    expect(DEFAULT_BOARD_SEQUENCER_CONFIG).toMatchObject({ rows: 4, cols: 4, boardSquares: 8, samplesPerAxis: 15, readSettingsCustom: false });
-    expect(DEFAULT_BOARD_SEQUENCER_CONFIG.minFilledFraction).toBeCloseTo(0.03, 6);
+  it('brand-new default grid is square 8 × 8 (one counter per square) with suggested read settings', () => {
+    const suggested = suggestReadSettings(8, 8, 8);
+    expect(DEFAULT_BOARD_SEQUENCER_CONFIG).toMatchObject({ rows: 8, cols: 8, boardSquares: 8, samplesPerAxis: suggested.samplesPerAxis, readSettingsCustom: false });
+    expect(DEFAULT_BOARD_SEQUENCER_CONFIG.minFilledFraction).toBeCloseTo(suggested.minFilledFraction, 9);
     expect(DEFAULT_BOARD_SEQUENCER_CONFIG).toMatchObject({ themeMode: 'dark', boardNudgesEnabled: true, handedness: 'right', seatEdge: 'low' });
   });
 

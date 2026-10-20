@@ -31,11 +31,34 @@ export interface PhraseCell {
   colour: string;
   role: PhraseRole;
   conditional?: boolean;
+  /**
+   * Which layer the counter belongs to: the player's board ('live', or absent), or a
+   * saved loop ('slot3', 'bank0'). Counters of one colour make one phrase only within
+   * their layer, so a loop plays its own tune underneath the player's.
+   */
+  layer?: string;
+}
+
+/** The player's own counters: the board or the page being played. */
+export const LIVE_LAYER = 'live';
+
+/**
+ * Put loops and the player's board together. A melody from a loop plays alongside the
+ * player's (each its own phrase). The bass, the chords and the drums are one part each:
+ * when the player puts down a counter for one of those, it takes that part over from
+ * the loops while it is down — two basslines or two grooves at once is mud, and the
+ * player's choice is the one that counts.
+ */
+export function layerPhraseCells(cells: readonly PhraseCell[]): PhraseCell[] {
+  const liveRoles = new Set(cells.filter((c) => (c.layer ?? LIVE_LAYER) === LIVE_LAYER).map((c) => c.role));
+  return cells.filter((c) => (c.layer ?? LIVE_LAYER) === LIVE_LAYER || c.role === 'melody' || !liveRoles.has(c.role));
 }
 
 export interface PhraseEvent {
   role: PhraseRole;
   colour: string;
+  /** The layer of the counter that started it (absent = the player's board). */
+  layer?: string;
   /** The counter whose phrase this note belongs to — where its light is drawn. */
   owner: { row: number; col: number; conditional: boolean };
   /** When, in beats after this step starts (0 ≤ offset < 1). */
@@ -283,15 +306,19 @@ export function harmonyAt(input: PhraseInput): Harmony | null {
 export function phraseEventsAtStep(input: PhraseInput): PhraseEvent[] {
   const out: PhraseEvent[] = [];
   const harmony = harmonyAt(input);
+  // One phrase per colour per layer: a loop's red tune and the player's red counters
+  // are two tunes, not one where the later counter cuts into the other.
   const byColour = new Map<string, PhraseCell[]>();
   for (const c of input.cells) {
-    const list = byColour.get(c.colour);
+    const key = `${c.layer ?? LIVE_LAYER}|${c.colour}`;
+    const list = byColour.get(key);
     if (list) list.push(c);
-    else byColour.set(c.colour, [c]);
+    else byColour.set(key, [c]);
   }
 
-  for (const [colour, cells] of byColour) {
+  for (const cells of byColour.values()) {
     const role = cells[0].role;
+    const colour = cells[0].colour;
     const loop = input.loopFor(role);
     const inLoop = cells.filter((c) => c.col < loop);
     const step = input.stepFor(role);
@@ -302,7 +329,7 @@ export function phraseEventsAtStep(input: PhraseInput): PhraseEvent[] {
     const alt = evo.variant % 2;
     for (const owner of inLoop.filter((c) => c.col === col)) {
       const who = { row: owner.row, col: owner.col, conditional: owner.conditional ?? false };
-      const base = { role, colour, owner: who };
+      const base = { role, colour, owner: who, ...(owner.layer && owner.layer !== LIVE_LAYER ? { layer: owner.layer } : {}) };
       const degree = input.rows - 1 - owner.row;
       if (role === 'drums') {
         const level = Math.max(0, Math.min(3, Math.floor((degree / Math.max(1, input.rows)) * 4) + evo.busy));

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { describeEvolve, evolveState, NEUTRAL, type EvolveInput } from '../audio/evolve/evolve';
+import { describeEvolve, evolveStagger, evolveState, NEUTRAL, type EvolveInput } from '../audio/evolve/evolve';
 
 const input = (over: Partial<EvolveInput> = {}): EvolveInput => ({
   colour: 'c1', role: 'melody', lap: 0, seed: 11, amount: 0.8, sceneLoops: 4, world: 'warm', ownInstrument: false, ...over,
@@ -145,5 +145,22 @@ describe('engine — Evolve', () => {
     expect(midi).toBe(69);
     expect(p.voiceByChannel.get('m')!.voice.sound).toBeUndefined(); // the voice was never swapped
     expect(e.getEvolveLabels().get('m')!.label).toBe('Warm');
+  });
+});
+
+describe('Evolve changes one part at a time', () => {
+  it('colours change instrument on different loops, and each starts on its own sound', () => {
+    const colours = ['c1', 'c2', 'c3', 'c4', 'c5', 'c6'];
+    const firstChange = (colour: string): number => {
+      const start = evolveState({ colour, role: 'melody', lap: 0, seed: 7, amount: 0.5, sceneLoops: 8, world: 'warm', ownInstrument: false });
+      expect(start.scene).toBe(0);
+      for (let lap = 1; lap < 40; lap++) {
+        if (evolveState({ colour, role: 'melody', lap, seed: 7, amount: 0.5, sceneLoops: 8, world: 'warm', ownInstrument: false }).scene !== start.scene) return lap;
+      }
+      return -1;
+    };
+    const laps = new Set(colours.map(firstChange));
+    expect(laps.size).toBeGreaterThan(1);
+    for (const c of colours) expect(evolveStagger(c, 8)).toBeLessThan(8);
   });
 });

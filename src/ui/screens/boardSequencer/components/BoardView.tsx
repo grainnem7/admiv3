@@ -48,6 +48,12 @@ export interface BoardViewProps {
   /** Page label ("Page A · live"), when there is more than one page. */
   pageLabel?: string | null;
   reducedMotion?: boolean;
+  /**
+   * Notes of the loops playing now, drawn as outlined counters where no counter of the
+   * player's stands, so what is sounding can be seen (deaf and hard-of-hearing players,
+   * the audience) — they pulse as they play.
+   */
+  loopCells?: readonly { row: number; col: number; colour: ColourId }[];
   /** The laptop board: squares are buttons, and a click places or lifts a counter. */
   onCellTap?(row: number, col: number): void;
   /** What a square is called for a screen reader on the laptop board ("Red, melody"). */
@@ -71,7 +77,7 @@ function ghostsBySquare(ghosts: ReadonlyMap<string, ActiveCell> | undefined): Ma
  */
 export function BoardView({
   rows, cols, frame, pops, playheadCol, playing, pingPongDirection, swatchFor, palette,
-  pageLabel, reducedMotion = false, fillMarks, band, spans, notice, onCellTap, describeCell,
+  pageLabel, reducedMotion = false, fillMarks, band, spans, notice, onCellTap, describeCell, loopCells,
 }: BoardViewProps): JSX.Element {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -251,6 +257,30 @@ export function BoardView({
       }
     }
 
+    // Loop notes: an outlined counter with a small centre, where the player has none.
+    if (loopCells && loopCells.length > 0) {
+      for (const l of loopCells) {
+        if (l.row < 0 || l.row >= rows || l.col < 0 || l.col >= cols) continue;
+        const key = keyOf(l.row, l.col);
+        if (frame.settled.has(key) || frame.detected.has(key)) continue;
+        const cx = l.col * cw + cw / 2;
+        const cy = l.row * ch + ch / 2;
+        const sounding = popByKey.has(key);
+        const r = Math.min(cw, ch) / 2 - pad - 3;
+        ctx.globalAlpha = sounding ? 1 : 0.7;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.lineWidth = sounding && !reducedMotion ? 4 : 2.5;
+        ctx.strokeStyle = swatchFor(l.colour);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(cx, cy, Math.max(2, r * (sounding ? 0.45 : 0.22)), 0, Math.PI * 2);
+        ctx.fillStyle = swatchFor(l.colour);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+    }
+
     // The band's pulse: a soft bar along the bottom edge, brighter on the beat.
     if (band?.playing) {
       ctx.fillStyle = palette.accent;
@@ -321,9 +351,10 @@ export function BoardView({
       ctx.textBaseline = 'top';
       ctx.fillText(pingPongDirection > 0 ? '→' : '←', playheadCol * cw + cw / 2, 2);
     }
-  }, [dims, rows, cols, frame, pops, playheadCol, playing, pingPongDirection, swatchFor, palette, reducedMotion, fillMarks, band, spans, notice]);
+  }, [dims, rows, cols, frame, pops, playheadCol, playing, pingPongDirection, swatchFor, palette, reducedMotion, fillMarks, band, spans, notice, loopCells]);
 
   const pieces = frame.settled.size;
+  const loopNotes = loopCells?.length ?? 0;
   const heldCount = frame.held?.size ?? 0;
   return (
     <div ref={wrapRef} style={{ position: 'relative', width: '100%', height: '100%', minHeight: 160, display: 'grid', placeItems: 'center' }}>
@@ -332,7 +363,7 @@ export function BoardView({
         role="img"
         aria-label={heldCount > 0
           ? `${boardSummary(rows, cols, playheadCol, pieces)}, ${heldCount} on hold`
-          : boardSummary(rows, cols, playheadCol, pieces)}
+          : `${boardSummary(rows, cols, playheadCol, pieces)}${loopNotes > 0 ? `, ${loopNotes} loop ${loopNotes === 1 ? 'note' : 'notes'}` : ''}`}
         style={{ width: dims.w, height: dims.h, borderRadius: 'var(--bs-radius-lg)' }}
       />
       {onCellTap && (

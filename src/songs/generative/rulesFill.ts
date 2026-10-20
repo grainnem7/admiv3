@@ -74,6 +74,17 @@ export interface FillNote {
 /** At most this many added notes in one beat, per part. */
 export const MAX_FILL_PER_BEAT = 2;
 
+/**
+ * How much of the possible fill a Fill amount lets through. The ear hears the first
+ * added notes far more than later ones, and phrases already fill most of the beat, so
+ * a straight line made 30–40% almost inaudible (4–14 notes in 30 s in a test run). This
+ * curve keeps 0 and 100% where they were and lifts the middle: 30% → 0.51, 50% → 0.75.
+ */
+export function fillDensity(amount: number): number {
+  const a = Math.max(0, Math.min(1, amount));
+  return 1 - (1 - a) * (1 - a);
+}
+
 /** A small, fast, seeded random number generator (mulberry32). */
 export function seededRandom(seed: number): () => number {
   let a = seed >>> 0;
@@ -107,7 +118,7 @@ export function rowForDrum(drum: KitDrum, rows: number): number {
 }
 
 export function generateFill(ctx: FillContext): FillNote[] {
-  const amount = Math.max(0, Math.min(1, ctx.amount));
+  const amount = fillDensity(ctx.amount);
   if (amount <= 0 || ctx.loop <= 0) return [];
   const rand = seededRandom(ctx.seed);
   const chance = (p: number): boolean => rand() < p * amount;

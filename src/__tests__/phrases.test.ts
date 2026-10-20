@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { harmonyAt, phraseEventsAtStep, type PhraseCell, type PhraseInput, type PhraseRole } from '../songs/phrases/phrases';
+import { harmonyAt, layerPhraseCells, phraseEventsAtStep, type PhraseCell, type PhraseInput, type PhraseRole } from '../songs/phrases/phrases';
 import { degreeMidi } from '../songs/boardSequencerScale';
 
 const PENT = [0, 2, 4, 7, 9];
@@ -98,5 +98,33 @@ describe('phrases — styles', () => {
     const groove = (style: PhraseInput['style']) => JSON.stringify(loopEvents([cell('drums', 2, 0)], { style }));
     const all = new Set(['warm', 'lofi', 'ambient', 'electronic'].map((s) => groove(s as PhraseInput['style'])));
     expect(all.size).toBe(4);
+  });
+});
+
+describe('phrases — loops layer under the player', () => {
+  const loopCell = (role: PhraseRole, row: number, col: number, layer: string): PhraseCell => ({ role, row, col, colour: role, layer });
+
+  it('a loop tune and the player tune of the same colour both play, each its own phrase', () => {
+    // The loop's red counter at step 0; the player's red counter at step 4.
+    const cells = layerPhraseCells([loopCell('melody', 2, 0, 'slot4'), cell('melody', 5, 4)]);
+    const at6 = phraseEventsAtStep(input(cells, 6));
+    // Before layers, the player's counter took over from step 4 and the loop went quiet.
+    expect(at6.some((e) => e.layer === 'slot4' && e.owner.col === 0)).toBe(true);
+    expect(at6.some((e) => e.layer === undefined && e.owner.col === 4)).toBe(true);
+  });
+
+  it('the player takes the bass, the chords or the drums over from the loops while their counter is down', () => {
+    const loops = [loopCell('bass', 7, 0, 'slot1'), loopCell('drums', 4, 0, 'slot2'), loopCell('chord', 5, 0, 'slot0')];
+    expect(layerPhraseCells(loops)).toHaveLength(3);
+    const withPlayerBass = layerPhraseCells([...loops, cell('bass', 6, 2)]);
+    expect(withPlayerBass.filter((c) => c.role === 'bass')).toEqual([cell('bass', 6, 2)]);
+    expect(withPlayerBass.some((c) => c.role === 'drums')).toBe(true);   // drums still the loop's
+    expect(withPlayerBass.some((c) => c.role === 'chord')).toBe(true);
+  });
+
+  it('two loops of the same colour are two tunes', () => {
+    const cells = layerPhraseCells([loopCell('melody', 2, 0, 'slot0'), loopCell('melody', 4, 0, 'slot3')]);
+    const owners = new Set(phraseEventsAtStep(input(cells, 1)).map((e) => e.layer));
+    expect(owners).toEqual(new Set(['slot0', 'slot3']));
   });
 });

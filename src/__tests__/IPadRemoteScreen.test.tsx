@@ -1,7 +1,11 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react';
+
+// Tell React this is a test environment, so act() waits for every update to render
+// (without it a tab switch could still be pending when the test looked for its pads).
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 /**
  * The iPad page, touched in a simulated browser: a finger on a strip sends a control, a
@@ -55,6 +59,14 @@ beforeEach(async () => {
   root = createRoot(el);
   await act(async () => { root.render(<IPadRemoteScreen code="4821" />); });
   await act(async () => { onMsg?.(STATE); });
+});
+
+// Each test's page is taken down after it. A page left mounted kept its timers (the
+// touch mark), re-rendered during the next test and took over the fake link's message
+// handler, so the next page never received its state — only when the machine was busy.
+afterEach(async () => {
+  await act(async () => { root.unmount(); });
+  el.remove();
 });
 
 describe('the iPad page, touched', () => {

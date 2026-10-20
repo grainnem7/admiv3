@@ -67,6 +67,24 @@ export interface Scene {
 export const MAX_SCENES = 12;
 const MAX_NAME = 24;
 
+/** The player's iPad strips a scene can set. */
+export type PlayerStrip = 'tempo' | 'fill' | 'evolve';
+const STRIP_SETTING: Record<PlayerStrip, keyof SceneSettings> = { tempo: 'bpm', fill: 'fillAmount', evolve: 'evolveAmount' };
+
+/**
+ * What a scene changes when it comes in. A scene sets the stage — loops, sound, band —
+ * but a strip the player has moved since the last scene is theirs: it is left as they
+ * set it (when `respectPlayer` is on). Otherwise a scene at 3:30 reset Tim's Fill under
+ * his finger.
+ */
+export function sceneSettingsToApply(
+  settings: SceneSettings, touched: ReadonlySet<PlayerStrip>, respectPlayer: boolean,
+): Partial<SceneSettings> {
+  const out: Partial<SceneSettings> = { ...settings };
+  if (respectPlayer) for (const s of touched) delete out[STRIP_SETTING[s]];
+  return out;
+}
+
 /** A scene from how things are now. */
 export function sceneFromNow(name: string, wanted: ReadonlySet<number>, settings: SceneSettings, id = `s${Date.now().toString(36)}`): Scene {
   return {

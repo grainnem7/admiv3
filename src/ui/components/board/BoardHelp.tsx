@@ -144,7 +144,8 @@ const HELP: HelpEntry[] = [
     body: 'Off, Gentle or Full. A pad, a bass and a groove that join in on the pass after the '
       + 'first counter goes down, follow the chords, and stop once the pass the last counter '
       + 'left in has finished. Put down a bass, chord or drum counter and the band hands that '
-      + 'part to you. The board’s bottom edge pulses with its beat.',
+      + 'part to you. It answers the player, not the loops: a loop alone does not bring it '
+      + 'in, and it keeps its parts while loops play. The board’s bottom edge pulses with its beat.',
   },
   {
     title: 'Fill — the instrument adds notes',
@@ -205,7 +206,11 @@ const HELP: HelpEntry[] = [
       + 'the loops playing now plus the sound world, band, phrases, fill, Evolve and tempo: '
       + '"Save scene from now", then Go, or "Next scene" to walk the set list. The iPad’s '
       + '"Loops & scenes" page has big pads for all of it and a Stop all. Loops fade in and '
-      + 'out over half a pass, a pass or two passes ("Loops fade", in Perform), or at once.',
+      + 'out over half a pass, a pass or two passes ("Loops fade", in Perform), or at once. '
+      + 'Loops layer under the player: a loop tune keeps playing under your counters of the '
+      + 'same colour; your bass, chord or drum counter takes that part over while it is down. '
+      + 'Playing loops show on the board as outlined counters. Scenes leave alone a strip the '
+      + 'player moved on the iPad since the last scene.',
   },
   {
     title: 'The performance clock and the ending',

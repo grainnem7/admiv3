@@ -141,6 +141,8 @@ export interface BoardSequencerStored {
   currentScene: number | null;
   /** How many passes a launched loop takes to come in and go out (0 = at once). */
   loopFadePasses: number;
+  /** Scenes leave alone an iPad strip the player has moved since the last scene. */
+  sceneRespectsPlayer: boolean;
   /** The performance clock: length, ending, when it starts (see performance/clock). */
   performance: PerformanceSettings;
   /**
@@ -334,8 +336,10 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   version: CONFIG_VERSION,
   enabled: false,
   corners: ZERO_CORNERS,
-  rows: 4,
-  cols: 4,
+  // One counter per square of an 8 x 8 board, and an 8-step loop: long enough to shape
+  // a piece (a 4-step loop at 90 BPM is under three seconds).
+  rows: 8,
+  cols: 8,
   scaleRootMidi: 60,
   scaleSemitones: [0, 2, 4, 7, 9],
   scaleName: 'Major pentatonic',
@@ -350,7 +354,7 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   // No predefined colours — the user calibrates their own by clicking a piece.
   channels: [],
   faderAxis: 'row',
-  minFilledFraction: suggestReadSettings(8, 4, 4).minFilledFraction,
+  minFilledFraction: suggestReadSettings(8, 8, 8).minFilledFraction,
   variationEnabled: false,
   variationOffsetThreshold: 0.6,
   pingPong: false,
@@ -381,6 +385,7 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   scenes: [],
   currentScene: null,
   loopFadePasses: 1,
+  sceneRespectsPlayer: true,
   performance: DEFAULT_PERFORMANCE,
   boardSource: 'camera',
   laptopBoard: [],
@@ -405,7 +410,7 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   cameraLabel: '',
   boardSquares: 8,
   themeMode: 'dark',
-  samplesPerAxis: suggestReadSettings(8, 4, 4).samplesPerAxis,
+  samplesPerAxis: suggestReadSettings(8, 8, 8).samplesPerAxis,
   readSettingsCustom: false,
   readSettingsRev: READ_SETTINGS_REV,
   boardNudgesEnabled: true,
@@ -718,6 +723,7 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     }),
     currentScene: isNum(o.currentScene) && o.currentScene >= 0 ? Math.round(o.currentScene) : null,
     loopFadePasses: [0, 0.5, 1, 2].includes(num(o.loopFadePasses, 1)) ? num(o.loopFadePasses, 1) : 1,
+    sceneRespectsPlayer: o.sceneRespectsPlayer !== false,
     performance: sanitizePerformance(o.performance),
     boardSource: o.boardSource === 'laptop' ? 'laptop' : 'camera',
     laptopBoard: Array.isArray(o.laptopBoard) ? (sanitizeLoopSlots([o.laptopBoard])[0] ?? []) : [],

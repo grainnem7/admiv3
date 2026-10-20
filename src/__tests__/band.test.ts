@@ -160,6 +160,20 @@ describe('engine — the band waits for the player', () => {
     expect(bandNotes(e)).toEqual([]);
   });
 
+  it('answers the player, not the loops: a loop alone does not bring it in or take its parts', () => {
+    const { e, p } = engine();
+    e.setLaunchFade(0);
+    e.setLaunchedLoops([0], [[{ row: 7, col: 0, colour: 'b' }, { row: 3, col: 1, colour: 'm' }]]);
+    lapOf(p, 0);
+    lapOf(p, 1);
+    expect(bandNotes(e)).toEqual([]);              // only a loop playing: the band waits
+    e.setActiveCells([{ row: 3, col: 2, colour: 'm' }]);
+    lapOf(p, 2);
+    lapOf(p, 3);
+    // The player is here: the band comes in with all its parts, though a loop has a bass.
+    expect(e.getBandStatus().parts).toEqual(['pad', 'bass', 'groove']);
+  });
+
   it('hands the bass to the player when a bass counter goes down', () => {
     const { e, p } = engine();
     e.setActiveCells([{ row: 3, col: 1, colour: 'm' }]);

@@ -181,12 +181,24 @@ export interface EvolveInput {
   ownInstrument: boolean;
 }
 
+/**
+ * How many loops a colour's changes are held back. Each colour by its own amount, so the parts change one at a time — at 50% every instrument used to change on
+ * the same loop, which sounded like a different band walking on, not an instrument
+ * moving.
+ */
+export function evolveStagger(colour: string, sceneLoops: number): number {
+  let h = 2166136261;
+  for (let i = 0; i < colour.length; i++) h = Math.imul(h ^ colour.charCodeAt(i), 16777619);
+  return (h >>> 0) % Math.max(1, Math.round(sceneLoops));
+}
+
 /** What one colour sounds like on a given loop. */
 export function evolveState(input: EvolveInput): EvolveState {
   const amount = Math.max(0, Math.min(1, input.amount));
   if (amount <= 0) return NEUTRAL;
   const sceneLoops = Math.max(1, Math.round(input.sceneLoops));
-  const lap = Math.max(0, input.lap);
+  // Later, never earlier: every part still starts on its own sound.
+  const lap = Math.max(0, Math.max(0, input.lap) - evolveStagger(input.colour, sceneLoops));
   const scene = Math.floor(lap / sceneLoops);
   const t = ease((lap % sceneLoops) / sceneLoops);
   const voices = input.role !== 'drums' && input.world !== 'none' && !input.ownInstrument
