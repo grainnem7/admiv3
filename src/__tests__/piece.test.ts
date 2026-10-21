@@ -41,7 +41,9 @@ describe('the piece — one tick of the clock', () => {
 
   it('at the end time nothing is left playing: the backstop stops it', () => {
     const at = (remaining: number, extra = {}) => decideClockTick({ ...base, prev: { remaining: remaining + 0.25, elapsed: 420 - remaining - 0.25 }, now: { remaining, elapsed: 420 - remaining }, ...extra });
-    expect(at(1).hardStop).toBe(false);
+    // It begins a second early, so its own fade and stop are over by the end time.
+    expect(at(1.25).hardStop).toBe(false);
+    expect(at(1).hardStop).toBe(true);
     expect(at(0).hardStop).toBe(true);
     // Even with an ending running (cancelled, or slowed past its time) or already auto-ended.
     expect(at(0, { ending: true, autoEnded: true }).hardStop).toBe(true);

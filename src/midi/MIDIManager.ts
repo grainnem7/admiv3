@@ -158,6 +158,21 @@ class MIDIManagerClass {
   }
 
   /**
+   * The selected output only while it is really there. getSelectedOutput() keeps
+   * returning a port that has gone (it may come back), which other screens rely on;
+   * the Board Sequencer needs to know, so it can fall back to its own sound.
+   */
+  getConnectedSelectedOutput(): MIDIOutput | null {
+    const output = this.getSelectedOutput();
+    return output && output.state === 'connected' ? output : null;
+  }
+
+  /** Whether the selected output is connected right now. */
+  isSelectedConnected(): boolean {
+    return this.getConnectedSelectedOutput() !== null;
+  }
+
+  /**
    * Get the ID of the currently selected output
    */
   getSelectedOutputId(): string | null {

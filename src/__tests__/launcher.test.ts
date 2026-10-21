@@ -322,7 +322,9 @@ describe('engine — the musical endings', () => {
     e.drainFiredNotes();
     p.fireStep(4, 4, 1, null);                     // the chord
     const fired = e.drainFiredNotes();
-    expect(fired.some((f) => f.colour === 'band:final' && f.midis && f.midis.length === 4)).toBe(true);
+    // Logged as what sounds: the chord with the band's chords, its root with the band's bass.
+    expect(fired.some((f) => f.colour === 'band:final' && f.role === 'chord' && f.midis && f.midis.length === 3)).toBe(true);
+    expect(fired.some((f) => f.colour === 'band:final' && f.role === 'bass' && f.midi !== undefined)).toBe(true);
     expect(fired.some((f) => f.origin === 'placed')).toBe(false);
     for (let b = 5; b < 8; b++) p.fireStep(b, b, 1, null);
     expect(e.drainFiredNotes()).toEqual([]);       // the chord rings alone

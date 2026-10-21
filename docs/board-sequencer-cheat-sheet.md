@@ -6,6 +6,7 @@
 1. Close other ADMI windows. Start with **`npm run show`** and open **http://localhost:3001**. Press **Board Sequencer** and pick the player.
 2. **Board: 📷 Camera** at the top. **Set up**: camera, board (**Skip, board hasn't moved**; with the board empty, **Learn it again** in this room's light), colours.
 3. **Connections** tab: tick **iPad controls** and open the link in Safari on the iPad. The 👆 mark lights on touch.
+   With Ableton: loopMIDI open before Chrome, the **ADMI template** Set open, then **Sound from: Ableton**, port **ADMIOutput**, ▶ Play and **Play test note**. Setup: `docs/ableton-setup-guide.html`.
 4. **Make a piece → 3 · Ending & check**: look at the Ready check and fix anything marked ✕. **⤓ Back up to a file** and copy it to a USB stick.
 5. Sound check: ▶ Play, then ■ Stop twice. Then **▶ Show** → **▶ Start the piece**: it starts in its opening scene.
 6. At the 30-second cue: **End piece** on the iPad (two taps) or **⏹ End**. Afterwards: **Save session** and **CSV**.
@@ -55,5 +56,11 @@ Strips and pads shown · **Also on the Play page** (End piece, Next scene, Captu
 | Loops/scenes missing | `localhost:3001`, right player; **⤒ Restore from a file** or `.admi-data/backups` |
 | "Open in another tab" | Close all ADMI tabs but one |
 | Sounds awful | **Mute** |
+| Ableton crashed or froze | **Sound from: ADMI** (Connections tab); the piece carries on |
+| "Ableton's port has gone" | ADMI is playing its own sound already. When it says Ableton is back: **Switch to Ableton** |
+| A note stuck on in Ableton | **Panic** (Connections tab, or in Show) |
+| "AI: Extra notes off · Sounds change off" | Nothing generative is on: turn them up on the Sound tab |
+| Ableton on the wrong sound | **Send sound choices to Ableton** (Connections tab) |
+| Band or Extra notes silent in Ableton | **Play test note**: a silent channel is a missing track (band 11, 12; Extra notes 13) |
 
 *Board: 💻 Laptop plays with no camera (click squares) — for testing and planning; the Ready check warns if it's on. **+ Add a colour** above the board adds Orange, Purple, Pink, Cyan, White or Black with the job you pick.*

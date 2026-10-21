@@ -100,6 +100,11 @@ const PALETTE: Record<SoundWorldId, Record<'melody' | 'chord' | 'bass', NamedVoi
   },
 };
 
+/** Every instrument Evolve can move a part to, in every world (for MIDI out's chain list). */
+export function allEvolveVoices(): NamedVoice[] {
+  return Object.values(PALETTE).flatMap((parts) => Object.values(parts).flat());
+}
+
 export interface EvolveState {
   /** Multiplies the part's own Tone (brightness). */
   brightness: number;

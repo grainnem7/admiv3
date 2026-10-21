@@ -14,6 +14,22 @@ import type { BandLevel, BandPart } from '../../../../songs/band/band';
 import { describeChannel, ROLE_LABELS, type ColourChannel } from '../../../../tracking/boardColours';
 import type { BoardSequencerStored } from '../../../../profiles/BoardSequencerConfig';
 import { DRUM_OPTIONS, INSTRUMENT_OPTIONS, soundNameFor } from '../soundOptions';
+import { BRIGHT, ENERGY, LOUD, nearest, SPACE_ALL, SPACE_SEND, type Step } from '../../../../audio/soundSteps';
+import { channelFor, colourChannelMap, configToSoundFrom } from '../../../../midi/boardMidi';
+import { chainFor, chainLabel } from '../../../../midi/abletonSounds';
+
+/** Said wherever a control only changes ADMI's own sound, while Ableton makes it. */
+const IN_ABLETON = 'Sound set in Ableton';
+/** Said on a control that goes to an Ableton macro. */
+const TO_MACRO = '→ Ableton macro';
+
+/** The MIDI channel a colour's own notes go out on, or null when it plays none. */
+function midiChannelOf(c: ColourChannel, config: BoardSequencerStored): number | null {
+  return channelFor({ role: c.role, origin: 'placed', colour: c.id }, {
+    channelMode: config.midiChannelMode,
+    colourChannels: config.midiChannelMode === 'colour' ? colourChannelMap(config.channels) : undefined,
+  });
+}
 
 /** The fields of a colour's sound that the cards change. */
 export type ChannelSoundPatch = Partial<Pick<ColourChannel,
@@ -48,17 +64,13 @@ export interface SoundTabProps {
   liveValue(c: ColourChannel): string | null;
   /** Key, scale, note length, the studio mix and the other choices most sessions leave. */
   advanced: ReactNode;
+  /** Phase 2: colours that share an Ableton channel with an earlier colour (one per part). */
+  abletonShares?: ReadonlyMap<string, { channel: number; withId: string }>;
 }
 
 // ---- steps: a few named places instead of a slider ----
 
-interface Step { label: string; value: number }
-
-const LOUD: Step[] = [{ label: 'Soft', value: 0.4 }, { label: 'Medium', value: 0.65 }, { label: 'Loud', value: 0.85 }, { label: 'Full', value: 1 }];
-const BRIGHT: Step[] = [{ label: 'Dark', value: 0.3 }, { label: 'Warm', value: 0.55 }, { label: 'Clear', value: 0.8 }, { label: 'Bright', value: 1 }];
-const SPACE_SEND: Step[] = [{ label: 'Dry', value: 0 }, { label: 'Room', value: 0.15 }, { label: 'Hall', value: 0.3 }, { label: 'Huge', value: 0.5 }];
-const ENERGY: Step[] = [{ label: 'Calm', value: 0.2 }, { label: 'Steady', value: 0.5 }, { label: 'Lively', value: 0.75 }, { label: 'Driving', value: 1 }];
-const SPACE_ALL: Step[] = [{ label: 'Dry', value: 0.1 }, { label: 'Natural', value: 0.5 }, { label: 'Roomy', value: 0.75 }, { label: 'Huge', value: 1 }];
+// Loud, Bright, Space, Energy and overall Space are shared with MIDI out (soundSteps.ts).
 const FILL_STEPS: Step[] = [{ label: 'Off', value: 0 }, { label: 'A few', value: 0.25 }, { label: 'Some', value: 0.5 }, { label: 'Lots', value: 0.8 }];
 const EVOLVE_STEPS: Step[] = [{ label: 'Off', value: 0 }, { label: 'Slowly', value: 0.35 }, { label: 'More', value: 0.7 }];
 const LOOP_VARY_STEPS: Step[] = [{ label: 'Off', value: 0 }, { label: 'A little', value: 0.35 }, { label: 'More', value: 0.7 }];
@@ -70,12 +82,6 @@ const GROOVES: Record<GrooveName, { label: string; swing: number; humanize: numb
   lazy: { label: 'Lazy', swing: 0.5, humanize: 0.22 },
 };
 
-/** The step nearest a stored value, so a value set elsewhere still lights a step. */
-function nearest(steps: Step[], v: number): number {
-  let best = 0;
-  for (let i = 1; i < steps.length; i++) if (Math.abs(steps[i].value - v) < Math.abs(steps[best].value - v)) best = i;
-  return best;
-}
 
 function grooveOf(swing: number, humanize: number): GrooveName | null {
   for (const [name, g] of Object.entries(GROOVES) as [GrooveName, typeof GROOVES[GrooveName]][]) {
@@ -155,13 +161,27 @@ function ColourCard({ c, n, p }: { c: ColourChannel; n: number; p: SoundTabProps
   const set = (patch: ChannelSoundPatch): void => p.setChannelSound(c.id, patch);
   const name = describeChannel(c);
   const [open, setOpen] = useState(false);
+  const soundFrom = configToSoundFrom(config);
+  // Ableton only: the colour's instrument and mix are Ableton's; its notes still go out.
+  const inAbleton = soundFrom === 'ableton';
+  const midiCh = soundFrom === 'admi' ? null : midiChannelOf(c, config);
+  // Phase 2: the Rack chain Ableton plays for this colour, and a channel it shares (one per part).
+  const chain = soundFrom === 'admi' ? null : chainFor(c, config.soundWorld);
+  const share = soundFrom === 'admi' ? undefined : p.abletonShares?.get(c.id);
+  const shareName = share ? describeChannel(config.channels.find((x) => x.id === share.withId) ?? c) : null;
   return (
     <div role="group" aria-label={`${name}: ${ROLE_LABELS[c.role]}`} style={CARD}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <SwatchChip swatch={c.swatch} palette={p.palette} number={n} size={24} />
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
           <span style={{ fontWeight: 600 }}>{`${name} · ${ROLE_LABELS[c.role]}`}</span>
-          {sound && <span style={NOTE}>{sound}</span>}
+          {sound && !inAbleton && <span style={NOTE}>{sound}</span>}
+          {midiCh !== null && <span style={NOTE}>{`MIDI ch ${midiCh}${chain !== null && !share ? ` · Ableton sound: ${chainLabel(chain)}` : ''}`}</span>}
+          {share && shareName && (
+            <span role="note" style={{ ...NOTE, color: 'var(--bs-warn)' }}>
+              {`Shares channel ${share.channel} with ${shareName}: Ableton plays one sound for both. Choose One per colour on the Connections tab to give each its own.`}
+            </span>
+          )}
           {live && <span style={NOTE}>{live}</span>}
           {c.role === 'loop' && <span style={NOTE}>{`Plays loop ${(c.loopSlot ?? 0) + 1}${config.loopNames[c.loopSlot ?? 0] ? `: ${config.loopNames[c.loopSlot ?? 0]}` : ''}`}</span>}
         </div>
@@ -201,11 +221,12 @@ function ColourCard({ c, n, p }: { c: ColourChannel; n: number; p: SoundTabProps
           onClick={() => setOpen((o) => !o)}
           style={{ alignSelf: 'flex-start' }}
         >
-          {`${open ? '▾' : '▸'} Adjust: ${LOUD[nearest(LOUD, c.volume ?? 1)].label.toLowerCase()} · ${BRIGHT[nearest(BRIGHT, c.tone ?? 1)].label.toLowerCase()} · ${SPACE_SEND[nearest(SPACE_SEND, c.reverbSend ?? world?.reverbSend ?? 0.18)].label.toLowerCase()}`}
+          {`${open ? '▾' : '▸'} Adjust: ${LOUD[nearest(LOUD, c.volume ?? 1)].label.toLowerCase()} · ${BRIGHT[nearest(BRIGHT, c.tone ?? 1)].label.toLowerCase()} · ${SPACE_SEND[nearest(SPACE_SEND, c.reverbSend ?? world?.reverbSend ?? 0.18)].label.toLowerCase()}${inAbleton ? ` ${TO_MACRO}` : ''}`}
         </Button>
       )}
       {melodic && open && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 6 }}>
+          {inAbleton && <span style={NOTE}>{`${TO_MACRO}s on this colour's Rack: Loud is macro 1 (CC 24), Bright macro 2 (CC 25), Space macro 3 (CC 26).`}</span>}
           <StepRow label="Loud" steps={LOUD} value={c.volume ?? 1} onPick={(v) => set({ volume: v })} />
           <StepRow label="Bright" steps={BRIGHT} value={c.tone ?? 1} onPick={(v) => set({ tone: v })} />
           <StepRow
@@ -267,6 +288,7 @@ export function SoundTab(p: SoundTabProps): JSX.Element {
   const groove = grooveOf(config.swing, config.humanize);
   const fillStep = nearest(FILL_STEPS, config.fillAmount);
   const evolveStep = nearest(EVOLVE_STEPS, config.evolveAmount);
+  const inAbleton = configToSoundFrom(config) === 'ableton';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18, paddingTop: 10 }}>
@@ -284,7 +306,7 @@ export function SoundTab(p: SoundTabProps): JSX.Element {
               { value: 'none' as SoundWorldChoice, label: 'My picks' },
             ]}
           />
-          <span style={NOTE}>{world ? world.description : 'Each colour plays the sound chosen on its card.'}</span>
+          <span style={NOTE}>{world ? world.description : 'Each colour plays the sound chosen on its card.'}{inAbleton ? ' Also switches Ableton\u2019s chains (CC 30) on every colour without its own sound.' : ''}</span>
         </div>
         <StepRow
           label="Energy"
@@ -298,7 +320,7 @@ export function SoundTab(p: SoundTabProps): JSX.Element {
           steps={SPACE_ALL}
           value={config.space}
           onPick={(v) => update({ space: v })}
-          hint="How much room and echo around everything. A reverb or echo counter on the board takes over."
+          hint={inAbleton ? '→ Ableton Return A level (CC 22 on channel 16).' : 'How much room and echo around everything. A reverb or echo counter on the board takes over.'}
         />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>Groove</span>
@@ -418,6 +440,7 @@ export function SoundTab(p: SoundTabProps): JSX.Element {
       </section>
 
       <Disclosure summary="Advanced: key, scale, note length, mix, AI">
+        {inAbleton && <p style={{ ...NOTE, margin: '0 0 8px' }}>{`${IN_ABLETON}: Studio mix and the mix settings here only change ADMI's own sound. Key, scale and note length still change the notes Ableton plays.`}</p>}
         {p.advanced}
       </Disclosure>
     </div>

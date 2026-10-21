@@ -34,6 +34,10 @@ import type { BoardSequencerEngine } from '../../../songs/BoardSequencerEngine';
 import { emptyLoopBank, seedLoopBank, type LoopBankState } from '../../../songs/loopBank';
 import type { Mat3 } from '../../../utils/homography';
 import type { BoardSequencerStored } from '../../../profiles/BoardSequencerConfig';
+import { MIDIManager } from '../../../midi/MIDIManager';
+import {
+  colourChannelMap, configToSoundFrom, effectiveSound, sendsFor,
+} from '../../../midi/boardMidi';
 import { homographyForCorners } from './homographyForCorners';
 import { laptopReadings } from '../../../tracking/laptopBoard';
 import { detectionSetup, type DetectionSetup } from '../../../tracking/boardReference/detectionSetup';
@@ -113,12 +117,25 @@ const LAPTOP_FRAME_MS = 33;
 /** A click is a deliberate placement; it only needs a moment to settle, not a hand's. */
 const LAPTOP_SETTLE_MS = 120;
 
+/** The MIDI port as the screen sees it: whether it is there, and whether ADMI is holding on its own sound. */
+export interface MidiPortState {
+  portConnected: boolean;
+  /** The port went during the piece: ADMI's sound stays until "switch to it" is pressed. */
+  holdOnAdmi: boolean;
+}
+
 /**
  * Every setting the running engine takes from the config. Called whenever the config
  * changes and when the engine starts — independent of camera frames. Each setter is
  * cheap and does nothing when the value is unchanged.
+ *
+ * Sound from goes through the fallback rule here, so a lost port brings ADMI's own sound
+ * back even while the camera has stalled.
  */
-export function applyEngineSettings(engine: BoardSequencerEngine, cfg: BoardSequencerStored): void {
+export function applyEngineSettings(
+  engine: BoardSequencerEngine, cfg: BoardSequencerStored,
+  port: MidiPortState = { portConnected: MIDIManager.isSelectedConnected(), holdOnAdmi: false },
+): void {
   engine.setChannels(cfg.channels);
   engine.setPingPong(cfg.pingPong);
   engine.setTickEnabled(cfg.tickEnabled);
@@ -129,8 +146,18 @@ export function applyEngineSettings(engine: BoardSequencerEngine, cfg: BoardSequ
   engine.setFillEngine(cfg.fillEngine);
   engine.setBand(cfg.band);
   engine.setLaunchFade(Math.round(cfg.loopFadePasses * cfg.cols * Math.max(1, cfg.numPages)));
-  engine.setMidiOut({ enabled: cfg.midiEnabled && cfg.midiDeviceId !== '', sends: cfg.midiSends });
-  engine.setInternalSound(!cfg.midiEnabled || cfg.midiKeepSound);
+  const route = effectiveSound(cfg, port.portConnected, port.holdOnAdmi);
+  engine.setMidiOut({
+    enabled: route.midi,
+    sends: sendsFor(configToSoundFrom(cfg), cfg.midiSends),
+    channelMode: cfg.midiChannelMode,
+    colourChannels: cfg.midiChannelMode === 'colour' ? colourChannelMap(cfg.channels) : undefined,
+    leadMs: cfg.midiLeadMs,
+    loopChannels: cfg.midiLoopChannels,
+  // Any Sound from switch (Ableton and Both included) counts as a new route, so the
+  // receiving end is cleared and nothing is left hanging.
+  }, `${cfg.midiDeviceId}|${route.internal ? 'with-admi' : 'alone'}`);
+  engine.setInternalSound(route.internal);
   engine.setEvolve({
     amount: cfg.evolveAmount, sceneLoops: cfg.evolveSceneLoops, seed: cfg.evolveSeed, holdLap: cfg.evolveHoldLap,
   });

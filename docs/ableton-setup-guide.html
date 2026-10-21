@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ableton Setup Guide</title>
+<meta name="description" content="How to make Ableton Live the sound of the Board Sequencer: loopMIDI, Ableton's preferences, the ADMI template Set, the timing check and what to do on the night.">
+<style>
+:root {
+  --bg: #eef1f4; --surface: #ffffff; --ink: #15202c; --ink2: #4a5868; --line: #d3dae2; --accent: #1f4fd8; --warn: #b8322a; --ok: #2f9a62;
+  --font-body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --font-mono: ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #0f151c; --surface: #17202a; --ink: #e6ebf1; --ink2: #9fb0c2; --line: #2a3644; --accent: #7fa2ff; --warn: #ff7a66; --ok: #4fc287; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --bg: #0f151c; --surface: #17202a; --ink: #e6ebf1; --ink2: #9fb0c2; --line: #2a3644; --accent: #7fa2ff; --warn: #ff7a66; --ok: #4fc287; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 17px; line-height: 1.55; }
+.wrap { max-width: 900px; margin: 0 auto; padding: 40px 16px 80px; display: grid; gap: 36px; }
+h1, h2, h3 { line-height: 1.2; margin: 0; }
+h1 { font-size: clamp(1.9rem, 5vw, 2.6rem); }
+h2 { font-size: 1.5rem; }
+h3 { font-size: 1.1rem; }
+p { margin: 0; max-width: 68ch; }
+ol, ul { margin: 0; padding-left: 1.3em; display: grid; gap: 6px; }
+section { display: grid; gap: 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 20px; }
+.lede { color: var(--ink2); font-size: 1.08rem; }
+code, kbd { font-family: var(--font-mono); font-size: 0.88em; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
+.btn { font-weight: 700; border: 1.5px solid var(--ink2); border-radius: 6px; padding: 0 6px; white-space: nowrap; }
+.note { border-left: 4px solid var(--accent); padding: 8px 12px; background: var(--bg); border-radius: 6px; }
+.warn { border-left: 4px solid var(--warn); padding: 8px 12px; background: var(--bg); border-radius: 6px; }
+table { border-collapse: collapse; width: 100%; font-size: 0.95rem; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.scroll { overflow-x: auto; }
+nav ul { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 16px; }
+nav a, a { color: var(--accent); }
+a:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.checklist li::marker { content: "☐  "; }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header style="display:grid;gap:10px">
+    <h1>Ableton Live as the Board Sequencer's sound</h1>
+    <p class="lede">ADMI stays the brain: the board, the loops, the scenes, the clock and everything on screen. Ableton only makes the sound. This guide is for the facilitator setting up the laptop, not for a programmer.</p>
+    <p class="note">ADMI's own sound is always one press away: on the Connections tab, <span class="btn">Sound from: ADMI</span>. If the MIDI port disappears during a piece, ADMI switches to its own sound by itself and says so on screen.</p>
+    <nav aria-label="Contents"><ul>
+      <li><a href="#loopmidi">1. loopMIDI</a></li>
+      <li><a href="#prefs">2. Ableton's preferences</a></li>
+      <li><a href="#template">3. The ADMI template Set</a></li>
+      <li><a href="#admi">4. ADMI's Connections tab</a></li>
+      <li><a href="#colours">5. A track per colour</a></li>
+      <li><a href="#racks">5a. ADMI's sounds in Ableton</a></li>
+      <li><a href="#loops">5b. A fader per loop</a></li>
+      <li><a href="#timing">6. The timing check</a></li>
+      <li><a href="#showday">7. Show day</a></li>
+      <li><a href="#trouble">8. When something goes wrong</a></li>
+    </ul></nav>
+  </header>
+
+  <section id="loopmidi" aria-labelledby="h-loopmidi">
+    <h2 id="h-loopmidi">1. loopMIDI: the cable between Chrome and Ableton</h2>
+    <p>loopMIDI is already installed on this laptop. It makes a "virtual cable": ADMI sends into it from Chrome, and Ableton listens to it.</p>
+    <ol>
+      <li>Open <strong>loopMIDI</strong> from the Start menu (or the small icon by the clock).</li>
+      <li>Look in the list for the ADMI port. <strong>On this laptop it is called <code>ADMIOutput</code></strong>; that is the one Ableton and the template use, so choose it wherever this guide says ADMI. On a new laptop, type <code>ADMI</code> in the "New port name" box and press <span class="btn">+</span>, then restart Ableton so it sees the new port.</li>
+      <li>Right click the loopMIDI icon by the clock and tick <strong>Autostart</strong> (start with Windows), so the port is there every time.</li>
+      <li><strong>Start loopMIDI before Chrome.</strong> Chrome only sees the ports that exist when it opens. If you made the port with Chrome already open, close Chrome completely and open it again.</li>
+    </ol>
+  </section>
+
+  <section id="prefs" aria-labelledby="h-prefs">
+    <h2 id="h-prefs">2. Ableton's preferences</h2>
+    <p>Open Ableton Live 12 Suite, then <strong>Options → Settings</strong> (<kbd>Ctrl</kbd> + <kbd>,</kbd>).</p>
+    <h3>Audio</h3>
+    <ul>
+      <li><strong>Audio Device:</strong> the interface or speakers you will use on the night.</li>
+      <li><strong>Buffer Size: 128 samples.</strong> Smaller is quicker; 128 keeps the delay from counter to sound small. If you hear crackles, try 256 and check the timing again (section 6).</li>
+    </ul>
+    <h3>Link, Tempo and MIDI</h3>
+    <p>Find <strong>ADMI</strong> under the MIDI Ports list, on the <strong>Input</strong> line:</p>
+    <ul>
+      <li><strong>Track: On.</strong> This lets the tracks play ADMI's notes.</li>
+      <li><strong>Remote: On.</strong> This lets you map ADMI's controllers to Ableton's controls (the fades, the volume).</li>
+      <li><strong>Sync: Off</strong> for now. It is for a later stage, when Ableton will follow ADMI's tempo.</li>
+    </ul>
+    <p class="warn"><strong>Leave Ableton's own Scale off</strong> (the Scale switch in the Set and on each clip). ADMI already sends the right notes in its key; a scale in Ableton would bend them to other notes.</p>
+  </section>
+
+  <section id="template" aria-labelledby="h-template">
+    <h2 id="h-template">3. The ADMI template Set</h2>
+    <p>Build this once and save it as <strong>ADMI template</strong> (File → Save Live Set As). Every show starts from it.</p>
+    <h3>The tracks</h3>
+    <p>Make one MIDI track for each channel below (<kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>T</kbd>). On each one, in the In/Out section:</p>
+    <ul>
+      <li><strong>MIDI From:</strong> <code>ADMI</code>, then the channel number from the table.</li>
+      <li><strong>Monitor:</strong> <strong>In</strong>, so it plays whatever arrives without arming.</li>
+    </ul>
+    <div class="scroll"><table>
+      <thead><tr><th scope="col">Channel</th><th scope="col">What ADMI sends</th><th scope="col">Name the track</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Melody colours</td><td>Melody</td></tr>
+        <tr><td>2</td><td>Bass colours</td><td>Bass</td></tr>
+        <tr><td>3</td><td>Chord colours</td><td>Chords</td></tr>
+        <tr><td>10</td><td>Every drum: the player's, the loops', the band's, the Extra notes' drum hits, the final chord's crash</td><td>Drums</td></tr>
+        <tr><td>11</td><td>The band's chords and pad, and the ending's final chord</td><td>Band chords</td></tr>
+        <tr><td>12</td><td>The band's bass, and the final chord's bass note</td><td>Band bass</td></tr>
+        <tr><td>13</td><td>Extra notes (the notes ADMI adds around the player's, from Magenta or the rules)</td><td>Extra notes</td></tr>
+      </tbody>
+    </table></div>
+    <h3>Drums</h3>
+    <p>Put a <strong>Drum Rack</strong> on the channel 10 track. ADMI sends General MIDI drum notes, which match a Drum Rack's default pads: kick 36 (C1), rim 37, snare 38, clap 39, closed hat 42, tom 45, crash 49. Load a kit from the Browser (Drums) and check those pads have sounds.</p>
+    <h3>Suggested Suite sounds for each ADMI world</h3>
+    <p>Starting points only; choose what sounds right with the player. Find them in the Browser under Sounds or Instruments.</p>
+    <div class="scroll"><table>
+      <thead><tr><th scope="col">ADMI world</th><th scope="col">Melody and chords</th><th scope="col">Bass</th><th scope="col">Drums</th></tr></thead>
+      <tbody>
+        <tr><td>Warm</td><td>An Electric piano or a soft Grand Piano preset; Meld pads for chords</td><td>Upright or warm Analog bass</td><td>A brushed or acoustic kit</td></tr>
+        <tr><td>Lo fi</td><td>A dusty Keys or Sampler instrument, with Vinyl Distortion or Redux after it</td><td>A round Drift bass</td><td>A lo fi or boom bap kit</td></tr>
+        <tr><td>Ambient</td><td>Wavetable or Meld pads with long release; add Hybrid Reverb</td><td>A sub bass from Operator</td><td>A soft, sparse kit, low in the mix</td></tr>
+        <tr><td>Electronic</td><td>Wavetable or Drift leads and plucks</td><td>An Operator or Drift synth bass</td><td>A 909 or 808 style kit</td></tr>
+      </tbody>
+    </table></div>
+    <h3>Fades and Mute: a Utility on every track</h3>
+    <p>ADMI sends its endings and Mute as <strong>CC 11</strong> (Expression) on every channel. It also makes the notes softer through a fade, which every instrument hears. Ableton's instruments do not follow CC 11 unless you map it, so:</p>
+    <ol>
+      <li>Drag a <strong>Utility</strong> (Audio Effects) to the end of each track. (The ADMI template already has them.)</li>
+      <li>In ADMI, Connections tab, with Sound from on Ableton and the port chosen, find <strong>Map in Ableton</strong>.</li>
+      <li><strong>Stop ADMI</strong> (during a timed piece, press Stop twice). In Map Mode Ableton learns from any MIDI it hears, notes included.</li>
+      <li>In Ableton press <kbd>Ctrl</kbd> + <kbd>M</kbd> (MIDI Map Mode: the screen turns blue).</li>
+      <li>Click the Utility's <strong>Gain</strong> on the track ADMI names under "Next to map", then press <span class="btn">Send</span> in ADMI. ADMI moves on to the next track by itself; repeat for each.</li>
+      <li>The last one is Volume: click the <strong>Main</strong> track's volume fader, then press <span class="btn">Send</span>.</li>
+      <li>Still in Map Mode, in the Mappings list on the left, set <strong>Max</strong> to <strong>0 dB</strong> on every Gain mapping. A Utility's Gain goes up to +35 dB, so without this full Expression would be far too loud.</li>
+      <li>Press <kbd>Ctrl</kbd> + <kbd>M</kbd> again to leave, and save the Set. The tracks stay silent until ADMI plays: Play sends full Expression.</li>
+    </ol>
+    <h3>Volume: the Main track</h3>
+    <p>ADMI's Volume counter goes out as <strong>CC 7 on channel 16</strong>, mapped to the Main track's volume in the steps above.</p>
+    <p class="note">Save the Set as <strong>ADMI template</strong> once all of this is done.</p>
+  </section>
+
+  <section id="admi" aria-labelledby="h-admi">
+    <h2 id="h-admi">4. ADMI's Connections tab</h2>
+    <ol>
+      <li>Open the Board Sequencer, then the <strong>Connections</strong> tab.</li>
+      <li>Under <strong>Sound from</strong>, press <span class="btn">Ableton</span>. Chrome asks to use MIDI devices the first time: allow it.</li>
+      <li>Under <strong>MIDI port</strong>, choose <code>ADMI</code>. It says <strong>✓ Sending to ADMI</strong>.</li>
+      <li><span class="btn">Both</span> plays ADMI's sound and Ableton's together: useful for the timing check, or to layer the two.</li>
+    </ol>
+    <p>In Ableton mode the Sound tab says <strong>Sound set in Ableton</strong> on the controls that only change ADMI's own sound (sound pickers, Loud, Bright, Space, World, Studio mix, the Advanced mix, and the Tone, Reverb and Delay counters). Energy, Groove, Extra notes, Band, Sounds change, and the Fill, Evolve, Tempo and Volume counters still work, because they change the notes or are sent to Ableton.</p>
+  </section>
+
+  <section id="colours" aria-labelledby="h-colours">
+    <h2 id="h-colours">5. A track per colour (optional)</h2>
+    <p>Two melody colours share channel 1 in the usual setting, so they play the same Ableton instrument. To give each colour its own:</p>
+    <ol>
+      <li>On the Connections tab, under <strong>Channels</strong>, choose <span class="btn">One per colour</span>.</li>
+      <li>Each colour gets its own channel (from 1 to 9, then 14 to 16) and keeps it, even if colours are moved or added. You can change it in the table there; each colour card on the Sound tab shows <strong>MIDI ch</strong> and its number.</li>
+      <li>In Ableton, add a MIDI track for each of those channels (MIDI From ADMI, that channel, Monitor In), with a Utility mapped to CC 11 as above.</li>
+    </ol>
+    <p>Drums, the band and the Extra notes stay on 10, 11, 12 and 13.</p>
+  </section>
+
+  <section id="racks" aria-labelledby="h-racks">
+    <h2 id="h-racks">5a. ADMI's sounds in Ableton (Instrument Racks)</h2>
+    <p>With this in place, choosing a sound on a colour card, changing the World, a scene's World and Sounds change all switch Ableton's sound too, instantly. ADMI picks a chain in each track's Instrument Rack with <strong>CC 30</strong>. It is long, but done once, and it can be done one track at a time: a track without a rack simply ignores CC 30 and keeps its one instrument.</p>
+    <ol>
+      <li>On each track (1, 2, 3, 11, 12, 13, any per colour channels, and the loop tracks if you use them), drag in an <strong>Instrument Rack</strong> (Instruments) and move the track's instrument into it, or replace it.</li>
+      <li>Show the Rack's <strong>Chain list</strong> and add the 16 chains below, <strong>in this order, named exactly</strong>. The Connections tab in ADMI has the same list (Template checklist).</li>
+    </ol>
+    <div class="scroll"><table>
+      <thead><tr><th scope="col">Chain</th><th scope="col">Name</th><th scope="col">Zone (CC 30)</th><th scope="col">Suggested Suite sound</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>World: Warm</td><td>0 to 7</td><td>the Warm sounds in section 3</td></tr>
+        <tr><td>2</td><td>World: Lo-fi</td><td>8 to 15</td><td>the Lo fi sounds in section 3</td></tr>
+        <tr><td>3</td><td>World: Ambient</td><td>16 to 23</td><td>the Ambient sounds in section 3</td></tr>
+        <tr><td>4</td><td>World: Electronic</td><td>24 to 31</td><td>the Electronic sounds in section 3</td></tr>
+        <tr><td>5</td><td>Piano</td><td>32 to 39</td><td>Grand Piano</td></tr>
+        <tr><td>6</td><td>Electric piano</td><td>40 to 47</td><td>an Electric (EP) preset</td></tr>
+        <tr><td>7</td><td>Harp</td><td>48 to 55</td><td>a Sampler harp from the Orchestral packs, or Collision</td></tr>
+        <tr><td>8</td><td>Organ</td><td>56 to 63</td><td>an Electric organ</td></tr>
+        <tr><td>9</td><td>Clarinet</td><td>64 to 71</td><td>Orchestral Woodwinds</td></tr>
+        <tr><td>10</td><td>French horn</td><td>72 to 79</td><td>Orchestral Brass</td></tr>
+        <tr><td>11</td><td>Strings / cello</td><td>80 to 87</td><td>Orchestral Strings</td></tr>
+        <tr><td>12</td><td>Nylon guitar</td><td>88 to 95</td><td>a guitar from the Guitar &amp; Bass pack, or Sampler</td></tr>
+        <tr><td>13</td><td>Electric bass</td><td>96 to 103</td><td>an Electric bass</td></tr>
+        <tr><td>14</td><td>Pad</td><td>104 to 111</td><td>a Meld or Wavetable pad</td></tr>
+        <tr><td>15</td><td>Chord stab</td><td>112 to 119</td><td>a Drift or Wavetable stab</td></tr>
+        <tr><td>16</td><td>Bell / pluck</td><td>120 to 127</td><td>an Operator bell, or a Wavetable pluck</td></tr>
+      </tbody>
+    </table></div>
+    <ol start="3">
+      <li>Show the <strong>Chain select ruler</strong> (the "Chain" button above the chain list). Give each chain its zone from the table (chain 1: 0 to 7, chain 2: 8 to 15, and so on), with no fades.</li>
+      <li>Map the Rack's <strong>Chain selector</strong> to CC 30: in ADMI, Connections tab, <strong>Map in Ableton</strong>, choose <strong>Sounds and macros</strong>. Stop ADMI. In Ableton press <kbd>Ctrl</kbd> + <kbd>M</kbd>, click the Chain selector on the track ADMI names, then press <span class="btn">Send</span> in ADMI. It moves on to the next by itself.</li>
+      <li>Give the Rack three macros, the same on every chain: <strong>1 Volume</strong> (each chain's volume), <strong>2 Brightness</strong> (a filter), <strong>3 Space</strong> (a reverb amount or send). Then map them with the same helper: ADMI's Loud is CC 24, Bright CC 25, Space CC 26. Echo (the Delay counter) is CC 27, optional.</li>
+      <li>On channel 16 the helper also offers <strong>Space</strong> (CC 22): map it to Return A (the reverb) level. Energy (CC 21) and Groove (CC 23) are optional.</li>
+      <li><strong>Drums (ch 10):</strong> an Instrument Rack holding four Drum Racks, one per World (Warm, Lo fi, Ambient, Electronic), zones 0 to 7, 8 to 15, 16 to 23, 24 to 31, its Chain selector on CC 30.</li>
+      <li>Save the Set as <strong>ADMI template</strong>.</li>
+    </ol>
+    <p class="note">If Ableton was restarted, or a track is on the wrong sound, press <span class="btn">Send sound choices to Ableton</span> on the Connections tab. ADMI also sends them all on Play.</p>
+    <p class="note">With one channel per part, two melody colours share channel 1 and so share one Ableton sound: the colour card says so. Choose <strong>One per colour</strong> to give each its own.</p>
+  </section>
+
+  <section id="loops" aria-labelledby="h-loops">
+    <h2 id="h-loops">5b. A fader per loop</h2>
+    <p>ADMI fades a loop in and out by making its notes softer. Many Ableton instruments hardly change volume with that, so a loop would play at full level and then stop. With loops on their own tracks, each loop fades smoothly and has its own fader.</p>
+    <ol>
+      <li>In ADMI, Connections tab, tick <strong>A fader per loop in Ableton</strong>. Loops 1 to 6 now send their melody, bass and chords on channels <strong>4 to 9</strong> (loop 7 and after share 9). A loop's drums stay on the drum track (10), and fade by how hard they play.</li>
+      <li>Colours with their own channel then use 1 to 3 and 14 to 15 (ADMI moves them for you).</li>
+      <li>In Ableton add six MIDI tracks, named Loop 1 to Loop 6: MIDI From the ADMI port, channels 4 to 9, Monitor In. Each needs an instrument (or an Instrument Rack, as in 5a) and a <strong>Utility</strong> at the end.</li>
+      <li>Map each loop track's Utility Gain to CC 11 with <strong>Map in Ableton</strong> → <strong>Fades and volume</strong>: the loop channels are in its list. Set each mapping's Max to 0 dB.</li>
+    </ol>
+    <p class="note">A loop holds several parts, and on its own track they all play through that track's one instrument. If that matters for a loop, leave this off: the loop then plays on the part tracks with their own sounds, and fades by velocity only.</p>
+  </section>
+
+  <section id="timing" aria-labelledby="h-timing">
+    <h2 id="h-timing">6. The timing check (aim: under 20 ms)</h2>
+    <h3>By ear</h3>
+    <ol>
+      <li>Set Ableton's buffer to 128 samples.</li>
+      <li>In ADMI choose <span class="btn">Both</span> and press Play (an empty board is fine).</li>
+      <li>On the Connections tab press <span class="btn">Play test note</span>: ADMI clicks and Ableton plays a note on channel 1 at the same scheduled moment.</li>
+      <li>One clean hit: good. A double hit (a flam): move <strong>Send early by</strong> (0 to 40 ms) a few milliseconds at a time until they land together.</li>
+      <li>Choose <span class="btn">Ableton</span> again for the piece.</li>
+    </ol>
+    <h3>Measured (loopback)</h3>
+    <ol>
+      <li>Connect the audio interface's output back into one of its inputs with a cable.</li>
+      <li>In Ableton, record an audio track from that input while pressing Play test note a few times in Both mode.</li>
+      <li>Zoom in on the recording: the gap between ADMI's click and Ableton's note is the difference. Ableton's own extra delay is shown in Settings → Audio as "Overall Latency".</li>
+    </ol>
+  </section>
+
+  <section id="showday" aria-labelledby="h-showday">
+    <h2 id="h-showday">7. Show day checklist</h2>
+    <ul class="checklist">
+      <li>loopMIDI open, with the ADMI port, before Chrome.</li>
+      <li>Ableton open with the <strong>ADMI template</strong> Set, buffer 128, the right audio device.</li>
+      <li>ADMI started with <code>npm run show</code>; Connections tab: Sound from Ableton, port ADMI, "✓ Sending to ADMI".</li>
+      <li>Press Play, then <span class="btn">Play test note</span>: it plays one note on each channel in turn (1, 2, 3, 10, 11, 12, 13) and names it on screen. A silent one is a missing track. Extra notes need track 13, the band 11 and 12.</li>
+      <li>The Ready check (Make a piece, step 3) says "MIDI port ADMI connected". It can only see the port, not whether Ableton is listening: that is what the test note is for.</li>
+      <li>A short test ending: Ableton fades with ADMI.</li>
+      <li>A full 7 minute run on this laptop with this Set, at least once before the show (the camera, Chrome and Ableton together use a lot of the laptop).</li>
+    </ul>
+  </section>
+
+  <section id="trouble" aria-labelledby="h-trouble">
+    <h2 id="h-trouble">8. When something goes wrong</h2>
+    <ul>
+      <li><strong>Ableton freezes or crashes:</strong> press <span class="btn">ADMI</span> under Sound from. ADMI's own sound comes straight back and the piece carries on.</li>
+      <li><strong>The port disappears</strong> (loopMIDI closed, a cable out): ADMI switches to its own sound by itself and shows "Ableton's port has gone, so ADMI is playing its own sound." When the port comes back, ADMI waits: press <span class="btn">Switch to Ableton</span> when it suits the music. It never jumps twice in a piece on its own.</li>
+      <li><strong>A note is stuck on</strong> in Ableton: press <span class="btn">Panic</span> (Connections tab, or in Show). It sends every note off and all sound off on all 16 channels. The piece carries on.</li>
+      <li><strong>Notes stop after the laptop has slept:</strong> close Chrome, restart loopMIDI, then open Chrome and ADMI again.</li>
+      <li><strong>No sound from one part:</strong> check that track's MIDI From is ADMI with the right channel, and Monitor is In.</li>
+      <li><strong>Ableton doesn't fade at the end:</strong> the Utility's Gain is not mapped to CC 11 on that track (section 3). The notes still get softer, but the long ones keep ringing.</li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>

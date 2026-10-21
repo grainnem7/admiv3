@@ -27,6 +27,7 @@ import { nextColourlessState } from '../../tracking/cameraCheck';
 import { describeLighting, nextLightingProblem, type LightingProblem } from '../../tracking/lightingCheck';
 import {
   useBoardRuntime, applyEngineSettings, NOOP_RUNTIME_CALLBACKS, type BoardRuntimeCallbacks, type RuntimeFrame,
+  type MidiPortState,
 } from './boardSequencer/useBoardRuntime';
 import { homographyForCorners } from './boardSequencer/homographyForCorners';
 import { applyGridChange } from '../../tracking/boardGrid';
@@ -98,6 +99,12 @@ import { SOUND_WORLDS, SOUND_WORLD_IDS, worldOf } from '../../audio/worlds/sound
 import type { FillSourceStatus } from '../../songs/BoardSequencerEngine';
 import type { BandLevel, BandPart } from '../../songs/band/band';
 import { BoardMidiPanel } from './boardSequencer/components/BoardMidiPanel';
+import { planFromConfig } from './boardSequencer/components/AbletonSoundsPanel';
+import { useBoardMidiPort } from './boardSequencer/useBoardMidiPort';
+import { abletonReadyItem, abletonTracksItem } from './boardSequencer/abletonReady';
+import { aiOffLine } from './boardSequencer/aiStatus';
+import { assignColourChannels, BoardMidiSender, channelFor, colourChannelMap, configToSoundFrom } from '../../midi/boardMidi';
+import { ABLETON_CHAINS, chainFor } from '../../midi/abletonSounds';
 import { LoopEditor } from './boardSequencer/components/LoopEditor';
 import {
   LAUNCH_SLOTS, MAX_SCENES, loopLabel, nextSceneIndex, sceneFromNow, sceneSettingsToApply, slotState, toggleSlot, type PlayerStrip, type SceneSettings,
@@ -160,7 +167,7 @@ import { applyHomography, type Mat3 } from '../../utils/homography';
 import { SCALE_PRESETS, NOTE_NAMES } from '../../songs/boardSequencerScale';
 import { clearLoopSlot, emptyLoopBank, seedLoopBank } from '../../songs/loopBank';
 import {
-  DEFAULT_BOARD_SEQUENCER_CONFIG, type BoardSequencerStored, type BoardPoint, type StoredLoopCell,
+  DEFAULT_BOARD_SEQUENCER_CONFIG, NEW_PLAYER_SOUND, type BoardSequencerStored, type BoardPoint, type StoredLoopCell,
 } from '../../profiles/BoardSequencerConfig';
 import {
   loadActiveBoardConfig as loadBoardSequencerConfig, saveActiveBoardConfig as saveBoardSequencerConfig,
@@ -291,7 +298,8 @@ export default function BoardSequencerScreen() {
 
   const storedRef = useRef<BoardSequencerStored | null>(loadBoardSequencerConfig());
   const [config, setConfig] = useState<BoardSequencerStored>(
-    () => storedRef.current ?? DEFAULT_BOARD_SEQUENCER_CONFIG,
+    // A first run is a new player: it starts generative (NEW_PLAYER_SOUND). A saved one keeps its own.
+    () => storedRef.current ?? { ...DEFAULT_BOARD_SEQUENCER_CONFIG, ...NEW_PLAYER_SOUND },
   );
   // Corners the board tracker has moved since the last save. They must survive a render,
   // so they are merged into the ref the runtime reads rather than living in React state
@@ -465,11 +473,17 @@ export default function BoardSequencerScreen() {
   selectedPageRef.current = selectedPage;
   const [playingPage, setPlayingPage] = useState(0);
   const [running, setRunning] = useState(false);
+  // The MIDI port (Ableton), watched for the whole screen; see "Sound from Ableton" below.
+  const midiPort = useBoardMidiPort(config.midiEnabled, config.midiDeviceId);
+  const [midiHold, setMidiHold] = useState(false);
+  const midiPortRef = useRef<MidiPortState>({ portConnected: false, holdOnAdmi: false });
+  midiPortRef.current = { portConnected: midiPort.connected, holdOnAdmi: midiHold };
+  const midiPortLive = `${midiPort.connected}|${midiHold}`;
   // The running engine follows the config whenever it changes — a scene, the iPad, a
   // tab — whether or not camera frames are arriving.
   useEffect(() => {
-    if (engineRef.current) applyEngineSettings(engineRef.current, configRef.current);
-  }, [config, running, engineRef, configRef]);
+    if (engineRef.current) applyEngineSettings(engineRef.current, configRef.current, midiPortRef.current);
+  }, [config, running, engineRef, configRef, midiPortLive]);
   // Watchdog: no camera frame for a moment while playing means the camera has stopped.
   useEffect(() => {
     if (!running || laptop) { setCameraStalled(false); return; }
@@ -672,6 +686,102 @@ export default function BoardSequencerScreen() {
       return next;
     });
   }, []);
+
+  // ---- Sound from Ableton: the MIDI port, watched all the time, and the fallback ----
+  // A show can never go silent because of Ableton. If the port is not there while the
+  // piece plays, ADMI's own sound takes over at once (applyEngineSettings applies the
+  // rule) and stays until someone presses "Switch to Ableton", so the sound never jumps
+  // twice in a piece.
+  const soundFrom = configToSoundFrom(config);
+  const [midiBanner, setMidiBanner] = useState<'lost' | 'back' | null>(null);
+  useEffect(() => {
+    if (soundFrom === 'admi') {
+      setMidiHold(false);
+      setMidiBanner(null);
+      return;
+    }
+    if (midiPort.support === 'unknown') return;
+    if (!midiPort.connected) {
+      if (running && !midiHold) {
+        setMidiHold(true);
+        setMidiBanner('lost');
+        sessionLogRef.current.action('laptop', 'Ableton port gone: ADMI plays its own sound');
+        announce("Ableton's port has gone, so ADMI is playing its own sound.");
+      }
+      return;
+    }
+    if (!midiHold) return;
+    if (running) {
+      setMidiBanner((b) => {
+        if (b !== 'back') sessionLogRef.current.action('laptop', 'Ableton port back');
+        return 'back';
+      });
+    } else {
+      // Nothing is playing, so there is no jump to avoid.
+      setMidiHold(false);
+      setMidiBanner(null);
+    }
+  }, [soundFrom, midiPort.connected, midiPort.support, running, midiHold, announce]);
+  const switchBackToAbleton = useCallback(() => {
+    setMidiHold(false);
+    setMidiBanner(null);
+    sessionLogRef.current.action(logActorRef.current, 'switched back to Ableton');
+    announce('Ableton is playing again.');
+  }, [announce]);
+  const midiPanic = useCallback(() => {
+    // Works stopped too: a note can be left hanging in Ableton after Stop. Panic needs no
+    // clock, so a sender with none will do.
+    if (engineRef.current) engineRef.current.panicMidi();
+    else new BoardMidiSender({ currentTime: 0 }).panic();
+    sessionLogRef.current.action(logActorRef.current, 'MIDI panic');
+    announce('Panic sent: every note off.');
+  }, [announce, engineRef]);
+  /**
+   * What a colour chip under the board says it sounds like: ADMI's sound, or in Ableton
+   * mode the MIDI channel and Ableton's chain ("MIDI ch 1 · Harp"); in Both, both.
+   */
+  const chipSound = (c: ColourChannel): string => {
+    const own = soundNameFor(c, config.soundWorld);
+    if (soundFrom === 'admi') return own;
+    const ch = channelFor({ role: c.role, origin: 'placed', colour: c.id }, {
+      channelMode: config.midiChannelMode,
+      colourChannels: config.midiChannelMode === 'colour' ? colourChannelMap(config.channels) : undefined,
+    });
+    if (ch === null) return own;
+    const chain = chainFor(c, config.soundWorld);
+    const ableton = `MIDI ch ${ch}${chain !== null ? ` · ${ABLETON_CHAINS[chain].name}` : ''}`;
+    return soundFrom === 'both' && own ? `${own} · ${ableton}` : ableton;
+  };
+
+  // The fallback, said on screen: in Play and in Show alike.
+  const midiBannerView = midiBanner === null ? null : (
+    <div role="alert" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', padding: '8px 12px', borderRadius: 'var(--bs-radius-md)', background: midiBanner === 'lost' ? 'var(--bs-warn)' : 'var(--bs-elev)', color: midiBanner === 'lost' ? 'var(--bs-bg)' : 'var(--bs-fg)', fontWeight: 600 }}>
+      <span style={{ flex: '1 1 240px' }}>
+        {midiBanner === 'lost'
+          ? "Ableton's port has gone, so ADMI is playing its own sound."
+          : 'Ableton is back. ADMI is still playing its own sound until you switch.'}
+      </span>
+      {midiBanner === 'back' && <Button tone="primary" onClick={switchBackToAbleton}>Switch to Ableton</Button>}
+      <Button tone="secondary" onClick={() => setMidiBanner(null)}>{midiBanner === 'lost' ? 'OK' : 'Not now'}</Button>
+    </div>
+  );
+
+  // Phase 2: the engine's chains while playing, and "Send sound choices to Ableton".
+  const getAbletonLive = useCallback(() => engineRef.current?.abletonState() ?? null, [engineRef]);
+  const sendSoundsToAbleton = useCallback(() => {
+    const eng = engineRef.current;
+    if (eng) eng.resendAbleton();
+    // Stopped: the same plan from the settings, straight to the port.
+    else new BoardMidiSender({ currentTime: 0 }).sendControls([...planFromConfig(configRef.current).controls.values()]);
+    sessionLogRef.current.action(logActorRef.current, 'sent sound choices to Ableton');
+  }, [engineRef, configRef]);
+
+  // Per colour channels are given once, the first time per colour mode is used, and saved.
+  useEffect(() => {
+    if (config.midiChannelMode !== 'colour') return;
+    const next = assignColourChannels(config.channels, config.midiLoopChannels);
+    if (next) update({ channels: next });
+  }, [config.midiChannelMode, config.midiLoopChannels, config.channels, update]);
 
   // Grid changes re-suggest the read settings (unless the user has tuned them).
   const updateGrid = useCallback((patch: Partial<Pick<BoardSequencerStored, 'rows' | 'cols' | 'boardSquares'>>) => {
@@ -1713,7 +1823,7 @@ export default function BoardSequencerScreen() {
     }
     engine.start();
     engineRef.current = engine;
-    applyEngineSettings(engine, cfg);
+    applyEngineSettings(engine, cfg, midiPortRef.current);
     // One pad per cell of the loop lane — a row of steps or a column of rows.
     loopBankRef.current = seedLoopBank(
       zoneSlotCount(cfg.loopZone, cfg.rows, cfg.cols), cfg.loopSlots, loopBankRef.current,
@@ -2923,11 +3033,16 @@ export default function BoardSequencerScreen() {
       )}
     </div>
     <BoardMidiPanel
-      enabled={config.midiEnabled}
-      deviceId={config.midiDeviceId}
-      sends={config.midiSends}
-      keepSound={config.midiKeepSound}
+      config={config}
+      port={midiPort}
+      running={running}
+      holdOnAdmi={midiHold}
       onChange={(patch) => update(patch)}
+      onSwitchBack={switchBackToAbleton}
+      onTestNote={() => engineRef.current?.playTestNote() ?? false}
+      onPanic={midiPanic}
+      getAbletonLive={getAbletonLive}
+      onSendSounds={sendSoundsToAbleton}
     />
     </div>
   );
@@ -3160,6 +3275,7 @@ export default function BoardSequencerScreen() {
       config={config}
       palette={palette}
       running={running}
+      abletonShares={soundFrom === 'admi' ? undefined : planFromConfig(config).shares}
       update={update}
       setChannelSound={setChannelSound}
       setGroove={(swing, humanize) => {
@@ -3300,6 +3416,12 @@ export default function BoardSequencerScreen() {
     if (c.fillEngine === 'magenta' && typeof navigator !== 'undefined' && navigator.onLine === false) {
       items.push({ label: 'Offline: the AI fill uses simple rules', state: 'warn', fix: 'Fine for the piece; connect once beforehand to load Magenta.' });
     }
+    const ableton = abletonReadyItem({
+      soundFrom, deviceId: c.midiDeviceId, connected: midiPort.connected, portName: midiPort.chosenName, holdOnAdmi: midiHold,
+    });
+    if (ableton) items.push(ableton);
+    const tracks = abletonTracksItem(soundFrom);
+    if (tracks) items.push(tracks);
     items.push(disk.state === 'saved'
       ? { label: 'Saved on this laptop', state: 'ok' }
       : { label: 'Not saved on this laptop', state: 'warn', fix: 'Open ADMI at http://localhost:3001 from npm run show, or back up to a file.' });
@@ -3883,6 +4005,7 @@ export default function BoardSequencerScreen() {
           </div>
         );
       })()}
+      {view !== 'bigBoard' && midiBannerView}
       {cameraStalled && running && !laptop && (
         <div role="alert" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', padding: '8px 12px', borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-danger)', color: 'var(--bs-danger-fg)', fontWeight: 600 }}>
           <span style={{ flex: '1 1 240px' }}>The camera has stopped — the board isn&apos;t being read. The music carries on with the last pattern.</span>
@@ -4060,9 +4183,7 @@ export default function BoardSequencerScreen() {
             <span key={c.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
               <SwatchChip swatch={c.swatch} palette={palette} number={i + 1} size={20} />
               <span>{describeChannel(c)}</span>
-              {soundNameFor(c, config.soundWorld) && (
-                <span style={{ color: 'var(--bs-fg2)' }}>{soundNameFor(c, config.soundWorld)}</span>
-              )}
+              {chipSound(c) && <span style={{ color: 'var(--bs-fg2)' }}>{chipSound(c)}</span>}
               <strong>
                 {isFaderRole(c.role)
                   ? legendValue(c.role as FaderRole, controlState?.values[c.role as FaderRole], controlState?.held ?? new Set())
@@ -4111,6 +4232,9 @@ export default function BoardSequencerScreen() {
             CSV
           </Button>
         </div>
+      )}
+      {view === 'play' && aiOffLine(config.fillAmount, config.evolveAmount) && (
+        <span role="status" style={{ fontSize: 13, color: 'var(--bs-fg2)' }}>{aiOffLine(config.fillAmount, config.evolveAmount)}</span>
       )}
       {view === 'play' && (
         <p aria-live="off" style={{ margin: 0, fontSize: 12, color: 'var(--bs-fg2)', minHeight: 18 }}>
@@ -4161,6 +4285,7 @@ export default function BoardSequencerScreen() {
         if (e.key === 'Escape' && document.fullscreenElement === null) setView('play');
       }}
     >
+      {midiBannerView}
       {running ? bigNowNextStrip : (
         <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap', padding: '10px 14px', borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-elev)' }}>
           <Button tone="primary" onClick={() => void start()} style={{ fontSize: 22, padding: '10px 26px' }}>▶ Start the piece</Button>
@@ -4170,6 +4295,9 @@ export default function BoardSequencerScreen() {
         </div>
       )}
       <div style={{ flex: 1, minHeight: 0 }}>{boardView}</div>
+      {aiOffLine(config.fillAmount, config.evolveAmount) && (
+        <span role="status" style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>{aiOffLine(config.fillAmount, config.evolveAmount)}</span>
+      )}
       <div
         style={{
           display: 'flex', gap: 8, alignItems: 'center',
@@ -4180,6 +4308,11 @@ export default function BoardSequencerScreen() {
         <Button tone="secondary" aria-pressed={muted} disabled={!running} onClick={toggleMuted}>
           {muted ? 'Sound off' : 'Mute'}
         </Button>
+        {soundFrom !== 'admi' && (
+          <Button tone="secondary" onClick={midiPanic} aria-label="Panic: stop every note Ableton is holding">
+            Panic
+          </Button>
+        )}
         <Button tone="secondary" onClick={() => setView('play')}>Leave Show</Button>
       </div>
     </div>

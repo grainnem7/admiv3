@@ -117,6 +117,11 @@ export interface ColourChannel {
   plays?: 'note' | 'tune';
   /** false = this colour keeps its sound while "Sounds change" moves the others. */
   changes?: boolean;
+  /**
+   * MIDI out, per colour mode: this colour's own channel (1 to 16). Belongs to the rig,
+   * like the Ableton Set it routes into; given once and never moved by the board.
+   */
+  midiChannel?: number;
 }
 
 /** A colour reduced to "does this HSV pixel match?", tagged with its id. */

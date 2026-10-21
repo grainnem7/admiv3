@@ -185,11 +185,19 @@ const HELP: HelpEntry[] = [
       + 'Mute) act on touch. Learn reach makes a player’s comfortable slide the whole range.',
   },
   {
-    title: 'MIDI out',
-    body: 'Sound tab → MIDI out: pick an output and the board’s notes go to it as they sound '
-      + '(melody ch 1, bass 2, chords 3, drums 10). Send only your notes, or everything, and '
-      + 'keep the built-in sound on or not. Chrome and Edge only; a DAW on this laptop needs '
-      + 'a virtual port such as loopMIDI.',
+    title: 'Sound from: ADMI, Ableton or Both',
+    body: 'Connections tab → Sound from. ADMI: its own sound. Ableton: everything the board plays '
+      + 'goes to Ableton over MIDI (the loopMIDI port called ADMI) and Ableton makes the sound; ADMI '
+      + 'still draws every note. Both: the two together, for checking the timing. Channels: melody 1, '
+      + 'bass 2, chords 3, all drums 10, band chords 11, band bass 12, Extra notes 13, or one per colour '
+      + '(shown as "MIDI ch" on each colour card). Fades and Mute go out as CC 11, the Volume counter as '
+      + 'CC 7 on channel 16. If the port goes during a piece, ADMI plays its own sound at once and waits '
+      + 'for "Switch to Ableton". Panic stops any stuck note. Play test note checks Ableton is listening. '
+      + 'Chrome and Edge only. Full setup: docs/ableton-setup-guide.html. With Instrument Racks in the '
+      + 'template, a card\u2019s sound, the World and Sounds change switch Ableton\u2019s sound too (CC 30), and Loud, '
+      + 'Bright and Space move its macros (CC 24 to 26). "A fader per loop" puts each loop on its own track '
+      + '(channels 4 to 9) so it fades smoothly. "AI: Extra notes off" under the board means nothing generative '
+      + 'is playing: turn them up on the Sound tab.',
   },
   {
     title: 'Session log',

@@ -6,7 +6,7 @@
  */
 import type { ColourChannel } from '../tracking/boardColours';
 import {
-  DEFAULT_BOARD_SEQUENCER_CONFIG, sanitizeBoardSequencerConfig, referencedChannelIds,
+  DEFAULT_BOARD_SEQUENCER_CONFIG, NEW_PLAYER_SOUND, sanitizeBoardSequencerConfig, referencedChannelIds,
   type BoardSequencerStored,
 } from './BoardSequencerConfig';
 import { applyGridChange } from '../tracking/boardGrid';
@@ -16,10 +16,10 @@ export const PLAYERS_KEY = 'admi-board-players';
 export const ACTIVE_PLAYER_KEY = 'admi-board-active-player';
 export const LEGACY_KEY = 'admi-board-sequencer';
 
-const RIG_FIELDS = ['version', 'enabled', 'corners', 'boardSquares', 'cameraDeviceId', 'cameraLabel', 'mirrorX', 'mirrorY', 'cameraRotation', 'midiEnabled', 'midiDeviceId', 'midiSends', 'midiKeepSound', 'boardSource', 'boardReference', 'counterDetection'] as const;
+const RIG_FIELDS = ['version', 'enabled', 'corners', 'boardSquares', 'cameraDeviceId', 'cameraLabel', 'mirrorX', 'mirrorY', 'cameraRotation', 'midiEnabled', 'midiDeviceId', 'midiSends', 'midiKeepSound', 'midiChannelMode', 'midiLeadMs', 'midiLoopChannels', 'boardSource', 'boardReference', 'counterDetection'] as const;
 export type RigField = (typeof RIG_FIELDS)[number];
 
-export type RigChannel = Pick<ColourChannel, 'id' | 'kind' | 'swatch' | 'band' | 'blackBand' | 'whiteBand'>;
+export type RigChannel = Pick<ColourChannel, 'id' | 'kind' | 'swatch' | 'band' | 'blackBand' | 'whiteBand' | 'midiChannel'>;
 export type ChannelPlayerSettings = Pick<ColourChannel, 'role' | 'instrument' | 'drum' | 'loopSlot' | 'volume' | 'tone' | 'reverbSend' | 'delaySend' | 'plays' | 'changes'>;
 
 export interface BoardRigConfig {
@@ -199,7 +199,7 @@ export function createBoardPlayer(name: string, handedness: 'left' | 'right'): B
   // a 10 x 10 board must not start with the sampling suggested for an 8 x 8 one.
   const rig = loadRig();
   const boardSquares = rig?.fields.boardSquares ?? DEFAULT_BOARD_SEQUENCER_CONFIG.boardSquares;
-  const base = { ...DEFAULT_BOARD_SEQUENCER_CONFIG, handedness, boardSquares };
+  const base = { ...DEFAULT_BOARD_SEQUENCER_CONFIG, ...NEW_PLAYER_SOUND, handedness, boardSquares };
   const { settings } = splitBoardConfig(applyGridChange(base, {}));
   const player: BoardPlayerProfile = { id: freshPlayerId(players), name: name.trim() || 'Player', settings, channelSettings: {} };
   savePlayers([...players, player]);

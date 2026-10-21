@@ -53,9 +53,9 @@ describe('what the board says in MIDI', () => {
     expect(ev[1].atMs - ev[0].atMs).toBeGreaterThanOrEqual(30);
   });
 
-  it('all notes off reaches every channel the board uses', () => {
+  it('all notes off reaches every channel the board uses, the band and Extra notes too', () => {
     const ev = allNotesOffEvents(5);
-    expect(ev.map((e) => (e.data[0] & 0x0f) + 1).sort((a, b) => a - b)).toEqual([1, 2, 3, 10]);
+    expect(ev.map((e) => (e.data[0] & 0x0f) + 1).sort((a, b) => a - b)).toEqual([1, 2, 3, 10, 11, 12, 13]);
     expect(ev.every((e) => e.data[1] === 123)).toBe(true);
   });
 });
@@ -75,7 +75,7 @@ describe('audio time → wall clock', () => {
 // ---- the engine sends what it logs ----
 
 const port = vi.hoisted(() => ({ send: vi.fn() }));
-vi.mock('../midi/MIDIManager', () => ({ MIDIManager: { getSelectedOutput: () => port } }));
+vi.mock('../midi/MIDIManager', () => ({ MIDIManager: { getSelectedOutput: () => port, getConnectedSelectedOutput: () => port, isSelectedConnected: () => true } }));
 vi.mock('tone', () => ({
   getContext: vi.fn(() => ({ rawContext: { currentTime: 0 } })),
   now: vi.fn(() => 0), immediate: vi.fn(() => 0),

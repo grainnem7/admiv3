@@ -54,7 +54,7 @@ const LOGGED_SETTINGS = [
   'bpm', 'swing', 'humanize', 'scaleRootMidi', 'scaleName', 'rows', 'cols', 'numPages', 'pingPong',
   'noteLengthBeats', 'velocity', 'volume', 'soundWorld', 'phrases', 'band', 'fillAmount', 'fillSeed',
   'fillEngine', 'evolveAmount', 'evolveSceneLoops', 'evolveSeed', 'evolveHoldLap', 'studioMix',
-  'midiEnabled', 'midiSends', 'loopStepsRed', 'loopStepsBlack', 'loopStepsBlue', 'variationEnabled',
+  'midiEnabled', 'midiSends', 'midiKeepSound', 'midiChannelMode', 'midiLeadMs', 'midiLoopChannels', 'loopStepsRed', 'loopStepsBlack', 'loopStepsBlue', 'variationEnabled',
   'loopFadePasses', 'currentScene', 'performance',
 ] as const;
 

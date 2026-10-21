@@ -32,7 +32,15 @@ import { describeEvolve, evolveState, NEUTRAL, type EvolveState } from '../audio
 import {
   BAND_GAIN, bandEventsAtStep, bandParts, defaultHarmonyAt, type BandLevel, type BandPart, type Harmony,
 } from './band/band';
-import { BoardMidiSender, type BoardMidiOptions } from '../midi/boardMidi';
+import {
+  BoardMidiSender, channelsInUse, EXPRESSION_STEP_SEC, gainToCc, loopChannel, loopSlotOf, LOOP_CHANNELS, type BoardMidiOptions,
+} from '../midi/boardMidi';
+import {
+  abletonPlan, changedControls, controlKey, counterControls, CC_BRIGHT, CC_SPACE,
+  type AbletonControl, type AbletonPlan,
+} from '../midi/abletonSounds';
+import type { NamedVoice } from '../audio/evolve/evolve';
+import { GainTrack } from './gainTrack';
 import type { EndingStyle } from './performance/clock';
 import { bassNote, chordOnDegree, degreeOfNote, voiceNear } from './harmony/harmony';
 
@@ -55,6 +63,8 @@ export interface FiredNote {
   midis?: number[];
   drum?: KitDrum;
   velocity?: number;
+  /** A saved loop's note: which loop (0 based), so MIDI can give each loop its own channel and fader. */
+  loopSlot?: number;
 }
 
 /** How loud the fill is next to the player's own notes: about -6 dB. */
@@ -334,6 +344,30 @@ export class BoardSequencerEngine {
   // MIDI out: every logged note is also sent, when the player has switched it on.
   private midi: BoardMidiSender | null = null;
   private midiOpts: BoardMidiOptions = { enabled: false, sends: 'player' };
+  /** The channels the board may be sounding on, for releases and CC 11. */
+  private midiChannels: number[] = channelsInUse();
+  /**
+   * The ending gain as numbers (see gainTrack.ts): endGain's automation, mirrored so MIDI
+   * can follow ADMI's fades. Every change to endGain goes through endAuto().
+   */
+  private endTrack = new GainTrack(1);
+  /** CC 11: the last value sent, and the audio time it has been sent up to. */
+  private exprLast = new Map<number, number>();
+  private exprUntil = 0;
+  /** Phase 2: every chain and macro value last sent to Ableton, by channel and CC. */
+  private abletonSent = new Map<string, number>();
+  /** The plan last worked out, for the screen. */
+  private abletonLast: AbletonPlan | null = null;
+  /** The Space setting as the player chose it (0 to 1), for CC 22. */
+  private spaceSetting = 0.5;
+  /** Which control counters are on the board: they own CC 25, 26 and 27 while there. */
+  private counterOwns = { tone: false, reverb: false, delay: false };
+  /** Each fading loop's loudness over time (by slot), for its channel's CC 11. */
+  private loopFades = new Map<number, GainTrack>();
+  /** The layer of the cell being played, so its notes know which loop they belong to. */
+  private firingLayer: string | undefined = undefined;
+  /** CC 7: the last Volume value sent (-1 = none yet). */
+  private volumeSent = -1;
   /** False when the player wants MIDI only: the built-in sound is silenced, the log and the lights carry on. */
   private internalSound = true;
 
@@ -539,6 +573,7 @@ export class BoardSequencerEngine {
   setSoundWorld(choice: SoundWorldChoice): void {
     if ((this.cfg.soundWorld ?? 'none') === choice) return;
     this.cfg.soundWorld = choice;
+    this.syncAbleton();
     const world = worldOf(choice);
     const t = Tone.immediate();
     this.mixTone?.frequency.setTargetAtTime(world?.mixToneHz ?? 20000, t, MIX_SWITCH_TC);
@@ -654,6 +689,7 @@ export class BoardSequencerEngine {
   private energy = 0.5;
   setEnergy(e: number): void {
     this.energy = Math.max(0, Math.min(1, e));
+    this.syncAbleton();
   }
   /** How hard notes play at this Energy: 0.7 at the bottom, 1 at the middle, 1.3 at the top. */
   private energyGain(): number {
@@ -670,6 +706,8 @@ export class BoardSequencerEngine {
   private reverbOwned = false;
   private delayOwned = false;
   setSpace(space: number): void {
+    this.spaceSetting = Math.max(0, Math.min(1, space));
+    this.syncAbleton();
     // 0 = dry, 0.5 = the world's own room, 1 = twice as much.
     const amount = 0.15 + 1.7 * Math.max(0, Math.min(1, space));
     if (amount === this.spaceAmount) return;
@@ -821,6 +859,8 @@ export class BoardSequencerEngine {
       e.del.gain.setTargetAtTime(e.delBase + state.delay, t, EVOLVE_GLIDE_SEC);
       if (studio && e.pan) e.pan.pan.setTargetAtTime(Math.max(-1, Math.min(1, (e.panBase ?? 0) + state.pan)), t, EVOLVE_GLIDE_SEC);
     }
+    // Evolve's instrument for this scene switches Ableton's chain too (only when it changed).
+    this.syncAbleton();
   }
 
   /**
@@ -874,6 +914,7 @@ export class BoardSequencerEngine {
       e.voiceName = null;
       this.swapVoiceWhenReady(e, next);
     }
+    this.syncAbleton();
   }
 
   /** Counters play phrases (on) or one note each (off), from the next beat. */
@@ -920,12 +961,190 @@ export class BoardSequencerEngine {
     g.setTargetAtTime(1, time + d.holdSec, d.releaseTc);
   }
 
-  /** MIDI out, live. Switching off silences whatever the receiving instrument still holds. */
-  setMidiOut(opts: BoardMidiOptions): void {
-    const was = this.midiOpts.enabled;
-    this.midiOpts = opts;
+  /**
+   * MIDI out, live. Any change to where notes go (on/off, the port, the channels) first
+   * releases everything the receiving instrument may still hold, so nothing sticks.
+   * Turning it on sends the current Expression and Volume, so Ableton starts in step.
+   */
+  setMidiOut(opts: BoardMidiOptions, portKey = ''): void {
+    const was = this.midiOpts;
+    const channels = channelsInUse(opts.colourChannels, opts.loopChannels);
+    const routeChanged = was.enabled !== opts.enabled || this.midiPortKey !== portKey
+      || (was.channelMode ?? 'part') !== (opts.channelMode ?? 'part')
+      || !!was.loopChannels !== !!opts.loopChannels
+      || channels.join(',') !== this.midiChannels.join(',');
     if (opts.enabled && !this.midi) this.midi = new BoardMidiSender(this.ctx);
-    if (was && !opts.enabled) this.midi?.allNotesOff();
+    if (routeChanged && was.enabled) this.midi?.releaseAll(this.midiChannels);
+    this.midiOpts = opts;
+    this.midiPortKey = portKey;
+    this.midiChannels = channels;
+    if (routeChanged && opts.enabled) {
+      this.exprLast.clear();
+      this.exprUntil = 0;
+      this.volumeSent = -1;
+      this.sendExpressionNow();
+      this.sendVolume();
+      this.syncAbleton(true);
+    }
+    if (!opts.enabled) this.abletonSent.clear();
+  }
+
+  private midiPortKey = '';
+
+  /**
+   * Phase 2: tell Ableton which chain each channel plays and how its macros sit. Only the
+   * values that changed go out; `full` sends everything (Play, a new route, the button).
+   * A control counter on the board owns its macro while it is there.
+   */
+  private syncAbleton(full = false): void {
+    if (!this.midiOpts.enabled || !this.midi) return;
+    const evolveVoices = new Map<string, NamedVoice | null>();
+    this.voiceByChannel.forEach((e, id) => evolveVoices.set(id, e.evo?.voice ?? null));
+    const plan = abletonPlan({
+      channels: this.cfg.channels,
+      world: this.cfg.soundWorld ?? 'none',
+      channelMode: this.midiOpts.channelMode ?? 'part',
+      colourChannels: this.midiOpts.colourChannels,
+      evolveVoices,
+      energy: this.energy,
+      space: this.spaceSetting,
+      swing: this.cfg.swing,
+      loopChannels: this.midiOpts.loopChannels,
+    });
+    this.abletonLast = plan;
+    const owned = new Set<number>([
+      ...(this.counterOwns.tone ? [CC_BRIGHT] : []), ...(this.counterOwns.reverb ? [CC_SPACE] : []),
+    ]);
+    const mine = new Map([...plan.controls].filter(([, c]) => !owned.has(c.cc)));
+    this.sendAbleton(changedControls(mine, this.abletonSent, full));
+  }
+
+  private sendAbleton(list: readonly AbletonControl[]): void {
+    if (list.length === 0 || !this.midi || !this.midiOpts.enabled) return;
+    this.midi.sendControls(list);
+    for (const c of list) this.abletonSent.set(controlKey(c.channel, c.cc), c.value);
+  }
+
+  /** "Send sound choices to Ableton": everything again, for after Ableton is restarted. */
+  resendAbleton(): void {
+    this.syncAbleton(true);
+  }
+
+  /** What the screen shows: each channel's chain now, every value last sent, and shared channels. */
+  abletonState(): { chains: ReadonlyMap<number, number>; sent: ReadonlyMap<string, number>; shares: AbletonPlan['shares'] } {
+    return {
+      chains: this.abletonLast?.chains ?? new Map(),
+      sent: this.abletonSent,
+      shares: this.abletonLast?.shares ?? new Map(),
+    };
+  }
+
+  /** Panic: every note off and all sound off, on all 16 channels. The piece carries on. */
+  panicMidi(): void {
+    this.midi?.panic();
+    this.exprLast.clear();
+    this.exprUntil = 0;
+  }
+
+  /**
+   * The latency check: one MIDI note and ADMI's own click at the same scheduled moment.
+   * In Both mode a double hit (a flam) means "Send early by" needs moving.
+   */
+  playTestNote(): boolean {
+    if (this.muted) return false;
+    const t = Tone.now() + 0.05;
+    if (this.tick) {
+      const tt = strictlyAfter(t, this.lastTickTime);
+      this.lastTickTime = tt;
+      this.tick.triggerAttackRelease('C2', 0.05, tt);
+    }
+    if (this.midiOpts.enabled) this.midi?.testNote(t, this.midiOpts.leadMs);
+    return true;
+  }
+
+  /** Every change to the ending gain goes to the audio and to its copy for MIDI alike. */
+  private endAuto(): {
+    set(v: number, t: number): void; linear(v: number, t: number): void;
+    target(v: number, t: number, tc: number): void; cancel(t: number): void;
+  } {
+    const g = this.endGain?.gain;
+    const track = this.endTrack;
+    return {
+      set: (v, t) => { g?.setValueAtTime(v, t); track.setValueAtTime(v, t); },
+      linear: (v, t) => { g?.linearRampToValueAtTime(v, t); track.linearRampToValueAtTime(v, t); },
+      target: (v, t, tc) => { g?.setTargetAtTime(v, t, tc); track.setTargetAtTime(v, t, tc); },
+      cancel: (t) => { g?.cancelScheduledValues(t); track.cancelScheduledValues(t); },
+    };
+  }
+
+  /**
+   * CC 11 on a channel as the receiving end should hear it: 0 while muted, else the ending
+   * gain, and on a loop's own channel also where that loop's fade has got to.
+   */
+  private expressionFor(channel: number, audioTime: number): number {
+    if (this.muted) return 0;
+    return gainToCc(this.endTrack.valueAt(audioTime) * this.loopGain(channel, audioTime));
+  }
+
+  /** A loop channel's loudness: 1 while a loop plays on it un-faded, else its fading loop's level. */
+  private loopGain(channel: number, audioTime: number): number {
+    if (!this.midiOpts.loopChannels || !LOOP_CHANNELS.includes(channel)) return 1;
+    let fading: number | null = null;
+    for (const l of this.launched) {
+      if (loopChannel(l.slot) !== channel) continue;
+      const track = this.loopFades.get(l.slot);
+      if (!track) return 1;
+      const v = track.valueAt(audioTime);
+      fading = fading === null ? v : Math.max(fading, v);
+    }
+    // A loop that has finished fading out has left; its channel stays where it ended.
+    if (fading === null) {
+      for (const [slot, track] of this.loopFades) if (loopChannel(slot) === channel) return track.valueAt(audioTime);
+      return 1;
+    }
+    return fading;
+  }
+
+  private sendExpressionNow(): void {
+    if (!this.midiOpts.enabled || !this.midi) return;
+    const now = Tone.immediate();
+    for (const ch of this.midiChannels) {
+      const v = this.expressionFor(ch, now);
+      this.midi.expression(v, [ch]);
+      this.exprLast.set(ch, v);
+    }
+    this.exprUntil = now;
+  }
+
+  /**
+   * Called from the scheduler: CC 11 for the look ahead in 50 ms steps, sent only when it
+   * changes. Never queued further ahead than the notes, so Cancel the ending, Stop or
+   * Mute take effect within one tick rather than leaving a fade already sent to the port.
+   */
+  private tickExpression(): void {
+    if (!this.midiOpts.enabled || !this.midi) return;
+    const now = Tone.immediate();
+    const horizon = now + LOOKAHEAD_SEC;
+    let t = Math.max(this.exprUntil + EXPRESSION_STEP_SEC, now);
+    while (t <= horizon) {
+      for (const ch of this.midiChannels) {
+        const v = this.expressionFor(ch, t);
+        if (v === this.exprLast.get(ch)) continue;
+        this.midi.expression(v, [ch], t);
+        this.exprLast.set(ch, v);
+      }
+      this.exprUntil = t;
+      t += EXPRESSION_STEP_SEC;
+    }
+  }
+
+  /** The Volume counter as CC 7 on channel 16, sent only when its value changes. */
+  private sendVolume(): void {
+    if (!this.midiOpts.enabled || !this.midi) return;
+    const v = gainToCc(this.cfg.volume);
+    if (v === this.volumeSent) return;
+    this.midi.volume(this.cfg.volume);
+    this.volumeSent = v;
   }
 
   /** The built-in sound on or off (off = MIDI only). Everything else carries on. */
@@ -936,7 +1155,17 @@ export class BoardSequencerEngine {
   }
 
   private recordFired(n: FiredNote): void {
-    this.midi?.send(n, this.muted, this.midiOpts);
+    if (n.loopSlot === undefined && (n.origin === 'placed' || n.origin === 'phrase')) {
+      const slot = loopSlotOf(this.firingLayer);
+      if (slot !== null) n.loopSlot = slot;
+    }
+    // MIDI notes fade with the ending, by velocity, which every instrument hears with no
+    // set-up. Read a moment after the note, so the final chord (which lifts the gain back
+    // up over 30 ms) arrives at full strength.
+    if (this.midi && this.midiOpts.enabled) {
+      const scale = Math.min(1, Math.max(0, this.endTrack.valueAt(n.audioTime + 0.05)));
+      this.midi.send(n, this.muted, scale >= 1 ? this.midiOpts : { ...this.midiOpts, velocityScale: (this.midiOpts.velocityScale ?? 1) * scale });
+    }
     this.fired.push(n);
     if (this.fired.length > FIRED_NOTE_CAP) this.fired.splice(0, this.fired.length - FIRED_NOTE_CAP);
   }
@@ -990,11 +1219,10 @@ export class BoardSequencerEngine {
 
   /** The end time has come: everything fades out over `sec`, whatever else is going on. */
   fadeOutNow(sec: number): void {
-    const g = this.endGain?.gain;
-    if (!g) return;
     const t = Tone.immediate();
-    g.cancelScheduledValues(t);
-    g.setTargetAtTime(0, t, Math.max(0.02, sec / 4));
+    const end = this.endAuto();
+    end.cancel(t);
+    end.target(0, t, Math.max(0.02, sec / 4));
   }
 
   /** Change of mind: the ending is cancelled and the sound comes back. */
@@ -1004,12 +1232,10 @@ export class BoardSequencerEngine {
     this.onFinished = null;
     this.thinning = false;
     if (f?.style === 'slow' && f.startBpm !== undefined) this.applyBpm(f.startBpm);
-    const g = this.endGain?.gain;
-    if (g) {
-      const t = Tone.immediate();
-      g.cancelScheduledValues(t);
-      g.setTargetAtTime(1, t, MUTE_GLIDE_SEC);
-    }
+    const t = Tone.immediate();
+    const end = this.endAuto();
+    end.cancel(t);
+    end.target(1, t, MUTE_GLIDE_SEC);
   }
 
   /** The final chord: the key note's chord on the band's pad and bass, and a crash. */
@@ -1025,10 +1251,12 @@ export class BoardSequencerEngine {
     for (const m of midis) this.bandVoices?.pad.play(m, 0.9, durSec, time);
     this.bandVoices?.bass.play(root, 0.9, durSec, time);
     this.drumKit?.play('crash', 0.9, time);
-    this.recordFired({
-      row: -1, col: -1, colour: 'band:final', role: 'chord', audioTime: time, durSec, source: 'live', origin: 'band',
-      midis: [...midis, root], velocity: 0.9,
-    });
+    // Logged as the three things that sound, so MIDI sends each where the band's own go:
+    // the chord with the band's chords, the root with its bass, the crash with the drums.
+    const base = { row: -1, col: -1, colour: 'band:final', audioTime: time, durSec, source: 'live', origin: 'band', velocity: 0.9 } as const;
+    this.recordFired({ ...base, role: 'chord', midis });
+    this.recordFired({ ...base, role: 'bass', midi: root });
+    if (this.drumKit) this.recordFired({ ...base, role: 'drums', drum: 'crash' });
   }
 
   isFinishing(): boolean {
@@ -1049,25 +1277,51 @@ export class BoardSequencerEngine {
    * Bring the wanted loops in at a pass boundary. A loop that was playing and is no longer
    * wanted fades out over the fade length (or stops dead at 0); one that is new fades in.
    */
-  private applyPendingLaunch(beat: number): void {
+  private applyPendingLaunch(beat: number, atTime = Tone.now(), secPerBeat = 60 / this.cfg.bpm): void {
     const next = this.pendingLaunch;
     if (!next) return;
     const fade = this.launchFadeBeats;
     const out: LaunchedLoop[] = [];
+    const stopped: number[] = [];
+    // A loop's fade over time, for its own channel's CC 11 (velocity fades the notes too).
+    const fadeTrack = (dir: 'in' | 'out'): GainTrack => {
+      const g = new GainTrack(dir === 'out' ? 1 : 0);
+      g.setValueAtTime(dir === 'out' ? 1 : 0, atTime);
+      g.linearRampToValueAtTime(dir === 'out' ? 0 : 1, atTime + fade * secPerBeat);
+      return g;
+    };
     for (const l of this.launched) {
       if (next.slots.includes(l.slot)) continue;
       if (l.fade?.dir === 'out') out.push(l); // already going: let it finish
-      else if (fade > 0) out.push({ slot: l.slot, cells: l.cells, fade: { dir: 'out', start: beat, beats: fade } });
+      else if (fade > 0) {
+        out.push({ slot: l.slot, cells: l.cells, fade: { dir: 'out', start: beat, beats: fade } });
+        this.loopFades.set(l.slot, fadeTrack('out'));
+      } else stopped.push(l.slot);
     }
     next.slots.forEach((slot, i) => {
       const was = this.launched.find((l) => l.slot === slot);
       // Re-wanted while fading out, or still playing: carry on at full strength.
-      if (was) out.push({ slot, cells: next.loops[i] ?? was.cells });
-      else out.push({ slot, cells: next.loops[i] ?? [], fade: fade > 0 ? { dir: 'in', start: beat, beats: fade } : undefined });
+      if (was) {
+        out.push({ slot, cells: next.loops[i] ?? was.cells });
+        this.loopFades.delete(slot);
+      } else {
+        out.push({ slot, cells: next.loops[i] ?? [], fade: fade > 0 ? { dir: 'in', start: beat, beats: fade } : undefined });
+        if (fade > 0) this.loopFades.set(slot, fadeTrack('in'));
+        else this.loopFades.delete(slot);
+      }
     });
     this.launched = out;
     this.launchedSlots = out.map((l) => l.slot);
     this.pendingLaunch = null;
+    this.releaseLoopChannels(stopped);
+  }
+
+  /** Loops that have stopped: their own channels' notes end now, unless another loop still plays there. */
+  private releaseLoopChannels(slots: readonly number[]): void {
+    if (slots.length === 0 || !this.midiOpts.enabled || !this.midiOpts.loopChannels) return;
+    const busy = new Set(this.launched.map((l) => loopChannel(l.slot)));
+    const free = [...new Set(slots.map(loopChannel))].filter((ch) => !busy.has(ch));
+    if (free.length > 0) this.midi?.releaseChannels(free);
   }
 
   /** The loudness of a launched loop on this beat: 1, or where its fade has got to. */
@@ -1119,6 +1373,15 @@ export class BoardSequencerEngine {
     // value is absent here and the saved setting is back in charge.
     this.fillOverride = values.fill ?? null;
     this.evolveOverride = values.evolve ?? null;
+    // In Ableton: Tone, Reverb and Delay counters as CC 25, 26 and 27 on every sounding
+    // channel, sent on change; while one is on the board it owns that macro.
+    this.counterOwns = { tone: values.tone !== undefined, reverb: reverb !== undefined, delay: delay !== undefined };
+    if (this.midiOpts.enabled) {
+      const list = counterControls(this.midiChannels, { tone: values.tone, reverb, delay })
+        .filter((c) => this.abletonSent.get(controlKey(c.channel, c.cc)) !== c.value);
+      this.sendAbleton(list);
+      if (!this.counterOwns.tone || !this.counterOwns.reverb) this.syncAbleton();
+    }
     if (values.tone !== undefined && values.tone !== this.toneScale) {
       this.toneScale = values.tone;
       // Scale each channel's own Tone rather than overwriting it, so a bright lead and a
@@ -1199,7 +1462,11 @@ export class BoardSequencerEngine {
    */
   setMuted(muted: boolean): void {
     this.muted = muted;
-    if (muted) this.midi?.allNotesOff();
+    // Over MIDI: Expression to 0 at once, then every note released; back on, Expression
+    // returns to wherever the ending has it.
+    this.exprUntil = 0;
+    this.sendExpressionNow();
+    if (muted) this.midi?.releaseAll(this.midiChannels);
     // Always its own short ramp: Mute has to cut, not fade. A volume counter glides over
     // controlGlideSec (0.3 s by default), and borrowing that made Mute take about a
     // second, with every note still firing underneath it.
@@ -1209,6 +1476,7 @@ export class BoardSequencerEngine {
   /** Live sound controls (safe to call while running). */
   setVolume(v: number, glideSec = 0.02): void {
     this.cfg.volume = v;
+    this.sendVolume();
     // Remembered for when the sound comes back; while muted the bus stays where it is,
     // so a volume counter being moved can neither un-mute nor restart the fade.
     if (this.muted) return;
@@ -1269,6 +1537,7 @@ export class BoardSequencerEngine {
 
   setSwing(swing: number): void {
     this.cfg.swing = swing;
+    this.syncAbleton();
   }
 
   setHumanize(h: number): void {
@@ -1355,6 +1624,13 @@ export class BoardSequencerEngine {
     this.lastBeatIndex = -1;
     this.lastTickTime = 0;
     this.fired = [];
+    // Play: nothing is fading, and the receiving end hears full Expression again.
+    this.endTrack.reset(1);
+    this.exprLast.clear();
+    this.exprUntil = 0;
+    this.loopFades.clear();
+    this.sendExpressionNow();
+    this.syncAbleton(true);
     if (this.timer) clearInterval(this.timer);
     this.timer = setInterval(() => this.scheduleTick(), TICK_INTERVAL_MS);
   }
@@ -1365,6 +1641,7 @@ export class BoardSequencerEngine {
     } else {
       this.scheduleInternal();
     }
+    this.tickExpression();
   }
 
   /** Standalone clock: advance one step per beat at the configured BPM. */
@@ -1474,32 +1751,28 @@ export class BoardSequencerEngine {
       const atBoundary = ((beat % cycle) + cycle) % cycle === 0;
       if (f.startBeat === null && atBoundary) {
         f.startBeat = beat;
-        const g = this.endGain?.gain;
+        const end = this.endAuto();
         const t0 = cellTime;
-        if (f.style === 'fade' && g) {
-          g.cancelScheduledValues(t0);
-          g.setValueAtTime(1, t0);
-          g.linearRampToValueAtTime(0, t0 + f.beats * secPerBeat);
+        if (f.style === 'fade') {
+          end.cancel(t0);
+          end.set(1, t0);
+          end.linear(0, t0 + f.beats * secPerBeat);
         } else if (f.style === 'slow') {
           f.startBpm = this.cfg.bpm;
         } else if (f.style === 'thin') {
           // The band and the fill leave now; the player's own notes carry on, and fade
           // over the last pass.
           this.thinning = true;
-          if (g) {
-            g.cancelScheduledValues(t0);
-            g.setValueAtTime(1, t0);
-            g.setValueAtTime(1, t0 + Math.max(0, f.beats - cycle) * secPerBeat);
-            g.linearRampToValueAtTime(0, t0 + f.beats * secPerBeat);
-          }
+          end.cancel(t0);
+          end.set(1, t0);
+          end.set(1, t0 + Math.max(0, f.beats - cycle) * secPerBeat);
+          end.linear(0, t0 + f.beats * secPerBeat);
         } else if (f.style === 'chord') {
           this.thinning = true;
           f.chordAt = beat + f.beats - cycle;
-          if (g) {
-            g.cancelScheduledValues(t0);
-            g.setValueAtTime(1, t0);
-            g.linearRampToValueAtTime(0.35, t0 + (f.beats - cycle) * secPerBeat);
-          }
+          end.cancel(t0);
+          end.set(1, t0);
+          end.linear(0.35, t0 + (f.beats - cycle) * secPerBeat);
         }
       }
       if (f.startBeat !== null) {
@@ -1525,12 +1798,10 @@ export class BoardSequencerEngine {
         }
         if (f.style === 'chord' && f.chordAt !== undefined) {
           if (beat === f.chordAt) {
-            const g = this.endGain?.gain;
-            if (g) {
-              g.cancelScheduledValues(cellTime);
-              g.setValueAtTime(0.35, cellTime);
-              g.linearRampToValueAtTime(1, cellTime + 0.03);
-            }
+            const end = this.endAuto();
+            end.cancel(cellTime);
+            end.set(0.35, cellTime);
+            end.linear(1, cellTime + 0.03);
             this.playFinalChord(cellTime, cycle * secPerBeat * 1.5);
           }
           if (beat >= f.chordAt) return; // only the chord rings now
@@ -1540,14 +1811,16 @@ export class BoardSequencerEngine {
     // A launch lands on the pass boundary — the first beat of the whole cycle.
     if (this.pendingLaunch) {
       const cycle = Math.max(1, this.cfg.cols * Math.max(1, this.cfg.numPages));
-      if (((beat % cycle) + cycle) % cycle === 0) this.applyPendingLaunch(beat);
+      if (((beat % cycle) + cycle) % cycle === 0) this.applyPendingLaunch(beat, cellTime, secPerBeat);
     }
     // Fades that have run their course: a faded-out loop leaves, a faded-in one is simply playing.
     if (this.launched.some((l) => l.fade)) {
+      const gone = this.launched.filter((l) => l.fade?.dir === 'out' && beat - l.fade.start >= l.fade.beats).map((l) => l.slot);
       this.launched = this.launched
         .filter((l) => !(l.fade?.dir === 'out' && beat - l.fade.start >= l.fade.beats))
         .map((l) => (l.fade?.dir === 'in' && beat - l.fade.start + 1 >= l.fade.beats ? { slot: l.slot, cells: l.cells } : l));
       this.launchedSlots = this.launched.map((l) => l.slot);
+      this.releaseLoopChannels(gone);
     }
     try {
       this.applyEvolve(beat);
@@ -1645,10 +1918,13 @@ export class BoardSequencerEngine {
     }
     for (const { cell, source } of noteTagged) {
       try {
+        this.firingLayer = cell.layer;
         this.fireCell(cell, source, beat, cellTime, secPerBeat, chord, voicing, oct, h, melodicLoop, durSec, drumHits, colsByColour);
       } catch (err) {
         // One cell must never take the rest of the beat with it.
         console.warn('[BoardSequencer] a cell failed to play:', err);
+      } finally {
+        this.firingLayer = undefined;
       }
     }
   }
@@ -1980,10 +2256,12 @@ export class BoardSequencerEngine {
           durSec *= evo.length;
           voice.play(midi, vel, durSec, time);
         } else continue;
+        this.firingLayer = tag?.cell.layer ?? ev.layer;
         this.recordFired({
           row: ev.owner.row, col: ev.owner.col, colour: ev.colour, role: ev.role,
           audioTime: time, durSec, source: tag?.source ?? 'live', origin: 'phrase', midi, drum: ev.drum, velocity: vel,
         });
+        this.firingLayer = undefined;
       } catch (err) {
         console.warn('[BoardSequencer] a phrase note failed to play:', err);
       }
@@ -2107,7 +2385,8 @@ export class BoardSequencerEngine {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
     this.fired = [];
-    this.midi?.allNotesOff();
+    this.loopFades.clear();
+    this.midi?.releaseAll(this.midiChannels);
   }
 
   dispose(): void {

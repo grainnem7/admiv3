@@ -9,7 +9,7 @@
 
 import type { FillNote } from '../songs/generative/rulesFill';
 import type { BandLevel } from '../songs/band/band';
-import type { MidiSends } from '../midi/boardMidi';
+import { clampLeadMs, type MidiChannelMode, type MidiSends } from '../midi/boardMidi';
 import {
   fullReachMap, REMOTE_CONTROLS, sanitizeReachMap, type Reach, type RemoteControlName, type RemoteTriggerName,
   DEFAULT_REMOTE_TOUCH, sanitizeRemoteTouch, type RemoteTouch,
@@ -208,6 +208,12 @@ export interface BoardSequencerStored {
   midiSends: MidiSends;
   /** Keep the built-in sound on while sending MIDI (off = the external instrument is the sound). */
   midiKeepSound: boolean;
+  /** One MIDI channel per part, or one fixed channel per colour (each colour's midiChannel). */
+  midiChannelMode: MidiChannelMode;
+  /** "Send early by", 0 to 40 ms: in Both mode, so ADMI and Ableton land together. */
+  midiLeadMs: number;
+  /** Each loop's melody, bass and chords on its own channel (4 to 9), for a fader per loop in Ableton. */
+  midiLoopChannels: boolean;
   /** Physical squares per side of the board (8 × 8 chess/draughts, 10 × 10 draughts). */
   boardSquares: BoardSquares;
   /** Calm theme mode for the redesigned screens. */
@@ -354,6 +360,13 @@ const FALLBACK_HUE_BAND: TrackedColor = {
 /** The current generation of suggested read settings (see `readSettingsRev`). */
 export const READ_SETTINGS_REV = 2;
 
+/**
+ * What a NEW player starts with on the Sound tab, so the instrument is generative out of
+ * the box: Extra notes "A few" and Sounds change "Slowly". Only for a player made now or a
+ * first run: a saved player keeps exactly what it had (the sanitiser never fills these in).
+ */
+export const NEW_PLAYER_SOUND = { fillAmount: 0.25, evolveAmount: 0.35 } as const;
+
 export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   version: CONFIG_VERSION,
   enabled: false,
@@ -432,6 +445,9 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   midiDeviceId: '',
   midiSends: 'player',
   midiKeepSound: true,
+  midiChannelMode: 'part',
+  midiLeadMs: 0,
+  midiLoopChannels: false,
   cameraDeviceId: '',
   cameraLabel: '',
   boardSquares: 8,
@@ -633,6 +649,7 @@ function sanitizeChannel(v: unknown): ColourChannel | null {
   if (isNum(o.delaySend)) ch.delaySend = o.delaySend;
   if (o.plays === 'note' || o.plays === 'tune') ch.plays = o.plays;
   if (o.changes === false) ch.changes = false;
+  if (isNum(o.midiChannel) && Number.isInteger(o.midiChannel) && o.midiChannel >= 1 && o.midiChannel <= 16) ch.midiChannel = o.midiChannel;
   return ch;
 }
 
@@ -786,6 +803,9 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     midiDeviceId: typeof o.midiDeviceId === 'string' ? o.midiDeviceId : '',
     midiSends: o.midiSends === 'all' ? 'all' : 'player',
     midiKeepSound: o.midiKeepSound !== false,
+    midiChannelMode: o.midiChannelMode === 'colour' ? 'colour' : 'part',
+    midiLeadMs: clampLeadMs(o.midiLeadMs),
+    midiLoopChannels: o.midiLoopChannels === true,
     boardSquares,
     themeMode: o.themeMode === 'light' ? 'light' : 'dark',
     samplesPerAxis,

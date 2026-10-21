@@ -56,6 +56,12 @@ export function nowNext(scenes: readonly Scene[], current: number | null, elapse
   return { now, next };
 }
 
+/**
+ * How long before the end time the backstop begins: its fade (0.8 s) and stop (0.9 s) fit
+ * inside it, so the piece is silent by its length.
+ */
+export const HARD_STOP_LEAD_SEC = 1;
+
 /** What the performance clock does on one tick. */
 export interface ClockDecision {
   /** Cues crossed (seconds left: 60, 30, 10). */
@@ -88,8 +94,10 @@ export function decideClockTick(input: {
   const end = !input.ending && !input.autoEnded && input.now.elapsed >= 5
     && endingDue(input.performance, input.now.remaining, input.passSec);
   // The backstop: at the end time nothing may still be playing — an ending cancelled, a
-  // tempo slowed after the ending was timed, End pressed too late. Fade out now.
-  const hardStop = input.now.elapsed >= 5 && input.now.remaining <= 0;
+  // tempo slowed after the ending was timed, End pressed too late. It starts a moment
+  // before the end, so its own short fade and stop are over by the end time too (in
+  // Ableton as well as in ADMI).
+  const hardStop = input.now.elapsed >= 5 && input.now.remaining <= HARD_STOP_LEAD_SEC;
   return { cues, scene, end, hardStop };
 }
 
