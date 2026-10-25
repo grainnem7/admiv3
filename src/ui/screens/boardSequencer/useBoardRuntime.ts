@@ -33,7 +33,7 @@ import { splitByZone, zoneContains, zoneSlotCount } from '../../../tracking/zone
 import type { BoardSequencerEngine } from '../../../songs/BoardSequencerEngine';
 import { emptyLoopBank, seedLoopBank, type LoopBankState } from '../../../songs/loopBank';
 import type { Mat3 } from '../../../utils/homography';
-import type { BoardSequencerStored } from '../../../profiles/BoardSequencerConfig';
+import type { BoardSequencerStored, FaderRole } from '../../../profiles/BoardSequencerConfig';
 import { MIDIManager } from '../../../midi/MIDIManager';
 import {
   colourChannelMap, configToSoundFrom, effectiveSound, sendsFor,
@@ -41,6 +41,7 @@ import {
 import { homographyForCorners } from './homographyForCorners';
 import { laptopReadings } from '../../../tracking/laptopBoard';
 import { detectionSetup, type DetectionSetup } from '../../../tracking/boardReference/detectionSetup';
+import type { BoardActivity } from '../../../tracking/cap/capTracker';
 
 export interface RuntimeFrame {
   readings: CellReading[];
@@ -116,6 +117,18 @@ const STATE_THROTTLE_MS = 100;
 const LAPTOP_FRAME_MS = 33;
 /** A click is a deliberate placement; it only needs a moment to settle, not a hand's. */
 const LAPTOP_SETTLE_MS = 120;
+/** An arm moving over the board: this many more or fewer watch points covered than last frame. */
+const HAND_MOVE_POINTS = 3;
+
+/** What is on the board, as one string: which cells have a counter, and of which colour. */
+function boardKey(readings: readonly CellReading[], skip: ReadonlySet<string> | null): string {
+  let key = '';
+  for (const r of readings) {
+    if (!r.occupied || skip?.has(`${r.row},${r.col}`)) continue;
+    key += `${r.row},${r.col}:${r.colour ?? '?'};`;
+  }
+  return key;
+}
 
 /** The MIDI port as the screen sees it: whether it is there, and whether ADMI is holding on its own sound. */
 export interface MidiPortState {
@@ -175,8 +188,12 @@ export function useBoardRuntime(opts: {
   laptop: boolean;
   configRef: MutableRefObject<BoardSequencerStored>;
   callbacksRef: MutableRefObject<BoardRuntimeCallbacks>;
+  /** Control values from the red cap; a control counter on the board wins over them. */
+  capValuesRef?: MutableRefObject<Partial<Record<FaderRole, number>>>;
+  /** Written every frame: when the board last changed and whether a hand is on it (the cap pauses). */
+  boardActivityRef?: MutableRefObject<BoardActivity>;
 }): BoardRuntimeRefs {
-  const { cameraDeviceId, cameraRetry, calibrated, laptop, configRef, callbacksRef } = opts;
+  const { cameraDeviceId, cameraRetry, calibrated, laptop, configRef, callbacksRef, capValuesRef, boardActivityRef } = opts;
   const videoRef = useRef<HTMLVideoElement>(null);
   const cameraRef = useRef<CameraManager | null>(null);
   const readerRef = useRef<BoardReader | null>(null);
@@ -260,6 +277,7 @@ export function useBoardRuntime(opts: {
     let matchersFor: {
       channels: BoardSequencerStored['channels']; minFill: number;
       reference: BoardSequencerStored['boardReference']; detection: BoardSequencerStored['counterDetection']; squares: number;
+      corners: BoardSequencerStored['corners'];
     } | null = null;
     let detection: DetectionSetup | null = null;
     let matchers: ColourMatcher[] = [];
@@ -270,6 +288,12 @@ export function useBoardRuntime(opts: {
     let prevHeld: ReadonlySet<string> = new Set<string>();
     let lastTrackMs = 0;
     let settledBefore: ActiveCell[] = [];
+    // Board activity for the cap: what was on the board one and two frames ago (a change
+    // has to last two frames, so one flickering cell isn't a counter being moved), and how
+    // much of the watch grid an arm covered last frame.
+    let keyPrev = '';
+    let keyPrev2 = '';
+    let maskPrev = 0;
 
     let hSize = { w: 0, h: 0 };
     // The last colour each cell showed while it was still visible, so a covered control
@@ -279,13 +303,15 @@ export function useBoardRuntime(opts: {
       const cfg = configRef.current;
       if (!matchersFor || matchersFor.channels !== cfg.channels || matchersFor.minFill !== cfg.minFilledFraction
         || matchersFor.reference !== cfg.boardReference || matchersFor.detection !== cfg.counterDetection
-        || matchersFor.squares !== cfg.boardSquares) {
+        || matchersFor.squares !== cfg.boardSquares || matchersFor.corners !== cfg.corners) {
         matchers = buildChannelMatchers(cfg.channels);
         detection = detectionSetup(cfg);
         recognizer = new ColourRecognizer(cfg.minFilledFraction, channelPriority(cfg.channels), detection.achromatic);
         matchersFor = {
           channels: cfg.channels, minFill: cfg.minFilledFraction,
           reference: cfg.boardReference, detection: cfg.counterDetection, squares: cfg.boardSquares,
+          // Turned or flipped: the learnt board turns with it.
+          corners: cfg.corners,
         };
         sequencedColours = new Set(cfg.channels.filter((c) => isSequencedRole(c.role)).map((c) => c.id));
         // A loop colour's counter is a trigger, never a note and never a pad press.
@@ -334,7 +360,11 @@ export function useBoardRuntime(opts: {
       let resting = false;
       let globalChange = false;
       let handGuardReady = false;
-      if (cfg.handGuardEnabled && lastFrame && homographyRef.current) {
+      // The watcher also runs for the cap alone: then it only reports a hand, holds nothing.
+      const capWatch = cfg.cap.enabled && cfg.cap.pauseOnBoard;
+      let armPoints = 0;
+      let armCells: Set<string> | null = null;
+      if ((cfg.handGuardEnabled || capWatch) && lastFrame && homographyRef.current) {
         const gridKey = watchKey(homographyRef.current, cfg, lastFrame);
         if (watchGridRef.current?.key !== gridKey) {
           watchGridRef.current = {
@@ -353,13 +383,17 @@ export function useBoardRuntime(opts: {
           dtMs,
         });
         watchRef.current = watch.state;
-        handGuardReady = watch.ready;
-        resting = watch.resting;
-        globalChange = watch.global;
-        for (const cell of watch.heldCells) {
-          held.add(`${Math.floor(cell / cfg.cols)},${cell % cfg.cols}`);
+        // An arm anywhere over the board or reaching in from its edge, or a whole-picture change.
+        for (let i = 0; i < watch.mask.length; i++) armPoints += watch.mask[i];
+        if (watch.global) armPoints = Math.max(armPoints, 1);
+        armCells = new Set([...watch.heldCells].map((cell) => `${Math.floor(cell / cfg.cols)},${cell % cfg.cols}`));
+        if (cfg.handGuardEnabled) {
+          handGuardReady = watch.ready;
+          resting = watch.resting;
+          globalChange = watch.global;
+          for (const key of armCells) held.add(key);
         }
-      } else if (!cfg.handGuardEnabled) {
+      } else if (!cfg.handGuardEnabled && !capWatch) {
         watchRef.current = initialWatchState();
         watchGridRef.current = null;
       }
@@ -418,6 +452,27 @@ export function useBoardRuntime(opts: {
       });
       if (released.length > 0) modeRef.current?.restartSettle(released);
       prevHeld = held;
+
+      // Board activity, for the cap: a counter put down or picked up (on the laptop board,
+      // a click), or an arm over the board. Cells under the arm are left out of "what is on
+      // the board", as the arm itself reads as counters there.
+      const activity = boardActivityRef?.current;
+      if (activity) {
+        const key = boardKey(readings, armCells);
+        if (key !== keyPrev2 && key === keyPrev) activity.lastChangeMs = nowMs;
+        keyPrev2 = keyPrev;
+        keyPrev = key;
+        if (armPoints > 0) {
+          if (activity.handSinceMs === null) { activity.handSinceMs = nowMs; activity.lastChangeMs = nowMs; }
+          // A moving arm keeps the pause going; one lying still lets it go after "resting".
+          else if (Math.abs(armPoints - maskPrev) >= HAND_MOVE_POINTS
+            && nowMs - activity.handSinceMs < cfg.cap.restMs) activity.lastChangeMs = nowMs;
+        } else if (activity.handSinceMs !== null) {
+          activity.handSinceMs = null;
+          activity.lastChangeMs = nowMs;
+        }
+        maskPrev = armPoints;
+      }
 
       modeRef.current?.setVariation(cfg.variationEnabled, cfg.variationOffsetThreshold);
       modeRef.current?.setTwoCounters(cfg.twoCounterMode === 'both');
@@ -496,7 +551,9 @@ export function useBoardRuntime(opts: {
       }, dtMs);
       controls = ctl.state;
       const engine = engineRef.current;
-      engine?.setControlValues(ctl.values, ctl.toggles);
+      // The cap's values, then the board's control counters on top: a counter put down on
+      // purpose is the more deliberate choice.
+      engine?.setControlValues({ ...(capValuesRef?.current ?? {}), ...ctl.values }, ctl.toggles);
       if (running && engine) {
         loopBankRef.current = frame.loopBank;
         if (frame.captured.length > 0) callbacksRef.current.onLoopSlotsCaptured(frame.loopBank.saved);

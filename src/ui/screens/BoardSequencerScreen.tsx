@@ -50,12 +50,17 @@ import { describeBoard, phraseSpans, popsAt, pruneFired, type Pop } from './boar
 import { isSequencedRole, isControlRole, isLoopRole } from '../../tracking/boardColours';
 import { placeLaptopCounter } from '../../tracking/laptopBoard';
 import { LaptopBoardBar } from './boardSequencer/components/LaptopBoardBar';
-import { learnBoardReference, storeBoardReference, type FrameRGBA } from '../../tracking/boardReference/boardReference';
+import { learnBoardReference, loadBoardReference, orientSquareGrid, storeBoardReference, type FrameRGBA } from '../../tracking/boardReference/boardReference';
+import { findCounterBlobs } from '../../tracking/boardReference/findCounters';
+import { captureReaderFrames, READER_DOWNSCALE } from './boardSequencer/captureReaderFrames';
 import { detectionSetup } from '../../tracking/boardReference/detectionSetup';
 import { LoopThumb, PieceSteps, type PieceLoop, type PieceStep } from './boardSequencer/play/PieceSteps';
 import { NowNextStrip } from './boardSequencer/play/NowNextStrip';
 import type { ReadyItem } from './boardSequencer/play/ReadyCheck';
 import { PlayPanel } from './boardSequencer/play/PlayPanel';
+import { CapPanel, CAP_ROLE_LABELS, CAP_PAUSE_TEXT, capValueText } from './boardSequencer/play/CapPanel';
+import { useCapTracker } from './boardSequencer/useCapTracker';
+import type { BoardActivity, CapSettings } from '../../tracking/cap/capTracker';
 import { BoardLegend } from './boardSequencer/components/BoardLegend';
 import { soundNameFor } from './boardSequencer/soundOptions';
 import { SoundTab, type ChannelSoundPatch } from './boardSequencer/play/SoundTab';
@@ -81,11 +86,12 @@ import { runFrameBurst } from './boardSequencer/useFrameBurst';
 import {
   buildSquareModel, modelHsv, warpToBoard, type SquareModel,
 } from '../../tracking/boardColourDetect/squareModel';
-import { bandKeeps, fitSafeBand } from '../../tracking/boardColourDetect/detectColours';
+import { bandKeeps, coloursFromBlobs, fitSafeBand } from '../../tracking/boardColourDetect/detectColours';
 import { detectColours, type DetectedColour } from '../../tracking/boardColourDetect/detectColours';
 import type { FiredNote } from '../../songs/BoardSequencerEngine';
 import {
   SETUP_STEPS, canOpenStep, canPlay, resolveEntry, stepIndicator,
+  setupRequestedOnOpen, clearSetupRequest,
   type CameraStatus, type SetupStep,
 } from './boardSequencer/boardSetupFlow';
 import {
@@ -125,7 +131,7 @@ import {
   type RemoteControlName, type RemoteMessage, type RemoteState, type RemoteTriggerName,
 } from '../../remote/protocol';
 import { rotateCorners } from '../../tracking/boardDetect/orientation';
-import { applyDetectedColours } from './boardSequencer/applyDetectedColours';
+import { alikePairs, applyDetectedColours } from './boardSequencer/applyDetectedColours';
 import type { BoardSquares } from '../../tracking/boardGrid';
 import type { ControlsResult } from '../../tracking/controlCounters';
 import type { FaderRole, ControlRemoval } from '../../profiles/BoardSequencerConfig';
@@ -138,9 +144,6 @@ import type { FaderRole, ControlRemoval } from '../../profiles/BoardSequencerCon
 
 /** Reserved space under a control, so a disabled reason never shifts the layout. */
 /** How the camera picture is turned and flipped, from the saved settings. */
-/** The reader's frame size (BoardReader's default): the board is learnt at the same size it is read. */
-const READER_DOWNSCALE = 4;
-
 const orientationOf = (c: Pick<BoardSequencerStored, 'mirrorX' | 'mirrorY' | 'cameraRotation'>): FrameOrientation => ({
   mirrorX: c.mirrorX, mirrorY: c.mirrorY, rotation: c.cameraRotation,
 });
@@ -293,6 +296,14 @@ export default function BoardSequencerScreen() {
   const uiSize = useAppStore((s) => s.uiSize);
   const setUISize = useAppStore((s) => s.setUISize);
   const announce = useAppStore((s) => s.announce);
+  // The red cap: its own camera facing the player; its values merge into the controls.
+  const capValuesRef = useRef<Partial<Record<FaderRole, number>>>({});
+  const capPointerRef = useRef<{ x: number; y: number } | null>(null);
+  // What the board is doing, so the cap holds still while counters are being moved.
+  const boardActivityRef = useRef<BoardActivity>({ lastChangeMs: null, handSinceMs: null });
+  // The board camera actually in use: the cap must never take it.
+  const [camInfo, setCamInfo] = useState<CameraTrackInfo | null>(null);
+  const [capMouse, setCapMouse] = useState(false);
   const overlayRef = useRef<HTMLCanvasElement>(null);
   const startSecRef = useRef(0);
 
@@ -397,7 +408,24 @@ export default function BoardSequencerScreen() {
   const {
     videoRef, cameraRef, homographyRef, modeRef, engineRef, runningRef, loopBankRef, activeCellsRef,
     dismiss, letGoGhosts, knockRef, latestFrameRef, lastFrameAtRef,
-  } = useBoardRuntime({ cameraDeviceId: config.cameraDeviceId, cameraRetry, calibrated, laptop, configRef, callbacksRef });
+  } = useBoardRuntime({ cameraDeviceId: config.cameraDeviceId, cameraRetry, calibrated, laptop, configRef, callbacksRef, capValuesRef, boardActivityRef });
+  const cap = useCapTracker({
+    settings: config.cap,
+    ranges: config.controlRanges,
+    mouse: capMouse,
+    pointerRef: capPointerRef,
+    valuesRef: capValuesRef,
+    onReachLearnt: (reachX, reachY) => {
+      update({ cap: { ...configRef.current.cap, reachX, reachY } });
+      announce(reachX || reachY ? 'Your range is learnt.' : 'The cap hardly moved, so the whole picture stays the range. Try again, moving a little further.');
+    },
+    boardCameraId: (!laptop && camInfo?.deviceId) || config.cameraDeviceId,
+    activityRef: boardActivityRef,
+    onSideLearnt: (sideArc) => {
+      if (sideArc) update({ cap: { ...configRef.current.cap, sideArc } });
+      announce(sideArc ? 'Your side to side is learnt.' : 'The cap didn\u2019t move far enough sideways to learn it. Try again, a little further each way.');
+    },
+  });
   // Colour calibration armed for the next camera click: add a new channel, or
   // recalibrate an existing one (null = not calibrating).
   const [colourCalib, setColourCalib] = useState<ColourCalibTarget | null>(null);
@@ -408,14 +436,19 @@ export default function BoardSequencerScreen() {
   const [controlState, setControlState] = useState<ControlsResult | null>(null);
 
   // Guided Set up vs Play. The entry step is resolved once, from the config alone:
-  // routing never moves the player on its own.
-  const [view, setView] = useState<BoardScreenView>(() => (storedRef.current?.boardSource === 'laptop' ? 'play' : 'setup'));
+  // routing never moves the player on its own. The Welcome screen can ask for Set up instead of Play.
+  const [view, setView] = useState<BoardScreenView>(() => (
+    storedRef.current?.boardSource === 'laptop' && !setupRequestedOnOpen() ? 'play' : 'setup'
+  ));
   // The counter a click on the laptop board puts down.
   const [laptopColour, setLaptopColour] = useState('');
-  const [step, setStep] = useState<SetupStep>(() => resolveEntry(
-    { enabled: storedRef.current?.enabled ?? false, channels: storedRef.current?.channels ?? [] },
-    storedRef.current !== null,
+  const [step, setStep] = useState<SetupStep>(() => (
+    storedRef.current?.boardSource === 'laptop' && setupRequestedOnOpen() ? 'colours' : resolveEntry(
+      { enabled: storedRef.current?.enabled ?? false, channels: storedRef.current?.channels ?? [] },
+      storedRef.current !== null,
+    )
   ));
+  useEffect(() => { clearSetupRequest(); }, []);
   const [players, setPlayers] = useState<BoardPlayerProfile[]>(() => listBoardPlayers());
   const [activePlayer, setActivePlayerState] = useState<BoardPlayerProfile | null>(() => getActiveBoardPlayer());
   activePlayerIdRef.current = activePlayer?.id ?? activePlayerIdRef.current;
@@ -506,7 +539,6 @@ export default function BoardSequencerScreen() {
   // a notice (chosen camera missing / just switched), how colourful the frames the
   // app READS are, and the colour the last calibration click captured.
   const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
-  const [camInfo, setCamInfo] = useState<CameraTrackInfo | null>(null);
   const [camNotice, setCamNotice] = useState<CameraNotice | null>(null);
   const [feedSaturation, setFeedSaturation] = useState<number | null>(null);
   // Latched (hysteresis) so the black-and-white warning can't flicker/re-announce.
@@ -1176,6 +1208,33 @@ export default function BoardSequencerScreen() {
         });
         return;
       }
+      // Against the learnt board when there is one: the same pictures, the same light
+      // correction and the same test play uses, so bare wood is never offered as a colour.
+      const reference = loadBoardReference(cfg.boardReference);
+      if (reference && reference.squares === cfg.boardSquares && video.videoWidth > 0) {
+        const got = await captureReaderFrames(video, orientationOf(cfg), 5, 120, controller.signal);
+        if (controller.signal.aborted) return;
+        const hRef = homographyForCorners(cfg.corners, got.shown.width, got.shown.height);
+        const blobs = findCounterBlobs(got.frames, hRef, reference, READER_DOWNSCALE);
+        const foundRef = coloursFromBlobs(blobs, cfg.boardColours);
+        if (!foundRef.ok) {
+          setColourProposal({
+            colours: [],
+            message: 'I couldn’t see any counters. Put one of each on the board and try again. (If the light has changed a lot since the board was learnt, learn it again first.)',
+          });
+          return;
+        }
+        const unsafeRef = foundRef.colours.filter((c) => c.unsafe).length;
+        // Colours this close may be mixed up while playing: say so now, not mid-piece.
+        const offered = foundRef.colours.filter((c) => !c.unsafe);
+        const alike = alikePairs(offered.map((c) => c.swatch))
+          .map(([a, b]) => `${hueName(offered[a].hsv.h)} and ${hueName(offered[b].hsv.h)}`);
+        setColourProposal({
+          colours: foundRef.colours,
+          message: `Found ${foundRef.colours.length} ${foundRef.colours.length === 1 ? 'colour' : 'colours'} on ${blobs.length} ${blobs.length === 1 ? 'counter' : 'counters'}, against the learnt board.${unsafeRef > 0 ? ` ${unsafeRef} look close to the board's colours: they start switched off.` : ''}${alike.length > 0 ? ` ${alike.join('; ')} look alike in this light and may be mixed up while playing: more even light helps, or use just one of them.` : ''}`,
+        });
+        return;
+      }
       const frame = burst.frames[burst.frames.length - 1];
       const h = homographyForCorners(cfg.corners, frame.width, frame.height);
       const warped = warpToBoard(frame.data, frame.width, frame.height, h, cfg.boardSquares);
@@ -1191,7 +1250,11 @@ export default function BoardSequencerScreen() {
       // one inferred from this frame — which has counters all over it.
       const found = detectColours(warped, model.model, {
         boardColours: cfg.boardColours,
-        learntSquares: { squares: cfg.boardLearntSquares, rgb: cfg.boardSquareRgb },
+        learntSquares: {
+          squares: cfg.boardLearntSquares,
+          // Learnt with the same corners as the learnt board: turned with the board since.
+          rgb: orientSquareGrid(cfg.boardSquareRgb, cfg.boardLearntSquares, cfg.boardReference?.corners, cfg.corners),
+        },
       });
       if (!found.ok) {
         setColourProposal({
@@ -1560,10 +1623,13 @@ export default function BoardSequencerScreen() {
   /**
    * Learn what the EMPTY board looks like.
    *
-   * Refuses when the board plainly is not empty. Learning a board with counters on it is
-   * worse than not learning at all: the counters' own colours would be recorded as "the
-   * board", and every one of them would then be rejected as "looks like the board" —
-   * failing in a way that points at the wrong thing entirely.
+   * It used to REFUSE when many squares looked unlike the rest of their colour, taking that
+   * as counters left on the board. On a real board that blocked an empty board: walnut
+   * squares cut from lighter wood and a brighter corner looked "covered", and there was no
+   * way past. The facilitator can see the board; the app can only guess. So it trusts
+   * them: it learns, and if some squares stood out it says which way to check, plainly.
+   * (Learning each square exactly as it is, golden walnut and all, is the whole point of
+   * the board reference.)
    */
   const learnBoard = useCallback(() => {
     const cfg = configRef.current;
@@ -1579,11 +1645,9 @@ export default function BoardSequencerScreen() {
     const total = model.squares * model.squares;
     let covered = 0;
     for (let i = 0; i < total; i++) if (model.covered[i]) covered += 1;
-    if (covered > total * 0.12) {
-      setLearnMessage('There is still something on the board. Take the counters off, then learn it.');
-      announce('There is still something on the board.');
-      return;
-    }
+    const unusual = covered > total * 0.12
+      ? ` ${covered} squares look different from the others of their colour: lighter wood or a bright patch is fine. If anything is on them, take it off and learn it again.`
+      : '';
     const colours = modelHsv(model);
     if (colours.length === 0) {
       setLearnMessage('Couldn’t make out the squares. Try more even light.');
@@ -1600,33 +1664,32 @@ export default function BoardSequencerScreen() {
     // own grain, noise and flicker are what counts as "the board".
     const video = videoRef.current;
     void (async () => {
-      const frames: FrameRGBA[] = [];
+      let frames: FrameRGBA[] = [];
+      let learnt = false;
       if (video && video.videoWidth > 0) {
-        const shown = orientedSize(video.videoWidth, video.videoHeight, cfg.cameraRotation);
-        const w = Math.max(1, Math.floor(shown.width / READER_DOWNSCALE));
-        const hgt = Math.max(1, Math.floor(shown.height / READER_DOWNSCALE));
-        const cv = document.createElement('canvas');
-        cv.width = w;
-        cv.height = hgt;
-        const ctx = cv.getContext('2d', { willReadFrequently: true });
-        for (let i = 0; ctx && i < 12; i++) {
-          drawOriented(ctx, video, w, hgt, orientationOf(cfg));
-          frames.push({ data: ctx.getImageData(0, 0, w, hgt).data, width: w, height: hgt });
-          await new Promise((r) => { setTimeout(r, 90); });
-        }
+        const got = await captureReaderFrames(video, orientationOf(cfg), 12, 90);
+        frames = got.frames;
+        const shown = got.shown;
         try {
           const hm = homographyForCorners(cfg.corners, shown.width, shown.height);
           const ref = learnBoardReference(frames, hm, cfg.boardSquares, READER_DOWNSCALE);
-          if (ref) update({ boardReference: storeBoardReference(ref) });
+          // With the corners it was learnt with: a later Turn or Flip turns it too.
+          if (ref) update({ boardReference: { ...storeBoardReference(ref), corners: cfg.corners.map((c) => ({ x: c.x, y: c.y })) } });
+          learnt = ref !== null;
         } catch {
           // Degenerate corners: the colour model above still stands.
         }
+      }
+      if (!learnt) {
+        setLearnMessage('Couldn’t learn the board: all of it must be in the camera picture, with nothing on it. Check the corners and try again.');
+        announce('The board could not be learnt.');
+        return;
       }
       // Say so, with the time on it. Learning a second time usually finds the same number
       // of squares, so a bare count is indistinguishable from the button doing nothing —
       // and a control that gives no sign it ran is a control you cannot trust.
       const at = new Date().toLocaleTimeString();
-      setLearnMessage(`Learnt from ${colours.length} squares and ${frames.length} pictures at ${at}.`);
+      setLearnMessage(`Learnt from ${colours.length} squares and ${frames.length} pictures at ${at}.${unusual}`);
       announce(`Board learnt from ${colours.length} squares.`);
     })();
   }, [configRef, boardModelNow, update, announce, videoRef]);
@@ -1767,7 +1830,11 @@ export default function BoardSequencerScreen() {
     // Rehearsing from a scene: the clock starts part-way, in the scene on at that moment.
     const from = rehearseFromRef.current;
     rehearseFromRef.current = null;
-    const clockOn = from !== null || home.performance.startOn === 'play';
+    // ▶ Play just plays: the piece (its clock, scenes, band and loops) starts only from
+    // Show's "Start the piece" or "Rehearse from here" — both of which set `from`. Play
+    // used to start the piece whenever one existed, so making a loop or trying drums alone
+    // got the opening scene's band and loops, and loops changing at 1:30.
+    const clockOn = from !== null;
     const startSec = from ?? 0;
     const openingIndex = clockOn ? sceneAt(home.scenes, startSec) : -1;
     const opening = openingIndex >= 0 ? home.scenes[openingIndex] : null;
@@ -2785,15 +2852,20 @@ export default function BoardSequencerScreen() {
         const bpm = tempoFromValue(msg.value);
         update({ bpm });
         engineRef.current?.setBpm(bpm);
+        // The cap would put its own value straight back: it takes the iPad's instead.
+        cap.handOver('tempo', bpm);
       } else if (msg.name === 'dynamics') {
         const { velocity, volume } = dynamicsFromValue(msg.value);
         update({ velocity, volume });
         engineRef.current?.setVelocity(velocity);
         engineRef.current?.setVolume(volume);
+        cap.handOver('volume', volume);
       } else if (msg.name === 'fill') {
         update({ fillAmount: msg.value });
+        cap.handOver('fill', msg.value);
       } else {
         update({ evolveAmount: msg.value });
+        cap.handOver('evolve', msg.value);
       }
       const next = { ...c, ...(msg.name === 'tempo' ? { bpm: tempoFromValue(msg.value) } : {}),
         ...(msg.name === 'dynamics' ? { velocity: dynamicsFromValue(msg.value).velocity } : {}),
@@ -3384,6 +3456,15 @@ export default function BoardSequencerScreen() {
       : c.enabled && (camera.phase === 'running' || camera.phase === 'fallback')
         ? { label: 'Board: camera running and the board found', state: 'ok' }
         : { label: 'Board: camera or board not ready', state: 'problem', fix: 'Set up: Camera and Board.' });
+    if (c.cap.enabled) {
+      items.push(cap.view.camera === 'no-camera'
+        ? { label: 'Red cap: its camera could not be opened', state: 'problem', fix: 'Cap tab: choose the camera facing the player, or switch the cap off.' }
+        : cap.view.camera === 'only-board'
+          ? { label: 'Red cap: no camera of its own (the only one is the board’s)', state: 'problem', fix: 'Connect a second camera facing the player, or switch the cap off.' }
+        : cap.view.seen
+          ? { label: `Red cap: ${cap.view.source === 'face' ? 'following the face' : 'found'}`, state: 'ok' }
+          : { label: 'Red cap: not in sight', state: 'warn', fix: 'Cap tab: check the camera sees the player and click the cap to learn its colour.' });
+    }
     if (!laptop) {
       const det = detectionSetup(c);
       items.push(det.mode === 'board'
@@ -3966,6 +4047,48 @@ export default function BoardSequencerScreen() {
     />
   );
 
+  const updateCap = (patch: Partial<CapSettings>): void => update({ cap: { ...configRef.current.cap, ...patch } });
+  const capTab = (
+    <CapPanel
+      settings={config.cap}
+      onChange={updateCap}
+      view={cap.view}
+      previewRef={cap.previewRef}
+      pointerRef={capPointerRef}
+      mouse={capMouse}
+      onMouse={setCapMouse}
+      cameras={cap.cameras}
+      learnReach={cap.learnReach}
+      learnSide={cap.learnSide}
+      boardCameraId={(!laptop && camInfo?.deviceId) || config.cameraDeviceId}
+      colourAt={cap.colourAt}
+      ranges={config.controlRanges}
+      announce={announce}
+    />
+  );
+  /** What the cap is doing, under the board: visible feedback for every change it makes. */
+  const capHud = config.cap.enabled ? (
+    <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', fontSize: 13 }}>
+      {/* Only the state is announced: the numbers change several times a second. */}
+      <span role="status" aria-label="Red cap" style={{ fontWeight: 700, color: cap.view.seen && !cap.view.paused ? 'var(--bs-ok)' : 'var(--bs-warn)' }}>
+        {`🧢 ${cap.view.paused ? CAP_PAUSE_TEXT[cap.view.paused] : cap.view.seen ? (cap.view.source === 'face' ? 'following the face' : 'cap found') : 'cap not in sight (holding)'}${config.cap.locked ? ' · locked' : ''}`}
+      </span>
+      {(['xRole', 'yRole'] as const).map((k) => {
+        const role = config.cap[k];
+        if (role === 'off') return null;
+        const pos = k === 'xRole' ? cap.view.axes.x : cap.view.axes.y;
+        return (
+          <span key={k} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            {`${CAP_ROLE_LABELS[role]} ${capValueText(role, cap.view.values[role])}`}
+            <span aria-hidden="true" style={{ width: 60, height: 8, borderRadius: 4, background: 'var(--bs-elev)', overflow: 'hidden', display: 'inline-block' }}>
+              <span style={{ display: 'block', width: `${Math.round((pos ?? 0) * 100)}%`, height: '100%', background: 'var(--bs-accent)' }} />
+            </span>
+          </span>
+        );
+      })}
+    </div>
+  ) : null;
+
   const boardLegend = (
     <BoardLegend
       tunes={config.phrases && config.channels.some((c) => c.role === 'drums' || c.role === 'bass' || c.role === 'chord' ? c.plays !== 'note' : c.role === 'melody' && c.plays === 'tune')}
@@ -4031,6 +4154,7 @@ export default function BoardSequencerScreen() {
       {view === 'play' && running && nowNextStrip}
       {(view === 'play' || laptop) && <div style={{ flex: 1, minHeight: 200 }}>{boardView}</div>}
       {(view === 'play' || laptop) && running && boardLegend}
+      {(view === 'play' || laptop) && capHud}
       <div style={view === 'play'
         ? { width: 220, alignSelf: layout.pip === 'bottom-left' ? 'flex-start' : 'flex-end' }
         : undefined}
@@ -4179,6 +4303,9 @@ export default function BoardSequencerScreen() {
           </div>
         </>
       )}
+      {view === 'play' && aiOffLine(config.fillAmount, config.evolveAmount) && (
+        <span role="status" style={{ fontSize: 13, color: 'var(--bs-fg2)' }}>{aiOffLine(config.fillAmount, config.evolveAmount)}</span>
+      )}
       {view === 'play' && (
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
           {config.channels.map((c, i) => (
@@ -4235,9 +4362,6 @@ export default function BoardSequencerScreen() {
           </Button>
         </div>
       )}
-      {view === 'play' && aiOffLine(config.fillAmount, config.evolveAmount) && (
-        <span role="status" style={{ fontSize: 13, color: 'var(--bs-fg2)' }}>{aiOffLine(config.fillAmount, config.evolveAmount)}</span>
-      )}
       {view === 'play' && (
         <p aria-live="off" style={{ margin: 0, fontSize: 12, color: 'var(--bs-fg2)', minHeight: 18 }}>
           {pops.length > 0
@@ -4290,7 +4414,7 @@ export default function BoardSequencerScreen() {
       {midiBannerView}
       {running ? bigNowNextStrip : (
         <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap', padding: '10px 14px', borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-elev)' }}>
-          <Button tone="primary" onClick={() => void start()} style={{ fontSize: 22, padding: '10px 26px' }}>▶ Start the piece</Button>
+          <Button tone="primary" onClick={() => { rehearseFromRef.current = 0; void start(); }} style={{ fontSize: 22, padding: '10px 26px' }}>▶ Start the piece</Button>
           <span style={{ fontSize: 16 }}>
             {`${formatClock(config.performance.lengthSec)} · ${config.scenes.length === 0 ? 'no scenes' : `${config.scenes.length} ${config.scenes.length === 1 ? 'scene' : 'scenes'}`} · ${describeEnding(config.performance)}`}
           </span>
@@ -4560,6 +4684,7 @@ export default function BoardSequencerScreen() {
                 clock={clock}
                 piece={workspace === 'piece' ? pieceTab : null}
                 connections={connectionsTab}
+                cap={capTab}
                 groove={grooveTab}
                 sound={soundTab}
                 loops={loopsTab}

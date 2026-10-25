@@ -1,0 +1,666 @@
+<title>Board Sequencer Journey</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Lexend:wght@500;700&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: a journey rail (stages, in order) on the left; each stage is a mock screen of the
+   redesigned app with "what changed and why" notes beside it. Phone: rail becomes a strip. */
+:root {
+  --bg: #eef0f3; --panel: #ffffff; --elev: #e4e8ee; --ink: #232833; --ink2: #4a5262; --line: #cfd5de;
+  --accent: #23675a; --accent-ink: #ffffff; --accent-soft: #d6ece5; --warn: #7a5a0e; --warn-soft: #f6edd3;
+  --danger: #9b3527; --note: #f7f3e8;
+  --red: #d93a3a; --blue: #2f6fd6; --yellow: #d9b11c; --green: #2f9a52; --cyan: #1fa7b4; --purple: #8a4fc0;
+  --f-display: "Lexend", "Segoe UI", system-ui, sans-serif;
+  --f-body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+  --r: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #1b2029; --panel: #252b37; --elev: #2f3645; --ink: #e7e9ee; --ink2: #b9c0cc; --line: #3a4252;
+    --accent: #9fd8c4; --accent-ink: #14201c; --accent-soft: #2c4a42; --warn: #e9cf8f; --warn-soft: #3b3524;
+    --danger: #f0a598; --note: #2d2a22; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #1b2029; --panel: #252b37; --elev: #2f3645; --ink: #e7e9ee; --ink2: #b9c0cc; --line: #3a4252;
+  --accent: #9fd8c4; --accent-ink: #14201c; --accent-soft: #2c4a42; --warn: #e9cf8f; --warn-soft: #3b3524;
+  --danger: #f0a598; --note: #2d2a22; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 16px; line-height: 1.5; }
+.page { max-width: 1240px; margin: 0 auto; padding-inline: 16px; padding-block: 28px 64px; display: grid; gap: 24px; }
+h1, h2, h3, h4 { font-family: var(--f-display); line-height: 1.15; margin: 0; text-wrap: balance; }
+h1 { font-size: clamp(1.7rem, 3.5vw, 2.4rem); }
+h2 { font-size: 1.35rem; }
+h3 { font-size: 1.05rem; }
+p { margin: 0; max-width: 68ch; }
+.lede { color: var(--ink2); font-size: 1.05rem; }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+/* ---- header ---- */
+.top { display: grid; gap: 10px; }
+.eyebrow { font-family: var(--f-mono); font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink2); }
+.findings { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; }
+.finding { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 12px; display: grid; gap: 4px; min-width: 0; }
+.finding b { font-family: var(--f-display); font-weight: 500; }
+.finding span { color: var(--ink2); font-size: 0.92rem; }
+
+/* ---- the journey ---- */
+.journey { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 20px; align-items: start; }
+.rail { position: sticky; top: env(safe-area-inset-top, 0px); display: grid; gap: 4px; }
+.rail button {
+  display: grid; grid-template-columns: 28px 1fr; gap: 8px; align-items: center; text-align: left;
+  background: transparent; border: 1px solid transparent; border-radius: 8px; padding: 8px; cursor: pointer;
+}
+.rail button .n { font-family: var(--f-mono); font-size: 0.8rem; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--elev); }
+.rail button .who { display: block; font-size: 0.75rem; color: var(--ink2); }
+.rail button[aria-current="step"] { background: var(--panel); border-color: var(--line); }
+.rail button[aria-current="step"] .n { background: var(--accent); color: var(--accent-ink); }
+.stage { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
+.stage[hidden] { display: none; }
+.stage-head { grid-column: 1 / -1; display: grid; gap: 4px; }
+
+/* the mock app window */
+.app { background: var(--bg); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; box-shadow: 0 1px 0 var(--line); min-width: 0; }
+.app-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 12px; background: var(--panel); border-bottom: 1px solid var(--line); }
+.app-bar .title { font-family: var(--f-display); font-weight: 700; }
+.app-bar .crumb { color: var(--ink2); font-size: 0.9rem; }
+.app-bar .spacer { flex: 1; }
+.stepper { display: flex; flex-wrap: wrap; gap: 4px; }
+.stepper span { font-size: 0.8rem; padding: 3px 8px; border-radius: 999px; background: var(--elev); color: var(--ink2); }
+.stepper span.on { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+.app-body { padding: 14px; display: grid; gap: 12px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 12px; display: grid; gap: 8px; min-width: 0; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.btn { border: 1.5px solid var(--line); background: var(--panel); border-radius: 8px; padding: 8px 14px; min-height: 44px; cursor: pointer; font-weight: 700; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.big { min-height: 64px; font-size: 1.15rem; padding: 10px 22px; }
+.btn.quiet { border-color: transparent; background: transparent; color: var(--ink2); font-weight: 400; }
+.btn.danger-armed { background: var(--danger); color: var(--panel); border-color: var(--danger); }
+.pill { font-size: 0.8rem; padding: 3px 9px; border-radius: 999px; background: var(--elev); }
+.pill.ok { background: var(--accent-soft); }
+.pill.warn { background: var(--warn-soft); color: var(--warn); }
+.muted { color: var(--ink2); font-size: 0.9rem; }
+.mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+
+/* board + loops */
+.board { display: grid; grid-template-columns: repeat(8, 1fr); gap: 3px; background: var(--elev); padding: 6px; border-radius: 8px; aspect-ratio: 1; max-width: 360px; width: 100%; }
+.board i { border-radius: 4px; background: var(--panel); display: grid; place-items: center; }
+.board i b { width: 70%; height: 70%; border-radius: 50%; display: block; }
+.board i.head { outline: 2px solid var(--accent); }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+.tile { border: 1.5px solid var(--line); border-radius: 8px; background: var(--panel); padding: 6px; display: grid; gap: 4px; cursor: pointer; text-align: left; min-height: 104px; }
+.tile.empty { border-style: dashed; color: var(--ink2); place-items: center; text-align: center; font-size: 0.85rem; }
+.tile.playing { border-color: var(--accent); box-shadow: inset 0 0 0 2px var(--accent); }
+.tile.picked { border-color: var(--warn); box-shadow: inset 0 0 0 2px var(--warn); }
+.thumb { display: grid; grid-template-columns: repeat(8, 1fr); gap: 1px; aspect-ratio: 1; background: var(--elev); border-radius: 4px; padding: 2px; }
+.thumb i { border-radius: 50%; }
+.tile .name { font-weight: 700; font-size: 0.85rem; }
+.tile .st { font-size: 0.75rem; color: var(--ink2); }
+
+/* timeline */
+.timeline { position: relative; display: grid; grid-template-columns: var(--cols); gap: 3px; min-height: 92px; }
+.sec { border-radius: 8px; padding: 8px; color: #fff; display: grid; align-content: start; gap: 3px; cursor: pointer; border: 2px solid transparent; min-width: 0; overflow: hidden; }
+.sec .t { font-family: var(--f-mono); font-size: 0.75rem; opacity: 0.9; }
+.sec .nm { font-family: var(--f-display); font-weight: 700; }
+.sec .ls { font-size: 0.75rem; }
+.sec.sel { border-color: var(--ink); }
+.sec.end { background: repeating-linear-gradient(135deg, #5a6170, #5a6170 6px, #646b7a 6px, #646b7a 12px); }
+.ruler { display: flex; justify-content: space-between; font-family: var(--f-mono); font-size: 0.75rem; color: var(--ink2); }
+.playhead { position: absolute; top: -4px; bottom: -4px; width: 3px; background: var(--ink); border-radius: 2px; transition: left 0.3s; }
+
+/* perform */
+.perform { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.screen-label { font-family: var(--f-mono); font-size: 0.75rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink2); }
+.nownext { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 12px; }
+.clock { font-family: var(--f-mono); font-size: 2.4rem; font-weight: 500; }
+.ipad { background: #111419; border-radius: 18px; padding: 14px; display: grid; gap: 10px; color: #e7e9ee; }
+.ipad .strip { height: 46px; border-radius: 10px; background: linear-gradient(90deg, #2f3645, #9fd8c4); display: flex; align-items: center; padding-inline: 12px; color: #14201c; font-weight: 700; }
+.ipad .pads { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.ipad .pad { border-radius: 12px; background: #2f3645; padding: 16px 10px; text-align: center; font-weight: 700; }
+
+/* notes */
+.notes { display: grid; gap: 10px; position: sticky; top: env(safe-area-inset-top, 0px); }
+.note { background: var(--note); border: 1px solid var(--line); border-radius: var(--r); padding: 12px; display: grid; gap: 6px; font-size: 0.92rem; }
+.note h4 { font-size: 0.95rem; }
+.note ul { margin: 0; padding-left: 1.1em; display: grid; gap: 4px; }
+.fixes { font-size: 0.8rem; color: var(--ink2); }
+.nav { grid-column: 1 / -1; display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+
+/* terms + map */
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
+th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-family: var(--f-display); font-weight: 500; }
+td s { color: var(--ink2); }
+.toast { min-height: 1.5em; font-size: 0.9rem; color: var(--accent); font-weight: 700; }
+
+@media (max-width: 960px) {
+  .journey { grid-template-columns: 1fr; }
+  .rail { position: static; display: flex; overflow-x: auto; gap: 6px; padding-bottom: 4px; }
+  .rail button { grid-template-columns: 24px auto; white-space: nowrap; }
+  .stage { grid-template-columns: 1fr; }
+  .notes { position: static; }
+  .perform { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) { .playhead { transition: none; } }
+</style>
+
+<div class="page">
+  <header class="top">
+    <span class="eyebrow">ADMI · Board Sequencer · redesign proposal</span>
+    <h1>From "where is everything?" to a journey you can follow</h1>
+    <p class="lede">A clickable mock-up of the redesigned Board Sequencer, stage by stage, from opening it with Tim to the bow at 7:00. It is built from four reviews: an audit of today's app, comparable loop instruments (Ableton Note and Move, Koala, Circuit, Logic Live Loops) and accessible instruments (Clarion, Soundbeam, Skoog, AUMI), and an inclusive-design review.</p>
+    <div class="findings" aria-label="What the reviews found">
+      <div class="finding"><b>▶ Play secretly starts the piece</b><span>Once a plan exists, playing to make a loop starts the 7-minute clock and the opening scene, and loops swap at 1:30.</span></div>
+      <div class="finding"><b>Six things are called "loop"</b><span>Saved loops, loop pads, the "Plays a loop" colour, launched loops, "Loops vary", and a pass ("every 8 loops").</span></div>
+      <div class="finding"><b>Grouped by technology, not task</b><span>Sound, Groove, Board, Connections, Cap. Tim's settings are spread over three places; grid size sits in "Groove".</span></div>
+      <div class="finding"><b>No "where am I, what next"</b><span>Six independent modes share one header; the Ready check only appears in step 3 of making a piece.</span></div>
+    </div>
+  </header>
+
+  <section class="journey" aria-label="The redesigned journey">
+    <nav class="rail" aria-label="Stages">
+      <button data-go="0"><span class="n">1</span><span>Open<span class="who">Who's playing, which piece</span></span></button>
+      <button data-go="1"><span class="n">2</span><span>Tim's card<span class="who">The player, set up once</span></span></button>
+      <button data-go="2"><span class="n">3</span><span>Room check<span class="who">One run, plain fallbacks</span></span></button>
+      <button data-go="3"><span class="n">4</span><span>Make loops<span class="who">Play, then Keep</span></span></button>
+      <button data-go="4"><span class="n">5</span><span>Build the piece<span class="who">Sections on a timeline</span></span></button>
+      <button data-go="5"><span class="n">6</span><span>Rehearse<span class="who">Run from any section</span></span></button>
+      <button data-go="6"><span class="n">7</span><span>Perform<span class="who">Three controls, two screens</span></span></button>
+      <button data-go="7"><span class="n">8</span><span>After<span class="who">The session, for the research</span></span></button>
+    </nav>
+
+    <div id="stages">
+      <!-- 1. Open -->
+      <article class="stage" data-stage="0" aria-labelledby="s0">
+        <div class="stage-head"><span class="eyebrow">Stage 1 of 8 · facilitator</span><h2 id="s0">Open: who's playing, which piece</h2></div>
+        <div class="app">
+          <div class="app-bar"><span class="title">Board Sequencer</span><span class="spacer"></span><span class="pill">Saved on this laptop · backed up 20 Oct</span></div>
+          <div class="app-body">
+            <div class="card">
+              <h3>Carry on where you left off</h3>
+              <p class="muted">"Seven Minutes" with Tim · 4 loops kept · 4 sections · ends with a fade at 7:00</p>
+              <div class="row"><button class="btn primary big" data-go="2">Continue "Seven Minutes" with Tim</button></div>
+            </div>
+            <div class="two">
+              <div class="card">
+                <h3>Pieces</h3>
+                <div class="row"><span class="pill ok">Seven Minutes</span><span class="pill">Warm-up jam</span><span class="pill">Starter: Calm</span><span class="pill">Starter: Groove</span></div>
+                <button class="btn quiet">+ New piece (from a starter)</button>
+              </div>
+              <div class="card">
+                <h3>Players</h3>
+                <div class="row"><button class="btn" data-go="1">Tim · board, iPad, cap</button><button class="btn">Guest · laptop</button></div>
+                <button class="btn quiet">+ Add a player</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <aside class="notes" aria-label="Notes">
+          <div class="note"><h4>What changed</h4><ul>
+            <li>The first screen asks two plain questions: <b>who</b> and <b>which piece</b>. One big button carries on.</li>
+            <li><b>Pieces</b> and <b>players</b> are separate: casting a guest into the piece keeps its loops and sections.</li>
+            <li>Starter pieces: sound in seconds, and a safe fallback if the camera fails on the day.</li>
+          </ul></div>
+          <p class="fixes">Fixes: "loops/scenes missing — wrong player", no where-am-I.</p>
+        </aside>
+        <div class="nav"><span></span><button class="btn" data-next>Next: Tim's card →</button></div>
+      </article>
+
+      <!-- 2. Player card -->
+      <article class="stage" data-stage="1" aria-labelledby="s1" hidden>
+        <div class="stage-head"><span class="eyebrow">Stage 2 of 8 · facilitator, once (and when something changes)</span><h2 id="s1">Tim's card: everything about how he plays, in one place</h2></div>
+        <div class="app">
+          <div class="app-bar"><span class="title">Players › Tim</span><span class="spacer"></span><button class="btn quiet">Duplicate ("Tim, tired day")</button></div>
+          <div class="app-body">
+            <div class="card">
+              <div class="row"><h3>Tim</h3><span class="pill">left-handed</span><span class="pill">Warm sounds</span><span class="pill">reduced motion: off</span></div>
+              <p class="muted">How Tim plays. Each input shows today's status, never an error.</p>
+              <div class="two">
+                <div class="card"><b>Board (camera)</b><span class="pill ok">Ready</span><span class="muted">Board learnt 21 Oct · 5 colours</span><button class="btn">Learn the board again</button></div>
+                <div class="card"><b>iPad</b><span class="pill ok">Ready</span><span class="muted">Reach learnt 14 Oct · strips follow · pads act on lift</span><button class="btn">Learn reach</button></div>
+                <div class="card"><b>Red cap</b><span class="pill ok">Ready</span><span class="muted">Left–right → Speed · Up–down → Volume · one direction at a time</span><button class="btn">Learn range</button></div>
+                <div class="card"><b>Laptop board</b><span class="pill">For planning</span><span class="muted">Used automatically when there is no camera</span></div>
+              </div>
+            </div>
+            <div class="card">
+              <b>During a piece, Tim can…</b>
+              <div class="row"><span class="pill ok">✓ Keep a loop</span><span class="pill ok">✓ Next section</span><span class="pill">End the piece: facilitator only</span></div>
+            </div>
+          </div>
+        </div>
+        <aside class="notes" aria-label="Notes">
+          <div class="note"><h4>What changed</h4><ul>
+            <li>The Cap tab, the iPad half of Connections and his reach move onto <b>his card</b>. Connections keeps only the room's technology (Ableton, iPad link, Panic).</li>
+            <li>Every calibration shows its date, so "still fine?" is a glance.</li>
+            <li><b>Duplicate</b> turns a tired day into one tap instead of re-calibrating (common with CP and ABI).</li>
+          </ul></div>
+          <p class="fixes">Fixes: Tim's settings spread over Cap, Connections and Set up.</p>
+        </aside>
+        <div class="nav"><button class="btn" data-prev>← Back</button><button class="btn" data-next>Next: Room check →</button></div>
+      </article>
+
+      <!-- 3. Room check -->
+      <article class="stage" data-stage="2" aria-labelledby="s2" hidden>
+        <div class="stage-head"><span class="eyebrow">Stage 3 of 8 · facilitator, start of every session</span><h2 id="s2">Room check: one button, plain fallbacks</h2></div>
+        <div class="app">
+          <div class="app-bar"><span class="title">Seven Minutes · Tim</span><div class="stepper" aria-label="Where you are"><span class="on">Room</span><span>Make</span><span>Build</span><span>Rehearse</span><span>Perform</span></div></div>
+          <div class="app-body">
+            <div class="card">
+              <div class="row"><h3>Is the room ready?</h3><span class="spacer"></span><button class="btn primary" id="check">Check everything</button></div>
+              <ul id="checks" style="list-style:none;margin:0;padding:0;display:grid;gap:6px">
+                <li class="row"><span class="pill" data-c>…</span>Camera sees the board</li>
+                <li class="row"><span class="pill" data-c>…</span>Counter colours found (5)</li>
+                <li class="row"><span class="pill" data-c>…</span>Tim's iPad</li>
+                <li class="row"><span class="pill" data-c>…</span>Red cap seen</li>
+                <li class="row"><span class="pill" data-c>…</span>Sound: Ableton on port ADMI <span class="muted">(test note on every track)</span></li>
+              </ul>
+              <p class="muted" id="checkNote">Press Check everything. Nothing here ever blocks playing: anything missing says what will happen instead.</p>
+            </div>
+          </div>
+        </div>
+        <aside class="notes" aria-label="Notes">
+          <div class="note"><h4>What changed</h4><ul>
+            <li>Set up becomes a <b>check</b>, not a maze: one automatic run, and you only open a step when something fails.</li>
+            <li>Each missing piece names its fallback: no camera → laptop board; no iPad → keys N/E; no Ableton → ADMI's sound; no cap → volume and speed stay put.</li>
+            <li>The Ready check moves here, to the start, instead of step 3 of making a piece.</li>
+          </ul></div>
+          <p class="fixes">Fixes: Set up isn't a gate; iPad, Ableton and cap had no checklist.</p>
+        </aside>
+        <div class="nav"><button class="btn" data-prev>← Back</button><button class="btn" data-next>Next: Make loops →</button></div>
+      </article>
+
+      <!-- 4. Make loops -->
+      <article class="stage" data-stage="3" aria-labelledby="s3" hidden>
+        <div class="stage-head"><span class="eyebrow">Stage 4 of 8 · facilitator and Tim together</span><h2 id="s3">Make loops: play freely, then Keep</h2></div>
+        <div class="app">
+          <div class="app-bar"><span class="title">Seven Minutes · Tim</span><div class="stepper"><span>Room</span><span class="on">Make</span><span>Build</span><span>Rehearse</span><span>Perform</span></div><span class="spacer"></span><span class="pill ok">▶ Playing freely · no clock</span></div>
+          <div class="app-body">
+            <div class="row" style="align-items:flex-start">
+              <div style="display:grid;gap:8px;flex:1 1 260px;min-width:0">
+                <div class="board" id="board" aria-label="The board: Tim's counters now"></div>
+                <p class="muted">● Tim's counters · ◎ a loop playing under him · ◌ extra notes</p>
+              </div>
+              <div style="display:grid;gap:10px;flex:1 1 220px;min-width:0">
+                <button class="btn primary big" id="keep">Keep this</button>
+                <p class="muted">Saves the board as it sounds now into the next free loop, named and ready. Tim can press it too (iPad pad or a nod).</p>
+                <div class="toast" id="keepToast" role="status" aria-live="polite"></div>
+                <details class="card"><summary><b>Sound</b> <span class="muted">· Warm · helpers: extra notes a few</span></summary><p class="muted">World, each colour's sound and the helpers (band, extra notes, sounds change) live in this one drawer, not in tabs.</p></details>
+              </div>
+            </div>
+            <div class="card">
+              <div class="row"><h3>Loops</h3><span class="muted">Tap a loop to play it under Tim; tap again to fade it out.</span></div>
+              <div class="tiles" id="tiles"></div>
+            </div>
+          </div>
+        </div>
+        <aside class="notes" aria-label="Notes">
+          <div class="note"><h4>What changed</h4><ul>
+            <li><b>Play never starts the piece.</b> Here the music just plays; the clock only exists in Rehearse and Perform.</li>
+            <li><b>Keep</b> is capture after the fact (as Ableton Note and Move do): no arming, no slot to choose, no typing. Rename later.</li>
+            <li>The loops are a row of tiles with a picture of each, right under the board, and tapping one plays it.</li>
+            <li>"Loop" means one thing only: a kept board.</li>
+          </ul></div>
+          <p class="fixes">Fixes: ▶ Play = performance; "Save the board here" 540px away; six meanings of loop.</p>
+        </aside>
+        <div class="nav"><button class="btn" data-prev>← Back</button><button class="btn" data-next>Next: Build the piece →</button></div>
+      </article>
+
+      <!-- 5. Build -->
+      <article class="stage" data-stage="4" aria-labelledby="s4" hidden>
+        <div class="stage-head"><span class="eyebrow">Stage 5 of 8 · facilitator</span><h2 id="s4">Build the piece: sections on a 7-minute timeline</h2></div>
+        <div class="app">
+          <div class="app-bar"><span class="title">Seven Minutes · Tim</span><div class="stepper"><span>Room</span><span>Make</span><span class="on">Build</span><span>Rehearse</span><span>Perform</span></div></div>
+          <div class="app-body">
+            <div class="card">
+              <div class="row"><h3>The piece</h3><span class="muted mono">7:00</span><span class="spacer"></span><button class="btn quiet">Start from the 4-section plan</button></div>
+              <div class="timeline" id="tl" style="--cols: 90fr 120fr 150fr 50fr 10fr"></div>
+              <div class="ruler" aria-hidden="true"><span>0:00</span><span>1:30</span><span>3:30</span><span>6:00</span><span>7:00</span></div>
+            </div>
+            <div class="row" style="align-items:flex-start">
+              <div class="card" style="flex:1 1 280px">
+                <h3 id="secTitle">Build · 1:30</h3>
+                <p class="muted">A section is three things: when it starts, which loops play, and how long. Tap a loop below, then "Add to this section".</p>
+                <div class="row" id="secLoops"></div>
+                <div class="row"><button class="btn" id="addLoop">Add to this section</button><span class="muted" id="addHint"></span></div>
+                <details><summary>More for this section</summary><p class="muted">World · Band · Extra notes · Sounds change · Speed. Each starts as "same as before", so a section only changes what you change.</p></details>
+              </div>
+              <div class="card" style="flex:1 1 200px">
+                <h3>How it ends</h3>
+                <div class="row"><span class="pill ok">Fade out · 2 passes</span></div>
+                <p class="muted">Ends by 7:00 whatever happens, or earlier when you press End.</p>
+              </div>
+            </div>
+            <div class="card"><h3>Loops</h3><div class="tiles" id="tiles2"></div></div>
+          </div>
+        </div>
+        <aside class="notes" aria-label="Notes">
+          <div class="note"><h4>What changed</h4><ul>
+            <li>"Scenes" become <b>sections</b> (a musician's word) on a timeline you can see, ending included as the last block.</li>
+            <li>A section shows three things; the rest is under "More" and defaults to "same as before".</li>
+            <li>A section remembers the <b>whole</b> sound you set (today a scene silently drops Energy, Space, Groove and per-colour sounds).</li>
+          </ul></div>
+          <p class="fixes">Fixes: scenes drop settings; 8 parameters per scene; structure hidden in a list.</p>
+        </aside>
+        <div class="nav"><button class="btn" data-prev>← Back</button><button class="btn" data-next>Next: Rehearse →</button></div>
+      </article>
+
+      <!-- 6. Rehearse -->
+      <article class="stage" data-stage="5" aria-labelledby="s5" hidden>
+        <div class="stage-head"><span class="eyebrow">Stage 6 of 8 · facilitator and Tim</span><h2 id="s5">Rehearse: run from any section, while playing</h2></div>
+        <div class="app">
+          <div class="app-bar"><span class="title">Seven Minutes · Tim</span><div class="stepper"><span>Room</span><span>Make</span><span>Build</span><span class="on">Rehearse</span><span>Perform</span></div><span class="spacer"></span><span class="pill ok mono" id="rClock">▶ 1:30</span></div>
+          <div class="app-body">
+            <div class="card">
+              <div style="position:relative">
+                <div class="timeline" id="tlR" style="--cols: 90fr 120fr 150fr 50fr 10fr"></div>
+                <span class="playhead" id="ph" style="left: 21.5%"></span>
+              </div>
+              <div class="row" id="runFrom"></div>
+              <div class="row"><button class="btn">Loop this section</button><span class="muted">Stays in the section until you press Next, to practise one part.</span></div>
+            </div>
+            <div class="card"><b>Notes for next time</b><div class="row"><span class="pill">+ Tim tired</span><span class="pill">+ Great take</span><span class="pill">+ Tech issue</span></div></div>
+          </div>
+        </div>
+        <aside class="notes" aria-label="Notes">
+          <div class="note"><h4>What changed</h4><ul>
+            <li><b>Run from here</b> works while playing (today it is only offered when stopped).</li>
+            <li>"Loop this section" practises one part without the clock moving on.</li>
+            <li>Rehearse is its own place: the clock runs here and in Perform, never in Make.</li>
+          </ul></div>
+          <p class="fixes">Fixes: rehearsing a section meant stopping, finding Make a piece → Scenes.</p>
+        </aside>
+        <div class="nav"><button class="btn" data-prev>← Back</button><button class="btn" data-next>Next: Perform →</button></div>
+      </article>
+
+      <!-- 7. Perform -->
+      <article class="stage" data-stage="6" aria-labelledby="s6" hidden>
+        <div class="stage-head"><span class="eyebrow">Stage 7 of 8 · the show</span><h2 id="s6">Perform: three controls for the facilitator, the music for Tim</h2></div>
+        <div class="app">
+          <div class="app-bar"><span class="title">Seven Minutes · Tim</span><div class="stepper"><span>Room</span><span>Make</span><span>Build</span><span>Rehearse</span><span class="on">Perform</span></div></div>
+          <div class="app-body">
+            <div class="perform">
+              <div style="display:grid;gap:8px;min-width:0">
+                <span class="screen-label">Laptop · facilitator</span>
+                <div class="nownext"><span class="clock" id="pClock">4:12</span><div><b id="pNow">Now: Open</b><div class="muted" id="pNext">Next: Home in 1:12</div></div></div>
+                <div class="row">
+                  <button class="btn big" id="pNextBtn">Next ▶</button>
+                  <button class="btn big" id="pEnd">⏹ End</button>
+                  <button class="btn big">Mute</button>
+                </div>
+                <div class="toast" id="pToast" role="status" aria-live="polite"></div>
+                <p class="muted">Nothing else: no tabs, no settings, no delete. Panic and Leave are in a small menu.</p>
+              </div>
+              <div style="display:grid;gap:8px;min-width:0">
+                <span class="screen-label">Projector and Tim's iPad</span>
+                <div class="board" id="board2" aria-label="The board as Tim and the audience see it"></div>
+                <div class="ipad" aria-label="Tim's iPad">
+                  <div class="strip">Speed</div>
+                  <div class="pads"><div class="pad">Keep</div><div class="pad">Next section</div></div>
+                  <div style="font-size:0.85rem;opacity:.8">Now: Open · beat light ●</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <aside class="notes" aria-label="Notes">
+          <div class="note"><h4>What changed</h4><ul>
+            <li>Perform is a place, not a header button: entering it locks every edit.</li>
+            <li><b>Two screens</b>: the laptop shows control; the projector and the iPad show only the music. Cues and errors never reach Tim's screen.</li>
+            <li>End takes two presses; Next lands on the next bar so an imprecise tap still sounds intended.</li>
+          </ul></div>
+          <p class="fixes">Fixes: Show mixed with editing; status and debug text in the performance space.</p>
+        </aside>
+        <div class="nav"><button class="btn" data-prev>← Back</button><button class="btn" data-next>Next: After →</button></div>
+      </article>
+
+      <!-- 8. After -->
+      <article class="stage" data-stage="7" aria-labelledby="s7" hidden>
+        <div class="stage-head"><span class="eyebrow">Stage 8 of 8 · facilitator, researcher</span><h2 id="s7">After: the session is saved for you</h2></div>
+        <div class="app">
+          <div class="app-bar"><span class="title">Sessions › 21 Oct, Seven Minutes, Tim</span></div>
+          <div class="app-body">
+            <div class="card">
+              <div class="row"><span class="pill ok">Saved automatically</span><span class="muted">6:58 played · 1,412 notes · ended with a fade</span></div>
+              <p class="muted">Linked to Tim's card as it was today (calibration 14 Oct) and to the piece version used.</p>
+              <div class="row"><span class="pill">Tim tired at 4:00</span><span class="pill">Great take in Open</span><button class="btn quiet">+ Add a note</button></div>
+              <div class="row"><button class="btn">Download for analysis (CSV)</button><button class="btn quiet">Back up the project</button></div>
+            </div>
+          </div>
+        </div>
+        <aside class="notes" aria-label="Notes">
+          <div class="note"><h4>What changed</h4><ul>
+            <li>Save session, CSV and backups move out of the playing screen into <b>Sessions</b>.</li>
+            <li>Each session records which player card and which piece version were used: the research trail is automatic.</li>
+          </ul></div>
+          <p class="fixes">Fixes: research and debug tools in the performance space.</p>
+        </aside>
+        <div class="nav"><button class="btn" data-prev>← Back</button><button class="btn primary" data-go="0">Start again</button></div>
+      </article>
+    </div>
+  </section>
+
+  <section class="two" aria-label="Words and where things moved">
+    <div class="card">
+      <h2>Words: one meaning each</h2>
+      <div class="scroll"><table>
+        <thead><tr><th scope="col">Today</th><th scope="col">Proposed</th></tr></thead>
+        <tbody>
+          <tr><td>Save the board here · Capture · Overwrite with board</td><td><b>Keep</b> (replace is in the loop's own menu)</td></tr>
+          <tr><td>Saved loop · slot · loop pad · launched loop</td><td><b>Loop</b>: one kept board</td></tr>
+          <tr><td>"Plays a loop" colour · loop-pad lanes</td><td><b>Loop trigger</b> (one idea, set on Tim's card)</td></tr>
+          <tr><td>"every 8 loops"</td><td><b>pass</b> (once round the board)</td></tr>
+          <tr><td>Scene</td><td><b>Section</b></td></tr>
+          <tr><td>Make a piece · Show · Play</td><td><b>Make · Build · Rehearse · Perform</b></td></tr>
+          <tr><td>Fill · Extra notes · Magenta</td><td><b>Extra notes</b> (Magenta under More)</td></tr>
+          <tr><td>Evolve · Sounds change · "change instrument every"</td><td><b>Sounds change</b></td></tr>
+          <tr><td>Connections (iPad + Ableton)</td><td><b>Tim's card</b> (iPad, cap) · <b>Room</b> (Ableton, links)</td></tr>
+          <tr><td>Capture board → Page · Pages</td><td>Hidden (advanced, under More)</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+    <div class="card">
+      <h2>Where today's things go</h2>
+      <div class="scroll"><table>
+        <thead><tr><th scope="col">Today</th><th scope="col">Goes to</th></tr></thead>
+        <tbody>
+          <tr><td>Set up (camera, board, colours)</td><td>Room check (opens a step only when it fails) and Tim's card (colour jobs)</td></tr>
+          <tr><td>Sound tab</td><td>The Sound drawer in Make (World, colours, helpers); Key, scale and mix under More</td></tr>
+          <tr><td>Groove tab</td><td>Speed and feel in the Sound drawer; grid size in Room; polyrhythm and pages under More</td></tr>
+          <tr><td>Board tab (lanes, pads, variation)</td><td>Tim's card (how he plays the board)</td></tr>
+          <tr><td>Connections, Cap tabs</td><td>Tim's card (iPad, cap) and Room (Ableton, Panic)</td></tr>
+          <tr><td>Make a piece 1 · 2 · 3</td><td>Make (loops) · Build (sections, ending)</td></tr>
+          <tr><td>▶ Show</td><td>Perform (two screens, three controls)</td></tr>
+          <tr><td>Save session, CSV, Describe board</td><td>Sessions (after)</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </section>
+</div>
+
+<script>
+(() => {
+  const C = { r: 'var(--red)', b: 'var(--blue)', y: 'var(--yellow)', g: 'var(--green)', c: 'var(--cyan)', p: 'var(--purple)' };
+  // A few boards, as 8×8 strings: . = empty, letters = colours.
+  const BOARDS = [
+    '......c.' + 'c..r....' + 'c..c..c.' + '..c...c.' + '..c.....' + '....c...' + '.r......' + 'b...b...',
+    'y.......' + '...y....' + '........' + '.....y..' + '........' + 'b.....b.' + '...b....' + 'g.g.g.g.',
+    '.c....c.' + '..c..c..' + '...cc...' + '........' + 'r.......' + '....r...' + '........' + 'g...g...',
+    'p.......' + '..p.....' + '....p...' + '......p.' + '........' + '..y...y.' + '........' + 'b..b..b.',
+    'c.c.c.c.' + '........' + 'y...y...' + '........' + '.r...r..' + '........' + 'b.......' + 'g.g.g.g.',
+  ];
+  const NAMES = ['Opening bells', 'Bass walk', 'Cyan arch', 'Purple steps', 'Full band'];
+  const loops = [0, 1, 2]; // kept so far (indices into BOARDS)
+  const playing = new Set([0]);
+  let picked = null;
+
+  const drawBoard = (el, idx) => {
+    el.innerHTML = '';
+    const s = BOARDS[idx];
+    for (let i = 0; i < 64; i++) {
+      const cell = document.createElement('i');
+      if (i % 8 === 2) cell.className = 'head';
+      const ch = s[i];
+      if (ch !== '.') { const d = document.createElement('b'); d.style.background = C[ch]; cell.appendChild(d); }
+      el.appendChild(cell);
+    }
+  };
+  const thumb = (idx) => {
+    const t = document.createElement('div'); t.className = 'thumb'; t.setAttribute('aria-hidden', 'true');
+    const s = BOARDS[idx];
+    for (let i = 0; i < 64; i++) { const d = document.createElement('i'); if (s[i] !== '.') d.style.background = C[s[i]]; t.appendChild(d); }
+    return t;
+  };
+  const drawTiles = (el, mode) => {
+    el.innerHTML = '';
+    for (let slot = 0; slot < 8; slot++) {
+      const idx = loops[slot];
+      const b = document.createElement('button');
+      if (idx === undefined) {
+        b.className = 'tile empty'; b.textContent = slot === loops.length ? 'Next Keep goes here' : 'Empty';
+        b.disabled = true;
+      } else {
+        b.className = 'tile' + (mode === 'make' && playing.has(slot) ? ' playing' : '') + (mode === 'build' && picked === slot ? ' picked' : '');
+        b.appendChild(thumb(idx));
+        const n = document.createElement('span'); n.className = 'name'; n.textContent = NAMES[idx]; b.appendChild(n);
+        const st = document.createElement('span'); st.className = 'st';
+        st.textContent = mode === 'make' ? (playing.has(slot) ? '▶ playing' : 'tap to play') : (picked === slot ? 'picked' : 'tap to pick');
+        b.appendChild(st);
+        b.setAttribute('aria-pressed', mode === 'make' ? String(playing.has(slot)) : String(picked === slot));
+        b.addEventListener('click', () => {
+          if (mode === 'make') { playing.has(slot) ? playing.delete(slot) : playing.add(slot); }
+          else picked = picked === slot ? null : slot;
+          drawTiles(el, mode);
+        });
+      }
+      el.appendChild(b);
+    }
+  };
+
+  // ---- the piece ----
+  const SECS = [
+    { at: '0:00', name: 'Arrival', col: '#3a6ea5', loops: [0] },
+    { at: '1:30', name: 'Build', col: '#b06a2c', loops: [0, 1, 2] },
+    { at: '3:30', name: 'Open', col: '#7b4ea0', loops: [] },
+    { at: '6:00', name: 'Home', col: '#2f8a69', loops: [0] },
+  ];
+  let sel = 1;
+  const drawTimeline = (el, onPick) => {
+    el.innerHTML = '';
+    SECS.forEach((s, i) => {
+      const b = document.createElement('button');
+      b.className = 'sec' + (onPick && i === sel ? ' sel' : ''); b.style.background = s.col;
+      b.innerHTML = `<span class="t">${s.at}</span><span class="nm"></span><span class="ls"></span>`;
+      b.querySelector('.nm').textContent = s.name;
+      b.querySelector('.ls').textContent = s.loops.length ? s.loops.map((l) => NAMES[loops[l]]).join(' + ') : 'Tim alone';
+      b.setAttribute('aria-label', `${s.name} at ${s.at}`);
+      if (onPick) b.addEventListener('click', () => onPick(i));
+      el.appendChild(b);
+    });
+    const e = document.createElement('div'); e.className = 'sec end'; e.setAttribute('aria-label', 'The ending');
+    e.innerHTML = '<span class="t">6:52</span>'; el.appendChild(e);
+  };
+  const drawSection = () => {
+    const s = SECS[sel];
+    document.getElementById('secTitle').textContent = `${s.name} · ${s.at}`;
+    const box = document.getElementById('secLoops'); box.innerHTML = '';
+    if (s.loops.length === 0) { const m = document.createElement('span'); m.className = 'muted'; m.textContent = 'No loops: Tim plays alone.'; box.appendChild(m); }
+    s.loops.forEach((l, k) => {
+      const b = document.createElement('button'); b.className = 'btn'; b.textContent = `${NAMES[loops[l]]} ✕`;
+      b.setAttribute('aria-label', `Take ${NAMES[loops[l]]} out of ${s.name}`);
+      b.addEventListener('click', () => { s.loops.splice(k, 1); refreshBuild(); });
+      box.appendChild(b);
+    });
+  };
+  const refreshBuild = () => {
+    drawTimeline(document.getElementById('tl'), (i) => { sel = i; refreshBuild(); });
+    drawSection(); drawTiles(document.getElementById('tiles2'), 'build');
+  };
+  document.getElementById('addLoop').addEventListener('click', () => {
+    const hint = document.getElementById('addHint');
+    if (picked === null) { hint.textContent = 'Tap a loop below first.'; return; }
+    const s = SECS[sel];
+    if (!s.loops.includes(picked)) s.loops.push(picked);
+    hint.textContent = `Added to ${s.name}.`; picked = null; refreshBuild();
+  });
+
+  // ---- make: Keep ----
+  let shown = 3;
+  document.getElementById('keep').addEventListener('click', () => {
+    const toast = document.getElementById('keepToast');
+    if (loops.length >= 8) { toast.textContent = 'All 8 loops are full. Replace one from its menu.'; return; }
+    const idx = shown % BOARDS.length;
+    loops.push(idx);
+    toast.textContent = `Kept as Loop ${loops.length}: "${NAMES[idx]}". Rename it any time.`;
+    shown++; drawBoard(document.getElementById('board'), shown % BOARDS.length);
+    drawTiles(document.getElementById('tiles'), 'make');
+  });
+
+  // ---- room check ----
+  document.getElementById('check').addEventListener('click', () => {
+    const res = [['ok', 'Ready'], ['ok', 'Ready'], ['ok', 'Ready'], ['warn', 'Not seen: volume and speed stay where they are'], ['ok', 'Ready, all 7 tracks answered']];
+    document.querySelectorAll('[data-c]').forEach((p, i) => { p.className = `pill ${res[i][0]}`; p.textContent = res[i][1]; });
+    document.getElementById('checkNote').textContent = 'Ready to play. The cap is the only thing missing, and nothing depends on it.';
+  });
+
+  // ---- rehearse ----
+  const tlR = document.getElementById('tlR'); drawTimeline(tlR, null);
+  const lefts = ['0%', '21.5%', '50.2%', '86%'];
+  const rf = document.getElementById('runFrom');
+  SECS.forEach((s, i) => {
+    const b = document.createElement('button'); b.className = 'btn'; b.textContent = `▶ Run from ${s.name}`;
+    b.addEventListener('click', () => { document.getElementById('ph').style.left = lefts[i]; document.getElementById('rClock').textContent = `▶ ${s.at}`; });
+    rf.appendChild(b);
+  });
+
+  // ---- perform ----
+  let pIdx = 2; let endArmed = false;
+  const pTimes = ['0:00', '1:30', '3:30', '6:00'];
+  document.getElementById('pNextBtn').addEventListener('click', () => {
+    if (pIdx >= SECS.length - 1) { document.getElementById('pToast').textContent = 'Home is the last section: End finishes the piece.'; return; }
+    pIdx++;
+    document.getElementById('pNow').textContent = `Now: ${SECS[pIdx].name}`;
+    document.getElementById('pNext').textContent = pIdx < SECS.length - 1 ? `Next: ${SECS[pIdx + 1].name}` : 'Next: the ending';
+    document.getElementById('pClock').textContent = pTimes[pIdx];
+    document.getElementById('pToast').textContent = `${SECS[pIdx].name} comes in on the next bar.`;
+  });
+  const endBtn = document.getElementById('pEnd');
+  endBtn.addEventListener('click', () => {
+    if (!endArmed) { endArmed = true; endBtn.textContent = 'Press again to end'; endBtn.classList.add('danger-armed'); document.getElementById('pToast').textContent = ''; return; }
+    endArmed = false; endBtn.textContent = '⏹ End'; endBtn.classList.remove('danger-armed');
+    document.getElementById('pToast').textContent = 'Ending: fading out over 2 passes.';
+  });
+  endBtn.addEventListener('blur', () => { if (endArmed) { endArmed = false; endBtn.textContent = '⏹ End'; endBtn.classList.remove('danger-armed'); } });
+
+  // ---- stage navigation ----
+  const stages = [...document.querySelectorAll('.stage')];
+  const railBtns = [...document.querySelectorAll('.rail button')];
+  let cur = 0;
+  const go = (i) => {
+    cur = Math.max(0, Math.min(stages.length - 1, i));
+    stages.forEach((s, k) => { s.hidden = k !== cur; });
+    railBtns.forEach((b, k) => b.toggleAttribute('aria-current', k === cur) || (k === cur && b.setAttribute('aria-current', 'step')));
+    railBtns.forEach((b, k) => { if (k === cur) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current'); });
+    try { localStorage.setItem('journey-stage', String(cur)); } catch { /* not available */ }
+  };
+  document.addEventListener('click', (e) => {
+    const t = e.target.closest('[data-go],[data-next],[data-prev]');
+    if (!t) return;
+    if (t.hasAttribute('data-go')) go(Number(t.getAttribute('data-go')));
+    else if (t.hasAttribute('data-next')) go(cur + 1);
+    else go(cur - 1);
+    if (t.closest('.stage')) document.querySelector('.journey').scrollIntoView({ block: 'start', behavior: 'instant' });
+  });
+
+  drawBoard(document.getElementById('board'), 0);
+  drawBoard(document.getElementById('board2'), 4);
+  drawTiles(document.getElementById('tiles'), 'make');
+  refreshBuild();
+  let start = 0;
+  try { start = Number(localStorage.getItem('journey-stage') ?? 0) || 0; } catch { start = 0; }
+  go(start);
+})();
+</script>

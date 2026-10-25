@@ -27,6 +27,8 @@ export interface PlayPanelProps {
   piece: ReactNode | null;
   /** The iPad and MIDI out: set up once per rig. */
   connections: ReactNode;
+  /** The red cap: head movements as controls. */
+  cap: ReactNode;
   groove: ReactNode;
   sound: ReactNode;
   /** The board's own rules: lanes, the loop bank, Variation, where a counter sits. */
@@ -43,7 +45,7 @@ export interface PlayPanelProps {
  */
 export function PlayPanel({
   running, muted, onStart, onStop, stopArmed = false, onToggleMute, bpm, step, cols, variationLap, beatOn, clock = null,
-  heldCount, handGuardWaiting, piece, connections, groove, sound, loops, stacked, transportAlign,
+  heldCount, handGuardWaiting, piece, connections, cap, groove, sound, loops, stacked, transportAlign,
 }: PlayPanelProps): JSX.Element {
   const [tab, setTab] = useState('sound');
 
@@ -131,6 +133,7 @@ export function PlayPanel({
             { id: 'groove', label: 'Groove', content: groove },
             { id: 'loops', label: 'Board', content: loops },
             { id: 'connections', label: 'Connections', content: connections },
+            { id: 'cap', label: 'Cap', content: cap },
           ]}
         />}
       </div>

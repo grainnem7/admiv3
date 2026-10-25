@@ -10,6 +10,14 @@ export type StepIndicator = 'done' | 'warning' | 'current' | 'todo' | 'pending';
 
 const hasActiveChannel = (cfg: SetupConfigView): boolean => cfg.channels.some((c) => c.role !== 'off');
 
+// The Welcome screen's "Set up the board again": the next mount opens in Set up even when a
+// saved laptop board would open in Play. Peeked at mount, cleared after, so StrictMode's double
+// initialiser call sees the same answer.
+let setupRequested = false;
+export function requestSetupOnOpen(): void { setupRequested = true; }
+export function setupRequestedOnOpen(): boolean { return setupRequested; }
+export function clearSetupRequest(): void { setupRequested = false; }
+
 /** Resolved once at mount from config only; routing never moves the user on its own. */
 export function resolveEntry(cfg: SetupConfigView, hasStoredConfig: boolean): SetupStep {
   if (!hasStoredConfig) return 'camera';

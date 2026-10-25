@@ -20,7 +20,7 @@ const RIG_FIELDS = ['version', 'enabled', 'corners', 'boardSquares', 'cameraDevi
 export type RigField = (typeof RIG_FIELDS)[number];
 
 export type RigChannel = Pick<ColourChannel, 'id' | 'kind' | 'swatch' | 'band' | 'blackBand' | 'whiteBand' | 'midiChannel'>;
-export type ChannelPlayerSettings = Pick<ColourChannel, 'role' | 'instrument' | 'drum' | 'loopSlot' | 'volume' | 'tone' | 'reverbSend' | 'delaySend' | 'plays' | 'changes'>;
+export type ChannelPlayerSettings = Pick<ColourChannel, 'role' | 'instrument' | 'drum' | 'loopSlot' | 'volume' | 'tone' | 'reverbSend' | 'delaySend' | 'plays' | 'changes' | 'noteVary'>;
 
 export interface BoardRigConfig {
   fields: Pick<BoardSequencerStored, RigField>;
@@ -64,7 +64,7 @@ export function splitBoardConfig(cfg: BoardSequencerStored): {
   const channels: RigChannel[] = [];
   const channelSettings: Record<string, ChannelPlayerSettings> = {};
   for (const c of cfg.channels) {
-    const { role, instrument, drum, loopSlot, volume, tone, reverbSend, delaySend, plays, changes, ...rigPart } = c;
+    const { role, instrument, drum, loopSlot, volume, tone, reverbSend, delaySend, plays, changes, noteVary, ...rigPart } = c;
     channels.push(rigPart);
     const ps: ChannelPlayerSettings = { role };
     if (instrument !== undefined) ps.instrument = instrument;
@@ -76,6 +76,7 @@ export function splitBoardConfig(cfg: BoardSequencerStored): {
     if (delaySend !== undefined) ps.delaySend = delaySend;
     if (plays !== undefined) ps.plays = plays;
     if (changes !== undefined) ps.changes = changes;
+    if (noteVary !== undefined) ps.noteVary = noteVary;
     channelSettings[c.id] = ps;
   }
   return { rig: { fields: fields as Pick<BoardSequencerStored, RigField>, channels }, settings, channelSettings };

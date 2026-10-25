@@ -24,6 +24,7 @@ import type {
 } from '../tracking/boardColours';
 import { ROLE_LABELS, DEFAULT_BLACK_BAND, DEFAULT_WHITE_BAND } from '../tracking/boardColours';
 import { isStoredBoardReference, type StoredBoardReference } from '../tracking/boardReference/boardReference';
+import { DEFAULT_CAP_SETTINGS, sanitizeCapSettings, type CapSettings } from '../tracking/cap/capTracker';
 import { suggestReadSettings, type BoardSquares } from '../tracking/boardGrid';
 import { ANYWHERE, clampZone, NO_ZONE, zoneSlotCount, zonesCollide, type Zone } from '../tracking/zones';
 
@@ -284,6 +285,8 @@ export interface BoardSequencerStored {
    * until the board is learnt); 'bands' = the colour ranges only, as before.
    */
   counterDetection: 'board' | 'bands';
+  /** The red cap: a camera facing the player turns where the cap is into control values. */
+  cap: CapSettings;
   handGuardEnabled: boolean;
   /** Set once the one-time clearing of an inherited "hand guard on" has happened. */
   handGuardReset?: boolean;
@@ -470,6 +473,7 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   boardLearntSquares: 0,
   boardReference: null,
   counterDetection: 'board',
+  cap: DEFAULT_CAP_SETTINGS,
   handGuardEnabled: false,
   handGuardReset: true,
   handMarginSquares: 0.75,
@@ -649,6 +653,7 @@ function sanitizeChannel(v: unknown): ColourChannel | null {
   if (isNum(o.delaySend)) ch.delaySend = o.delaySend;
   if (o.plays === 'note' || o.plays === 'tune') ch.plays = o.plays;
   if (o.changes === false) ch.changes = false;
+  if (isNum(o.noteVary) && o.noteVary >= 0 && o.noteVary <= 1) ch.noteVary = o.noteVary;
   if (isNum(o.midiChannel) && Number.isInteger(o.midiChannel) && o.midiChannel >= 1 && o.midiChannel <= 16) ch.midiChannel = o.midiChannel;
   return ch;
 }
@@ -832,6 +837,7 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     boardLearntSquares: isNum(o.boardLearntSquares) ? Math.round(o.boardLearntSquares) : 0,
     boardReference: isStoredBoardReference(o.boardReference) ? o.boardReference : null,
     counterDetection: o.counterDetection === 'bands' ? 'bands' : 'board',
+    cap: sanitizeCapSettings(o.cap),
     handGuardEnabled: o.handGuardEnabled === true && o.handGuardReset === true,
     handGuardReset: true,
     handMarginSquares: clampNum(o.handMarginSquares, 0.25, 2, d.handMarginSquares),

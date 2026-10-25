@@ -410,12 +410,10 @@ function EndingStep(p: PieceStepsProps): JSX.Element {
       {endingTooLong(perf, p.passSec) && (
         <span role="alert" style={{ fontSize: 12, color: 'var(--bs-warn)' }}>The ending takes as long as half the piece at this tempo. Choose fewer passes or a longer length.</span>
       )}
-      <SegmentedControl<'play' | 'manual'>
-        label="The clock starts"
-        value={perf.startOn}
-        onChange={(startOn) => p.onPerformance({ startOn })}
-        options={[{ value: 'play', label: 'With ▶ Play' }, { value: 'manual', label: 'When I press Start clock' }]}
-      />
+      <p style={note}>
+        The piece starts from <b>▶ Show → Start the piece</b>, or <b>Rehearse from here</b> on a
+        scene. <b>▶ Play</b> on its own just plays what is on the board: no clock, no scenes.
+      </p>
       <span style={{ fontWeight: 700, marginTop: 6 }}>Ready check</span>
       <ReadyList items={p.readyItems} />
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>

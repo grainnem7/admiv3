@@ -114,6 +114,8 @@ export interface WatchState {
   maskSince: Map<number, number>;
   /** When each cell stops being held, so a hand lifting doesn't snap cells back. */
   heldUntil: Map<number, number>;
+  /** How long whatever covers the board has not moved at all (a shadow, not a hand). */
+  coverStillMs: number;
 }
 
 export interface WatcherOpts {
@@ -121,6 +123,11 @@ export interface WatcherOpts {
   marginSquares: number;
   releaseMs: number;
   restNudgeMs: number;
+  /**
+   * Something covering the board that hasn't moved at all for this long is scenery (a
+   * shadow), not a hand, and becomes part of the board. Default: twice restNudgeMs.
+   */
+  absorbStillMs?: number;
   bgTauSec?: number;
   dtMs: number;
 }
@@ -139,7 +146,7 @@ export interface WatchStep {
 export function initialWatchState(): WatchState {
   return {
     bg: null, ready: false, stillFrames: 0, prevGrey: null,
-    globalSince: null, global: false, maskSince: new Map(), heldUntil: new Map(),
+    globalSince: null, global: false, maskSince: new Map(), heldUntil: new Map(), coverStillMs: 0,
   };
 }
 
@@ -165,7 +172,9 @@ export function stepWatcher(
     global: prev.global,
     maskSince: new Map(prev.maskSince),
     heldUntil: new Map(prev.heldUntil),
+    coverStillMs: prev.coverStillMs ?? 0,
   };
+  const prevGrey = prev.prevGrey;
 
   // Sample the grid once; -1 means the point is outside the picture.
   const cur = new Float32Array(n * 3);
@@ -338,6 +347,28 @@ export function stepWatcher(
     if (!dilated[i]) continue;
     const cell = grid.cellOf[i];
     if (cell >= 0) covered.add(cell);
+  }
+
+  // Has what covers the board moved at all? Judged on the covered points alone: a still
+  // shadow next to a busy rest of the picture is still still. A hand — and certainly a
+  // hand with a tremor — never holds this still for long.
+  let coverDiff = 0;
+  let coverPoints = 0;
+  if (prevGrey) {
+    for (let i = 0; i < n; i++) {
+      if (!mask[i] || grid.imgIdx[i] < 0) continue;
+      coverDiff += Math.abs(grey[i] - prevGrey[i]);
+      coverPoints++;
+    }
+  }
+  state.coverStillMs = coverPoints > 0 && coverDiff / coverPoints < STILL_MAX ? state.coverStillMs + opts.dtMs : 0;
+  if (state.coverStillMs >= (opts.absorbStillMs ?? 2 * opts.restNudgeMs)) {
+    // Scenery: this is what the board looks like now. Nothing is held from here on.
+    state.bg = Float32Array.from(cur);
+    state.coverStillMs = 0;
+    state.maskSince.clear();
+    state.heldUntil.clear();
+    return { state, mask: new Uint8Array(n), heldCells: new Set(), resting: false, global: false, ready: true };
   }
 
   for (const cell of covered) {

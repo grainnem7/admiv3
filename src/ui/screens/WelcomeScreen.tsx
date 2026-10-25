@@ -1,15 +1,19 @@
 /**
  * Welcome Screen
  *
- * Professional landing page for ADMIv3.
+ * Landing page for ADMIv3. The Board Sequencer is the main instrument, so it
+ * leads: one large button straight into setting up (or playing) the board.
+ * The body-movement instrument stays reachable under "Other ways to play".
  * Uses SVG icons, design tokens, no emoji.
  */
 
 import { useEffect, useState } from 'react';
 import { useAppStore, useHasCompletedSetup } from '../../state/store';
 import { getAudioEngine } from '../../sound/AudioEngine';
+import { loadActiveBoardConfig } from '../../profiles/BoardProfiles';
+import { requestSetupOnOpen } from './boardSequencer/boardSetupFlow';
 import {
-  IconBody, IconCamera, IconMusic, IconArrowRight, IconInfo, IconCalibrate,
+  IconSequencer, IconCamera, IconMusic, IconArrowRight, IconInfo, IconCalibrate, IconBody,
 } from '../design-system/Icons';
 
 type CameraStatus = 'checking' | 'available' | 'unavailable';
@@ -19,6 +23,8 @@ function WelcomeScreen() {
   const setMuted = useAppStore((s) => s.setMuted);
   const hasCompletedSetup = useHasCompletedSetup();
   const [cameraStatus, setCameraStatus] = useState<CameraStatus>('checking');
+  // A saved board means the main button plays it; otherwise it starts setting one up.
+  const [hasBoard] = useState(() => loadActiveBoardConfig() !== null);
 
   useEffect(() => {
     let cancelled = false;
@@ -41,6 +47,11 @@ function WelcomeScreen() {
     setCurrentScreen('performance');
   };
 
+  const openBoardSetup = () => {
+    requestSetupOnOpen();
+    setCurrentScreen('boardSequencer');
+  };
+
   return (
     <div className="welcome-screen" role="main">
       {/* Logo */}
@@ -48,17 +59,17 @@ function WelcomeScreen() {
         <div className="welcome-logo">A</div>
         <h1 className="welcome-title">ADMIv3</h1>
         <p className="welcome-subtitle">
-          Make music with your body movements
+          Make music by placing counters on a board
         </p>
       </div>
 
-      {/* How it works — three pillars with SVG icons */}
+      {/* How the board works — three pillars with SVG icons */}
       <div className="welcome-pillars">
-        <Pillar icon={<IconBody size={28} />} title="Move" desc="Your body becomes the instrument" />
+        <Pillar icon={<IconSequencer size={28} />} title="Place" desc="Put coloured counters on the board" />
         <span className="welcome-pillars__arrow"><IconArrowRight size={18} /></span>
-        <Pillar icon={<IconCamera size={28} />} title="Track" desc="Camera reads your movements" />
+        <Pillar icon={<IconCamera size={28} />} title="See" desc="The camera finds each counter" />
         <span className="welcome-pillars__arrow"><IconArrowRight size={18} /></span>
-        <Pillar icon={<IconMusic size={28} />} title="Play" desc="Every gesture becomes sound" />
+        <Pillar icon={<IconMusic size={28} />} title="Play" desc="Each colour plays its own sound" />
       </div>
 
       {/* Camera status */}
@@ -76,58 +87,24 @@ function WelcomeScreen() {
         <span>
           {cameraStatus === 'checking' && 'Checking camera...'}
           {cameraStatus === 'available' && 'Camera ready'}
-          {cameraStatus === 'unavailable' && 'No camera detected'}
+          {cameraStatus === 'unavailable' && 'No camera detected (the laptop board still works)'}
         </span>
       </div>
 
-      {/* Actions */}
+      {/* Main action: the board. Its name keeps "Board Sequencer" for the e2e tests. */}
       <div className="welcome-actions">
-        {hasCompletedSetup ? (
-          <>
-            <button
-              className="btn btn--primary btn--lg"
-              onClick={handleQuickStart}
-              disabled={cameraStatus === 'unavailable'}
-            >
-              Start Playing
-            </button>
-            <button
-              className="btn btn--ghost"
-              onClick={() => setCurrentScreen('calibration')}
-            >
-              <IconCalibrate size={16} /> Recalibrate
-            </button>
-            <button
-              className="btn btn--ghost"
-              onClick={() => setCurrentScreen('setup')}
-            >
-              Change Setup
-            </button>
-          </>
-        ) : (
-          <>
-            <button
-              className="btn btn--primary btn--lg"
-              onClick={() => setCurrentScreen('setup')}
-              disabled={cameraStatus === 'unavailable'}
-            >
-              Set Up My Instrument
-            </button>
-            <button
-              className="btn btn--ghost"
-              onClick={handleQuickStart}
-              disabled={cameraStatus === 'unavailable'}
-            >
-              Quick Start
-            </button>
-          </>
-        )}
         <button
-          className="btn btn--ghost"
+          className="btn btn--primary btn--lg welcome-board-btn"
           onClick={() => setCurrentScreen('boardSequencer')}
         >
-          <IconMusic size={16} /> Board Sequencer
+          <span className="welcome-board-btn__label">{hasBoard ? 'Play my board' : 'Set up the board'}</span>
+          <span className="welcome-board-btn__sub">Board Sequencer</span>
         </button>
+        {hasBoard && (
+          <button className="btn btn--ghost" onClick={openBoardSetup}>
+            <IconCalibrate size={16} /> Set up the board again
+          </button>
+        )}
         <button
           className="btn btn--ghost"
           onClick={() => setCurrentScreen('info')}
@@ -135,6 +112,53 @@ function WelcomeScreen() {
           <IconInfo size={16} /> How It Works
         </button>
       </div>
+
+      {/* The body-movement instrument */}
+      <section className="welcome-other" aria-labelledby="welcome-other-title">
+        <h2 id="welcome-other-title" className="welcome-other__title">Other ways to play</h2>
+        <div className="welcome-other__actions">
+          {hasCompletedSetup ? (
+            <>
+              <button
+                className="btn btn--ghost btn--sm"
+                onClick={handleQuickStart}
+                disabled={cameraStatus === 'unavailable'}
+              >
+                <IconBody size={16} /> Play with body movement
+              </button>
+              <button
+                className="btn btn--ghost btn--sm"
+                onClick={() => setCurrentScreen('calibration')}
+              >
+                Recalibrate
+              </button>
+              <button
+                className="btn btn--ghost btn--sm"
+                onClick={() => setCurrentScreen('setup')}
+              >
+                Change Setup
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                className="btn btn--ghost btn--sm"
+                onClick={() => setCurrentScreen('setup')}
+                disabled={cameraStatus === 'unavailable'}
+              >
+                <IconBody size={16} /> Set up body movement
+              </button>
+              <button
+                className="btn btn--ghost btn--sm"
+                onClick={handleQuickStart}
+                disabled={cameraStatus === 'unavailable'}
+              >
+                Quick Start
+              </button>
+            </>
+          )}
+        </div>
+      </section>
 
       {/* Footer hints */}
       <footer className="welcome-footer">

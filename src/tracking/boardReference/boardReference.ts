@@ -11,7 +11,7 @@
  * Everything here is pure — pixels in, answers out — so it runs the same in the app and in
  * the reliability benchmark (src/__tests__/bench).
  */
-import { applyHomography, type Mat3 } from '../../utils/homography';
+import { applyHomography, type Mat3, type Point } from '../../utils/homography';
 
 /** Reference pixels per board square. Fine enough for a counter's disc, small enough to store. */
 export const REF_PIXELS_PER_SQUARE = 8;
@@ -123,7 +123,9 @@ export function learnBoardReference(
     const m = sumL[k] / c;
     temporalL[k] = Math.sqrt(Math.max(0, sumL2[k] / c - m * m));
   }
-  if (seen < n * 0.8) return null; // most of the board is out of the picture
+  // All of it, or nothing: a point never seen keeps a mean of black, and every counter-free
+  // square along a missing edge would then read as a counter for as long as it was used.
+  if (seen < n) return null;
   // Spatial spread: how different the neighbours within this square are. A sample point
   // never lands exactly where the reference was taken, so a grain line next door must not
   // read as "something new here".
@@ -308,6 +310,27 @@ export const MAX_COUNTER_DISTANCE = 3.2;
 /** The nearest colour must win clearly, or the pixel is not counted for either. */
 const CLEAR_WIN = 1.25;
 
+/**
+ * Skin, pale to dark. A hand is within reach of yellow, pink, orange and white counters, so
+ * a hand resting on the board read as counters and played. Each tone is a rival colour: a
+ * pixel nearer skin than any counter is no counter. A tone this close to one of the
+ * player's own counter colours stands aside, so cream or peach counters still work.
+ */
+const SKIN_TONES: readonly (readonly [number, number, number])[] = [
+  [232, 190, 172], [225, 172, 145], [205, 150, 125], [176, 122, 92], [130, 88, 64], [92, 62, 48],
+];
+const SKIN_STANDS_ASIDE = 0.6;
+let skinFor: { protos: readonly CounterPrototype[]; tones: (readonly [number, number, number])[] } | null = null;
+function skinTones(protos: readonly CounterPrototype[]): (readonly [number, number, number])[] {
+  if (skinFor?.protos !== protos) {
+    skinFor = {
+      protos,
+      tones: SKIN_TONES.filter((t) => protos.every((p) => colourDistance(t, p.rgb) >= SKIN_STANDS_ASIDE)),
+    };
+  }
+  return skinFor.tones;
+}
+
 /** The counter colour a pixel is clearly nearest, and how near; null when none clearly. */
 export function nearestCounterWithDistance(
   rgb: readonly [number, number, number], protos: readonly CounterPrototype[],
@@ -321,6 +344,8 @@ export function nearestCounterWithDistance(
   }
   if (best === null || d1 > MAX_COUNTER_DISTANCE) return null;
   if (d2 !== Infinity && d2 < d1 * CLEAR_WIN) return null;
+  // A hand: skin must not be a close rival either.
+  for (const t of skinTones(protos)) if (colourDistance(rgb, t) < d1 * CLEAR_WIN) return null;
   return { id: best, distance: d1 };
 }
 
@@ -357,6 +382,75 @@ export interface StoredBoardReference {
   mean: string;
   spreadL: string;
   spreadC: string;
+  /** The corners it was learnt with, so turning the board later can turn it too. */
+  corners?: Point[];
+}
+
+// ---- turning with the board -------------------------------------------------------------
+
+/** The unit-square corners, in saved order: start+high, end+high, end+low, start+low. */
+const UNIT: readonly [number, number][] = [[0, 0], [1, 0], [1, 1], [0, 1]];
+/** The eight ways the same four corners can be listed: four turns, each flipped or not. */
+const ORDERS: readonly number[][] = [0, 1, 2, 3].flatMap((k) => [
+  [0, 1, 2, 3].map((i) => (i + k) % 4),
+  [0, 1, 2, 3].map((i) => (k - i + 4) % 4),
+]);
+
+/**
+ * How the corners now relate to the corners it was learnt with: which learnt corner each
+ * corner now is (the order closest to the learnt one). Null when nothing needs turning.
+ */
+function turnFrom(learnt: readonly Point[] | undefined, now: readonly Point[]): number[] | null {
+  if (!learnt || learnt.length !== 4 || now.length !== 4) return null;
+  let best = ORDERS[0];
+  let bestD = Infinity;
+  for (const order of ORDERS) {
+    let d = 0;
+    for (let i = 0; i < 4; i++) d += Math.hypot(now[i].x - learnt[order[i]].x, now[i].y - learnt[order[i]].y);
+    if (d < bestD) { bestD = d; best = order; }
+  }
+  return best.every((v, i) => v === i) ? null : best;
+}
+
+/**
+ * A size × size grid of `channels` values per cell, re-indexed for the new corner order:
+ * cell (x, y) now is the learnt cell at the same place on the physical board.
+ */
+function turnGrid<T extends Float32Array | number[]>(src: T, size: number, channels: number, order: number[], out: T): T {
+  const [o0, o1, o3] = [UNIT[order[0]], UNIT[order[1]], UNIT[order[3]]];
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const u = (x + 0.5) / size; const v = (y + 0.5) / size;
+      const lu = o0[0] + u * (o1[0] - o0[0]) + v * (o3[0] - o0[0]);
+      const lv = o0[1] + u * (o1[1] - o0[1]) + v * (o3[1] - o0[1]);
+      const from = (Math.floor(lv * size) * size + Math.floor(lu * size)) * channels;
+      const to = (y * size + x) * channels;
+      for (let c = 0; c < channels; c++) out[to + c] = src[from + c];
+    }
+  }
+  return out;
+}
+
+/** The learnt board, turned or flipped to match the corners as they are now. */
+export function orientReference(ref: BoardReference, learnt: readonly Point[] | undefined, now: readonly Point[]): BoardReference {
+  const order = turnFrom(learnt, now);
+  if (!order) return ref;
+  const { size } = ref;
+  return {
+    ...ref,
+    mean: turnGrid(ref.mean, size, 3, order, new Float32Array(ref.mean.length)),
+    spreadL: turnGrid(ref.spreadL, size, 1, order, new Float32Array(ref.spreadL.length)),
+    spreadC: turnGrid(ref.spreadC, size, 1, order, new Float32Array(ref.spreadC.length)),
+  };
+}
+
+/** The learnt per-square colours (squares × squares RGB), turned the same way. */
+export function orientSquareGrid(
+  rgb: readonly number[], squares: number, learnt: readonly Point[] | undefined, now: readonly Point[],
+): number[] {
+  const order = turnFrom(learnt, now);
+  if (!order || rgb.length !== squares * squares * 3) return [...rgb];
+  return turnGrid([...rgb], squares, 3, order, new Array<number>(rgb.length).fill(0));
 }
 
 const toB64 = (bytes: Uint8Array): string => {
@@ -410,5 +504,7 @@ export function loadBoardReference(s: StoredBoardReference | null | undefined): 
 export function isStoredBoardReference(v: unknown): v is StoredBoardReference {
   const o = v as Record<string, unknown> | null;
   return !!o && typeof o === 'object' && typeof o.squares === 'number' && typeof o.size === 'number'
-    && typeof o.mean === 'string' && typeof o.spreadL === 'string' && typeof o.spreadC === 'string';
+    && typeof o.mean === 'string' && typeof o.spreadL === 'string' && typeof o.spreadC === 'string'
+    && (o.corners === undefined || (Array.isArray(o.corners) && o.corners.length === 4
+      && o.corners.every((c: unknown) => typeof (c as Point)?.x === 'number' && typeof (c as Point)?.y === 'number')));
 }

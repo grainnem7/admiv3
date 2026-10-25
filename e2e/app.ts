@@ -54,3 +54,13 @@ export async function makePlan(page: Page): Promise<void> {
   await page.getByRole('button', { name: /Make my plan/ }).click();
 }
 
+
+/**
+ * Start the piece the way a performer does: ▶ Show → ▶ Start the piece, then back to the
+ * normal view (the clock keeps running). ▶ Play on its own only plays the board.
+ */
+export async function startPiece(page: Page): Promise<void> {
+  await page.getByRole('button', { name: /^Show: the board, the clock/ }).click();
+  await page.getByRole('button', { name: '▶ Start the piece' }).click();
+  await page.getByRole('button', { name: 'Leave Show' }).click();
+}

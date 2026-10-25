@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import {
   counterAt, differsFromBoard, estimateGain, learnBoardReference, loadBoardReference, nearestCounter,
-  storeBoardReference, type BoardReference,
+  orientReference, orientSquareGrid, storeBoardReference, type BoardReference,
 } from '../tracking/boardReference/boardReference';
+import { flipCorners, rotateCorners } from '../tracking/boardDetect/orientation';
+import { computeHomography, UNIT_SQUARE } from '../utils/homography';
 import { detectionSetup } from '../tracking/boardReference/detectionSetup';
 import type { ColourChannel } from '../tracking/boardColours';
 import { angledCorners, boardHomography, COUNTERS, MAPLE, renderBoard, WALNUT } from './helpers/boardRenderer';
@@ -98,6 +100,19 @@ describe('is this the board?', () => {
   it('something that is no counter colour (a hand) counts for none', () => {
     expect(nearestCounter([205, 150, 125], protos.filter((p) => p.id !== 'orange' && p.id !== 'pink'))).toBeNull();
   });
+
+  it('a hand counts for none, whatever its skin and whichever counters are in use', () => {
+    // Skin sits within reach of yellow, pink, orange and white: before, a hand resting on an
+    // empty board played notes. Pale to dark.
+    for (const skin of [[232, 190, 172], [225, 172, 145], [205, 150, 125], [176, 122, 92], [130, 88, 64], [92, 62, 48]] as const) {
+      expect(nearestCounter(skin, protos), `skin ${skin.join(',')}`).toBeNull();
+    }
+  });
+
+  it('a counter as pale as skin (cream wood) is still found: that skin tone stands aside', () => {
+    const cream = { id: 'cream', rgb: [226, 178, 150] as [number, number, number] };
+    expect(nearestCounter([226, 178, 150], [...protos, cream])).toBe('cream');
+  });
 });
 
 describe('which detector is used', () => {
@@ -120,5 +135,66 @@ describe('which detector is used', () => {
     const old = detectionSetup({ counterDetection: 'bands', boardReference: stored, boardSquares: 8, channels });
     expect(old.mode).toBe('bands');
     expect(old.reason).toBeNull();
+  });
+});
+
+describe('turning or flipping the board after it is learnt', () => {
+  // The learnt board is stored in board order (start, high notes…). Turn the board — or
+  // confirm its corners in another order — and that order changes: the learnt board has
+  // to turn with it, or every square is compared with a different square and the board
+  // fills with notes that aren't there.
+  const frames = [0, 1].map((seed) => renderBoard({ width: W, height: H, corners, seed }));
+  const learnt = learnBoardReference(frames, hom, 8)!;
+  const orders = [
+    ['a quarter turn', rotateCorners(corners, 1)],
+    ['a half turn', rotateCorners(corners, 2)],
+    ['three quarters', rotateCorners(corners, 3)],
+    ['a flip', flipCorners(corners)],
+    ['a flip and a turn', rotateCorners(flipCorners(corners), 1)],
+  ] as const;
+
+  for (const [name, turned] of orders) {
+    it(`after ${name}, matches the board learnt that way round`, () => {
+      const fresh = learnBoardReference(frames, computeHomography(UNIT_SQUARE, turned), 8)!;
+      const oriented = orientReference(learnt, corners, turned);
+      let worst = 0;
+      for (let i = 0; i < fresh.mean.length; i++) worst = Math.max(worst, Math.abs(oriented.mean[i] - fresh.mean[i]));
+      expect(worst).toBeLessThan(1);
+      let worstSpread = 0;
+      for (let i = 0; i < fresh.spreadL.length; i++) worstSpread = Math.max(worstSpread, Math.abs(oriented.spreadL[i] - fresh.spreadL[i]));
+      expect(worstSpread).toBeLessThan(0.01);
+    });
+  }
+
+  it('leaves it alone when the corners only moved a little (a nudged board)', () => {
+    const nudged = corners.map((c) => ({ x: c.x + 3, y: c.y - 2 }));
+    expect(orientReference(learnt, corners, nudged)).toBe(learnt);
+    // Saved before corners were stored with it: as before.
+    expect(orientReference(learnt, undefined, rotateCorners(corners, 1))).toBe(learnt);
+  });
+
+  it('turns the per-square colours the same way', () => {
+    const grid = Array.from({ length: 4 * 3 }, (_, i) => i); // 2 × 2 squares, RGB each
+    // A quarter turn: the new first square (start, high) is the old start, low notes.
+    expect(orientSquareGrid(grid, 2, corners, rotateCorners(corners, 1)).slice(0, 3)).toEqual([6, 7, 8]);
+  });
+
+  it('is applied when the reader is set up', () => {
+    const turned = rotateCorners(corners, 1);
+    const channels: ColourChannel[] = [{ id: 'c1', kind: 'hue', role: 'melody', swatch: '#c42a2e' }];
+    const d = detectionSetup({
+      counterDetection: 'board', boardReference: { ...storeBoardReference(learnt), corners: [...corners] },
+      boardSquares: 8, channels, corners: turned,
+    });
+    const fresh = learnBoardReference(frames, computeHomography(UNIT_SQUARE, turned), 8)!;
+    expect(Math.abs(d.reference!.mean[0] - fresh.mean[0])).toBeLessThanOrEqual(1);
+  });
+});
+
+describe('learning a board that is not all in the picture', () => {
+  it('refuses, rather than reading the missing edge as counters for ever', () => {
+    const low = corners.map((c) => ({ x: c.x, y: c.y + H * 0.1 })) as typeof corners;
+    const f = renderBoard({ width: W, height: H, corners: low, seed: 1 });
+    expect(learnBoardReference([f], boardHomography({ corners: low }), 8)).toBeNull();
   });
 });

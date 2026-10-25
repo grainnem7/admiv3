@@ -93,7 +93,7 @@ describe('the iPad page, touched', () => {
   });
 
   it('a loop pad launches its loop', async () => {
-    const tab = [...el.querySelectorAll('[role="tab"]')].find((b) => b.textContent?.includes('Loops'))!;
+    const tab = [...el.querySelectorAll('[role="tab"]')].find((b) => b.textContent === 'Loops & scenes')!;
     await act(async () => { pointer('pointerdown', tab, 10); });
     const loop = [...el.querySelectorAll('button')].find((b) => b.getAttribute('aria-label')?.startsWith('Bass:'))!;
     expect(loop).toBeTruthy();
@@ -150,7 +150,7 @@ describe('the iPad page, set up for the player', () => {
   it('scene pads follow the piece, however many scenes there are', async () => {
     const scenes = Array.from({ length: 8 }, (_, i) => ({ name: `S${i + 1}`, active: i === 5 }));
     await act(async () => { onMsg?.({ ...STATE, state: { ...STATE.state, scenes } }); });
-    const tab = [...el.querySelectorAll('[role="tab"]')].find((b) => b.textContent?.includes('Loops'))!;
+    const tab = [...el.querySelectorAll('[role="tab"]')].find((b) => b.textContent === 'Loops & scenes')!;
     await act(async () => { pointer('pointerdown', tab, 10); });
     const labels = [...el.querySelectorAll('button')].map((b) => b.textContent ?? '').filter((t) => t.startsWith('Scene '));
     expect(labels).toEqual(['Scene 5: S5', 'Scene 6: S6', 'Scene 7: S7', 'Scene 8: S8']);

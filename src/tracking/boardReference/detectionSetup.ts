@@ -3,13 +3,18 @@
  * settings — and, when it can't, why not, in words a facilitator can act on.
  */
 import type { ColourChannel, ColourId } from '../boardColours';
-import { hexToRgb, loadBoardReference, type BoardReference, type CounterPrototype, type StoredBoardReference } from './boardReference';
+import {
+  hexToRgb, loadBoardReference, orientReference, type BoardReference, type CounterPrototype, type StoredBoardReference,
+} from './boardReference';
+import type { Point } from '../../utils/homography';
 
 export interface DetectionSettings {
   counterDetection: 'board' | 'bands';
   boardReference: StoredBoardReference | null;
   boardSquares: number;
   channels: readonly ColourChannel[];
+  /** The corners now: a board turned or flipped since it was learnt is read the same way round. */
+  corners?: readonly Point[];
 }
 
 export interface DetectionSetup {
@@ -23,13 +28,14 @@ export interface DetectionSetup {
   reason: string | null;
 }
 
-let cache: { stored: StoredBoardReference; loaded: BoardReference | null } | null = null;
+let cache: { stored: StoredBoardReference; corners: readonly Point[] | undefined; loaded: BoardReference | null } | null = null;
 
-/** Decoding the stored board is not free: once per learnt board, not once per frame. */
-function load(stored: StoredBoardReference): BoardReference | null {
-  if (cache && cache.stored === stored) return cache.loaded;
-  const loaded = loadBoardReference(stored);
-  cache = { stored, loaded };
+/** Decoding the stored board is not free: once per learnt board and corners, not once per frame. */
+function load(stored: StoredBoardReference, corners: readonly Point[] | undefined): BoardReference | null {
+  if (cache && cache.stored === stored && cache.corners === corners) return cache.loaded;
+  const raw = loadBoardReference(stored);
+  const loaded = raw && corners ? orientReference(raw, stored.corners, corners) : raw;
+  cache = { stored, corners, loaded };
   return loaded;
 }
 
@@ -44,7 +50,7 @@ export function detectionSetup(s: DetectionSettings): DetectionSetup {
   const bands = (reason: string | null): DetectionSetup => ({ mode: 'bands', reference: null, prototypes, achromatic, reason });
   if (s.counterDetection === 'bands') return bands(null);
   if (!s.boardReference) return bands('Learn the board (Set up → Board, with the board empty) to find counters against it.');
-  const reference = load(s.boardReference);
+  const reference = load(s.boardReference, s.corners);
   if (!reference) return bands('The learnt board could not be read. Learn the board again.');
   if (reference.squares !== s.boardSquares) return bands('The board size has changed since it was learnt. Learn the board again.');
   if (prototypes.length === 0) return bands('No counter colour has a job yet.');

@@ -122,7 +122,16 @@ export interface ColourChannel {
    * like the Ableton Set it routes into; given once and never moved by the board.
    */
   midiChannel?: number;
+  /**
+   * One-note counters: how often a counter wanders to a neighbouring note of the scale
+   * (0 = never, exactly as placed). Unset = DEFAULT_NOTE_VARY: a placed note that never
+   * moved sounded stuck, and the player expected the instrument to keep it alive.
+   */
+  noteVary?: number;
 }
+
+/** How often a one-note counter wanders when its colour hasn't chosen ("A little"). */
+export const DEFAULT_NOTE_VARY = 0.35;
 
 /** A colour reduced to "does this HSV pixel match?", tagged with its id. */
 export interface ColourMatcher {

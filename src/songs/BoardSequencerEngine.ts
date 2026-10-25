@@ -16,6 +16,7 @@ import { BoardSequencerVoice } from './voices/BoardSequencerVoice';
 import { voicingForCells, degreeMidi, chordDegreeMidi, drumForRow, DEFAULT_DRUM_ROWS, loopLen, playheadStep, lapIndex, strictlyAfter, pageIndexAt, firesThisLap, firesThisLapPaged } from './boardSequencerScale';
 import type { ActiveCell } from '../tracking/BoardSequencerMode';
 import type { ColourChannel, ColourId, ColourRole } from '../tracking/boardColours';
+import { DEFAULT_NOTE_VARY } from '../tracking/boardColours';
 import type { FaderRole } from '../profiles/BoardSequencerConfig';
 import { getEffectChainManager } from '../effects';
 import { RoundRobinDrumKit } from '../audio/instruments/RoundRobinDrumKit';
@@ -724,17 +725,20 @@ export class BoardSequencerEngine {
   }
 
   /**
-   * "Sounds change" on a one-note counter: on some passes it plays a neighbouring note of
-   * the scale instead of its own, so a placed note doesn't sound stuck. More change = more
-   * passes moved. Every fourth pass it is home again, so the player's note stays the
+   * A one-note counter wandering: on some passes it plays a neighbouring note of the scale
+   * instead of its own, so a placed note doesn't sound stuck. How often is the colour's own
+   * "Notes wander" (on by default), raised by "Sounds change"; a saved loop's notes follow
+   * "Loops vary" instead. More = more passes moved. Every fourth pass it is home again, so the player's note stays the
    * anchor. The same seed, pass and counter always give the same note, so Freeze holds it
    * and Previous brings it back. A colour with "Changes over time" off never moves.
    */
   noteDrift(cell: { row: number; col: number; colour: string; layer?: string }, beat: number): number {
     const ch = this.channelById.get(cell.colour);
     if (!ch || ch.changes === false) return 0;
-    // A saved loop varies by itself ("Loops vary"), so it isn't the same notes every pass.
-    const amount = isLoopLayer(cell.layer) ? Math.max(this.evolve.amount, this.loopVaryChance()) : this.evolve.amount;
+    // A saved loop varies by itself ("Loops vary"); the player's own counters by their
+    // colour's "Notes wander". Either way, "Sounds change" can only add to it.
+    const own = isLoopLayer(cell.layer) ? this.loopVaryChance() : (ch.noteVary ?? DEFAULT_NOTE_VARY);
+    const amount = Math.max(this.evolve.amount, own);
     if (amount <= 0) return 0;
     const cycle = Math.max(1, this.cfg.cols * Math.max(1, this.cfg.numPages));
     const lap = this.evolve.holdLap ?? lapIndex(beat, cycle);

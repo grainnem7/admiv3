@@ -6,6 +6,7 @@
  * fills with notes nobody played. Here every candidate band is tested against the board's
  * own squares, tightened if it matches them, and reported as unsafe if it still does.
  */
+import { colourDistance } from '../boardReference/boardReference';
 import { rgbToHsv } from '../ColorTracker';
 import {
   buildChannelMatcher, calibrationFromHsv, classifyCounterKind,
@@ -95,7 +96,7 @@ export type ColourDetection =
   | { ok: true; colours: DetectedColour[]; blobs: number }
   | { ok: false; reason: 'board-too-covered' | 'nothing-found' };
 
-interface Blob {
+export interface Blob {
   r: number;
   g: number;
   b: number;
@@ -166,13 +167,24 @@ export function detectColours(
     blobs.push({ r: r / n, g: g / n, b: b / n, pixels: n, row, col });
   }
   if (blobs.length === 0) return { ok: false, reason: 'nothing-found' };
-
-  const clusters = opts.oneEach ? blobs.map((b) => [b]) : cluster(blobs);
   // Board colours learnt earlier, from a board with nothing on it, are far better
   // evidence than anything inferred from a frame that has counters all over it: there,
   // "which squares are board?" is itself a guess, and a square the guess gets wrong
   // becomes a counter colour that lights up bare wood. Fall back when we have none.
   const boardColours = opts.boardColours?.length ? opts.boardColours : modelHsv(model);
+  return coloursFromBlobs(blobs, boardColours, opts.oneEach === true);
+}
+
+/**
+ * Counters found (each a blob with its colour and square) → the colours to offer: grouped
+ * by colour, each with a band fitted to stay off the board. Shared by the per-square
+ * search above and the search against the learnt board (boardReference).
+ */
+export function coloursFromBlobs(
+  blobs: Blob[], boardColours: { h: number; s: number; v: number }[], oneEach = false,
+): ColourDetection {
+  if (blobs.length === 0) return { ok: false, reason: 'nothing-found' };
+  const clusters = oneEach ? blobs.map((b) => [b]) : cluster(blobs);
 
   const colours = clusters.map((group) => {
     const weight = group.reduce((s, b) => s + b.pixels, 0);
@@ -315,6 +327,13 @@ function hueGap(a: number, b: number): number {
  * colour despite being nothing like each other. That is exactly what happened on the
  * research board: yellow, orange and pink came back as one.
  */
+/**
+ * And, as a last guard, the same colour distance the detector plays with: blue and purple
+ * can sit within MERGE_HUE of each other on a webcam (purple drifts blue), and must still
+ * never become one colour.
+ */
+const MERGE_DISTANCE = 1.4;
+
 function cluster(blobs: Blob[]): Blob[][] {
   const groups: { blobs: Blob[]; hsv: { h: number; s: number; v: number }[] }[] = [];
   for (const blob of blobs) {
@@ -328,7 +347,7 @@ function cluster(blobs: Blob[]): Blob[][] {
       // Hue AND saturation: hue says which colour, saturation says how strong it is, and
       // both survive a change in light. Value does not, so it is left out.
       return hueGap(other.h, hsv.h) < MERGE_HUE && Math.abs(other.s - hsv.s) < MERGE_SAT;
-    }));
+    }) && group.blobs.every((other) => colourDistance([other.r, other.g, other.b], [blob.r, blob.g, blob.b]) < MERGE_DISTANCE));
     if (found) { found.blobs.push(blob); found.hsv.push(hsv); }
     else groups.push({ blobs: [blob], hsv: [hsv] });
   }

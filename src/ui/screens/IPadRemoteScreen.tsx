@@ -58,8 +58,9 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
   /** The finger's latest value per strip, read when it lifts (state may lag a move behind). */
   const latest = useRef(new Map<RemoteControlName, number>());
   const [flash, setFlash] = useState<RemoteTriggerName | null>(null);
-  // Two pages: the strips and pads, and the loops and scenes prepared for the performance.
-  const [tab, setTab] = useState<'play' | 'loops'>('play');
+  // Three pages: the strips and pads; just the saved loops, on and off; and the loops and
+  // scenes prepared for the performance.
+  const [tab, setTab] = useState<'play' | 'onoff' | 'loops'>('play');
   const lastPad = useRef(new Map<string, number>());
   const [confirmStop, setConfirmStop] = useState(false);
   // Shown for a moment whenever a touch reaches the page at all: with it, "nothing
@@ -313,8 +314,8 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
       )}
 
       {loopsPage && (
-      <div role="tablist" aria-label="Page" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: GAP }}>
-        {(['play', 'loops'] as const).map((p) => (
+      <div role="tablist" aria-label="Page" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: GAP }}>
+        {(['play', 'onoff', 'loops'] as const).map((p) => (
           <button
             key={p}
             type="button"
@@ -326,11 +327,63 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
               border: `3px solid ${tab === p ? '#ffffff' : '#3a4152'}`, background: tab === p ? '#3f4a63' : '#232836', touchAction: 'none',
             }}
           >
-            {p === 'play' ? 'Play' : 'Loops & scenes'}
+            {p === 'play' ? 'Play' : p === 'onoff' ? 'Loops' : 'Loops & scenes'}
           </button>
         ))}
       </div>
       )}
+
+      {tab === 'onoff' && loopsPage && (() => {
+        // Just the loops that have been saved, big: tap one to turn it on, tap again to turn
+        // it off. Nothing else on the page, so nothing else can be pressed by mistake.
+        const saved = (state?.loops ?? [])
+          .map((l, i) => ({ ...l, i }))
+          .filter((l) => l.state !== 'empty');
+        if (saved.length === 0) {
+          return (
+            <div style={{ flex: '1 1 0', display: 'grid', placeItems: 'center', textAlign: 'center', fontSize: 24, opacity: 0.8, padding: 20 }}>
+              No loops saved yet. Save some on the laptop (Make a piece → Loops) and they appear here.
+            </div>
+          );
+        }
+        const cols = saved.length <= 2 ? saved.length : saved.length <= 4 ? 2 : saved.length <= 6 ? 3 : 4;
+        return (
+          <div
+            style={{
+              flex: '1 1 0', display: 'grid', gap: GAP, minHeight: 0, opacity: connected ? 1 : 0.4,
+              gridTemplateColumns: `repeat(${cols}, 1fr)`, gridAutoRows: '1fr',
+            }}
+          >
+            {saved.map((l) => {
+              const on = l.state === 'playing' || l.state === 'starting';
+              const label = l.name || `Loop ${l.i + 1}`;
+              const status = !state?.playing && on ? 'ON · starts with Play'
+                : l.state === 'playing' ? 'ON'
+                  : l.state === 'starting' ? (state?.loopsFade ? 'coming in…' : 'starting…')
+                    : l.state === 'stopping' ? (state?.loopsFade ? 'fading out…' : 'stopping…')
+                      : 'OFF';
+              return (
+                <button
+                  key={`onoff-${l.i}`}
+                  type="button"
+                  aria-pressed={on}
+                  aria-label={`${label}: ${status}. Tap to turn ${on ? 'off' : 'on'}.`}
+                  {...padProps(`onoff${l.i}`, () => padTap(`loop${l.i}`, { type: 'loop', index: l.i }))}
+                  style={{
+                    borderRadius: 24, touchAction: 'none', color: '#eef1f7',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10,
+                    border: `6px ${l.state === 'starting' || l.state === 'stopping' ? 'dashed' : 'solid'} ${on ? '#81c784' : l.state === 'stopping' ? '#ffb74d' : '#3a4152'}`,
+                    background: on ? '#2e5a37' : '#232836',
+                  }}
+                >
+                  <span style={{ fontSize: 30, fontWeight: 800 }}>{label}</span>
+                  <span style={{ fontSize: 26, fontWeight: 800, color: on ? '#c8f0cb' : '#9aa3b5' }}>{status}</span>
+                </button>
+              );
+            })}
+          </div>
+        );
+      })()}
 
       {tab === 'loops' && loopsPage && (
         <div style={{ flex: '1 1 0', display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0, opacity: connected ? 1 : 0.4 }}>

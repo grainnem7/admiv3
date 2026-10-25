@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  applyDetectedColours, swatchDistance, MATCH_SWATCH_DISTANCE,
+  alikePairs, applyDetectedColours, matchDistance, MATCH_DISTANCE,
 } from '../ui/screens/boardSequencer/applyDetectedColours';
 import type { ColourChannel } from '../tracking/boardColours';
 import type { DetectedColour } from '../tracking/boardColourDetect/detectColours';
@@ -33,8 +33,37 @@ describe('putting the found colours onto the board', () => {
 
   it('two similar colours both survive, however close they are', () => {
     const close = ['#f58c55', '#fac846'];
-    expect(swatchDistance(close[0], close[1])).toBeLessThan(MATCH_SWATCH_DISTANCE);
     expect(applyDetectedColours([], close.map((s) => found(s)))).toHaveLength(2);
+  });
+
+  // Seen on the rig: adding a purple counter took it for the existing BLUE colour (only ~86
+  // apart in RGB, under the old limit of 90) and overwrote it, so blue counters read as
+  // purple from then on.
+  it('a new purple is a new colour: the existing blue is left exactly as it was', () => {
+    const blue: ColourChannel = { id: 'c3', kind: 'hue', role: 'drums', swatch: '#264eb4' };
+    const out = applyDetectedColours([blue], [found('#783ca0')]);
+    expect(out).toHaveLength(2);
+    expect(out[0]).toEqual(blue);
+    expect(out[1].swatch).toBe('#783ca0');
+    expect(matchDistance('#264eb4', '#783ca0')).toBeGreaterThan(MATCH_DISTANCE * 2.5);
+  });
+
+  it('blue and purple found together each update their own colour, whichever comes first', () => {
+    const existing: ColourChannel[] = [
+      { id: 'b', kind: 'hue', role: 'bass', swatch: '#264eb4' },
+      { id: 'p', kind: 'hue', role: 'melody', swatch: '#783ca0' },
+    ];
+    for (const order of [['#7a3ea2', '#2850b0'], ['#2850b0', '#7a3ea2']]) {
+      const out = applyDetectedColours(existing, order.map((s) => found(s)));
+      expect(out).toHaveLength(2);
+      expect(out.find((c) => c.id === 'b')!.swatch).toBe('#2850b0');
+      expect(out.find((c) => c.id === 'p')!.swatch).toBe('#7a3ea2');
+    }
+  });
+
+  it('two colours that really do look alike are pointed out', () => {
+    expect(alikePairs(['#264eb4', '#783ca0', '#d23c3c'])).toEqual([]);
+    expect(alikePairs(['#264eb4', '#2a52b8'])).toEqual([[0, 1]]);
   });
 
   it('a colour the player already has is updated, not duplicated', () => {

@@ -117,8 +117,21 @@ describe('Sounds change moves a one-note counter', () => {
     return out;
   };
 
-  it('stays exactly on the placed note with Sounds change off', () => {
-    expect(new Set(pitches({}, 0)).size).toBe(1);
+  it('with Notes wander on Never and Sounds change off, stays exactly on the placed note', () => {
+    expect(new Set(pitches({ noteVary: 0 }, 0)).size).toBe(1);
+  });
+
+  // Seen in rehearsal: a one-note melody with Sounds change off played the same note every
+  // pass; the player expected the instrument to keep it alive.
+  it('by default (Notes wander "A little") a one-note counter moves, even with Sounds change off', () => {
+    const p = pitches({}, 0, 32);
+    expect(new Set(p).size).toBeGreaterThan(1);
+    for (let lap = 0; lap < p.length; lap += 4) expect(p[lap]).toBe(p[0]); // home every 4th pass
+  });
+
+  it('Notes wander "More" moves more passes than "A little"', () => {
+    const moved = (v: number): number => { const p = pitches({ noteVary: v }, 0, 64); return p.filter((m) => m !== p[0]).length; };
+    expect(moved(0.7)).toBeGreaterThan(moved(0.35));
   });
 
   it('wanders to nearby notes, and is home every fourth pass', () => {
@@ -154,8 +167,8 @@ describe('Sounds change moves a one-note counter', () => {
 
 describe('Loops vary: a saved loop is not the same notes every pass', () => {
   /** What one melody counter plays on each pass: from a launched loop, or from the board. */
-  const passes = (opts: { from: 'loop' | 'board'; vary: number; plays?: 'note' | 'tune'; changes?: boolean; n?: number }): string[] => {
-    const { e, p } = engine([melody({ plays: opts.plays, changes: opts.changes })]);
+  const passes = (opts: { from: 'loop' | 'board'; vary: number; plays?: 'note' | 'tune'; changes?: boolean; noteVary?: number; n?: number }): string[] => {
+    const { e, p } = engine([melody({ plays: opts.plays, changes: opts.changes, ...(opts.noteVary !== undefined ? { noteVary: opts.noteVary } : {}) })]);
     e.setLoopVary(opts.vary);
     const cell = { row: 3, col: 0, colour: 'm' };
     if (opts.from === 'loop') e.setLaunchedLoops([0], [[cell]]);
@@ -183,8 +196,8 @@ describe('Loops vary: a saved loop is not the same notes every pass', () => {
     expect(new Set(passes({ from: 'loop', vary: 0, plays: 'tune' })).size).toBe(1);
   });
 
-  it("the player's own counters are not changed by it", () => {
-    expect(new Set(passes({ from: 'board', vary: 1 })).size).toBe(1);
+  it("the player's own counters are not changed by it (they follow their own Notes wander)", () => {
+    expect(new Set(passes({ from: 'board', vary: 1, noteVary: 0 })).size).toBe(1);
   });
 
   it('a colour with Changes over time off keeps its loop as saved', () => {

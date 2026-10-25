@@ -559,6 +559,48 @@
   max-width: 280px;
 }
 
+/* The board button: the main way in, so bigger than the rest */
+.welcome-actions .welcome-board-btn {
+  max-width: 320px;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding-block: var(--space-4);
+}
+
+.welcome-board-btn__label {
+  font-size: var(--text-xl);
+  font-weight: var(--font-bold);
+}
+
+.welcome-board-btn__sub {
+  font-size: var(--text-sm);
+  font-weight: var(--font-normal);
+  opacity: 0.85;
+}
+
+/* Other ways to play: the body-movement instrument, kept but quieter */
+.welcome-other {
+  margin-top: var(--space-8);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+  text-align: center;
+  min-width: 260px;
+}
+
+.welcome-other__title {
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: var(--color-text-tertiary);
+  margin-bottom: var(--space-2);
+}
+
+.welcome-other__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+}
+
 .welcome-footer {
   position: fixed;
   bottom: var(--space-4);

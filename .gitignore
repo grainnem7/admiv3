@@ -53,3 +53,6 @@ public/songs/*/analysis.*.bak.json
 # Playwright
 /test-results/
 /playwright-report/
+
+# Local HTTPS certificate for the iPad (never commit)
+public/rootCA.pem

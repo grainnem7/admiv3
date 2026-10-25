@@ -33,7 +33,7 @@ function midiChannelOf(c: ColourChannel, config: BoardSequencerStored): number |
 
 /** The fields of a colour's sound that the cards change. */
 export type ChannelSoundPatch = Partial<Pick<ColourChannel,
-  'instrument' | 'drum' | 'volume' | 'tone' | 'reverbSend' | 'delaySend' | 'plays' | 'changes'>>;
+  'instrument' | 'drum' | 'volume' | 'tone' | 'reverbSend' | 'delaySend' | 'plays' | 'changes' | 'noteVary'>>;
 
 /** A helper's ↻ / ↶ / 📌 buttons and what they can do right now. */
 export interface HelperActions {
@@ -244,13 +244,24 @@ function ColourCard({ c, n, p }: { c: ColourChannel; n: number; p: SoundTabProps
           value={plays === 'tune' ? 1 : 0}
           onPick={(v) => set({ plays: v === 1 ? 'tune' : 'note' })}
           hint={plays === 'note'
-            ? (config.evolveAmount > 0 && c.changes !== false
-              ? 'One note where each counter sits. "Sounds change" moves it to nearby notes on some passes.'
-              : 'Exactly the notes you put down, where you put them.')
+            ? 'One note where each counter sits.'
             : c.role === 'drums' ? 'One counter keeps a whole groove going; higher on the board is busier.'
               : c.role === 'bass' ? 'One counter plays a bassline under the chords.'
                 : c.role === 'chord' ? 'Where a counter sits sets the chord until the next one.'
                   : 'One counter plays a short tune from its step.'}
+        />
+      )}
+      {(c.role === 'melody' || c.role === 'bass') && (!config.phrases || plays === 'note') && (
+        <StepRow
+          label="Notes wander"
+          steps={[{ label: 'Never', value: 0 }, { label: 'A little', value: 0.35 }, { label: 'More', value: 0.7 }]}
+          value={c.noteVary ?? 0.35}
+          onPick={(v) => set({ noteVary: v })}
+          hint={c.changes === false
+            ? 'Off while "Changes over time" is off for this colour.'
+            : (c.noteVary ?? 0.35) <= 0
+              ? 'Exactly the note each counter sits on, every pass.'
+              : 'Each counter sometimes moves to a neighbouring note, and is back on its own every 4th pass.'}
         />
       )}
       {(melodic || c.role === 'drums') && (

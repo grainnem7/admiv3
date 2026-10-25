@@ -118,6 +118,36 @@ describe('release and resting', () => {
   });
 });
 
+describe('a shadow that stays', () => {
+  // A lamp, the sun, or someone standing beside the board: a still patch reaching in from
+  // the edge looks like an arm. The background only adapted with nothing covered, so it
+  // held half the board for as long as the shadow stayed.
+  it('is taken in as part of the board once it has been perfectly still for a while', () => {
+    const { state, g } = warmUp();
+    const o = opts({ restNudgeMs: 1000 });
+    const shadow = scene({ shapes: [arm(0.35, 0.6)] });
+    let st = state;
+    let out = run(st, g, shadow, 1000, o);
+    expect(out.heldCells.size).toBeGreaterThan(0);
+    for (let t = 1033; t <= 3600; t += 33) { out = run(st, g, shadow, t, o); st = out.state; }
+    expect(out.heldCells.size).toBe(0);
+    // And the guard still works: an arm somewhere else is held.
+    expect(run(st, g, scene({ shapes: [arm(0.35, 0.6), arm(-0.2, 0.1)] }), 3700, o).heldCells.size).toBeGreaterThan(0);
+  });
+
+  it('a hand that keeps moving, however long it stays, is never taken in', () => {
+    const { state, g } = warmUp();
+    const o = opts({ restNudgeMs: 1000 });
+    let st = state;
+    let out = run(st, g, scene(), 1000, o);
+    for (let t = 1000, i = 0; t <= 6000; t += 33, i++) {
+      out = run(st, g, scene({ shapes: [arm(0.35, 0.6, i % 2 ? 0.6 : 0.4)] }), t, o);
+      st = out.state;
+    }
+    expect(out.heldCells.size).toBeGreaterThan(0);
+  });
+});
+
 describe('a bumped camera', () => {
   it('sets global, holds nothing, and re-learns once the picture is still', () => {
     const { state, g } = warmUp();
@@ -178,12 +208,12 @@ describe('a background the guard can no longer trust', () => {
     for (let i = 0; i < STILL_FRAMES_NEEDED + 4; i++) {
       s2 = run(s2, g, swamped(), 1000 + i * 33).state;
     }
-    // Having re-learnt, THIS is the board now — so an ordinary hand over part of it is
-    // recognised again, which is the proof the guard is alive rather than stuck.
-    const withHand = run(s2, g, scene({ shapes: [arm(-0.2, 1.2, 1.4), counter(0.5, 0.5)] }), 2100);
-    expect(withHand.heldCells.size).toBeGreaterThanOrEqual(0);
-    const backToEmpty = run(s2, g, swamped(), 2200);
-    expect(backToEmpty.heldCells.size).toBe(0);
+    // Having re-learnt, THIS is the board now: nothing is marked as covered at all. Still
+    // standing down would mark the whole board (and hold nothing), so an empty mask is the
+    // proof it re-learnt rather than gave up.
+    const after = run(s2, g, swamped(), 2200);
+    expect(after.heldCells.size).toBe(0);
+    expect([...after.mask].every((v) => v === 0)).toBe(true);
   });
 
   it('a hand over part of the board is still held normally', () => {

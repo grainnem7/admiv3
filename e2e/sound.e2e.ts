@@ -88,3 +88,24 @@ test('the laptop board can add more colours, each with a job, and they play', as
   await expect(page.getByRole('group', { name: /^Orange: Melody/ })).toBeVisible();
   expect(pageErrors(page)).toEqual([]);
 });
+
+test('the red cap (tried with the mouse) moves the speed left–right and shows it', async ({ page }) => {
+  await openLaptopBoard(page);
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1]]);
+  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await page.getByRole('tab', { name: 'Cap' }).click();
+  await page.getByRole('switch', { name: 'Control with the red cap' }).click();
+  await page.getByRole('button', { name: 'Test with the mouse' }).click();
+  const area = page.getByRole('img', { name: /Test area/ });
+  await area.scrollIntoViewIfNeeded();
+  const box = (await area.boundingBox())!;
+  const bpm = async (): Promise<number> => Number(/(\d+) BPM/.exec((await page.getByText(/Playing\s*·\s*\d+ BPM/).first().textContent()) ?? '')?.[1] ?? 0);
+  await area.hover({ position: { x: box.width * 0.05, y: box.height / 2 } });
+  await expect.poll(bpm, { timeout: 8000 }).toBeLessThan(90);
+  const slow = await bpm();
+  await area.hover({ position: { x: box.width * 0.95, y: box.height / 2 } });
+  await expect.poll(bpm, { timeout: 8000 }).toBeGreaterThan(slow + 30);
+  await expect(page.getByRole('status', { name: 'Red cap' })).toContainText('Speed');
+  expect(pageErrors(page)).toEqual([]);
+});
