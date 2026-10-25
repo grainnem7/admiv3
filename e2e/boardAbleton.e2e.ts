@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { notesPlayed, openLaptopBoard, pageErrors, pickColour, pieceStep, place } from './app';
+import { notesPlayed, openLaptopBoard, pageErrors, pickColour, pieceStep, place, startPiece } from './app';
 
 /**
  * Ableton as the Board Sequencer's sound, end to end with a stand-in MIDI port: Chrome's
@@ -126,7 +126,8 @@ test('a 40 second piece in Ableton mode is silent by 0:40', async ({ page }) => 
   await length.blur();
   await page.getByRole('radio', { name: /Fade out/ }).click();
   const started = await now(page);
-  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  // ▶ Play just plays; the piece (its clock and its end) starts from Show.
+  await startPiece(page);
   const stopButton = page.getByRole('button', { name: /■ Stop|Press again to stop/ });
   await expect(stopButton.first()).toBeVisible();
   await expect(stopButton).toHaveCount(0, { timeout: 45_000 });

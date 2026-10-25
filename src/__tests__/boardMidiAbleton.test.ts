@@ -296,6 +296,19 @@ describe('engine: Ableton hears ADMI\u2019s endings, Mute and Volume', () => {
     expect(cc(11).every((x) => x.d[2] === 127)).toBe(true);
   });
 
+  it('Stop: Expression to 0 at once, so notes already queued ahead come out silent', () => {
+    // Notes go to the port up to ~200 ms (and a phrase's offsets) ahead, and a queued MIDI
+    // message can't be taken back: without this a pad or a band chord rang on after Stop.
+    const { e, p } = engine();
+    e.setMidiOut({ enabled: true, sends: 'all' }, 'p1');
+    p.fireStep(0, 0, 1, null);
+    port.send.mockClear();
+    e.stop();
+    expect(cc(11).length).toBeGreaterThan(0);
+    expect(cc(11).every((x) => x.d[2] === 0)).toBe(true);
+    expect(sent().some((x) => status(x.d) === NOTE_OFF && x.d[1] === 69)).toBe(true);
+  });
+
   it('the Volume counter is CC 7 on channel 16, sent only when it changes', () => {
     const { e } = engine();
     e.setMidiOut({ enabled: true, sends: 'all' }, 'p1');

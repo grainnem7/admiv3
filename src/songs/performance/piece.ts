@@ -44,13 +44,20 @@ export interface NowNext {
   next: { scene: Scene; inSec: number } | null;
 }
 
+/**
+ * Scenes are in time order, so only those after the one on now can still come in: one
+ * brought in early by hand (Next ▶) must not come back at its time, nor an earlier one
+ * pull the piece backwards.
+ */
+const comesLater = (i: number, current: number | null | undefined): boolean => current === null || current === undefined || i > current;
+
 /** For the Now / Next strip: what is on, what the clock brings next and when. */
 export function nowNext(scenes: readonly Scene[], current: number | null, elapsedSec: number | null): NowNext {
   const now = current !== null ? scenes[current] ?? null : null;
   if (elapsedSec === null) return { now, next: null };
   let next: { scene: Scene; inSec: number } | null = null;
-  for (const s of scenes) {
-    if (typeof s.at !== 'number' || s.at <= elapsedSec) continue;
+  for (const [i, s] of scenes.entries()) {
+    if (typeof s.at !== 'number' || s.at <= elapsedSec || !comesLater(i, current)) continue;
     if (!next || s.at - elapsedSec < next.inSec) next = { scene: s, inSec: s.at - elapsedSec };
   }
   return { now, next };
@@ -83,13 +90,15 @@ export function decideClockTick(input: {
   prev: { remaining: number; elapsed: number };
   now: { remaining: number; elapsed: number };
   scenes: readonly Scene[];
+  /** The scene on now: only scenes after it can come in. */
+  current?: number | null;
   performance: PerformanceSettings;
   passSec: number;
   ending: boolean;
   autoEnded: boolean;
 }): ClockDecision {
   const cues = cuesCrossed(input.prev.remaining, input.now.remaining);
-  const due = scenesDue(input.prev.elapsed, input.now.elapsed, input.scenes);
+  const due = scenesDue(input.prev.elapsed, input.now.elapsed, input.scenes).filter((i) => comesLater(i, input.current));
   const scene = due.length > 0 && !input.ending ? due[due.length - 1] : null;
   const end = !input.ending && !input.autoEnded && input.now.elapsed >= 5
     && endingDue(input.performance, input.now.remaining, input.passSec);

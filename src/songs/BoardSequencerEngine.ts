@@ -2390,6 +2390,10 @@ export class BoardSequencerEngine {
     this.timer = null;
     this.fired = [];
     this.loopFades.clear();
+    // Over MIDI, notes are already queued at the port up to ~200 ms (and a phrase's
+    // offsets) ahead, and a queued message can't be taken back. Expression to 0 first, so
+    // they come out silent; Play sends it back up.
+    if (this.midiOpts.enabled && this.midi) this.midi.expression(0, this.midiChannels);
     this.midi?.releaseAll(this.midiChannels);
   }
 

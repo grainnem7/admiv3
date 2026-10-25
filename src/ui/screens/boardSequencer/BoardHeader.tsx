@@ -10,6 +10,8 @@ export interface CameraNotice {
 export interface BoardHeaderProps {
   title: string;
   onExit(): void;
+  /** Exit was pressed once while a piece runs: the next press stops it and leaves. */
+  exitArmed?: boolean;
   mode: BoardMode;
   onModeChange(mode: BoardMode): void;
   largeUi: boolean;
@@ -34,7 +36,7 @@ export interface BoardHeaderProps {
  * not only on the one that caused it.
  */
 export function BoardHeader({
-  title, onExit, mode, onModeChange, largeUi, onLargeUiChange, onHelp, right,
+  title, onExit, exitArmed = false, mode, onModeChange, largeUi, onLargeUiChange, onHelp, right,
   playerName, onSwitchPlayer, switchPlayerDisabledReason = null, notice, onChangeCamera, hidden = false,
 }: BoardHeaderProps): JSX.Element {
   return (
@@ -45,7 +47,9 @@ export function BoardHeader({
       }}
     >
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-        <Button tone="quiet" onClick={onExit} aria-label="Exit the Board Sequencer">← Exit</Button>
+        <Button tone="quiet" onClick={onExit} aria-label={exitArmed ? 'Press again to stop the piece and exit' : 'Exit the Board Sequencer'}>
+          {exitArmed ? '← Press again to leave' : '← Exit'}
+        </Button>
         <h1 style={{ fontSize: 18, margin: 0, flex: '0 0 auto' }}>{title}</h1>
         <div style={{ flex: 1, minWidth: 0 }}>{right}</div>
         {playerName && onSwitchPlayer && (

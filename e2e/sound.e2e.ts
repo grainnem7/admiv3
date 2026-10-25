@@ -100,12 +100,14 @@ test('the red cap (tried with the mouse) moves the speed left–right and shows 
   const area = page.getByRole('img', { name: /Test area/ });
   await area.scrollIntoViewIfNeeded();
   const box = (await area.boundingBox())!;
-  const bpm = async (): Promise<number> => Number(/(\d+) BPM/.exec((await page.getByText(/Playing\s*·\s*\d+ BPM/).first().textContent()) ?? '')?.[1] ?? 0);
+  const bpm = async (): Promise<number> => Number(/(\d+) BPM/.exec((await page.getByText(/·\s*\d+ BPM · step/).first().textContent()) ?? '')?.[1] ?? 0);
   await area.hover({ position: { x: box.width * 0.05, y: box.height / 2 } });
   await expect.poll(bpm, { timeout: 8000 }).toBeLessThan(90);
   const slow = await bpm();
   await area.hover({ position: { x: box.width * 0.95, y: box.height / 2 } });
   await expect.poll(bpm, { timeout: 8000 }).toBeGreaterThan(slow + 30);
-  await expect(page.getByRole('status', { name: 'Red cap' })).toContainText('Speed');
+  // Under the board: the cap's state (announced), and what it is doing (shown, not announced).
+  await expect(page.getByRole('status', { name: 'Red cap' })).toContainText('cap found');
+  await expect(page.getByText(/^Speed \d+ BPM$/).first()).toBeVisible();
   expect(pageErrors(page)).toEqual([]);
 });

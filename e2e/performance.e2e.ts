@@ -61,6 +61,25 @@ test('a scene time is checked as it is typed', async ({ page }) => {
   await expect(page.getByRole('alert').filter({ hasText: 'After the end of the piece' })).toBeVisible();
 });
 
+test('while the clock runs, Exit and Set up need a second press too', async ({ page }) => {
+  await openLaptopBoard(page);
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1]]);
+  await startPiece(page);
+  await expect(page.getByRole('timer').first()).toBeVisible();
+  // One press of Exit: still here, still playing.
+  await page.getByRole('button', { name: 'Exit the Board Sequencer' }).click();
+  await expect(page.getByRole('button', { name: 'Press again to stop the piece and exit' })).toBeVisible();
+  await expect(page.getByRole('timer').first()).toBeVisible();
+  // One press of Set up: the same.
+  await page.getByRole('button', { name: '⚙ Set up' }).click();
+  await expect(page.getByRole('button', { name: '⚙ Press again to stop and set up' })).toBeVisible();
+  await expect(page.getByRole('status').filter({ hasText: 'Playing' }).first()).toBeVisible();
+  // The second press leaves.
+  await page.getByRole('button', { name: '⚙ Press again to stop and set up' }).click();
+  await expect(page.getByRole('button', { name: '▶ Play' }).first()).toBeHidden();
+});
+
 test('while the clock runs, Stop needs a second press', async ({ page }) => {
   await openLaptopBoard(page);
   await pickColour(page, 'Red');

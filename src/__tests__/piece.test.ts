@@ -28,6 +28,12 @@ describe('the piece — now and next', () => {
     expect(nowNext(scenes, 2, 300)).toEqual({ now: scenes[2], next: null });
     expect(nowNext(scenes, null, null)).toEqual({ now: null, next: null });
   });
+
+  it('after Next ▶ early, Next is the scene after the one on now, not the one skipped', () => {
+    // Build brought in by hand at 0:06: the strip said "Now: Build, Next: Build in 1:24".
+    expect(nowNext(scenes, 1, 6)).toEqual({ now: scenes[1], next: { scene: scenes[2], inSec: 204 } });
+    expect(nowNext(scenes, 2, 6)).toEqual({ now: scenes[2], next: null });
+  });
 });
 
 describe('the piece — one tick of the clock', () => {
@@ -53,6 +59,20 @@ describe('the piece — one tick of the clock', () => {
     const tick = { prev: { remaining: 330.2, elapsed: 89.8 }, now: { remaining: 329.9, elapsed: 90.1 } };
     expect(decideClockTick({ ...base, ...tick }).scene).toBe(1);
     expect(decideClockTick({ ...base, ...tick, ending: true }).scene).toBeNull();
+  });
+
+  it('a scene already passed by hand does not come back at its time', () => {
+    const three = [scene('a', 0), scene('b', 90), scene('c', 210)];
+    const at90 = { prev: { remaining: 330.2, elapsed: 89.8 }, now: { remaining: 329.9, elapsed: 90.1 } };
+    const at210 = { prev: { remaining: 210.2, elapsed: 209.8 }, now: { remaining: 209.9, elapsed: 210.1 } };
+    // Next ▶ pressed early: b is on. At 1:30 the clock must not bring b in again…
+    expect(decideClockTick({ ...base, scenes: three, current: 1, ...at90 }).scene).toBeNull();
+    // …and skipped ahead to c: b at 1:30 must not pull the piece backwards.
+    expect(decideClockTick({ ...base, scenes: three, current: 2, ...at90 }).scene).toBeNull();
+    // A later scene still comes in at its time.
+    expect(decideClockTick({ ...base, scenes: three, current: 1, ...at210 }).scene).toBe(2);
+    // Gone back by hand to a: b and c come again, at their times.
+    expect(decideClockTick({ ...base, scenes: three, current: 0, ...at90 }).scene).toBe(1);
   });
 
   it('cues as the end nears, and the automatic ending once', () => {

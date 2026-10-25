@@ -1871,6 +1871,14 @@ export default function BoardSequencerScreen() {
       toggleAmount: cfg.toggleAmount, controlGlideSec: cfg.controlGlideSec,
     });
     await engine.init();
+    // Stop — or Stop then Play again — may have been pressed while the samples loaded. This
+    // start is then no longer wanted: drop its engine before it is started or put where
+    // Stop can find it, and touch nothing else. Checked later, a newer start could already
+    // be playing, and clearing engineRef would leave that one with nothing able to stop it.
+    if (startingRef.current !== generation) {
+      engine.dispose();
+      return;
+    }
     engine.setMuted(mutedRef.current);
     // Pattern chaining: load captured page snapshots + the live (selected) page.
     engine.setPages(cfg.pages as ActiveCell[][]);
@@ -1907,7 +1915,7 @@ export default function BoardSequencerScreen() {
     // longer wanted is disposed rather than left playing with nothing able to stop it.
     if (startingRef.current !== generation) {
       engine.dispose();
-      engineRef.current = null;
+      if (engineRef.current === engine) engineRef.current = null;
       return;
     }
     startSecRef.current = Tone.now();
@@ -1966,30 +1974,35 @@ export default function BoardSequencerScreen() {
     }
   }, [startEngine, startingRef, stop, announce]);
 
-  // Stop during a piece: while the performance clock runs, one press (or one Space) only
-  // arms it, and a second press within a few seconds stops. A stray key or tap must not
-  // end the show.
-  const [stopArmed, setStopArmed] = useState(false);
-  const stopArmedRef = useRef<number | null>(null);
-  const requestStop = useCallback((): void => {
-    const armedAt = stopArmedRef.current;
+  // Anything that stops a piece: while the performance clock runs, one press (or one
+  // Space) only arms it, and a second press of the same button within a few seconds does
+  // it. A stray key or tap — Stop, ← Exit or ⚙ Set up — must not end the show.
+  const [armed, setArmed] = useState<'stop' | 'exit' | 'setup' | null>(null);
+  const armedRef = useRef<{ what: 'stop' | 'exit' | 'setup'; at: number } | null>(null);
+  const confirmThen = useCallback((what: 'stop' | 'exit' | 'setup', act: () => void): void => {
+    const a = armedRef.current;
     const pieceRunning = runningRef.current && clockStartRef.current !== null;
-    if (pieceRunning && (armedAt === null || performance.now() - armedAt > STOP_CONFIRM_MS)) {
-      stopArmedRef.current = performance.now();
-      setStopArmed(true);
-      announce('The piece is running. Press Stop again to stop it.');
+    if (pieceRunning && (a === null || a.what !== what || performance.now() - a.at > STOP_CONFIRM_MS)) {
+      const at = performance.now();
+      armedRef.current = { what, at };
+      setArmed(what);
+      announce(what === 'stop' ? 'The piece is running. Press Stop again to stop it.'
+        : what === 'exit' ? 'The piece is running. Press Exit again to stop it and leave.'
+          : 'The piece is running. Press Set up again to stop it and set up.');
       window.setTimeout(() => {
-        if (stopArmedRef.current !== null && performance.now() - stopArmedRef.current >= STOP_CONFIRM_MS) {
-          stopArmedRef.current = null;
-          setStopArmed(false);
+        if (armedRef.current?.at === at) {
+          armedRef.current = null;
+          setArmed(null);
         }
       }, STOP_CONFIRM_MS);
       return;
     }
-    stopArmedRef.current = null;
-    setStopArmed(false);
-    stop();
-  }, [stop, announce, runningRef]);
+    armedRef.current = null;
+    setArmed(null);
+    act();
+  }, [announce, runningRef]);
+  const requestStop = useCallback((): void => confirmThen('stop', stop), [confirmThen, stop]);
+  const stopArmed = armed === 'stop';
 
   // Space starts and stops the board in Play and Big board. The global handler in
   // App.tsx stands down on this screen, so this is the only one listening.
@@ -2727,7 +2740,7 @@ export default function BoardSequencerScreen() {
     clockPrevRef.current = { remaining: view.remainingSec, elapsed: view.elapsedSec };
     // What to do is decided by one tested rule (performance/piece.ts); this only does it.
     const d = decideClockTick({
-      prev, now: { remaining: view.remainingSec, elapsed: view.elapsedSec }, scenes: c.scenes,
+      prev, now: { remaining: view.remainingSec, elapsed: view.elapsedSec }, scenes: c.scenes, current: c.currentScene,
       performance: c.performance, passSec: (c.cols * Math.max(1, c.numPages)) * 60 / Math.max(20, engine.getBpm()),
       ending: endingRef.current, autoEnded: autoEndedRef.current,
     });
@@ -4496,7 +4509,8 @@ export default function BoardSequencerScreen() {
       )}
         <BoardHeader
           title={view === 'setup' ? 'Board Sequencer · Set up' : 'Board Sequencer'}
-          onExit={() => { stop(); setCurrentScreen('welcome'); }}
+          onExit={() => confirmThen('exit', () => { stop(); setCurrentScreen('welcome'); })}
+          exitArmed={armed === 'exit'}
           mode={config.themeMode}
           onModeChange={(m) => update({ themeMode: m })}
           largeUi={uiSize === 'large'}
@@ -4538,9 +4552,9 @@ export default function BoardSequencerScreen() {
               </Button>
               <Button
                 tone="quiet"
-                onClick={() => { if (running) stop(); setView('setup'); if (laptop) setStep('colours'); }}
+                onClick={() => confirmThen('setup', () => { if (running) stop(); setView('setup'); if (laptop) setStep('colours'); })}
               >
-                ⚙ Set up
+                {armed === 'setup' ? '⚙ Press again to stop and set up' : '⚙ Set up'}
               </Button>
               {boardSourceButton}
             </div>
