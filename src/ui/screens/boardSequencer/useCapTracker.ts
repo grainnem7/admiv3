@@ -248,12 +248,14 @@ export function useCapTracker(opts: {
       }
       if (now - lastUi >= UI_EVERY_MS) {
         lastUi = now;
-        setView({
+        const next: CapView = {
           camera, face: s.faceAssist && !mouse ? faceStatus : 'off', seen: reading.seen, source: fused.source,
           axes: reading.axes, values: reading.values, paused,
           learning: learn && learnRef.current ? Math.max(0, Math.ceil((learn.until - now) / 1000))
             : side && sideRef.current ? Math.max(0, Math.ceil((side.until - now) / 1000)) : null,
-        });
+        };
+        // A still head changes nothing on screen: don't re-render the screen for it.
+        setView((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
       }
     }, TICK_MS);
 

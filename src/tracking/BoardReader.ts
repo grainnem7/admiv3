@@ -307,9 +307,12 @@ export class BoardPixelReader {
     let gain: Gain = NO_GAIN;
     let field: LightField | null = null;
     if (boardMode) {
-      const allObs: number[] = [];
-      const allRef: number[] = [];
-      const allUv: number[] = [];
+      let total = 0;
+      for (const lat of this.lattices) total += lat.length / 4;
+      const allObs = new Float32Array(total * 3);
+      const allRef = new Float32Array(total * 3);
+      const allUv = new Float32Array(total * 2);
+      let at = 0;
       cellPixels = this.lattices.map((lat) => {
         const n = lat.length / 4;
         const obs = new Float32Array(n * 3);
@@ -319,9 +322,10 @@ export class BoardPixelReader {
           obs[i * 3] = r; obs[i * 3 + 1] = g; obs[i * 3 + 2] = b;
           const rk = refIndex(ref, lat[k], lat[k + 1]);
           refK[i] = rk;
-          allObs.push(r, g, b);
-          allRef.push(ref.mean[rk * 3], ref.mean[rk * 3 + 1], ref.mean[rk * 3 + 2]);
-          allUv.push(lat[k], lat[k + 1]);
+          allObs[at * 3] = r; allObs[at * 3 + 1] = g; allObs[at * 3 + 2] = b;
+          allRef[at * 3] = ref.mean[rk * 3]; allRef[at * 3 + 1] = ref.mean[rk * 3 + 1]; allRef[at * 3 + 2] = ref.mean[rk * 3 + 2];
+          allUv[at * 2] = lat[k]; allUv[at * 2 + 1] = lat[k + 1];
+          at++;
         }
         return { obs, refK };
       });

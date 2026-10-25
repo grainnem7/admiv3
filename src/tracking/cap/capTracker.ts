@@ -439,7 +439,11 @@ export function stepCap(
   const t = st.t + Math.max(0, dtMs);
   let settling = st.settling || (st.paused && !paused);
   const stillMs = settling && !moving ? st.stillMs + dtMs : 0;
-  if (settling && stillMs >= CAP_SETTLE_MS) settling = false;
+  // Settled: wherever the head came to rest is where the cap picks up (gliding there).
+  // One direction at a time only follows a MOVING head, so a head that moved while the
+  // cap waited, then stopped, would otherwise be left behind for good.
+  const pickUp = settling && stillMs >= CAP_SETTLE_MS;
+  if (pickUp) settling = false;
   const hold = paused || settling;
   let fromX = st.x;
   let fromY = st.y;
@@ -447,8 +451,8 @@ export function stepCap(
     const back = positionAt(st.history, t - s.rewindMs);
     if (back) { fromX = rewindAxis(st.x, back.x); fromY = rewindAxis(st.y, back.y); }
   }
-  const x = stepAxis(fromX, rawX, s, dtMs, allowX && !hold, moving);
-  const y = stepAxis(fromY, rawY, s, dtMs, allowY && !hold, moving);
+  const x = stepAxis(fromX, rawX, s, dtMs, (allowX || pickUp) && !hold, moving || pickUp);
+  const y = stepAxis(fromY, rawY, s, dtMs, (allowY || pickUp) && !hold, moving || pickUp);
   const history = st.history.filter((h) => h.t >= t - HISTORY_MS);
   history.push({ t, x: x.pos, y: y.pos });
   const values: Partial<Record<FaderRole, number>> = {};

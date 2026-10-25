@@ -44,6 +44,26 @@ describe('BoardSequencerEngine tempo + tick', () => {
     expect((clock.now - p.startSec) / (60 / 120)).toBeCloseTo(10, 6);
   });
 
+  it('slowing down never plays a beat twice', () => {
+    // The look-ahead is in seconds, so after a slow-down it spans fewer beats and the beat
+    // it reaches steps back over one already sent: that beat sounded again, a flam 33 ms
+    // after itself. The tempo counter, the cap and the "slow" ending all slow down.
+    const e = new BoardSequencerEngine({ ...cfg(), bpm: 120 });
+    const fired: number[] = [];
+    const p = e as unknown as Priv & { fireStep(i: number): void; scheduleInternal(): void; lastInternalBeat: number };
+    p.fireStep = (i: number) => { fired.push(i); };
+    p.startSec = 0;
+    p.lastInternalBeat = -1;
+    // Ticks every 25 ms; beat 23 (at 11.5 s) is sent at 11.4 s, then the tempo drops.
+    for (let i = 0; i <= 456; i++) { clock.now = i * 0.025; p.scheduleInternal(); }
+    expect(fired.at(-1)).toBe(23);
+    e.setBpm(90);
+    for (let i = 457; i <= 560; i++) { clock.now = i * 0.025; p.scheduleInternal(); }
+    expect(new Set(fired).size).toBe(fired.length);
+    // And nothing was skipped.
+    expect(fired).toEqual(Array.from({ length: fired.length }, (_, i) => i));
+  });
+
   it('setBpm is a no-op while synced to a song with beats; getBpm reports the song tempo', () => {
     const e = new BoardSequencerEngine(cfg());
     e.setSyncSource({ getTime: () => 0, beats: [0, 0.5, 1, 1.5], chordAt: () => null });

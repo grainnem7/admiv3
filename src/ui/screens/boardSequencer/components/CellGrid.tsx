@@ -1,4 +1,4 @@
-import { useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
+import { memo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 
 export interface CellGridProps {
   rows: number;
@@ -19,7 +19,7 @@ export interface CellGridProps {
  * go to the ends of a row, and Enter or Space places or lifts. A 10 × 10 board used to
  * be a hundred tab stops.
  */
-export function CellGrid({ rows, cols, label, cellLabel, pressed, onActivate, cellStyle, style }: CellGridProps): JSX.Element {
+export const CellGrid = memo(function CellGrid({ rows, cols, label, cellLabel, pressed, onActivate, cellStyle, style }: CellGridProps): JSX.Element {
   const [focus, setFocus] = useState({ row: rows - 1, col: 0 });
   const refs = useRef(new Map<string, HTMLButtonElement>());
   const at = { row: Math.min(focus.row, rows - 1), col: Math.min(focus.col, cols - 1) };
@@ -71,4 +71,4 @@ export function CellGrid({ rows, cols, label, cellLabel, pressed, onActivate, ce
       ))}
     </div>
   );
-}
+});

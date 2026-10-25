@@ -45,7 +45,9 @@ import { BoardStep } from './boardSequencer/setup/BoardStep';
 import { ColoursStep } from './boardSequencer/setup/ColoursStep';
 import { ReadyStep } from './boardSequencer/setup/ReadyStep';
 import { BoardCornerEditor } from './boardSequencer/components/BoardCornerEditor';
-import { BoardView, cellMap } from './boardSequencer/components/BoardView';
+import { cellMap, LiveBoardView } from './boardSequencer/components/BoardView';
+import { createPopStore, soundingKey, type PopStore } from './boardSequencer/popStore';
+import { cellsKey, controlsKey, frameKey } from './boardSequencer/runtimeKeys';
 import { describeBoard, phraseSpans, popsAt, pruneFired, type Pop } from './boardSequencer/components/boardViewModel';
 import { isSequencedRole, isControlRole, isLoopRole } from '../../tracking/boardColours';
 import { placeLaptopCounter } from '../../tracking/laptopBoard';
@@ -487,8 +489,14 @@ export default function BoardSequencerScreen() {
   const bigBoardRef = useRef<HTMLDivElement | null>(null);
   const bigBoardButtonRef = useRef<HTMLButtonElement | null>(null);
   // Play-side visuals, all read from audible time so they match what is heard.
+  // The notes sounding now: every frame for the board drawing, through a store (see
+  // popStore.ts); the screen itself only hears when WHAT is sounding changes.
+  const popStoreRef = useRef<PopStore | null>(null);
+  if (!popStoreRef.current) popStoreRef.current = createPopStore();
+  const popStore = popStoreRef.current;
   const [pops, setPops] = useState<Pop[]>([]);
   const [latestFrame, setLatestFrame] = useState<RuntimeFrame | null>(null);
+  const shownKeysRef = useRef({ frame: '', controls: '', active: '', stats: '' });
   const [liveBpm, setLiveBpm] = useState(0);
   const [beatOn, setBeatOn] = useState(false);
   const [isVarLap, setIsVarLap] = useState(false);
@@ -1423,9 +1431,11 @@ export default function BoardSequencerScreen() {
         // re-rendered this whole screen 60 times a second for nothing, on the same thread
         // as the colour detection and the sound scheduler.
         const next = popsAt(firedRef.current, audible);
-        setPops((prev) => (prev.length === 0 && next.length === 0 ? prev : next));
+        popStore.set(next);
+        setPops((prev) => (soundingKey(prev) === soundingKey(next) ? prev : next));
       } else if (firedRef.current.length > 0) {
         firedRef.current = [];
+        popStore.set([]);
         setPops((prev) => (prev.length === 0 ? prev : []));
       }
       setNudge((prev) => (prev === signal || (prev !== null && signal !== null && JSON.stringify(prev) === JSON.stringify(signal)) ? prev : signal));
@@ -1446,12 +1456,18 @@ export default function BoardSequencerScreen() {
           pushLaunchRef.current();
         }
       }
-      setLatestFrame(rf);
-      setControlState(controls);
+      // Only what changed reaches the screen: this runs ten times a second, always with
+      // new objects, and re-rendered the whole screen each time with nothing moving.
+      const fk = frameKey(rf);
+      if (fk !== shownKeysRef.current.frame) { shownKeysRef.current.frame = fk; setLatestFrame(rf); }
+      const ck = controlsKey(controls);
+      if (ck !== shownKeysRef.current.controls) { shownKeysRef.current.controls = ck; setControlState(controls); }
       // Settled pattern cells only exist while playing, so in Set up (and when stopped)
       // this falls back to what the camera can see. Otherwise "On the board now" and
       // Describe board told the player the board was empty with counters all over it.
-      setActive(runningRef.current ? frame.patternCells : cellsFromOccupied(frame.occupied));
+      const nextActive = runningRef.current ? frame.patternCells : cellsFromOccupied(frame.occupied);
+      const ak = cellsKey(nextActive);
+      if (ak !== shownKeysRef.current.active) { shownKeysRef.current.active = ak; setActive(nextActive); }
       if (runningRef.current) {
         sessionLogRef.current.board(frame.patternCells);
         const counts = sessionLogRef.current.counts();
@@ -1459,7 +1475,8 @@ export default function BoardSequencerScreen() {
       }
       setPlayheadCol(runningRef.current && engine ? engine.getPlayheadCol(cfg.cols) : 0);
       if (cfg.numPages > 1 && engine) setPlayingPage(engine.getCurrentPage());
-      setStats({ byColour: frame.byColour, settled: frame.activeMap.size });
+      const sk = `${JSON.stringify(frame.byColour)}|${frame.activeMap.size}`;
+      if (sk !== shownKeysRef.current.stats) { shownKeysRef.current.stats = sk; setStats({ byColour: frame.byColour, settled: frame.activeMap.size }); }
       if (engine) {
         setLiveBpm(engine.getBpm());
         setIsVarLap(cfg.numPages <= 1 ? engine.isVariationLap() : false);
@@ -1470,7 +1487,8 @@ export default function BoardSequencerScreen() {
         const fill = engine.getFillNotes();
         const marks = new Map<string, { row: number; col: number; colour: ColourId }>();
         for (const n of fill) marks.set(`${n.cell.row},${n.cell.col}`, { row: n.cell.row, col: n.cell.col, colour: n.colour });
-        setFillStatus(engine.getFillStatus());
+        const fs = engine.getFillStatus();
+        setFillStatus((prev) => (JSON.stringify(prev) === JSON.stringify(fs) ? prev : fs));
         const applied = engine.getLaunchedSlots();
         setAppliedSlots((prev) => (prev.length === applied.length && prev.every((s, i) => s === applied[i]) ? prev : applied));
         const bs = engine.getBandStatus();
@@ -4035,11 +4053,11 @@ export default function BoardSequencerScreen() {
   );
 
   const boardView = (
-    <BoardView
+    <LiveBoardView
+      popStore={popStore}
       rows={config.rows}
       cols={config.cols}
       frame={boardFrame}
-      pops={pops}
       playheadCol={playheadCol}
       playing={running}
       pingPongDirection={pingDir}

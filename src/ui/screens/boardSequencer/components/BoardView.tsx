@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { usePops, type PopStore } from '../popStore';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { ActiveCell, PieceColour } from '../../../../tracking/BoardSequencerMode';
 import type { ColourId } from '../../../../tracking/boardColours';
 import { CellGrid } from './CellGrid';
@@ -76,6 +77,8 @@ function ghostsBySquare(ghosts: ReadonlyMap<string, ActiveCell> | undefined): Ma
  * swatch carries a two-tone contrast ring, so a black counter on a dark theme (or a
  * white one on light) is still visible.
  */
+const CLEAR_CELL = (): CSSProperties => ({ background: 'transparent', border: 'none', borderRadius: 6 });
+
 export function BoardView({
   rows, cols, frame, pops, playheadCol, playing, pingPongDirection, swatchFor, palette,
   pageLabel, reducedMotion = false, fillMarks, band, spans, notice, onCellTap, describeCell, loopCells,
@@ -358,6 +361,21 @@ export function BoardView({
     }
   }, [dims, rows, cols, frame, pops, playheadCol, playing, pingPongDirection, swatchFor, palette, reducedMotion, fillMarks, band, spans, notice, loopCells]);
 
+  // The squares to click: rebuilt only when what they say changes. The board redraws for
+  // every frame of a sounding note, and rebuilding 64+ buttons with it cost more than the
+  // drawing.
+  const labelsKey = onCellTap
+    ? Array.from({ length: rows * cols }, (_, i) => {
+      const row = Math.floor(i / cols); const col = i % cols;
+      const what = describeCell?.(row, col) ?? '';
+      return `Row ${rows - row} from the bottom, step ${col + 1}${what ? `: ${what}` : ''}`;
+    }).join('\n')
+    : '';
+  const cellLabel = useCallback((row: number, col: number) => labelsKey.split('\n')[row * cols + col] ?? '', [labelsKey, cols]);
+  const gridStyle = useMemo<CSSProperties>(() => ({
+    position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: dims.w, height: dims.h,
+  }), [dims.w, dims.h]);
+
   const pieces = frame.settled.size;
   const loopNotes = loopCells?.length ?? 0;
   const heldCount = frame.held?.size ?? 0;
@@ -376,13 +394,10 @@ export function BoardView({
           rows={rows}
           cols={cols}
           label={`Laptop board, ${rows} rows by ${cols} steps. Arrow keys move; Enter places or lifts.`}
-          cellLabel={(row, col) => {
-            const what = describeCell?.(row, col) ?? '';
-            return `Row ${rows - row} from the bottom, step ${col + 1}${what ? `: ${what}` : ''}`;
-          }}
+          cellLabel={cellLabel}
           onActivate={onCellTap}
-          cellStyle={() => ({ background: 'transparent', border: 'none', borderRadius: 6 })}
-          style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: dims.w, height: dims.h }}
+          cellStyle={CLEAR_CELL}
+          style={gridStyle}
         />
       )}
       {pageLabel && (
@@ -412,4 +427,9 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
 /** The cells currently settled, as a map, for `BoardViewFrame`. */
 export function cellMap(cells: readonly ActiveCell[]): Map<string, PieceColour> {
   return new Map(cells.map((c) => [keyOf(c.row, c.col), c.colour]));
+}
+
+/** The board, redrawn for every frame of the sounding notes without re-rendering its parent. */
+export function LiveBoardView({ popStore, ...props }: Omit<BoardViewProps, 'pops'> & { popStore: PopStore }): JSX.Element {
+  return <BoardView {...props} pops={usePops(popStore)} />;
 }

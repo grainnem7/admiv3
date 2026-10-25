@@ -250,6 +250,18 @@ describe('pausing while counters are moved', () => {
     expect(r.values.tempo!).toBeGreaterThan(before + 10);
   });
 
+  it('picks up where the head settled after a pause, even one direction at a time', () => {
+    // One direction at a time only follows a moving head. A head that moved while the cap
+    // was waiting, then stopped, used to be left behind for good.
+    const one = settings({ xRole: 'tempo', yRole: 'off', oneAtATime: true, rewindMs: 500 });
+    let r = settle(one, at(0.1));
+    for (let i = 0; i < 10; i++) r = stepCap(r.state, at(0.1), one, ranges, 33, true);
+    // The pause ends; the head moves right at once and stays there.
+    for (let i = 0; i < 3; i++) r = stepCap(r.state, at(0.1 + 0.3 * (i + 1)), one, ranges, 33);
+    r = settle(one, at(0.9), r.state);
+    expect(r.values.tempo!).toBeCloseTo(70 + 0.9 * 60, 0);
+  });
+
   it('keeps the timings within safe limits when loading', () => {
     const d = sanitizeCapSettings({});
     expect(d.pauseOnBoard).toBe(true);

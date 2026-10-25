@@ -1661,10 +1661,10 @@ export class BoardSequencerEngine {
     // lit the columns that never sounded.
     if (target < this.lastInternalBeat) {
       // The look-ahead is a fixed number of SECONDS, so it spans fewer beats after a
-      // slow-down and the target can step back over beats that have already played.
-      // Resync quietly: replaying them made sliding the tempo counter down hiccup and
-      // flam, and the counter calls setBpm on every camera frame while it is moving.
-      this.lastInternalBeat = target;
+      // slow-down and the target can step back over beats that have already been sent.
+      // Wait for it to catch up: lowering the mark here sent the same beat again, a flam
+      // 33 ms after itself, every time the tempo counter, the cap or a "slow" ending
+      // slowed down. (setBpm keeps the beat continuous, so it steps back by one at most.)
       return;
     }
     const first = Math.max(this.lastInternalBeat + 1, target - MAX_CATCHUP_BEATS);

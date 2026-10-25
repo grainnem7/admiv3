@@ -170,21 +170,27 @@ export const NO_GAIN: Gain = [1, 1, 1];
  * saw when learnt. A median, so counters and a hand covering part of the board don't move
  * it — the rest of the board outvotes them.
  */
-export function estimateGain(observed: readonly number[], reference: readonly number[]): Gain {
-  const ratios: [number[], number[], number[]] = [[], [], []];
+export function estimateGain(observed: ArrayLike<number>, reference: ArrayLike<number>): Gain {
+  // Typed arrays, sorted natively: this runs on every camera frame, and a comparator sort
+  // over a few thousand samples was a large part of reading the board.
+  const n = Math.floor(observed.length / 3);
+  const ratios = [new Float32Array(n), new Float32Array(n), new Float32Array(n)];
+  const counts = [0, 0, 0];
   for (let i = 0; i + 2 < observed.length; i += 3) {
     for (let ch = 0; ch < 3; ch++) {
       const ref = reference[i + ch];
       if (ref < 20 || observed[i + ch] >= 250) continue; // too dark to trust, or clipped
-      ratios[ch].push(observed[i + ch] / ref);
+      ratios[ch][counts[ch]++] = observed[i + ch] / ref;
     }
   }
-  const median = (a: number[]): number => {
-    if (a.length < 12) return 1;
-    a.sort((x, y) => x - y);
-    return a[Math.floor(a.length / 2)];
-  };
-  return ratios.map((a) => Math.max(0.4, Math.min(2.5, median(a)))) as Gain;
+  return ratios.map((a, ch) => Math.max(0.4, Math.min(2.5, medianOf(a, counts[ch], 12)))) as Gain;
+}
+
+/** The median of the first `count` values (sorted in place), or 1 with fewer than `min`. */
+function medianOf(a: Float32Array, count: number, min: number): number {
+  if (count < min) return 1;
+  const used = a.subarray(0, count).sort();
+  return used[Math.floor(count / 2)];
 }
 
 /**
@@ -202,23 +208,34 @@ export interface LightField {
 }
 
 export function estimateLightField(
-  observed: readonly number[], reference: readonly number[], uv: readonly number[], gain: Gain, regions = LIGHT_REGIONS,
+  observed: ArrayLike<number>, reference: ArrayLike<number>, uv: ArrayLike<number>, gain: Gain, regions = LIGHT_REGIONS,
 ): LightField {
-  const buckets: number[][] = Array.from({ length: regions * regions }, () => []);
-  for (let i = 0, s = 0; i + 2 < observed.length; i += 3, s += 2) {
+  const n = Math.floor(observed.length / 3);
+  const region = new Int32Array(n);
+  const ratio = new Float32Array(n);
+  const sizes = new Int32Array(regions * regions);
+  for (let i = 0, s = 0, j = 0; i + 2 < observed.length; i += 3, s += 2, j++) {
+    region[j] = -1;
     const yr = lum(reference[i], reference[i + 1], reference[i + 2]);
     if (yr < 24) continue;
     const yo = lum(observed[i] / gain[0], observed[i + 1] / gain[1], observed[i + 2] / gain[2]);
     const rx = Math.min(regions - 1, Math.max(0, Math.floor(uv[s] * regions)));
     const ry = Math.min(regions - 1, Math.max(0, Math.floor(uv[s + 1] * regions)));
-    buckets[ry * regions + rx].push(yo / yr);
+    region[j] = ry * regions + rx;
+    ratio[j] = yo / yr;
+    sizes[region[j]]++;
   }
+  // Bucket by region into one buffer, then a native sort per region.
+  const start = new Int32Array(sizes.length + 1);
+  for (let k = 0; k < sizes.length; k++) start[k + 1] = start[k] + sizes[k];
+  const fill = start.slice(0, sizes.length);
+  const sorted = new Float32Array(start[sizes.length]);
+  for (let j = 0; j < n; j++) if (region[j] >= 0) sorted[fill[region[j]]++] = ratio[j];
   const scale = new Float32Array(regions * regions);
   for (let k = 0; k < scale.length; k++) {
-    const a = buckets[k];
-    if (a.length < 8) { scale[k] = 1; continue; }
-    a.sort((x, y) => x - y);
-    scale[k] = Math.max(0.45, Math.min(2.2, a[Math.floor(a.length / 2)]));
+    if (sizes[k] < 8) { scale[k] = 1; continue; }
+    const a = sorted.subarray(start[k], start[k + 1]).sort();
+    scale[k] = Math.max(0.45, Math.min(2.2, a[Math.floor(sizes[k] / 2)]));
   }
   return { regions, scale };
 }
@@ -264,9 +281,12 @@ export function differsFromBoard(rgb: readonly [number, number, number], ref: Bo
   const y = lum(r, g, b);
   const ym = lum(mr, mg, mb);
   const dl = Math.log(y / ym);
-  const c = chroma(r, g, b);
-  const cm = chroma(mr, mg, mb);
-  const dc = Math.hypot(c[0] - cm[0], c[1] - cm[1]);
+  // chroma(), written out: this runs for every sample of every cell, every frame.
+  const s0 = r + g + b + 12;
+  const s1 = mr + mg + mb + 12;
+  const cx = (r + 4) / s0 - (mr + 4) / s1;
+  const cy = (g + 4) / s0 - (mg + 4) / s1;
+  const dc = Math.sqrt(cx * cx + cy * cy);
   const tolL = Math.max(MIN_TOL_L, SPREAD_MULTIPLE * ref.spreadL[k]);
   const tolC = Math.max(MIN_TOL_C, SPREAD_MULTIPLE * ref.spreadC[k]) + darkChromaSlack(Math.min(y, ym)) * 0.2;
   if (dc > tolC) return true;            // a different colour
@@ -296,13 +316,17 @@ export function hexToRgb(hex: string): [number, number, number] | null {
  * a counter in shadow becomes another colour.
  */
 export function colourDistance(a: readonly [number, number, number], b: readonly [number, number, number]): number {
-  const ca = chroma(a[0], a[1], a[2]);
-  const cb = chroma(b[0], b[1], b[2]);
+  // Written out rather than through chroma(): it runs for every sample against every
+  // counter colour, every frame, and the small arrays added up.
+  const sa = a[0] + a[1] + a[2] + 12;
+  const sb = b[0] + b[1] + b[2] + 12;
+  const dx = (a[0] + 4) / sa - (b[0] + 4) / sb;
+  const dy = (a[1] + 4) / sa - (b[1] + 4) / sb;
   const ya = lum(a[0], a[1], a[2]);
   const yb = lum(b[0], b[1], b[2]);
-  const dc = Math.hypot(ca[0] - cb[0], ca[1] - cb[1]) / (0.06 + 0.5 * darkChromaSlack(Math.min(ya, yb)));
+  const dc = Math.sqrt(dx * dx + dy * dy) / (0.06 + 0.5 * darkChromaSlack(Math.min(ya, yb)));
   const dl = Math.log(ya / yb) / 0.45;
-  return Math.hypot(dc, dl);
+  return Math.sqrt(dc * dc + dl * dl);
 }
 
 /** Further than this from every counter colour: something else (a hand, a sleeve, glare). */
