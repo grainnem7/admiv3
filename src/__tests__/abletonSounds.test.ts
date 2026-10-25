@@ -96,13 +96,29 @@ describe('the plan', () => {
   });
   it('macros from the card steps, overall on channel 16', () => {
     const plan = abletonPlan(base([colour('a', 'melody', { volume: 0.4, tone: 1, reverbSend: 0.3 })], { energy: 1, space: 0.1, swing: 0.5 }));
-    expect(plan.controls.get(controlKey(1, 24))?.value).toBe(0);
+    expect(plan.controls.get(controlKey(1, 24))?.value).toBe(32); // Soft: quiet, never silent
     expect(plan.controls.get(controlKey(1, 25))?.value).toBe(127);
-    expect(plan.controls.get(controlKey(1, 26))?.value).toBe(85);
+    expect(plan.controls.get(controlKey(1, 26))?.value).toBe(95);
     expect(plan.controls.get(controlKey(16, 21))?.value).toBe(127);
-    expect(plan.controls.get(controlKey(16, 22))?.value).toBe(0);
+    expect(plan.controls.get(controlKey(16, 22))?.value).toBe(32);
     expect(plan.controls.get(controlKey(16, 23))?.value).toBe(127);
     expect(grooveCc(0)).toBe(0);
+  });
+  it('only a step that means none sends 0: Space Dry, never Loud Soft', () => {
+    const dry = abletonPlan(base([colour('a', 'melody', { volume: 0.4, reverbSend: 0 })]));
+    expect(dry.controls.get(controlKey(1, 26))?.value).toBe(0);
+    expect(dry.controls.get(controlKey(1, 24))?.value).toBeGreaterThan(0);
+  });
+  it('drums, band and Extra notes rest at open Bright and the World\'s Space, for after a counter', () => {
+    const plan = abletonPlan(base([colour('a', 'melody')]));
+    for (const ch of [10, 11, 12, 13]) {
+      expect(plan.controls.get(controlKey(ch, 25))?.value).toBe(127);
+      expect(plan.controls.get(controlKey(ch, 26))?.value).toBeGreaterThan(0);
+      expect(plan.controls.get(controlKey(ch, 24))).toBeUndefined();
+    }
+    const t = abletonMappingTargets(plan);
+    expect(t.filter((x) => x.channel === 10).map((x) => x.cc)).toEqual([30, 25, 26]);
+    expect(t.filter((x) => x.channel === 1).map((x) => x.cc)).toEqual([30, 24, 25, 26]);
   });
   it('only what changed is sent, unless full', () => {
     const plan = abletonPlan(base([colour('a', 'melody')]));

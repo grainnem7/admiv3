@@ -52,11 +52,11 @@ export function AbletonMappingHelper({ config, connected }: {
         <li>In Ableton press Ctrl+M (the screen turns blue).</li>
         {group === 'fades'
           ? <li>Click the Utility&apos;s Gain on the track named below, then press Send here.</li>
-          : <li>Click the control named below on that track&apos;s Instrument Rack (its Chain selector, or macro 1, 2 or 3), then press Send here.</li>}
+          : <li>Click the control named below on that track, then press Send here. For the Chain selector, click the Rack&apos;s Chain selector, or the macro that drives it if a macro does (the selector is then greyed out).</li>}
         <li>Send moves on to the next one by itself. Repeat for each.</li>
         {group === 'fades'
           ? <li>Still in Ctrl+M, look at the Mappings list on the left of Ableton: set <strong>Max</strong> to <strong>0 dB</strong> on every Gain mapping, or full Expression will be far too loud.</li>
-          : <li>Chain selectors keep their full range (0 to 127): each chain&apos;s zone does the choosing.</li>}
+          : <li>Chain selectors keep their full range (0 to 127): each chain&apos;s zone does the choosing. On the others set a <strong>Min</strong> as well as a Max, or the lowest step is far too quiet: Loud Gain Min −18 dB, Max 0 dB; Send A Min −40 dB; Return A Min −24 dB, Max 0 dB; Bright filter Min 600 Hz.</li>}
         <li>Press Ctrl+M again to finish, and save the Set.{group === 'fades' ? ' The tracks stay silent until ADMI plays (Play sends full Expression).' : ''}</li>
       </ol>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>

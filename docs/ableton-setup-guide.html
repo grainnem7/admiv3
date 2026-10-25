@@ -190,10 +190,17 @@ a:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
       </tbody>
     </table></div>
     <ol start="3">
-      <li>Show the <strong>Chain select ruler</strong> (the "Chain" button above the chain list). Give each chain its zone from the table (chain 1: 0 to 7, chain 2: 8 to 15, and so on), with no fades.</li>
-      <li>Map the Rack's <strong>Chain selector</strong> to CC 30: in ADMI, Connections tab, <strong>Map in Ableton</strong>, choose <strong>Sounds and macros</strong>. Stop ADMI. In Ableton press <kbd>Ctrl</kbd> + <kbd>M</kbd>, click the Chain selector on the track ADMI names, then press <span class="btn">Send</span> in ADMI. It moves on to the next by itself.</li>
-      <li>Give the Rack three macros, the same on every chain: <strong>1 Volume</strong> (each chain's volume), <strong>2 Brightness</strong> (a filter), <strong>3 Space</strong> (a reverb amount or send). Then map them with the same helper: ADMI's Loud is CC 24, Bright CC 25, Space CC 26. Echo (the Delay counter) is CC 27, optional.</li>
-      <li>On channel 16 the helper also offers <strong>Space</strong> (CC 22): map it to Return A (the reverb) level. Energy (CC 21) and Groove (CC 23) are optional.</li>
+      <li>Show the <strong>Chain select ruler</strong> (the "Chain" button above the chain list). Give each chain its zone from the table (chain 1: 0 to 7, chain 2: 8 to 15, and so on), with no fades. The quick way: drag chain 1's zone out to 0 to 7, move chain 16's zone to 127, select every chain, right click a chain and choose <strong>Distribute Ranges Equally</strong>.</li>
+      <li>Build it once on Melody, then copy the Rack to the other tracks (select it, <kbd>Ctrl</kbd> + <kbd>C</kbd>, select the other track's instrument, <kbd>Ctrl</kbd> + <kbd>V</kbd>) and swap the four World chains for sounds that suit that part.</li>
+      <li>After the Rack on each track, add a <strong>Utility</strong> named <strong>Loud</strong> and an <strong>Auto Filter</strong> named <strong>Bright</strong>. Space uses the track's <strong>Send A</strong>. (Macros inside the Rack work too, but these need far less setup.)</li>
+      <li>Map them: in ADMI, Connections tab, <strong>Map in Ableton</strong>, choose <strong>Sounds and macros</strong>. Stop ADMI. In Ableton press <kbd>Ctrl</kbd> + <kbd>M</kbd>, click the control on the track ADMI names, then press <span class="btn">Send</span> in ADMI. It moves on to the next by itself.
+        <ul>
+          <li><strong>Chain selector (CC 30):</strong> click the Rack's Chain selector. If a macro drives it (the selector is greyed out), click that macro instead.</li>
+          <li><strong>Loud (CC 24):</strong> the Loud Utility's Gain. <strong>Bright (CC 25):</strong> the Bright filter's Freq. <strong>Space (CC 26):</strong> the track's Send A. Drums, the band and Extra notes get Bright and Space only, for the Tone and Reverb counters.</li>
+          <li><strong>Space for the whole piece (CC 22 on channel 16):</strong> the A Reverb return's volume. Energy (CC 21) and Groove (CC 23) are optional. Echo (the Delay counter, CC 27) is optional too.</li>
+        </ul>
+      </li>
+      <li>Still in <kbd>Ctrl</kbd> + <kbd>M</kbd>, set each mapping's <strong>Min</strong> and <strong>Max</strong> in the Mappings list on the left: Loud Gain Min −18 dB, Max 0 dB; Send A Min −40 dB, Max 0 dB; Return A Min −24 dB, Max 0 dB; Bright Freq Min 600 Hz. Without a Min the lowest step is far too quiet. Leave Chain selectors at 0 to 127.</li>
       <li><strong>Drums (ch 10):</strong> an Instrument Rack holding four Drum Racks, one per World (Warm, Lo fi, Ambient, Electronic), zones 0 to 7, 8 to 15, 16 to 23, 24 to 31, its Chain selector on CC 30.</li>
       <li>Save the Set as <strong>ADMI template</strong>.</li>
     </ol>

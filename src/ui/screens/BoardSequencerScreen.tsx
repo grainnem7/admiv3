@@ -700,7 +700,9 @@ export default function BoardSequencerScreen() {
       setMidiBanner(null);
       return;
     }
-    if (midiPort.support === 'unknown') return;
+    // 'off' is the render just after Sound from changes to Ableton or Both, before MIDI is
+    // asked for: the port is not lost, it simply has not been looked at yet.
+    if (midiPort.support === 'unknown' || midiPort.support === 'off') return;
     if (!midiPort.connected) {
       if (running && !midiHold) {
         setMidiHold(true);

@@ -189,12 +189,16 @@ export function abletonPlan(input: AbletonPlanInput): AbletonPlan {
     set(channel, CC_BRIGHT, stepCc(BRIGHT, ch.tone ?? 1));
     set(channel, CC_SPACE, stepCc(SPACE_SEND, ch.reverbSend ?? world?.reverbSend ?? 0.18));
   }
-  // The band, the Extra notes and the drums follow the World.
+  // The band, the Extra notes and the drums follow the World. They have no card, so their
+  // Bright and Space rest at open and the World's reverb: the Tone and Reverb counters move
+  // them, and this is where they come back to when the counter is lifted.
   const w = worldChain(input.world);
   const followers = [ROLE_CHANNEL.drums, BAND_PAD_CHANNEL, BAND_BASS_CHANNEL, EXTRA_NOTES_CHANNEL, ...(input.loopChannels ? LOOP_CHANNELS : [])];
   for (const channel of followers) {
     chains.set(channel, w);
     set(channel, CHAIN_CC, chainCcValue(w));
+    set(channel, CC_BRIGHT, 127);
+    set(channel, CC_SPACE, stepCc(SPACE_SEND, world?.reverbSend ?? 0.18));
   }
   set(VOLUME_CHANNEL, CC_ENERGY, stepCc(ENERGY, input.energy));
   set(VOLUME_CHANNEL, CC_SPACE_ALL, stepCc(SPACE_ALL, input.space));
@@ -238,8 +242,8 @@ const TRACK_NAMES: Record<number, string> = {
 
 /**
  * Phase 2's things to map in the template, in order: on each channel its Rack's Chain
- * selector (CC 30), then on each colour's channel macros 1 to 3 (Loud, Bright, Space),
- * then on channel 16 Space (to Return A), Energy and Groove. Each is left at the value
+ * selector (CC 30), then on each colour's channel Loud, Bright and Space (CC 24 to 26),
+ * on the other channels Bright and Space for the counters, then on channel 16 Space (to Return A), Energy and Groove. Each is left at the value
  * ADMI wants now, so mapping never jumps the sound.
  */
 export function abletonMappingTargets(plan: AbletonPlan, names: ReadonlyMap<number, string> = new Map()): MappingTarget[] {
@@ -248,10 +252,14 @@ export function abletonMappingTargets(plan: AbletonPlan, names: ReadonlyMap<numb
   const out: MappingTarget[] = [];
   const chainChannels = [...plan.chains.keys()].sort((a, b) => a - b);
   for (const ch of chainChannels) out.push({ channel: ch, cc: CHAIN_CC, value: value(ch, CHAIN_CC), what: `${nameOf(ch)} (ch ${ch}): Rack Chain selector` });
-  const macro: [number, string][] = [[CC_LOUD, 'macro 1, Volume'], [CC_BRIGHT, 'macro 2, Brightness'], [CC_SPACE, 'macro 3, Space']];
+  const macro: [number, string][] = [[CC_LOUD, 'Loud (a Utility Gain)'], [CC_BRIGHT, 'Bright (a filter)'], [CC_SPACE, 'Space (Send A)']];
+  const counters: [number, string][] = [[CC_BRIGHT, 'Bright (a filter), for the Tone counter'], [CC_SPACE, 'Space (Send A), for the Reverb counter']];
   for (const ch of chainChannels) {
-    if (value(ch, CC_LOUD) === undefined) continue;
-    for (const [cc, what] of macro) out.push({ channel: ch, cc, value: value(ch, cc), what: `${nameOf(ch)} (ch ${ch}): ${what}` });
+    const list = value(ch, CC_LOUD) !== undefined ? macro : counters;
+    for (const [cc, what] of list) {
+      if (value(ch, cc) === undefined) continue;
+      out.push({ channel: ch, cc, value: value(ch, cc), what: `${nameOf(ch)} (ch ${ch}): ${what}` });
+    }
   }
   out.push({ channel: VOLUME_CHANNEL, cc: CC_SPACE_ALL, value: value(VOLUME_CHANNEL, CC_SPACE_ALL), what: 'Space (ch 16): Return A level' });
   out.push({ channel: VOLUME_CHANNEL, cc: CC_ENERGY, value: value(VOLUME_CHANNEL, CC_ENERGY), what: 'Energy (ch 16): optional macro' });

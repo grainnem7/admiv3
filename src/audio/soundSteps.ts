@@ -19,8 +19,19 @@ export function nearest(steps: readonly Step[], v: number): number {
   return best;
 }
 
-/** A value as its step, spread over 0 to 127: four steps are 0, 42, 85, 127. */
+/**
+ * The lowest value a step that should still be heard sends. CC 0 is silence in Ableton
+ * whatever the mapping's Min, so Soft must never send it.
+ */
+export const STEP_FLOOR_CC = 32;
+
+/**
+ * A value as its step, spread over STEP_FLOOR_CC to 127: four steps are 32, 64, 95, 127.
+ * Only a step whose own value is 0 (Space "Dry") sends 0, because it means none.
+ */
 export function stepCc(steps: readonly Step[], v: number): number {
   if (steps.length < 2) return 127;
-  return Math.round((nearest(steps, v) / (steps.length - 1)) * 127);
+  const i = nearest(steps, v);
+  if (steps[i].value === 0) return 0;
+  return Math.round(STEP_FLOOR_CC + (i / (steps.length - 1)) * (127 - STEP_FLOOR_CC));
 }

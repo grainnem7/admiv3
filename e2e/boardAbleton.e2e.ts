@@ -65,10 +65,13 @@ test('Sound from: switching while playing releases every note in Ableton', async
   await setUpAbleton(page);
   await page.getByRole('button', { name: '▶ Play' }).first().click();
   await expect.poll(async () => (await sentSince(page, 0)).filter(isOn).length, { timeout: 15_000 }).toBeGreaterThan(0);
-  for (const choice of ['ADMI', 'Both', 'Ableton'] as const) {
+  // Leaving a route that was sending releases it: Ableton to ADMI, and Both to Ableton (a
+  // new route). ADMI to Both has nothing in Ableton to release.
+  for (const [choice, releases] of [['ADMI', true], ['Both', false], ['Ableton', true]] as const) {
     const t = await now(page);
     await chooseSoundFrom(page, choice);
-    await expect.poll(async () => (await sentSince(page, t)).some((m) => isCc(m, 123)), { timeout: 5_000 }).toBe(true);
+    if (releases) await expect.poll(async () => (await sentSince(page, t)).some((m) => isCc(m, 123)), { timeout: 5_000 }).toBe(true);
+    else await expect.poll(async () => (await sentSince(page, t)).filter(isOn).length, { timeout: 15_000 }).toBeGreaterThan(0);
   }
   expect(await notesPlayed(page)).toBeGreaterThan(0); // ADMI drew and logged them throughout
   expect(pageErrors(page)).toEqual([]);
@@ -83,7 +86,7 @@ test('the port goes mid-piece: ADMI plays on and says so; when it is back, it wa
   await expect.poll(async () => (await sentSince(page, 0)).filter(isOn).length, { timeout: 15_000 }).toBeGreaterThan(0);
 
   await page.evaluate(() => (window as unknown as { __midiPort: { remove(): void } }).__midiPort.remove());
-  await expect(page.getByText("Ableton's port has gone, so ADMI is playing its own sound.")).toBeVisible();
+  await expect(page.getByText("Ableton's port has gone, so ADMI is playing its own sound.").first()).toBeVisible();
   const before = await notesPlayed(page);
   await expect.poll(() => notesPlayed(page), { timeout: 10_000 }).toBeGreaterThan(before); // the music carries on
 
@@ -170,6 +173,8 @@ test('picking Harp on a card switches that channel’s Ableton chain (CC 30 = 48
 
 test('changing World switches every channel without its own sound', async ({ page }) => {
   await openLaptopBoard(page);
+  // A new player has Sounds change on, and a changing colour keeps its own sound: turn it off.
+  await page.getByRole('group', { name: 'Sounds change' }).getByRole('radio', { name: 'Off' }).click();
   await pickColour(page, 'Red');
   await place(page, [[3, 1]]);
   await setUpAbleton(page);

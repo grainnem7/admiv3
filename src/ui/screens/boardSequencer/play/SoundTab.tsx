@@ -226,7 +226,7 @@ function ColourCard({ c, n, p }: { c: ColourChannel; n: number; p: SoundTabProps
       )}
       {melodic && open && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 6 }}>
-          {inAbleton && <span style={NOTE}>{`${TO_MACRO}s on this colour's Rack: Loud is macro 1 (CC 24), Bright macro 2 (CC 25), Space macro 3 (CC 26).`}</span>}
+          {inAbleton && <span style={NOTE}>{'In Ableton: Loud is CC 24, Bright CC 25, Space CC 26 on this colour\'s track, as mapped in the template.'}</span>}
           <StepRow label="Loud" steps={LOUD} value={c.volume ?? 1} onPick={(v) => set({ volume: v })} />
           <StepRow label="Bright" steps={BRIGHT} value={c.tone ?? 1} onPick={(v) => set({ tone: v })} />
           <StepRow
