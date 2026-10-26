@@ -57,6 +57,7 @@ export function BoardHeader({
             tone="secondary"
             onClick={onSwitchPlayer}
             reason={switchPlayerDisabledReason}
+            reserveReason
             aria-label={`Player: ${playerName}. Switch player`}
           >
             {`Player: ${playerName}`}

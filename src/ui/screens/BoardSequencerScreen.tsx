@@ -100,7 +100,7 @@ import {
   type CameraStatus, type SetupStep,
 } from './boardSequencer/boardSetupFlow';
 import {
-  listBoardPlayers, getActiveBoardPlayer, createBoardPlayer, setActiveBoardPlayer,
+  listBoardPlayers, getActiveBoardPlayer, createBoardPlayer, updateBoardPlayer, setActiveBoardPlayer,
   type BoardPlayerProfile,
 } from '../../profiles/BoardProfiles';
 import { layoutFor } from './boardSequencer/layout';
@@ -251,7 +251,8 @@ const TAKE_SAVE_MS = 5000;
 const REMOTE_ENABLED_KEY = 'admi-remote-enabled';
 const REMOTE_CODE_KEY = 'admi-remote-code';
 const REMOTE_CONTROL_WORDS: Record<RemoteControlName, string> = {
-  tempo: 'Speed', dynamics: 'Dynamics', fill: 'Fill', evolve: 'Evolve',
+  // The laptop's words, so the iPad, the laptop and Help say the same thing.
+  tempo: 'Speed', dynamics: 'Dynamics', fill: 'Extra notes', evolve: 'Sounds change',
 };
 const REMOTE_TRIGGER_WORDS: Record<RemoteTriggerName, string> = {
   newIdea: 'New idea', newSound: 'New sound', keep: 'Keep', mute: 'Mute', stopAll: 'Stop all loops',
@@ -446,7 +447,9 @@ export default function BoardSequencerScreen() {
   const [activePlayer, setActivePlayerState] = useState<BoardPlayerProfile | null>(() => getActiveBoardPlayer());
   activePlayerIdRef.current = activePlayer?.id ?? activePlayerIdRef.current;
   // Ask who's playing only when there is a real choice to make.
-  const [chooserOpen, setChooserOpen] = useState(() => listBoardPlayers().length > 1);
+  // Who's playing: asked when there is a choice, and on the very first run — name and
+  // hand — rather than silently making a right-handed "Player 1" (Tim is left-handed).
+  const [chooserOpen, setChooserOpen] = useState(() => listBoardPlayers().length !== 1);
   // The first save creates an implicit "Player 1". Without picking it up, the Player button
   // never appears and every screen keeps calling them "the player".
   useEffect(() => {
@@ -4228,7 +4231,7 @@ export default function BoardSequencerScreen() {
   const bigNowNextStrip = <NowNextStrip {...nowNextProps} big />;
 
   const stage = (
-    <div style={{ flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
+    <div style={{ flex: layout.mode === 'stacked' ? 'none' : '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
       {resumeFrom && !running && (() => {
         const at = Math.round((Date.now() - resumeFrom.startedAt) / 1000);
         return (
@@ -4282,11 +4285,15 @@ export default function BoardSequencerScreen() {
         />
       )}
       {laptop && view !== 'bigBoard' && laptopBar}
-      {view === 'play' && running && nowNextStrip}
-      {(view === 'play' || laptop) && <div style={{ flex: 1, minHeight: 200 }}>{boardView}</div>}
+      {/* Play is just playing: the piece's strip (Start clock, Next, End) only once there
+          is a piece to steer — scenes, or its clock running. With neither, Next did
+          nothing and Start clock began a countdown that faded the music out by itself. */}
+      {view === 'play' && running && (config.scenes.length > 0 || (clock !== null && clock.phase !== 'idle')) && nowNextStrip}
+      {/* The board is the instrument: never squeezed below about half the screen. */}
+      {(view === 'play' || laptop) && <div style={{ flex: 1, minHeight: 'clamp(240px, 52vh, 560px)' }}>{boardView}</div>}
       {(view === 'play' || laptop) && running && boardLegend}
       {(view === 'play' || laptop) && capHud}
-      <div style={view === 'play'
+      <div style={view === 'play' && !laptop
         ? { width: 220, alignSelf: layout.pip === 'bottom-left' ? 'flex-start' : 'flex-end' }
         : undefined}
       >
@@ -4609,7 +4616,14 @@ export default function BoardSequencerScreen() {
       className="bs-root board-sequencer-screen"
       data-bs-style="calm"
       data-bs-mode={config.themeMode}
-      style={{ display: 'flex', flexDirection: 'column', height: '100vh', padding: 16, boxSizing: 'border-box', gap: 12 }}
+      // Stacked (narrow, or Large controls): the board, then the panel, down a page that
+      // scrolls. Squeezed into one screen they overlapped and the board shrank to dots.
+      style={{
+        display: 'flex', flexDirection: 'column', padding: 16, boxSizing: 'border-box', gap: 12,
+        ...(layout.mode === 'stacked'
+          ? { minHeight: '100vh', paddingBottom: 'calc(var(--bs-target) + 40px)', scrollPaddingBottom: 'calc(var(--bs-target) + 40px)' }
+          : { height: '100vh' }),
+      }}
     >
       {/* The chooser sits OVER the screen so the camera element below it stays mounted
           and the camera actually starts. */}
@@ -4650,6 +4664,17 @@ export default function BoardSequencerScreen() {
               ? 'colours'
               : resolveEntry(view, loaded !== null));
           }}
+          onEdit={(id, name, handedness) => {
+            updateBoardPlayer(id, { name, handedness });
+            setPlayers(listBoardPlayers());
+            // The player on the screen now: their controls move to the other side at once.
+            if (activePlayer?.id === id) {
+              const loaded = loadBoardSequencerConfig();
+              if (loaded) setConfig(loaded);
+              setActivePlayerState(getActiveBoardPlayer());
+            }
+            announce(`${name.trim() || 'Player'} saved.`);
+          }}
           onCancel={players.length > 0 ? () => setChooserOpen(false) : undefined}
         />
         </div>
@@ -4682,8 +4707,11 @@ export default function BoardSequencerScreen() {
             />
             </div>
           ) : (
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <span style={{ color: 'var(--bs-fg2)', fontSize: 13 }}>
+            // Labels never break mid-label ("Set / up" on three lines), and the controls
+            // wrap as whole buttons; the status word keeps one width. Otherwise pressing Play
+            // re-wrapped the header and moved everything under it, Stop included.
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', whiteSpace: 'nowrap' }}>
+              <span style={{ color: 'var(--bs-fg2)', fontSize: 13, minWidth: '4.5em' }}>
                 {running ? 'Playing' : 'Stopped'}
               </span>
               <div role="group" aria-label="What you are doing" style={{ display: 'flex' }}>
@@ -4832,7 +4860,7 @@ export default function BoardSequencerScreen() {
           style={{
             display: 'flex',
             gap: 16,
-            flex: 1,
+            flex: layout.mode === 'stacked' ? 'none' : 1,
             minHeight: 0,
             flexDirection: layout.mode === 'stacked'
               ? 'column'
@@ -4841,7 +4869,7 @@ export default function BoardSequencerScreen() {
         >
           {stage}
           {/* The panel keeps its place in the DOM for both hands; only the row flips. */}
-          <div style={{ width: layout.mode === 'stacked' ? '100%' : view === 'play' && workspace === 'piece' ? 540 : 320, flexShrink: 0, display: 'flex', flexDirection: 'column', minHeight: 0, overflowY: 'auto' }}>
+          <div style={{ width: layout.mode === 'stacked' ? '100%' : view === 'play' && workspace === 'piece' ? 540 : 320, flexShrink: 0, display: 'flex', flexDirection: 'column', minHeight: 0, overflowY: layout.mode === 'stacked' ? 'visible' : 'auto' }}>
             {view === 'setup' ? setupPanel : (
               <PlayPanel
                 running={running}

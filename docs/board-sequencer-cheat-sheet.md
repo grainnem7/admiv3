@@ -15,11 +15,11 @@
 **Play** = just play (Sound, Groove, Board, Connections tabs; no loops or scenes needed) · **Make a piece** = steps 1 Loops, 2 Scenes, 3 Ending & check (each optional) · **▶ Show** = the board full screen for the performance.
 
 ## Making a piece
-- **1 · Loops:** counters down → **Save the board here** on an empty loop → type a name. A saved loop has ▶ Play, **Replace** (press twice), ✎ draw, ✕ clear. Fades are under More.
+- **1 · Loops:** counters down → **Save the board here** on an empty loop → type a name. A saved loop has ▶ Play, **Overwrite with board** (press twice), ✎ draw, ✕ clear (with Undo). Fades are under More.
 - **2 · Scenes → ✦ Make my plan:** Arrival 0:00, Build 1:30, Open 3:30, Home 6:00, from your saved loops.
-- **Scenes:** tap one to edit it where it is: time, loops, world, band, Fill, Evolve, tempo. **Update from now**, **+ Add a scene from what's playing**, **Go**. Undo a delete for 15 s.
+- **Scenes:** tap one to edit it where it is: time, loops, world, band, Extra notes, Sounds change, tempo. **Update from now**, **+ Add a scene from what's playing**, **Jump here now**. Undo a delete for 15 s.
 - **3 · Ending & check:** length; how it ends (each described); Fade, Final chord, Slow down, Thin out or Stop; over 1, 2 or 4 passes; *When I press End* or *At the time*.
-- **▶ From here** on a scene rehearses from that moment.
+- **▶ Rehearse from here** on a scene rehearses from that moment.
 - **Scenes leave the player's strips alone** (on): a strip Tim moved on the iPad keeps his setting.
 
 ## During the piece (Show)

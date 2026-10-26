@@ -102,18 +102,20 @@ export function CameraSurface({
   return (
     <div
       aria-hidden={hidden || undefined}
-      style={{
-        position: 'relative',
-        ...sizing,
-        aspectRatio: shownRatio ? `${shownRatio}` : '4 / 3',
-        borderRadius: 'var(--bs-radius-lg)',
-        overflow: 'hidden',
-        background: 'var(--bs-elev)',
-        border: '1px solid var(--bs-border)',
-        // Visual only: the element keeps its stream and its place in the document.
-        opacity: hidden ? 0 : 1,
-        pointerEvents: hidden ? 'none' : undefined,
-      }}
+      style={hidden
+        // Hidden: the element keeps its stream (the board is still read from it), but no
+        // longer its place. Merely invisible, it kept a whole picture's worth of space,
+        // and the laptop board shrank to tiny squares above an empty band.
+        ? { position: 'absolute', left: 0, top: 0, width: 1, height: 1, overflow: 'hidden', opacity: 0, pointerEvents: 'none' }
+        : {
+          position: 'relative',
+          ...sizing,
+          aspectRatio: shownRatio ? `${shownRatio}` : '4 / 3',
+          borderRadius: 'var(--bs-radius-lg)',
+          overflow: 'hidden',
+          background: 'var(--bs-elev)',
+          border: '1px solid var(--bs-border)',
+        }}
       onClick={onPick ? (e) => {
         const box = e.currentTarget.getBoundingClientRect();
         if (box.width <= 0 || box.height <= 0) return;

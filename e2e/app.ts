@@ -18,6 +18,9 @@ export async function openLaptopBoard(page: Page): Promise<void> {
   await page.route('**/magentadata/**', (route) => route.abort());
   await page.goto('/');
   await page.getByRole('button', { name: /Board Sequencer/ }).click();
+  // The first run asks who is playing and which hand they use.
+  await page.getByRole('region', { name: "Who's playing?" }).getByRole('textbox', { name: 'Name' }).fill('Test');
+  await page.getByRole('button', { name: 'Create' }).click();
   await page.getByRole('button', { name: /Laptop board: play on the laptop/ }).click();
   await page.getByRole('button', { name: 'Add four colours' }).click();
   await expect(page.getByRole('radiogroup', { name: 'Counter to put down' })).toBeVisible();

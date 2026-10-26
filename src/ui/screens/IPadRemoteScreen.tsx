@@ -15,7 +15,8 @@ import { useRemoteLink } from '../../remote/useRemoteLink';
  */
 
 const STRIP_NAMES: Record<RemoteControlName, string> = {
-  tempo: 'Speed', dynamics: 'Dynamics', fill: 'Fill', evolve: 'Evolve',
+  // The laptop's words, so the iPad, the laptop and Help say the same thing.
+  tempo: 'Speed', dynamics: 'Dynamics', fill: 'Extra notes', evolve: 'Sounds change',
 };
 const STRIP_COLOURS: Record<RemoteControlName, string> = {
   tempo: '#4fc3f7', dynamics: '#ffb74d', fill: '#81c784', evolve: '#ce93d8',

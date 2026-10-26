@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react';
 
 // Disabled controls are skipped: focusing one is a no-op, so treating it as the first or
 // last element let Tab escape the dialog entirely.
@@ -64,6 +64,12 @@ export interface ModalProps {
 export function Modal({ label, onClose, children, maxWidth = 560 }: ModalProps): JSX.Element {
   const panel = useRef<HTMLDivElement | null>(null);
   const onKeyDown = useModalFocus(panel, onClose);
+  // Focus moves in on open, even when nothing inside asks for it: Help's only button is
+  // at the end of a long text, focus stayed on "?", and Esc and Tab went nowhere.
+  useLayoutEffect(() => {
+    const p = panel.current;
+    if (p && !p.contains(document.activeElement)) p.focus();
+  }, []);
 
   return (
     <div
@@ -78,6 +84,7 @@ export function Modal({ label, onClose, children, maxWidth = 560 }: ModalProps):
         role="dialog"
         aria-modal="true"
         aria-label={label}
+        tabIndex={-1}
         style={{
           background: 'var(--bs-raised)', color: 'var(--bs-fg)', padding: 20,
           borderRadius: 'var(--bs-radius-lg)', maxWidth, maxHeight: '80vh', overflowY: 'auto',

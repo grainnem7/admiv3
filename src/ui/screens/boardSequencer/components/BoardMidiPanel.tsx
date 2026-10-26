@@ -86,6 +86,8 @@ export function BoardMidiPanel({
 
   return (
     <div role="group" aria-label="Sound from" style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 10, borderRadius: 'var(--bs-radius-md)', border: '1px solid var(--bs-border)' }}>
+      {/* Seen as well as heard: the cheat sheet and Help say "Sound from". */}
+      <span style={{ fontWeight: 600 }}>Sound from</span>
       <div style={{ fontSize: 17 }}>
         <SegmentedControl<SoundFrom>
           label="Sound from"

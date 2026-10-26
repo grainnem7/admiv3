@@ -33,14 +33,19 @@ export default function ScreenTransition({ screenKey, children }: ScreenTransiti
       setDisplayedKey(screenKey);
       setDisplayedChildren(children);
       setPhase('fading-in');
-
-      timeoutRef.current = setTimeout(() => {
-        setPhase('visible');
-      }, 150);
     }, 150);
 
     return () => clearTimeout(timeoutRef.current);
   }, [screenKey, children, displayedKey]);
+
+  // Its own effect: the swap above re-runs that effect (displayedKey changes), and its
+  // clean-up cancelled this timer, so every screen stayed "fading in" for good — with a
+  // transform that trapped anything pinned to the window inside it.
+  useEffect(() => {
+    if (phase !== 'fading-in') return;
+    const id = setTimeout(() => setPhase('visible'), 150);
+    return () => clearTimeout(id);
+  }, [phase]);
 
   const opacity = phase === 'fading-out' ? 0 : 1;
   const transform = phase === 'fading-out'

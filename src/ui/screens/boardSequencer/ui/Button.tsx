@@ -11,6 +11,11 @@ export interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement
    * that doesn't say why is a dead end.
    */
   reason?: string | null;
+  /**
+   * Keep the reason's space even with no reason: for a button whose reason comes and goes
+   * while the player works (the Player button while playing), so nothing near it moves.
+   */
+  reserveReason?: boolean;
   full?: boolean;
 }
 
@@ -22,7 +27,7 @@ const TONE_STYLE: Record<ButtonTone, CSSProperties> = {
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
-  { tone = 'secondary', children, reason = null, full = false, disabled, style, ...rest }, ref,
+  { tone = 'secondary', children, reason = null, reserveReason = false, full = false, disabled, style, ...rest }, ref,
 ) {
   const button = (
     <button
@@ -45,12 +50,18 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       {children}
     </button>
   );
-  if (reason === null) return button;
+  if (reason === null && !reserveReason) return button;
   return (
     <span style={{ display: full ? 'block' : 'inline-block' }}>
       {button}
       {/* Reserved space: showing a reason must never shift what sits under the pointer. */}
-      <span style={{ display: 'block', minHeight: 16, fontSize: 12, color: 'var(--bs-fg2)' }}>
+      <span style={{
+        display: 'block', minHeight: 16, fontSize: 12, color: 'var(--bs-fg2)',
+        // Reserved: exactly one line, whatever the reason says, so its coming and going
+        // moves nothing (a wrapped reason was taller than the space kept for it).
+        ...(reserveReason ? { height: 16, lineHeight: '16px', whiteSpace: 'nowrap' } : {}),
+      }}
+      >
         {reason}
       </span>
     </span>

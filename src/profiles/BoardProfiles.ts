@@ -208,6 +208,17 @@ export function createBoardPlayer(name: string, handedness: 'left' | 'right'): B
   return player;
 }
 
+/** A player's name or main hand, changed. Everything else of theirs stays as it is. */
+export function updateBoardPlayer(id: string, change: { name?: string; handedness?: 'left' | 'right' }): void {
+  const players = listBoardPlayers();
+  if (!players.some((p) => p.id === id)) return;
+  savePlayers(players.map((p) => (p.id !== id ? p : {
+    ...p,
+    name: change.name !== undefined && change.name.trim() ? change.name.trim() : p.name,
+    settings: change.handedness ? { ...p.settings, handedness: change.handedness } : p.settings,
+  })));
+}
+
 export function setActiveBoardPlayer(id: string): void {
   if (listBoardPlayers().some((p) => p.id === id)) localStorage.setItem(ACTIVE_PLAYER_KEY, id);
 }

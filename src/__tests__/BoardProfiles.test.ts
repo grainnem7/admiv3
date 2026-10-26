@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   RIG_KEY, PLAYERS_KEY, ACTIVE_PLAYER_KEY, LEGACY_KEY,
   loadActiveBoardConfig, saveActiveBoardConfig, listBoardPlayers, getActiveBoardPlayer,
-  createBoardPlayer, setActiveBoardPlayer, splitBoardConfig, resolveBoardConfig, allReferencedChannelIds,
+  createBoardPlayer, updateBoardPlayer, setActiveBoardPlayer, splitBoardConfig, resolveBoardConfig, allReferencedChannelIds,
 } from '../profiles/BoardProfiles';
 import { DEFAULT_BOARD_SEQUENCER_CONFIG, type BoardSequencerStored } from '../profiles/BoardSequencerConfig';
 import { suggestReadSettings } from '../tracking/boardGrid';
@@ -150,5 +150,26 @@ describe('BoardProfiles', () => {
     expect(localStorage.getItem(PLAYERS_KEY)).not.toBeNull();
     expect(localStorage.getItem(ACTIVE_PLAYER_KEY)).not.toBeNull();
     expect(loadActiveBoardConfig()?.bpm).toBe(100);
+  });
+});
+
+describe('changing a player’s name or hand', () => {
+  beforeEach(() => localStorage.clear());
+
+  it('renames them and moves their controls to the other hand, keeping everything else', () => {
+    const tim = createBoardPlayer('T', 'right');
+    updateBoardPlayer(tim.id, { name: 'Tim', handedness: 'left' });
+    const back = listBoardPlayers().find((p) => p.id === tim.id)!;
+    expect(back.name).toBe('Tim');
+    expect(back.settings.handedness).toBe('left');
+    expect(back.settings.rows).toBe(tim.settings.rows);
+  });
+
+  it('a blank name keeps the old one; an unknown player changes nothing', () => {
+    const a = createBoardPlayer('A', 'right');
+    updateBoardPlayer(a.id, { name: '   ' });
+    expect(listBoardPlayers()[0].name).toBe('A');
+    updateBoardPlayer('nobody', { name: 'X' });
+    expect(listBoardPlayers().map((p) => p.name)).toEqual(['A']);
   });
 });

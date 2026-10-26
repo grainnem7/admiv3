@@ -178,3 +178,29 @@ test('Clear the board can be undone', async ({ page }) => {
   await expect(grid.getByRole('button', { name: /^Row 5 from the bottom, step 3: Red/ })).toBeVisible();
   expect(pageErrors(page)).toEqual([]);
 });
+
+test('Help opens with focus inside, and Esc closes it', async ({ page }) => {
+  await openLaptopBoard(page);
+  await page.getByRole('button', { name: 'Help' }).click();
+  const dialog = page.getByRole('dialog', { name: 'How to play' });
+  await expect(dialog).toBeVisible();
+  await expect.poll(() => page.evaluate(() => !!document.activeElement?.closest('[role="dialog"]'))).toBe(true);
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Help' })).toBeFocused();
+});
+
+test('a player can be renamed and their hand changed', async ({ page }) => {
+  await openLaptopBoard(page);
+  await page.getByRole('button', { name: /^Player: Test/ }).click();
+  const chooser = page.getByRole('region', { name: 'Who\'s playing?' });
+  await expect(chooser.getByText('Right-handed')).toBeVisible();
+  await chooser.getByRole('button', { name: 'Edit Test: name and hand' }).click();
+  await chooser.getByRole('textbox', { name: 'Name' }).fill('Tim');
+  await chooser.getByRole('radio', { name: 'Left' }).click();
+  await chooser.getByRole('button', { name: 'Save' }).click();
+  await expect(chooser.getByRole('button', { name: /^Tim/ })).toContainText('Left-handed');
+  await chooser.getByRole('button', { name: /^Tim/ }).click();
+  await expect(page.getByRole('button', { name: /^Player: Tim/ })).toBeVisible();
+  expect(pageErrors(page)).toEqual([]);
+});

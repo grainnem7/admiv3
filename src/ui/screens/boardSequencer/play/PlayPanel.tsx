@@ -52,21 +52,33 @@ export function PlayPanel({
   const transport = (
     <div
       style={{
-        display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap',
+        // Play and Mute on a line of their own, the status below: the status grows as it
+        // plays ("· step 2 of 8"), and beside the buttons it pushed ■ Stop away from where
+        // ▶ Play had just been pressed — an imprecise second press landed on something else.
+        display: 'flex', gap: 8, flexWrap: 'wrap',
+        flexDirection: stacked ? 'row' : 'column',
+        alignItems: stacked ? 'center' : transportAlign === 'start' ? 'flex-start' : 'flex-end',
         justifyContent: transportAlign === 'start' ? 'flex-start' : 'flex-end',
-        padding: stacked ? '8px 0' : 0,
+        padding: stacked ? '8px 16px' : 0,
         background: stacked ? 'var(--bs-bg)' : undefined,
         borderTop: stacked ? '1px solid var(--bs-border)' : undefined,
-        position: stacked ? 'sticky' : undefined,
+        // Stacked, the page scrolls: Play and Stop stay pinned to the bottom of the
+        // window, always in reach (the page leaves room for them at its end).
+        position: stacked ? 'fixed' : undefined,
+        left: stacked ? 0 : undefined,
+        right: stacked ? 0 : undefined,
         bottom: stacked ? 0 : undefined,
+        zIndex: stacked ? 5 : undefined,
       }}
     >
-      {running
-        ? <Button tone="primary" onClick={onStop}>{stopArmed ? '■ Press again to stop' : '■ Stop'}</Button>
-        : <Button tone="primary" onClick={onStart}>▶ Play</Button>}
-      <Button tone="secondary" aria-pressed={muted} onClick={onToggleMute} disabled={!running}>
-        {muted ? 'Sound off' : 'Mute'}
-      </Button>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        {running
+          ? <Button tone="primary" onClick={onStop} style={{ minWidth: '7.5em' }}>{stopArmed ? '■ Press again to stop' : '■ Stop'}</Button>
+          : <Button tone="primary" onClick={onStart} style={{ minWidth: '7.5em' }}>▶ Play</Button>}
+        <Button tone="secondary" aria-pressed={muted} onClick={onToggleMute} disabled={!running} title={running ? undefined : 'Mute works while playing.'}>
+          {muted ? 'Sound off' : 'Mute'}
+        </Button>
+      </div>
       <span
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 8, padding: '4px 10px',
