@@ -178,7 +178,7 @@ test('picking Harp on a card switches that channel’s Ableton chain (CC 30 = 48
 
 test('changing World switches every channel without its own sound', async ({ page }) => {
   await openLaptopBoard(page);
-  // A new player has Sounds change on, and a changing colour keeps its own sound: turn it off.
+  // Sounds change off (a new player's default): a changing colour would keep its own sound.
   await page.getByRole('group', { name: 'Sounds change' }).getByRole('radio', { name: 'Off' }).click();
   await pickColour(page, 'Red');
   await place(page, [[3, 1]]);
@@ -194,13 +194,12 @@ test('changing World switches every channel without its own sound', async ({ pag
 test('the AI line says when Extra notes and Sounds change are both off', async ({ page }) => {
   await openLaptopBoard(page);
   const line = page.getByText(/AI: Extra notes off · Sounds change off/);
-  // A new player starts with both a little on.
-  await expect(line).toHaveCount(0);
-  await page.getByRole('group', { name: 'Extra notes' }).getByRole('radio', { name: 'Off' }).click();
-  await page.getByRole('group', { name: 'Sounds change' }).getByRole('radio', { name: 'Off' }).click();
+  // A new player starts with both off: what they hear is their own counters.
   await expect(line.first()).toBeVisible();
   await page.getByRole('group', { name: 'Extra notes' }).getByRole('radio', { name: 'A few' }).click();
   await expect(line).toHaveCount(0);
+  await page.getByRole('group', { name: 'Extra notes' }).getByRole('radio', { name: 'Off' }).click();
+  await expect(line.first()).toBeVisible();
 });
 
 test('Ableton mode asks to check the band and Extra notes tracks', async ({ page }) => {

@@ -100,13 +100,14 @@ describe('the Ready check line about Ableton', () => {
 import { createBoardPlayer, listBoardPlayers, PLAYERS_KEY } from '../profiles/BoardProfiles';
 import { NEW_PLAYER_SOUND } from '../profiles/BoardSequencerConfig';
 
-describe('new players start generative; saved players keep theirs', () => {
-  it('a new player has Extra notes "A few" and Sounds change "Slowly"', () => {
+describe('new players hear only their counters; saved players keep theirs', () => {
+  it('a new player has Extra notes and Sounds change off, and loops play as saved', () => {
     localStorage.clear();
     const p = createBoardPlayer('Tim', 'right');
-    expect(p.settings.fillAmount).toBe(0.25);
-    expect(p.settings.evolveAmount).toBe(0.35);
-    expect(NEW_PLAYER_SOUND).toEqual({ fillAmount: 0.25, evolveAmount: 0.35 });
+    expect(p.settings.fillAmount).toBe(0);
+    expect(p.settings.evolveAmount).toBe(0);
+    expect(NEW_PLAYER_SOUND).toEqual({ fillAmount: 0, evolveAmount: 0 });
+    expect(sanitizeBoardSequencerConfig({})?.loopVary).toBe(0);
   });
 
   it('a loaded player keeps 0, and a missing value stays 0 (never the new defaults)', () => {

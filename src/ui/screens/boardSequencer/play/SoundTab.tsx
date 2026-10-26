@@ -11,7 +11,7 @@ import { SwatchChip } from '../ui/SwatchChip';
 import type { BoardPalette } from '../theme/boardTokens';
 import { SOUND_WORLDS, SOUND_WORLD_IDS, worldOf, type SoundWorldChoice } from '../../../../audio/worlds/soundWorlds';
 import type { BandLevel, BandPart } from '../../../../songs/band/band';
-import { describeChannel, ROLE_LABELS, type ColourChannel } from '../../../../tracking/boardColours';
+import { DEFAULT_NOTE_VARY, describeChannel, ROLE_LABELS, type ColourChannel } from '../../../../tracking/boardColours';
 import type { BoardSequencerStored } from '../../../../profiles/BoardSequencerConfig';
 import { DRUM_OPTIONS, INSTRUMENT_OPTIONS, soundNameFor } from '../soundOptions';
 import { BRIGHT, ENERGY, LOUD, nearest, SPACE_ALL, SPACE_SEND, type Step } from '../../../../audio/soundSteps';
@@ -256,11 +256,11 @@ function ColourCard({ c, n, p }: { c: ColourChannel; n: number; p: SoundTabProps
         <StepRow
           label="Notes wander"
           steps={[{ label: 'Never', value: 0 }, { label: 'A little', value: 0.35 }, { label: 'More', value: 0.7 }]}
-          value={c.noteVary ?? 0.35}
+          value={c.noteVary ?? DEFAULT_NOTE_VARY}
           onPick={(v) => set({ noteVary: v })}
           hint={c.changes === false
             ? 'Off while "Changes over time" is off for this colour.'
-            : (c.noteVary ?? 0.35) <= 0
+            : (c.noteVary ?? DEFAULT_NOTE_VARY) <= 0
               ? 'Exactly the note each counter sits on, every pass.'
               : 'Each counter sometimes moves to a neighbouring note, and is back on its own every 4th pass.'}
         />
@@ -378,8 +378,8 @@ export function SoundTab(p: SoundTabProps): JSX.Element {
           />
           <span style={NOTE}>
             {config.band === 'off'
-              ? 'Chords, a bass and drums that join in under you once your first counter is down.'
-              : `${config.band === 'gentle' ? 'A held chord, a root bass and a soft pulse.' : 'Chords, a walking bass and the full kit.'} Put down a bass, chord or drum counter and the band hands that part to you.`}
+              ? 'Chords, a bass and drums that build up under you as you put counters down.'
+              : `${config.band === 'gentle' ? 'A held chord, a root bass and a soft pulse.' : 'Chords, a walking bass and the full kit.'} Chords under your first counters, the bass from three, the drums from five. Put down a bass, chord or drum counter and the band hands that part to you.`}
           </span>
           {config.band !== 'off' && p.running && (
             <span role="status" style={NOTE}>

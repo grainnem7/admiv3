@@ -2059,9 +2059,10 @@ export class BoardSequencerEngine {
     const cycle = Math.max(1, this.cfg.cols * Math.max(1, this.cfg.numPages));
     const lap = lapIndex(beat, cycle);
     const roles = new Set<'melody' | 'chord' | 'bass' | 'drums'>();
+    let counters = 0;
     for (const c of playerCells) {
       const r = this.roleFor(c.colour);
-      if (r === 'melody' || r === 'chord' || r === 'bass' || r === 'drums') roles.add(r);
+      if (r === 'melody' || r === 'chord' || r === 'bass' || r === 'drums') { roles.add(r); counters++; }
     }
     if (roles.size > 0) {
       this.bandLastCounterLap = lap;
@@ -2071,7 +2072,7 @@ export class BoardSequencerEngine {
     }
     const playing = this.band !== 'off' && !this.thinning && this.bandFromLap !== null && lap >= this.bandFromLap;
     this.bandPlaying = playing;
-    this.bandPartsNow = playing ? bandParts(this.band, roles) : [];
+    this.bandPartsNow = playing ? bandParts(this.band, roles, counters) : [];
     if (!playing || !this.bandVoices) return;
     const loop = loopLen(this.rawLoop('melodic'), this.cfg.cols);
     const step = ((beat % loop) + loop) % loop;
@@ -2084,7 +2085,7 @@ export class BoardSequencerEngine {
     while (step + chordSpan < loop && keyOf(this.harmonyForBand(step + chordSpan, cells, chord)) === key) chordSpan++;
     const events = bandEventsAtStep({
       level: this.band, step, loop, style: worldOf(this.cfg.soundWorld ?? 'none')?.id ?? 'warm',
-      harmony, chordChange, chordSpan, playerRoles: roles, previousPad: this.bandPadVoicing,
+      harmony, chordChange, chordSpan, playerRoles: roles, playerCounters: counters, previousPad: this.bandPadVoicing,
     });
     const padEvent = events.find((ev) => ev.part === 'pad' && ev.voicing);
     if (padEvent?.voicing) this.bandPadVoicing = padEvent.voicing;

@@ -8,6 +8,9 @@
  *    (the engine keeps that clock; this module only answers "what plays on this step");
  *  - it makes room: as soon as the player has a counter of a part's role, that part drops
  *    out — placing a bass counter is taking over the bass, never doubling it;
+ *  - it builds with the player: one or two counters get only the pad, the bass joins at
+ *    BASS_FROM counters and the groove at GROOVE_FROM. Coming in whole, a hat on every
+ *    eighth buried a single counter (one note of the player's to some 36 of the band's);
  *  - it follows the player's chords (chord counters, or a backing song), and with none it
  *    plays each world's own gentle progression, which the phrases follow too.
  *
@@ -39,6 +42,8 @@ export interface BandInput {
   chordSpan: number;
   /** Roles the player has counters for: the band's part for each is silent. */
   playerRoles: ReadonlySet<'melody' | 'chord' | 'bass' | 'drums'>;
+  /** How many counters the player has down: the band builds with them (see bandParts). */
+  playerCounters?: number;
   /** The pad's last voicing, so this chord moves to it by small steps. */
   previousPad?: readonly number[] | null;
 }
@@ -65,11 +70,21 @@ const PART_OF_ROLE: Record<'melody' | 'chord' | 'bass' | 'drums', BandPart | nul
   melody: null, chord: 'pad', bass: 'bass', drums: 'groove',
 };
 
-/** Which of the band's parts play, given what the player has taken over. */
-export function bandParts(level: BandLevel, playerRoles: ReadonlySet<string>): BandPart[] {
+/** The bass joins once the player has this many counters down. */
+export const BASS_FROM = 3;
+/** The groove joins once the player has this many counters down. */
+export const GROOVE_FROM = 5;
+
+/**
+ * Which of the band's parts play, given what the player has taken over and how many
+ * counters they have down (unknown = all of them, as before).
+ */
+export function bandParts(level: BandLevel, playerRoles: ReadonlySet<string>, playerCounters = Infinity): BandPart[] {
   if (level === 'off') return [];
   const taken = new Set<BandPart>();
   for (const [role, part] of Object.entries(PART_OF_ROLE)) if (part && playerRoles.has(role)) taken.add(part);
+  if (playerCounters < BASS_FROM) taken.add('bass');
+  if (playerCounters < GROOVE_FROM) taken.add('groove');
   return BAND_PARTS.filter((p) => !taken.has(p));
 }
 
@@ -99,7 +114,7 @@ export function defaultHarmonyAt(
 
 /** The band's notes on one step. */
 export function bandEventsAtStep(input: BandInput): BandEvent[] {
-  const parts = bandParts(input.level, input.playerRoles);
+  const parts = bandParts(input.level, input.playerRoles, input.playerCounters);
   if (parts.length === 0 || input.loop <= 0) return [];
   const out: BandEvent[] = [];
   const h = input.harmony;

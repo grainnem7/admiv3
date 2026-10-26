@@ -133,6 +133,9 @@ function engine(level: 'gentle' | 'full' = 'gentle') {
 const lapOf = (p: Priv, lap: number) => { for (let b = lap * 4; b < lap * 4 + 4; b++) p.fireStep(b, b, 1, null); };
 const bandNotes = (e: BoardSequencerEngine) => e.drainFiredNotes().filter((f) => f.origin === 'band');
 
+/** Five melody counters: enough for the whole band (pad, bass and groove). */
+const five = [[3, 0], [4, 1], [5, 2], [2, 3], [6, 0]].map(([row, col]) => ({ row, col, colour: 'm' }));
+
 describe('engine — the band waits for the player', () => {
   it('is silent on an empty board', () => {
     const { e, p } = engine();
@@ -167,22 +170,37 @@ describe('engine — the band waits for the player', () => {
     lapOf(p, 0);
     lapOf(p, 1);
     expect(bandNotes(e)).toEqual([]);              // only a loop playing: the band waits
-    e.setActiveCells([{ row: 3, col: 2, colour: 'm' }]);
+    e.setActiveCells(five);
     lapOf(p, 2);
     lapOf(p, 3);
     // The player is here: the band comes in with all its parts, though a loop has a bass.
     expect(e.getBandStatus().parts).toEqual(['pad', 'bass', 'groove']);
   });
 
+  it('builds with the player: the pad under one counter, the bass from 3, the groove from 5', () => {
+    const { e, p } = engine();
+    const parts = (n: number, lap: number): string[] => {
+      e.setActiveCells(five.slice(0, n));
+      lapOf(p, lap);
+      return e.getBandStatus().parts;
+    };
+    lapOf(p, 0);
+    expect(parts(1, 1)).toEqual([]); // in on the pass after the first counter
+    expect(parts(1, 2)).toEqual(['pad']);
+    expect(parts(2, 3)).toEqual(['pad']);
+    expect(parts(3, 4)).toEqual(['pad', 'bass']);
+    expect(parts(5, 5)).toEqual(['pad', 'bass', 'groove']);
+  });
+
   it('hands the bass to the player when a bass counter goes down', () => {
     const { e, p } = engine();
-    e.setActiveCells([{ row: 3, col: 1, colour: 'm' }]);
+    e.setActiveCells(five);
     lapOf(p, 0);
     lapOf(p, 1);
     expect(e.getBandStatus().parts).toEqual(['pad', 'bass', 'groove']);
     expect(p.bandVoices.bass.play).toHaveBeenCalled();
     p.bandVoices.bass.play.mockClear();
-    e.setActiveCells([{ row: 3, col: 1, colour: 'm' }, { row: 7, col: 0, colour: 'b' }]);
+    e.setActiveCells([...five, { row: 7, col: 0, colour: 'b' }]);
     lapOf(p, 2);
     expect(e.getBandStatus().parts).toEqual(['pad', 'groove']);
     expect(p.bandVoices.bass.play).not.toHaveBeenCalled();

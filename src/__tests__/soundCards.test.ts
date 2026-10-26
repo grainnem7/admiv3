@@ -136,8 +136,13 @@ describe('Sounds change moves a one-note counter', () => {
 
   // Seen in rehearsal: a one-note melody with Sounds change off played the same note every
   // pass; the player expected the instrument to keep it alive.
-  it('by default (Notes wander "A little") a one-note counter moves, even with Sounds change off', () => {
-    const p = pitches({}, 0, 32);
+  it('by default (Notes wander "Never") a one-note counter plays the note it sits on, every pass', () => {
+    // It used to wander by default, playing notes the board didn't show.
+    expect(new Set(pitches({}, 0, 32)).size).toBe(1);
+  });
+
+  it('Notes wander "A little" moves it, even with Sounds change off', () => {
+    const p = pitches({ noteVary: 0.35 }, 0, 32);
     expect(new Set(p).size).toBeGreaterThan(1);
     for (let lap = 0; lap < p.length; lap += 4) expect(p[lap]).toBe(p[0]); // home every 4th pass
   });

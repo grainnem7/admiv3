@@ -393,11 +393,13 @@ const FALLBACK_HUE_BAND: TrackedColor = {
 export const READ_SETTINGS_REV = 2;
 
 /**
- * What a NEW player starts with on the Sound tab, so the instrument is generative out of
- * the box: Extra notes "A few" and Sounds change "Slowly". Only for a player made now or a
- * first run: a saved player keeps exactly what it had (the sanitiser never fills these in).
+ * What a NEW player starts with on the Sound tab: Extra notes and Sounds change off, so
+ * what they hear is what their counters do. (Both used to start a little on, and the
+ * instrument added notes and changed its sound by itself before the player knew what
+ * their own counters did.) Only for a player made now or a first run: a saved player keeps
+ * exactly what it had (the sanitiser never fills these in).
  */
-export const NEW_PLAYER_SOUND = { fillAmount: 0.25, evolveAmount: 0.35 } as const;
+export const NEW_PLAYER_SOUND = { fillAmount: 0, evolveAmount: 0 } as const;
 
 export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   version: CONFIG_VERSION,
@@ -432,7 +434,8 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   velocity: 0.7,
   energy: 0.5,
   space: 0.5,
-  loopVary: 0.35,
+  // Saved loops play exactly as saved until the player asks them to vary.
+  loopVary: 0,
   octaveShift: 0,
   volume: 0.6,
   tickEnabled: true,

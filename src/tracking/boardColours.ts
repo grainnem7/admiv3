@@ -124,14 +124,18 @@ export interface ColourChannel {
   midiChannel?: number;
   /**
    * One-note counters: how often a counter wanders to a neighbouring note of the scale
-   * (0 = never, exactly as placed). Unset = DEFAULT_NOTE_VARY: a placed note that never
-   * moved sounded stuck, and the player expected the instrument to keep it alive.
+   * (0 = never, exactly as placed). Unset = DEFAULT_NOTE_VARY: exactly as placed, so a
+   * counter plays the note the board shows it on until the player asks for more.
    */
   noteVary?: number;
 }
 
-/** How often a one-note counter wanders when its colour hasn't chosen ("A little"). */
-export const DEFAULT_NOTE_VARY = 0.35;
+/**
+ * How often a one-note counter wanders when its colour hasn't chosen: never. A counter
+ * that wandered by default played a note the board didn't show, and a new player couldn't
+ * tell what their own counter did.
+ */
+export const DEFAULT_NOTE_VARY = 0;
 
 /** A colour reduced to "does this HSV pixel match?", tagged with its id. */
 export interface ColourMatcher {
