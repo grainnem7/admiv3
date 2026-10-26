@@ -12,9 +12,8 @@ export async function openLaptopBoard(page: Page): Promise<void> {
   await page.route('**/admi-store**', (route) => (route.request().method() === 'GET'
     ? route.fulfill({ status: 404, body: '' })
     : route.fulfill({ status: 204, body: '' })));
-  // The Magenta models load on the page's only thread and, in a browser without WebGL,
-  // freeze it for seconds — long enough to swallow a "press again" window. Without them
-  // Extra notes falls back to its own rules. (The freeze itself is the app's to fix.)
+  // No Magenta models in the tests: they come from the internet, and without them Extra
+  // notes uses its own rules. (They load in a worker now, so they no longer freeze the page.)
   await page.route('**/magentadata/**', (route) => route.abort());
   await page.goto('/');
   await page.getByRole('button', { name: /Board Sequencer/ }).click();

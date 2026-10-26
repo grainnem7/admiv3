@@ -8,10 +8,11 @@
  * can suggest anything but only what fits around the player is played. Bass keeps the
  * rule-based approach notes: Magenta has no bass model.
  *
- * The models download on first use (a few MB each, from Magenta's public storage) and are
- * loaded with a dynamic import, so nothing of Magenta or TensorFlow.js is fetched until a
- * player turns the fill up. Generation runs when the board changes or "New idea" is
- * pressed — never on the sound path — and its result plays from the next time round.
+ * The models download on first use (a few MB each, from Magenta's public storage) and run
+ * in a worker (magentaWorker.ts): nothing of Magenta or TensorFlow.js is fetched until a
+ * player turns the fill up, and loading or running them never holds up the page. Generation
+ * runs when the board changes or "New idea" is pressed — never on the sound path — and its
+ * result plays from the next time round.
  */
 
 import { generateFill, type FillContext, type FillNote } from './rulesFill';
@@ -19,9 +20,7 @@ import { fitFill, type FillCandidate } from './fillFilter';
 import {
   bestCandidate, chordProgressionFor, drumSeed, fitLength, fromGenerated, melodySeed, STEPS_PER_BEAT, type QuantizedSequence,
 } from './magentaSequences';
-
-const CHECKPOINTS = 'https://storage.googleapis.com/magentadata/js/checkpoints/music_rnn/';
-const VAE_CHECKPOINTS = 'https://storage.googleapis.com/magentadata/js/checkpoints/music_vae/';
+import type { MagentaReply, MagentaRequest } from './magentaWorker';
 /** Several tries at different boldness; the critic keeps the best. */
 const TEMPERATURES = [0.9, 1.1, 1.35];
 /** The variation model works in two bars of sixteenths. */
@@ -54,6 +53,53 @@ let drumModel: Rnn | null = null;
 let vaeModel: Vae | null = null;
 const cache = new Map<string, FillNote[]>();
 
+// ---- the worker the models live in ----------------------------------------------------
+
+type Request = MagentaRequest extends infer R ? (R extends MagentaRequest ? Omit<R, 'id'> : never) : never;
+let worker: Worker | null = null;
+let nextId = 1;
+const waiting = new Map<number, { resolve(v: unknown): void; reject(e: Error): void }>();
+
+/** Ask the worker; the answer comes back as a promise. Fails where there are no workers. */
+function ask(req: Request): Promise<unknown> {
+  if (!worker) {
+    if (typeof Worker === 'undefined') return Promise.reject(new Error('no workers here'));
+    worker = new Worker(new URL('./magentaWorker.ts', import.meta.url), { type: 'module' });
+    worker.onmessage = (e: MessageEvent<MagentaReply>) => {
+      const w = waiting.get(e.data.id);
+      if (!w) return;
+      waiting.delete(e.data.id);
+      if (e.data.ok) w.resolve(e.data.result); else w.reject(new Error(e.data.error));
+    };
+    // The worker itself failed (it could not start): everything waiting gives up, and the
+    // simple rules carry on.
+    worker.onerror = () => {
+      for (const w of waiting.values()) w.reject(new Error('the Magenta worker stopped'));
+      waiting.clear();
+    };
+  }
+  const id = nextId++;
+  const w = worker;
+  return new Promise((resolve, reject) => {
+    waiting.set(id, { resolve, reject });
+    w.postMessage({ ...req, id });
+  });
+}
+
+type Generated = { notes?: QuantizedSequence['notes'] | null };
+
+/** A model in the worker, called as if it were here. */
+const rnnIn = (model: 'melody' | 'improv' | 'drums'): Rnn => ({
+  initialize: async () => {},
+  continueSequence: async (seq, steps, temperature = 1, progression) =>
+    (await ask({ kind: 'continue', model, seq, steps, temperature, ...(progression ? { progression } : {}) })) as Generated,
+});
+const vaeIn: Vae = {
+  initialize: async () => {},
+  similar: async (seq, n, similarity, temperature = 1) =>
+    (await ask({ kind: 'similar', seq, n, similarity, temperature })) as Generated[],
+};
+
 export function magentaStatus(): MagentaStatus {
   return status;
 }
@@ -64,22 +110,16 @@ export function loadMagenta(): Promise<void> {
     status = 'loading';
     loading = (async () => {
       try {
-        const mm = await import('@magenta/music/esm/music_rnn');
-        const melody = new mm.MusicRNN(`${CHECKPOINTS}melody_rnn`) as unknown as Rnn;
-        const improv = new mm.MusicRNN(`${CHECKPOINTS}chord_pitches_improv`) as unknown as Rnn;
-        const drums = new mm.MusicRNN(`${CHECKPOINTS}drum_kit_rnn`) as unknown as Rnn;
-        await Promise.all([melody.initialize(), improv.initialize(), drums.initialize()]);
-        melodyModel = melody;
-        improvModel = improv;
-        drumModel = drums;
+        await ask({ kind: 'load' });
+        melodyModel = rnnIn('melody');
+        improvModel = rnnIn('improv');
+        drumModel = rnnIn('drums');
         status = 'ready';
         // The variation model is larger: it arrives in the background and is used once it has.
         void (async () => {
           try {
-            const mv = await import('@magenta/music/esm/music_vae');
-            const vae = new mv.MusicVAE(`${VAE_CHECKPOINTS}mel_2bar_small`) as unknown as Vae;
-            await vae.initialize();
-            vaeModel = vae;
+            await ask({ kind: 'loadVae' });
+            vaeModel = vaeIn;
           } catch (err) {
             console.warn('[Fill] the variation model could not load; continuations only.', err);
           }

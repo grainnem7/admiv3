@@ -38,6 +38,11 @@ function admiRemote(): Plugin {
 
 export default defineConfig({
   plugins: [react(), admiRemote()],
+  // The Magenta worker loads its models piece by piece, which needs module workers.
+  worker: { format: 'es' },
+  // Prepared when the dev server starts, not discovered the first time the worker asks
+  // for them — a discovery reloads the open page.
+  optimizeDeps: { include: ['@magenta/music/esm/music_rnn', '@magenta/music/esm/music_vae'] },
   resolve: {
     alias: {
       '@': resolve(__dirname, './src'),
