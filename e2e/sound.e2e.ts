@@ -204,3 +204,14 @@ test('a player can be renamed and their hand changed', async ({ page }) => {
   await expect(page.getByRole('button', { name: /^Player: Tim/ })).toBeVisible();
   expect(pageErrors(page)).toEqual([]);
 });
+
+test('after saving the board as a loop, its name is ready to type', async ({ page }) => {
+  await openLaptopBoard(page);
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1]]);
+  await pieceStep(page, 'Loops');
+  await page.getByRole('button', { name: 'Save the board here' }).first().click();
+  await expect(page.getByRole('textbox', { name: 'Name of loop 1' })).toBeFocused();
+  await page.keyboard.type('Intro');
+  await expect(page.getByRole('textbox', { name: 'Name of loop 1' })).toHaveValue('Intro');
+});

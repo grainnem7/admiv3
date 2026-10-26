@@ -245,6 +245,8 @@ const CUE_SHOWN_MS = 5000;
 const SAVE_GATHER_MS = 400;
 /** How long the first press of Stop during a piece waits for the second. */
 const STOP_CONFIRM_MS = 4000;
+/** Where Play / Make a piece is remembered. */
+const WORKSPACE_KEY = 'admi-board-workspace';
 /** How long Undo stays on offer after the board, a loop or the scenes are thrown away. */
 const UNDO_MS = 15000;
 /** How often a take being played is kept (storage/sessionArchive). */
@@ -2648,7 +2650,14 @@ export default function BoardSequencerScreen() {
     return () => window.clearTimeout(t);
   }, [cueShown]);
   // Play (just play the board) or Make a piece (the guided steps); Show is the big board.
-  const [workspace, setWorkspace] = useState<'play' | 'piece'>('play');
+  // Remembered on this laptop: coming back to the board, you are where you were working.
+  const [workspace, setWorkspaceState] = useState<'play' | 'piece'>(() => {
+    try { return localStorage.getItem(WORKSPACE_KEY) === 'piece' ? 'piece' : 'play'; } catch { return 'play'; }
+  });
+  const setWorkspace = (w: 'play' | 'piece'): void => {
+    setWorkspaceState(w);
+    try { localStorage.setItem(WORKSPACE_KEY, w); } catch { /* not remembered */ }
+  };
   const [pieceStep, setPieceStep] = useState<PieceStep>('loops');
   /** "Make my plan": the four-scene plan across the piece's length, from the saved loops. */
   const makePlan = (): void => {
@@ -4430,7 +4439,8 @@ export default function BoardSequencerScreen() {
                   ? legendValue(c.role as FaderRole, controlState?.values[c.role as FaderRole], controlState?.held ?? new Set())
                   : c.role === 'off' ? 'not used'
                     : c.role === 'loop' ? `→ ${loopLabel(config.loopNames, c.loopSlot ?? 0)}${counterWantedRef.current.has(c.loopSlot ?? 0) ? ' ▶' : ''}`
-                      : `${stats.byColour[c.id] ?? 0} playing`}
+                      // Stopped, nothing is playing: the same count is what's on the board.
+                      : `${stats.byColour[c.id] ?? 0} ${running ? 'playing' : 'on the board'}`}
               </strong>
             </span>
           ))}
@@ -4469,7 +4479,8 @@ export default function BoardSequencerScreen() {
           >
             {`Save session (${logCounts.notes} notes)`}
           </Button>
-          <Button tone="quiet" onClick={() => saveSession('csv')} reason={logCounts.notes === 0 ? 'Nothing played yet this session.' : null}>
+          {/* Its reason is Save session's, said once beside it. */}
+          <Button tone="quiet" onClick={() => saveSession('csv')} disabled={logCounts.notes === 0} aria-label="Session log as CSV">
             CSV
           </Button>
           {takes.length > 1 && (

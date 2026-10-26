@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Button } from '../ui/Button';
 import { LabeledSlider } from '../ui/LabeledSlider';
 import { SegmentedControl } from '../ui/SegmentedControl';
@@ -182,6 +182,7 @@ function StepFooter({ back, next }: { back?: { label: string; onClick(): void };
 /** Step 1: the loops — a board saved once, that then plays by itself. */
 function LoopsStep(p: PieceStepsProps): JSX.Element {
   const [replaceArmed, setReplaceArmed] = useState<number | null>(null);
+  const nameRefs = useRef(new Map<number, HTMLInputElement>());
   const [more, setMore] = useState(false);
   return (
     <section aria-labelledby="piece-loops" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -212,6 +213,7 @@ function LoopsStep(p: PieceStepsProps): JSX.Element {
               <span style={{ fontWeight: 800, width: 18, textAlign: 'right', color: 'var(--bs-fg2)' }}>{l.slot + 1}</span>
               {!empty && <LoopThumb cells={l.cells} rows={p.rows} cols={p.cols} swatchFor={p.swatchFor} />}
               <input
+                ref={(el) => { if (el) nameRefs.current.set(l.slot, el); else nameRefs.current.delete(l.slot); }}
                 type="text" value={l.name} placeholder={empty ? 'name (after saving)' : `Loop ${l.slot + 1}`}
                 aria-label={`Name of loop ${l.slot + 1}`}
                 onChange={(e) => p.onRenameLoop(l.slot, e.target.value)}
@@ -222,9 +224,12 @@ function LoopsStep(p: PieceStepsProps): JSX.Element {
               {empty ? (
                 <Button
                   tone="primary"
-                  onClick={() => p.onSaveBoardToLoop(l.slot)}
-                  disabled={!p.canSaveBoard}
-                  title={p.canSaveBoard ? undefined : 'Put counters on the board first.'}
+                  onClick={() => {
+                    p.onSaveBoardToLoop(l.slot);
+                    // Next comes its name: focus goes there, rather than dropping to the page.
+                    requestAnimationFrame(() => nameRefs.current.get(l.slot)?.focus());
+                  }}
+                  reason={p.canSaveBoard ? null : 'Put counters on the board first.'}
                 >
                   Save the board here
                 </Button>

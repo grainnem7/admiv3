@@ -82,6 +82,9 @@ function ghostsBySquare(ghosts: ReadonlyMap<string, ActiveCell> | undefined): Ma
  * swatch carries a two-tone contrast ring, so a black counter on a dark theme (or a
  * white one on light) is still visible.
  */
+/** Height of the line kept above the board for a notice. */
+const NOTICE_H = 32;
+
 const CLEAR_CELL = (): CSSProperties => ({ background: 'transparent', border: 'none', borderRadius: 6 });
 
 export function BoardView({
@@ -92,13 +95,17 @@ export function BoardView({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [dims, setDims] = useState({ w: 320, h: 240 });
 
+  // A line kept above the board for a notice ("Scene: Build", "Band joins"): drawn on the
+  // board it covered the top row. Kept even when empty, so a notice moves nothing.
+  const noticeH = notice === undefined ? 0 : NOTICE_H;
+
   // Fit a cols:rows rectangle inside the stage so cells stay square at any size.
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
     const fit = (): void => {
       const aw = el.clientWidth;
-      const ah = el.clientHeight;
+      const ah = el.clientHeight - noticeH;
       if (aw <= 0 || ah <= 0) return;
       const aspect = cols / rows;
       let w = aw;
@@ -110,7 +117,7 @@ export function BoardView({
     const ro = new ResizeObserver(fit);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [rows, cols]);
+  }, [rows, cols, noticeH]);
 
   useEffect(() => {
     const cv = canvasRef.current;
@@ -345,20 +352,6 @@ export function BoardView({
       }
     }
 
-    // A change that was only heard, said on the board for a moment.
-    if (notice) {
-      ctx.font = `600 ${Math.round(Math.min(cw, ch) * 0.3)}px system-ui, sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      const tw = ctx.measureText(notice).width + 24;
-      const th = Math.min(cw, ch) * 0.5;
-      roundRect(ctx, w / 2 - tw / 2, 8, tw, th, th / 2);
-      ctx.fillStyle = palette.accent;
-      ctx.fill();
-      ctx.fillStyle = palette.bg;
-      ctx.fillText(notice, w / 2, 8 + th / 2);
-    }
-
     // Ping-pong direction, so the sweep's turn is visible, not only audible.
     if (playing && pingPongDirection !== 0) {
       ctx.fillStyle = palette.accent;
@@ -381,14 +374,27 @@ export function BoardView({
     : '';
   const cellLabel = useCallback((row: number, col: number) => labelsKey.split('\n')[row * cols + col] ?? '', [labelsKey, cols]);
   const gridStyle = useMemo<CSSProperties>(() => ({
-    position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: dims.w, height: dims.h,
-  }), [dims.w, dims.h]);
+    position: 'absolute', left: '50%', top: `calc(50% + ${noticeH / 2}px)`, transform: 'translate(-50%, -50%)', width: dims.w, height: dims.h,
+  }), [dims.w, dims.h, noticeH]);
 
   const pieces = frame.settled.size;
   const loopNotes = loopCells?.length ?? 0;
   const heldCount = frame.held?.size ?? 0;
   return (
-    <div ref={wrapRef} style={{ position: 'relative', width: '100%', height: '100%', minHeight: 160, display: 'grid', placeItems: 'center' }}>
+    <div ref={wrapRef} style={{ position: 'relative', width: '100%', height: '100%', minHeight: 160, display: 'grid', placeItems: 'center', paddingTop: noticeH, boxSizing: 'border-box' }}>
+      {/* A change that was only heard, said above the board for a moment. */}
+      {noticeH > 0 && (
+        <div
+          role="status"
+          style={{ position: 'absolute', top: 0, left: 0, right: 0, height: noticeH, display: 'flex', justifyContent: 'center', alignItems: 'center', pointerEvents: 'none' }}
+        >
+          {notice && (
+            <span style={{ padding: '3px 14px', borderRadius: 999, background: 'var(--bs-accent)', color: 'var(--bs-bg)', fontWeight: 600, fontSize: 15 }}>
+              {notice}
+            </span>
+          )}
+        </div>
+      )}
       <canvas
         ref={canvasRef}
         role="img"
