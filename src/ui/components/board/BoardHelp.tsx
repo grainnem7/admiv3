@@ -143,12 +143,13 @@ const HELP: HelpEntry[] = [
       + 'plays the instrument chosen for it.',
   },
   {
-    title: 'Each counter plays a phrase',
-    body: 'With "A phrase" on, a counter plays a musical idea until the next counter of its '
-      + 'colour: a drum counter plays a whole groove (higher rows are busier), a bass counter '
-      + 'a bassline, a melody counter a short tune, and chord counters set the chords that '
-      + 'bass and melody follow. One counter fills the loop; a second divides it. A soft band '
-      + 'under each counter shows which beats it owns. "One note" is the old way.',
+    title: 'A counter can play a phrase',
+    body: 'Each counter plays one note where it sits. On a colour’s card (Sound tab) you can '
+      + 'choose a phrase instead: a counter then plays a musical idea until the next counter of '
+      + 'its colour: a drum counter a whole groove (higher rows are busier), a bass counter a '
+      + 'bassline, a melody counter a short tune, and chord counters set the chords that bass '
+      + 'and melody follow. One counter fills the loop; a second divides it. A soft band under '
+      + 'each counter shows which beats it owns.',
   },
   {
     title: 'The band',

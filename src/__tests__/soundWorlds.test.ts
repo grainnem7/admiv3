@@ -79,7 +79,7 @@ interface Priv {
 const channels: ColourChannel[] = [
   { id: 'm', kind: 'hue', role: 'melody', swatch: '#f00', plays: 'tune' },
   { id: 'p', kind: 'hue', role: 'melody', swatch: '#0f0', instrument: 'clarinet' },
-  { id: 'd', kind: 'black', role: 'drums', swatch: '#000' },
+  { id: 'd', kind: 'black', role: 'drums', swatch: '#000', plays: 'tune' },
 ];
 
 function engine(over: Partial<BoardEngineConfig> = {}) {

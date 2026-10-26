@@ -8,16 +8,14 @@ import { loopLen } from './boardSequencerScale';
 import type { ColourChannel, ColourRole } from '../tracking/boardColours';
 
 /**
- * Whether a colour plays a whole tune (a phrase) or one note per counter. Its own choice
- * when it has made one; otherwise by part — the melody plays the notes placed, while
- * drums, bass and chords play a groove, a bassline and the chords. With phrases off,
- * every colour plays one note. (The engine plays by this rule; the board shows by it.)
+ * Whether a colour plays a whole tune (a phrase) or one note per counter. One note,
+ * unless the colour's card chose a tune: a counter sounds where it sits, so one counter
+ * on its own is one note, not a groove filling every beat. With phrases off, every
+ * colour plays one note. (The engine plays by this rule; the board and its cards show by it.)
  */
 export function playsTune(ch: Pick<ColourChannel, 'role' | 'plays'> | undefined, phrases: boolean): boolean {
   if (!phrases || !ch) return false;
-  if (ch.plays === 'note') return false;
-  if (ch.plays === 'tune') return true;
-  return ch.role !== 'melody';
+  return ch.plays === 'tune';
 }
 
 export interface LoopLengths {

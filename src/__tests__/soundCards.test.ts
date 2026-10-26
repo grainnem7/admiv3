@@ -60,8 +60,21 @@ describe('each colour plays one note or a tune', () => {
     expect(fired[0]).toMatchObject({ row: 3, col: 2, origin: 'placed' });
   });
 
-  it('by default one drum counter plays a whole groove', () => {
-    const { e, p } = engine([drums]);
+  it('by default every colour plays one note where its counter sits, not a whole loop', () => {
+    // One counter on its own used to fill every beat with a groove, a bassline or the
+    // chords: the board then didn't show what was playing.
+    for (const ch of [drums, melody(), melody({ role: 'bass' }), melody({ role: 'chord' })]) {
+      const { e, p } = engine([ch]);
+      e.setActiveCells([{ row: 4, col: 0, colour: ch.id }]);
+      for (let beat = 0; beat < 8; beat++) p.fireStep(beat, beat, 1, null);
+      const fired = e.drainFiredNotes();
+      expect(fired.length).toBe(1);
+      expect(fired[0]).toMatchObject({ col: 0, origin: 'placed' });
+    }
+  });
+
+  it('drums set to "a groove" keep one going from one counter', () => {
+    const { e, p } = engine([{ ...drums, plays: 'tune' }]);
     e.setActiveCells([{ row: 4, col: 0, colour: 'd' }]);
     for (let beat = 0; beat < 8; beat++) p.fireStep(beat, beat, 1, null);
     expect(e.drainFiredNotes().every((f) => f.origin === 'phrase')).toBe(true);
@@ -87,7 +100,7 @@ describe('each colour plays one note or a tune', () => {
   });
 
   it('notes and tunes play together in one step', () => {
-    const { e, p } = engine([melody(), drums]);
+    const { e, p } = engine([melody(), { ...drums, plays: 'tune' }]);
     e.setActiveCells([{ row: 3, col: 0, colour: 'm' }, { row: 4, col: 0, colour: 'd' }]);
     p.fireStep(0, 0, 1, null);
     const origins = new Set(e.drainFiredNotes().map((f) => `${f.colour}:${f.origin}`));

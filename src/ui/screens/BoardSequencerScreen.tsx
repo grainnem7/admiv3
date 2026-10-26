@@ -50,7 +50,7 @@ import { createSessionArchive, indexedDbTakeStore, MAX_TAKES, type SessionArchiv
 import { forgetPieceRunning, readPieceRunning, rememberPieceRunning, rememberShowing, type PieceRunning } from '../../songs/performance/pieceRunning';
 import { LinkQr } from './boardSequencer/components/LinkQr';
 import { createPopStore, soundingKey, type PopStore } from './boardSequencer/popStore';
-import { beyondLoopNote, beyondLoopSquares } from '../../songs/beyondLoop';
+import { beyondLoopNote, beyondLoopSquares, playsTune } from '../../songs/beyondLoop';
 import { cellsKey, controlsKey, frameKey } from './boardSequencer/runtimeKeys';
 import { describeBoard, phraseSpans, popsAt, pruneFired, type Pop } from './boardSequencer/components/boardViewModel';
 import { isSequencedRole, isControlRole, isLoopRole } from '../../tracking/boardColours';
@@ -2333,10 +2333,14 @@ export default function BoardSequencerScreen() {
   // per-row drum picker), and a colour-id → channel lookup for labels/swatches.
   const channels = config.channels;
   const channelById = new Map(channels.map((c) => [c.id, c]));
-  // With phrases on, which beats each counter owns — recomputed only when the board changes.
+  // Which beats each counter playing a tune owns — recomputed only when the board changes.
+  // A one-note counter owns only its own step, so it gets no band.
   const spans = useMemo(
     () => (config.phrases
-      ? phraseSpans(active, config.cols, (id) => isSequencedRole(config.channels.find((c) => c.id === id)?.role ?? 'off'))
+      ? phraseSpans(active, config.cols, (id) => {
+        const ch = config.channels.find((c) => c.id === id);
+        return isSequencedRole(ch?.role ?? 'off') && playsTune(ch, true);
+      })
       : []),
     [config.phrases, active, config.cols, config.channels],
   );
@@ -4197,7 +4201,7 @@ export default function BoardSequencerScreen() {
 
   const boardLegend = (
     <BoardLegend
-      tunes={config.phrases && config.channels.some((c) => c.role === 'drums' || c.role === 'bass' || c.role === 'chord' ? c.plays !== 'note' : c.role === 'melody' && c.plays === 'tune')}
+      tunes={config.channels.some((c) => playsTune(c, config.phrases))}
       loops={appliedSlots.length > 0 || (latestFrame?.frame.activeLoops ?? []).length > 0}
       extra={config.fillAmount > 0}
       band={config.band !== 'off'}

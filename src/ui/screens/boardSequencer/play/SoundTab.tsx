@@ -17,6 +17,7 @@ import { DRUM_OPTIONS, INSTRUMENT_OPTIONS, soundNameFor } from '../soundOptions'
 import { BRIGHT, ENERGY, LOUD, nearest, SPACE_ALL, SPACE_SEND, type Step } from '../../../../audio/soundSteps';
 import { channelFor, colourChannelMap, configToSoundFrom } from '../../../../midi/boardMidi';
 import { chainFor, chainLabel } from '../../../../midi/abletonSounds';
+import { playsTune } from '../../../../songs/beyondLoop';
 
 /** Said wherever a control only changes ADMI's own sound, while Ableton makes it. */
 const IN_ABLETON = 'Sound set in Ableton';
@@ -157,7 +158,7 @@ function ColourCard({ c, n, p }: { c: ColourChannel; n: number; p: SoundTabProps
   const melodic = isMelodic(c);
   const sound = soundNameFor(c, config.soundWorld);
   const live = p.liveValue(c);
-  const plays = c.plays ?? (c.role === 'melody' ? 'note' : 'tune');
+  const plays = playsTune(c, true) ? 'tune' : 'note';
   const set = (patch: ChannelSoundPatch): void => p.setChannelSound(c.id, patch);
   const name = describeChannel(c);
   const [open, setOpen] = useState(false);
