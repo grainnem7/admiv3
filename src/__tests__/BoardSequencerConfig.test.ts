@@ -190,11 +190,13 @@ describe('BoardSequencerConfig — redesign fields', () => {
     expect(c.readSettingsRev).toBe(2);
   });
 
-  it('settings the player tuned are never moved by that update', () => {
+  it('the coverage a player tuned is kept; the sampling is never coarser than suggested', () => {
+    // Nothing on screen sets the sampling, so it is not the player's choice: keeping 5 x 5
+    // because they had moved the coverage slider lost counters on the real board.
     localStorage.setItem('admi-board-sequencer', JSON.stringify({
-      rows: 8, cols: 8, samplesPerAxis: 5, minFilledFraction: 0.25, readSettingsCustom: true,
+      rows: 8, cols: 8, samplesPerAxis: 5, minFilledFraction: 0.25, readSettingsCustom: true, readSettingsRev: 2,
     }));
-    expect(loadBoardSequencerConfig()).toMatchObject({ samplesPerAxis: 5, minFilledFraction: 0.25 });
+    expect(loadBoardSequencerConfig()).toMatchObject({ samplesPerAxis: 9, minFilledFraction: 0.25 });
   });
 
   it('once migrated, saved read settings are never re-suggested on load', () => {

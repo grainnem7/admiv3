@@ -3914,6 +3914,8 @@ export default function BoardSequencerScreen() {
       minFilledFraction={config.minFilledFraction}
       readSettingsCustom={config.readSettingsCustom}
       onMinFill={(v) => update({ minFilledFraction: v, readSettingsCustom: true })}
+      counterHeight={config.counterHeight}
+      onCounterHeight={(counterHeight) => update({ counterHeight })}
       onResetReadSettings={() => setConfig((prev) => {
         const next = applyGridChange({ ...prev, readSettingsCustom: false }, {});
           return next;

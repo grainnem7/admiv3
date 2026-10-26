@@ -73,6 +73,9 @@ export interface ColoursStepProps {
   minFilledFraction: number;
   readSettingsCustom: boolean;
   onMinFill(value: number): void;
+  /** How tall the counters are, in board squares (the camera's angle is allowed for). */
+  counterHeight: number;
+  onCounterHeight(value: number): void;
   onResetReadSettings(): void;
   settleWindowMs: number;
   onSettleWindow(ms: number): void;
@@ -110,7 +113,7 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
     channels, counts, palette, arming, pending, boardLearnt, onLearnBoard, learnMessage,
     onFindColours, onArmTap, onCancelArm,
     onAddPending, onDiscardPending, onRecalibrate, onRole, onLoopSlot, loopNames, onRemove, onClearAll, isReferenced, running,
-    minFilledFraction, readSettingsCustom, onMinFill, onResetReadSettings,
+    minFilledFraction, readSettingsCustom, onMinFill, onResetReadSettings, counterHeight, onCounterHeight,
     settleWindowMs, onSettleWindow, onBlackDarkness, picker, onMovePicker, onSampleSquare, hands,
     finding, onCancelFind, found, onUseFound, onDiscardFound,
   } = props;
@@ -402,6 +405,20 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
           onChange={onSettleWindow}
         />
         <p style={{ margin: 0, fontSize: 12, color: 'var(--bs-fg2)' }}>Settle time takes effect once you are playing.</p>
+        <LabeledSlider
+          label="Counter height"
+          min={0}
+          max={50}
+          step={5}
+          value={Math.round(counterHeight * 100)}
+          display={counterHeight === 0 ? 'flat' : `${Math.round(counterHeight * 100)}% of a square`}
+          onChange={(v) => onCounterHeight(v / 100)}
+        />
+        <p style={{ margin: 0, fontSize: 12, color: 'var(--bs-fg2)' }}>
+          A camera at an angle sees the tops of counters shifted towards the far side. This
+          allows for it. If a counter sitting in its square reads in the square behind,
+          raise it; if it reads in the square in front, lower it.
+        </p>
       </Disclosure>
 
       <Disclosure summary="Hands">

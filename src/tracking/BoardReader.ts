@@ -12,6 +12,8 @@
 import { drawOriented, orientedSize, type QuarterTurns } from './frameOrientation';
 import type { Mat3 } from '../utils/homography';
 import { applyHomography } from '../utils/homography';
+import { invert } from './boardDetect/lattice';
+import { liftHomography } from './parallax';
 import { rgbToHsv } from './ColorTracker';
 import { alphaForDt, REFERENCE_FRAME_MS } from '../utils/timeConstant';
 import type { ColourId, ColourMatcher } from './boardColours';
@@ -63,24 +65,38 @@ export interface RegionSample {
 const INSET = 0.9;
 
 /** Precompute a cell's sample lattice ([ux, uy, imgX, imgY] per sample), once per homography. */
-export function buildCellLattice(h: Mat3, row: number, col: number, rows: number, cols: number, samplesPerAxis: number): Float64Array {
+/**
+ * One cell's sample points, 6 numbers each: the board position (cell, centroid), the
+ * picture pixel to read, and the board position actually visible at that pixel (what the
+ * learnt board is compared at). With `lifted` (the plane at counter height, see parallax.ts)
+ * the pixel is where a counter's TOP over that board position appears, and the visible
+ * board position is the one behind it; without, both are the board position itself.
+ */
+export const LATTICE_STRIDE = 6;
+export function buildCellLattice(
+  h: Mat3, row: number, col: number, rows: number, cols: number, samplesPerAxis: number,
+  lifted?: { top: Mat3; boardFromPicture: Mat3 } | null,
+): Float64Array {
   const cellW = 1 / cols;
   const cellH = 1 / rows;
   const x0 = col * cellW + cellW * (1 - INSET) / 2;
   const y0 = row * cellH + cellH * (1 - INSET) / 2;
   const stepX = (cellW * INSET) / Math.max(samplesPerAxis - 1, 1);
   const stepY = (cellH * INSET) / Math.max(samplesPerAxis - 1, 1);
-  const out = new Float64Array(samplesPerAxis * samplesPerAxis * 4);
+  const out = new Float64Array(samplesPerAxis * samplesPerAxis * LATTICE_STRIDE);
   let k = 0;
   for (let iy = 0; iy < samplesPerAxis; iy++) {
     for (let ix = 0; ix < samplesPerAxis; ix++) {
       const ux = x0 + ix * stepX;
       const uy = y0 + iy * stepY;
-      const img = applyHomography(h, { x: ux, y: uy });
+      const img = applyHomography(lifted ? lifted.top : h, { x: ux, y: uy });
+      const seen = lifted ? applyHomography(lifted.boardFromPicture, img) : { x: ux, y: uy };
       out[k++] = ux;
       out[k++] = uy;
       out[k++] = Math.round(img.x);
       out[k++] = Math.round(img.y);
+      out[k++] = seen.x;
+      out[k++] = seen.y;
     }
   }
   return out;
@@ -111,7 +127,7 @@ export function sampleRegion(
   const sumY = new Map<ColourId, number>();
   let total = 0;
 
-  for (let k = 0; k < lat.length; k += 4) {
+  for (let k = 0; k < lat.length; k += LATTICE_STRIDE) {
     const ux = lat[k];
     const uy = lat[k + 1];
     const { r, g, b } = sampler(lat[k + 2], lat[k + 3]);
@@ -212,6 +228,11 @@ export interface BoardReaderOptions {
    * from the nearest square centre instead of the cell centre.
    */
   boardSquares?: number;
+  /**
+   * How tall a counter is, in board squares (about 0.2 for draughts). Above 0, cells are
+   * read where counter TOPS appear rather than on the board under them (parallax.ts).
+   */
+  counterHeightSquares?: number;
   samplesPerAxis?: number;
   downscale?: number;
   /** Per-cell temporal smoothing 0..1 (EMA per 60 Hz frame; 1 = off). Default FRACTION_SMOOTHING. */
@@ -275,12 +296,20 @@ export class BoardPixelReader {
   read(frame: ReaderFrame, opts: BoardReaderOptions): CellReading[] {
     const { data, width: w, height: h, downscale } = frame;
     const samples = opts.samplesPerAxis ?? 5;
-    const latticeKey = `${opts.homography.join(',')}|${opts.rows}|${opts.cols}|${samples}`;
+    // Counter tops, not the board under them: the plane at counter height (parallax.ts).
+    // The homography is in full-size picture pixels; the frame may be read smaller.
+    const lift = (opts.counterHeightSquares ?? 0) > 0 && opts.boardSquares ? (opts.counterHeightSquares ?? 0) / opts.boardSquares : 0;
+    const latticeKey = `${opts.homography.join(',')}|${opts.rows}|${opts.cols}|${samples}|${lift}|${w * downscale}x${h * downscale}`;
     if (latticeKey !== this.latticeKey) {
+      let lifted: { top: Mat3; boardFromPicture: Mat3 } | null = null;
+      if (lift > 0) {
+        const inv = invert(opts.homography);
+        if (inv) lifted = { top: liftHomography(opts.homography, w * downscale, h * downscale, lift), boardFromPicture: inv };
+      }
       this.lattices = [];
       for (let row = 0; row < opts.rows; row++) {
         for (let col = 0; col < opts.cols; col++) {
-          this.lattices.push(buildCellLattice(opts.homography, row, col, opts.rows, opts.cols, samples));
+          this.lattices.push(buildCellLattice(opts.homography, row, col, opts.rows, opts.cols, samples, lifted));
         }
       }
       this.latticeKey = latticeKey;
@@ -308,23 +337,24 @@ export class BoardPixelReader {
     let field: LightField | null = null;
     if (boardMode) {
       let total = 0;
-      for (const lat of this.lattices) total += lat.length / 4;
+      for (const lat of this.lattices) total += lat.length / LATTICE_STRIDE;
       const allObs = new Float32Array(total * 3);
       const allRef = new Float32Array(total * 3);
       const allUv = new Float32Array(total * 2);
       let at = 0;
       cellPixels = this.lattices.map((lat) => {
-        const n = lat.length / 4;
+        const n = lat.length / LATTICE_STRIDE;
         const obs = new Float32Array(n * 3);
         const refK = new Int32Array(n);
-        for (let k = 0, i = 0; k < lat.length; k += 4, i++) {
+        for (let k = 0, i = 0; k < lat.length; k += LATTICE_STRIDE, i++) {
           const { r, g, b } = sampler(lat[k + 2], lat[k + 3]);
           obs[i * 3] = r; obs[i * 3 + 1] = g; obs[i * 3 + 2] = b;
-          const rk = refIndex(ref, lat[k], lat[k + 1]);
+          // The learnt board where the picture shows it: behind a counter top's sample point.
+          const rk = refIndex(ref, lat[k + 4], lat[k + 5]);
           refK[i] = rk;
           allObs[at * 3] = r; allObs[at * 3 + 1] = g; allObs[at * 3 + 2] = b;
           allRef[at * 3] = ref.mean[rk * 3]; allRef[at * 3 + 1] = ref.mean[rk * 3 + 1]; allRef[at * 3 + 2] = ref.mean[rk * 3 + 2];
-          allUv[at * 2] = lat[k]; allUv[at * 2 + 1] = lat[k + 1];
+          allUv[at * 2] = lat[k + 4]; allUv[at * 2 + 1] = lat[k + 5];
           at++;
         }
         return { obs, refK };
@@ -403,15 +433,15 @@ function sampleAgainstBoard(
   const sumY = new Map<ColourId, number>();
   const n = px.refK.length;
   for (let i = 0; i < n; i++) {
-    const local = field ? lightAt(field, lat[i * 4], lat[i * 4 + 1]) : 1;
+    const local = field ? lightAt(field, lat[i * LATTICE_STRIDE + 4], lat[i * LATTICE_STRIDE + 5]) : 1;
     const rgb: [number, number, number] = [
       px.obs[i * 3] / (gain[0] * local), px.obs[i * 3 + 1] / (gain[1] * local), px.obs[i * 3 + 2] / (gain[2] * local),
     ];
     const id = counterAt(rgb, ref, px.refK[i], protos);
     if (id === null) continue;
     counts.set(id, (counts.get(id) ?? 0) + 1);
-    sumX.set(id, (sumX.get(id) ?? 0) + lat[i * 4]);
-    sumY.set(id, (sumY.get(id) ?? 0) + lat[i * 4 + 1]);
+    sumX.set(id, (sumX.get(id) ?? 0) + lat[i * LATTICE_STRIDE]);
+    sumY.set(id, (sumY.get(id) ?? 0) + lat[i * LATTICE_STRIDE + 1]);
   }
   const fractions: Partial<Record<ColourId, number>> = {};
   const centroids: Partial<Record<ColourId, { x: number; y: number }>> = {};

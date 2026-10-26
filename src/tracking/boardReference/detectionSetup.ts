@@ -41,18 +41,21 @@ function load(stored: StoredBoardReference, corners: readonly Point[] | undefine
 
 export function detectionSetup(s: DetectionSettings): DetectionSetup {
   const achromatic = new Set(s.channels.filter((c) => c.kind !== 'hue').map((c) => c.id));
+  // Every colour the player has, switched off or not. A colour that is off still has to be
+  // recognised as itself, only not played: left out, its counters were claimed by the
+  // nearest colour that was on — purple counters played as black.
   const prototypes: CounterPrototype[] = [];
   for (const c of s.channels) {
-    if (c.role === 'off') continue;
     const rgb = hexToRgb(c.swatch);
     if (rgb) prototypes.push({ id: c.id, rgb });
   }
+  const anyOn = s.channels.some((c) => c.role !== 'off');
   const bands = (reason: string | null): DetectionSetup => ({ mode: 'bands', reference: null, prototypes, achromatic, reason });
   if (s.counterDetection === 'bands') return bands(null);
   if (!s.boardReference) return bands('Learn the board (Set up → Board, with the board empty) to find counters against it.');
   const reference = load(s.boardReference, s.corners);
   if (!reference) return bands('The learnt board could not be read. Learn the board again.');
   if (reference.squares !== s.boardSquares) return bands('The board size has changed since it was learnt. Learn the board again.');
-  if (prototypes.length === 0) return bands('No counter colour has a job yet.');
+  if (prototypes.length === 0 || !anyOn) return bands('No counter colour has a job yet.');
   return { mode: 'board', reference, prototypes, achromatic, reason: null };
 }

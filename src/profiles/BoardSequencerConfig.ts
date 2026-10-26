@@ -288,6 +288,12 @@ export interface BoardSequencerStored {
    * until the board is learnt); 'bands' = the colour ranges only, as before.
    */
   counterDetection: 'board' | 'bands';
+  /**
+   * How tall the counters are, in board squares. A camera at an angle sees their tops
+   * shifted towards the far side; the board is read where the tops appear (parallax.ts).
+   * 0 = flat (no correction).
+   */
+  counterHeight: number;
   /** The red cap: a camera facing the player turns where the cap is into control values. */
   cap: CapSettings;
   handGuardEnabled: boolean;
@@ -497,6 +503,7 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   boardLearntSquares: 0,
   boardReference: null,
   counterDetection: 'board',
+  counterHeight: 0.2,
   cap: DEFAULT_CAP_SETTINGS,
   handGuardEnabled: false,
   handGuardReset: true,
@@ -748,6 +755,10 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     samplesPerAxis = s.samplesPerAxis;
     minFilledFraction = s.minFilledFraction;
   }
+  // Never coarser than suggested. Nothing on screen sets the sampling — "custom" is the
+  // player's coverage — yet a player who had moved that slider kept 5 x 5 for good. On the
+  // real board, at an angle, 5 x 5 lost counters that 9 x 9 read in every frame.
+  samplesPerAxis = Math.max(samplesPerAxis, suggestReadSettings(boardSquares, rows, cols).samplesPerAxis);
   return {
     version: CONFIG_VERSION,
     enabled: o.enabled === true,
@@ -862,6 +873,8 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     boardLearntSquares: isNum(o.boardLearntSquares) ? Math.round(o.boardLearntSquares) : 0,
     boardReference: isStoredBoardReference(o.boardReference) ? o.boardReference : null,
     counterDetection: o.counterDetection === 'bands' ? 'bands' : 'board',
+    counterHeight: typeof o.counterHeight === 'number' && Number.isFinite(o.counterHeight)
+      ? Math.max(0, Math.min(0.6, o.counterHeight)) : d.counterHeight,
     cap: sanitizeCapSettings(o.cap),
     handGuardEnabled: o.handGuardEnabled === true && o.handGuardReset === true,
     handGuardReset: true,

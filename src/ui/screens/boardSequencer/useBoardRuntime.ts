@@ -351,6 +351,8 @@ export function useBoardRuntime(opts: {
           mirrorX: cfg.mirrorX, mirrorY: cfg.mirrorY, rotation: cfg.cameraRotation,
           samplesPerAxis: cfg.samplesPerAxis,
           boardSquares: cfg.boardSquares, dtMs,
+          // Counter tops, where a camera at an angle sees them (parallax.ts).
+          counterHeightSquares: cfg.counterHeight,
           // Against the learnt board when there is one (the colour ranges otherwise).
           ...(detection?.mode === 'board' ? { reference: detection.reference, prototypes: detection.prototypes } : {}),
         }), cfg);
