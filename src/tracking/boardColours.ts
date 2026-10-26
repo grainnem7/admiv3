@@ -58,7 +58,7 @@ export const ROLE_LABELS: Record<ColourRole, string> = {
   melody: 'Melody',
   bass: 'Bass',
   drums: 'Drums',
-  chord: 'Chord stab',
+  chord: 'Chords',
   volume: 'Volume (fader)',
   reverb: 'Reverb amount (fader)',
   delay: 'Delay amount (fader)',

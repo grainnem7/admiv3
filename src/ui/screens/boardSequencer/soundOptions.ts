@@ -1,6 +1,7 @@
 // The instruments and kit pieces a colour can pick, and plain names for whatever a colour
 // actually plays — its own pick, or what the sound world gives its part.
 
+import { soundOptionName } from './soundCatalogue';
 import { worldOf, type LayeredVoiceSpec, type SoundWorldChoice, type SynthLayerId } from '../../../audio/worlds/soundWorlds';
 import type { ColourChannel } from '../../../tracking/boardColours';
 
@@ -68,7 +69,7 @@ export function soundNameFor(ch: ColourChannel, choice: SoundWorldChoice): strin
     return piece ? `${kit}: ${piece.toLowerCase()}` : kit;
   }
   if (ch.role !== 'melody' && ch.role !== 'chord' && ch.role !== 'bass') return '';
-  if (ch.instrument) return SAMPLE_NAMES[ch.instrument] ?? ch.instrument;
+  if (ch.instrument) return soundOptionName(ch.instrument);
   if (world) return describeSpec(world.voices[ch.role]);
   return ch.role === 'bass' ? 'Electric bass' : 'Electric piano';
 }

@@ -15,7 +15,7 @@
 
 import type { NamedVoice } from '../audio/evolve/evolve';
 import type { LayeredVoiceSpec, SoundWorldChoice } from '../audio/worlds/soundWorlds';
-import { worldOf } from '../audio/worlds/soundWorlds';
+import { synthLayerOf, worldOf } from '../audio/worlds/soundWorlds';
 import { BRIGHT, ENERGY, LOUD, SPACE_ALL, SPACE_SEND, stepCc } from '../audio/soundSteps';
 import type { ColourChannel } from '../tracking/boardColours';
 import {
@@ -52,8 +52,8 @@ export const ABLETON_CHAINS: readonly AbletonChain[] = [
   { index: 6, name: 'Harp', keys: ['harp'] },
   { index: 7, name: 'Organ', keys: ['organ'] },
   { index: 8, name: 'Clarinet', keys: ['clarinet'] },
-  { index: 9, name: 'French horn', keys: ['frenchHorn'] },
-  { index: 10, name: 'Strings / cello', keys: ['cello'] },
+  { index: 9, name: 'French horn', keys: ['frenchHorn', 'tuba'] },
+  { index: 10, name: 'Strings / cello', keys: ['cello', 'violin'] },
   { index: 11, name: 'Nylon guitar', keys: ['guitarNylon'] },
   { index: 12, name: 'Electric bass', keys: ['bassElectric', 'contrabass'] },
   { index: 13, name: 'Pad', keys: ['pad', 'padChoir'] },
@@ -96,7 +96,8 @@ export function chainFor(ch: Pick<ColourChannel, 'role' | 'instrument'>, choice:
   if (ch.role === 'drums') return worldChain(choice);
   if (!hasColourChannel(ch.role)) return null;
   if (ch.instrument) {
-    const own = chainForKey(ch.instrument);
+    const synth = synthLayerOf(ch.instrument);
+    const own = synth ? SYNTH_CHAIN[synth] ?? BELL_PLUCK : chainForKey(ch.instrument);
     if (own !== null) return own;
   }
   if (worldOf(choice)) return worldChain(choice);

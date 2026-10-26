@@ -12,6 +12,17 @@ export type SoundWorldId = 'warm' | 'lofi' | 'ambient' | 'electronic';
 export type SoundWorldChoice = SoundWorldId | 'none';
 
 export type SynthLayerId = 'sub' | 'pad' | 'pluck' | 'sawBass' | 'bell' | 'supersaw' | 'keys';
+const SYNTH_LAYER_IDS: readonly SynthLayerId[] = ['sub', 'pad', 'pluck', 'sawBass', 'bell', 'supersaw', 'keys'];
+
+/** A colour's own `instrument` that is a synth layer is stored as `synth:<layer>`. */
+export const SYNTH_PREFIX = 'synth:';
+
+/** The synth layer of a `synth:<layer>` instrument, or null for a sampled one. */
+export function synthLayerOf(key: string): SynthLayerId | null {
+  if (!key.startsWith(SYNTH_PREFIX)) return null;
+  const id = key.slice(SYNTH_PREFIX.length);
+  return SYNTH_LAYER_IDS.includes(id as SynthLayerId) ? (id as SynthLayerId) : null;
+}
 
 /** One part's sound: a sampled instrument, a synth layer, or both blended. */
 export interface LayeredVoiceSpec {
@@ -142,7 +153,10 @@ export function voiceSpecFor(
   ch: { role: string; instrument?: string },
   choice: SoundWorldChoice,
 ): LayeredVoiceSpec | string {
-  if (ch.instrument && ch.instrument.length > 0) return ch.instrument;
+  if (ch.instrument && ch.instrument.length > 0) {
+    const synth = synthLayerOf(ch.instrument);
+    return synth ? { synth } : ch.instrument;
+  }
   const world = worldOf(choice);
   if (world && (ch.role === 'melody' || ch.role === 'chord' || ch.role === 'bass')) return world.voices[ch.role];
   return ch.role === 'bass' ? 'bassElectric' : 'electricPiano';
