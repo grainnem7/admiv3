@@ -27,6 +27,7 @@
   "dependencies": {
     "@magenta/music": "^1.23.1",
     "@mediapipe/tasks-vision": "^0.10.22-rc.20250304",
+    "qrcode": "^1.5.4",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
     "tone": "^15.1.22",
@@ -36,6 +37,7 @@
     "@playwright/test": "^1.52.0",
     "@rollup/rollup-win32-x64-msvc": "^4.53.3",
     "@types/node": "^20.19.41",
+    "@types/qrcode": "^1.5.5",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
     "@types/ws": "^8.18.2",

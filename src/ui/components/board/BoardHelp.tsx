@@ -178,8 +178,8 @@ const HELP: HelpEntry[] = [
   },
   {
     title: 'iPad controls',
-    body: 'Start ADMI with "npm run show" (or "npm run dev:ipad" for testing), tick iPad controls on the Connections tab, and open '
-      + 'the link it shows in Safari on an iPad on the same Wi-Fi. Four strips (Speed, '
+    body: 'Start ADMI with "npm run show" (or "npm run dev:ipad" for testing), tick iPad controls on the Connections tab, and on an '
+      + 'iPad on the same Wi-Fi point the Camera at the QR code it shows (or type the link into Safari). Four strips (Speed, '
       + 'Dynamics, Extra notes, Sounds change) slide like ThumbJam — the whole strip is the target, the '
       + 'ends are generous, values move in steps — and four pads (New idea, New sound, Keep, '
       + 'Mute) act on touch. Learn reach makes a player’s comfortable slide the whole range.',

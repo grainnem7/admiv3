@@ -5,7 +5,7 @@
 ## Show day
 1. Close other ADMI windows. Start with **`npm run show`** and open **http://localhost:3001**. Press **Board Sequencer** and pick the player.
 2. **Board: 📷 Camera** at the top. **Set up**: camera, board (**Skip, board hasn't moved**; with the board empty, **Learn it again** in this room's light), colours.
-3. **Connections** tab: tick **iPad controls** and open the link in Safari on the iPad. The 👆 mark lights on touch.
+3. **Connections** tab: tick **iPad controls**, then point the iPad's Camera at the QR code and tap the link (or type it into Safari). The 👆 mark lights on touch.
    With Ableton: loopMIDI open before Chrome, the **ADMI template** Set open, then **Sound from: Ableton**, port **ADMIOutput**, ▶ Play and **Play test note**. Setup: `docs/ableton-setup-guide.html`.
 4. **Make a piece → 3 · Ending & check**: look at the Ready check and fix anything marked ✕. **⤓ Back up to a file** and copy it to a USB stick.
 5. Sound check: ▶ Play, then ■ Stop twice. Then **▶ Show** → **▶ Start the piece**: it starts in its opening scene.

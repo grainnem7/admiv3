@@ -48,6 +48,7 @@ import { BoardCornerEditor } from './boardSequencer/components/BoardCornerEditor
 import { cellMap, LiveBoardView } from './boardSequencer/components/BoardView';
 import { createSessionArchive, indexedDbTakeStore, MAX_TAKES, type SessionArchive, type TakeSummary } from '../../storage/sessionArchive';
 import { forgetPieceRunning, readPieceRunning, rememberPieceRunning, rememberShowing, type PieceRunning } from '../../songs/performance/pieceRunning';
+import { LinkQr } from './boardSequencer/components/LinkQr';
 import { createPopStore, soundingKey, type PopStore } from './boardSequencer/popStore';
 import { beyondLoopNote, beyondLoopSquares } from '../../songs/beyondLoop';
 import { cellsKey, controlsKey, frameKey } from './boardSequencer/runtimeKeys';
@@ -2997,14 +2998,20 @@ export default function BoardSequencerScreen() {
             </span>
           ) : (
             <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
-              On the iPad (same Wi-Fi), open Safari and go to:
+              On the iPad (same Wi-Fi), open the Camera and point it at the code, then tap the
+              link that appears. Or type the address into Safari.
             </span>
           )}
-          {remoteInfo?.lan && remoteInfo.addresses.map((ip) => (
-            <code key={ip} style={{ fontSize: 16, fontWeight: 700, userSelect: 'all' }}>
-              {`http://${ip}:${remoteInfo.port ?? window.location.port}/?remote=${remoteCode}`}
-            </code>
-          ))}
+          {remoteInfo?.lan && remoteInfo.addresses.map((ip) => {
+            // The page's own http or https: the server the iPad reaches is this same one.
+            const url = `${window.location.protocol}//${ip}:${remoteInfo.port ?? window.location.port}/?remote=${remoteCode}`;
+            return (
+              <div key={ip} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <LinkQr url={url} />
+                <code style={{ fontSize: 16, fontWeight: 700, userSelect: 'all' }}>{url}</code>
+              </div>
+            );
+          })}
           <Button
             tone="quiet"
             onClick={() => {
