@@ -170,8 +170,9 @@ test('picking Harp on a card switches that channel’s Ableton chain (CC 30 = 48
   await expect.poll(async () => (await sentSince(page, 0)).filter(isOn).length, { timeout: 15_000 }).toBeGreaterThan(0);
   await page.getByRole('tab', { name: 'Sound' }).click();
   const t = await now(page);
-  await page.getByRole('group', { name: /^Red: Melody/ }).getByRole('combobox', { name: 'Sound' }).selectOption('harp');
+  await page.getByRole('row', { name: /^Red: Melody/ }).getByRole('combobox', { name: 'Sound' }).selectOption('harp');
   await expect.poll(() => lastCc(page, t, 30, 1), { timeout: 5_000 }).toBe(48);
+  await page.getByRole('button', { name: 'More for Red' }).click();
   await expect(page.getByText(/Ableton sound: Harp \(chain 7\)/).first()).toBeVisible();
   expect(pageErrors(page)).toEqual([]);
 });

@@ -91,3 +91,36 @@ describe('hearing a colour while the board is stopped', () => {
     expect(voices.made[0].play).toHaveBeenCalledTimes(4);
   });
 });
+
+import { previewRoute } from '../audio/soundPreview';
+import { soundFromToConfig } from '../midi/boardMidi';
+
+describe('where Hear plays: ADMI, unless Ableton is the only sound and its port is there', () => {
+  const cfg = (s: 'admi' | 'ableton' | 'both') => ({ ...soundFromToConfig(s), midiDeviceId: 'p1' });
+  it('ADMI and Both: ADMI’s own sound', () => {
+    expect(previewRoute(cfg('admi'), { portConnected: true, holdOnAdmi: false })).toBe('admi');
+    expect(previewRoute(cfg('both'), { portConnected: true, holdOnAdmi: false })).toBe('admi');
+  });
+  it('Ableton with its port: Ableton; with the port gone or held on ADMI: ADMI, as Play does', () => {
+    expect(previewRoute(cfg('ableton'), { portConnected: true, holdOnAdmi: false })).toBe('ableton');
+    expect(previewRoute(cfg('ableton'), { portConnected: false, holdOnAdmi: false })).toBe('admi');
+    expect(previewRoute(cfg('ableton'), { portConnected: true, holdOnAdmi: true })).toBe('admi');
+  });
+});
+
+import { previewNotesFor } from '../audio/soundPreview';
+import { KIT_GM_NOTE } from '../midi/gmDrums';
+
+describe('the preview as MIDI notes, for Ableton', () => {
+  it('a melody: its four notes a quarter second apart', () => {
+    const n = previewNotesFor(red, KEY);
+    expect(n.map((x) => x.midi)).toEqual([60, 62, 64, 67]);
+    expect(n.map((x) => x.atMs)).toEqual([0, 250, 500, 750]);
+  });
+  it('drums: a bar of the kit, as General MIDI drum notes; one piece when the colour has one', () => {
+    const kit = previewNotesFor({ ...red, role: 'drums', instrument: undefined }, KEY);
+    expect(kit.map((x) => x.midi)).toEqual([KIT_GM_NOTE.kick, KIT_GM_NOTE.hat, KIT_GM_NOTE.snare, KIT_GM_NOTE.hat]);
+    const snare = previewNotesFor({ ...red, role: 'drums', drum: 'snare' }, KEY);
+    expect(new Set(snare.map((x) => x.midi))).toEqual(new Set([KIT_GM_NOTE.snare]));
+  });
+});

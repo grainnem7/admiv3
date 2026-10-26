@@ -2,38 +2,24 @@
 // three helpers that add to the player's music. Everything a musician reaches for during
 // a session sits here as a few named steps; the developer-level choices live in Advanced.
 
-import { useState, type CSSProperties, type ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { Button } from '../ui/Button';
 import { Disclosure } from '../ui/Disclosure';
 import { SegmentedControl } from '../ui/SegmentedControl';
-import { Switch } from '../ui/Switch';
-import { SwatchChip } from '../ui/SwatchChip';
 import type { BoardPalette } from '../theme/boardTokens';
 import { SOUND_WORLDS, SOUND_WORLD_IDS, worldOf, type SoundWorldChoice } from '../../../../audio/worlds/soundWorlds';
 import type { BandLevel, BandPart } from '../../../../songs/band/band';
-import { DEFAULT_NOTE_VARY, describeChannel, ROLE_LABELS, type ColourChannel } from '../../../../tracking/boardColours';
+import { type ColourChannel, type ColourId, type ColourRole } from '../../../../tracking/boardColours';
+import { ColourTable } from './ColourTable';
 import type { BoardSequencerStored } from '../../../../profiles/BoardSequencerConfig';
-import { DRUM_OPTIONS, INSTRUMENT_OPTIONS, soundNameFor } from '../soundOptions';
-import { BRIGHT, ENERGY, LOUD, nearest, SPACE_ALL, SPACE_SEND, type Step } from '../../../../audio/soundSteps';
+import { ENERGY, nearest, SPACE_ALL, type Step } from '../../../../audio/soundSteps';
 import { StepRow } from './StepRow';
-import { channelFor, colourChannelMap, configToSoundFrom } from '../../../../midi/boardMidi';
-import { chainFor, chainLabel } from '../../../../midi/abletonSounds';
-import { playsTune } from '../../../../songs/beyondLoop';
+import { configToSoundFrom } from '../../../../midi/boardMidi';
 
 /** Said wherever a control only changes ADMI's own sound, while Ableton makes it. */
 const IN_ABLETON = 'Sound set in Ableton';
-/** Said on a control that goes to an Ableton macro. */
-const TO_MACRO = '→ Ableton macro';
 
-/** The MIDI channel a colour's own notes go out on, or null when it plays none. */
-function midiChannelOf(c: ColourChannel, config: BoardSequencerStored): number | null {
-  return channelFor({ role: c.role, origin: 'placed', colour: c.id }, {
-    channelMode: config.midiChannelMode,
-    colourChannels: config.midiChannelMode === 'colour' ? colourChannelMap(config.channels) : undefined,
-  });
-}
-
-/** The fields of a colour's sound that the cards change. */
+/** The fields of a colour's sound that the colour table changes. */
 export type ChannelSoundPatch = Partial<Pick<ColourChannel,
   'instrument' | 'drum' | 'volume' | 'tone' | 'reverbSend' | 'delaySend' | 'plays' | 'changes' | 'noteVary'>>;
 
@@ -57,6 +43,12 @@ export interface SoundTabProps {
   update(patch: Partial<BoardSequencerStored>): void;
   /** Change a colour's sound: saved for the player and heard straight away. */
   setChannelSound(id: string, patch: ChannelSoundPatch): void;
+  /** What a colour plays (its job), and which loop a loop colour plays. */
+  onRole(id: ColourId, role: ColourRole): void;
+  onLoopSlot(id: ColourId, slot: number): void;
+  /** ▶ Hear a colour's sound now, and which one is loading. */
+  onHear(c: ColourChannel): void;
+  hearing: string | null;
   /** Swing and humanize also go to the running engine. */
   setGroove(swing: number, humanize: number): void;
   fill: HelperActions & { count: number; status: string | null };
@@ -100,165 +92,6 @@ const CARD: CSSProperties = {
   borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-raised)', border: '1px solid var(--bs-border)',
 };
 
-// ---- one colour's card ----
-
-function isMelodic(c: ColourChannel): boolean {
-  return c.role === 'melody' || c.role === 'chord' || c.role === 'bass';
-}
-
-/** True when this colour has any sound choice of its own (so Reset has something to do). */
-function customised(c: ColourChannel): boolean {
-  return [c.instrument || undefined, c.drum || undefined, c.volume, c.tone, c.reverbSend, c.delaySend, c.plays, c.changes]
-    .some((v) => v !== undefined);
-}
-
-/** The ‹ name › picker: steps through a list, with the list itself one press away. */
-function Picker({ label, value, options, onPick }: {
-  label: string; value: string; options: { key: string; name: string }[]; onPick(key: string): void;
-}): JSX.Element {
-  const i = Math.max(0, options.findIndex((o) => o.key === value));
-  const step = (d: number): void => onPick(options[(i + d + options.length) % options.length].key);
-  return (
-    <div role="group" aria-label={label} style={{ display: 'flex', alignItems: 'stretch', gap: 4 }}>
-      <Button aria-label={`Previous ${label.toLowerCase()}`} onClick={() => step(-1)}>‹</Button>
-      <select
-        aria-label={label}
-        value={options[i]?.key ?? ''}
-        onChange={(e) => onPick(e.target.value)}
-        style={{ flex: 1, minHeight: 'var(--bs-target)' }}
-      >
-        {options.map((o) => <option key={o.key} value={o.key}>{o.name}</option>)}
-      </select>
-      <Button aria-label={`Next ${label.toLowerCase()}`} onClick={() => step(1)}>›</Button>
-    </div>
-  );
-}
-
-function ColourCard({ c, n, p }: { c: ColourChannel; n: number; p: SoundTabProps }): JSX.Element {
-  const { config } = p;
-  const world = worldOf(config.soundWorld);
-  const melodic = isMelodic(c);
-  const sound = soundNameFor(c, config.soundWorld);
-  const live = p.liveValue(c);
-  const plays = playsTune(c, true) ? 'tune' : 'note';
-  const set = (patch: ChannelSoundPatch): void => p.setChannelSound(c.id, patch);
-  const name = describeChannel(c);
-  const [open, setOpen] = useState(false);
-  const soundFrom = configToSoundFrom(config);
-  // Ableton only: the colour's instrument and mix are Ableton's; its notes still go out.
-  const inAbleton = soundFrom === 'ableton';
-  const midiCh = soundFrom === 'admi' ? null : midiChannelOf(c, config);
-  // Phase 2: the Rack chain Ableton plays for this colour, and a channel it shares (one per part).
-  const chain = soundFrom === 'admi' ? null : chainFor(c, config.soundWorld);
-  const share = soundFrom === 'admi' ? undefined : p.abletonShares?.get(c.id);
-  const shareName = share ? describeChannel(config.channels.find((x) => x.id === share.withId) ?? c) : null;
-  return (
-    <div role="group" aria-label={`${name}: ${ROLE_LABELS[c.role]}`} style={CARD}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <SwatchChip swatch={c.swatch} palette={p.palette} number={n} size={24} />
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-          <span style={{ fontWeight: 600 }}>{`${name} · ${ROLE_LABELS[c.role]}`}</span>
-          {sound && !inAbleton && <span style={NOTE}>{sound}</span>}
-          {midiCh !== null && <span style={NOTE}>{`MIDI ch ${midiCh}${chain !== null && !share ? ` · Ableton sound: ${chainLabel(chain)}` : ''}`}</span>}
-          {share && shareName && (
-            <span role="note" style={{ ...NOTE, color: 'var(--bs-warn)' }}>
-              {`Shares channel ${share.channel} with ${shareName}: Ableton plays one sound for both. Choose One per colour on the Connections tab to give each its own.`}
-            </span>
-          )}
-          {live && <span style={NOTE}>{live}</span>}
-          {c.role === 'loop' && <span style={NOTE}>{`Plays loop ${(c.loopSlot ?? 0) + 1}${config.loopNames[c.loopSlot ?? 0] ? `: ${config.loopNames[c.loopSlot ?? 0]}` : ''}`}</span>}
-        </div>
-        {customised(c) && (melodic || c.role === 'drums') && (
-          <Button
-            tone="quiet"
-            aria-label={`Reset ${name} to the ${world ? `${world.name} world` : 'default'}`}
-            onClick={() => set({
-              instrument: undefined, drum: undefined, volume: undefined, tone: undefined,
-              reverbSend: undefined, delaySend: undefined, plays: undefined, changes: undefined,
-            })}
-          >
-            Reset
-          </Button>
-        )}
-      </div>
-      {melodic && (
-        <Picker
-          label="Sound"
-          value={c.instrument ?? ''}
-          options={[{ key: '', name: world ? `${world.name} world's sound` : 'Default' }, ...INSTRUMENT_OPTIONS]}
-          onPick={(key) => set({ instrument: key === '' ? undefined : key })}
-        />
-      )}
-      {c.role === 'drums' && (
-        <Picker
-          label="Drum"
-          value={c.drum ?? ''}
-          options={[{ key: '', name: 'By row (kick → crash)' }, ...DRUM_OPTIONS]}
-          onPick={(key) => set({ drum: key === '' ? undefined : key })}
-        />
-      )}
-      {melodic && (
-        <Button
-          tone="quiet"
-          aria-expanded={open}
-          onClick={() => setOpen((o) => !o)}
-          style={{ alignSelf: 'flex-start' }}
-        >
-          {`${open ? '▾' : '▸'} Adjust: ${LOUD[nearest(LOUD, c.volume ?? 1)].label.toLowerCase()} · ${BRIGHT[nearest(BRIGHT, c.tone ?? 1)].label.toLowerCase()} · ${SPACE_SEND[nearest(SPACE_SEND, c.reverbSend ?? world?.reverbSend ?? 0.18)].label.toLowerCase()}${inAbleton ? ` ${TO_MACRO}` : ''}`}
-        </Button>
-      )}
-      {melodic && open && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 6 }}>
-          {inAbleton && <span style={NOTE}>{'In Ableton: Loud is CC 24, Bright CC 25, Space CC 26 on this colour\'s track, as mapped in the template.'}</span>}
-          <StepRow label="Loud" steps={LOUD} value={c.volume ?? 1} onPick={(v) => set({ volume: v })} />
-          <StepRow label="Bright" steps={BRIGHT} value={c.tone ?? 1} onPick={(v) => set({ tone: v })} />
-          <StepRow
-            label="Space"
-            steps={SPACE_SEND}
-            value={c.reverbSend ?? world?.reverbSend ?? 0.18}
-            onPick={(v) => set({ reverbSend: v })}
-          />
-        </div>
-      )}
-      {config.phrases && (melodic || c.role === 'drums') && (
-        <StepRow
-          label="Each counter plays"
-          steps={[{ label: 'One note', value: 0 }, { label: c.role === 'drums' ? 'A groove' : c.role === 'bass' ? 'A bassline' : c.role === 'chord' ? 'The chords' : 'A tune', value: 1 }]}
-          value={plays === 'tune' ? 1 : 0}
-          onPick={(v) => set({ plays: v === 1 ? 'tune' : 'note' })}
-          hint={plays === 'note'
-            ? 'One note where each counter sits.'
-            : c.role === 'drums' ? 'One counter keeps a whole groove going; higher on the board is busier.'
-              : c.role === 'bass' ? 'One counter plays a bassline under the chords.'
-                : c.role === 'chord' ? 'Where a counter sits sets the chord until the next one.'
-                  : 'One counter plays a short tune from its step.'}
-        />
-      )}
-      {(c.role === 'melody' || c.role === 'bass') && (!config.phrases || plays === 'note') && (
-        <StepRow
-          label="Notes wander"
-          steps={[{ label: 'Never', value: 0 }, { label: 'A little', value: 0.35 }, { label: 'More', value: 0.7 }]}
-          value={c.noteVary ?? DEFAULT_NOTE_VARY}
-          onPick={(v) => set({ noteVary: v })}
-          hint={c.changes === false
-            ? 'Off while "Changes over time" is off for this colour.'
-            : (c.noteVary ?? DEFAULT_NOTE_VARY) <= 0
-              ? 'Exactly the note each counter sits on, every pass.'
-              : 'Each counter sometimes moves to a neighbouring note, and is back on its own every 4th pass.'}
-        />
-      )}
-      {(melodic || c.role === 'drums') && (
-        <Switch
-          label="Changes over time"
-          checked={c.changes !== false}
-          onChange={(on) => set({ changes: on ? undefined : false })}
-          hint={config.evolveAmount <= 0 ? 'Only while "Sounds change" (below) is on.' : undefined}
-        />
-      )}
-    </div>
-  );
-}
-
 // ---- a helper: Band, Extra notes, Sounds change ----
 
 function HelperButtons({ a, tryLabel }: { a: HelperActions; tryLabel: string }): JSX.Element {
@@ -278,7 +111,6 @@ const BAND_PART_NAMES: Record<BandPart, string> = { pad: 'chords', bass: 'bass',
 export function SoundTab(p: SoundTabProps): JSX.Element {
   const { config, update } = p;
   const world = worldOf(config.soundWorld);
-  const colours = config.channels.filter((c) => c.role !== 'off');
   const groove = grooveOf(config.swing, config.humanize);
   const fillStep = nearest(FILL_STEPS, config.fillAmount);
   const evolveStep = nearest(EVOLVE_STEPS, config.evolveAmount);
@@ -300,7 +132,16 @@ export function SoundTab(p: SoundTabProps): JSX.Element {
               { value: 'none' as SoundWorldChoice, label: 'My picks' },
             ]}
           />
-          <span style={NOTE}>{world ? world.description : 'Each colour plays the sound chosen on its card.'}{inAbleton ? ' Also switches Ableton\u2019s chains (CC 30) on every colour without its own sound.' : ''}</span>
+          {world && config.channels.some((c) => c.instrument || c.drum) && (
+            <Button
+              tone="quiet"
+              style={{ alignSelf: 'flex-start' }}
+              onClick={() => update({ channels: config.channels.map((c) => ({ ...c, instrument: undefined, drum: undefined })) })}
+            >
+              {`Reset every colour to the ${world.name} world`}
+            </Button>
+          )}
+          <span style={NOTE}>{world ? world.description : 'Each colour plays the sound chosen in its row.'}{inAbleton ? ' Also switches Ableton\u2019s chains (CC 30) on every colour without its own sound.' : ''}</span>
         </div>
         <StepRow
           label="Energy"
@@ -337,11 +178,22 @@ export function SoundTab(p: SoundTabProps): JSX.Element {
       {/* ---- each colour ---- */}
       <section aria-labelledby="sound-colours" style={SECTION}>
         <h3 id="sound-colours" style={HEADING}>Your colours</h3>
-        {colours.length === 0
-          ? <span style={NOTE}>No colour has a job yet. Set up: Colours.</span>
-          : colours.map((c) => (
-            <ColourCard key={c.id} c={c} n={config.channels.indexOf(c) + 1} p={p} />
-          ))}
+        {config.channels.length === 0
+          ? <span style={NOTE}>No colours yet. Set up: Colours.</span>
+          : (
+            <ColourTable
+              config={config}
+              palette={p.palette}
+              roleLockedReason={p.running ? 'Stop the board to change what a colour plays.' : null}
+              onRole={p.onRole}
+              onLoopSlot={p.onLoopSlot}
+              setChannelSound={p.setChannelSound}
+              onHear={p.onHear}
+              hearing={p.hearing}
+              liveValue={p.liveValue}
+              abletonShares={p.abletonShares}
+            />
+          )}
         {p.running && <span style={NOTE}>A new sound comes in from the next notes, once it has loaded.</span>}
       </section>
 

@@ -6,14 +6,11 @@ import { LabeledSlider } from '../ui/LabeledSlider';
 import { SwatchChip } from '../ui/SwatchChip';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import type { BoardPalette } from '../theme/boardTokens';
-import {
-  describeChannel, FADER_ROLES, ROLE_LABELS, TOGGLE_ROLES,
-  type ColourChannel, type ColourId, type ColourRole,
-} from '../../../../tracking/boardColours';
+import { describeChannel, type ColourChannel, type ColourId, type ColourRole } from '../../../../tracking/boardColours';
+import type { BoardSequencerStored } from '../../../../profiles/BoardSequencerConfig';
+import { ColourTable } from '../play/ColourTable';
+import type { ChannelSoundPatch } from '../play/SoundTab';
 
-/** The jobs offered as chips; Control… opens the fader and toggle roles. */
-const MAIN_JOBS: ColourRole[] = ['melody', 'bass', 'drums', 'chord', 'off'];
-const CONTROL_JOBS: ColourRole[] = [...FADER_ROLES, ...TOGGLE_ROLES];
 
 /** One detected colour, as the results panel needs it. */
 export interface DetectedColourCard {
@@ -55,10 +52,14 @@ export interface ColoursStepProps {
   onDiscardPending(): void;
   onRecalibrate(id: ColourId): void;
   onRole(id: ColourId, role: ColourRole): void;
+  /** The whole config, for the colour table (sounds, world, loop names). */
+  config: BoardSequencerStored;
+  setChannelSound(id: string, patch: ChannelSoundPatch): void;
+  onHear(c: ColourChannel): void;
+  /** The colour whose ▶ Hear is loading, or null. */
+  hearing: string | null;
   /** For the "Plays a loop" job: which saved loop this colour's counter plays. */
   onLoopSlot(id: ColourId, slot: number): void;
-  /** The loop slots' names, for the loop picker ('' = "Loop n"). */
-  loopNames: string[];
   /**
    * A colour's JOB is read once, when the engine is built. Changing it while the board is
    * playing left the sound on the old job and the control counters on the new one — a
@@ -112,13 +113,12 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
   const {
     channels, counts, palette, arming, pending, boardLearnt, onLearnBoard, learnMessage,
     onFindColours, onArmTap, onCancelArm,
-    onAddPending, onDiscardPending, onRecalibrate, onRole, onLoopSlot, loopNames, onRemove, onClearAll, isReferenced, running,
+    onAddPending, onDiscardPending, onRecalibrate, onRole, onLoopSlot, onRemove, config, setChannelSound, onHear, hearing, onClearAll, isReferenced, running,
     minFilledFraction, readSettingsCustom, onMinFill, onResetReadSettings, counterHeight, onCounterHeight,
     settleWindowMs, onSettleWindow, onBlackDarkness, picker, onMovePicker, onSampleSquare, hands,
     finding, onCancelFind, found, onUseFound, onDiscardFound,
   } = props;
   const [confirm, setConfirm] = useState<{ kind: 'remove'; id: ColourId } | { kind: 'clear' } | null>(null);
-  const [controlOpen, setControlOpen] = useState<ColourId | null>(null);
 
   const removeTarget = confirm?.kind === 'remove' ? channels.find((c) => c.id === confirm.id) : null;
 
@@ -284,26 +284,19 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
         </div>
       )}
 
-      {channels.map((c, i) => {
-        const count = counts[c.id] ?? 0;
-        const isControl = CONTROL_JOBS.includes(c.role);
-        const jobReason = running ? 'Stop the board to change what a colour does.' : null;
-        return (
-          <div
-            key={c.id}
-            aria-label={`${i + 1}, ${describeChannel(c)}, ${count} on board`}
-            style={{
-              display: 'flex', flexDirection: 'column', gap: 8, padding: 10,
-              borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-raised)',
-              border: '1px solid var(--bs-border)',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <SwatchChip swatch={c.swatch} palette={palette} number={i + 1} size={32} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 600 }}>{describeChannel(c)}</div>
-                <div style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>{`${count} on board`}</div>
-              </div>
+      {channels.length > 0 && (
+        <ColourTable
+          config={config}
+          palette={palette}
+          roleLockedReason={running ? 'Stop the board to change what a colour plays.' : null}
+          onRole={onRole}
+          onLoopSlot={onLoopSlot}
+          setChannelSound={setChannelSound}
+          onHear={onHear}
+          hearing={hearing}
+          rowExtras={(c) => (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
+              <span style={{ fontSize: 12, color: 'var(--bs-fg2)', flex: 1 }}>{`${counts[c.id] ?? 0} on board`}</span>
               <Button tone="secondary" aria-label={`Recalibrate ${describeChannel(c)}`} onClick={() => onRecalibrate(c.id)}>
                 <span aria-hidden="true">⟳</span>
               </Button>
@@ -311,77 +304,19 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
                 <span aria-hidden="true">×</span>
               </Button>
             </div>
-
-            <div role="radiogroup" aria-label={`Job for ${describeChannel(c)}`} style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-              {MAIN_JOBS.map((role) => (
-                <JobChip
-                  key={role}
-                  label={role === 'off' ? 'Off (not used)' : ROLE_LABELS[role]}
-                  selected={c.role === role}
-                  disabledReason={jobReason}
-                  onClick={() => { onRole(c.id, role); setControlOpen(null); }}
-                />
-              ))}
-              <JobChip
-                label={isControl ? `Control: ${ROLE_LABELS[c.role]}` : 'Control…'}
-                selected={isControl}
-                disabledReason={jobReason}
-                onClick={() => setControlOpen((id) => (id === c.id ? null : c.id))}
-              />
-              <JobChip
-                label={c.role === 'loop' ? `Plays loop ${(c.loopSlot ?? 0) + 1}` : 'Plays a loop…'}
-                selected={c.role === 'loop'}
-                disabledReason={jobReason}
-                onClick={() => { onRole(c.id, 'loop'); if (c.loopSlot === undefined) onLoopSlot(c.id, 0); setControlOpen(null); }}
-              />
-            </div>
-
-            {c.role === 'loop' && (
-              <label style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 12 }}>
-                Which loop this counter plays
-                <select
-                  value={c.loopSlot ?? 0}
-                  disabled={running}
-                  onChange={(e) => onLoopSlot(c.id, Number(e.target.value))}
-                >
-                  {loopNames.map((name, slot) => (
-                    <option key={slot} value={slot}>{name && name.length > 0 ? `${slot + 1}. ${name}` : `Loop ${slot + 1}`}</option>
-                  ))}
-                </select>
-                <span style={{ color: 'var(--bs-fg2)' }}>
-                  Put this counter anywhere on the board and the loop plays (Hold) or flips on and off (Toggle) — the loop pads&rsquo; setting on the Board tab. It never plays a note of its own.
-                </span>
-              </label>
-            )}
-
-            {(controlOpen === c.id || isControl) && (
-              <div role="radiogroup" aria-label={`Control job for ${describeChannel(c)}`} style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                {CONTROL_JOBS.map((role) => (
-                  <JobChip
-                    key={role}
-                    label={ROLE_LABELS[role]}
-                    selected={c.role === role}
-                    disabledReason={jobReason}
-                    onClick={() => onRole(c.id, role)}
-                  />
-                ))}
-              </div>
-            )}
-
-            {c.kind === 'black' && (
-              <LabeledSlider
-                label="Black darkness"
-                min={10}
-                max={70}
-                value={c.blackBand?.maxValue ?? 45}
-                display={String(c.blackBand?.maxValue ?? 45)}
-                onChange={(v) => onBlackDarkness(c.id, v)}
-              />
-            )}
-          </div>
-        );
-      })}
-
+          )}
+          rowMore={(c) => c.kind === 'black' && (
+            <LabeledSlider
+              label="Black darkness"
+              min={10}
+              max={70}
+              value={c.blackBand?.maxValue ?? 45}
+              display={String(c.blackBand?.maxValue ?? 45)}
+              onChange={(v) => onBlackDarkness(c.id, v)}
+            />
+          )}
+        />
+      )}
 
       <Disclosure summary="Detection sensitivity">
         <LabeledSlider
@@ -488,33 +423,5 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
         />
       )}
     </>
-  );
-}
-
-function JobChip(
-  { label, selected, onClick, disabledReason = null }:
-  { label: string; selected: boolean; onClick(): void; disabledReason?: string | null },
-): JSX.Element {
-  return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={selected}
-      disabled={disabledReason !== null}
-      title={disabledReason ?? undefined}
-      onClick={onClick}
-      style={{
-        minHeight: 'var(--bs-target)',
-        borderRadius: 999,
-        padding: '0 14px',
-        background: selected ? 'var(--bs-accent)' : 'var(--bs-elev)',
-        color: selected ? 'var(--bs-accent-fg)' : 'var(--bs-fg)',
-        borderColor: selected ? 'var(--bs-accent)' : 'var(--bs-border-control)',
-        borderWidth: selected ? 2 : 1,
-        fontWeight: selected ? 600 : 400,
-      }}
-    >
-      {label}
-    </button>
   );
 }

@@ -116,7 +116,9 @@ import { useBoardMidiPort } from './boardSequencer/useBoardMidiPort';
 import { abletonReadyItem, abletonTracksItem } from './boardSequencer/abletonReady';
 import { aiOffLine } from './boardSequencer/aiStatus';
 import { assignColourChannels, BoardMidiSender, channelFor, colourChannelMap, configToSoundFrom, effectiveSound } from '../../midi/boardMidi';
-import { ABLETON_CHAINS, chainFor } from '../../midi/abletonSounds';
+import { ABLETON_CHAINS, chainCcValue, chainFor, previewEvents } from '../../midi/abletonSounds';
+import { MIDIManager } from '../../midi/MIDIManager';
+import { previewNotesFor, previewRoute, SoundAuditioner } from '../../audio/soundPreview';
 import { LoopEditor } from './boardSequencer/components/LoopEditor';
 import {
   LAUNCH_SLOTS, MAX_SCENES, loopLabel, nextSceneIndex, sceneFromNow, sceneSettingsToApply, slotState, toggleSlot, type PlayerStrip, type SceneSettings,
@@ -918,6 +920,37 @@ export default function BoardSequencerScreen() {
     if ('reverbSend' in patch) eng.setChannelReverbSend(id, patch.reverbSend ?? w?.reverbSend ?? 0.18);
     if ('delaySend' in patch) eng.setChannelDelaySend(id, patch.delaySend ?? w?.delaySend ?? 0);
   }, [patchChannel]);
+
+  // ▶ Hear: a colour's sound on its own, at once, playing or stopped — in Ableton when
+  // Ableton is the whole sound (and its port is there), otherwise ADMI's own.
+  const auditionerRef = useRef<SoundAuditioner | null>(null);
+  const [hearing, setHearing] = useState<string | null>(null);
+  useEffect(() => () => { auditionerRef.current?.dispose(); auditionerRef.current = null; }, []);
+  const hearColour = useCallback((c: ColourChannel) => {
+    const cfg = configRef.current;
+    const key = { rootMidi: cfg.scaleRootMidi, semitones: cfg.scaleSemitones };
+    if (previewRoute(cfg, midiPortRef.current) === 'ableton') {
+      const out = MIDIManager.getConnectedSelectedOutput();
+      const channel = channelFor({ role: c.role, origin: 'placed', colour: c.id }, {
+        channelMode: cfg.midiChannelMode,
+        colourChannels: cfg.midiChannelMode === 'colour' ? colourChannelMap(cfg.channels) : undefined,
+      });
+      if (!out || channel === null) return;
+      const chain = chainFor(c, cfg.soundWorld);
+      const now = performance.now();
+      for (const ev of previewEvents(channel, chain === null ? null : chainCcValue(chain), previewNotesFor(c, key))) {
+        out.send(ev.data, now + ev.atMs);
+      }
+      return;
+    }
+    void Tone.start().then(() => {
+      auditionerRef.current ??= new SoundAuditioner();
+      setHearing(c.id);
+      return auditionerRef.current.hear(c, cfg.soundWorld, key);
+    }).then((result) => {
+      if (result === 'timeout') announce(`${describeChannel(c)}'s sound didn't load in time. Try again in a moment.`);
+    }).finally(() => setHearing((h) => (h === c.id ? null : h)));
+  }, [announce]);
 
   // Pattern chaining: select which page the live camera edits.
   const selectPage = useCallback((i: number) => {
@@ -3457,6 +3490,10 @@ export default function BoardSequencerScreen() {
       abletonShares={soundFrom === 'admi' ? undefined : planFromConfig(config).shares}
       update={update}
       setChannelSound={setChannelSound}
+      onRole={setChannelRole}
+      onLoopSlot={(id, slot) => patchChannel(id, { loopSlot: slot })}
+      onHear={hearColour}
+      hearing={hearing}
       setGroove={(swing, humanize) => {
         update({ swing, humanize });
         engineRef.current?.setSwing(swing);
@@ -3938,7 +3975,10 @@ export default function BoardSequencerScreen() {
       onRecalibrate={recalibrateChannel}
       onRole={setChannelRole}
       onLoopSlot={(id, slot) => patchChannel(id, { loopSlot: slot })}
-      loopNames={config.loopNames}
+      config={config}
+      setChannelSound={setChannelSound}
+      onHear={hearColour}
+      hearing={hearing}
       running={running}
       onRemove={removeChannel}
       onClearAll={clearChannels}

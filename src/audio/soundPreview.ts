@@ -9,6 +9,8 @@ import { BoardSequencerVoice } from '../songs/voices/BoardSequencerVoice';
 import { RoundRobinDrumKit, type KitDrum } from './instruments/RoundRobinDrumKit';
 import { voiceSpecFor, type SoundWorldChoice } from './worlds/soundWorlds';
 import type { ColourChannel } from '../tracking/boardColours';
+import { effectiveSound } from '../midi/boardMidi';
+import { KIT_GM_NOTE } from '../midi/gmDrums';
 
 /** How long Hear waits for a sound's samples before saying it couldn't. */
 const READY_MAX_MS = 4000;
@@ -32,6 +34,31 @@ export function previewPhrase(role: 'melody' | 'bass' | 'chord', rootMidi: numbe
 }
 
 const BAR: KitDrum[] = ['kick', 'hat', 'snare', 'hat'];
+
+/** The same preview as MIDI notes (ms after the press), for Hear in Ableton. */
+export function previewNotesFor(
+  ch: ColourChannel, key: { rootMidi: number; semitones: readonly number[] },
+): { midi: number; atMs: number; durMs: number }[] {
+  if (ch.role === 'drums') {
+    return BAR.map((d, i) => ({ midi: KIT_GM_NOTE[(ch.drum as KitDrum | undefined) ?? d], atMs: i * 250, durMs: 120 }));
+  }
+  if (ch.role !== 'melody' && ch.role !== 'bass' && ch.role !== 'chord') return [];
+  const phrase = previewPhrase(ch.role, key.rootMidi, key.semitones);
+  const durMs = ch.role === 'chord' ? 1200 : NOTE_SEC * 1000;
+  return phrase.midis.flatMap((notes, i) => notes.map((midi) => ({ midi, atMs: Math.round(phrase.atSec[i] * 1000), durMs })));
+}
+
+/**
+ * Where Hear plays: in Ableton only when Ableton is the whole sound and its port is there
+ * (the same rule Play follows); otherwise ADMI's own sound, so Hear is never silent.
+ */
+export function previewRoute(
+  cfg: { midiEnabled: boolean; midiKeepSound: boolean; midiDeviceId: string },
+  port: { portConnected: boolean; holdOnAdmi: boolean },
+): 'admi' | 'ableton' {
+  const route = effectiveSound(cfg, port.portConnected, port.holdOnAdmi);
+  return route.midi && !route.internal ? 'ableton' : 'admi';
+}
 
 /** Plays a colour's sound on demand. One per screen; voices are kept per sound. */
 export class SoundAuditioner {
