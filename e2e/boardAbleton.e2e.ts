@@ -115,7 +115,7 @@ test('Panic sends every note off and all sound off on all 16 channels', async ({
 });
 
 test('a 40 second piece in Ableton mode is silent by 0:40', async ({ page }) => {
-  test.setTimeout(90_000);
+  test.setTimeout(180_000); // a 40 s piece, plus setting up and waiting for the instruments
   await openLaptopBoard(page);
   await pickColour(page, 'Red');
   await place(page, [[3, 1], [5, 2], [4, 3], [6, 4]]);

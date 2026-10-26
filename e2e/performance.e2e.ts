@@ -126,7 +126,7 @@ test('the iPad joins with the code, shows the piece, and its End piece reaches t
   await makePlan(page);
   await page.getByRole('button', { name: 'Play', exact: true }).click();
   await page.getByRole('tab', { name: 'Connections' }).click();
-  await page.getByRole('checkbox', { name: 'iPad controls' }).check();
+  await page.getByRole('switch', { name: 'iPad controls' }).click();
   await page.getByRole('checkbox', { name: 'End piece' }).check();
   const code = await page.evaluate(() => localStorage.getItem('admi-remote-code'));
   expect(code).toMatch(/^\d{4}$/);
@@ -244,7 +244,7 @@ test('the iPad Loops page shows only the saved loops, and a tap turns one on and
   await page.getByRole('button', { name: 'Clear the board' }).click();
   await page.getByRole('button', { name: 'Play', exact: true }).click();
   await page.getByRole('tab', { name: 'Connections' }).click();
-  await page.getByRole('checkbox', { name: 'iPad controls' }).check();
+  await page.getByRole('switch', { name: 'iPad controls' }).click();
   const code = await page.evaluate(() => localStorage.getItem('admi-remote-code'));
   await page.getByRole('button', { name: '▶ Play' }).first().click();
 

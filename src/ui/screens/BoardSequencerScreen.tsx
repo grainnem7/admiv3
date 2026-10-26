@@ -2383,147 +2383,120 @@ export default function BoardSequencerScreen() {
 
   // The Play tabs: the same controls as the old rail, grouped by what the player is
   // thinking about — the feel, the sounds, and the loops.
+  // While playing, the grid can't change under the playhead: said, not just greyed out.
+  const gridReason = running ? 'Stop playing to change this.' : null;
   const grooveTab = (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 10 }}>
-              <label>
-                Tempo {config.bpm} BPM
-                <input
-                  type="range" min={50} max={300} value={config.bpm}
-                  disabled={tempoReason !== null}
-                  onChange={(e) => {
-                    const v = Number(e.target.value);
-                    update({ bpm: v });
-                    engineRef.current?.setBpm(v); // live, not only on the next start
-                  }}
-                />
-                <span style={REASON_STYLE}>{tempoReason ?? ''}</span>
-              </label>
-              <label>
-                Swing {Math.round(config.swing * 100)}%
-                <input
-                  type="range" min={0} max={60} value={Math.round(config.swing * 100)}
-                  onChange={(e) => {
-                    const v = Number(e.target.value) / 100;
-                    update({ swing: v });
-                    engineRef.current?.setSwing(v);
-                  }}
-                />
-              </label>
-              <label>
-                Humanize {Math.round(config.humanize * 100)}%
-                <input
-                  type="range" min={0} max={100} value={Math.round(config.humanize * 100)}
-                  onChange={(e) => {
-                    const v = Number(e.target.value) / 100;
-                    update({ humanize: v });
-                    engineRef.current?.setHumanize(v);
-                  }}
-                />
-              </label>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <span style={{ fontSize: 11, opacity: 0.65 }}>
-                  Polyrhythm — loop length per role (Off = full {config.cols} steps; shorter values drift)
-                </span>
-                {config.phrases && (
-                  <span role="note" style={{ fontSize: 12, color: 'var(--bs-warn)' }}>
-                    Counters are playing phrases (Sound tab), which fill the whole loop: leave polyrhythm Off, or the parts fight each other.
-                  </span>
-                )}
-                {POLY_ROLES.map(({ role, field, label }) => (
-                  <label key={role} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
-                    <span style={{ width: 64 }}>{label}</span>
-                    <select
-                      value={config[field]}
-                      onChange={(e) => {
-                        const n = Number(e.target.value);
-                        update({ [field]: n } as Partial<BoardSequencerStored>);
-                        engineRef.current?.setLoopSteps(role, n);
-                      }}
-                    >
-                      <option value={0}>Off</option>
-                      {[2, 3, 4, 5, 6, 7, 8].filter((n) => n <= config.cols).map((n) => (
-                        <option key={n} value={n}>{n}</option>
-                      ))}
-                    </select>
-                  </label>
-                ))}
-              </div>
-              <label>
-                Rows
-                <select
-                  value={config.rows} disabled={running}
-                  onChange={(e) => updateGrid({ rows: Number(e.target.value) })}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, paddingTop: 10 }}>
+      <LabeledSlider
+        label="Tempo" min={50} max={300} value={config.bpm} display={`${config.bpm} BPM`}
+        reason={tempoReason}
+        onChange={(v) => { update({ bpm: v }); engineRef.current?.setBpm(v); /* live, not only on the next start */ }}
+      />
+      <LabeledSlider
+        label="Swing" min={0} max={60} value={Math.round(config.swing * 100)} display={`${Math.round(config.swing * 100)}%`}
+        onChange={(v) => { update({ swing: v / 100 }); engineRef.current?.setSwing(v / 100); }}
+      />
+      <LabeledSlider
+        label="Humanize" min={0} max={100} value={Math.round(config.humanize * 100)} display={`${Math.round(config.humanize * 100)}%`}
+        onChange={(v) => { update({ humanize: v / 100 }); engineRef.current?.setHumanize(v / 100); }}
+      />
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <span style={{ fontWeight: 600 }}>Loop length per part</span>
+        <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
+          Off = all {config.cols} steps. A shorter loop drifts against the others.
+        </span>
+        {config.phrases && (
+          <span role="note" style={{ fontSize: 12, color: 'var(--bs-warn)' }}>
+            Colours playing a tune (Sound tab) fill the whole loop: leave their part Off, or the parts fight each other.
+          </span>
+        )}
+        {POLY_ROLES.map(({ role, field, label }) => (
+          <div key={role} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <span style={{ fontSize: 13 }}>{label}</span>
+            <SegmentedControl<number>
+              label={`${label} loop length`}
+              value={config[field]}
+              onChange={(n) => {
+                update({ [field]: n } as Partial<BoardSequencerStored>);
+                engineRef.current?.setLoopSteps(role, n);
+              }}
+              options={[{ value: 0, label: 'Off' }, ...[2, 3, 4, 5, 6, 7, 8].filter((n) => n <= config.cols).map((n) => ({ value: n, label: String(n) }))]}
+            />
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <span style={{ fontWeight: 600 }}>The grid</span>
+        {([
+          { label: 'Rows', value: config.rows, choices: [2, 3, 4, 5, 6, 7, 8], set: (n: number) => updateGrid({ rows: n }) },
+          { label: 'Steps', value: config.cols, choices: [2, 3, 4, 5, 6, 7, 8, 10, 12, 16], set: (n: number) => updateGrid({ cols: n }) },
+          { label: 'Pages', value: config.numPages, choices: [1, 2, 4], set: (n: number) => setPagesCount(n) },
+        ]).map((g) => (
+          <div key={g.label} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <span style={{ fontSize: 13 }}>{g.label}</span>
+            <SegmentedControl<number>
+              label={g.label} value={g.value} disabled={gridReason !== null}
+              onChange={g.set}
+              options={g.choices.map((n) => ({ value: n, label: String(n) }))}
+            />
+          </div>
+        ))}
+        <span style={REASON_STYLE}>{gridReason ?? ''}</span>
+      </div>
+
+      {config.numPages > 1 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
+            The selected page (●) plays live; Capture freezes it and moves on. The loop is {config.numPages * config.cols} steps.
+          </span>
+          <div role="group" aria-label="Pages" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {Array.from({ length: config.numPages }, (_, i) => {
+              const isSel = i === selectedPage;
+              const isPlaying = running && i === playingPage;
+              const hasSnapshot = (config.pages[i]?.length ?? 0) > 0;
+              return (
+                <Button
+                  key={i}
+                  tone={isSel ? 'primary' : 'secondary'}
+                  aria-pressed={isSel}
+                  aria-label={`Page ${String.fromCharCode(65 + i)}${isSel ? ', selected' : ''}${isPlaying ? ', playing' : ''}${hasSnapshot ? '' : ', empty'}`}
+                  onClick={() => selectPage(i)}
+                  style={{ outline: isPlaying ? '3px solid var(--bs-ok)' : undefined, opacity: hasSnapshot || isSel ? 1 : 0.6 }}
                 >
-                  {[2, 3, 4, 5, 6, 7, 8].map((n) => <option key={n} value={n}>{n}</option>)}
-                </select>
-              </label>
-              <label>
-                Steps
-                <select
-                  value={config.cols} disabled={running}
-                  onChange={(e) => updateGrid({ cols: Number(e.target.value) })}
-                >
-                  {[2, 3, 4, 5, 6, 7, 8, 10, 12, 16].map((n) => <option key={n} value={n}>{n}</option>)}
-                </select>
-              </label>
-              <label>
-                Pages
-                <select
-                  value={config.numPages} disabled={running}
-                  onChange={(e) => setPagesCount(Number(e.target.value))}
-                >
-                  {[1, 2, 4].map((n) => <option key={n} value={n}>{n}</option>)}
-                </select>
-              </label>
-              {config.numPages > 1 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <span style={{ fontSize: 11, opacity: 0.65 }}>
-                    Selected page (●) plays live; Capture freezes it and moves on. Loop = {config.numPages * config.cols} steps.
-                  </span>
-                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                    {Array.from({ length: config.numPages }, (_, i) => {
-                      const isSel = i === selectedPage;
-                      const isPlaying = running && i === playingPage;
-                      const hasSnapshot = (config.pages[i]?.length ?? 0) > 0;
-                      return (
-                        <button
-                          key={i} type="button" onClick={() => selectPage(i)}
-                          style={{
-                            fontSize: 12, padding: '4px 10px',
-                            fontWeight: isSel ? 700 : 400,
-                            border: isPlaying ? '2px solid #4caf50' : '1px solid #888',
-                            opacity: hasSnapshot || isSel ? 1 : 0.5,
-                          }}
-                        >
-                          {String.fromCharCode(65 + i)}{isSel ? ' ●' : ''}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <button
-                    type="button" style={{ fontSize: 12 }} disabled={!running}
-                    onClick={capturePage}
-                  >
-                    Capture board → Page {String.fromCharCode(65 + selectedPage)}
-                  </button>
-                </div>
-              )}
-              <label>
-                Backing song
-                <select value={selectedSongId} disabled={running} onChange={(e) => void handleSelectSong(e.target.value)}>
-                  <option value="">None (standalone)</option>
-                  {SONG_LIBRARY.map((s) => (
-                    <option key={s.id} value={s.id}>{s.title}</option>
-                  ))}
-                </select>
-              </label>
-              {selectedSongId && (
-                <p style={{ fontSize: 11, opacity: 0.75, margin: 0 }}>
-                  {songStatus === 'loading' && 'Loading song…'}
-                  {songStatus === 'loaded' && 'Song ready — board will lock to its tempo + chords'}
-                  {songStatus === 'error' && 'Song failed to load'}
-                </p>
-              )}
+                  {`${String.fromCharCode(65 + i)}${isSel ? ' ●' : ''}${isPlaying ? ' ▶' : ''}`}
+                </Button>
+              );
+            })}
+          </div>
+          <Button tone="secondary" onClick={capturePage} reason={running ? null : 'Play first, then capture the board.'}>
+            {`Capture board → Page ${String.fromCharCode(65 + selectedPage)}`}
+          </Button>
+        </div>
+      )}
+
+      <label style={{ display: 'flex', flexDirection: 'column', gap: 4, textAlign: 'left' }}>
+        <span style={{ fontWeight: 600 }}>Backing song</span>
+        <select
+          value={selectedSongId} disabled={running}
+          onChange={(e) => void handleSelectSong(e.target.value)}
+          style={{ minHeight: 'var(--bs-target)' }}
+        >
+          <option value="">None (standalone)</option>
+          {SONG_LIBRARY.map((sg) => (
+            <option key={sg.id} value={sg.id}>{sg.title}</option>
+          ))}
+        </select>
+        <span style={REASON_STYLE}>{running ? 'Stop playing to change the song.' : ''}</span>
+      </label>
+      {selectedSongId && (
+        <p style={{ fontSize: 12, color: 'var(--bs-fg2)', margin: 0 }}>
+          {songStatus === 'loading' && 'Loading song…'}
+          {songStatus === 'loaded' && 'Song ready: the board locks to its tempo and chords.'}
+          {songStatus === 'error' && 'The song failed to load.'}
+        </p>
+      )}
     </div>
   );
 
@@ -2976,16 +2949,14 @@ export default function BoardSequencerScreen() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 10 }}>
     {/* The iPad remote: a second controller in the performance (see src/remote). */}
     <div role="group" aria-label="iPad controls" style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 8, borderRadius: 'var(--bs-radius-md)', border: '1px solid var(--bs-border)' }}>
-      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600 }}>
-        <input
-          type="checkbox" checked={remoteEnabled}
-          onChange={(e) => {
-            setRemoteEnabled(e.target.checked);
-            try { localStorage.setItem(REMOTE_ENABLED_KEY, e.target.checked ? '1' : '0'); } catch { /* not remembered */ }
-          }}
-        />
-        iPad controls
-      </label>
+      <Switch
+        label="iPad controls"
+        checked={remoteEnabled}
+        onChange={(on) => {
+          setRemoteEnabled(on);
+          try { localStorage.setItem(REMOTE_ENABLED_KEY, on ? '1' : '0'); } catch { /* not remembered */ }
+        }}
+      />
       {remoteEnabled && (
         <>
           <span role="status" style={{ fontSize: 13, fontWeight: 600, color: remoteLink.others > 0 ? 'var(--bs-ok)' : 'var(--bs-fg2)' }}>
@@ -3752,13 +3723,12 @@ export default function BoardSequencerScreen() {
         onChange={(on) => update({ twoCounterMode: on ? 'both' : 'off' })}
         hint="Otherwise the stronger colour wins the box."
       />
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <input
-                  type="checkbox" checked={config.pingPong}
-                  onChange={(e) => update({ pingPong: e.target.checked })}
-                />
-                Ping-pong (sweep → then ←)
-              </label>
+              <Switch
+                label="Ping-pong"
+                checked={config.pingPong}
+                onChange={(pingPong) => update({ pingPong })}
+                hint="The playhead sweeps → then back ←."
+              />
               {config.pingPong && config.numPages > 1 && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <span style={{ fontSize: 12 }}>Ping-pong with {config.numPages} pages</span>
@@ -3797,27 +3767,21 @@ export default function BoardSequencerScreen() {
                   }))}
                 />
               )}
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <input
-                  type="checkbox" checked={config.variationEnabled}
-                  onChange={(e) => update({ variationEnabled: e.target.checked })}
-                />
-                Variation — shove a piece to its edge = every other pass
-              </label>
+              <Switch
+                label="Variation"
+                checked={config.variationEnabled}
+                onChange={(variationEnabled) => update({ variationEnabled })}
+                hint="A counter shoved to the edge of its square plays every other pass."
+              />
               {config.variationEnabled && (
-                <label>
-                  Shove needed {Math.round(config.variationOffsetThreshold * 100)}%
-                  <input
-                    type="range" min={30} max={85}
-                    value={Math.round(config.variationOffsetThreshold * 100)}
-                    onChange={(e) => update({ variationOffsetThreshold: Number(e.target.value) / 100 })}
-                  />
-                </label>
-              )}
-              {config.variationEnabled && config.numPages > 1 && (
-                <span style={{ fontSize: 11, opacity: 0.7 }}>
-                  Variation applies to a single page only (v1) — set Pages to 1 to use it.
-                </span>
+                <LabeledSlider
+                  label="How far to the edge counts"
+                  min={30} max={85}
+                  value={Math.round(config.variationOffsetThreshold * 100)}
+                  display={`${Math.round(config.variationOffsetThreshold * 100)}%`}
+                  onChange={(v) => update({ variationOffsetThreshold: v / 100 })}
+                  reason={config.numPages > 1 ? 'Variation works with one page: set Pages to 1 (Groove tab).' : null}
+                />
               )}
     </div>
   );

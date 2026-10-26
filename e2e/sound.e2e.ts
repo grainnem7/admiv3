@@ -115,7 +115,7 @@ test('the red cap (tried with the mouse) moves the speed left–right and shows 
 test('a counter past its part’s loop shows that it doesn’t play', async ({ page }) => {
   await openLaptopBoard(page);
   await page.getByRole('tab', { name: 'Groove' }).click();
-  await page.getByRole('combobox', { name: 'Melody', exact: true }).selectOption('6');
+  await page.getByRole('radiogroup', { name: 'Melody loop length' }).getByRole('radio', { name: '6', exact: true }).click();
   await pickColour(page, 'Red');
   await place(page, [[3, 8], [3, 2]]);
   const grid = page.getByRole('grid', { name: /Laptop board/ });
@@ -131,9 +131,9 @@ test('ping-pong with two pages: choose each page there and back, or one strip', 
   await pickColour(page, 'Red');
   await place(page, [[3, 1]]);
   await page.getByRole('tab', { name: 'Groove' }).click();
-  await page.getByRole('combobox', { name: 'Pages' }).selectOption('2');
+  await page.getByRole('radiogroup', { name: 'Pages' }).getByRole('radio', { name: '2', exact: true }).click();
   await page.getByRole('tab', { name: 'Board' }).click();
-  await page.getByRole('checkbox', { name: /Ping-pong/ }).check();
+  await page.getByRole('switch', { name: 'Ping-pong' }).click();
   const choice = page.getByRole('radiogroup', { name: 'Ping-pong with 2 pages' });
   await expect(choice.getByRole('radio', { name: 'Each page there and back' })).toBeChecked();
   await choice.getByRole('radio', { name: 'All pages as one strip' }).click();

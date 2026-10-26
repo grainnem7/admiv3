@@ -22,6 +22,7 @@ export function LabeledSlider({
   label, value, min, max, step = 1, onChange, display, disabled = false, reason = null,
 }: LabeledSliderProps): JSX.Element {
   const id = useId();
+  const fill = max > min ? Math.max(0, Math.min(100, ((value - min) / (max - min)) * 100)) : 0;
   const reasonId = `${id}-reason`;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -39,7 +40,12 @@ export function LabeledSlider({
         disabled={disabled || reason !== null}
         aria-describedby={reason ? reasonId : undefined}
         onChange={(e) => onChange(Number(e.target.value))}
-        style={{ minHeight: 'var(--bs-target)', background: 'transparent', border: 'none' }}
+        // The track drawn here, filled up to the value: the page's own slider style takes the
+        // browser's away, and a transparent background left only a knob floating on nothing.
+        style={{
+          minHeight: 'var(--bs-target)', border: 'none', margin: 0,
+          background: `linear-gradient(to right, var(--bs-accent) 0 ${fill}%, var(--bs-border-control) ${fill}% 100%) center / 100% 8px no-repeat`,
+        }}
       />
       {/* Reserved space so a reason appearing never shifts the layout under the pointer. */}
       <span id={reasonId} style={{ minHeight: 16, fontSize: 12, color: 'var(--bs-fg2)' }}>

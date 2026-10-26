@@ -138,3 +138,47 @@
 .bs-root h1, .bs-root h2, .bs-root h3, .bs-root h4, .bs-root label {
   color: var(--bs-fg);
 }
+
+/* Sliders: a knob big enough for an imprecise finger, in the board's colours. The track is
+   drawn by LabeledSlider itself. */
+.bs-root input[type="range"]::-webkit-slider-thumb {
+  width: 28px;
+  height: 28px;
+  background: var(--bs-accent);
+  border: 3px solid var(--bs-bg);
+}
+.bs-root input[type="range"]::-moz-range-thumb {
+  width: 28px;
+  height: 28px;
+  background: var(--bs-accent);
+  border: 3px solid var(--bs-bg);
+}
+.bs-root input[type="range"]:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Checkboxes: 24 px, in the board's colours, with the tick scaled to match. The page-wide
+   style made them 16 px (one only 10 px wide) — too small for an imprecise finger. A label
+   holding one is a full-size touch target. */
+.bs-root input[type="checkbox"] {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border: 2px solid var(--bs-border-control);
+  border-radius: 6px;
+  background-color: var(--bs-raised);
+}
+.bs-root input[type="checkbox"]:checked {
+  background-color: var(--bs-accent);
+  border-color: var(--bs-accent);
+}
+.bs-root input[type="checkbox"]:checked::after {
+  left: 7px;
+  top: 3px;
+  width: 6px;
+  height: 11px;
+  border-color: var(--bs-bg);
+  border-width: 0 3px 3px 0;
+}
+.bs-root label:has(> input[type="checkbox"]) {
+  min-height: var(--bs-target);
+  cursor: pointer;
+}
