@@ -81,6 +81,17 @@ export const SPILL_TWO_COUNTERS = 1.7;
  * colour, so coverage alone dropped one of every real pair and pairs near the limit flashed.
  */
 export const SPILL_LINE_SQUARES = 0.25;
+/**
+ * …or when one cell sees its colour well inside (SPILL_INSIDE_SQUARES from the line) and the
+ * other at least not touching it (SPILL_TOUCHING_SQUARES). A counter spilling across a line
+ * shows on both sides hugging it — the line cuts through the counter itself. On the real
+ * board, seen at an angle, a tall counter leans its top towards the far side, so the nearer
+ * of a pair looks close to the line (0.16 of a square, measured) while the other sits half a
+ * square in. Position, not coverage: coverage on a counter that small in the picture is 3 or
+ * 4 sample points, and flickers.
+ */
+export const SPILL_INSIDE_SQUARES = 0.4;
+export const SPILL_TOUCHING_SQUARES = 0.1;
 /** minFilledFraction is 0.4 × the coverage of a counter sitting wholly in the cell. */
 const MIN_FILL_TO_COVERAGE = 1 / 0.4;
 
@@ -99,18 +110,28 @@ export interface SpillCtx {
  * reading of that colour is cleared. A pair whose combined coverage is at least
  * SPILL_TWO_COUNTERS × one counter's worth is two real counters and is left alone.
  */
-/** Both cells see the colour well away from the line between them (see SPILL_LINE_SQUARES). */
-function bothWellInside(a: CellReading, b: CellReading, vertical: boolean, ctx: SpillCtx): boolean {
+/** How far each cell sees the colour from the line between them, in board units (or null). */
+function lineGaps(a: CellReading, b: CellReading, vertical: boolean, ctx: SpillCtx): [number, number] | null {
   const colour = a.colour!;
   const ca = a.centroids?.[colour] ?? a.centroid;
   const cb = b.centroids?.[colour] ?? b.centroid;
-  if (!ca || !cb) return false;
+  if (!ca || !cb) return null;
   // The shared line, in unit board coordinates: b is the cell below (vertical) or to the right.
   const line = vertical ? b.row / ctx.rows : b.col / ctx.cols;
-  const da = Math.abs((vertical ? ca.y : ca.x) - line);
-  const db = Math.abs((vertical ? cb.y : cb.x) - line);
-  const minGap = SPILL_LINE_SQUARES / Math.max(1, ctx.boardSquares);
-  return da >= minGap && db >= minGap;
+  return [Math.abs((vertical ? ca.y : ca.x) - line), Math.abs((vertical ? cb.y : cb.x) - line)];
+}
+
+/** One of the two cells sees the colour at least `squares` (board squares) from the line. */
+function eitherWellInside(a: CellReading, b: CellReading, vertical: boolean, ctx: SpillCtx, squares: number): boolean {
+  const g = lineGaps(a, b, vertical, ctx);
+  return g !== null && Math.max(g[0], g[1]) >= squares / Math.max(1, ctx.boardSquares);
+}
+
+/** Both cells see the colour well away from the line between them (see SPILL_LINE_SQUARES). */
+function bothWellInside(a: CellReading, b: CellReading, vertical: boolean, ctx: SpillCtx, squares: number): boolean {
+  const g = lineGaps(a, b, vertical, ctx);
+  const minGap = squares / Math.max(1, ctx.boardSquares);
+  return g !== null && g[0] >= minGap && g[1] >= minGap;
 }
 
 export function suppressSpill(readings: CellReading[], ctx: SpillCtx): CellReading[] {
@@ -128,7 +149,9 @@ export function suppressSpill(readings: CellReading[], ctx: SpillCtx): CellReadi
       if (!b || !b.occupied || b.colour !== a.colour) continue;
       const total = coverage(a) + coverage(b);
       if (total >= SPILL_TWO_COUNTERS * expected) continue; // two real counters
-      if (bothWellInside(a, b, dr === 1, ctx)) continue; // two real counters, seen small
+      if (bothWellInside(a, b, dr === 1, ctx, SPILL_LINE_SQUARES)) continue; // two real counters, seen small
+      if (bothWellInside(a, b, dr === 1, ctx, SPILL_TOUCHING_SQUARES)
+        && eitherWellInside(a, b, dr === 1, ctx, SPILL_INSIDE_SQUARES)) continue; // a pair, one leaning in
       pairs.push({ a, b, total });
     }
   }

@@ -51,6 +51,19 @@ describe('suppressSpill', () => {
     expect(suppressSpill(readings, ctx()).filter((r) => r.occupied)).toHaveLength(2);
   });
 
+  it('the real board: a yellow pair, tall counters leaning towards the far side, both kept', () => {
+    // Measured on the USB/iPhone camera, 30 frames running: the lower yellow showed its
+    // colour only 0.16 of a square from the line it shares with the upper one (a tall
+    // counter seen at an angle leans its top towards the far side), and each showed 0.16
+    // of its square. The lower one was dropped in every frame. A counter spilling across
+    // a line shows on both sides hugging it; here the upper one sits half a square in.
+    const yellow = [cell(3, 6, 0.798, 0.437, 0.16, 'c12'), cell(4, 6, 0.798, 0.52, 0.16, 'c12')];
+    expect(suppressSpill(yellow, ctx({ minFilledFraction: 0.1 })).filter((r) => r.occupied)).toHaveLength(2);
+    // The upper one's coverage flickered between 3 and 4 sample points (0.12–0.16): still two.
+    const flicker = [cell(3, 6, 0.798, 0.419, 0.12, 'c12'), cell(4, 6, 0.798, 0.52, 0.16, 'c12')];
+    expect(suppressSpill(flicker, ctx({ minFilledFraction: 0.1 })).filter((r) => r.occupied)).toHaveLength(2);
+  });
+
   it('leaves diagonal neighbours and different colours alone', () => {
     const diag = [cell(0, 1, 0.235, 0.0625, 0.15), cell(1, 2, 0.265, 0.1875, 0.10)];
     expect(suppressSpill(diag, ctx()).filter((r) => r.occupied)).toHaveLength(2);
