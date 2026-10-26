@@ -63,4 +63,25 @@ describe('fill and evolve as control counters', () => {
     expect(p.fillAmount).toBeCloseTo(0.2, 9);
     expect(p.evolve.amount).toBeCloseTo(0.8, 9);
   });
+
+  it('takes effect at once while playing, without the settings being applied again', () => {
+    // In play the settings are applied when they change, and the counters arrive every
+    // camera frame after that. The counter's value only took effect at the next settings
+    // change, so a fill or evolve counter did nothing at all while playing.
+    const e = new BoardSequencerEngine({
+      bpm: 60, rows: 8, cols: 8, scaleRootMidi: 60, scaleSemitones: [0, 2, 4, 7, 9], swing: 0, humanize: 0,
+      noteLengthBeats: 0.5, velocity: 0.7, tickEnabled: false, octaveShift: 0, volume: 0.6, channels: [],
+      faderAxis: 'row', loopStepsRed: 0, loopStepsBlack: 0, loopStepsBlue: 0, numPages: 1,
+    });
+    const p = e as unknown as { fillAmount: number; evolve: { amount: number } };
+    e.setFill(0.2, 1, null);
+    e.setEvolve({ amount: 0.8, sceneLoops: 8, seed: 1, holdLap: null });
+    e.setControlValues({ fill: 0.9, evolve: 0.3 });
+    expect(p.fillAmount).toBeCloseTo(0.9, 9);
+    expect(p.evolve.amount).toBeCloseTo(0.3, 9);
+    // The counter lifted off: the saved settings are back, again without a settings change.
+    e.setControlValues({});
+    expect(p.fillAmount).toBeCloseTo(0.2, 9);
+    expect(p.evolve.amount).toBeCloseTo(0.8, 9);
+  });
 });

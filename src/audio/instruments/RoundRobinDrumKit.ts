@@ -23,6 +23,8 @@ export class RoundRobinDrumKit {
   private samples = new Map<DrumName, Tone.Player[]>();
   private rrIndex = new Map<DrumName, number>();
   private ready = false;
+  /** Disposed: a load still under way must not build (or keep) anything. */
+  private disposed = false;
   private readonly loadedPromise: Promise<void>;
   private dest: AudioNode | null = null;
   /**
@@ -108,6 +110,7 @@ export class RoundRobinDrumKit {
   }
 
   dispose(): void {
+    this.disposed = true;
     for (const players of this.samples.values()) {
       for (const p of players) p.dispose();
     }
@@ -128,6 +131,7 @@ export class RoundRobinDrumKit {
     } catch {
       return; // offline / missing manifest → stay not-ready, play() no-ops
     }
+    if (this.disposed) return;
 
     // Load each sample independently: resolve on EITHER onload or onerror so a
     // single 404 can't wedge the whole kit. After all settle, keep only the
@@ -155,9 +159,16 @@ export class RoundRobinDrumKit {
     }
 
     await Promise.all(loads);
+    if (this.disposed) {
+      // Disposed while the samples loaded: dispose() ran before they were all here.
+      for (const players of this.samples.values()) for (const p of players) p.dispose();
+      this.samples.clear();
+      return;
+    }
     // Prune samples that failed to load; drop drums left with none.
     for (const [name, players] of [...this.samples]) {
       const loaded = players.filter((p) => p.loaded !== false);
+      for (const p of players) if (p.loaded === false) p.dispose();
       if (loaded.length === 0) {
         this.samples.delete(name);
         this.rrIndex.delete(name);

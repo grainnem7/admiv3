@@ -336,6 +336,26 @@ export type ControlRemoval = 'hold' | 'zero' | 'default';
 
 const FADER_ROLE_LIST: FaderRole[] = ['volume', 'reverb', 'delay', 'tone', 'tempo', 'fill', 'evolve'];
 
+/**
+ * The furthest a control's range may go: what the sound can safely take. Everything but
+ * the speed is a gain or an amount from 0 to 1; a typed-in 8 went straight into a send.
+ */
+export const CONTROL_RANGE_LIMITS: Record<FaderRole, ControlRange> = {
+  volume: { min: 0, max: 1 },
+  reverb: { min: 0, max: 1 },
+  delay: { min: 0, max: 1 },
+  tone: { min: 0, max: 1 },
+  tempo: { min: 20, max: 400 },
+  fill: { min: 0, max: 1 },
+  evolve: { min: 0, max: 1 },
+};
+
+/** A value held within a control's limits. */
+export function clampToControl(role: FaderRole, v: number): number {
+  const l = CONTROL_RANGE_LIMITS[role];
+  return Math.max(l.min, Math.min(l.max, v));
+}
+
 const DEFAULT_CONTROL_RANGES: Record<FaderRole, ControlRange> = {
   volume: { min: 0.2, max: 1 },
   reverb: { min: 0, max: 0.6 },
@@ -520,7 +540,7 @@ function sanitizeControlRanges(v: unknown): Record<FaderRole, ControlRange> {
   for (const role of FADER_ROLE_LIST) {
     const d = DEFAULT_CONTROL_RANGES[role];
     const r = (typeof o[role] === 'object' && o[role] !== null ? o[role] : {}) as Record<string, unknown>;
-    out[role] = { min: num(r.min, d.min), max: num(r.max, d.max) };
+    out[role] = { min: clampToControl(role, num(r.min, d.min)), max: clampToControl(role, num(r.max, d.max)) };
   }
   return out;
 }

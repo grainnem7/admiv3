@@ -67,6 +67,18 @@ describe('RoundRobinDrumKit', () => {
     expect(players.length).toBe(5); // 2 kick + 1 snare + 1 hat + 1 crash
   });
 
+  it('disposed while still fetching its list: loads nothing and never becomes ready', async () => {
+    // Stop pressed while a new band's kit was loading left a whole kit of players alive.
+    let answer: (v: unknown) => void = () => {};
+    (globalThis as { fetch: typeof fetch }).fetch = vi.fn(() => new Promise((r) => { answer = r; })) as unknown as typeof fetch;
+    const kit = new RoundRobinDrumKit(fakeCtx(), 'studio-kit');
+    kit.dispose();
+    answer({ ok: true, status: 200, json: () => Promise.resolve(MANIFEST) });
+    await kit.whenReady();
+    expect(players.length).toBe(0);
+    expect(kit.isReady()).toBe(false);
+  });
+
   it('rotates through a drum’s samples on successive hits', async () => {
     mockFetchOk();
     const kit = new RoundRobinDrumKit(fakeCtx(), 'studio-kit');

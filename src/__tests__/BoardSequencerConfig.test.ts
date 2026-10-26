@@ -266,6 +266,17 @@ describe('BoardSequencerConfig — control counter settings', () => {
     expect(c.controlRemoval.volume).toBe('hold');
     expect(c.controlRemoval.tone).toBe('default');
   });
+
+  it('keeps every control range within what the sound can safely take', () => {
+    // Typed in: a reverb of 8 went straight into the reverb send, a volume of 4 into the mix.
+    localStorage.setItem('admi-board-sequencer', JSON.stringify({
+      controlRanges: { reverb: { min: -1, max: 8 }, volume: { min: 0.2, max: 4 }, tempo: { min: 5, max: 900 } },
+    }));
+    const c = loadBoardSequencerConfig()!;
+    expect(c.controlRanges.reverb).toEqual({ min: 0, max: 1 });
+    expect(c.controlRanges.volume).toEqual({ min: 0.2, max: 1 });
+    expect(c.controlRanges.tempo).toEqual({ min: 20, max: 400 });
+  });
 });
 
 describe('BoardSequencerConfig — hand and knock guard', () => {

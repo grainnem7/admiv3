@@ -172,7 +172,7 @@ import { applyHomography, type Mat3 } from '../../utils/homography';
 import { SCALE_PRESETS, NOTE_NAMES } from '../../songs/boardSequencerScale';
 import { clearLoopSlot, emptyLoopBank, seedLoopBank } from '../../songs/loopBank';
 import {
-  DEFAULT_BOARD_SEQUENCER_CONFIG, NEW_PLAYER_SOUND, type BoardSequencerStored, type BoardPoint, type StoredLoopCell,
+  CONTROL_RANGE_LIMITS, clampToControl, DEFAULT_BOARD_SEQUENCER_CONFIG, NEW_PLAYER_SOUND, type BoardSequencerStored, type BoardPoint, type StoredLoopCell,
 } from '../../profiles/BoardSequencerConfig';
 import {
   loadActiveBoardConfig as loadBoardSequencerConfig, saveActiveBoardConfig as saveBoardSequencerConfig,
@@ -3320,8 +3320,14 @@ export default function BoardSequencerScreen() {
                         Lowest
                         <input
                           type="number" step={role === 'tempo' ? 5 : 0.05} value={range.min}
+                          min={CONTROL_RANGE_LIMITS[role].min} max={CONTROL_RANGE_LIMITS[role].max}
+                          // The speed is typed digit by digit ("1", "12", "120"): held to its limits
+                          // when the box is left, not while typing.
                           onChange={(e) => update({
-                            controlRanges: { ...config.controlRanges, [role]: { ...range, min: Number(e.target.value) } },
+                            controlRanges: { ...config.controlRanges, [role]: { ...range, min: role === 'tempo' ? Number(e.target.value) || 0 : clampToControl(role, Number(e.target.value) || 0) } },
+                          })}
+                          onBlur={() => update({
+                            controlRanges: { ...configRef.current.controlRanges, [role]: { ...configRef.current.controlRanges[role], min: clampToControl(role, configRef.current.controlRanges[role].min) } },
                           })}
                         />
                       </label>
@@ -3329,8 +3335,14 @@ export default function BoardSequencerScreen() {
                         Highest
                         <input
                           type="number" step={role === 'tempo' ? 5 : 0.05} value={range.max}
+                          min={CONTROL_RANGE_LIMITS[role].min} max={CONTROL_RANGE_LIMITS[role].max}
+                          // The speed is typed digit by digit ("1", "12", "120"): held to its limits
+                          // when the box is left, not while typing.
                           onChange={(e) => update({
-                            controlRanges: { ...config.controlRanges, [role]: { ...range, max: Number(e.target.value) } },
+                            controlRanges: { ...config.controlRanges, [role]: { ...range, max: role === 'tempo' ? Number(e.target.value) || 0 : clampToControl(role, Number(e.target.value) || 0) } },
+                          })}
+                          onBlur={() => update({
+                            controlRanges: { ...configRef.current.controlRanges, [role]: { ...configRef.current.controlRanges[role], max: clampToControl(role, configRef.current.controlRanges[role].max) } },
                           })}
                         />
                       </label>

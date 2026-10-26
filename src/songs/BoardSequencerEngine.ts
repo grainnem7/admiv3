@@ -204,6 +204,8 @@ const VOICE_READY_POLL_MS = 100;
 const VOICE_READY_MAX_MS = 15000;
 
 const LOOKAHEAD_SEC = 0.1;
+/** How long Play waits for the instruments' samples before starting without them. */
+const START_READY_MAX_MS = 4000;
 const TICK_INTERVAL_MS = 25;
 
 /** Largest index whose beats[idx] <= t, or -1 if none. Binary search. */
@@ -323,6 +325,9 @@ export class BoardSequencerEngine {
   /** Amounts set by a fill or evolve counter on the board; null = the saved setting. */
   private fillOverride: number | null = null;
   private evolveOverride: number | null = null;
+  /** The saved amounts underneath, so a counter lifted off hands back to them at once. */
+  private fillSetting = 0;
+  private evolveSetting = 0;
   private evolveLap = -1;
   private evolveKey = '';
   /** The kit's Evolve state (one kit, shared by every drum colour). */
@@ -485,6 +490,11 @@ export class BoardSequencerEngine {
         voice: v, gain, rev, del, revBase, delBase, toneBase: ch.tone ?? 1, pan, panBase,
       });
     }
+    // The first beats must sound. The samples load in the background and a voice says
+    // nothing until they arrive, while the lights, the pops and "Now:" (and the session
+    // log) report every note — so the opening seconds of a piece were silent on screen
+    // only. Wait for them, up to a limit: a slow connection still gets to play, late.
+    await this.voicesReady(START_READY_MAX_MS);
     // Always built so the tick can be switched on live (setTickEnabled).
     this.tick = new Tone.MembraneSynth({
       pitchDecay: 0.008,
@@ -617,6 +627,7 @@ export class BoardSequencerEngine {
    * freezes a fill: those notes play whatever the board does, until it is let go.
    */
   setFill(amount: number, seed: number, kept: FillNote[] | null): void {
+    this.fillSetting = amount;
     this.fillAmount = Math.max(0, Math.min(1, this.fillOverride ?? amount));
     this.fillSeed = seed;
     this.fillKept = kept;
@@ -646,6 +657,7 @@ export class BoardSequencerEngine {
 
   /** Evolve settings (safe while playing). Applied from the next beat. */
   setEvolve(settings: EvolveSettings): void {
+    this.evolveSetting = settings.amount;
     this.evolve = { ...settings, amount: Math.max(0, Math.min(1, this.evolveOverride ?? settings.amount)) };
   }
 
@@ -1158,6 +1170,19 @@ export class BoardSequencerEngine {
     this.applyMixGain(MUTE_GLIDE_SEC);
   }
 
+  /** Resolves once every channel's voice (and the band's) can sound, or after `maxMs`. */
+  private async voicesReady(maxMs: number): Promise<void> {
+    const ready = (): boolean => {
+      const voices = [...this.voiceByChannel.values()].map((e) => e.voice);
+      if (this.bandVoices) voices.push(this.bandVoices.pad, this.bandVoices.bass);
+      return voices.every((v) => typeof v.isReady !== 'function' || v.isReady());
+    };
+    const until = performance.now() + maxMs;
+    while (!ready() && performance.now() < until) {
+      await new Promise((r) => setTimeout(r, VOICE_READY_POLL_MS));
+    }
+  }
+
   private recordFired(n: FiredNote): void {
     if (n.loopSlot === undefined && (n.origin === 'placed' || n.origin === 'phrase')) {
       const slot = loopSlotOf(this.firingLayer);
@@ -1377,6 +1402,10 @@ export class BoardSequencerEngine {
     // value is absent here and the saved setting is back in charge.
     this.fillOverride = values.fill ?? null;
     this.evolveOverride = values.evolve ?? null;
+    // At once, from the saved setting underneath: the settings are applied only when they
+    // change, so waiting for that left a fill or evolve counter doing nothing while playing.
+    this.fillAmount = Math.max(0, Math.min(1, this.fillOverride ?? this.fillSetting));
+    this.evolve = { ...this.evolve, amount: Math.max(0, Math.min(1, this.evolveOverride ?? this.evolveSetting)) };
     // In Ableton: Tone, Reverb and Delay counters as CC 25, 26 and 27 on every sounding
     // channel, sent on change; while one is on the board it owns that macro.
     this.counterOwns = { tone: values.tone !== undefined, reverb: reverb !== undefined, delay: delay !== undefined };
