@@ -218,18 +218,13 @@ export function parseRemoteMessage(raw: unknown): RemoteMessage | null {
   return null;
 }
 
-/** A 6-digit code that pairs one iPad with one laptop screen. */
-/**
- * Six digits: anyone on the same Wi-Fi (a venue's, say) could try all 10,000 four-digit
- * codes in moments and take over the music mid-performance. With a million, and the relay
- * turning away a device that keeps missing, they can't.
- */
+/** A 4-digit code that pairs one iPad with one laptop screen. */
 export function makeRemoteCode(rand: () => number = Math.random): string {
-  return String(100000 + Math.floor(rand() * 900000));
+  return String(1000 + Math.floor(rand() * 9000));
 }
 
 export function isRemoteCode(code: unknown): code is string {
-  return typeof code === 'string' && /^\d{6}$/.test(code);
+  return typeof code === 'string' && /^\d{4}$/.test(code);
 }
 
 // ---- reach ---------------------------------------------------------------------------

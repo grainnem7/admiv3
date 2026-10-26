@@ -129,7 +129,7 @@ test('the iPad joins with the code, shows the piece, and its End piece reaches t
   await page.getByRole('checkbox', { name: 'iPad controls' }).check();
   await page.getByRole('checkbox', { name: 'End piece' }).check();
   const code = await page.evaluate(() => localStorage.getItem('admi-remote-code'));
-  expect(code).toMatch(/^\d{6}$/);
+  expect(code).toMatch(/^\d{4}$/);
   await startPiece(page);
 
   const ipad = await context.newPage();

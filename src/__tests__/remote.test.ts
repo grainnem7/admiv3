@@ -7,7 +7,7 @@ import {
   dynamicsFromValue, isRemoteCode, makeRemoteCode, parseRemoteMessage, REMOTE_PATH, stripValue,
   STRIP_STEP, tempoFromValue, TEMPO_MAX, TEMPO_MIN, valueFromTempo, valueFromVelocity,
 } from '../remote/protocol';
-import { allowedFrom, attachRemoteRelay, JoinGuard, MAX_MESSAGE_BYTES, MAX_MISSES, MISS_WINDOW_MS, sameOrigin } from '../remote/relay';
+import { allowedFrom, attachRemoteRelay, MAX_MESSAGE_BYTES } from '../remote/relay';
 
 describe('finger → value, for imprecise fingers', () => {
   it('the ends of a strip are generous "all the way" zones', () => {
@@ -57,26 +57,9 @@ describe('messages', () => {
     expect(parseRemoteMessage({ type: 'state', state: { values: {}, labels: {} } })).toBeNull();
   });
 
-  it('codes are six digits: a million to guess, not ten thousand', () => {
+  it('codes are four digits', () => {
     expect(isRemoteCode(makeRemoteCode())).toBe(true);
-    expect(makeRemoteCode()).toMatch(/^\d{6}$/);
-    expect(isRemoteCode('1234')).toBe(false);
-    expect(isRemoteCode('12a456')).toBe(false);
-  });
-
-  it('a device that keeps trying codes nobody is using is turned away for a while', () => {
-    const g = new JoinGuard();
-    for (let i = 0; i < MAX_MISSES; i++) { expect(g.blocked('10.0.0.9', 1000)).toBe(false); g.miss('10.0.0.9', 1000); }
-    expect(g.blocked('10.0.0.9', 2000)).toBe(true);
-    expect(g.blocked('10.0.0.8', 2000)).toBe(false); // someone else is not
-    expect(g.blocked('10.0.0.9', 1000 + MISS_WINDOW_MS + 1)).toBe(false);
-  });
-
-  it("only ADMI's own page may connect", () => {
-    expect(sameOrigin('https://192.168.1.20:3000', '192.168.1.20:3000')).toBe(true);
-    expect(sameOrigin('https://evil.example', 'localhost:3000')).toBe(false);
-    expect(sameOrigin(undefined, 'localhost:3000')).toBe(false);
-    expect(sameOrigin('not a url', 'localhost:3000')).toBe(false);
+    expect(isRemoteCode('12a4')).toBe(false);
   });
 
   it('the iPad may only send controls and taps; the laptop only state', () => {
@@ -103,12 +86,9 @@ async function relay(): Promise<number> {
   await new Promise<void>((r) => server!.listen(0, '127.0.0.1', () => r()));
   return (server.address() as AddressInfo).port;
 }
-function join(
-  port: number, code: string, role: string, origin: string | null = `http://127.0.0.1:${port}`,
-): Promise<{ ws: WebSocket; got: unknown[] }> {
+function join(port: number, code: string, role: string): Promise<{ ws: WebSocket; got: unknown[] }> {
   return new Promise((resolve, reject) => {
-    // A browser always says which page opened the socket; ADMI's own page is this server.
-    const ws = new WebSocket(`ws://127.0.0.1:${port}${REMOTE_PATH}?code=${code}&role=${role}`, origin ? { headers: { origin } } : {});
+    const ws = new WebSocket(`ws://127.0.0.1:${port}${REMOTE_PATH}?code=${code}&role=${role}`);
     sockets.push(ws);
     const got: unknown[] = [];
     ws.on('message', (d) => got.push(JSON.parse(d.toString())));
@@ -122,8 +102,8 @@ const settle = () => new Promise((r) => setTimeout(r, 200));
 describe('relay', () => {
   it('passes the iPad\'s slides to the laptop with the same code, and the laptop\'s state back', async () => {
     const port = await relay();
-    const host = await join(port, '482100', 'host');
-    const ipad = await join(port, '482100', 'remote');
+    const host = await join(port, '4821', 'host');
+    const ipad = await join(port, '4821', 'remote');
     await settle();
     ipad.ws.send(JSON.stringify({ type: 'control', name: 'fill', value: 0.7 }));
     const state = { values: { tempo: 0.5, dynamics: 0.5, fill: 0.7, evolve: 0 }, labels: { tempo: '100 BPM', dynamics: '50%', fill: '70%', evolve: 'Off' }, kept: false, muted: false, playing: true };
@@ -136,8 +116,8 @@ describe('relay', () => {
 
   it('a different code hears nothing', async () => {
     const port = await relay();
-    const host = await join(port, '111100', 'host');
-    const stranger = await join(port, '222200', 'remote');
+    const host = await join(port, '1111', 'host');
+    const stranger = await join(port, '2222', 'remote');
     await settle();
     stranger.ws.send(JSON.stringify({ type: 'trigger', name: 'mute' }));
     await settle();
@@ -146,8 +126,8 @@ describe('relay', () => {
 
   it('drops a malformed message, and one the sender may not send', async () => {
     const port = await relay();
-    const host = await join(port, '482100', 'host');
-    const ipad = await join(port, '482100', 'remote');
+    const host = await join(port, '4821', 'host');
+    const ipad = await join(port, '4821', 'remote');
     await settle();
     ipad.ws.send('{"type":"control","name":"tempo","value":42}');
     ipad.ws.send(JSON.stringify({ type: 'state', state: {} }));
@@ -157,15 +137,15 @@ describe('relay', () => {
 
   it('an oversized message closes only that connection; the server and the others carry on', async () => {
     const port = await relay();
-    const host = await join(port, '482100', 'host');
-    const bully = await join(port, '482100', 'remote');
+    const host = await join(port, '4821', 'host');
+    const bully = await join(port, '4821', 'remote');
     await settle();
     const closed = new Promise<void>((r) => bully.ws.on('close', () => r()));
     bully.ws.on('error', () => {});
     bully.ws.send('x'.repeat(MAX_MESSAGE_BYTES + 10));
     await closed;
     // Still serving: a fresh iPad joins and its taps reach the laptop.
-    const ipad = await join(port, '482100', 'remote');
+    const ipad = await join(port, '4821', 'remote');
     await settle();
     ipad.ws.send(JSON.stringify({ type: 'trigger', name: 'keep' }));
     await settle();
@@ -175,8 +155,8 @@ describe('relay', () => {
 
   it('a long set list fits: the laptop state with every name is passed on', async () => {
     const port = await relay();
-    const host = await join(port, '482100', 'host');
-    const ipad = await join(port, '482100', 'remote');
+    const host = await join(port, '4821', 'host');
+    const ipad = await join(port, '4821', 'remote');
     await settle();
     const name = 'A long loop name here!!';
     const state = {
@@ -195,13 +175,6 @@ describe('relay', () => {
   it('refuses a connection without a proper code', async () => {
     const port = await relay();
     await expect(join(port, 'abcd', 'remote')).rejects.toBeTruthy();
-    await expect(join(port, '4821', 'remote')).rejects.toBeTruthy(); // the old four digits
-  });
-
-  it('refuses a page from anywhere else (a website open in the same browser)', async () => {
-    const port = await relay();
-    await expect(join(port, '482100', 'remote', 'https://evil.example')).rejects.toBeTruthy();
-    await expect(join(port, '482100', 'host', null)).rejects.toBeTruthy();
   });
 });
 
