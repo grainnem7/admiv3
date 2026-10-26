@@ -259,6 +259,49 @@ export function pageIndexAt(beat: number, cols: number, numPages: number): numbe
   return ((p % numPages) + numPages) % numPages;
 }
 
+/**
+ * How ping-pong goes through several pages: each page there and back (A→ A← B→ B←), or
+ * the whole chain as one strip (A→ B→, then B← A←). With one sweep per page, two pages
+ * locked page A forwards and page B backwards for good. The player chooses.
+ */
+export type PingPongPages = 'each' | 'chain';
+
+export interface Sweep {
+  pingPong: boolean;
+  pages: number;
+  mode: PingPongPages;
+}
+
+/**
+ * Where the playhead is at a GLOBAL beat: which page, which step of a part looping over
+ * `loopSteps` (0 = the whole grid), and which way it is going. The one rule the sound,
+ * the playhead and the page shown all follow.
+ */
+export function sweepAt(beat: number, loopSteps: number, cols: number, s: Sweep): { page: number; col: number; dir: 1 | -1 } {
+  const len = loopLen(loopSteps, cols);
+  const pages = Math.max(1, Math.floor(s.pages));
+  if (!s.pingPong) {
+    return { page: pageIndexAt(beat, cols, pages), col: roleStep(beat, loopSteps, cols), dir: 1 };
+  }
+  const forwardOver = (period: number): 1 | -1 => ((((beat % (2 * period)) + 2 * period) % (2 * period)) < period ? 1 : -1);
+  if (pages <= 1 || s.mode === 'each' || cols < 1) {
+    const round = Math.floor(beat / (2 * Math.max(1, cols)));
+    return {
+      page: pages <= 1 ? 0 : ((round % pages) + pages) % pages,
+      col: pingPongStep(beat, len),
+      dir: forwardOver(Math.max(1, cols)),
+    };
+  }
+  // The chain: one strip of pages × steps, bouncing at its two ends.
+  const p = pingPongStep(beat, pages * cols);
+  return {
+    page: Math.floor(p / cols),
+    // A part looping over fewer steps than a page bounces within its own steps.
+    col: len === cols ? p % cols : pingPongStep(beat, len),
+    dir: forwardOver(pages * cols),
+  };
+}
+
 /** Which step the playhead is on at `nowSec`, given loop start, beat length, and step count. */
 export function stepIndexAt(
   nowSec: number,
@@ -301,9 +344,10 @@ export function lapIndex(beat: number, cols: number): number {
  * always sound; conditional (off-centre) cells sound only on variation laps, so
  * the board alternates a full lap (A) and a full-plus-variations lap (B).
  */
-export function firesThisLap(conditional: boolean, beat: number, cols: number): boolean {
+export function firesThisLap(conditional: boolean, beat: number, cols: number, pingPong = false): boolean {
   if (!conditional) return true;
-  const lap = lapIndex(beat, cols);
+  // With ping-pong a lap is there AND back: one sweep each was always the way back.
+  const lap = lapIndex(beat, pingPong ? 2 * cols : cols);
   return (((lap % 2) + 2) % 2) === VARIATION_PARITY;
 }
 
@@ -320,7 +364,8 @@ export function firesThisLapPaged(
   beat: number,
   cols: number,
   numPages: number,
+  pingPong = false,
 ): boolean {
   if (numPages > 1) return true;
-  return firesThisLap(conditional, beat, cols);
+  return firesThisLap(conditional, beat, cols, pingPong);
 }

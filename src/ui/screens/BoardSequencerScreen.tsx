@@ -1886,7 +1886,7 @@ export default function BoardSequencerScreen() {
       loopStepsRed: cfg.loopStepsRed, loopStepsBlack: cfg.loopStepsBlack,
       loopStepsBlue: cfg.loopStepsBlue, numPages: cfg.numPages,
       octaveShift: cfg.octaveShift, volume: cfg.volume,
-      pingPong: cfg.pingPong,
+      pingPong: cfg.pingPong, pingPongPages: cfg.pingPongPages,
       toggleAmount: cfg.toggleAmount, controlGlideSec: cfg.controlGlideSec,
     });
     await engine.init();
@@ -3711,6 +3711,25 @@ export default function BoardSequencerScreen() {
                 />
                 Ping-pong (sweep → then ←)
               </label>
+              {config.pingPong && config.numPages > 1 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <span style={{ fontSize: 12 }}>Ping-pong with {config.numPages} pages</span>
+                  <SegmentedControl<'each' | 'chain'>
+                    label={`Ping-pong with ${config.numPages} pages`}
+                    value={config.pingPongPages}
+                    onChange={(pingPongPages) => update({ pingPongPages })}
+                    options={[
+                      { value: 'each', label: 'Each page there and back' },
+                      { value: 'chain', label: 'All pages as one strip' },
+                    ]}
+                  />
+                  <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
+                    {config.pingPongPages === 'each'
+                      ? 'A → then ←, then B → then ←: every page plays both ways.'
+                      : 'A → B → to the end, then back B ← A ←: like one long board.'}
+                  </span>
+                </div>
+              )}
               {/* The lane picker above is the only switch: a second one could disagree
                   with it, and the runtime follows the lane. */}
               {loopSlotCount > 0 && (

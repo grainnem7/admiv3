@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  cellMidi, columnMidi, degreeMidi, chordDegreeMidi, voicingForCells, notesForStep, stepIndexAt,
+  cellMidi, columnMidi, degreeMidi, chordDegreeMidi, voicingForCells, notesForStep, stepIndexAt, sweepAt, type Sweep,
 } from '../songs/boardSequencerScale';
 import {
   drumForRow, drumForRowChoice, drumsForStep, DEFAULT_DRUM_ROWS,
@@ -381,5 +381,42 @@ describe('ping-pong playhead', () => {
     // loopSteps 0 → full width (8); loopSteps 6 → bounces within 6
     expect(playheadStep(8, 0, 8, true)).toBe(pingPongStep(8, 8)); // 7
     expect(playheadStep(7, 6, 8, true)).toBe(pingPongStep(7, 6)); // len 6
+  });
+});
+
+describe('ping-pong with pages', () => {
+  const walk = (s: Sweep, beats: number, loop = 0, cols = 4) =>
+    Array.from({ length: beats }, (_, b) => { const w = sweepAt(b, loop, cols, s); return `${'AB'[w.page]}${w.col}${w.dir > 0 ? '>' : '<'}`; }).join(' ');
+
+  it('each page there and back: A→ A← B→ B←', () => {
+    expect(walk({ pingPong: true, pages: 2, mode: 'each' }, 16)).toBe(
+      'A0> A1> A2> A3> A3< A2< A1< A0< B0> B1> B2> B3> B3< B2< B1< B0<',
+    );
+  });
+
+  it('the whole chain as one strip: A→ B→ then B← A←', () => {
+    expect(walk({ pingPong: true, pages: 2, mode: 'chain' }, 16)).toBe(
+      'A0> A1> A2> A3> B0> B1> B2> B3> B3< B2< B1< B0< A3< A2< A1< A0<',
+    );
+  });
+
+  it('one page, or no ping-pong, plays as it always has', () => {
+    expect(walk({ pingPong: true, pages: 1, mode: 'chain' }, 8)).toBe('A0> A1> A2> A3> A3< A2< A1< A0<');
+    expect(walk({ pingPong: false, pages: 2, mode: 'each' }, 8)).toBe('A0> A1> A2> A3> B0> B1> B2> B3>');
+  });
+
+  it('a part with a shorter loop bounces in its own steps', () => {
+    // (The direction shown is the board's playhead, so only the steps are checked here.)
+    const steps = (mode: 'each' | 'chain', pages: number) =>
+      Array.from({ length: 6 }, (_, b) => sweepAt(b, 3, 4, { pingPong: true, pages, mode }).col);
+    expect(steps('each', 1)).toEqual([0, 1, 2, 2, 1, 0]);
+    expect(steps('chain', 2)).toEqual([0, 1, 2, 2, 1, 0]);
+  });
+
+  it('with ping-pong, Variation plays on every other round trip, both ways', () => {
+    // Lap = there AND back: off-centre counters were only ever heard on the way back.
+    const on = (b: number) => firesThisLap(true, b, 4, true);
+    expect([0, 3, 4, 7].map(on)).toEqual([false, false, false, false]);
+    expect([8, 11, 12, 15].map(on)).toEqual([true, true, true, true]);
   });
 });

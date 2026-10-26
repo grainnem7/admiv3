@@ -14,7 +14,7 @@
 import { playsTune } from './beyondLoop';
 import * as Tone from 'tone';
 import { BoardSequencerVoice } from './voices/BoardSequencerVoice';
-import { voicingForCells, degreeMidi, chordDegreeMidi, drumForRow, DEFAULT_DRUM_ROWS, loopLen, playheadStep, lapIndex, strictlyAfter, pageIndexAt, firesThisLap, firesThisLapPaged } from './boardSequencerScale';
+import { voicingForCells, degreeMidi, chordDegreeMidi, drumForRow, DEFAULT_DRUM_ROWS, loopLen, lapIndex, strictlyAfter, firesThisLap, firesThisLapPaged, sweepAt, type PingPongPages, type Sweep } from './boardSequencerScale';
 import type { ActiveCell } from '../tracking/BoardSequencerMode';
 import type { ColourChannel, ColourId, ColourRole } from '../tracking/boardColours';
 import { DEFAULT_NOTE_VARY } from '../tracking/boardColours';
@@ -140,6 +140,8 @@ export interface BoardEngineConfig {
   numPages: number;
   /** Ping-pong playhead: sweep → then ← (repeat-edge) instead of always left→right. */
   pingPong?: boolean;
+  /** How ping-pong goes through several pages (see sweepAt). */
+  pingPongPages?: PingPongPages;
   /** Effect amount a toggle colour switches in (default 0.35). */
   toggleAmount?: number;
   /** Glide time for control-counter changes, so a slide never clicks (default 0.3 s). */
@@ -1474,13 +1476,13 @@ export class BoardSequencerEngine {
   /** The column the playhead is on right now (drives the visual playhead). */
   getPlayheadCol(cols: number): number {
     const beat = this.visualBeat();
-    return playheadStep(beat, 0, cols, this.cfg.pingPong ?? false);
+    return sweepAt(beat, 0, cols, this.sweep()).col;
   }
 
   /** Whether the lap being heard is a variation (B) lap — drives the A/B cue. */
   isVariationLap(): boolean {
     const beat = this.visualBeat();
-    return firesThisLap(true, beat, this.cfg.cols);
+    return firesThisLap(true, beat, this.cfg.cols, this.cfg.pingPong ?? false);
   }
 
   /**
@@ -1590,11 +1592,20 @@ export class BoardSequencerEngine {
     this.cfg.pingPong = on;
   }
 
+  /** How ping-pong goes through several pages (safe while running). */
+  setPingPongPages(mode: PingPongPages): void {
+    this.cfg.pingPongPages = mode;
+  }
+
+  /** Ping-pong and pages, for sweepAt: the one rule sound, playhead and page follow. */
+  private sweep(): Sweep {
+    return { pingPong: this.cfg.pingPong ?? false, pages: this.cfg.numPages, mode: this.cfg.pingPongPages ?? 'each' };
+  }
+
   /** Current sweep direction for the overlay arrow: +1 forward (→), -1 return (←). */
   getPlayheadDirection(): 1 | -1 {
     if (!this.cfg.pingPong) return 1;
-    const beat = this.visualBeat();
-    return lapIndex(beat, this.cfg.cols) % 2 === 0 ? 1 : -1;
+    return sweepAt(this.visualBeat(), 0, this.cfg.cols, this.sweep()).dir;
   }
 
   /** Choose which page is bound to the live camera board (others play snapshots). */
@@ -1860,7 +1871,7 @@ export class BoardSequencerEngine {
     const melodicLoop = loopLen(this.rawLoop('melodic'), this.cfg.cols);
     // Pattern chaining: pick this beat's page. The selected page plays live from
     // the camera (`active`); other pages play from their captured snapshot.
-    const page = pageIndexAt(beat, this.cfg.cols, this.cfg.numPages);
+    const page = sweepAt(beat, 0, this.cfg.cols, this.sweep()).page;
     this.lastFiredPage = page;
     const cells = page === this.selectedPage ? this.active : (this.pages[page] ?? []);
     // Loop bank: active saved loops layer on top of the live/page cells. Pitch is
@@ -1905,7 +1916,7 @@ export class BoardSequencerEngine {
       const cycle = Math.max(1, this.cfg.cols * Math.max(1, this.cfg.numPages));
       const leader = melodyLeader(noteTagged.filter((t) => isMelody(t.cell)).map((t) => layerOf(t.cell)), lapIndex(beat, cycle));
       if (leader !== null) {
-        const step = playheadStep(beat, this.rawLoop('melodic'), this.cfg.cols, this.cfg.pingPong ?? false);
+        const step = sweepAt(beat, this.rawLoop('melodic'), this.cfg.cols, this.sweep()).col;
         const leaderHere = noteTagged.some((t) => isMelody(t.cell) && layerOf(t.cell) === leader && t.cell.col === step);
         noteTagged = noteTagged
           .filter((t) => !(leaderHere && isMelody(t.cell) && layerOf(t.cell) !== leader && t.cell.col === step))
@@ -1974,7 +1985,7 @@ export class BoardSequencerEngine {
   private phraseInput(cells: PhraseCell[], beat: number, chord: BoardChord | null, pingPong: boolean): PhraseInput {
     return {
       cells,
-      stepFor: (role: PhraseRole) => playheadStep(beat, this.rawLoop(this.loopCategory(role)), this.cfg.cols, pingPong),
+      stepFor: (role: PhraseRole) => sweepAt(beat, this.rawLoop(this.loopCategory(role)), this.cfg.cols, { ...this.sweep(), pingPong }).col,
       loopFor: (role: PhraseRole) => loopLen(this.rawLoop(this.loopCategory(role)), this.cfg.cols),
       rows: this.cfg.rows,
       rootMidi: this.cfg.scaleRootMidi,
@@ -2255,7 +2266,7 @@ export class BoardSequencerEngine {
     for (const ev of events) {
       try {
         const varies = ev.owner.conditional && this.cfg.variationEnabled !== false;
-        if (!firesThisLapPaged(varies, beat, this.cfg.cols, this.cfg.numPages)) continue;
+        if (!firesThisLapPaged(varies, beat, this.cfg.cols, this.cfg.numPages, this.cfg.pingPong ?? false)) continue;
         const tag = byKey.get(`${ev.layer ?? ''}|${ev.owner.row},${ev.owner.col},${ev.colour}`);
         const base = (tag?.cell.velocity ?? this.cfg.velocity) * this.energyGain();
         const vel = Math.max(0, Math.min(1, base * ev.accent * (h > 0 ? 1 - Math.random() * h * 0.3 : 1)));
@@ -2313,14 +2324,14 @@ export class BoardSequencerEngine {
       // Per-role polyrhythm: a cell fires when its column matches the role's
       // own playhead (beat wrapped at that role's loop length).
       const cat = this.loopCategory(role);
-      if (cell.col !== playheadStep(beat, this.rawLoop(cat), this.cfg.cols, this.cfg.pingPong ?? false)) return;
+      if (cell.col !== sweepAt(beat, this.rawLoop(cat), this.cfg.cols, this.sweep()).col) return;
       // Variation: an off-centre ("conditional") cell plays only on variation laps,
       // so the loop alternates a full pass and a full-plus-variations pass.
       // A saved loop keeps the Variation flags it was captured with. Once Variation is
       // switched off the live board plays every counter every pass, so a loop that went
       // on dropping notes on alternate laps had nothing on screen explaining why.
       const varies = (cell.conditional ?? false) && this.cfg.variationEnabled !== false;
-      if (!firesThisLapPaged(varies, beat, this.cfg.cols, this.cfg.numPages)) return;
+      if (!firesThisLapPaged(varies, beat, this.cfg.cols, this.cfg.numPages, this.cfg.pingPong ?? false)) return;
       // Humanize: occasionally skip a step + vary velocity, so loops breathe.
       if (h > 0 && Math.random() < h * 0.5) return;
       // Box detail: where the counter sits gives it its own loudness and timing. The

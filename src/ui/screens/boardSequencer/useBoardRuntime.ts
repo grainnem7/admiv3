@@ -151,6 +151,7 @@ export function applyEngineSettings(
 ): void {
   engine.setChannels(cfg.channels);
   engine.setPingPong(cfg.pingPong);
+  engine.setPingPongPages(cfg.pingPongPages);
   engine.setTickEnabled(cfg.tickEnabled);
   engine.setStudioMix(cfg.studioMix);
   engine.setSoundWorld(cfg.soundWorld);

@@ -7,6 +7,7 @@
  * No change to UserProfile.
  */
 
+import type { PingPongPages } from '../songs/boardSequencerScale';
 import type { FillNote } from '../songs/generative/rulesFill';
 import type { BandLevel } from '../songs/band/band';
 import { clampLeadMs, type MidiChannelMode, type MidiSends } from '../midi/boardMidi';
@@ -92,6 +93,8 @@ export interface BoardSequencerStored {
   variationOffsetThreshold: number;
   /** Ping-pong playhead: sweep → then ← (repeat-edge) instead of always left→right. */
   pingPong: boolean;
+  /** With ping-pong and several pages: each page there and back, or the chain as one strip. */
+  pingPongPages: PingPongPages;
   /** Loop bank: the bottom row becomes save/recall slots for layered loops. */
   loopBankEnabled: boolean;
   /** Saved loops per slot (bottom-row column); null = empty slot. */
@@ -416,6 +419,7 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   variationEnabled: false,
   variationOffsetThreshold: 0.6,
   pingPong: false,
+  pingPongPages: 'each',
   loopBankEnabled: false,
   loopSlots: [],
   noteLengthBeats: 0.9,
@@ -769,6 +773,7 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     variationEnabled: o.variationEnabled === true,
     variationOffsetThreshold: num(o.variationOffsetThreshold, d.variationOffsetThreshold),
     pingPong: o.pingPong === true,
+    pingPongPages: o.pingPongPages === 'chain' ? 'chain' : 'each',
     loopBankEnabled: zoneSlotCount(resolvedLoopZone, rows, cols) > 0,
     loopSlots: sanitizeLoopSlots(o.loopSlots),
     noteLengthBeats: num(o.noteLengthBeats, d.noteLengthBeats),

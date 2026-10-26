@@ -51,7 +51,7 @@ export const MAX_LOGGED_NOTES = 60000;
 
 /** Settings worth writing down: the ones that change what is heard. Never the channels' colour bands. */
 const LOGGED_SETTINGS = [
-  'bpm', 'swing', 'humanize', 'scaleRootMidi', 'scaleName', 'rows', 'cols', 'numPages', 'pingPong',
+  'bpm', 'swing', 'humanize', 'scaleRootMidi', 'scaleName', 'rows', 'cols', 'numPages', 'pingPong', 'pingPongPages',
   'noteLengthBeats', 'velocity', 'volume', 'soundWorld', 'phrases', 'band', 'fillAmount', 'fillSeed',
   'fillEngine', 'evolveAmount', 'evolveSceneLoops', 'evolveSeed', 'evolveHoldLap', 'studioMix',
   'midiEnabled', 'midiSends', 'midiKeepSound', 'midiChannelMode', 'midiLeadMs', 'midiLoopChannels', 'loopStepsRed', 'loopStepsBlack', 'loopStepsBlue', 'variationEnabled',

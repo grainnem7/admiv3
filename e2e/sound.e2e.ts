@@ -125,3 +125,20 @@ test('a counter past its part’s loop shows that it doesn’t play', async ({ p
   await expect(page.getByText('Steps 7–8 are past Melody’s 6-step loop: melody counters there don’t play.')).toBeVisible();
   expect(pageErrors(page)).toEqual([]);
 });
+
+test('ping-pong with two pages: choose each page there and back, or one strip', async ({ page }) => {
+  await openLaptopBoard(page);
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1]]);
+  await page.getByRole('tab', { name: 'Groove' }).click();
+  await page.getByRole('combobox', { name: 'Pages' }).selectOption('2');
+  await page.getByRole('tab', { name: 'Board' }).click();
+  await page.getByRole('checkbox', { name: /Ping-pong/ }).check();
+  const choice = page.getByRole('radiogroup', { name: 'Ping-pong with 2 pages' });
+  await expect(choice.getByRole('radio', { name: 'Each page there and back' })).toBeChecked();
+  await choice.getByRole('radio', { name: 'All pages as one strip' }).click();
+  await expect(page.getByText('A → B → to the end, then back B ← A ←: like one long board.')).toBeVisible();
+  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await expect.poll(() => notesPlayed(page), { timeout: 15_000 }).toBeGreaterThan(0);
+  expect(pageErrors(page)).toEqual([]);
+});
