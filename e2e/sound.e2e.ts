@@ -142,3 +142,39 @@ test('ping-pong with two pages: choose each page there and back, or one strip', 
   await expect.poll(() => notesPlayed(page), { timeout: 15_000 }).toBeGreaterThan(0);
   expect(pageErrors(page)).toEqual([]);
 });
+
+test('the session log survives a reload, and earlier takes are kept', async ({ page }) => {
+  await openLaptopBoard(page);
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1], [5, 3]]);
+  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await expect.poll(() => notesPlayed(page), { timeout: 15_000 }).toBeGreaterThan(2);
+  await page.waitForTimeout(5500); // kept every few seconds while playing
+  // A reload mid-take: before, "Save session" came back with 0 notes.
+  await page.reload();
+  await page.getByRole('button', { name: /Board Sequencer/ }).click();
+  await expect.poll(() => notesPlayed(page), { timeout: 10_000 }).toBeGreaterThan(2);
+  // A new take: the old one stays, under Earlier takes. (The old count shows until the
+  // new take starts, so wait for the new one to begin counting from nothing.)
+  const before = await notesPlayed(page);
+  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await expect.poll(() => notesPlayed(page), { timeout: 15_000 }).toBeLessThan(before);
+  await expect.poll(() => notesPlayed(page), { timeout: 15_000 }).toBeGreaterThan(0);
+  await page.getByRole('button', { name: /■ Stop/ }).first().click();
+  await expect(page.getByText(/^Earlier takes \(1\)$/)).toBeVisible();
+  expect(pageErrors(page)).toEqual([]);
+});
+
+test('Clear the board can be undone', async ({ page }) => {
+  await openLaptopBoard(page);
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1], [5, 3]]);
+  await page.getByRole('button', { name: 'Clear the board' }).click();
+  const grid = page.getByRole('grid', { name: /Laptop board/ });
+  await expect(grid.getByRole('button', { name: /^Row 3 from the bottom, step 1: empty$/ })).toBeVisible();
+  await expect(page.getByRole('status').filter({ hasText: 'Board cleared (2 counters).' })).toBeVisible();
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect(grid.getByRole('button', { name: /^Row 3 from the bottom, step 1: Red/ })).toBeVisible();
+  await expect(grid.getByRole('button', { name: /^Row 5 from the bottom, step 3: Red/ })).toBeVisible();
+  expect(pageErrors(page)).toEqual([]);
+});

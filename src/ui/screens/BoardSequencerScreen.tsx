@@ -46,6 +46,8 @@ import { ColoursStep } from './boardSequencer/setup/ColoursStep';
 import { ReadyStep } from './boardSequencer/setup/ReadyStep';
 import { BoardCornerEditor } from './boardSequencer/components/BoardCornerEditor';
 import { cellMap, LiveBoardView } from './boardSequencer/components/BoardView';
+import { createSessionArchive, indexedDbTakeStore, MAX_TAKES, type SessionArchive, type TakeSummary } from '../../storage/sessionArchive';
+import { forgetPieceRunning, readPieceRunning, rememberPieceRunning, rememberShowing, type PieceRunning } from '../../songs/performance/pieceRunning';
 import { createPopStore, soundingKey, type PopStore } from './boardSequencer/popStore';
 import { beyondLoopNote, beyondLoopSquares } from '../../songs/beyondLoop';
 import { cellsKey, controlsKey, frameKey } from './boardSequencer/runtimeKeys';
@@ -236,30 +238,16 @@ interface LastColourSample {
 
 /** No camera frame for this long while playing: the camera has stopped. */
 const CAMERA_STALL_MS = 1500;
-/** Where a running piece is remembered, so a reload can carry on from the right moment. */
-const PIECE_RUNNING_KEY = 'admi-piece-running';
-function rememberPieceRunning(startedAt: number, lengthSec: number): void {
-  try { sessionStorage.setItem(PIECE_RUNNING_KEY, JSON.stringify({ startedAt, lengthSec })); } catch { /* a reload just starts again */ }
-}
-function forgetPieceRunning(): void {
-  try { sessionStorage.removeItem(PIECE_RUNNING_KEY); } catch { /* nothing remembered */ }
-}
-/** A piece that was playing and is not over yet, or null. */
-function readPieceRunning(): { startedAt: number; lengthSec: number } | null {
-  try {
-    const o = JSON.parse(sessionStorage.getItem(PIECE_RUNNING_KEY) ?? 'null') as { startedAt?: unknown; lengthSec?: unknown } | null;
-    if (!o || typeof o.startedAt !== 'number' || typeof o.lengthSec !== 'number') return null;
-    return (Date.now() - o.startedAt) / 1000 < o.lengthSec ? { startedAt: o.startedAt, lengthSec: o.lengthSec } : null;
-  } catch {
-    return null;
-  }
-}
 /** How long a cue stays large in the Now / Next strip. */
 const CUE_SHOWN_MS = 5000;
 /** Config saves are gathered over this long (and written at once when the page closes). */
 const SAVE_GATHER_MS = 400;
 /** How long the first press of Stop during a piece waits for the second. */
 const STOP_CONFIRM_MS = 4000;
+/** How long Undo stays on offer after the board, a loop or the scenes are thrown away. */
+const UNDO_MS = 15000;
+/** How often a take being played is kept (storage/sessionArchive). */
+const TAKE_SAVE_MS = 5000;
 const REMOTE_ENABLED_KEY = 'admi-remote-enabled';
 const REMOTE_CODE_KEY = 'admi-remote-code';
 const REMOTE_CONTROL_WORDS: Record<RemoteControlName, string> = {
@@ -399,7 +387,7 @@ export default function BoardSequencerScreen() {
   const [cameraStalled, setCameraStalled] = useState(false);
   // The page reloaded (a crash, a mistaken refresh) while a piece was playing: offer to
   // pick it up where the clock would be now, in the scene on at that moment.
-  const [resumeFrom, setResumeFrom] = useState<{ startedAt: number; lengthSec: number } | null>(() => readPieceRunning());
+  const [resumeFrom, setResumeFrom] = useState<PieceRunning | null>(() => readPieceRunning());
   // How the corner editor was opened: 'tap' starts from nothing, 'review' checks corners
   // that already exist. "Tap corners myself" must mean tapping, even for a board that is
   // already set up.
@@ -441,7 +429,9 @@ export default function BoardSequencerScreen() {
   // Guided Set up vs Play. The entry step is resolved once, from the config alone:
   // routing never moves the player on its own. The Welcome screen can ask for Set up instead of Play.
   const [view, setView] = useState<BoardScreenView>(() => (
-    storedRef.current?.boardSource === 'laptop' && !setupRequestedOnOpen() ? 'play' : 'setup'
+    // A reload mid-piece: straight to Play, where "Carry on" is.
+    (storedRef.current?.boardSource === 'laptop' || (storedRef.current !== null && readPieceRunning() !== null))
+      && !setupRequestedOnOpen() ? 'play' : 'setup'
   ));
   // The counter a click on the laptop board puts down.
   const [laptopColour, setLaptopColour] = useState('');
@@ -560,6 +550,38 @@ export default function BoardSequencerScreen() {
   const [bandStatus, setBandStatus] = useState<{ level: BandLevel; playing: boolean; parts: BandPart[] }>({ level: 'off', playing: false, parts: [] });
   // The session log: kept while the board runs, saved when the facilitator asks.
   const sessionLogRef = useRef(new SessionLog());
+  // Every take kept in the browser as it is played (storage/sessionArchive): a reload,
+  // Exit or a new Play no longer throws the research data away.
+  const archiveRef = useRef<SessionArchive | null>(null);
+  if (!archiveRef.current) archiveRef.current = createSessionArchive(indexedDbTakeStore());
+  const [takes, setTakes] = useState<TakeSummary[]>([]);
+  const keepTake = useCallback(async (): Promise<void> => {
+    const archive = archiveRef.current;
+    if (!archive) return;
+    await archive.save(sessionLogRef.current.toJSON());
+    setTakes(await archive.list());
+  }, []);
+  useEffect(() => {
+    // After a reload: the last take is back, ready to save, until the next Play.
+    let alive = true;
+    void (async () => {
+      const archive = archiveRef.current;
+      if (!archive) return;
+      const list = await archive.list();
+      if (!alive) return;
+      setTakes(list);
+      const log = sessionLogRef.current;
+      if (list.length > 0 && !log.isRunning() && log.counts().notes === 0) {
+        const data = await archive.load(list[0].key);
+        if (!alive || !data || sessionLogRef.current.isRunning()) return;
+        sessionLogRef.current = SessionLog.fromJSON(data);
+        setLogCounts(sessionLogRef.current.counts());
+      }
+    })();
+    // While playing, the take is kept every few seconds.
+    const id = window.setInterval(() => { if (sessionLogRef.current.isRunning()) void keepTake(); }, TAKE_SAVE_MS);
+    return () => { alive = false; window.clearInterval(id); };
+  }, [keepTake]);
   const logActorRef = useRef<LogActor>('laptop');
   const [logCounts, setLogCounts] = useState({ notes: 0, placed: 0, added: 0, events: 0 });
   // A change that was only heard, shown on the board for a moment (deaf and HoH players).
@@ -577,6 +599,14 @@ export default function BoardSequencerScreen() {
   const [disk, setDisk] = useState(diskState);
   useEffect(() => onDiskState(() => setDisk(diskState())), []);
   const [restoreTarget, setRestoreTarget] = useState<BoardBackup | null>(null);
+  // Undo for anything that throws work away — the board cleared, a loop cleared, the
+  // scenes replaced by a plan — for a while afterwards, the same way every time.
+  const [undoOffer, setUndoOffer] = useState<{ text: string; restore: () => void } | null>(null);
+  useEffect(() => {
+    if (!undoOffer) return;
+    const id = window.setTimeout(() => setUndoOffer(null), UNDO_MS);
+    return () => window.clearTimeout(id);
+  }, [undoOffer]);
   // The scene just deleted, for Undo: one tap next to Go must be reversible.
   const [deletedScene, setDeletedScene] = useState<{ scene: BoardSequencerStored['scenes'][number]; index: number; wasCurrent: boolean } | null>(null);
   useEffect(() => {
@@ -1781,6 +1811,7 @@ export default function BoardSequencerScreen() {
     songEngineRef.current?.stopPlayback();
     sessionLogRef.current.stop();
     setLogCounts(sessionLogRef.current.counts());
+    void keepTake();
     clockStartRef.current = null;
     setClock(null);
     endingRef.current = false;
@@ -1967,6 +1998,9 @@ export default function BoardSequencerScreen() {
   }, [engineRef, homographyRef, loopBankRef, modeRef, runningRef, startingRef, videoRef]);
 
   /** Rehearse from a point in the piece: Play, with the clock already at `sec`. */
+  // Whether Show is open, for the piece remembered across a reload (when there is one).
+  useEffect(() => { if (running) rememberShowing(view === 'bigBoard'); }, [view, running]);
+
   const rehearseFrom = (sec: number): void => {
     if (runningRef.current) return;
     rehearseFromRef.current = sec;
@@ -2640,7 +2674,9 @@ export default function BoardSequencerScreen() {
   const makePlan = (): void => {
     const c = configRef.current;
     const scenes = planScenes(c.performance.lengthSec, c.loopSlots, sceneSettingsNow(c));
+    const before = { scenes: c.scenes, currentScene: c.currentScene };
     update({ scenes, currentScene: null });
+    if (before.scenes.length > 0) setUndoOffer({ text: `Plan made: your ${before.scenes.length} ${before.scenes.length === 1 ? 'scene was' : 'scenes were'} replaced.`, restore: () => update(before) });
     setPlanConfirm(false);
     sessionLogRef.current.action(logActorRef.current, 'make my plan');
     announce('Plan made: Arrival, Build, Open and Home, placed across the piece. Open a scene to change it.');
@@ -2801,8 +2837,7 @@ export default function BoardSequencerScreen() {
   };
 
   /** Hand the facilitator the session as a file. Nothing leaves the machine otherwise. */
-  const saveSession = (ext: 'json' | 'csv'): void => {
-    const log = sessionLogRef.current;
+  const saveSession = (ext: 'json' | 'csv', log: SessionLog = sessionLogRef.current): void => {
     const data = log.toJSON();
     const text = ext === 'json' ? JSON.stringify(data, null, 1) : log.toCsv();
     const blob = new Blob([text], { type: ext === 'json' ? 'application/json' : 'text/csv' });
@@ -4060,7 +4095,11 @@ export default function BoardSequencerScreen() {
       selected={laptopPick}
       onSelect={setLaptopColour}
       count={config.laptopBoard.filter((x) => x.row < config.rows && x.col < config.cols && channelById.has(x.colour)).length}
-      onClear={() => update({ laptopBoard: [] })}
+      onClear={() => {
+        const before = configRef.current.laptopBoard;
+        update({ laptopBoard: [] });
+        setUndoOffer({ text: `Board cleared (${before.length} ${before.length === 1 ? 'counter' : 'counters'}).`, restore: () => update({ laptopBoard: before }) });
+      }}
       onAddColours={addLaptopColours}
       onAddColour={nextLaptopColour() ? addLaptopColour : null}
       palette={palette}
@@ -4195,13 +4234,33 @@ export default function BoardSequencerScreen() {
         return (
           <div role="alert" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', padding: '8px 12px', borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-warn)', color: 'var(--bs-bg)', fontWeight: 600 }}>
             <span style={{ flex: '1 1 240px' }}>{`The piece was playing when the page reloaded. The clock would be at ${formatClock(Math.min(at, resumeFrom.lengthSec))} now.`}</span>
-            <Button tone="primary" onClick={() => { const now = Math.round((Date.now() - resumeFrom.startedAt) / 1000); setResumeFrom(null); rehearseFrom(Math.max(0, now)); }}>
+            <Button
+              tone="primary"
+              onClick={() => {
+                const now = Math.round((Date.now() - resumeFrom.startedAt) / 1000);
+                setResumeFrom(null);
+                rehearseFrom(Math.max(0, now));
+                // Back where it was: Show, if Show was open.
+                if (resumeFrom.show) setView('bigBoard');
+              }}
+            >
               {`▶ Carry on from ${formatClock(Math.min(at, resumeFrom.lengthSec))}`}
             </Button>
             <Button tone="secondary" onClick={() => { setResumeFrom(null); forgetPieceRunning(); }}>No</Button>
           </div>
         );
       })()}
+      {undoOffer && (
+        <div role="status" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', padding: '6px 12px', borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-raised)', border: '1px solid var(--bs-border)' }}>
+          <span style={{ flex: '1 1 200px' }}>{undoOffer.text}</span>
+          <Button
+            tone="secondary"
+            onClick={() => { undoOffer.restore(); setUndoOffer(null); announce('Undone.'); }}
+          >
+            Undo
+          </Button>
+        </div>
+      )}
       {view !== 'bigBoard' && midiBannerView}
       {cameraStalled && running && !laptop && (
         <div role="alert" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', padding: '8px 12px', borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-danger)', color: 'var(--bs-danger-fg)', fontWeight: 600 }}>
@@ -4432,6 +4491,32 @@ export default function BoardSequencerScreen() {
           <Button tone="quiet" onClick={() => saveSession('csv')} reason={logCounts.notes === 0 ? 'Nothing played yet this session.' : null}>
             CSV
           </Button>
+          {takes.length > 1 && (
+            <details>
+              <summary style={{ cursor: 'pointer', fontSize: 13 }}>{`Earlier takes (${takes.length - 1})`}</summary>
+              <p style={{ margin: '4px 0', fontSize: 12, color: 'var(--bs-fg2)' }}>
+                Every take is kept on this laptop as it is played: the newest {MAX_TAKES}.
+              </p>
+              <ul style={{ margin: 0, paddingLeft: 16, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {takes.slice(1).map((t) => (
+                  <li key={t.key} style={{ fontSize: 13 }}>
+                    {`${new Date(t.startedAt).toLocaleString()} · ${t.player} · ${t.notes} notes `}
+                    {(['json', 'csv'] as const).map((ext) => (
+                      <Button
+                        key={ext}
+                        tone="quiet"
+                        onClick={() => {
+                          void archiveRef.current?.load(t.key).then((d) => { if (d) saveSession(ext, SessionLog.fromJSON(d)); });
+                        }}
+                      >
+                        {ext.toUpperCase()}
+                      </Button>
+                    ))}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
         </div>
       )}
       {view === 'play' && (
@@ -4686,9 +4771,24 @@ export default function BoardSequencerScreen() {
         {clearSlotTarget !== null && (
           <ConfirmDialog
             title={`Clear loop ${clearSlotTarget + 1}?`}
-            body="The loop saved on this pad is deleted for this player. There is no way to get it back."
+            body="The loop saved on this pad is deleted for this player. You can undo it for a few seconds afterwards."
             confirmLabel="Clear it"
-            onConfirm={() => { clearLoopSlotAt(clearSlotTarget); setClearSlotTarget(null); }}
+            onConfirm={() => {
+              const slot = clearSlotTarget;
+              const before = configRef.current.loopSlots[slot] ?? null;
+              clearLoopSlotAt(slot);
+              setClearSlotTarget(null);
+              if (before) {
+                setUndoOffer({
+                  text: `Loop ${slot + 1} cleared.`,
+                  restore: () => {
+                    const slots = configRef.current.loopSlots.map((sl, i) => (i === slot ? before : sl));
+                    setConfig((prev) => ({ ...prev, loopSlots: slots }));
+                    loopBankRef.current = seedLoopBank(loopBankRef.current.saved.length, slots, loopBankRef.current);
+                  },
+                });
+              }
+            }}
             onCancel={() => setClearSlotTarget(null)}
           />
         )}

@@ -154,6 +154,16 @@ export class SessionLog {
     return { notes: this.notes.length, placed, added: this.notes.length - placed, events: this.events.length };
   }
 
+  /** A log brought back from a saved take (after a reload): ready to save, not running. */
+  static fromJSON(data: SessionLogData, now?: () => number): SessionLog {
+    const log = new SessionLog(now);
+    log.notes = [...data.notes];
+    log.events = [...data.events];
+    log.startedAt = new Date(data.startedAt);
+    log.player = data.player;
+    return log;
+  }
+
   toJSON(): SessionLogData {
     return { version: 1, startedAt: this.startedAt.toISOString(), player: this.player, notes: this.notes, events: this.events };
   }

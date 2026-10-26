@@ -29,6 +29,7 @@ import { DEFAULT_ACCOMPANIMENT_SETTINGS } from '../accompaniment/types';
 import type { NoteName, ScaleType } from '../sound/MusicTheory';
 import { AUDIO } from '../utils/constants';
 import { DEFAULT_MUSIC_SETTINGS } from './musicSettingsDefaults';
+import { readPieceRunning } from '../songs/performance/pieceRunning';
 
 const initialState: AppState = {
   // Tracking
@@ -83,7 +84,8 @@ const initialState: AppState = {
   keySuggestion: null,
 
   // UI
-  currentScreen: 'welcome',
+  // A reload mid-piece goes straight back to the board, where it can carry on.
+  currentScreen: readPieceRunning() !== null ? 'boardSequencer' : 'welcome',
   showDebugPanel: false,
   isFullscreen: false,
 

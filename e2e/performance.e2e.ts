@@ -166,11 +166,26 @@ test('a reload mid-piece offers to carry on from where the clock would be', asyn
   await expect(page.getByRole('region', { name: 'Now and next' })).toContainText('Now: Arrival');
   await page.waitForTimeout(1500); // let the board be saved
   await page.reload();
-  await page.getByRole('button', { name: /Board Sequencer/ }).click();
+  // Straight back to the board: no home screen, no hunting for it.
   const offer = page.getByRole('alert').filter({ hasText: 'The piece was playing when the page reloaded' });
   await expect(offer).toBeVisible();
   await offer.getByRole('button', { name: /Carry on from/ }).click();
   await expect(page.getByRole('region', { name: 'Now and next' })).toContainText('Now: Arrival');
+  expect(pageErrors(page)).toEqual([]);
+});
+
+test('a reload during Show carries on in Show', async ({ page }) => {
+  await openLaptopBoard(page);
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1]]);
+  await makePlan(page);
+  await page.getByRole('button', { name: /^Show: the board, the clock/ }).click();
+  await page.getByRole('button', { name: '▶ Start the piece' }).click();
+  await expect(page.getByRole('button', { name: 'Leave Show' })).toBeVisible();
+  await page.waitForTimeout(1500); // let the board be saved
+  await page.reload();
+  await page.getByRole('alert').filter({ hasText: 'The piece was playing' }).getByRole('button', { name: /Carry on from/ }).click();
+  await expect(page.getByRole('button', { name: 'Leave Show' })).toBeVisible();
   expect(pageErrors(page)).toEqual([]);
 });
 
