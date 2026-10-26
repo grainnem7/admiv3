@@ -115,7 +115,7 @@ import { planFromConfig } from './boardSequencer/components/AbletonSoundsPanel';
 import { useBoardMidiPort } from './boardSequencer/useBoardMidiPort';
 import { abletonReadyItem, abletonTracksItem } from './boardSequencer/abletonReady';
 import { aiOffLine } from './boardSequencer/aiStatus';
-import { assignColourChannels, BoardMidiSender, channelFor, colourChannelMap, configToSoundFrom } from '../../midi/boardMidi';
+import { assignColourChannels, BoardMidiSender, channelFor, colourChannelMap, configToSoundFrom, effectiveSound } from '../../midi/boardMidi';
 import { ABLETON_CHAINS, chainFor } from '../../midi/abletonSounds';
 import { LoopEditor } from './boardSequencer/components/LoopEditor';
 import {
@@ -1930,6 +1930,10 @@ export default function BoardSequencerScreen() {
       pingPong: cfg.pingPong, pingPongPages: cfg.pingPongPages,
       toggleAmount: cfg.toggleAmount, controlGlideSec: cfg.controlGlideSec,
     });
+    // Sound from Ableton: ADMI's own sound is off from the very start, not switched off
+    // a moment after Play (that let a blip of it through).
+    const port = midiPortRef.current;
+    engine.setInternalSound(effectiveSound(cfg, port.portConnected, port.holdOnAdmi).internal);
     await engine.init();
     // Stop — or Stop then Play again — may have been pressed while the samples loaded. This
     // start is then no longer wanted: drop its engine before it is started or put where
@@ -1939,6 +1943,9 @@ export default function BoardSequencerScreen() {
       engine.dispose();
       return;
     }
+    // Every setting (where the sound goes included) before start(), which sends the
+    // receiving end its opening Expression.
+    applyEngineSettings(engine, cfg, midiPortRef.current);
     engine.setMuted(mutedRef.current);
     // Pattern chaining: load captured page snapshots + the live (selected) page.
     engine.setPages(cfg.pages as ActiveCell[][]);
@@ -1960,7 +1967,6 @@ export default function BoardSequencerScreen() {
     }
     engine.start();
     engineRef.current = engine;
-    applyEngineSettings(engine, cfg, midiPortRef.current);
     // One pad per cell of the loop lane — a row of steps or a column of rows.
     loopBankRef.current = seedLoopBank(
       zoneSlotCount(cfg.loopZone, cfg.rows, cfg.cols), cfg.loopSlots, loopBankRef.current,

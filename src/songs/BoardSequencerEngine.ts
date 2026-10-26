@@ -400,7 +400,8 @@ export class BoardSequencerEngine {
     // Mix bus → limiter → shared effects bus. Shared reverb + delay buses return
     // into the mix; per-row sends feed them. Limiter stops stacked voices clipping.
     const mix = ctx.createGain();
-    mix.gain.value = this.muted ? 0 : this.cfg.volume;
+    // Sound from Ableton (set before init): the mix starts silent, never a blip of ADMI.
+    mix.gain.value = this.muted || !this.internalSound ? 0 : this.cfg.volume;
     const studio = this.studioOn();
     const world = worldOf(this.cfg.soundWorld ?? 'none');
     const mixTone = ctx.createBiquadFilter();
@@ -1067,7 +1068,7 @@ export class BoardSequencerEngine {
   playTestNote(): boolean {
     if (this.muted) return false;
     const t = Tone.now() + 0.05;
-    if (this.tick) {
+    if (this.tick && this.internalSound) {
       const tt = strictlyAfter(t, this.lastTickTime);
       this.lastTickTime = tt;
       this.tick.triggerAttackRelease('C2', 0.05, tt);
@@ -1161,7 +1162,11 @@ export class BoardSequencerEngine {
     this.volumeSent = v;
   }
 
-  /** The built-in sound on or off (off = MIDI only). Everything else carries on. */
+  /**
+   * The built-in sound on or off (off = MIDI only). Everything else carries on. Off, the
+   * voices aren't played at all (silent notes piled up in the synths: "Max polyphony
+   * exceeded"); every note is still logged, drawn and sent. Can be set before init.
+   */
   setInternalSound(on: boolean): void {
     if (this.internalSound === on) return;
     this.internalSound = on;
@@ -1275,9 +1280,11 @@ export class BoardSequencerEngine {
     const midis = voiceNear(chord, 62).map((n) => n + oct);
     const root = bassNote(chord, 36) + oct;
     this.bandVoices?.gain.gain.setTargetAtTime(1, time, 0.01);
-    for (const m of midis) this.bandVoices?.pad.play(m, 0.9, durSec, time);
-    this.bandVoices?.bass.play(root, 0.9, durSec, time);
-    this.drumKit?.play('crash', 0.9, time);
+    if (this.internalSound) {
+      for (const m of midis) this.bandVoices?.pad.play(m, 0.9, durSec, time);
+      this.bandVoices?.bass.play(root, 0.9, durSec, time);
+      this.drumKit?.play('crash', 0.9, time);
+    }
     // Logged as the three things that sound, so MIDI sends each where the band's own go:
     // the chord with the band's chords, the root with its bass, the crash with the drums.
     const base = { row: -1, col: -1, colour: 'band:final', audioTime: time, durSec, source: 'live', origin: 'band', velocity: 0.9 } as const;
@@ -1648,7 +1655,7 @@ export class BoardSequencerEngine {
 
   /** Fire the confirmation tick immediately (distinct from a sequenced note). */
   fireTick(): void {
-    if (this.muted || !this.tick || !this.cfg.tickEnabled) return;
+    if (this.muted || !this.internalSound || !this.tick || !this.cfg.tickEnabled) return;
     // The tick is a monophonic MembraneSynth; Tone requires strictly increasing
     // start times. Two cells settling in the same audio quantum repeat Tone.now(),
     // so guard against a non-increasing time (was throwing "Start time must be
@@ -2080,12 +2087,12 @@ export class BoardSequencerEngine {
           const hit = `${ev.drum}@${time}`;
           if (hits.has(hit)) continue;
           hits.add(hit);
-          this.drumKit.play(ev.drum, vel, time);
+          if (this.internalSound) this.drumKit.play(ev.drum, vel, time);
           if (ev.drum === 'kick' && this.band === 'full') this.duckForKick(time);
           role = 'drums';
         } else if (ev.midi !== undefined) {
           midi = ev.midi + this.cfg.octaveShift * 12;
-          (ev.part === 'pad' ? this.bandVoices.pad : this.bandVoices.bass).play(midi, ev.accent, durSec, time);
+          if (this.internalSound) (ev.part === 'pad' ? this.bandVoices.pad : this.bandVoices.bass).play(midi, ev.accent, durSec, time);
           role = ev.part === 'pad' ? 'chord' : 'bass';
         } else continue;
         // Logged for the session, never drawn: a band note has no counter.
@@ -2224,14 +2231,14 @@ export class BoardSequencerEngine {
           const hit = `${n.drum}@${time}`;
           if (hits.has(hit)) continue;
           hits.add(hit);
-          this.drumKit.play(n.drum, vel, time);
+          if (this.internalSound) this.drumKit.play(n.drum, vel, time);
         } else if (n.midi !== undefined) {
           const voice = this.voiceByChannel.get(n.colour)?.voice;
           if (!voice) continue;
           const evo = this.evoFor(n.colour);
           midi = n.midi + oct + 12 * evo.octave;
           dur *= evo.length;
-          voice.play(midi, vel, dur, time);
+          if (this.internalSound) voice.play(midi, vel, dur, time);
         } else continue;
         this.recordFired({
           row: n.cell.row, col: n.cell.col, colour: n.colour, role: n.role,
@@ -2280,7 +2287,7 @@ export class BoardSequencerEngine {
           const hit = `${ev.drum}@${time}`;
           if (drumHits.has(hit)) continue;
           drumHits.add(hit);
-          this.drumKit.play(ev.drum, vel, time);
+          if (this.internalSound) this.drumKit.play(ev.drum, vel, time);
           if (ev.drum === 'kick') this.duckForKick(time);
         } else if (ev.midi !== undefined) {
           const voice = this.voiceByChannel.get(ev.colour)?.voice;
@@ -2294,7 +2301,7 @@ export class BoardSequencerEngine {
           if (notesHere.has(same)) continue;
           notesHere.add(same);
           durSec *= evo.length;
-          voice.play(midi, vel, durSec, time);
+          if (this.internalSound) voice.play(midi, vel, durSec, time);
         } else continue;
         this.firingLayer = tag?.cell.layer ?? ev.layer;
         this.recordFired({
@@ -2351,7 +2358,7 @@ export class BoardSequencerEngine {
           const hit = `${drum}@${stepTime}`;
           if (drumHits.has(hit)) return;
           drumHits.add(hit);
-          this.drumKit.play(drum as KitDrum, vel, stepTime);
+          if (this.internalSound) this.drumKit.play(drum as KitDrum, vel, stepTime);
           if (drum === 'kick' || drum === 'kickCrash') this.duckForKick(stepTime);
           this.recordFired({
             row: cell.row, col: cell.col, colour: cell.colour, role, audioTime: stepTime, durSec, source,
@@ -2379,7 +2386,7 @@ export class BoardSequencerEngine {
           ? chordDegreeMidi(degree, chord.notes)
           : degreeMidi(degree, this.cfg.scaleRootMidi, this.cfg.scaleSemitones);
         const dur = ringSec(loopLen(this.rawLoop('bass'), this.cfg.cols)) * this.evoFor(ch.id).length;
-        voice.play(base - 12 + oct, vel, dur, stepTime);
+        if (this.internalSound) voice.play(base - 12 + oct, vel, dur, stepTime);
         this.recordFired({
           row: cell.row, col: cell.col, colour: cell.colour, role, audioTime: stepTime, durSec: dur, source,
           origin: 'placed', midi: base - 12 + oct, velocity: vel,
@@ -2388,7 +2395,7 @@ export class BoardSequencerEngine {
         // Chord stab: play a stack (the song chord, or a scale triad) at once.
         const evo = this.evoFor(ch.id);
         const midis = this.chordStack(cell, chord, 'row').map((n) => n + oct + 12 * evo.octave);
-        for (const n of midis) voice.play(n, vel, durSec * evo.length, stepTime);
+        if (this.internalSound) for (const n of midis) voice.play(n, vel, durSec * evo.length, stepTime);
         this.recordFired({
           row: cell.row, col: cell.col, colour: cell.colour, role, audioTime: stepTime, durSec: durSec * evo.length, source,
           origin: 'placed', midis, velocity: vel,
@@ -2401,7 +2408,7 @@ export class BoardSequencerEngine {
           // held harmonic bed; others play the short note length.
           const evo = this.evoFor(ch.id);
           const dur = (ch.instrument === 'pad' ? secPerBeat * melodicLoop : ringSec(melodicLoop)) * evo.length;
-          voice.play(midi + oct + 12 * evo.octave, vel, dur, stepTime);
+          if (this.internalSound) voice.play(midi + oct + 12 * evo.octave, vel, dur, stepTime);
           this.recordFired({
             row: cell.row, col: cell.col, colour: cell.colour, role, audioTime: stepTime, durSec: dur, source,
             origin: 'placed', midi: midi + oct + 12 * evo.octave, velocity: vel,
@@ -2410,7 +2417,7 @@ export class BoardSequencerEngine {
           if (orn !== null) {
             const passing = this.scaleStep(midi, orn) + oct + 12 * evo.octave;
             const at = stepTime + 0.5 * secPerBeat;
-            voice.play(passing, vel * 0.7, Math.min(dur, 0.45 * secPerBeat), at);
+            if (this.internalSound) voice.play(passing, vel * 0.7, Math.min(dur, 0.45 * secPerBeat), at);
             this.recordFired({
               row: cell.row, col: cell.col, colour: cell.colour, role, audioTime: at, durSec: 0.45 * secPerBeat, source,
               origin: 'placed', midi: passing, velocity: vel * 0.7,

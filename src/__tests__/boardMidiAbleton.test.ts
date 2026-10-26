@@ -426,3 +426,84 @@ describe('mapping in Ableton', () => {
     expect(vol.at(-1)?.[2]).toBe(64);
   });
 });
+
+describe('engine: Sound from Ableton keeps ADMI’s own voices silent', () => {
+  beforeEach(() => { port.send.mockClear(); setNow(0); vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  /** Any audio node: every property is another, every call returns one, and values set stick. */
+  function anyNode(): unknown {
+    const store = new Map<PropertyKey, unknown>();
+    const p: unknown = new Proxy(function stand() { /* a node */ }, {
+      get(_t, k) {
+        if (k === 'then') return undefined;
+        if (!store.has(k)) store.set(k, anyNode());
+        return store.get(k);
+      },
+      set(_t, k, v) { store.set(k, v); return true; },
+      apply: () => anyNode(),
+      construct: () => anyNode() as object,
+    });
+    return p;
+  }
+
+  async function initialised(internal: boolean) {
+    for (const k of ['Limiter', 'Reverb', 'FeedbackDelay', 'MembraneSynth'] as const) {
+      (Tone[k] as unknown as Mock).mockImplementation(function made() { return anyNode(); });
+    }
+    const { e } = engine();
+    (e as unknown as { ctx: unknown }).ctx = anyNode();
+    e.setInternalSound(internal);
+    await e.init();
+    return (e as unknown as { mix: { gain: { value: number } } }).mix.gain.value;
+  }
+
+  it('Play in Ableton mode: the mix starts at 0, not at the volume', async () => {
+    expect(await initialised(false)).toBe(0);
+    expect(await initialised(true)).toBe(0.6);
+  });
+
+  /** The engine on a route, as applyEngineSettings sets it, and the melody voice's play. */
+  function routed(route: ReturnType<typeof effectiveSound>) {
+    const { e, p } = engine();
+    const play = vi.fn();
+    p.voiceByChannel = new Map([['m', fakeVoiceEntry(play)]]);
+    e.setMidiOut({ enabled: route.midi, sends: 'all' }, 'p1');
+    e.setInternalSound(route.internal);
+    return { e, p, play };
+  }
+  const ons = () => sent().filter((x) => status(x.d) === NOTE_ON && x.d[2] > 0);
+  const cfgFor = (s: SoundFrom) => ({ ...soundFromToConfig(s), midiDeviceId: 'p1' });
+
+  it('Ableton: no internal voice is played (no "Max polyphony exceeded"), and the MIDI still goes', () => {
+    const { p, play } = routed(effectiveSound(cfgFor('ableton'), true));
+    for (let beat = 0; beat < 4; beat++) p.fireStep(beat, beat, 1, null);
+    expect(play).not.toHaveBeenCalled();
+    expect(ons().length).toBeGreaterThan(0);
+  });
+
+  it('Both: ADMI plays and Ableton hears it too', () => {
+    const { p, play } = routed(effectiveSound(cfgFor('both'), true));
+    p.fireStep(0, 0, 1, null);
+    expect(play).toHaveBeenCalled();
+    expect(ons().length).toBeGreaterThan(0);
+  });
+
+  it('the fallback (port gone, or held on ADMI) plays ADMI’s own sound', () => {
+    for (const route of [effectiveSound(cfgFor('ableton'), false), effectiveSound(cfgFor('ableton'), true, true)]) {
+      expect(route.fellBack).toBe(true);
+      const { p, play } = routed(route);
+      p.fireStep(0, 0, 1, null);
+      expect(play).toHaveBeenCalled();
+    }
+  });
+
+  it('switching back to ADMI or Both mid-piece brings the voices back on the next step', () => {
+    const { e, p, play } = routed(effectiveSound(cfgFor('ableton'), true));
+    p.fireStep(0, 0, 1, null);
+    expect(play).not.toHaveBeenCalled();
+    e.setInternalSound(true);
+    p.fireStep(4, 4, 1, null);
+    expect(play).toHaveBeenCalled();
+  });
+});
