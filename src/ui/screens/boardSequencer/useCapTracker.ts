@@ -55,6 +55,12 @@ export interface CapPreview {
 export function useCapTracker(opts: {
   settings: CapSettings;
   ranges: Record<FaderRole, ControlRange>;
+  /**
+   * What each control is set to now. The cap starts from these and changes them only once
+   * the head moves: it used to jump them to wherever it first saw the head — the volume to
+   * its lowest the moment Play started, which sounded like the music stopping.
+   */
+  startValues?: Partial<Record<FaderRole, number>>;
   /** Test with the mouse instead of the camera. */
   mouse: boolean;
   /** Where the pointer is over the preview (0..1), or null when it is off it. */
@@ -82,6 +88,8 @@ export function useCapTracker(opts: {
   settingsRef.current = settings;
   const rangesRef = useRef(ranges);
   rangesRef.current = ranges;
+  const startValuesRef = useRef(opts.startValues);
+  startValuesRef.current = opts.startValues;
   const onReachRef = useRef(opts.onReachLearnt);
   onReachRef.current = opts.onReachLearnt;
   const boardCameraIdRef = useRef(opts.boardCameraId);
@@ -131,6 +139,16 @@ export function useCapTracker(opts: {
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     let camera: CapCameraStatus = mouse ? 'mouse' : 'starting';
     let state = initialCapState();
+    {
+      const s0 = settingsRef.current;
+      for (const [axis, role] of [['x', s0.xRole], ['y', s0.yRole]] as const) {
+        if (role === 'off') continue;
+        const v = startValuesRef.current?.[role];
+        const r = rangesRef.current[role];
+        if (v === undefined || !(r.max > r.min)) continue;
+        state = handOverAxis(state, axis, (v - r.min) / (r.max - r.min));
+      }
+    }
     let offset: CapOffset | null = null;
     let lastFace: { box: FaceBox; at: number } | null = null;
     let frameNo = 0;

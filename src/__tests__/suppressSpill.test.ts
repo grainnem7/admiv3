@@ -41,6 +41,16 @@ describe('suppressSpill', () => {
     expect(suppressSpill(readings, ctx()).filter((r) => r.occupied)).toHaveLength(2);
   });
 
+  it('two real counters one above the other, each seen small, are both kept', () => {
+    // The real board, seen at an angle: a pair of same-colour counters in neighbouring
+    // squares, each showing little colour (0.06 here, against the 0.25 a counter covers
+    // straight on), so together they fall short of "two counters' worth". One of each pair
+    // was dropped, and pairs near the limit flashed. But each sits well inside its own
+    // square (a third of a square from the line), where a counter's spill never does.
+    const readings = [cell(3, 3, 0.4375, 0.4583, 0.06), cell(4, 3, 0.4375, 0.5417, 0.06)];
+    expect(suppressSpill(readings, ctx()).filter((r) => r.occupied)).toHaveLength(2);
+  });
+
   it('leaves diagonal neighbours and different colours alone', () => {
     const diag = [cell(0, 1, 0.235, 0.0625, 0.15), cell(1, 2, 0.265, 0.1875, 0.10)];
     expect(suppressSpill(diag, ctx()).filter((r) => r.occupied)).toHaveLength(2);

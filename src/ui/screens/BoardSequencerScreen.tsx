@@ -407,6 +407,7 @@ export default function BoardSequencerScreen() {
   const cap = useCapTracker({
     settings: config.cap,
     ranges: config.controlRanges,
+    startValues: { volume: config.volume, tempo: config.bpm, fill: config.fillAmount, evolve: config.evolveAmount },
     mouse: capMouse,
     pointerRef: capPointerRef,
     valuesRef: capValuesRef,

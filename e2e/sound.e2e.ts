@@ -101,7 +101,11 @@ test('the red cap (tried with the mouse) moves the speed left–right and shows 
   await area.scrollIntoViewIfNeeded();
   const box = (await area.boundingBox())!;
   const bpm = async (): Promise<number> => Number(/(\d+) BPM/.exec((await page.getByText(/·\s*\d+ BPM · step/).first().textContent()) ?? '')?.[1] ?? 0);
-  await area.hover({ position: { x: box.width * 0.05, y: box.height / 2 } });
+  // The cap starts from the current speed and changes it only once the head moves: so the
+  // mouse moves into place, as a head would, rather than appearing there.
+  await area.hover({ position: { x: box.width * 0.5, y: box.height / 2 } });
+  await page.waitForTimeout(300);
+  await page.mouse.move(box.x + box.width * 0.05, box.y + box.height / 2, { steps: 10 });
   await expect.poll(bpm, { timeout: 8000 }).toBeLessThan(90);
   const slow = await bpm();
   await area.hover({ position: { x: box.width * 0.95, y: box.height / 2 } });
