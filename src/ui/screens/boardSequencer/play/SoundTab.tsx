@@ -15,6 +15,7 @@ import { DEFAULT_NOTE_VARY, describeChannel, ROLE_LABELS, type ColourChannel } f
 import type { BoardSequencerStored } from '../../../../profiles/BoardSequencerConfig';
 import { DRUM_OPTIONS, INSTRUMENT_OPTIONS, soundNameFor } from '../soundOptions';
 import { BRIGHT, ENERGY, LOUD, nearest, SPACE_ALL, SPACE_SEND, type Step } from '../../../../audio/soundSteps';
+import { StepRow } from './StepRow';
 import { channelFor, colourChannelMap, configToSoundFrom } from '../../../../midi/boardMidi';
 import { chainFor, chainLabel } from '../../../../midi/abletonSounds';
 import { playsTune } from '../../../../songs/beyondLoop';
@@ -89,25 +90,6 @@ function grooveOf(swing: number, humanize: number): GrooveName | null {
     if (Math.abs(g.swing - swing) < 0.02 && Math.abs(g.humanize - humanize) < 0.02) return name;
   }
   return null;
-}
-
-function StepRow({ label, steps, value, onPick, disabled = false, hint }: {
-  label: string; steps: Step[]; value: number; onPick(v: number): void; disabled?: boolean; hint?: string | null;
-}): JSX.Element {
-  const i = nearest(steps, value);
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>{label}</span>
-      <SegmentedControl<number>
-        label={label}
-        value={i}
-        disabled={disabled}
-        onChange={(k) => onPick(steps[k].value)}
-        options={steps.map((s, k) => ({ value: k, label: s.label }))}
-      />
-      {hint && <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>{hint}</span>}
-    </div>
-  );
 }
 
 const SECTION: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 8 };
