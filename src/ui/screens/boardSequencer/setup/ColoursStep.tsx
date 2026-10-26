@@ -272,6 +272,15 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
         </p>
       )}
 
+      {/* At the top of the list, not below every colour: starting again with colours from
+          an earlier setup is common, and one by one is slow. */}
+      {channels.length > 1 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ fontWeight: 600, flex: 1 }}>{`Your colours (${channels.length})`}</span>
+          <Button tone="secondary" onClick={() => setConfirm({ kind: 'clear' })}>Remove all colours</Button>
+        </div>
+      )}
+
       {channels.map((c, i) => {
         const count = counts[c.id] ?? 0;
         const isControl = CONTROL_JOBS.includes(c.role);
@@ -370,9 +379,6 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
         );
       })}
 
-      {channels.length > 0 && (
-        <Button tone="quiet" onClick={() => setConfirm({ kind: 'clear' })}>Clear all colours</Button>
-      )}
 
       <Disclosure summary="Detection sensitivity">
         <LabeledSlider
@@ -452,9 +458,9 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
       )}
       {confirm?.kind === 'clear' && (
         <ConfirmDialog
-          title="Clear all colours?"
+          title="Remove all colours?"
           body="Every colour is removed for every player on this board. Saved loops and pages that use them will go quiet."
-          confirmLabel="Clear all"
+          confirmLabel="Remove all"
           onConfirm={() => { onClearAll(); setConfirm(null); }}
           onCancel={() => setConfirm(null)}
         />

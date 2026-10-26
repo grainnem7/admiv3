@@ -334,7 +334,20 @@ function hueGap(a: number, b: number): number {
  */
 const MERGE_DISTANCE = 1.4;
 
-function cluster(blobs: Blob[]): Blob[][] {
+/**
+ * Colour distance with the lightness set aside: b brought to a's brightness first. The
+ * guard above is about colour; with lightness in it, the same red counter near the camera
+ * and further off in shade (a third darker) came back as two colours on the real board.
+ */
+function colourOnlyDistance(a: [number, number, number], b: [number, number, number]): number {
+  const la = a[0] + a[1] + a[2];
+  const lb = b[0] + b[1] + b[2];
+  const k = lb > 0 ? la / lb : 1;
+  return colourDistance(a, [b[0] * k, b[1] * k, b[2] * k]);
+}
+
+/** Exported for the tests: counters found on the board, grouped into colours. */
+export function cluster(blobs: Blob[]): Blob[][] {
   const groups: { blobs: Blob[]; hsv: { h: number; s: number; v: number }[] }[] = [];
   for (const blob of blobs) {
     const hsv = rgbToHsv(blob.r, blob.g, blob.b);
@@ -347,7 +360,7 @@ function cluster(blobs: Blob[]): Blob[][] {
       // Hue AND saturation: hue says which colour, saturation says how strong it is, and
       // both survive a change in light. Value does not, so it is left out.
       return hueGap(other.h, hsv.h) < MERGE_HUE && Math.abs(other.s - hsv.s) < MERGE_SAT;
-    }) && group.blobs.every((other) => colourDistance([other.r, other.g, other.b], [blob.r, blob.g, blob.b]) < MERGE_DISTANCE));
+    }) && group.blobs.every((other) => colourOnlyDistance([other.r, other.g, other.b], [blob.r, blob.g, blob.b]) < MERGE_DISTANCE));
     if (found) { found.blobs.push(blob); found.hsv.push(hsv); }
     else groups.push({ blobs: [blob], hsv: [hsv] });
   }

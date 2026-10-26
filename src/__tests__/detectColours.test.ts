@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { warpToBoard, buildSquareModel, modelHsv } from '../tracking/boardColourDetect/squareModel';
 import {
-  detectColours, fitSafeBand, MAX_BOARD_MATCH, MIN_BLOB_SQUARES,
+  cluster, detectColours, fitSafeBand, MAX_BOARD_MATCH, MIN_BLOB_SQUARES,
 } from '../tracking/boardColourDetect/detectColours';
 import { computeHomography, UNIT_SQUARE } from '../utils/homography';
 import { buildChannelMatcher, calibrationFromHsv } from '../tracking/boardColours';
@@ -495,5 +495,20 @@ describe('telling one counter colour from another', () => {
     if (!out.ok) return;
     expect(out.colours).toHaveLength(1);
     expect(out.colours[0].counters).toBe(2);
+  });
+});
+
+describe('one colour, whatever the light on it', () => {
+  // Seen on the real board: two red counters, one near the camera in the light and one
+  // further off in shade, came back as two colours. Hue and saturation match; only the
+  // brightness differs, and brightness is not what makes a colour.
+  const blob = (r: number, g: number, b: number, col: number) => ({ r, g, b, pixels: 200, row: 0, col });
+  it('a red in the light and a red in deep shade are one colour', () => {
+    expect(cluster([blob(217, 74, 63, 0), blob(115, 35, 29, 1)])).toHaveLength(1);
+  });
+  it('red and pink, blue and purple, yellow and orange stay apart', () => {
+    expect(cluster([blob(196, 42, 46, 0), blob(232, 110, 170, 1)])).toHaveLength(2);
+    expect(cluster([blob(38, 78, 180, 0), blob(120, 60, 160, 1)])).toHaveLength(2);
+    expect(cluster([blob(232, 196, 40, 0), blob(236, 120, 36, 1)])).toHaveLength(2);
   });
 });

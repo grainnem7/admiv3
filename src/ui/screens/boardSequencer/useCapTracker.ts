@@ -198,7 +198,11 @@ export function useCapTracker(opts: {
           if (face && faceStatus === 'on' && frameNo % FACE_EVERY === 0) {
             try {
               const r = face.detectForVideo(video, now);
-              const box = r.face ? faceBoxFromLandmarks(r.face.landmarks, s.mirror) : null;
+              // FaceDetector hands back its points ALREADY mirrored (for a selfie view), so they
+              // only need flipping when this picture is NOT a mirror. Flipping them again for a
+              // mirrored picture put the face on the wrong side: the real cap was rejected as
+              // "not on the head" and the cap followed a spot across the room.
+              const box = r.face ? faceBoxFromLandmarks(r.face.landmarks, !s.mirror) : null;
               if (box) lastFace = { box, at: now };
             } catch { /* a missed frame */ }
           }
