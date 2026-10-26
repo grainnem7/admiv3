@@ -8,6 +8,27 @@ const FOCUSABLE = [
 ].join(', ');
 
 /**
+ * Everything on the page but `el` (and what contains it) made inert: a screen reader or the
+ * Tab key can no longer wander into the controls behind a dialog — 161 of them behind the
+ * player chooser. Returns the undo.
+ */
+export function inertOutside(el: HTMLElement): () => void {
+  const changed: HTMLElement[] = [];
+  let node: HTMLElement = el;
+  while (node.parentElement && node !== document.body) {
+    const parent = node.parentElement;
+    for (const sib of Array.from(parent.children)) {
+      if (sib === node || !(sib instanceof HTMLElement) || sib.hasAttribute('inert')) continue;
+      if (sib.tagName === 'SCRIPT' || sib.tagName === 'STYLE') continue;
+      sib.setAttribute('inert', '');
+      changed.push(sib);
+    }
+    node = parent;
+  }
+  return () => { for (const s of changed) s.removeAttribute('inert'); };
+}
+
+/**
  * Focus behaviour every modal on this screen needs: focus moves in on open, Tab is trapped
  * inside, Esc closes, and focus returns to whatever opened it — or, when that has been
  * removed, to a surviving heading rather than the top of the page.
@@ -25,7 +46,12 @@ export function useModalFocus(
   if (opener.current === null) opener.current = document.activeElement;
 
   useEffect(() => {
+    // The page behind is out of reach while the dialog is open (the overlay is the panel's parent).
+    const overlay = panel.current?.parentElement;
+    const restore = overlay ? inertOutside(overlay) : () => {};
     return () => {
+      // Back first: an inert element can't take the focus returned to it below.
+      restore();
       const prev = opener.current as HTMLElement | null;
       if (prev?.isConnected) { prev.focus?.(); return; }
       const fallback = document.querySelector<HTMLElement>('[data-focus-fallback]')

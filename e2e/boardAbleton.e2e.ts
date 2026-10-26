@@ -125,11 +125,15 @@ test('a 40 second piece in Ableton mode is silent by 0:40', async ({ page }) => 
   await length.fill('0:40');
   await length.blur();
   await page.getByRole('radio', { name: /Fade out/ }).click();
-  const started = await now(page);
+  const pressed = await now(page);
   // ▶ Play just plays; the piece (its clock and its end) starts from Show.
   await startPiece(page);
   const stopButton = page.getByRole('button', { name: /■ Stop|Press again to stop/ });
   await expect(stopButton.first()).toBeVisible();
+  // The piece's clock starts once the instruments are ready (up to a few seconds after the
+  // press): its 40 seconds count from then, which is when Stop appears.
+  const started = await now(page);
+  expect(started - pressed).toBeLessThan(6_000);
   await expect(stopButton).toHaveCount(0, { timeout: 45_000 });
   await page.waitForTimeout(500); // the second release
   const deadline = started + 41_000; // a second's grace for the page, as for ADMI's own sound

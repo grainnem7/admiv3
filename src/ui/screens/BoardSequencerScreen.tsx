@@ -77,7 +77,7 @@ import { SegmentedControl } from './boardSequencer/ui/SegmentedControl';
 import { clampZone, describeZone, NO_ZONE, zoneSlotCount, zonesCollide, type Zone, type ZoneMode } from '../../tracking/zones';
 import { LabeledSlider } from './boardSequencer/ui/LabeledSlider';
 import { Button } from './boardSequencer/ui/Button';
-import { Modal } from './boardSequencer/ui/Modal';
+import { inertOutside, Modal } from './boardSequencer/ui/Modal';
 import { cameraDebugEnabled } from '../../tracking/cameraDebugFlag';
 import { loadCameraChoice, saveCameraChoice } from '../../tracking/cameraChoice';
 import { CameraDebugPanel } from '../components/camera/CameraDebugPanel';
@@ -451,6 +451,9 @@ export default function BoardSequencerScreen() {
   // Who's playing: asked when there is a choice, and on the very first run — name and
   // hand — rather than silently making a right-handed "Player 1" (Tim is left-handed).
   const [chooserOpen, setChooserOpen] = useState(() => listBoardPlayers().length !== 1);
+  // The chooser covers the screen: what's behind it is out of reach while it is open.
+  const chooserRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => (chooserOpen && chooserRef.current ? inertOutside(chooserRef.current) : undefined), [chooserOpen]);
   // The first save creates an implicit "Player 1". Without picking it up, the Player button
   // never appears and every screen keeps calling them "the player".
   useEffect(() => {
@@ -4635,10 +4638,12 @@ export default function BoardSequencerScreen() {
       {/* The chooser sits OVER the screen so the camera element below it stays mounted
           and the camera actually starts. */}
       {chooserOpen && (
-        <div style={{
-          position: 'fixed', inset: 0, zIndex: 40, overflowY: 'auto',
-          background: 'var(--bs-bg)',
-        }}
+        <div
+          ref={chooserRef}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 40, overflowY: 'auto',
+            background: 'var(--bs-bg)',
+          }}
         >
         <PlayerChooser
           players={players}
