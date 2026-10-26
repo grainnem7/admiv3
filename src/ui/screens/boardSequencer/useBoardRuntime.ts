@@ -506,7 +506,10 @@ export function useBoardRuntime(opts: {
       // the lanes — the same rule the pattern itself uses.
       let knocked = false;
       // A click that empties the laptop board is a choice, not a knock.
-      if (running && modeResult && cfg.knockGuardEnabled && !laptop) {
+      // Only with the hand guard: it is what tells a knock from an arm covering counters.
+      // Without it every reach over three counters froze the old pattern ("Let go").
+      const knockGuard = cfg.knockGuardEnabled && cfg.handGuardEnabled;
+      if (running && modeResult && knockGuard && !laptop) {
         const notes = (cells: ActiveCell[]): ActiveCell[] =>
           splitByZone(cells, cfg.controlZone, cfg.loopZone).pattern
             .filter((c) => sequencedColours.has(c.colour));
@@ -523,7 +526,7 @@ export function useBoardRuntime(opts: {
         // not: the promise of the guard is that a knocked-over pattern waits until the
         // player decides, and Stop is not that decision. They stay silent until Play, and
         // "Save as loop" / "Let go" stay on offer the whole time.
-        if (!cfg.knockGuardEnabled && knockRef.current.ghosts.size > 0) {
+        if (!knockGuard && knockRef.current.ghosts.size > 0) {
           knockRef.current = letGo(knockRef.current);
         }
         settledBefore = modeResult ? modeResult.activeCells : [];

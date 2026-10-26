@@ -430,9 +430,14 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
         />
         <Switch
           label="Keep the pattern if pieces get knocked"
-          checked={hands.knockGuardEnabled}
+          checked={hands.knockGuardEnabled && hands.handGuardEnabled}
           onChange={hands.onKnockGuardEnabled}
-          hint="Knocked pieces keep sounding until you let them go or save them as a loop."
+          disabled={!hands.handGuardEnabled}
+          hint={hands.handGuardEnabled
+            ? 'Knocked pieces keep sounding until you let them go or save them as a loop.'
+            // Without the hand guard it can't tell a knock from an arm covering counters:
+            // every reach across the board froze the old pattern.
+            : 'Needs "Ignore hands" on: without it, an arm reaching over counters looks like a knock.'}
         />
         <Button tone="secondary" onClick={hands.onCheckHand} disabled={hands.checking}>
           {hands.checking ? 'Hold your hand over the board…' : 'Check my hand'}
