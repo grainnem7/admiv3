@@ -20,7 +20,7 @@ import { BRIGHT, ENERGY, LOUD, SPACE_ALL, SPACE_SEND, stepCc } from '../audio/so
 import type { ColourChannel } from '../tracking/boardColours';
 import {
   BAND_BASS_CHANNEL, BAND_PAD_CHANNEL, channelFor, EXTRA_NOTES_CHANNEL, gainToCc, hasColourChannel,
-  LOOP_CHANNELS, ROLE_CHANNEL, VOLUME_CHANNEL, type MappingTarget, type MidiChannelMode,
+  LOOP_CHANNELS, ROLE_CHANNEL, VOLUME_CHANNEL, type MappingTarget, type MidiChannelMode, type MidiEvent,
 } from './boardMidi';
 
 /** The controller that picks a Rack chain. */
@@ -265,5 +265,22 @@ export function abletonMappingTargets(plan: AbletonPlan, names: ReadonlyMap<numb
   out.push({ channel: VOLUME_CHANNEL, cc: CC_SPACE_ALL, value: value(VOLUME_CHANNEL, CC_SPACE_ALL), what: 'Space (ch 16): Return A level' });
   out.push({ channel: VOLUME_CHANNEL, cc: CC_ENERGY, value: value(VOLUME_CHANNEL, CC_ENERGY), what: 'Energy (ch 16): optional macro' });
   out.push({ channel: VOLUME_CHANNEL, cc: CC_GROOVE, value: value(VOLUME_CHANNEL, CC_GROOVE), what: 'Groove (ch 16): optional' });
+  return out;
+}
+
+/**
+ * ▶ Hear in Ableton: the colour's chain chosen on its channel (when given, as the CC 30
+ * value), then the phrase's notes there, each with its Note Off.
+ */
+export function previewEvents(
+  channel: number, chainCc: number | null, notes: readonly { midi: number; atMs: number; durMs: number }[],
+): MidiEvent[] {
+  const ch = (channel - 1) & 0x0f;
+  const out: MidiEvent[] = [];
+  if (chainCc !== null) out.push({ data: [0xb0 | ch, CHAIN_CC, chainCc], atMs: 0 });
+  for (const n of notes) {
+    out.push({ data: [0x90 | ch, n.midi, 100], atMs: n.atMs });
+    out.push({ data: [0x80 | ch, n.midi, 0], atMs: n.atMs + n.durMs });
+  }
   return out;
 }
