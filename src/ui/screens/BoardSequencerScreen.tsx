@@ -47,6 +47,7 @@ import { ReadyStep } from './boardSequencer/setup/ReadyStep';
 import { BoardCornerEditor } from './boardSequencer/components/BoardCornerEditor';
 import { cellMap, LiveBoardView } from './boardSequencer/components/BoardView';
 import { createPopStore, soundingKey, type PopStore } from './boardSequencer/popStore';
+import { beyondLoopNote, beyondLoopSquares } from '../../songs/beyondLoop';
 import { cellsKey, controlsKey, frameKey } from './boardSequencer/runtimeKeys';
 import { describeBoard, phraseSpans, popsAt, pruneFired, type Pop } from './boardSequencer/components/boardViewModel';
 import { isSequencedRole, isControlRole, isLoopRole } from '../../tracking/boardColours';
@@ -3947,6 +3948,13 @@ export default function BoardSequencerScreen() {
     held: heldCells,
     ghosts: ghostCells,
   };
+  // Counters past their part's loop length never play: faded on the board, and said why.
+  const partLoops = { melodic: config.loopStepsRed, drums: config.loopStepsBlack, bass: config.loopStepsBlue };
+  const silentSquares = beyondLoopSquares(
+    [...boardFrame.detected, ...boardFrame.settled] as [string, string][],
+    (id) => channelById.get(id), partLoops, config.cols, config.phrases,
+  );
+  const beyondNote = beyondLoopNote(config.channels, partLoops, config.cols, config.phrases);
   const emptyLoopSlot = loopSlotCount > 0
     && loopBankRef.current.saved.slice(0, loopSlotCount).some((sl) => sl == null);
 
@@ -3963,7 +3971,8 @@ export default function BoardSequencerScreen() {
   const describeLaptopCell = (row: number, col: number): string => {
     const c = config.laptopBoard.find((x) => x.row === row && x.col === col);
     const ch = c ? channelById.get(c.colour) : undefined;
-    return ch ? `${describeChannel(ch)}, ${ROLE_LABELS[ch.role]}` : 'empty';
+    if (!ch) return 'empty';
+    return `${describeChannel(ch)}, ${ROLE_LABELS[ch.role]}${silentSquares.has(`${row},${col}`) ? ', past its loop: doesn’t play' : ''}`;
   };
   /**
    * Colours a laptop can add one at a time, each a clearly different hue so its name
@@ -4087,6 +4096,7 @@ export default function BoardSequencerScreen() {
       notice={running ? boardNotice : null}
       onCellTap={laptop ? tapLaptopCell : undefined}
       describeCell={laptop ? describeLaptopCell : undefined}
+      silent={silentSquares}
     />
   );
 
@@ -4413,6 +4423,9 @@ export default function BoardSequencerScreen() {
               .join(', ')}`
             : ''}
         </p>
+      )}
+      {view === 'play' && beyondNote && (
+        <p style={{ margin: 0, fontSize: 12, color: 'var(--bs-fg2)' }}>{beyondNote}</p>
       )}
       {view === 'play' && remoteNote && (
         <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--bs-accent)' }}>{remoteNote.text}</p>

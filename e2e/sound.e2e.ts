@@ -111,3 +111,17 @@ test('the red cap (tried with the mouse) moves the speed left–right and shows 
   await expect(page.getByText(/^Speed \d+ BPM$/).first()).toBeVisible();
   expect(pageErrors(page)).toEqual([]);
 });
+
+test('a counter past its part’s loop shows that it doesn’t play', async ({ page }) => {
+  await openLaptopBoard(page);
+  await page.getByRole('tab', { name: 'Groove' }).click();
+  await page.getByRole('combobox', { name: 'Melody', exact: true }).selectOption('6');
+  await pickColour(page, 'Red');
+  await place(page, [[3, 8], [3, 2]]);
+  const grid = page.getByRole('grid', { name: /Laptop board/ });
+  // Step 8 is past Melody's 6 steps: said on the square, and under the board.
+  await expect(grid.getByRole('button', { name: /^Row 3 from the bottom, step 8: .*doesn’t play/ })).toBeVisible();
+  await expect(grid.getByRole('button', { name: /^Row 3 from the bottom, step 2: (?!.*doesn’t play)/ })).toBeVisible();
+  await expect(page.getByText('Steps 7–8 are past Melody’s 6-step loop: melody counters there don’t play.')).toBeVisible();
+  expect(pageErrors(page)).toEqual([]);
+});

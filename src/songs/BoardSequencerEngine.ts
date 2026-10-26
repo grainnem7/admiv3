@@ -11,6 +11,7 @@
  * CURRENT active set via notesForStep.
  */
 
+import { playsTune } from './beyondLoop';
 import * as Tone from 'tone';
 import { BoardSequencerVoice } from './voices/BoardSequencerVoice';
 import { voicingForCells, degreeMidi, chordDegreeMidi, drumForRow, DEFAULT_DRUM_ROWS, loopLen, playheadStep, lapIndex, strictlyAfter, pageIndexAt, firesThisLap, firesThisLapPaged } from './boardSequencerScale';
@@ -690,12 +691,7 @@ export class BoardSequencerEngine {
    * With phrases switched off (Advanced) every colour plays one note.
    */
   private playsTune(colour: string): boolean {
-    if (!this.cfg.phrases) return false;
-    const ch = this.channelById.get(colour);
-    if (!ch) return false;
-    if (ch.plays === 'note') return false;
-    if (ch.plays === 'tune') return true;
-    return ch.role !== 'melody';
+    return playsTune(this.channelById.get(colour), this.cfg.phrases ?? false);
   }
 
   /** 0..1, 0.5 = as set. Louder, busier drums above; softer, sparser below. */

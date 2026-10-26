@@ -56,6 +56,11 @@ export interface BoardViewProps {
    * the audience) — they pulse as they play.
    */
   loopCells?: readonly { row: number; col: number; colour: ColourId }[];
+  /**
+   * Squares whose counter can never sound: past its part's loop length (see
+   * songs/beyondLoop). Drawn faded, so a silent counter doesn't look like a playing one.
+   */
+  silent?: ReadonlySet<string>;
   /** The laptop board: squares are buttons, and a click places or lifts a counter. */
   onCellTap?(row: number, col: number): void;
   /** What a square is called for a screen reader on the laptop board ("Red, melody"). */
@@ -81,7 +86,7 @@ const CLEAR_CELL = (): CSSProperties => ({ background: 'transparent', border: 'n
 
 export function BoardView({
   rows, cols, frame, pops, playheadCol, playing, pingPongDirection, swatchFor, palette,
-  pageLabel, reducedMotion = false, fillMarks, band, spans, notice, onCellTap, describeCell, loopCells,
+  pageLabel, reducedMotion = false, fillMarks, band, spans, notice, onCellTap, describeCell, loopCells, silent,
 }: BoardViewProps): JSX.Element {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -150,6 +155,7 @@ export function BoardView({
 
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
+        ctx.globalAlpha = 1;
         const x = c * cw + pad;
         const y = r * ch + pad;
         const cellW = cw - pad * 2;
@@ -189,6 +195,8 @@ export function BoardView({
         const detectedColour = frame.detected.get(key);
         const colour = settledColour ?? detectedColour ?? ghost?.colour;
         if (!colour) continue;
+        // Past its part's loop: it never plays, so it must not look like a counter that does.
+        if (silent?.has(key)) ctx.globalAlpha = 0.3;
 
         const swatch = swatchFor(colour);
         const { inner, outer } = swatchRingFor(swatch, palette.raised, palette);
@@ -359,7 +367,7 @@ export function BoardView({
       ctx.textBaseline = 'top';
       ctx.fillText(pingPongDirection > 0 ? '→' : '←', playheadCol * cw + cw / 2, 2);
     }
-  }, [dims, rows, cols, frame, pops, playheadCol, playing, pingPongDirection, swatchFor, palette, reducedMotion, fillMarks, band, spans, notice, loopCells]);
+  }, [dims, rows, cols, frame, pops, playheadCol, playing, pingPongDirection, swatchFor, palette, reducedMotion, fillMarks, band, spans, notice, loopCells, silent]);
 
   // The squares to click: rebuilt only when what they say changes. The board redraws for
   // every frame of a sounding note, and rebuilding 64+ buttons with it cost more than the
