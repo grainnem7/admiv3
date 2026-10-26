@@ -2,7 +2,8 @@
  * The iPad link, running inside the local dev/preview server (see vite.config.ts).
  *
  * Laptop ("host") and iPad ("remote") both open a WebSocket to REMOTE_PATH with the same
- * 4-digit code. The relay passes each side's messages to the other side of the SAME code
+ * 6-digit code. Only ADMI's own page may connect, only the laptop itself may be the host,
+ * and a device that keeps trying codes nobody is using is turned away for a while. The relay passes each side's messages to the other side of the SAME code
  * only, and tells both how many of each are connected. It understands nothing else: every
  * message is checked by `parseRemoteMessage` before it is passed on, and anything too big
  * or malformed is dropped.
@@ -15,6 +16,7 @@ import type { Duplex } from 'node:stream';
 import { networkInterfaces } from 'node:os';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { isRemoteCode, parseRemoteMessage, REMOTE_PATH } from './protocol';
+import { isLoopback } from '../storage/diskStore';
 
 type Role = 'host' | 'remote';
 interface Member { ws: WebSocket; role: Role }
@@ -28,6 +30,38 @@ export const MAX_MESSAGE_BYTES = 64 * 1024;
 /** A connection that answers no ping for this long is gone (a sleeping iPad, lost Wi-Fi). */
 const HEARTBEAT_MS = 5000;
 
+/** Joins to a code with no laptop on it, from one device, before it is turned away. */
+export const MAX_MISSES = 8;
+export const MISS_WINDOW_MS = 60_000;
+
+/**
+ * Counts each device's tries at codes nobody is using. A real iPad joins one code and
+ * stays connected while it waits for the laptop; something trying codes one after another
+ * runs out of tries within a minute.
+ */
+export class JoinGuard {
+  private misses = new Map<string, number[]>();
+
+  blocked(ip: string, now: number): boolean {
+    const recent = (this.misses.get(ip) ?? []).filter((t) => now - t < MISS_WINDOW_MS);
+    if (recent.length === 0) this.misses.delete(ip); else this.misses.set(ip, recent);
+    return recent.length >= MAX_MISSES;
+  }
+
+  miss(ip: string, now: number): void {
+    this.misses.set(ip, [...(this.misses.get(ip) ?? []), now].slice(-MAX_MISSES * 2));
+  }
+}
+
+/**
+ * The socket was opened by a page from this same server: ADMI's own page, on the laptop
+ * or the iPad. Any other website open in the same browser could otherwise connect.
+ */
+export function sameOrigin(origin: string | undefined, host: string | undefined): boolean {
+  if (!origin || !host) return false;
+  try { return new URL(origin).host === host; } catch { return false; }
+}
+
 /** Who may send what: the iPad sends controls and taps, the laptop sends state. */
 export function allowedFrom(role: Role, type: string): boolean {
   return role === 'remote'
@@ -38,6 +72,7 @@ export function allowedFrom(role: Role, type: string): boolean {
 export function attachRemoteRelay(server: Server): void {
   const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_MESSAGE_BYTES });
   const rooms = new Map<string, Set<Member>>();
+  const guard = new JoinGuard();
   // Nothing a client sends may take the server down: it also serves the app, the sound
   // and the saved loops. An unhandled socket error (an oversized message, say) would.
   wss.on('error', () => { /* a bad connection is dropped, the server carries on */ });
@@ -78,7 +113,12 @@ export function attachRemoteRelay(server: Server): void {
     if (url.pathname !== REMOTE_PATH) return;
     const code = url.searchParams.get('code');
     const role = url.searchParams.get('role');
-    if (!isRemoteCode(code) || (role !== 'host' && role !== 'remote')) {
+    const ip = req.socket.remoteAddress ?? '';
+    if (!isRemoteCode(code) || (role !== 'host' && role !== 'remote')
+      || !sameOrigin(req.headers.origin, req.headers.host)
+      // The laptop is the host: nothing on the network may pose as it and feed the iPad.
+      || (role === 'host' && !isLoopback(ip))
+      || (role === 'remote' && guard.blocked(ip, Date.now()))) {
       socket.destroy();
       return;
     }
@@ -88,6 +128,7 @@ export function attachRemoteRelay(server: Server): void {
       ws.on('pong', () => alive.set(ws, true));
       const member: Member = { ws, role };
       const room = rooms.get(code) ?? new Set<Member>();
+      if (role === 'remote' && ![...room].some((m) => m.role === 'host')) guard.miss(ip, Date.now());
       room.add(member);
       rooms.set(code, room);
       announce(code);

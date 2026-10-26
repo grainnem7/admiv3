@@ -131,7 +131,7 @@ import { diskState, onDiskState, restoreFromFile, scheduleDiskSave } from '../..
 import { backupFileName, parseBoardBackup, snapshotStorage, summariseBackup, type BoardBackup } from '../../storage/boardBackup';
 import { useRemoteLink } from '../../remote/useRemoteLink';
 import {
-  dynamicsFromValue, fullReachMap, makeRemoteCode, reachFromSamples, REMOTE_CONTROLS, REMOTE_INFO_PATH,
+  dynamicsFromValue, fullReachMap, isRemoteCode, makeRemoteCode, reachFromSamples, REMOTE_CONTROLS, REMOTE_INFO_PATH,
   tempoFromValue, valueFromTempo, valueFromVelocity,
   type RemoteControlName, type RemoteMessage, type RemoteState, type RemoteTriggerName,
 } from '../../remote/protocol';
@@ -657,7 +657,8 @@ export default function BoardSequencerScreen() {
   const [remoteCode, setRemoteCode] = useState<string>(() => {
     try {
       const saved = localStorage.getItem(REMOTE_CODE_KEY);
-      if (saved && /^\d{4}$/.test(saved)) return saved;
+      // A saved four-digit code from before is replaced by a six-digit one, once.
+      if (isRemoteCode(saved)) return saved;
       // Kept from the first moment: a reload making a new code broke the iPad's link.
       const fresh = makeRemoteCode();
       localStorage.setItem(REMOTE_CODE_KEY, fresh);
