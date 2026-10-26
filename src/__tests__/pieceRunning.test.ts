@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { forgetPieceRunning, readPieceRunning, rememberPieceRunning, rememberShowing } from '../songs/performance/pieceRunning';
+import { forgetPieceRunning, readPieceRunning, rememberPieceRunning, rememberScene, rememberShowing } from '../songs/performance/pieceRunning';
 
 describe('a piece remembered across a reload', () => {
   beforeEach(() => forgetPieceRunning());
@@ -16,5 +16,14 @@ describe('a piece remembered across a reload', () => {
   it('nothing remembered: nothing to carry on, and Show changes nothing', () => {
     rememberShowing(true);
     expect(readPieceRunning()).toBeNull();
+  });
+
+  it('remembers the scene that was playing, so a Next before the reload is kept', () => {
+    rememberPieceRunning(Date.now() - 10_000, 60);
+    rememberScene(2);
+    rememberShowing(true);
+    expect(readPieceRunning()).toMatchObject({ scene: 2, show: true });
+    rememberScene(null); // between scenes: the last one stands
+    expect(readPieceRunning()?.scene).toBe(2);
   });
 });

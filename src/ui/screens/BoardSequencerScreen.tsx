@@ -47,7 +47,7 @@ import { ReadyStep } from './boardSequencer/setup/ReadyStep';
 import { BoardCornerEditor } from './boardSequencer/components/BoardCornerEditor';
 import { cellMap, LiveBoardView } from './boardSequencer/components/BoardView';
 import { createSessionArchive, indexedDbTakeStore, MAX_TAKES, type SessionArchive, type TakeSummary } from '../../storage/sessionArchive';
-import { forgetPieceRunning, readPieceRunning, rememberPieceRunning, rememberShowing, type PieceRunning } from '../../songs/performance/pieceRunning';
+import { forgetPieceRunning, readPieceRunning, rememberPieceRunning, rememberScene, rememberShowing, type PieceRunning } from '../../songs/performance/pieceRunning';
 import { LinkQr } from './boardSequencer/components/LinkQr';
 import { createPopStore, soundingKey, type PopStore } from './boardSequencer/popStore';
 import { beyondLoopNote, beyondLoopSquares, playsTune } from '../../songs/beyondLoop';
@@ -642,6 +642,8 @@ export default function BoardSequencerScreen() {
   const hardStoppedRef = useRef(false);
   /** Where the next Play starts the clock, when rehearsing from a scene (seconds; null = the top). */
   const rehearseFromRef = useRef<number | null>(null);
+  /** Carrying on after a reload: the scene that was playing, if later than the plan's. */
+  const resumeSceneRef = useRef<number | null>(null);
   // The player's own settings from before the piece began. Scenes change tempo, sound
   // and band as the piece runs; when it is over they come back, so a rehearsal never
   // leaves the player's settings wherever the last scene put them.
@@ -1896,7 +1898,12 @@ export default function BoardSequencerScreen() {
     // got the opening scene's band and loops, and loops changing at 1:30.
     const clockOn = from !== null;
     const startSec = from ?? 0;
-    const openingIndex = clockOn ? sceneAt(home.scenes, startSec) : -1;
+    const resumeScene = resumeSceneRef.current;
+    resumeSceneRef.current = null;
+    // Carrying on: the clock never brings back a scene earlier than the one that was on.
+    const planned = clockOn ? sceneAt(home.scenes, startSec) : -1;
+    const openingIndex = clockOn && resumeScene !== null && resumeScene < home.scenes.length
+      ? Math.max(planned, resumeScene) : planned;
     const opening = openingIndex >= 0 ? home.scenes[openingIndex] : null;
     const cfg: BoardSequencerStored = opening ? { ...home, ...opening.settings, currentScene: openingIndex } : home;
     if (opening) wantedRef.current = new Set(opening.loops.filter((sl) => (home.loopSlots[sl] ?? null) !== null));
@@ -1916,6 +1923,10 @@ export default function BoardSequencerScreen() {
       variationEnabled: cfg.variationEnabled,
       variationOffsetThreshold: cfg.variationOffsetThreshold,
     });
+    // Counters already on the board play from step 1 of the first pass: they were placed
+    // before Play, so they don't have to settle all over again.
+    modeRef.current.setTwoCounters(cfg.twoCounterMode === 'both');
+    modeRef.current.primeSettled(latestFrameRef.current?.readings ?? []);
     const engine = new BoardSequencerEngine({
       bpm: cfg.bpm, rows: cfg.rows, cols: cfg.cols,
       scaleRootMidi: cfg.scaleRootMidi, scaleSemitones: cfg.scaleSemitones, swing: cfg.swing,
@@ -1965,7 +1976,9 @@ export default function BoardSequencerScreen() {
     } else {
       engine.setSyncSource(null);
     }
-    engine.start();
+    // The first beat waits for the board's first reading (a frame or so): until then the
+    // engine doesn't know which counters are down, and step 1 went by in silence.
+    engine.start({ waitForBoard: true });
     engineRef.current = engine;
     // One pad per cell of the loop lane — a row of steps or a column of rows.
     loopBankRef.current = seedLoopBank(
@@ -2016,6 +2029,15 @@ export default function BoardSequencerScreen() {
   /** Rehearse from a point in the piece: Play, with the clock already at `sec`. */
   // Whether Show is open, for the piece remembered across a reload (when there is one).
   useEffect(() => { if (running) rememberShowing(view === 'bigBoard'); }, [view, running]);
+  // And which scene is on, so a Next taken before a reload isn't lost.
+  useEffect(() => { if (running) rememberScene(config.currentScene); }, [config.currentScene, running]);
+  // The reload banner's times count on while it waits (they were frozen at the reload).
+  const [, setBannerTick] = useState(0);
+  useEffect(() => {
+    if (!resumeFrom || running) return undefined;
+    const id = window.setInterval(() => setBannerTick((n) => n + 1), 1000);
+    return () => window.clearInterval(id);
+  }, [resumeFrom, running]);
 
   const rehearseFrom = (sec: number): void => {
     if (runningRef.current) return;
@@ -4238,6 +4260,7 @@ export default function BoardSequencerScreen() {
               onClick={() => {
                 const now = Math.round((Date.now() - resumeFrom.startedAt) / 1000);
                 setResumeFrom(null);
+                resumeSceneRef.current = resumeFrom.scene ?? null;
                 rehearseFrom(Math.max(0, now));
                 // Back where it was: Show, if Show was open.
                 if (resumeFrom.show) setView('bigBoard');

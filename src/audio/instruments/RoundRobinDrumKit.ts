@@ -3,6 +3,8 @@ import * as Tone from 'tone';
 
 /** Canonical single-drum names the kit holds samples for. */
 type DrumName = 'kick' | 'snare' | 'hat' | 'crash' | 'tom' | 'clap' | 'rim';
+/** How far after a queued start a clashing hit goes, when no other take is free. */
+const MIN_RESTART_SEC = 0.001;
 const DRUM_NAMES: readonly DrumName[] = ['kick', 'snare', 'hat', 'crash', 'tom', 'clap', 'rim'];
 
 /** Every drum the kit can be asked to play (single pieces + compounds). */
@@ -21,6 +23,8 @@ type KitManifest = Partial<Record<DrumName, string[]>>;
  */
 export class RoundRobinDrumKit {
   private samples = new Map<DrumName, Tone.Player[]>();
+  /** Each player's latest queued start: a new start may not come before it. */
+  private lastStart = new Map<Tone.Player, number>();
   private rrIndex = new Map<DrumName, number>();
   private ready = false;
   /** Disposed: a load still under way must not build (or keep) anything. */
@@ -197,12 +201,28 @@ export class RoundRobinDrumKit {
       p = players[i];
       this.rrIndex.set(key, (i + 1) % players.length);
     }
+    // A player can't start before a start it already has queued (Tone throws, and the hit
+    // was lost): after a scene change, a tempo change or Carry on, a hit can be scheduled
+    // earlier than one queued a moment before. Use another take of the same drum that is
+    // free by then; failing that, this one just after its queued start.
+    if (time === undefined) {
+      p.volume.value = gainDb;
+      p.start(); // now
+      return;
+    }
+    let at = time;
+    const last = (q: Tone.Player): number => this.lastStart.get(q) ?? -Infinity;
+    if (last(p) > at) {
+      const free = players.find((q) => last(q) <= at);
+      if (free) p = free;
+      else at = last(p) + MIN_RESTART_SEC;
+    }
+    this.lastStart.set(p, at);
     // Schedule the volume AT the hit's own time. Writing `.value` applies immediately, so
     // two hits scheduled inside the look-ahead window both ended up at the later one's
     // volume — a quiet ghost note next to an accent made both loud.
-    if (time !== undefined) p.volume.setValueAtTime(gainDb, time);
-    else p.volume.value = gainDb;
-    p.start(time); // start(undefined) === start-now in Tone.js; safe for existing callers
+    p.volume.setValueAtTime(gainDb, at);
+    p.start(at);
   }
 }
 

@@ -183,6 +183,34 @@ export class BoardSequencerMode {
   }
 
   /**
+   * Counters already lying on the board when Play is pressed count as settled at once:
+   * they were placed before, and making them settle again silenced step 1 for a whole
+   * pass after every Play. No settle tick (nothing was just put down). A counter that is
+   * moving after all goes idle by the usual rule.
+   */
+  primeSettled(readings: readonly CellReading[]): void {
+    for (const r of readings) {
+      const colours = this.twoCounters
+        ? (r.colours ?? (r.colour ? [r.colour] : []))
+        : (r.colour ? [r.colour] : []);
+      for (const colour of colours) {
+        const key = this.twoCounters ? `${r.row},${r.col},${colour}` : keyOf(r.row, r.col);
+        const centroid = (this.twoCounters ? r.centroids?.[colour] : null) ?? r.centroid;
+        if (!centroid || this.states.get(key)?.phase === 'settled') continue;
+        const offset = (this.twoCounters ? r.offsets?.[colour] : null) ?? r.offset ?? null;
+        this.states.set(key, {
+          lastCentroid: centroid, velocity: 0, stillMs: this.settleWindowMs, movingMs: 0, lostMs: 0,
+          phase: 'settled', colour, pendingColour: null, pendingColourMs: 0, offsets: [], positions: [],
+          settledPosition: r.boxPositions?.[colour] ?? CENTRED,
+          settledOffset: offset,
+          conditional: conditionalFromOffset(offset, this.variationEnabled, this.variationOffsetThreshold),
+          resettle: false,
+        });
+      }
+    }
+  }
+
+  /**
    * Live-update the settle window. The hand guard makes settling safe to shorten: the
    * long window existed to ride out hands, and those cells are now held instead.
    */

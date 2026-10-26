@@ -210,6 +210,8 @@ const LOOKAHEAD_SEC = 0.1;
 /** How long Play waits for the instruments' samples before starting without them. */
 const START_READY_MAX_MS = 4000;
 const TICK_INTERVAL_MS = 25;
+/** How long Play waits for the board's first reading before starting anyway. */
+const BOARD_WAIT_MAX_SEC = 0.5;
 
 /** Largest index whose beats[idx] <= t, or -1 if none. Binary search. */
 function lastIndexLEQ(beats: number[], t: number): number {
@@ -302,6 +304,10 @@ export class BoardSequencerEngine {
   private lastFiredPage = 0;
   private startSec = 0;
   private lastInternalBeat = -1;
+  /** Play waits for the board: set once the screen hands over the counters. */
+  private boardArrived = false;
+  /** While waiting for the board: the latest the first beat may start (null = not waiting). */
+  private boardWaitUntil: number | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
   private muted = false;
   private syncSource: BoardSyncSource | null = null;
@@ -1211,6 +1217,7 @@ export class BoardSequencerEngine {
 
   setActiveCells(cells: ActiveCell[]): void {
     this.active = cells;
+    this.boardArrived = true;
   }
 
   /** Set the layered loops (from the loop bank) that play atop the live pattern. */
@@ -1665,8 +1672,14 @@ export class BoardSequencerEngine {
     this.tick.triggerAttackRelease('C2', 0.05, t);
   }
 
-  start(): void {
+  /**
+   * `waitForBoard`: hold the first beat (and the playhead) until the screen hands over the
+   * board's counters, up to BOARD_WAIT_MAX_SEC, so step 1 isn't played before they are known.
+   */
+  start(opts: { waitForBoard?: boolean } = {}): void {
     this.startSec = Tone.now();
+    this.boardArrived = false;
+    this.boardWaitUntil = opts.waitForBoard ? this.startSec + BOARD_WAIT_MAX_SEC : null;
     this.lastInternalBeat = -1;
     this.lastBeatIndex = -1;
     this.lastTickTime = 0;
@@ -1695,6 +1708,12 @@ export class BoardSequencerEngine {
   private scheduleInternal(): void {
     const secPerBeat = 60 / this.cfg.bpm;
     const now = Tone.now();
+    if (this.boardWaitUntil !== null) {
+      // Beat 0 starts when the board arrives: the clock slides along with the wait.
+      this.startSec = now;
+      if (!this.boardArrived && now < this.boardWaitUntil) return;
+      this.boardWaitUntil = null;
+    }
     const target = Math.floor((now + LOOKAHEAD_SEC - this.startSec) / secPerBeat);
     if (target === this.lastInternalBeat) return;
     // Catch up over EVERY beat that was missed, the way the song-locked path already does.

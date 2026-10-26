@@ -10,10 +10,12 @@ export interface PieceRunning {
   lengthSec: number;
   /** Show was open: carrying on goes back into it. */
   show: boolean;
+  /** The scene playing (after a Next, ahead of the plan), so carrying on doesn't lose it. */
+  scene?: number;
 }
 
-export function rememberPieceRunning(startedAt: number, lengthSec: number, show = false): void {
-  try { sessionStorage.setItem(KEY, JSON.stringify({ startedAt, lengthSec, show })); } catch { /* a reload just starts again */ }
+export function rememberPieceRunning(startedAt: number, lengthSec: number, show = false, scene?: number): void {
+  try { sessionStorage.setItem(KEY, JSON.stringify({ startedAt, lengthSec, show, scene })); } catch { /* a reload just starts again */ }
 }
 
 export function forgetPieceRunning(): void {
@@ -25,7 +27,9 @@ export function readPieceRunning(now = Date.now()): PieceRunning | null {
   try {
     const o = JSON.parse(sessionStorage.getItem(KEY) ?? 'null') as Partial<PieceRunning> | null;
     if (!o || typeof o.startedAt !== 'number' || typeof o.lengthSec !== 'number') return null;
-    return (now - o.startedAt) / 1000 < o.lengthSec ? { startedAt: o.startedAt, lengthSec: o.lengthSec, show: o.show === true } : null;
+    if ((now - o.startedAt) / 1000 >= o.lengthSec) return null;
+    const scene = typeof o.scene === 'number' && o.scene >= 0 ? Math.round(o.scene) : undefined;
+    return { startedAt: o.startedAt, lengthSec: o.lengthSec, show: o.show === true, ...(scene !== undefined ? { scene } : {}) };
   } catch {
     return null;
   }
@@ -34,5 +38,11 @@ export function readPieceRunning(now = Date.now()): PieceRunning | null {
 /** Whether Show is open, for the piece remembered now (nothing when none is). */
 export function rememberShowing(show: boolean): void {
   const p = readPieceRunning();
-  if (p && p.show !== show) rememberPieceRunning(p.startedAt, p.lengthSec, show);
+  if (p && p.show !== show) rememberPieceRunning(p.startedAt, p.lengthSec, show, p.scene);
+}
+
+/** The scene playing now, for the piece remembered now (nothing when none is). */
+export function rememberScene(scene: number | null): void {
+  const p = readPieceRunning();
+  if (p && scene !== null && p.scene !== scene) rememberPieceRunning(p.startedAt, p.lengthSec, p.show, scene);
 }

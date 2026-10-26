@@ -329,3 +329,53 @@ describe('the new settings are saved per player', () => {
     expect(cfg.space).toBe(0.5);
   });
 });
+
+describe('Play waits for the board before step 1', () => {
+  const setNow = async (t: number) => {
+    const Tone = await import('tone');
+    (Tone.now as ReturnType<typeof vi.fn>).mockReturnValue(t);
+    (Tone.immediate as ReturnType<typeof vi.fn>).mockReturnValue(t);
+  };
+
+  it('step 1 plays the counter handed over a frame after Play, not an empty board', async () => {
+    vi.useFakeTimers();
+    try {
+      const { e } = engine([melody()]);
+      await setNow(0);
+      e.start({ waitForBoard: true });
+      await setNow(0.05);
+      vi.advanceTimersByTime(25); // the clock ticks, but the board hasn't been read yet
+      expect(e.drainFiredNotes()).toEqual([]);
+      await setNow(0.12);
+      e.setActiveCells([{ row: 3, col: 0, colour: 'm' }]); // the first frame after Play
+      vi.advanceTimersByTime(25);
+      const fired = e.drainFiredNotes();
+      expect(fired).toHaveLength(1);
+      expect(fired[0]).toMatchObject({ col: 0, origin: 'placed' });
+      expect(fired[0].audioTime).toBeCloseTo(0.12, 5);
+      e.stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('starts anyway if no reading comes within half a second', async () => {
+    vi.useFakeTimers();
+    try {
+      const { e } = engine([melody()]);
+      await setNow(0);
+      // Counters known to the engine, but never handed over by a frame (a stalled camera).
+      (e as unknown as { active: unknown[] }).active = [{ row: 3, col: 0, colour: 'm' }];
+      e.start({ waitForBoard: true });
+      await setNow(0.3);
+      vi.advanceTimersByTime(25);
+      expect(e.drainFiredNotes()).toEqual([]);
+      await setNow(0.6);
+      vi.advanceTimersByTime(25);
+      expect(e.drainFiredNotes()).toHaveLength(1);
+      e.stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

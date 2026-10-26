@@ -46,3 +46,42 @@ describe('drum kit volume scheduling', () => {
     expect(player.volume.value).toBe(velToDb(0.5));
   });
 });
+
+/**
+ * Tone refuses a player start earlier than one it already has queued, and the hit was
+ * lost ("The time must be greater than or equal to the last scheduled time") around scene
+ * changes, tempo changes and Carry on.
+ */
+describe('drum starts out of order', () => {
+  const player = (): FakePlayer => ({ loaded: true, volume: { value: 0, setValueAtTime: vi.fn() }, start: vi.fn() });
+  function kitOf(players: FakePlayer[], fixedVariant: number | null = null): RoundRobinDrumKit {
+    const kit = new RoundRobinDrumKit({} as AudioContext, 'test-kit');
+    const priv = kit as unknown as { samples: Map<string, FakePlayer[]>; ready: boolean; fixedVariant: number | null };
+    priv.samples.set('kick', players);
+    priv.ready = true;
+    priv.fixedVariant = fixedVariant;
+    return kit;
+  }
+
+  it('with no take free, the hit goes just after the queued one instead of being lost', () => {
+    const a = player();
+    const b = player();
+    const kit = kitOf([a, b]);
+    kit.play('kick', 1, 10.5); // a
+    kit.play('kick', 1, 11); // b
+    kit.play('kick', 1, 10.2); // a's turn: a is queued at 10.5 and b at 11
+    kit.play('kick', 1, 12); // b's turn
+    expect(a.start.mock.calls.map((c) => c[0])).toEqual([10.5, 10.501]);
+    expect(b.start.mock.calls.map((c) => c[0])).toEqual([11, 12]);
+  });
+
+  it('a free take of the same drum is used before nudging one', () => {
+    const a = player();
+    const b = player();
+    const kit = kitOf([a, b], 0); // Sounds change holds one take: every hit asks for a
+    kit.play('kick', 1, 10.5);
+    kit.play('kick', 1, 10.2);
+    expect(a.start.mock.calls.map((c) => c[0])).toEqual([10.5]);
+    expect(b.start.mock.calls.map((c) => c[0])).toEqual([10.2]);
+  });
+});

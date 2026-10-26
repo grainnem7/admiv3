@@ -30,6 +30,9 @@ function WelcomeScreen() {
     let cancelled = false;
     (async () => {
       try {
+        // A browser (or a page not on https or localhost) that can't open cameras at all
+        // still lists them: listing one is not being able to use it.
+        if (typeof navigator.mediaDevices?.getUserMedia !== 'function') throw new Error('no camera access');
         const devices = await navigator.mediaDevices.enumerateDevices();
         if (cancelled) return;
         setCameraStatus(devices.some((d) => d.kind === 'videoinput') ? 'available' : 'unavailable');
@@ -86,7 +89,7 @@ function WelcomeScreen() {
         />
         <span>
           {cameraStatus === 'checking' && 'Checking camera...'}
-          {cameraStatus === 'available' && 'Camera ready'}
+          {cameraStatus === 'available' && 'Camera found'}
           {cameraStatus === 'unavailable' && 'No camera detected (the laptop board still works)'}
         </span>
       </div>
