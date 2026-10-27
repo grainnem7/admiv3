@@ -48,8 +48,8 @@ import { BoardCornerEditor } from './boardSequencer/components/BoardCornerEditor
 import { cellMap, LiveBoardView } from './boardSequencer/components/BoardView';
 import { createSessionArchive, indexedDbTakeStore, MAX_TAKES, type SessionArchive, type TakeSummary } from '../../storage/sessionArchive';
 import { forgetPieceRunning, readPieceRunning, rememberPieceRunning, rememberScene, rememberShowing, type PieceRunning } from '../../songs/performance/pieceRunning';
-import { drawCells, keepCells, loopChannelsFor, loopSwatch } from '../../songs/performance/loopSounds';
-import { boardSeen, engineSettingsFor, hearWith, startNewLoop, startWithThese, type NewLoopState } from '../../songs/performance/newLoop';
+import { drawCells, keepCells, loopChannelsFor, loopColourLabel, loopSwatch } from '../../songs/performance/loopSounds';
+import { boardSeen, engineSettingsFor, hearWith, loopsToPlay, startNewLoop, startWithThese, type NewLoopState } from '../../songs/performance/newLoop';
 import { NewLoopPanel } from './boardSequencer/play/NewLoopPanel';
 import { LinkQr } from './boardSequencer/components/LinkQr';
 import { createPopStore, soundingKey, type PopStore } from './boardSequencer/popStore';
@@ -2117,7 +2117,7 @@ export default function BoardSequencerScreen() {
     engine.setActiveLoops([]);
     {
       engine.setLaunchFade(Math.round(cfg.loopFadePasses * cfg.cols * Math.max(1, cfg.numPages)));
-      const slots = [...wantedRef.current].filter((s) => (cfg.loopSlots[s] ?? null) !== null).sort((a, b) => a - b);
+      const slots = loopsToPlay(newLoopRef.current, wantedRef.current, cfg).filter((s) => (cfg.loopSlots[s] ?? null) !== null);
       const played = slots.map((s) => loopChannelsFor(cfg.loopSlots[s] ?? [], cfg.channels));
       const loopColours = [...new Map(played.flatMap((l) => l.channels).map((c) => [c.id, c])).values()];
       engine.setLaunchedLoops(slots, played.map((l) => l.cells), loopColours);
@@ -2505,7 +2505,7 @@ export default function BoardSequencerScreen() {
   );
   const labelForId = (id: ColourId) => {
     const c = channelById.get(id);
-    return c ? describeChannel(c) : id;
+    return c ? describeChannel(c) : loopColourLabel(id) ?? id;
   };
   channelNameRef.current = labelForId;
   const calibLabel = colourCalib === null ? ''
@@ -2735,10 +2735,7 @@ export default function BoardSequencerScreen() {
   /** Tell the engine which loops are wanted; it brings them in at the next pass. */
   const pushLaunch = (extra?: { slot: number; cells: StoredLoopCell[] }, nl: NewLoopState | null = newLoopRef.current): void => {
     const cfg = configRef.current;
-    const want = new Set([...wantedRef.current, ...counterWantedRef.current]);
-    if (extra) want.add(extra.slot);
-    // While making a loop, only the loop asked for with "Hear it with…" plays.
-    if (nl) { want.clear(); for (const s of engineSettingsFor(nl, cfg).loops) want.add(s); }
+    const want = new Set(loopsToPlay(nl, [...wantedRef.current, ...counterWantedRef.current, ...(extra ? [extra.slot] : [])], cfg));
     const cellsOf = (s: number): StoredLoopCell[] | null => (extra && extra.slot === s ? extra.cells : (cfg.loopSlots[s] ?? null));
     const slots = [...want].filter((s) => cellsOf(s) !== null).sort((a, b) => a - b);
     setWantedSlots(slots);

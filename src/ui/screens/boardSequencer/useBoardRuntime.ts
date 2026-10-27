@@ -7,6 +7,7 @@
 import { orientedSize } from '../../../tracking/frameOrientation';
 import { useCallback, useEffect, useRef, type MutableRefObject, type RefObject } from 'react';
 import { playerCellsFor, type NewLoopState } from '../../../songs/performance/newLoop';
+import { loopColourChannels } from '../../../songs/performance/loopSounds';
 import { CameraManager, type CameraTrackInfo } from '../../../tracking/CameraManager';
 import { BoardReader } from '../../../tracking/BoardReader';
 import type { ActiveCell, BoardSequencerMode, CellReading } from '../../../tracking/BoardSequencerMode';
@@ -131,6 +132,11 @@ function boardKey(readings: readonly CellReading[], skip: ReadonlySet<string> | 
   return key;
 }
 
+/** One channel per colour: the player's colours, then each kept loop's colours on the track that plays its sound. */
+function withLoopColours(map: Map<string, number>, cfg: BoardSequencerStored): Map<string, number> {
+  return new Map([...map, ...loopColourChannels(cfg.loopSlots, cfg.channels, map)]);
+}
+
 /** The MIDI port as the screen sees it: whether it is there, and whether ADMI is holding on its own sound. */
 export interface MidiPortState {
   portConnected: boolean;
@@ -166,7 +172,7 @@ export function applyEngineSettings(
     enabled: route.midi,
     sends: sendsFor(configToSoundFrom(cfg), cfg.midiSends),
     channelMode: cfg.midiChannelMode,
-    colourChannels: cfg.midiChannelMode === 'colour' ? colourChannelMap(cfg.channels) : undefined,
+    colourChannels: cfg.midiChannelMode === 'colour' ? withLoopColours(colourChannelMap(cfg.channels), cfg) : undefined,
     leadMs: cfg.midiLeadMs,
     loopChannels: cfg.midiLoopChannels,
   // Any Sound from switch (Ableton and Both included) counts as a new route, so the

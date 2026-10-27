@@ -58,3 +58,12 @@ describe('what the player’s own counters do during a new loop', () => {
     expect(playerCellsFor(null, cells)).toEqual(cells);
   });
 });
+
+describe('which loops play', () => {
+  it('outside a new loop: the wanted ones; during one: only the loop asked for with Hear it with…, at Play too', async () => {
+    const { loopsToPlay } = await import('../songs/performance/newLoop');
+    expect(loopsToPlay(null, [3, 1], own)).toEqual([1, 3]);
+    expect(loopsToPlay(startNewLoop(0), [3, 1], own)).toEqual([]);
+    expect(loopsToPlay(hearWith(startNewLoop(0), { loop: 2 }), [3, 1], own)).toEqual([2]);
+  });
+});

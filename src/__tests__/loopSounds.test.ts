@@ -94,3 +94,25 @@ describe('drawing a kept loop', () => {
     expect(keepCells([{ row: 0, col: 3, colour: 'white' }], [tempo])).toEqual([]);
   });
 });
+
+describe('a kept loop in words, and on which track', () => {
+  it('names a loop colour by its sound', async () => {
+    const { loopColourLabel } = await import('../songs/performance/loopSounds');
+    expect(loopColourLabel('loop:melody:violin')).toBe('Violin loop');
+    expect(loopColourLabel('loop:bass:')).toBe('Bass loop');
+    expect(loopColourLabel('loop:drums:snare')).toBe('Snare loop');
+    expect(loopColourLabel('green')).toBeNull();
+  });
+
+  it('one channel per colour: a loop plays on the track of today’s colour with that sound, else its job’s first track', async () => {
+    const { loopColourChannels } = await import('../songs/performance/loopSounds');
+    const today = [colour('pink', 'melody', { instrument: 'piano' }), colour('teal', 'melody', { instrument: 'violin' }), colour('blue', 'bass')];
+    const trackOf = new Map([['pink', 1], ['teal', 14], ['blue', 2]]);
+    const slots: (StoredLoopCell[] | null)[] = [
+      [{ row: 1, col: 1, colour: 'green', job: 'melody', sound: 'violin' }, { row: 2, col: 1, colour: 'red', job: 'chord', sound: 'organ' }],
+      null,
+      [{ row: 1, col: 1, colour: 'old' }],
+    ];
+    expect(loopColourChannels(slots, today, trackOf)).toEqual(new Map([['loop:melody:violin', 14], ['loop:chord:organ', 3]]));
+  });
+});

@@ -11,6 +11,8 @@
 import type { ActiveCell } from '../../tracking/BoardSequencerMode';
 import type { ColourChannel } from '../../tracking/boardColours';
 import type { StoredLoopCell } from '../../profiles/BoardSequencerConfig';
+import { soundOptionName } from '../../ui/screens/boardSequencer/soundCatalogue';
+import { COLOUR_JOB_CHANNELS } from '../../midi/boardMidi';
 
 export type LoopJob = NonNullable<StoredLoopCell['job']>;
 
@@ -88,6 +90,40 @@ export function loopChannelsFor(
  */
 export function drawCells(cells: readonly StoredLoopCell[]): { row: number; col: number; colour: string }[] {
   return cells.map((c) => ({ row: c.row, col: c.col, colour: c.job ? loopColourId(c.job, c.sound ?? '') : c.colour }));
+}
+
+const JOB_WORDS: Record<LoopJob, string> = { melody: 'Melody', bass: 'Bass', chord: 'Chords', drums: 'Drums' };
+
+/** A loop colour in words ("Violin loop", "Bass loop"); null for any other colour id. */
+export function loopColourLabel(id: string): string | null {
+  if (!id.startsWith(LOOP_PREFIX)) return null;
+  const [job, ...rest] = id.slice(LOOP_PREFIX.length).split(':');
+  const sound = rest.join(':');
+  if (!sound) return `${JOB_WORDS[job as LoopJob] ?? 'A'} loop`;
+  const name = soundOptionName(sound);
+  return `${name.charAt(0).toUpperCase()}${name.slice(1)} loop`;
+}
+
+/**
+ * One channel per colour: which track each kept loop's notes go to. A loop plays on the
+ * track of today's colour that has the same job and sound (so Ableton's sound there is the
+ * one it was kept with); otherwise on its job's first track.
+ */
+export function loopColourChannels(
+  loopSlots: readonly (StoredLoopCell[] | null)[], today: readonly ColourChannel[], trackOf: ReadonlyMap<string, number>,
+): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const slot of loopSlots) {
+    for (const c of slot ?? []) {
+      if (!c.job) continue;
+      const id = loopColourId(c.job, c.sound ?? '');
+      if (out.has(id)) continue;
+      const match = todaysMatch(c.job, c.sound ?? '', today);
+      const own = match ? trackOf.get(match.id) : undefined;
+      out.set(id, own ?? COLOUR_JOB_CHANNELS[c.job === 'drums' ? 'melody' : c.job][0]);
+    }
+  }
+  return out;
 }
 
 /** What colour to draw a cell in: a loop colour as today's colour for that sound, a known colour as itself, else grey. */

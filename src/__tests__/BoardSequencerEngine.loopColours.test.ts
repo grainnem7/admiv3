@@ -43,7 +43,7 @@ interface Priv {
   fireStep(beat: number, t: number, spb: number, chord: null): void;
 }
 
-const gainNode = () => ({ gain: { value: 1 }, connect: vi.fn(), disconnect: vi.fn() });
+const gainNode = () => ({ gain: { value: 1, setTargetAtTime: vi.fn() }, connect: vi.fn(), disconnect: vi.fn() });
 
 function engine() {
   const e = new BoardSequencerEngine(baseCfg());
@@ -111,6 +111,42 @@ describe('a launched loop plays through its own loop colours', () => {
     expect(p.channelById.has('loop:melody:violin')).toBe(true);
     p.fireStep(2, 7.5, 1, null);
     expect(e.drainFiredNotes()).toHaveLength(1);
+  });
+
+  it('a loop keeps playing after its fade-in ends, and after a colour change rebuilds the index', () => {
+    const { e, p } = engine();
+    (e as unknown as { timer: unknown }).timer = {};
+    e.setLaunchFade(8);
+    e.setLaunchedLoops([0], [[cell(1, 2, 'loop:melody:violin')]], loopChannels);
+    for (let beat = 0; beat <= 9; beat++) p.fireStep(beat, beat, 1, null); // lands at 0, fades in over 8 beats
+    e.drainFiredNotes();
+    e.setChannels([...channels]); // any colour-card change rebuilds the index
+    p.fireStep(10, 10, 1, null);
+    expect(e.drainFiredNotes().map((f) => f.colour)).toEqual(['loop:melody:violin']);
+  });
+
+  it('a leaving loop sounds through its fade-out, then its colours go', () => {
+    const { e, p } = engine();
+    e.setLaunchedLoops([0], [[cell(1, 2, 'loop:melody:violin')]], loopChannels); // playing, no fade
+    (e as unknown as { timer: unknown }).timer = {};
+    e.setLaunchFade(8);
+    e.setLaunchedLoops([], [], []);
+    p.fireStep(8, 8, 1, null); // the boundary: the fade-out starts
+    p.fireStep(10, 10, 1, null);
+    expect(e.drainFiredNotes().map((f) => f.colour)).toEqual(['loop:melody:violin']);
+    for (let beat = 11; beat <= 16; beat++) p.fireStep(beat, beat, 1, null); // the fade-out ends at 16
+    expect(p.channelById.has('loop:melody:violin')).toBe(false);
+  });
+
+  it('a World change gives a default-sound loop the new World’s sound; a loop kept as violin stays violin', () => {
+    const { e, p } = engine();
+    const plain: ColourChannel = { id: 'loop:melody:', kind: 'hue', role: 'melody', swatch: '#9a9a9a', instrument: '', changes: false, plays: 'note' };
+    e.setLaunchedLoops([0], [[cell(1, 2, 'loop:melody:'), cell(2, 2, 'loop:melody:violin')]], [plain, loopChannels[0]]);
+    (p as unknown as { applyDrumColour(): void }).applyDrumColour = () => {};
+    made.length = 0;
+    e.setSoundWorld('electronic');
+    expect(made.some((spec) => typeof spec === 'object')).toBe(true); // the world's layered voice for the plain loop
+    expect(made).not.toContain('violin');
   });
 
   it('a drums loop builds the kit even when today has no drum colour and no band', () => {

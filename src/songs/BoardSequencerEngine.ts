@@ -620,7 +620,9 @@ export class BoardSequencerEngine {
       void this.reverb.generate();
     }
     this.applyDrumColour();
-    for (const ch of this.cfg.channels) {
+    // The player's colours and every launched loop's colours: a loop kept with the default
+    // sound follows the World like the colour it was made with did.
+    for (const ch of this.channelById.values()) {
       const e = this.voiceByChannel.get(ch.id);
       if (!e) continue;
       if (!(ch.instrument && ch.instrument.length > 0)) {
@@ -1367,7 +1369,7 @@ export class BoardSequencerEngine {
       if (next.slots.includes(l.slot)) continue;
       if (l.fade?.dir === 'out') out.push(l); // already going: let it finish
       else if (fade > 0) {
-        out.push({ slot: l.slot, cells: l.cells, fade: { dir: 'out', start: beat, beats: fade } });
+        out.push({ slot: l.slot, cells: l.cells, colours: l.colours, fade: { dir: 'out', start: beat, beats: fade } });
         this.loopFades.set(l.slot, fadeTrack('out'));
       } else stopped.push(l.slot);
     }
@@ -1917,8 +1919,10 @@ export class BoardSequencerEngine {
       const gone = this.launched.filter((l) => l.fade?.dir === 'out' && beat - l.fade.start >= l.fade.beats).map((l) => l.slot);
       this.launched = this.launched
         .filter((l) => !(l.fade?.dir === 'out' && beat - l.fade.start >= l.fade.beats))
-        .map((l) => (l.fade?.dir === 'in' && beat - l.fade.start + 1 >= l.fade.beats ? { slot: l.slot, cells: l.cells } : l));
+        .map((l) => (l.fade?.dir === 'in' && beat - l.fade.start + 1 >= l.fade.beats ? { slot: l.slot, cells: l.cells, colours: l.colours } : l));
       this.launchedSlots = this.launched.map((l) => l.slot);
+      // A loop that has faded out is gone, and its colours with it (and not before).
+      if (gone.length > 0) this.rebuildChannelIndex();
       this.releaseLoopChannels(gone);
     }
     try {

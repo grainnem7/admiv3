@@ -50,6 +50,19 @@ export function playerCellsFor<C>(s: NewLoopState | null, cells: readonly C[]): 
   return s?.phase === 'waitEmpty' ? [] : [...cells];
 }
 
+/**
+ * The loops that play: the wanted ones normally; during a new loop only the one asked for
+ * with "Hear it with…". The same rule at Play and while playing, so pressing Play during a
+ * new loop neither loses the loop being heard nor brings back the ones New loop stopped.
+ */
+export function loopsToPlay(
+  s: NewLoopState | null, wanted: Iterable<number>,
+  own: { band: BandLevel; fillAmount: number; evolveAmount: number },
+): number[] {
+  const slots = s ? engineSettingsFor(s, own).loops : [...wanted];
+  return [...new Set(slots)].sort((a, b) => a - b);
+}
+
 /** How loud Extra notes are when asked for while composing: enough to hear, never busy. */
 const HEAR_FILL = 0.3;
 
