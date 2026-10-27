@@ -678,6 +678,8 @@ export default function BoardSequencerScreen() {
   const counterWantedRef = useRef<Set<number>>(new Set());
   const loopTickRef = useRef<number | null>(null);
   const pushLaunchRef = useRef<() => void>(() => {});
+  /** Stop silences every loop too; stopAllLoops is defined further down, so Stop reaches it here. */
+  const stopAllLoopsRef = useRef<() => void>(() => {});
   // What each colour sounds like now (Evolve), and the seed before "New sound" (for Back).
   const [evolveLabels, setEvolveLabels] = useState<Map<string, { label: string; scene: number }>>(new Map());
   const evolveSigRef = useRef('');
@@ -1942,7 +1944,8 @@ export default function BoardSequencerScreen() {
     const home = homeSettingsRef.current;
     homeSettingsRef.current = null;
     if (home) setConfig((prev) => ({ ...prev, ...home, currentScene: null }));
-    // Nothing is playing any more: a loop still wanted is "ready", not "playing".
+    // Stop means silence: no loop is left waiting to start with Play.
+    stopAllLoopsRef.current();
     setAppliedSlots([]);
     setRunning(false);
   }, []);
@@ -2741,6 +2744,7 @@ export default function BoardSequencerScreen() {
     sessionLogRef.current.action(logActorRef.current, 'stop all loops');
     announce('All loops stop on the next pass.');
   };
+  stopAllLoopsRef.current = stopAllLoops;
   /** The board as it is now (settled while playing, seen otherwise), into a slot. */
   const saveBoardToSlot = (slot: number): void => {
     const cfg = configRef.current;
@@ -3776,7 +3780,6 @@ export default function BoardSequencerScreen() {
       onDrawLoop={(slot) => setEditSlot(slot)}
       onClearLoop={(slot) => setClearSlotTarget(slot)}
       onRenameLoop={renameLoop}
-      onStopAllLoops={stopAllLoops}
       onLoopFade={(loopFadePasses) => update({ loopFadePasses })}
       onGoScene={goScene}
       onRehearseFrom={rehearseFrom}

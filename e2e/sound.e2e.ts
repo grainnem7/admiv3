@@ -268,3 +268,25 @@ test('each new instrument loads and plays with ▶ Hear', async ({ page }) => {
   await hearEach(/^Red: Bass/, ['trombone', 'bassoon']);
   expect(pageErrors(page)).toEqual([]);
 });
+
+test('Stop silences a launched loop; it does not come back on Play', async ({ page }) => {
+  await openLaptopBoard(page);
+  await pieceStep(page, 'Loops');
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1], [5, 3]]);
+  await page.getByRole('button', { name: 'Save the board here' }).first().click();
+  await page.getByRole('button', { name: 'Clear the board' }).click();
+  // Launch the loop with the board empty, so every note comes from the loop.
+  await page.getByRole('listitem', { name: /^Loop 1:/ }).getByRole('button', { name: '▶ Play' }).click();
+  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await expect.poll(() => notesPlayed(page), { timeout: 15_000 }).toBeGreaterThan(0);
+  await page.getByRole('button', { name: '■ Stop' }).first().click();
+  // Stop means silence: the loop is stopped, not "ready · starts with Play".
+  await expect(page.getByRole('listitem', { name: /^Loop 1:/ })).not.toHaveAttribute('aria-label', /ready/);
+  await expect(page.getByRole('listitem', { name: /^Loop 1: .*2 notes/ })).toBeVisible();
+  // Play again with the board still empty: the loop stays stopped, so nothing plays.
+  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await page.waitForTimeout(3000);
+  expect(await notesPlayed(page)).toBe(0);
+  expect(pageErrors(page)).toEqual([]);
+});

@@ -55,7 +55,6 @@ export interface PieceStepsProps {
   onDrawLoop(slot: number): void;
   onClearLoop(slot: number): void;
   onRenameLoop(slot: number, name: string): void;
-  onStopAllLoops(): void;
   onLoopFade(passes: number): void;
   onGoScene(i: number): void;
   onRehearseFrom(sec: number): void;
@@ -103,12 +102,12 @@ function nearestStep(steps: { label: string; value: number }[], v: number): numb
   return best;
 }
 
-function loopStateText(l: PieceLoop, running: boolean, fades: boolean): string {
+export function loopStateText(l: PieceLoop, running: boolean, fades: boolean): string {
   if (l.state === 'empty') return 'empty';
-  if (!running && (l.state === 'playing' || l.state === 'starting')) return 'ready · starts with Play';
-  if (l.state === 'playing') return '▶ playing';
-  if (l.state === 'starting') return fades ? 'fading in…' : 'starting…';
-  if (l.state === 'stopping' && running) return fades ? 'fading out…' : 'stopping…';
+  // Stopped, nothing sounds: a row says what the loop is, never that it is playing.
+  if (running && l.state === 'playing') return '▶ playing';
+  if (running && l.state === 'starting') return fades ? 'fading in…' : 'starting…';
+  if (running && l.state === 'stopping') return fades ? 'fading out…' : 'stopping…';
   return `${l.notes} ${l.notes === 1 ? 'note' : 'notes'}`;
 }
 
@@ -261,7 +260,7 @@ function LoopsStep(p: PieceStepsProps): JSX.Element {
         type="button" aria-expanded={more} onClick={() => setMore((m) => !m)}
         style={{ alignSelf: 'flex-start', background: 'transparent', border: 'none', color: 'var(--bs-fg2)', minHeight: 'var(--bs-target)', cursor: 'pointer' }}
       >
-        {more ? '▾' : '▸'} More: fades, stop all
+        {more ? '▾' : '▸'} More: fades
       </button>
       {more && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -271,7 +270,6 @@ function LoopsStep(p: PieceStepsProps): JSX.Element {
             onChange={p.onLoopFade}
             options={[{ value: 0, label: 'At once' }, { value: 0.5, label: 'Half a pass' }, { value: 1, label: '1 pass' }, { value: 2, label: '2 passes' }]}
           />
-          <div><Button tone="secondary" onClick={p.onStopAllLoops} disabled={!p.loops.some((l) => l.state === 'playing' || l.state === 'starting')}>■ Stop all loops</Button></div>
         </div>
       )}
       <StepFooter next={{ label: 'Next: Scenes', onClick: () => p.onStep('scenes'), primary: true }} />
