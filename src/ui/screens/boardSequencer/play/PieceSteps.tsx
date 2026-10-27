@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { Button } from '../ui/Button';
 import { LabeledSlider } from '../ui/LabeledSlider';
 import { SegmentedControl } from '../ui/SegmentedControl';
@@ -50,6 +50,9 @@ export interface PieceStepsProps {
   rows: number;
   cols: number;
   swatchFor(colour: string): string;
+  /** New loop: composing from silence. Shown in place of the list while it is on. */
+  newLoop: ReactNode;
+  onNewLoop(): void;
   onToggleLoop(slot: number): void;
   onSaveBoardToLoop(slot: number): void;
   onDrawLoop(slot: number): void;
@@ -186,15 +189,13 @@ function LoopsStep(p: PieceStepsProps): JSX.Element {
   return (
     <section aria-labelledby="piece-loops" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <h3 id="piece-loops" style={heading}>1 · Loops</h3>
-      <div style={card}>
-        <p style={{ margin: 0 }}>A loop is a board you save, which then plays by itself under the player.</p>
-        <ol style={{ margin: 0, paddingLeft: 20, display: 'grid', gap: 2 }}>
-          <li>Put counters on the board (press ▶ Play to listen).</li>
-          <li>Press <b>Save the board here</b> on an empty loop.</li>
-          <li>Give it a name, clear the board, and make the next one.</li>
-        </ol>
-        <p style={note}>Optional: without loops, the board plays as usual.</p>
-      </div>
+      {p.newLoop ?? (
+        <div style={card}>
+          <p style={{ margin: 0 }}>A loop is something the player makes with counters, from silence, that then plays by itself.</p>
+          <div><Button tone="primary" onClick={p.onNewLoop}>New loop</Button></div>
+          <p style={note}>Everything stops; only the counters sound. Keep makes the loop.</p>
+        </div>
+      )}
       {!p.canSaveBoard && <p role="status" style={{ ...note, color: 'var(--bs-warn)' }}>The board is empty: put counters on it to save a loop.</p>}
       <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
         {p.loops.map((l) => {

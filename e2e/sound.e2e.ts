@@ -290,3 +290,45 @@ test('Stop silences a launched loop; it does not come back on Play', async ({ pa
   expect(await notesPlayed(page)).toBe(0);
   expect(pageErrors(page)).toEqual([]);
 });
+
+test('New loop starts from silence, Keep names it, Leave restores the player’s settings', async ({ page }) => {
+  await openLaptopBoard(page);
+  // The player's own settings: a quiet band, and a loop already playing.
+  await page.getByRole('tab', { name: 'Sound' }).click();
+  await page.getByRole('group', { name: 'Band' }).getByRole('radio', { name: 'Quiet' }).click();
+  await pieceStep(page, 'Loops');
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1]]);
+  await page.getByRole('button', { name: 'Save the board here' }).first().click();
+  await page.getByRole('button', { name: 'Clear the board' }).click();
+  await page.getByRole('listitem', { name: /^Loop 1:/ }).getByRole('button', { name: '▶ Play' }).click();
+  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await expect.poll(() => notesPlayed(page), { timeout: 15_000 }).toBeGreaterThan(0);
+
+  // New loop: everything stops; the board is empty, so it is ready to compose.
+  await page.getByRole('button', { name: 'New loop' }).click();
+  await expect(page.getByRole('heading', { name: /New loop 2 · silent/ })).toBeVisible();
+  await expect(page.getByRole('listitem', { name: /^Loop 1: .*1 note$/ })).toBeVisible();
+  const quiet = await notesPlayed(page);
+  await page.waitForTimeout(2500);
+  expect(await notesPlayed(page)).toBe(quiet);
+
+  // Two counters: only they sound.
+  await place(page, [[2, 2], [6, 4]]);
+  await expect.poll(() => notesPlayed(page), { timeout: 15_000 }).toBeGreaterThan(quiet);
+
+  // Keep, then name it from a quick name.
+  await page.getByRole('button', { name: 'Keep', exact: true }).click();
+  const name = page.getByRole('textbox', { name: 'Name of the new loop' });
+  await expect(name).toBeFocused();
+  await page.getByRole('button', { name: 'Bed', exact: true }).click();
+  await expect(name).toHaveValue('Bed');
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
+  await expect(page.getByRole('listitem', { name: /^Loop 2: Bed, 2 notes/ })).toBeVisible();
+
+  // Leaving gave the player's own settings back.
+  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await page.getByRole('tab', { name: 'Sound' }).click();
+  await expect(page.getByRole('group', { name: 'Band' }).getByRole('radio', { name: 'Quiet' })).toHaveAttribute('aria-checked', 'true');
+  expect(pageErrors(page)).toEqual([]);
+});

@@ -49,6 +49,8 @@ import { cellMap, LiveBoardView } from './boardSequencer/components/BoardView';
 import { createSessionArchive, indexedDbTakeStore, MAX_TAKES, type SessionArchive, type TakeSummary } from '../../storage/sessionArchive';
 import { forgetPieceRunning, readPieceRunning, rememberPieceRunning, rememberScene, rememberShowing, type PieceRunning } from '../../songs/performance/pieceRunning';
 import { keepCells, loopChannelsFor, loopSwatch } from '../../songs/performance/loopSounds';
+import { boardSeen, engineSettingsFor, hearWith, startNewLoop, startWithThese, type NewLoopState } from '../../songs/performance/newLoop';
+import { NewLoopPanel } from './boardSequencer/play/NewLoopPanel';
 import { LinkQr } from './boardSequencer/components/LinkQr';
 import { createPopStore, soundingKey, type PopStore } from './boardSequencer/popStore';
 import { beyondLoopNote, beyondLoopSquares, playsTune } from '../../songs/beyondLoop';
@@ -202,6 +204,13 @@ const POLY_ROLES: {
 ];
 
 /** Overlay tint from a channel swatch hex at a strong/weak alpha. */
+/** The settings the engine plays with: the player's own, or only what a New loop allows. */
+function forEngine(cfg: BoardSequencerStored, nl: NewLoopState | null): BoardSequencerStored {
+  if (!nl) return cfg;
+  const s = engineSettingsFor(nl, cfg);
+  return { ...cfg, band: s.band, fillAmount: s.fillAmount, evolveAmount: s.evolveAmount };
+}
+
 function colourTint(hex: string, strong: boolean): string {
   const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex.trim());
   const r = m ? parseInt(m[1], 16) : 200;
@@ -544,11 +553,19 @@ export default function BoardSequencerScreen() {
   const midiPortRef = useRef<MidiPortState>({ portConnected: false, holdOnAdmi: false });
   midiPortRef.current = { portConnected: midiPort.connected, holdOnAdmi: midiHold };
   const midiPortLive = `${midiPort.connected}|${midiHold}`;
+  /**
+   * New loop: composing from silence. While it is set the engine plays only what
+   * engineSettingsFor allows (never the player's band, Extra notes or Sounds change), and
+   * the loop being heard alongside goes through pushLaunch. Never saved.
+   */
+  const [newLoop, setNewLoop] = useState<NewLoopState | null>(null);
+  const newLoopRef = useRef<NewLoopState | null>(null);
+  newLoopRef.current = newLoop;
   // The running engine follows the config whenever it changes — a scene, the iPad, a
   // tab — whether or not camera frames are arriving.
   useEffect(() => {
-    if (engineRef.current) applyEngineSettings(engineRef.current, configRef.current, midiPortRef.current);
-  }, [config, running, engineRef, configRef, midiPortLive]);
+    if (engineRef.current) applyEngineSettings(engineRef.current, forEngine(configRef.current, newLoop), midiPortRef.current);
+  }, [config, running, engineRef, configRef, midiPortLive, newLoop]);
   // Watchdog: no camera frame for a moment while playing means the camera has stopped.
   useEffect(() => {
     if (!running || laptop) { setCameraStalled(false); return; }
@@ -2068,7 +2085,7 @@ export default function BoardSequencerScreen() {
     }
     // Every setting (where the sound goes included) before start(), which sends the
     // receiving end its opening Expression.
-    applyEngineSettings(engine, cfg, midiPortRef.current);
+    applyEngineSettings(engine, forEngine(cfg, newLoopRef.current), midiPortRef.current);
     engine.setMuted(mutedRef.current);
     // Pattern chaining: load captured page snapshots + the live (selected) page.
     engine.setPages(cfg.pages as ActiveCell[][]);
@@ -2719,6 +2736,9 @@ export default function BoardSequencerScreen() {
     const cfg = configRef.current;
     const want = new Set([...wantedRef.current, ...counterWantedRef.current]);
     if (extra) want.add(extra.slot);
+    // While making a loop, only the loop asked for with "Hear it with…" plays.
+    const nl = newLoopRef.current;
+    if (nl) { want.clear(); for (const s of engineSettingsFor(nl, cfg).loops) want.add(s); }
     const cellsOf = (s: number): StoredLoopCell[] | null => (extra && extra.slot === s ? extra.cells : (cfg.loopSlots[s] ?? null));
     const slots = [...want].filter((s) => cellsOf(s) !== null).sort((a, b) => a - b);
     setWantedSlots(slots);
@@ -2819,6 +2839,42 @@ export default function BoardSequencerScreen() {
     try { localStorage.setItem(WORKSPACE_KEY, w); } catch { /* not remembered */ }
   };
   const [pieceStep, setPieceStep] = useState<PieceStep>('loops');
+  const countersNow = boardCellsNow().length;
+  // "Lift the counters to start from silence": the wait ends once the board is seen empty.
+  useEffect(() => {
+    if (newLoopRef.current?.phase === 'waitEmpty') setNewLoop((n) => (n ? boardSeen(n, countersNow) : n));
+  }, [countersNow]);
+  /**
+   * New loop: composing from silence. While it is set the engine plays only what
+   * engineSettingsFor allows (never the player's band, Extra notes or Sounds change), and
+   * the loop being heard alongside goes through pushLaunch. Never saved.
+   */
+  const [keptLoop, setKeptLoop] = useState<{ slot: number; name: string } | null>(null);
+  const firstFreeSlot = (c: BoardSequencerStored): number | undefined =>
+    Array.from({ length: LAUNCH_SLOTS }, (_, i) => i).find((i) => (c.loopSlots[i] ?? null) === null);
+  const beginNewLoop = (): void => {
+    const count = boardCellsNow().length;
+    setNewLoop(startNewLoop(count));
+    setKeptLoop(null);
+    // Silence first: every loop stops along with the band and Extra notes.
+    wantedRef.current = new Set();
+    pushLaunchRef.current();
+    sessionLogRef.current.action(logActorRef.current, 'new loop');
+    announce(count > 0 ? `New loop. Lift the ${count} counters to start from silence.` : 'New loop: silent until a counter goes down.');
+  };
+  const leaveNewLoop = (): void => {
+    setNewLoop(null);
+    setKeptLoop(null);
+    wantedRef.current = new Set();
+    pushLaunchRef.current();
+  };
+  const keepNewLoop = (): void => {
+    const slot = firstFreeSlot(configRef.current);
+    if (slot === undefined) { announce('Every loop is full: clear one first.'); return; }
+    saveBoardToSlot(slot);
+    setKeptLoop({ slot, name: configRef.current.loopNames[slot] ?? '' });
+    announce(`Kept: ${loopLabel(configRef.current.loopNames, slot)}. Give it a name.`);
+  };
   /** "Make my plan": the four-scene plan across the piece's length, from the saved loops. */
   const makePlan = (): void => {
     const c = configRef.current;
@@ -3769,12 +3825,27 @@ export default function BoardSequencerScreen() {
       loopFadePasses={config.loopFadePasses}
       performance={config.performance}
       respectPlayer={config.sceneRespectsPlayer}
-      canSaveBoard={boardCellsNow().length > 0}
+      canSaveBoard={countersNow > 0}
       deletedSceneName={deletedScene?.scene.name ?? null}
       diskLine={diskLine}
       restoreError={restoreError}
       worldOptions={worldOptions}
       readyItems={pieceStep === 'ending' ? readyItems() : []}
+      onNewLoop={beginNewLoop}
+      newLoop={newLoop ? (
+        <NewLoopPanel
+          state={newLoop}
+          loopNumber={(keptLoop?.slot ?? firstFreeSlot(config) ?? LAUNCH_SLOTS - 1) + 1}
+          countersOnBoard={countersNow}
+          kept={keptLoop ? { slot: keptLoop.slot, name: config.loopNames[keptLoop.slot] ?? '' } : null}
+          otherLoops={config.loopSlots.flatMap((s, i) => (s === null || i === keptLoop?.slot ? [] : [{ slot: i, name: config.loopNames[i] ?? '' }]))}
+          onStartWithThese={() => setNewLoop((s) => (s ? startWithThese(s) : s))}
+          onHearWith={(what) => { setNewLoop((s) => (s ? hearWith(s, what) : s)); }}
+          onKeep={keepNewLoop}
+          onRename={renameLoop}
+          onLeave={leaveNewLoop}
+        />
+      ) : null}
       onToggleLoop={toggleLoop}
       onSaveBoardToLoop={saveBoardToSlot}
       onDrawLoop={(slot) => setEditSlot(slot)}
