@@ -111,77 +111,84 @@ export function CameraStep({
         </div>
       )}
 
-      <p style={{ margin: 0, color: 'var(--bs-fg2)', fontSize: 12 }}>
-        {trackInfo ? `${trackInfo.label || 'Camera'} · ${trackInfo.width} × ${trackInfo.height}` : 'No camera details yet'}
-      </p>
+      {/* Everything a working camera never needs. Opens by itself on a black-and-white
+          picture, since Picture size is the usual fix. */}
+      <details open={colourless || undefined}>
+        <summary style={{ cursor: 'pointer', color: 'var(--bs-fg2)', minHeight: 'var(--bs-target)', display: 'flex', alignItems: 'center' }}>More</summary>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 6 }}>
+          <p style={{ margin: 0, color: 'var(--bs-fg2)', fontSize: 12 }}>
+            {trackInfo ? `${trackInfo.label || 'Camera'} · ${trackInfo.width} × ${trackInfo.height}` : 'No camera details yet'}
+          </p>
 
-      {/* Not a quality setting. A phone bridged over USB negotiates a different video
-          format per size, and the browser decides how to turn that format into colour
-          partly FROM the size — so a camera can hand back sensible colour at one size and
-          colours that are simply wrong at another. If the colours are off, change this. */}
-      <div>
-        <span style={{ fontWeight: 600, display: 'block', marginBottom: 4 }}>Picture size</span>
-        <SegmentedControl<string>
-          label="Picture size"
-          value={`${resolution.width}x${resolution.height}`}
-          onChange={(v) => {
-            const [w, h] = v.split('x').map(Number);
-            onResolution({ width: w, height: h });
-          }}
-          options={CAMERA_RESOLUTIONS.map((r) => ({ value: `${r.width}x${r.height}`, label: r.label }))}
-        />
-        <p style={{ margin: '4px 0 0', color: 'var(--bs-fg2)', fontSize: 12 }}>
-          If the counters&rsquo; colours come out wrong &mdash; a purple counter reading as
-          brown, say &mdash; change this before changing anything else. A phone used as a
-          camera can send colour the browser reads correctly at one size and wrongly at
-          another. 1280 &times; 720 is the safe one.
-        </p>
-      </div>
+          {/* Not a quality setting. A phone bridged over USB negotiates a different video
+              format per size, and the browser decides how to turn that format into colour
+              partly FROM the size — so a camera can hand back sensible colour at one size and
+              colours that are simply wrong at another. If the colours are off, change this. */}
+          <div>
+            <span style={{ fontWeight: 600, display: 'block', marginBottom: 4 }}>Picture size</span>
+            <SegmentedControl<string>
+              label="Picture size"
+              value={`${resolution.width}x${resolution.height}`}
+              onChange={(v) => {
+                const [w, h] = v.split('x').map(Number);
+                onResolution({ width: w, height: h });
+              }}
+              options={CAMERA_RESOLUTIONS.map((r) => ({ value: `${r.width}x${r.height}`, label: r.label }))}
+            />
+            <p style={{ margin: '4px 0 0', color: 'var(--bs-fg2)', fontSize: 12 }}>
+              If the counters&rsquo; colours come out wrong &mdash; a purple counter reading as
+              brown, say &mdash; change this before changing anything else. A phone used as a
+              camera can send colour the browser reads correctly at one size and wrongly at
+              another. 1280 &times; 720 is the safe one.
+            </p>
+          </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <span style={{ fontWeight: 600 }}>Turn the picture</span>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <Button tone="secondary" onClick={onTurn} aria-label={`Turn the picture a quarter turn. Now turned ${rotation * 90} degrees.`}>
-            ↻ Turn 90°
-          </Button>
-          <span aria-hidden="true" style={{ color: 'var(--bs-fg2)', fontSize: 13 }}>
-            {rotation === 0 ? 'Not turned' : `Turned ${rotation * 90}°`}
-          </span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <span style={{ fontWeight: 600 }}>Turn the picture</span>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <Button tone="secondary" onClick={onTurn} aria-label={`Turn the picture a quarter turn. Now turned ${rotation * 90} degrees.`}>
+                ↻ Turn 90°
+              </Button>
+              <span aria-hidden="true" style={{ color: 'var(--bs-fg2)', fontSize: 13 }}>
+                {rotation === 0 ? 'Not turned' : `Turned ${rotation * 90}°`}
+              </span>
+            </div>
+            <p style={{ margin: 0, color: 'var(--bs-fg2)', fontSize: 12 }}>
+              For a camera mounted on its side. Keep turning until the board is the right way up
+              for the player. The board&rsquo;s corners and your colours are kept.
+            </p>
+          </div>
+
+          <Switch
+            label="Mirror the picture"
+            checked={mirrorX}
+            onChange={(v) => onViewChange({ mirrorX: v })}
+            hint="Changing this asks for the board corners again. Your colours are kept."
+          />
+          <Switch
+            label="Flip the picture upside down"
+            checked={mirrorY}
+            onChange={(v) => onViewChange({ mirrorY: v })}
+            hint="Changing this asks for the board corners again. Your colours are kept."
+          />
+
+          <Disclosure summary="Where to put the camera">
+            <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--bs-fg2)', fontSize: 12, lineHeight: 1.5 }}>
+              <li>
+                {`High up and opposite the player — never over their shoulder. For a ${handedness}-handed player, front-${handedness === 'left' ? 'right' : 'left'}.`}
+              </li>
+              <li>Light coming from near the camera, so the board isn&apos;t in its own shadow.</li>
+              <li>Plain sleeves that aren&apos;t one of the counter colours.</li>
+            </ul>
+          </Disclosure>
+
+          <Disclosure summary="Details">
+            <p style={{ margin: 0, fontSize: 12, color: 'var(--bs-fg2)' }}>
+              {`Colour in the frames the app reads: ${saturation === null ? 'not measured yet' : saturation.toFixed(1)}`}
+            </p>
+          </Disclosure>
         </div>
-        <p style={{ margin: 0, color: 'var(--bs-fg2)', fontSize: 12 }}>
-          For a camera mounted on its side. Keep turning until the board is the right way up
-          for the player. The board&rsquo;s corners and your colours are kept.
-        </p>
-      </div>
-
-      <Switch
-        label="Mirror the picture"
-        checked={mirrorX}
-        onChange={(v) => onViewChange({ mirrorX: v })}
-        hint="Changing this asks for the board corners again. Your colours are kept."
-      />
-      <Switch
-        label="Flip the picture upside down"
-        checked={mirrorY}
-        onChange={(v) => onViewChange({ mirrorY: v })}
-        hint="Changing this asks for the board corners again. Your colours are kept."
-      />
-
-      <Disclosure summary="Where to put the camera">
-        <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--bs-fg2)', fontSize: 12, lineHeight: 1.5 }}>
-          <li>
-            {`High up and opposite the player — never over their shoulder. For a ${handedness}-handed player, front-${handedness === 'left' ? 'right' : 'left'}.`}
-          </li>
-          <li>Light coming from near the camera, so the board isn&apos;t in its own shadow.</li>
-          <li>Plain sleeves that aren&apos;t one of the counter colours.</li>
-        </ul>
-      </Disclosure>
-
-      <Disclosure summary="Details">
-        <p style={{ margin: 0, fontSize: 12, color: 'var(--bs-fg2)' }}>
-          {`Colour in the frames the app reads: ${saturation === null ? 'not measured yet' : saturation.toFixed(1)}`}
-        </p>
-      </Disclosure>
+      </details>
     </>
   );
 }
