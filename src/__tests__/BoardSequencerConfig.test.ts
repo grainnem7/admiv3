@@ -137,6 +137,15 @@ describe('BoardSequencerConfig', () => {
     expect(back?.loopSlots[1]).toBeNull();
   });
 
+  it('a kept loop’s job and sound survive a save and load; an unknown job is dropped', () => {
+    saveBoardSequencerConfig({
+      ...DEFAULT_BOARD_SEQUENCER_CONFIG,
+      loopSlots: [[{ row: 1, col: 2, colour: 'red', job: 'melody', sound: 'violin' }, { row: 2, col: 2, colour: 'red', job: 'xyz' as never, sound: 'x' }]],
+    });
+    const back = loadBoardSequencerConfig();
+    expect(back?.loopSlots[0]).toEqual([{ row: 1, col: 2, colour: 'red', job: 'melody', sound: 'violin' }, { row: 2, col: 2, colour: 'red' }]);
+  });
+
   it('defaults loop bank off / empty when absent', () => {
     localStorage.setItem('admi-board-sequencer', JSON.stringify({ bpm: 90, channels: [] }));
     const back = loadBoardSequencerConfig();

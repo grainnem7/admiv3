@@ -48,6 +48,7 @@ import { BoardCornerEditor } from './boardSequencer/components/BoardCornerEditor
 import { cellMap, LiveBoardView } from './boardSequencer/components/BoardView';
 import { createSessionArchive, indexedDbTakeStore, MAX_TAKES, type SessionArchive, type TakeSummary } from '../../storage/sessionArchive';
 import { forgetPieceRunning, readPieceRunning, rememberPieceRunning, rememberScene, rememberShowing, type PieceRunning } from '../../songs/performance/pieceRunning';
+import { keepCells } from '../../songs/performance/loopSounds';
 import { LinkQr } from './boardSequencer/components/LinkQr';
 import { createPopStore, soundingKey, type PopStore } from './boardSequencer/popStore';
 import { beyondLoopNote, beyondLoopSquares, playsTune } from '../../songs/beyondLoop';
@@ -2735,10 +2736,7 @@ export default function BoardSequencerScreen() {
   /** The board as it is now (settled while playing, seen otherwise), into a slot. */
   const saveBoardToSlot = (slot: number): void => {
     const cfg = configRef.current;
-    const sequenced = new Set(cfg.channels.filter((c) => isSequencedRole(c.role)).map((c) => c.id));
-    const source = boardCellsNow();
-    const cells = source.filter((c) => sequenced.has(c.colour))
-      .map((c) => (c.conditional ? { ...storedCell(c), conditional: true as const } : storedCell(c)));
+    const cells = keepCells(boardCellsNow(), cfg.channels);
     if (cells.length === 0) return;
     setConfig((prev) => {
       const loopSlots = prev.loopSlots.slice();

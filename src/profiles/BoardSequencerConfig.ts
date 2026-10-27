@@ -55,10 +55,19 @@ export interface StoredBoardCell {
   timingBeats?: number;
 }
 
-/** A single cell of a saved loop (StoredBoardCell + the slice-1 variation flag). */
+/**
+ * A single cell of a saved loop (StoredBoardCell + the slice-1 variation flag), and since
+ * 2026-10-27 what the counter played: its job and sound, so the loop replays as it was made
+ * whatever the board's colours are today. Older loops have neither and play as their colour.
+ */
 export interface StoredLoopCell extends StoredBoardCell {
   conditional?: boolean;
+  job?: 'melody' | 'bass' | 'chord' | 'drums';
+  /** The colour's instrument (melodic jobs) or kit piece (drums); '' = the default. */
+  sound?: string;
 }
+
+const LOOP_JOBS = new Set(['melody', 'bass', 'chord', 'drums']);
 
 export interface BoardSequencerStored {
   /** Stored-shape version (see CONFIG_VERSION); pre-v2 colour data is reset. */
@@ -646,6 +655,10 @@ function sanitizeLoopSlots(v: unknown): (StoredLoopCell[] | null)[] {
       if (!isNum(o.row) || !isNum(o.col) || typeof o.colour !== 'string' || !o.colour) return [];
       const cell = withBoxDetail<StoredLoopCell>({ row: o.row, col: o.col, colour: o.colour }, o);
       if (o.conditional === true) cell.conditional = true;
+      if (typeof o.job === 'string' && LOOP_JOBS.has(o.job)) {
+        cell.job = o.job as StoredLoopCell['job'];
+        cell.sound = typeof o.sound === 'string' ? o.sound : '';
+      }
       return [cell];
     });
   });
