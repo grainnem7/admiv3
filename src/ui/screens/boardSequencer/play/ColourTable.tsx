@@ -17,7 +17,7 @@ import {
 } from '../../../../tracking/boardColours';
 import type { BoardSequencerStored } from '../../../../profiles/BoardSequencerConfig';
 import { DRUM_OPTIONS, soundNameFor } from '../soundOptions';
-import { soundOptionName, soundsFor } from '../soundCatalogue';
+import { soundOptionGroups, soundOptionName, soundsFor } from '../soundCatalogue';
 import { channelFor, colourChannelMap, configToSoundFrom } from '../../../../midi/boardMidi';
 import { chainFor, chainLabel } from '../../../../midi/abletonSounds';
 import { playsTune } from '../../../../songs/beyondLoop';
@@ -207,7 +207,10 @@ function ColourRow({ c, n, p, onSound, canGoBack, onBack }: {
                     : world ? `${world.name}: ${followName}` : `Default: ${followName}`}
                 </option>
                 {own && <option value={own}>{`${soundOptionName(own)} (own pick)`}</option>}
-                {options.map((o) => <option key={o.key} value={o.key}>{o.name}</option>)}
+                {soundOptionGroups(options).map(({ group, items }) => {
+                  const list = items.map((o) => <option key={o.key} value={o.key}>{o.name}</option>);
+                  return group ? <optgroup key={group} label={group}>{list}</optgroup> : list;
+                })}
               </select>
             ) : <span aria-label="No sound of its own" style={{ alignSelf: 'center' }}>—</span>}
           </div>

@@ -20,6 +20,22 @@ describe('the sounds each job can choose from', () => {
     ]));
   });
 
+  it('the new instruments are offered for their jobs', () => {
+    expect(keys('melody')).toEqual(expect.arrayContaining(['flute', 'saxophone', 'trumpet', 'xylophone', 'guitarAcoustic', 'guitarElectric']));
+    expect(keys('chord')).toEqual(expect.arrayContaining(['guitarAcoustic', 'guitarElectric']));
+    expect(keys('bass')).toEqual(expect.arrayContaining(['trombone', 'bassoon']));
+    expect(soundOptionName('guitarAcoustic')).toBe('Acoustic guitar');
+  });
+
+  it('each job’s list is in groups, each group in one piece, in the set order', () => {
+    const runs = (role: 'melody' | 'chord' | 'bass'): string[] =>
+      soundsFor(role).map((o) => o.group).filter((g, i, all) => i === 0 || g !== all[i - 1]);
+    expect(runs('melody')).toEqual(['Keys', 'Strings', 'Wind and brass', 'Plucked and struck', 'Synth']);
+    expect(runs('chord')).toEqual(['Keys', 'Plucked and struck', 'Synth']);
+    expect(runs('bass')).toEqual(['Plucked and struck', 'Strings', 'Wind and brass', 'Synth']);
+    expect(soundsFor('bass')[0].key).toBe('bassElectric');
+  });
+
   it('drums, controls and colours not used have no instrument list', () => {
     expect(soundsFor('drums')).toEqual([]);
     expect(soundsFor('tempo')).toEqual([]);

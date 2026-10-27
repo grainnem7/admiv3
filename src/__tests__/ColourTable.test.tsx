@@ -133,6 +133,18 @@ describe('the colour table', () => {
     expect(sound.selectedOptions[0].textContent).toBe('Cello (own pick)');
   });
 
+  it('the melody sounds are in named groups; an own pick and the world’s option stay above them', () => {
+    render(props({ config: { ...DEFAULT_BOARD_SEQUENCER_CONFIG, soundWorld: 'warm', channels: channels.map((c) => (c.id === 'm' ? { ...c, instrument: 'tuba' } : c)) } }));
+    const sound = select(row('Red'), 'Red: sound');
+    const [first, second] = [...sound.options];
+    expect(first.value).toBe('');
+    expect(second.textContent).toBe('Tuba (own pick)');
+    expect(first.parentElement).toBe(sound);
+    expect(second.parentElement).toBe(sound);
+    expect([...sound.querySelectorAll('optgroup')].map((g) => g.label)).toEqual(['Keys', 'Strings', 'Wind and brass', 'Plucked and struck', 'Synth']);
+    expect(sound.querySelector('optgroup[label="Wind and brass"] option[value="flute"]')).not.toBeNull();
+  });
+
   it('↶ is off after a job change, so a drum name never lands on an instrument', () => {
     live();
     choose(select(row('Red'), 'Red: sound'), 'harp');

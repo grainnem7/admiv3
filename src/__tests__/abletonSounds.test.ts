@@ -33,6 +33,10 @@ describe('the chain list', () => {
 });
 
 describe('chainFor: the rule for a colour', () => {
+  it('a new instrument follows the World in Ableton until it has a chain', () => {
+    expect(chainFor(colour('a', 'melody', { instrument: 'flute' }), 'warm')).toBe(0);
+  });
+
   it('its own instrument first', () => {
     expect(chainFor(colour('a', 'melody', { instrument: 'harp' }), 'warm')).toBe(6);
     expect(chainFor(colour('a', 'bass', { instrument: 'bassElectric' }), 'ambient')).toBe(12);
