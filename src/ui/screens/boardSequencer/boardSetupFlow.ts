@@ -78,3 +78,14 @@ export function prevStep(step: SetupStep): SetupStep | null {
   const i = SETUP_STEPS.indexOf(step);
   return i > 0 ? SETUP_STEPS[i - 1] : null;
 }
+
+/**
+ * Who's playing: asked on the very first run (name and hand), and when there are several
+ * players and none is remembered. Otherwise the last player plays again; the header's
+ * player button changes player.
+ */
+export function askWhoIsPlaying(playerIds: readonly string[], activeId: string | null): boolean {
+  if (playerIds.length === 0) return true;
+  if (activeId !== null) return !playerIds.includes(activeId);
+  return playerIds.length > 1;
+}

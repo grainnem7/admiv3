@@ -173,3 +173,18 @@ describe('changing a player’s name or hand', () => {
     expect(listBoardPlayers().map((p) => p.name)).toEqual(['A']);
   });
 });
+
+import { rememberedBoardPlayerId } from '../profiles/BoardProfiles';
+
+describe('the player remembered from last time', () => {
+  beforeEach(() => localStorage.clear());
+  it('is the one last chosen, as stored, without falling back to the first player', () => {
+    expect(rememberedBoardPlayerId()).toBeNull();
+    const tim = createBoardPlayer('Tim', 'left');
+    createBoardPlayer('Alex', 'right');
+    setActiveBoardPlayer(tim.id);
+    expect(rememberedBoardPlayerId()).toBe(tim.id);
+    localStorage.setItem(ACTIVE_PLAYER_KEY, 'gone');
+    expect(rememberedBoardPlayerId()).toBe('gone');
+  });
+});

@@ -97,11 +97,11 @@ import { detectColours, type DetectedColour } from '../../tracking/boardColourDe
 import type { FiredNote } from '../../songs/BoardSequencerEngine';
 import {
   SETUP_STEPS, canOpenStep, canPlay, resolveEntry, stepIndicator,
-  setupRequestedOnOpen, clearSetupRequest,
+  setupRequestedOnOpen, clearSetupRequest, askWhoIsPlaying,
   type CameraStatus, type SetupStep,
 } from './boardSequencer/boardSetupFlow';
 import {
-  listBoardPlayers, getActiveBoardPlayer, createBoardPlayer, updateBoardPlayer, setActiveBoardPlayer,
+  listBoardPlayers, getActiveBoardPlayer, rememberedBoardPlayerId, createBoardPlayer, updateBoardPlayer, setActiveBoardPlayer,
   type BoardPlayerProfile,
 } from '../../profiles/BoardProfiles';
 import { layoutFor } from './boardSequencer/layout';
@@ -452,10 +452,12 @@ export default function BoardSequencerScreen() {
   const [players, setPlayers] = useState<BoardPlayerProfile[]>(() => listBoardPlayers());
   const [activePlayer, setActivePlayerState] = useState<BoardPlayerProfile | null>(() => getActiveBoardPlayer());
   activePlayerIdRef.current = activePlayer?.id ?? activePlayerIdRef.current;
-  // Ask who's playing only when there is a real choice to make.
-  // Who's playing: asked when there is a choice, and on the very first run — name and
-  // hand — rather than silently making a right-handed "Player 1" (Tim is left-handed).
-  const [chooserOpen, setChooserOpen] = useState(() => listBoardPlayers().length !== 1);
+  // Who's playing: asked on the very first run — name and hand — rather than silently
+  // making a right-handed "Player 1" (Tim is left-handed), and when no player is
+  // remembered. Otherwise the last player plays again; the header's button switches.
+  const [chooserOpen, setChooserOpen] = useState(() => askWhoIsPlaying(
+    listBoardPlayers().map((p) => p.id), rememberedBoardPlayerId(),
+  ));
   // The chooser covers the screen: what's behind it is out of reach while it is open.
   const chooserRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => (chooserOpen && chooserRef.current ? inertOutside(chooserRef.current) : undefined), [chooserOpen]);

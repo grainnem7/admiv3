@@ -142,6 +142,12 @@ function migrateLegacy(): void {
   localStorage.setItem(ACTIVE_PLAYER_KEY, p1.id);
 }
 
+/** The player chosen last time, exactly as stored (null if none): who plays again. */
+export function rememberedBoardPlayerId(): string | null {
+  migrateLegacy();
+  return localStorage.getItem(ACTIVE_PLAYER_KEY);
+}
+
 export function getActiveBoardPlayer(): BoardPlayerProfile | null {
   migrateLegacy();
   const players = listBoardPlayers();

@@ -84,3 +84,22 @@ describe('next/prev', () => {
     expect(prevStep('ready')).toBe('colours');
   });
 });
+
+import { askWhoIsPlaying } from '../ui/screens/boardSequencer/boardSetupFlow';
+
+describe('who is playing', () => {
+  it('the very first run asks: name and hand', () => {
+    expect(askWhoIsPlaying([], null)).toBe(true);
+  });
+  it('one player: no question, as before', () => {
+    expect(askWhoIsPlaying(['tim'], 'tim')).toBe(false);
+    expect(askWhoIsPlaying(['tim'], null)).toBe(false);
+  });
+  it('several players: the last one is remembered, so no question', () => {
+    expect(askWhoIsPlaying(['tim', 'alex'], 'alex')).toBe(false);
+  });
+  it('several players and no one remembered, or the remembered one deleted: ask', () => {
+    expect(askWhoIsPlaying(['tim', 'alex'], null)).toBe(true);
+    expect(askWhoIsPlaying(['tim'], 'gone')).toBe(true);
+  });
+});
