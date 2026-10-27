@@ -71,3 +71,14 @@ describe('how a loop is drawn', () => {
     expect(loopSwatch('gone', today)).toBe('#9a9a9a');
   });
 });
+
+describe('the screen draws every cell through loopSwatch', () => {
+  it('a loop colour draws in today’s colour for that sound, and a colour that is gone draws grey, never red', () => {
+    const today = [colour('pink', 'melody', { instrument: 'violin', swatch: '#f0a' })];
+    const swatchFor = (id: string): string => loopSwatch(id, today);
+    expect(swatchFor('loop:melody:violin')).toBe('#f0a');
+    expect(swatchFor('green')).toBe('#9a9a9a');
+    expect(swatchFor('pink')).toBe('#f0a');
+    expect(swatchFor('green')).not.toBe('#e23');
+  });
+});

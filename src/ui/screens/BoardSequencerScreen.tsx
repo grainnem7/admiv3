@@ -48,7 +48,7 @@ import { BoardCornerEditor } from './boardSequencer/components/BoardCornerEditor
 import { cellMap, LiveBoardView } from './boardSequencer/components/BoardView';
 import { createSessionArchive, indexedDbTakeStore, MAX_TAKES, type SessionArchive, type TakeSummary } from '../../storage/sessionArchive';
 import { forgetPieceRunning, readPieceRunning, rememberPieceRunning, rememberScene, rememberShowing, type PieceRunning } from '../../songs/performance/pieceRunning';
-import { keepCells, loopChannelsFor } from '../../songs/performance/loopSounds';
+import { keepCells, loopChannelsFor, loopSwatch } from '../../songs/performance/loopSounds';
 import { LinkQr } from './boardSequencer/components/LinkQr';
 import { createPopStore, soundingKey, type PopStore } from './boardSequencer/popStore';
 import { beyondLoopNote, beyondLoopSquares, playsTune } from '../../songs/beyondLoop';
@@ -2468,6 +2468,9 @@ export default function BoardSequencerScreen() {
   // per-row drum picker), and a colour-id → channel lookup for labels/swatches.
   const channels = config.channels;
   const channelById = new Map(channels.map((c) => [c.id, c]));
+  // Every drawn cell: a colour as itself, a loop's colour as today's colour for that sound,
+  // and a colour that is gone as grey — never a colour that means something else.
+  const swatchFor = useCallback((id: string): string => loopSwatch(id, channels), [channels]);
   // Which beats each counter playing a tune owns — recomputed only when the board changes.
   // A one-note counter owns only its own step, so it gets no band.
   const spans = useMemo(
@@ -3749,7 +3752,7 @@ export default function BoardSequencerScreen() {
     <PieceSteps
       rows={config.rows}
       cols={config.cols}
-      swatchFor={(id) => channelById.get(id)?.swatch ?? '#888'}
+      swatchFor={swatchFor}
       step={pieceStep}
       onStep={setPieceStep}
       running={running}
@@ -4294,7 +4297,7 @@ export default function BoardSequencerScreen() {
       playheadCol={playheadCol}
       playing={running}
       pingPongDirection={pingDir}
-      swatchFor={(id) => channelById.get(id)?.swatch ?? '#e23'}
+      swatchFor={swatchFor}
       palette={palette}
       pageLabel={config.numPages > 1 ? `Page ${String.fromCharCode(65 + playingPage)} · live` : null}
       reducedMotion={reducedMotion}
@@ -4928,7 +4931,7 @@ export default function BoardSequencerScreen() {
               return (
                 <section aria-labelledby="edit-board-now" style={{ display: 'flex', flexDirection: 'column', gap: 6, maxWidth: 240 }}>
                   <h3 id="edit-board-now" style={{ margin: 0, fontSize: 14 }}>{`The board now · ${boardNow.length} ${boardNow.length === 1 ? 'counter' : 'counters'}`}</h3>
-                  <LoopThumb cells={boardNow} rows={config.rows} cols={config.cols} swatchFor={(id) => channelById.get(id)?.swatch ?? '#888'} width={220} />
+                  <LoopThumb cells={boardNow} rows={config.rows} cols={config.cols} swatchFor={swatchFor} width={220} />
                   <Button
                     tone="secondary"
                     reason={boardNow.length === 0 ? 'The board is empty.' : null}
