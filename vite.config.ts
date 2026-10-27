@@ -59,5 +59,8 @@ export default defineConfig({
   server: {
     port: 3000,
     open: true,
+    // Folders the dev server must not watch: the Python analysis environment alone is about
+    // 16,000 files, and watching it slowed every request (and the browser tests) to seconds.
+    watch: { ignored: ['**/.venv/**', '**/__pycache__/**', '**/.pytest_cache/**', '**/.superpowers/**', '**/test-results/**'] },
   },
 })
