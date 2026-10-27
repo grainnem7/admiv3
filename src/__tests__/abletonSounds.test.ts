@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
 import {
-  ABLETON_CHAINS, abletonMappingTargets, abletonPlan, CHAIN_CC, chainCcValue, chainFor, chainForVoice, chainZone,
+  ABLETON_CHAINS, abletonMappingTargets, abletonPlan, CHAIN_CC, chainCcValue, chainFor, chainForVoice, chainRange,
   changedControls, controlKey, counterControls, grooveCc, type AbletonPlanInput,
 } from '../midi/abletonSounds';
 import { allEvolveVoices } from '../audio/evolve/evolve';
+import { soundsFor } from '../ui/screens/boardSequencer/soundCatalogue';
 import { SOUND_WORLDS } from '../audio/worlds/soundWorlds';
 import {
   assignColourChannels, channelFor, channelsInUse, loopSlotOf, testSequenceEvents, TEST_CHANNELS, TEST_GAP_MS,
@@ -24,19 +25,50 @@ const base = (channels: ColourChannel[], extra: Partial<AbletonPlanInput> = {}):
 });
 
 describe('the chain list', () => {
-  it('16 chains, CC 30 value = index × 8, zones of 8', () => {
-    expect(ABLETON_CHAINS).toHaveLength(16);
-    expect(ABLETON_CHAINS.map((c) => c.index)).toEqual(Array.from({ length: 16 }, (_, i) => i));
-    expect(chainCcValue(6)).toBe(48);
-    expect(chainZone(15)).toEqual([120, 127]);
+  it('33 chains; CC 30 is the middle of each chain’s share; drums keep × 8', () => {
+    expect(ABLETON_CHAINS).toHaveLength(33);
+    expect(ABLETON_CHAINS.map((c) => c.index)).toEqual(Array.from({ length: 33 }, (_, i) => i));
+    expect(ABLETON_CHAINS.map((c) => c.name)).toEqual([
+      'World: Warm', 'World: Lo-fi', 'World: Ambient', 'World: Electronic', 'Piano', 'Electric piano', 'Harp', 'Organ',
+      'Clarinet', 'French horn', 'Cello', 'Nylon guitar', 'Electric bass', 'Choir pad', 'Electric piano chords', 'Bells',
+      'Violin', 'Upright bass', 'Tuba', 'Flute', 'Saxophone', 'Trumpet', 'Trombone', 'Bassoon', 'Xylophone',
+      'Acoustic guitar', 'Electric guitar', 'Synth pluck', 'Synth keys', 'Soft synth pad', 'Wide synth chords', 'Sub bass', 'Synth bass',
+    ]);
+    expect([0, 4, 6, 19, 32].map((i) => chainCcValue(i, 1))).toEqual([1, 17, 25, 75, 126]);
+    expect(chainCcValue(2, 10)).toBe(16);
+    let next = 0;
+    for (const c of ABLETON_CHAINS) {
+      const [lo, hi] = chainRange(c.index);
+      expect(lo, c.name).toBe(next);
+      expect(hi, c.name).toBeGreaterThanOrEqual(lo);
+      expect(chainCcValue(c.index, 1), c.name).toBeGreaterThanOrEqual(lo);
+      expect(chainCcValue(c.index, 1), c.name).toBeLessThanOrEqual(hi);
+      next = hi + 1;
+    }
+    expect(next).toBe(128);
+  });
+
+  it('every sound has a chain of its own', () => {
+    expect(chainFor(colour('a', 'melody', { instrument: 'flute' }), 'warm')).toBe(19);
+    expect(chainFor(colour('a', 'bass', { instrument: 'tuba' }), 'warm')).toBe(18);
+    expect(chainFor(colour('a', 'melody', { instrument: 'violin' }), 'warm')).toBe(16);
+    expect(chainFor(colour('a', 'bass', { instrument: 'contrabass' }), 'warm')).toBe(17);
+    expect(chainFor(colour('a', 'melody', { instrument: 'synth:pluck' }), 'warm')).toBe(27);
+    expect(chainFor(colour('a', 'chord', { instrument: 'synth:pad' }), 'warm')).toBe(29);
+    expect(chainFor(colour('a', 'bass', { instrument: 'synth:sawBass' }), 'warm')).toBe(32);
+    const byChain = new Map<number, Set<string>>();
+    for (const role of ['melody', 'chord', 'bass'] as const) {
+      for (const o of soundsFor(role)) {
+        const chain = chainFor(colour('a', role, { instrument: o.key }), 'none');
+        expect(chain, o.key).not.toBeNull();
+        byChain.set(chain as number, (byChain.get(chain as number) ?? new Set()).add(o.key === 'padChoir' ? 'pad' : o.key));
+      }
+    }
+    for (const [chain, keys] of byChain) expect([...keys], `chain ${chain}`).toHaveLength(1);
   });
 });
 
 describe('chainFor: the rule for a colour', () => {
-  it('a new instrument follows the World in Ableton until it has a chain', () => {
-    expect(chainFor(colour('a', 'melody', { instrument: 'flute' }), 'warm')).toBe(0);
-  });
-
   it('its own instrument first', () => {
     expect(chainFor(colour('a', 'melody', { instrument: 'harp' }), 'warm')).toBe(6);
     expect(chainFor(colour('a', 'bass', { instrument: 'bassElectric' }), 'ambient')).toBe(12);
@@ -65,25 +97,28 @@ describe('chainForVoice: Evolve', () => {
     for (const v of voices) {
       const c = chainForVoice(v);
       expect(c).toBeGreaterThanOrEqual(0);
-      expect(c).toBeLessThan(16);
+      expect(c).toBeLessThan(33);
     }
-    for (const w of Object.values(SOUND_WORLDS)) for (const spec of Object.values(w.voices)) expect(chainForVoice(spec)).toBeLessThan(16);
+    for (const w of Object.values(SOUND_WORLDS)) for (const spec of Object.values(w.voices)) expect(chainForVoice(spec)).toBeLessThan(33);
   });
   it('by sample first, then by synth layer', () => {
     expect(chainForVoice({ name: 'x', spec: { sample: 'harp' } })).toBe(6);
-    expect(chainForVoice({ name: 'x', spec: { sample: 'contrabass', synth: 'sub' } })).toBe(12);
+    expect(chainForVoice({ name: 'x', spec: { sample: 'contrabass', synth: 'sub' } })).toBe(17);
     expect(chainForVoice({ name: 'x', spec: { sample: 'padChoir' } })).toBe(13);
-    expect(chainForVoice({ name: 'x', spec: { synth: 'pad' } })).toBe(13);
+    expect(chainForVoice({ name: 'x', spec: { synth: 'pad' } })).toBe(29);
     expect(chainForVoice({ name: 'x', spec: { synth: 'bell' } })).toBe(15);
-    expect(chainForVoice({ name: 'x', spec: { synth: 'sawBass' } })).toBe(12);
-    expect(chainForVoice({ name: 'x', spec: { synth: 'supersaw' } })).toBe(3);
+    expect(chainForVoice({ name: 'x', spec: { synth: 'pluck' } })).toBe(27);
+    expect(chainForVoice({ name: 'x', spec: { synth: 'keys' } })).toBe(28);
+    expect(chainForVoice({ name: 'x', spec: { synth: 'sub' } })).toBe(31);
+    expect(chainForVoice({ name: 'x', spec: { synth: 'sawBass' } })).toBe(32);
+    expect(chainForVoice({ name: 'x', spec: { synth: 'supersaw' } })).toBe(30);
   });
 });
 
 describe('the plan', () => {
   it('per part: the first colour of a part owns the channel, and the share is reported', () => {
     const plan = abletonPlan(base([colour('cyan', 'melody', { instrument: 'harp' }), colour('pink', 'melody', { instrument: 'organ' })]));
-    expect(plan.controls.get(controlKey(1, CHAIN_CC))?.value).toBe(48);
+    expect(plan.controls.get(controlKey(1, CHAIN_CC))?.value).toBe(25);
     expect(plan.shares.get('pink')).toEqual({ channel: 1, withId: 'cyan' });
   });
   it('per colour: each colour on its own channel, independent', () => {
@@ -91,12 +126,13 @@ describe('the plan', () => {
       [colour('cyan', 'melody', { instrument: 'harp' }), colour('pink', 'melody', { instrument: 'organ' })],
       { channelMode: 'colour', colourChannels: new Map([['cyan', 1], ['pink', 4]]) },
     ));
-    expect(plan.controls.get(controlKey(4, CHAIN_CC))?.value).toBe(56);
+    expect(plan.controls.get(controlKey(4, CHAIN_CC))?.value).toBe(chainCcValue(7, 4)); // Organ
     expect(plan.shares.size).toBe(0);
   });
   it('band, Extra notes and drums follow the World; loops too when they have channels', () => {
     const plan = abletonPlan(base([colour('a', 'melody', { instrument: 'harp' })], { world: 'ambient', loopChannels: true }));
-    for (const ch of [10, 11, 12, 13, 4, 9]) expect(plan.controls.get(controlKey(ch, CHAIN_CC))?.value).toBe(16);
+    for (const ch of [11, 12, 13, 4, 9]) expect(plan.controls.get(controlKey(ch, CHAIN_CC))?.value).toBe(chainCcValue(2, ch));
+    expect(plan.controls.get(controlKey(10, CHAIN_CC))?.value).toBe(16); // the drums' kit rack keeps × 8
   });
   it('macros from the card steps, overall on channel 16', () => {
     const plan = abletonPlan(base([colour('a', 'melody', { volume: 0.4, tone: 1, reverbSend: 0.3 })], { energy: 1, space: 0.1, swing: 0.5 }));
@@ -138,7 +174,7 @@ describe('the plan', () => {
   });
   it('mapping targets: chain selectors, then macros, then channel 16, each left where ADMI wants it', () => {
     const t = abletonMappingTargets(abletonPlan(base([colour('a', 'melody', { instrument: 'harp' })])));
-    expect(t[0]).toMatchObject({ channel: 1, cc: 30, value: 48 });
+    expect(t[0]).toMatchObject({ channel: 1, cc: 30, value: 25 });
     expect(t.some((x) => x.cc === 24 && x.channel === 1)).toBe(true);
     expect(t.at(-1)?.channel).toBe(16);
   });
@@ -232,19 +268,19 @@ describe('engine: sound choices reach Ableton', () => {
   it('turning MIDI on sends every chain; after that only changes', () => {
     const { e } = engine();
     e.setMidiOut({ enabled: true, sends: 'all' }, 'p1');
-    expect(ccs(30, 1).at(-1)?.d[2]).toBe(0); // Warm
+    expect(ccs(30, 1).at(-1)?.d[2]).toBe(chainCcValue(0, 1)); // Warm
     expect(ccs(30, 11).length).toBe(1);
     port.send.mockClear();
     e.setEnergy(0.5);
     expect(ccs(30)).toHaveLength(0);
   });
 
-  it('picking Harp on the card sends CC 30 = 48 on its channel, once', () => {
+  it('picking Harp on the card sends CC 30 = 25 on its channel, once', () => {
     const { e } = engine();
     e.setMidiOut({ enabled: true, sends: 'all' }, 'p1');
     port.send.mockClear();
     e.setChannels([colour('m', 'melody', { instrument: 'harp' })]);
-    expect(ccs(30, 1).map((x) => x.d[2])).toEqual([48]);
+    expect(ccs(30, 1).map((x) => x.d[2])).toEqual([25]);
     expect(ccs(30, 10)).toHaveLength(0);
   });
 
@@ -253,9 +289,9 @@ describe('engine: sound choices reach Ableton', () => {
     e.setMidiOut({ enabled: true, sends: 'all' }, 'p1');
     port.send.mockClear();
     e.setSoundWorld('electronic');
-    expect(ccs(30, 1).at(-1)?.d[2]).toBe(24);
+    expect(ccs(30, 1).at(-1)?.d[2]).toBe(chainCcValue(3, 1));
     expect(ccs(30, 2)).toHaveLength(0); // its own Electric bass stays
-    for (const ch of [10, 11, 12, 13]) expect(ccs(30, ch).at(-1)?.d[2]).toBe(24);
+    for (const ch of [10, 11, 12, 13]) expect(ccs(30, ch).at(-1)?.d[2]).toBe(chainCcValue(3, ch));
   });
 
   it('Play and the button send everything again', () => {

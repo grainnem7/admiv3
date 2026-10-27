@@ -128,9 +128,10 @@ describe('the preview as MIDI notes, for Ableton', () => {
 import { previewChainCc } from '../audio/soundPreview';
 
 describe('the Ableton sound Hear chooses', () => {
-  const plan = { chains: new Map([[1, 6], [2, 12]]) };
+  const plan = { chains: new Map([[1, 6], [2, 12], [10, 2]]) };
   it('stopped: the chain Play would send for that channel (a shared channel keeps its first colour’s)', () => {
-    expect(previewChainCc(plan, 1, false)).toBe(48);
+    expect(previewChainCc(plan, 1, false)).toBe(25); // Harp, the middle of its share
+    expect(previewChainCc(plan, 10, false)).toBe(16); // the drums' kit rack keeps × 8
     expect(previewChainCc(plan, 3, false)).toBeNull();
   });
   it('playing: none, so the engine’s choice (Sounds change included) is never undone', () => {

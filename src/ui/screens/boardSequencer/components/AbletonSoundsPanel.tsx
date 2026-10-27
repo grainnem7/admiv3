@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ABLETON_CHAINS, abletonPlan, CHAIN_CC, chainLabel, chainZone, controlKey,
+  ABLETON_CHAINS, abletonPlan, CHAIN_CC, chainLabel, chainRange, controlKey,
 } from '../../../../midi/abletonSounds';
 import { colourChannelMap } from '../../../../midi/boardMidi';
 import type { BoardSequencerStored } from '../../../../profiles/BoardSequencerConfig';
@@ -107,7 +107,7 @@ export function AbletonSoundsPanel({ config, getLive, onSend, connected }: {
               <tr key={c.index}>
                 <td>{c.index + 1}</td>
                 <td>{c.name}</td>
-                <td>{`${chainZone(c.index)[0]} to ${chainZone(c.index)[1]}`}</td>
+                <td>{`${chainRange(c.index)[0]} to ${chainRange(c.index)[1]}`}</td>
               </tr>
             ))}
           </tbody>

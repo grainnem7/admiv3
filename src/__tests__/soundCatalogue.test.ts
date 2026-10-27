@@ -62,9 +62,9 @@ describe('a synth sound chosen by name', () => {
   });
 
   it('goes to the nearest Ableton chain', () => {
-    expect(chainFor({ role: 'melody', instrument: 'synth:pluck' }, 'warm')).toBe(15);
-    expect(chainFor({ role: 'melody', instrument: 'violin' }, 'warm')).toBe(10);
-    expect(chainFor({ role: 'bass', instrument: 'tuba' }, 'warm')).toBe(9);
+    expect(chainFor({ role: 'melody', instrument: 'synth:pluck' }, 'warm')).toBe(27);
+    expect(chainFor({ role: 'melody', instrument: 'violin' }, 'warm')).toBe(16);
+    expect(chainFor({ role: 'bass', instrument: 'tuba' }, 'warm')).toBe(18);
   });
 });
 

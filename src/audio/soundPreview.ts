@@ -69,7 +69,7 @@ export function previewRoute(
 export function previewChainCc(plan: { chains: ReadonlyMap<number, number> }, channel: number, running: boolean): number | null {
   if (running) return null;
   const chain = plan.chains.get(channel);
-  return chain === undefined ? null : chainCcValue(chain);
+  return chain === undefined ? null : chainCcValue(chain, channel);
 }
 
 /** Plays a colour's sound on demand. One per screen; voices are kept per sound. */

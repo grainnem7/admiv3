@@ -1,8 +1,9 @@
 /**
  * ADMI's sound choices, carried over to Ableton (Phase 2).
  *
- * Each Ableton track holds an Instrument Rack whose chains are ADMI's sounds. CC 30 on the
- * track's channel picks the chain (value = chain index × 8), so a colour card's sound,
+ * Each Ableton track holds an Instrument Rack whose chains are ADMI's sounds, one per sound.
+ * CC 30 on the track's channel picks the chain (the middle of that chain's equal share of
+ * 0–127; the drums' kit rack keeps index × 8), so a colour card's sound,
  * the World, a scene's World and Evolve's instrument changes all switch Ableton's sound
  * too. Every chain is already loaded, so a switch is instant and safe mid-piece.
  *
@@ -52,28 +53,54 @@ export const ABLETON_CHAINS: readonly AbletonChain[] = [
   { index: 6, name: 'Harp', keys: ['harp'] },
   { index: 7, name: 'Organ', keys: ['organ'] },
   { index: 8, name: 'Clarinet', keys: ['clarinet'] },
-  { index: 9, name: 'French horn', keys: ['frenchHorn', 'tuba'] },
-  { index: 10, name: 'Strings / cello', keys: ['cello', 'violin'] },
+  { index: 9, name: 'French horn', keys: ['frenchHorn'] },
+  { index: 10, name: 'Cello', keys: ['cello'] },
   { index: 11, name: 'Nylon guitar', keys: ['guitarNylon'] },
-  { index: 12, name: 'Electric bass', keys: ['bassElectric', 'contrabass'] },
-  { index: 13, name: 'Pad', keys: ['pad', 'padChoir'] },
-  { index: 14, name: 'Chord stab', keys: ['chord'] },
-  { index: 15, name: 'Bell / pluck', keys: [] },
+  { index: 12, name: 'Electric bass', keys: ['bassElectric'] },
+  { index: 13, name: 'Choir pad', keys: ['pad', 'padChoir'] },
+  { index: 14, name: 'Electric piano chords', keys: ['chord'] },
+  { index: 15, name: 'Bells', keys: [] },
+  // Added after the first 16 (2026-10-27), so an older rack only gains chains at the end.
+  { index: 16, name: 'Violin', keys: ['violin'] },
+  { index: 17, name: 'Upright bass', keys: ['contrabass'] },
+  { index: 18, name: 'Tuba', keys: ['tuba'] },
+  { index: 19, name: 'Flute', keys: ['flute'] },
+  { index: 20, name: 'Saxophone', keys: ['saxophone'] },
+  { index: 21, name: 'Trumpet', keys: ['trumpet'] },
+  { index: 22, name: 'Trombone', keys: ['trombone'] },
+  { index: 23, name: 'Bassoon', keys: ['bassoon'] },
+  { index: 24, name: 'Xylophone', keys: ['xylophone'] },
+  { index: 25, name: 'Acoustic guitar', keys: ['guitarAcoustic'] },
+  { index: 26, name: 'Electric guitar', keys: ['guitarElectric'] },
+  { index: 27, name: 'Synth pluck', keys: [] },
+  { index: 28, name: 'Synth keys', keys: [] },
+  { index: 29, name: 'Soft synth pad', keys: [] },
+  { index: 30, name: 'Wide synth chords', keys: [] },
+  { index: 31, name: 'Sub bass', keys: [] },
+  { index: 32, name: 'Synth bass', keys: [] },
 ];
 
 const WORLD_CHAIN: Record<string, number> = { warm: 0, lofi: 1, ambient: 2, electronic: 3 };
 const ELECTRIC_PIANO = 5;
 const ELECTRIC_BASS = 12;
-const BELL_PLUCK = 15;
+const BELLS = 15;
 
-/** CC 30's value for a chain: the middle of nothing, the start of its zone (index × 8). */
-export function chainCcValue(index: number): number {
-  return Math.max(0, Math.min(127, Math.round(index) * 8));
+/**
+ * CC 30's value for a chain on a channel. Racks share 0–127 equally between their chains
+ * (Ableton's Distribute Ranges Equally), so ADMI sends the middle of the chain's share: it
+ * lands inside however Ableton rounds the edges. The drums' kit rack keeps its four zones
+ * of 8 (index × 8).
+ */
+export function chainCcValue(index: number, channel: number): number {
+  const i = Math.round(index);
+  if (channel === ROLE_CHANNEL.drums) return Math.max(0, Math.min(127, i * 8));
+  return Math.max(0, Math.min(127, Math.floor(((i + 0.5) * 128) / ABLETON_CHAINS.length)));
 }
 
-/** The chain's zone in the Rack's chain selector. */
-export function chainZone(index: number): [number, number] {
-  return [index * 8, index * 8 + 7];
+/** The chain's expected range after Distribute Ranges Equally, for the checklist. */
+export function chainRange(index: number): [number, number] {
+  const n = ABLETON_CHAINS.length;
+  return [Math.round((index * 128) / n), Math.round(((index + 1) * 128) / n) - 1];
 }
 
 /** The chain an ADMI instrument key stands for, or null. */
@@ -97,7 +124,7 @@ export function chainFor(ch: Pick<ColourChannel, 'role' | 'instrument'>, choice:
   if (!hasColourChannel(ch.role)) return null;
   if (ch.instrument) {
     const synth = synthLayerOf(ch.instrument);
-    const own = synth ? SYNTH_CHAIN[synth] ?? BELL_PLUCK : chainForKey(ch.instrument);
+    const own = synth ? SYNTH_CHAIN[synth] ?? BELLS : chainForKey(ch.instrument);
     if (own !== null) return own;
   }
   if (worldOf(choice)) return worldChain(choice);
@@ -105,19 +132,19 @@ export function chainFor(ch: Pick<ColourChannel, 'role' | 'instrument'>, choice:
 }
 
 const SYNTH_CHAIN: Record<string, number> = {
-  pad: 13, bell: BELL_PLUCK, pluck: BELL_PLUCK, keys: BELL_PLUCK, sub: ELECTRIC_BASS, sawBass: ELECTRIC_BASS, supersaw: 3,
+  bell: BELLS, pluck: 27, keys: 28, pad: 29, supersaw: 30, sub: 31, sawBass: 32,
 };
 
 /** The nearest chain to an Evolve instrument: by its sample first, then by its synth layer. */
 export function chainForVoice(voice: NamedVoice | LayeredVoiceSpec | string): number {
   const spec: LayeredVoiceSpec | string = typeof voice === 'object' && 'spec' in voice ? voice.spec : voice;
-  if (typeof spec === 'string') return chainForKey(spec) ?? BELL_PLUCK;
+  if (typeof spec === 'string') return chainForKey(spec) ?? BELLS;
   if (spec.sample) {
     const bySample = chainForKey(spec.sample);
     if (bySample !== null) return bySample;
   }
-  if (spec.synth) return SYNTH_CHAIN[spec.synth] ?? BELL_PLUCK;
-  return BELL_PLUCK;
+  if (spec.synth) return SYNTH_CHAIN[spec.synth] ?? BELLS;
+  return BELLS;
 }
 
 /** One controller value to send. */
@@ -185,7 +212,7 @@ export function abletonPlan(input: AbletonPlanInput): AbletonPlan {
     const chain = evolved ? chainForVoice(evolved) : chainFor(ch, input.world);
     if (chain === null) continue;
     chains.set(channel, chain);
-    set(channel, CHAIN_CC, chainCcValue(chain));
+    set(channel, CHAIN_CC, chainCcValue(chain, channel));
     set(channel, CC_LOUD, stepCc(LOUD, ch.volume ?? 1));
     set(channel, CC_BRIGHT, stepCc(BRIGHT, ch.tone ?? 1));
     set(channel, CC_SPACE, stepCc(SPACE_SEND, ch.reverbSend ?? world?.reverbSend ?? 0.18));
@@ -197,7 +224,7 @@ export function abletonPlan(input: AbletonPlanInput): AbletonPlan {
   const followers = [ROLE_CHANNEL.drums, BAND_PAD_CHANNEL, BAND_BASS_CHANNEL, EXTRA_NOTES_CHANNEL, ...(input.loopChannels ? LOOP_CHANNELS : [])];
   for (const channel of followers) {
     chains.set(channel, w);
-    set(channel, CHAIN_CC, chainCcValue(w));
+    set(channel, CHAIN_CC, chainCcValue(w, channel));
     set(channel, CC_BRIGHT, 127);
     set(channel, CC_SPACE, stepCc(SPACE_SEND, world?.reverbSend ?? 0.18));
   }
