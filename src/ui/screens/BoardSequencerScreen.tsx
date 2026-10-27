@@ -88,6 +88,7 @@ import { ghostsForSave } from '../../tracking/handGuard/knockGuard';
 import { TRACK_SAVE_MS } from '../../tracking/handGuard/boardTrack';
 import { detectBoard, type BoardDetection } from '../../tracking/boardDetect/detectBoard';
 import { consensus, AGREE_COUNT } from '../../tracking/boardDetect/consensus';
+import { boardStillThere } from '../../tracking/boardDetect/boardStillThere';
 import { runFrameBurst } from './boardSequencer/useFrameBurst';
 import {
   buildSquareModel, modelHsv, warpToBoard, type SquareModel,
@@ -480,6 +481,10 @@ export default function BoardSequencerScreen() {
   const [finding, setFinding] = useState(false);
   const [proposal, setProposal] = useState<BoardDetection | null>(null);
   const findAbortRef = useRef<AbortController | null>(null);
+  // A returning session's quiet look at the board: is it where its corners say?
+  const boardCheckAbortRef = useRef<AbortController | null>(null);
+  const boardCheckedRef = useRef(false);
+  const [boardCheck, setBoardCheck] = useState<'checking' | 'found' | 'moved' | 'unsure' | null>(null);
   // Find colours: detected colours the player confirms, never saved on their own.
   const [findingColours, setFindingColours] = useState(false);
   const [colourProposal, setColourProposal] = useState<{ colours: DetectedColour[]; message: string } | null>(null);
@@ -1186,6 +1191,7 @@ export default function BoardSequencerScreen() {
     // A frame burst can still be sampling; it would set state on a screen that has gone.
     findAbortRef.current?.abort();
     findAbortRef.current = null;
+    boardCheckAbortRef.current?.abort();
     if (handCheckRef.current !== null) window.clearInterval(handCheckRef.current);
   }, [engineRef, runningRef, startingRef]);
 
@@ -1276,6 +1282,40 @@ export default function BoardSequencerScreen() {
       setFinding(false);
     }
   }, [announce, configRef, runningRef, videoRef]);
+
+  /**
+   * On arriving at Play: Find board's own look, silently, compared with the saved corners.
+   * Never blocks playing (▶ Play cancels it) and never says "moved" without seeing the board.
+   */
+  const checkBoard = useCallback(async () => {
+    const video = videoRef.current;
+    if (!video || runningRef.current) return;
+    const cfg = configRef.current;
+    const controller = new AbortController();
+    boardCheckAbortRef.current = controller;
+    setBoardCheck('checking');
+    try {
+      const detections: BoardDetection[] = [];
+      await runFrameBurst<BoardDetection>({
+        video,
+        mirrorX: cfg.mirrorX,
+        mirrorY: cfg.mirrorY,
+        rotation: cfg.cameraRotation,
+        signal: controller.signal,
+        detect: (frame) => {
+          const d = detectBoard(frame.data, frame.width, frame.height);
+          detections.push(d);
+          return d;
+        },
+        enough: (results) => results.filter((r) => r.status === 'high').length >= AGREE_COUNT,
+      });
+      if (controller.signal.aborted) return;
+      const result = consensus(detections);
+      setBoardCheck(boardStillThere(cfg.corners, result.status === 'high' ? result.corners ?? null : null, cfg.boardSquares));
+    } finally {
+      if (boardCheckAbortRef.current === controller) boardCheckAbortRef.current = null;
+    }
+  }, [configRef, runningRef, videoRef]);
 
   /**
    * Find colours: take a few frames of the board with the counters on it, learn what the
@@ -2098,6 +2138,8 @@ export default function BoardSequencerScreen() {
 
   const start = useCallback(async () => {
     if (startingRef.current) return;
+    boardCheckAbortRef.current?.abort();
+    setBoardCheck(null);
     startingRef.current = performance.now();
     const generation = startingRef.current;
     setSoundError(null);
@@ -2440,6 +2482,13 @@ export default function BoardSequencerScreen() {
   // On the laptop board there is no camera or board to find: both count as done.
   const setupCfg = { enabled: config.enabled || laptop, channels: config.channels };
   const cameraGate: typeof camera = laptop ? { phase: 'running', colourless: false } : camera;
+  // Once per visit, when the camera is up: is the board still where it was?
+  const cameraUp = camera.phase === 'running' || camera.phase === 'fallback';
+  useEffect(() => {
+    if (boardCheckedRef.current || view !== 'play' || laptop || !config.enabled || !cameraUp || running) return;
+    boardCheckedRef.current = true;
+    void checkBoard();
+  }, [view, laptop, config.enabled, cameraUp, running, checkBoard]);
   const headerNotice: HeaderNotice | null = saveFailed
     ? { kind: 'error', text: 'Changes are not being saved — the browser refused. Use Back up to a file (Make a piece, step 3) now.' }
     : otherTab
@@ -4347,6 +4396,18 @@ export default function BoardSequencerScreen() {
         <div role="alert" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', padding: '8px 12px', borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-danger)', color: 'var(--bs-danger-fg)', fontWeight: 600 }}>
           <span style={{ flex: '1 1 240px' }}>The camera has stopped — the board isn&apos;t being read. The music carries on with the last pattern.</span>
           <Button tone="secondary" onClick={() => setCameraRetry((n) => n + 1)}>Try the camera again</Button>
+        </div>
+      )}
+      {view === 'play' && !running && boardCheck !== null && boardCheck !== 'checking' && (
+        <div role="status" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', padding: '4px 10px', borderRadius: 'var(--bs-radius-md)', background: boardCheck === 'found' ? 'transparent' : 'var(--bs-warn-tint)', border: '1px solid var(--bs-border-control)' }}>
+          <span style={{ flex: '1 1 240px', color: boardCheck === 'found' ? 'var(--bs-ok)' : undefined, fontWeight: boardCheck === 'found' ? 600 : undefined }}>
+            {boardCheck === 'found' && '✓ Board found'}
+            {boardCheck === 'moved' && 'The board seems to have moved.'}
+            {boardCheck === 'unsure' && 'Couldn’t see the whole board to check it. If counters play in the wrong places, find the board again.'}
+          </span>
+          {boardCheck !== 'found' && (
+            <Button tone="secondary" onClick={() => { setBoardCheck(null); stop(); setView('setup'); setStep('board'); }}>Find board</Button>
+          )}
         </div>
       )}
       {view === 'play' && (
