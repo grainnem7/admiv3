@@ -49,6 +49,14 @@ describe('scenes', () => {
     expect(sanitizeScenes('nope', settings)).toEqual([]);
   });
 
+  it('a scene marked to play alone keeps the mark; a scene saved before it existed loads as it was', () => {
+    const old = { id: 'o', name: 'Open', loops: [], settings, at: 210 };
+    expect(sanitizeScenes([old], settings)).toEqual([old]);
+    expect(sanitizeScenes([{ ...old, alone: true }], settings)[0]).toEqual({ ...old, alone: true });
+    expect('alone' in sanitizeScenes([{ ...old, alone: 'yes' }], settings)[0]).toBe(false);
+    expect('alone' in sanitizeScenes([{ ...old, alone: false }], settings)[0]).toBe(false);
+  });
+
   it('names loops by number unless the player named them', () => {
     const names = sanitizeLoopNames(['Bass line', 42, '   ']);
     expect(names).toHaveLength(LAUNCH_SLOTS);

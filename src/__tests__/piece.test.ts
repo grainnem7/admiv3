@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { decideClockTick, nowNext, planScenes, sceneAt, sceneTimeProblem, sortScenes } from '../songs/performance/piece';
+import { decideClockTick, editedScene, nowNext, planScenes, sceneAt, sceneTimeProblem, sortScenes, takeLoopOut } from '../songs/performance/piece';
 import { CLOCK_NOT_STARTED, DEFAULT_PERFORMANCE } from '../songs/performance/clock';
 import type { Scene, SceneSettings } from '../songs/performance/launcher';
 
@@ -96,10 +96,47 @@ describe('the piece — make my plan', () => {
     expect(plan.map((p) => [p.name, p.at])).toEqual([['Arrival', 0], ['Build', 90], ['Open', 210], ['Home', 360]]);
     expect(plan[0].loops).toEqual([0]);
     expect(plan[1].loops).toEqual([0, 2, 3]);
-    expect(plan[2].loops).toEqual([]);
+    // Open is never left without loops: the band and Extra notes only play while a
+    // counter is down, so a scene with none was 2½ minutes of silence (T3-01).
+    expect(plan[2].loops).toEqual([0, 2]);
     expect(plan[2].settings).toMatchObject({ band: 'full', fillAmount: 0.4, evolveAmount: 0.5, soundWorld: 'warm', bpm: 96 });
     expect(planScenes(300, loops, settings, 't').map((p) => p.at)).toEqual([0, 64, 150, 257]);
     expect(new Set(plan.map((p) => p.id)).size).toBe(4);
+  });
+
+  it('with one saved loop, every scene has it; none is ever marked to play alone', () => {
+    const plan = planScenes(420, [null, [{}], null], settings, 't');
+    expect(plan.map((p) => p.loops)).toEqual([[1], [1], [1], [1]]);
+    expect(plan.some((p) => 'alone' in p)).toBe(false);
+  });
+
+  it('with nothing saved, the scenes are empty (and the check says so)', () => {
+    expect(planScenes(420, [null, null], settings, 't').map((p) => p.loops)).toEqual([[], [], [], []]);
+  });
+});
+
+describe('the piece — changing a scene', () => {
+  it('an emptied time makes the scene by hand only', () => {
+    const s = editedScene(scene('a', 90), { at: null });
+    expect(s).toEqual({ id: 'a', name: 'a', loops: [], settings });
+    expect('at' in s).toBe(false);
+    expect(editedScene(scene('a', 90), { at: 150 }).at).toBe(150);
+  });
+
+  it('"alone" takes the loops out; adding a loop, or unticking it, ends it', () => {
+    const alone = editedScene({ ...scene('a', 0), loops: [0, 2] }, { alone: true });
+    expect(alone).toMatchObject({ alone: true, loops: [] });
+    expect('alone' in editedScene(alone, { loops: [1] })).toBe(false);
+    expect('alone' in editedScene(alone, { alone: false })).toBe(false);
+    expect(editedScene(alone, { name: 'Solo', at: 30 })).toMatchObject({ alone: true, loops: [], name: 'Solo', at: 30 });
+  });
+});
+
+describe('the piece — taking an empty loop out of the scenes', () => {
+  it('removes that loop from every scene that uses it, and nothing else', () => {
+    const scenes = [{ ...scene('a', 0), loops: [0, 2] }, { ...scene('b', 90), loops: [2] }, { ...scene('c', 210), loops: [1] }];
+    expect(takeLoopOut(scenes, 2).map((s) => s.loops)).toEqual([[0], [], [1]]);
+    expect(takeLoopOut(scenes, 2)[2]).toBe(scenes[2]);
   });
 });
 

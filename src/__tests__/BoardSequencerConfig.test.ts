@@ -437,6 +437,19 @@ describe('saved work that has to survive a reload', () => {
   });
 });
 
+describe('a piece saved before the 7:00 limit and "alone" scenes', () => {
+  it('loads: its scenes as they were, a length over 7:00 as 7:00', () => {
+    const scene = {
+      id: 'p1-2', name: 'Open', loops: [], at: 210,
+      settings: { soundWorld: 'warm', band: 'full', phrases: false, fillAmount: 0.4, evolveAmount: 0.5, bpm: 90 },
+    };
+    const cfg = loadWith({ scenes: [scene], performance: { lengthSec: 480, ending: 'cue', style: 'fade', fadePasses: 2, startOn: 'play' } });
+    expect(cfg.performance.lengthSec).toBe(420);
+    expect(cfg.performance).toMatchObject({ ending: 'cue', style: 'fade', fadePasses: 2 });
+    expect(cfg.scenes).toEqual([scene]);
+  });
+});
+
 describe('two lanes that would sit on top of each other', () => {
   it('turns the loop pads off, where the player can see it', () => {
     // Controls win, so an overlapping loop lane is dead pads that the board still draws

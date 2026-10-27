@@ -7,6 +7,8 @@ export interface ReadyItem {
   state: CheckState;
   /** What to do about it, when it is not ok. */
   fix?: string;
+  /** A button that fixes it right here ("Take it out"); `name` says what it does in full. */
+  action?: { label: string; name: string; onClick(): void };
 }
 
 const MARK: Record<CheckState, string> = { ok: '✓', warn: '!', problem: '✕' };
@@ -28,13 +30,18 @@ export function ReadyList({ items }: { items: ReadyItem[] }): JSX.Element {
           : warns > 0 ? `Ready, with ${warns} ${warns === 1 ? 'thing' : 'things'} to check.` : 'Everything is ready.'}
       </p>
       <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {items.map((i) => (
-          <li key={i.label} style={{ display: 'grid', gridTemplateColumns: '28px 1fr', gap: 8, alignItems: 'start' }}>
+        {items.map((i, k) => (
+          <li key={`${k}:${i.label}`} style={{ display: 'grid', gridTemplateColumns: '28px 1fr', gap: 8, alignItems: 'start' }}>
             <span aria-hidden="true" style={{ fontWeight: 800, color: COLOUR[i.state], fontSize: 18, textAlign: 'center' }}>{MARK[i.state]}</span>
             <span>
               <span style={{ fontWeight: 600 }}>{i.label}</span>
               <span style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' }}>{` — ${WORD[i.state]}`}</span>
               {i.fix && i.state !== 'ok' && <span style={{ display: 'block', fontSize: 13, color: 'var(--bs-fg2)' }}>{i.fix}</span>}
+              {i.action && i.state !== 'ok' && (
+                <span style={{ display: 'block', marginTop: 4 }}>
+                  <Button tone="secondary" aria-label={i.action.name} onClick={i.action.onClick}>{i.action.label}</Button>
+                </span>
+              )}
             </span>
           </li>
         ))}

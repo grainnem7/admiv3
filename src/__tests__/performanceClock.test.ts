@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   clockView, cuesCrossed, cueText, DEFAULT_PERFORMANCE, describeEnding, endingDue, endingLeadSec, endingPasses, formatClock,
-  parseClock, sanitizePerformance, scenesDue, endingTooLong, CLOCK_NOT_STARTED,
+  parseClock, sanitizePerformance, scenesDue, endingTooLong, CLOCK_NOT_STARTED, MAX_PIECE_SEC, pieceLengthProblem,
 } from '../songs/performance/clock';
 import { DEFAULT_LOOP_COLOUR_OPTIONS, initialLoopColourState, stepLoopColours } from '../songs/performance/loopColours';
 
@@ -86,6 +86,35 @@ describe('the performance clock', () => {
     expect(parseClock('90')).toBe(90);
     expect(parseClock('')).toBeNull();
     expect(parseClock('x')).toBeNull();
+  });
+
+  it('reads two-thirty however it is written: 2:30, 2.30 or 2,30 (T2-04); refuses what it cannot read', () => {
+    for (const t of ['2:30', '2.30', '2,30', ' 2.30 ', '2 : 30']) expect(parseClock(t)).toBe(150);
+    expect(parseClock('7.00')).toBe(420);
+    expect(parseClock('0.45')).toBe(45);
+    expect(parseClock('1:5')).toBe(65); // a colon is minutes:seconds, as before
+    expect(parseClock('90')).toBe(90); // a plain whole number is seconds, as before
+    // "2.5" could be two and a half minutes or 2:05: refused, never guessed. "2.30" read
+    // as 2.3 seconds put a scene 2 s into the piece with no message.
+    for (const t of ['2.5', '2,5', '2.300', '2.75', '2:75', '2m30', '1e2', '-30', '0x10', '1:30:00', '2.3.0', '.30']) {
+      expect(parseClock(t)).toBeNull();
+    }
+  });
+
+  it('a piece is at most 7:00 (F5) and at least 0:30, and says so in words', () => {
+    expect(MAX_PIECE_SEC).toBe(420);
+    expect(pieceLengthProblem(420)).toBeNull();
+    expect(pieceLengthProblem(30)).toBeNull();
+    expect(pieceLengthProblem(421)).toBe('The piece can be at most 7:00.');
+    expect(pieceLengthProblem(480)).toBe('The piece can be at most 7:00.');
+    expect(pieceLengthProblem(29)).toBe('A piece is at least 0:30.');
+    expect(pieceLengthProblem(null)).toBe('Type the length as minutes:seconds, like 7:00.');
+  });
+
+  it('a length saved over 7:00 loads as 7:00', () => {
+    expect(sanitizePerformance({ lengthSec: 480 }).lengthSec).toBe(420);
+    expect(sanitizePerformance({ lengthSec: 3600 }).lengthSec).toBe(420);
+    expect(sanitizePerformance({ lengthSec: 360 }).lengthSec).toBe(360);
   });
 
   it('stored settings are made safe, and the old endings become a time and a style', () => {

@@ -6,11 +6,12 @@ import { Switch } from '../ui/Switch';
 import type { BandLevel } from '../../../../songs/band/band';
 import type { SoundWorldChoice } from '../../../../audio/worlds/soundWorlds';
 import {
-  describeEnding, endingTooLong, formatClock, parseClock,
+  describeEnding, endingTooLong, formatClock, parseClock, pieceLengthProblem,
   type ClockView, type EndingMode, type EndingStyle, type PerformanceSettings,
 } from '../../../../songs/performance/clock';
 import { MAX_SCENES, type LoopSlotState, type Scene } from '../../../../songs/performance/launcher';
 import { sceneTimeProblem } from '../../../../songs/performance/piece';
+import { listNames, playerWords } from '../pieceCheck';
 import { ReadyList, type ReadyItem } from './ReadyCheck';
 
 export interface PieceLoop {
@@ -46,6 +47,8 @@ export interface PieceStepsProps {
   restoreError: string | null;
   worldOptions: { value: SoundWorldChoice; label: string }[];
   readyItems: ReadyItem[];
+  /** Who plays, for "Tim alone" (null = "the player"). */
+  playerName: string | null;
   /** The board's size and colours, for the loop pictures. */
   rows: number;
   cols: number;
@@ -117,6 +120,14 @@ export function loopStateText(l: PieceLoop, running: boolean, fades: boolean): s
 /** One colour per scene on the timeline, so a block and its row in the list match. */
 const SCENE_HUES = [210, 32, 318, 145, 265, 0, 190, 55, 100, 285, 15, 230];
 const sceneColour = (i: number): string => `hsl(${SCENE_HUES[i % SCENE_HUES.length]} 60% 48%)`;
+/**
+ * The colour follows the scene, not its place in the list: when a new time re-sorts the
+ * list, the scene being edited keeps its colour (T2-02).
+ */
+function sceneColours(scenes: readonly Scene[]): (s: Scene) => string {
+  const ids = scenes.map((s) => s.id).sort();
+  return (s) => sceneColour(Math.max(0, ids.indexOf(s.id)));
+}
 
 const heading = { margin: 0, fontSize: 18, fontWeight: 800 } as const;
 const note = { fontSize: 13, color: 'var(--bs-fg2)', margin: 0 } as const;
@@ -280,10 +291,14 @@ function LoopsStep(p: PieceStepsProps): JSX.Element {
 
 /** Step 2: the scenes — the loops and the sound, changing at set times. */
 function ScenesStep(p: PieceStepsProps): JSX.Element {
-  const [selected, setSelected] = useState<number | null>(null);
+  // The open scene, by its id: a new time re-sorts the list, and the panel must stay on
+  // the scene being edited, not on whichever scene moves into its place (T2-02).
+  const [selected, setSelected] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
   const elapsed = p.clock && p.clock.phase !== 'idle' ? p.clock.elapsedSec : null;
   const saved = p.loops.filter((l) => l.state !== 'empty');
+  const colourOf = sceneColours(p.scenes);
+  const who = playerWords(p.playerName);
   return (
     <section aria-labelledby="piece-scenes" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <h3 id="piece-scenes" style={heading}>2 · Scenes</h3>
@@ -294,7 +309,7 @@ function ScenesStep(p: PieceStepsProps): JSX.Element {
       {p.scenes.length === 0 ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-start' }}>
           <Button tone="primary" onClick={p.onMakePlan}>{`✦ Make my plan: 4 scenes over ${formatClock(p.lengthSec)}`}</Button>
-          <p style={note}>Arrival, Build, Open and Home, using {saved.length > 0 ? 'your saved loops' : 'no loops yet (save some in step 1 first, or add them to the scenes later)'}. Every scene can be changed afterwards.</p>
+          <p style={note}>Arrival, Build, Open and Home, using {saved.length > 0 ? 'your saved loops' : `no loops yet (make some in step 1 first: a scene without loops is silent unless ${who.name} plays)`}. Every scene can be changed afterwards.</p>
         </div>
       ) : (
         <>
@@ -304,11 +319,11 @@ function ScenesStep(p: PieceStepsProps): JSX.Element {
               const nextAt = p.scenes.slice(i + 1).find((x) => typeof x.at === 'number')?.at ?? p.lengthSec;
               return (
                 <button
-                  key={s.id} type="button" role="listitem" onClick={() => setSelected(i)}
+                  key={s.id} type="button" role="listitem" onClick={() => setSelected(s.id)}
                   aria-label={`${s.name} at ${formatClock(s.at)}${p.currentScene === i ? ', on now' : ''}`}
                   style={{
                     position: 'absolute', left: `${(s.at / p.lengthSec) * 100}%`, width: `${Math.max(2, ((Math.min(p.lengthSec, nextAt as number) - s.at) / p.lengthSec) * 100)}%`,
-                    top: 0, bottom: 0, background: sceneColour(i), color: '#fff', border: p.currentScene === i ? '3px solid var(--bs-fg)' : '1px solid var(--bs-bg)',
+                    top: 0, bottom: 0, background: colourOf(s), color: '#fff', border: p.currentScene === i ? '3px solid var(--bs-fg)' : '1px solid var(--bs-bg)',
                     padding: '2px 6px', textAlign: 'left', fontSize: 12, fontWeight: 700, overflow: 'hidden', whiteSpace: 'nowrap', cursor: 'pointer',
                   }}
                 >
@@ -321,10 +336,10 @@ function ScenesStep(p: PieceStepsProps): JSX.Element {
           <p style={note}>{`Tap a scene to change it. ▶ Rehearse from here plays the piece from that moment; Jump here now switches to it straight away. 1 pass = ${p.passSec.toFixed(1)} s.`}</p>
           {p.scenes.map((s, i) => (
             <SceneRow
-              key={s.id} index={i} scene={s} open={selected === i} current={p.currentScene === i}
+              key={s.id} colour={colourOf(s)} scene={s} open={selected === s.id} current={p.currentScene === i}
               lengthSec={p.lengthSec} otherTimes={p.scenes.filter((_, k) => k !== i).map((x) => x.at)}
-              loops={saved} worldOptions={p.worldOptions}
-              onToggleOpen={() => setSelected(selected === i ? null : i)}
+              loops={p.loops} worldOptions={p.worldOptions} playerName={p.playerName}
+              onToggleOpen={() => setSelected(selected === s.id ? null : s.id)}
               onGo={() => p.onGoScene(i)}
               onRehearse={!p.running && typeof s.at === 'number' ? () => p.onRehearseFrom(s.at as number) : undefined}
               onUpdateFromNow={() => p.onUpdateSceneFromNow(i)}
@@ -375,7 +390,7 @@ function EndingStep(p: PieceStepsProps): JSX.Element {
         <p style={{ margin: 0, fontWeight: 700 }}>{`${formatClock(p.lengthSec)} · ${describeEnding(perf)} · ${perf.ending === 'cue' ? 'you press End' : 'ends at the time'}`}</p>
         <p style={note}>The clock counts down from the length, with cues at 1 minute, 30 and 10 seconds. The piece never runs over: if End hasn&rsquo;t been pressed, the ending starts by itself in time to finish at {formatClock(p.lengthSec)}.</p>
       </div>
-      <LengthField lengthSec={p.lengthSec} onChange={(lengthSec) => p.onPerformance({ lengthSec })} />
+      <LengthField lengthSec={p.lengthSec} scenes={p.scenes} onChange={(lengthSec) => p.onPerformance({ lengthSec })} />
       <div role="radiogroup" aria-label="How it ends" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         <span style={{ fontWeight: 700 }}>How it ends</span>
         {ENDINGS.map((e) => {
@@ -431,34 +446,57 @@ function EndingStep(p: PieceStepsProps): JSX.Element {
   );
 }
 
-/** The piece's length as m:ss, checked as it is typed. */
-function LengthField({ lengthSec, onChange }: { lengthSec: number; onChange(sec: number): void }): JSX.Element {
+/**
+ * The piece's length as m:ss, checked as it is typed: from 0:30 to 7:00 (F5). A length it
+ * refuses is not saved. A new length leaves the scenes where they are, and says so.
+ */
+function LengthField({ lengthSec, scenes, onChange }: { lengthSec: number; scenes: readonly Scene[]; onChange(sec: number): void }): JSX.Element {
   const [text, setText] = useState(formatClock(lengthSec));
+  const [changed, setChanged] = useState(false);
   const parsed = parseClock(text);
-  const problem = parsed === null ? 'Type the length as minutes:seconds, like 7:00.' : parsed < 30 ? 'A piece is at least 0:30.' : null;
+  const problem = pieceLengthProblem(parsed);
+  const late = scenes.filter((s) => typeof s.at === 'number' && s.at >= lengthSec).map((s) => s.name);
   return (
-    <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4, fontSize: 13 }}>
-      Length of the piece
-      <input
-        type="text" value={text} aria-invalid={problem !== null} aria-describedby="perform-length-problem"
-        onChange={(e) => setText(e.target.value)}
-        onBlur={() => { if (parsed !== null && parsed >= 30) onChange(parsed); }}
-        style={{ width: 90, minHeight: 'var(--bs-target)' }}
-      />
-      <span id="perform-length-problem" style={{ fontSize: 12, color: problem ? 'var(--bs-warn)' : 'transparent' }}>{problem ?? ' '}</span>
-    </label>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
+      <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4, fontSize: 13 }}>
+        Length of the piece
+        <input
+          type="text" value={text} aria-invalid={problem !== null} aria-describedby="perform-length-problem"
+          onChange={(e) => setText(e.target.value)}
+          onBlur={() => {
+            if (parsed === null || problem !== null) return;
+            setText(formatClock(parsed));
+            if (parsed === lengthSec) return;
+            onChange(parsed);
+            setChanged(true);
+          }}
+          style={{ width: 90, minHeight: 'var(--bs-target)' }}
+        />
+        <span id="perform-length-problem" style={{ fontSize: 12, color: problem ? 'var(--bs-warn)' : 'transparent' }}>{problem ?? ' '}</span>
+      </label>
+      {changed && scenes.length > 0 && (
+        <p role="status" style={note}>
+          {`The scenes keep their times.${late.length > 0
+            ? ` ${listNames(late)} now ${late.length === 1 ? 'comes' : 'come'} in at or after the end: see the check below.`
+            : ' Change them in Scenes if they should move.'}`}
+        </p>
+      )}
+    </div>
   );
 }
 
 interface SceneRowProps {
-  index: number;
+  /** The scene's colour, the same as its block on the timeline. */
+  colour: string;
   scene: Scene;
   open: boolean;
   current: boolean;
   lengthSec: number;
   otherTimes: (number | null | undefined)[];
+  /** Every loop slot, saved or empty. */
   loops: PieceLoop[];
   worldOptions: { value: SoundWorldChoice; label: string }[];
+  playerName: string | null;
   onToggleOpen(): void;
   onGo(): void;
   /** Play from this scene's time (only while stopped). */
@@ -471,16 +509,21 @@ interface SceneRowProps {
 /** One scene: a line saying what it is, opening into everything it sets, editable there. */
 function SceneRow(r: SceneRowProps): JSX.Element {
   const s = r.scene;
+  const who = playerWords(r.playerName);
   const [timeText, setTimeText] = useState(typeof s.at === 'number' ? formatClock(s.at) : '');
   const parsed = timeText.trim() === '' ? null : parseClock(timeText);
   const typo = timeText.trim() !== '' && parsed === null;
-  const problem = typo ? 'Type a time as minutes:seconds, like 1:30 — or leave it empty for by hand only.' : sceneTimeProblem(parsed, r.lengthSec, r.otherTimes);
-  const loopNames = s.loops.map((slot) => r.loops.find((l) => l.slot === slot)).filter(Boolean).map((l) => loopName(l as PieceLoop));
+  const problem = typo ? 'Type a time as minutes:seconds, like 2:30, or leave it empty for by hand only.' : sceneTimeProblem(parsed, r.lengthSec, r.otherTimes);
+  const saved = r.loops.filter((l) => l.state !== 'empty');
+  // A loop the scene uses that holds nothing still shows, marked, so it can be taken out (T2-06).
+  const emptyInScene = r.loops.filter((l) => l.state === 'empty' && s.loops.includes(l.slot));
+  const loopNames = s.loops.map((slot) => r.loops.find((l) => l.slot === slot)).filter((l): l is PieceLoop => l !== undefined)
+    .map((l) => (l.state === 'empty' ? `${loopName(l)} (empty)` : loopName(l)));
   const world = r.worldOptions.find((w) => w.value === s.settings.soundWorld)?.label ?? s.settings.soundWorld;
   const fill = FILL_STEPS[nearestStep(FILL_STEPS, s.settings.fillAmount)].label.toLowerCase();
   const evolve = EVOLVE_STEPS[nearestStep(EVOLVE_STEPS, s.settings.evolveAmount)].label.toLowerCase();
   const summary = [
-    loopNames.length > 0 ? loopNames.join(', ') : 'no loops',
+    loopNames.length > 0 ? loopNames.join(', ') : s.alone ? `${who.Name} alone` : 'no loops',
     world,
     BAND_WORDS[s.settings.band],
     fill === 'off' ? 'no extra notes' : `${fill} extra notes`,
@@ -496,7 +539,7 @@ function SceneRow(r: SceneRowProps): JSX.Element {
         borderTop: `2px solid ${r.current ? 'var(--bs-accent)' : 'var(--bs-border)'}`,
         borderRight: `2px solid ${r.current ? 'var(--bs-accent)' : 'var(--bs-border)'}`,
         borderBottom: `2px solid ${r.current ? 'var(--bs-accent)' : 'var(--bs-border)'}`,
-        borderLeft: `8px solid ${sceneColour(r.index)}`,
+        borderLeft: `8px solid ${r.colour}`,
       }}
     >
       <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -530,15 +573,34 @@ function SceneRow(r: SceneRowProps): JSX.Element {
               <input
                 type="text" value={timeText} placeholder="m:ss" aria-invalid={problem !== null} aria-label={`When ${s.name} comes in (minutes:seconds; empty = by hand only)`}
                 onChange={(e) => setTimeText(e.target.value)}
-                onBlur={() => { if (!typo) r.onEdit({ at: parsed }); }}
+                onBlur={() => {
+                  // Unreadable: refused beside the field, and not saved.
+                  if (typo) return;
+                  // Shown back as it was read ("2.30" → 2:30, "90" → 1:30), so a misreading is seen.
+                  setTimeText(parsed === null ? '' : formatClock(parsed));
+                  if (parsed !== (typeof s.at === 'number' ? s.at : null)) r.onEdit({ at: parsed });
+                }}
                 style={{ width: 80, minHeight: 'var(--bs-target)' }}
               />
             </label>
           </div>
           {problem && <span role="alert" style={{ fontSize: 12, color: 'var(--bs-warn)' }}>{problem}</span>}
           <div role="group" aria-label="Loops in this scene" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {r.loops.length === 0 && <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>No loops saved yet.</span>}
-            {r.loops.map((l) => {
+            {saved.length === 0 && <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>No loops saved yet.</span>}
+            {emptyInScene.map((l) => (
+              <button
+                key={`empty${l.slot}`} type="button"
+                onClick={() => r.onEdit({ loops: s.loops.filter((x) => x !== l.slot) })}
+                title="This loop holds nothing, so nothing plays from it"
+                style={{
+                  minHeight: 'var(--bs-target)', padding: '4px 10px', borderRadius: 999, cursor: 'pointer', color: 'inherit',
+                  border: '2px dashed var(--bs-warn)', background: 'transparent',
+                }}
+              >
+                {`${loopName(l)}: empty, take it out`}
+              </button>
+            ))}
+            {saved.map((l) => {
               const inScene = s.loops.includes(l.slot);
               return (
                 <button
@@ -554,6 +616,15 @@ function SceneRow(r: SceneRowProps): JSX.Element {
               );
             })}
           </div>
+          {/* A scene with no loops is silence unless the player plays: only on purpose (F4). */}
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, minHeight: 'var(--bs-target)', cursor: 'pointer' }}>
+            <input
+              type="checkbox" checked={s.alone === true}
+              onChange={(e) => r.onEdit({ alone: e.target.checked })}
+              style={{ width: 20, height: 20 }}
+            />
+            <span>{`${who.Name} alone: no loops, only what ${who.name} plays`}</span>
+          </label>
           <SegmentedControl<SoundWorldChoice> label="Sound world" value={s.settings.soundWorld} onChange={(soundWorld) => set({ soundWorld })} options={r.worldOptions} />
           <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>Band</span>
           <SegmentedControl<BandLevel>

@@ -1,5 +1,27 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { makePlan, notesPlayed, openLaptopBoard, pageErrors, pickColour, pieceStep, place, startPiece } from './app';
+
+/** Make a piece → Loops: two loops, "Bed" (two yellow counters) and an unnamed one (one blue). */
+async function saveTwoLoops(page: Page): Promise<void> {
+  await pieceStep(page, 'Loops');
+  await pickColour(page, 'Yellow');
+  await place(page, [[4, 1], [4, 5]]);
+  await page.getByRole('button', { name: 'Save the board here' }).first().click();
+  await page.getByRole('textbox', { name: 'Name of loop 1' }).fill('Bed');
+  await page.getByRole('button', { name: 'Clear the board' }).click();
+  await pickColour(page, 'Blue');
+  await place(page, [[1, 1]]);
+  await page.getByRole('button', { name: 'Save the board here' }).first().click();
+  await page.getByRole('button', { name: 'Clear the board' }).click();
+}
+
+/** Go to a step of Make a piece from inside it. */
+async function step(page: Page, name: 'Loops' | 'Scenes' | 'Ending & check'): Promise<void> {
+  await page.getByRole('navigation', { name: 'Make a piece: steps' }).getByRole('button', { name: new RegExp(`· ${name}`) }).click();
+}
+
+/** The check's summary line ("2 things need fixing…" or "Ready, with…"). */
+const checkSummary = (page: Page) => page.getByRole('status').filter({ hasText: /(needs? fixing before the piece|^Ready, with|^Everything is ready)/ });
 
 /**
  * The show, end to end on the laptop board: what a facilitator does to build and run a
@@ -59,6 +81,116 @@ test('a scene time is checked as it is typed', async ({ page }) => {
   await page.getByRole('button', { name: /1:30 · Build/ }).click();
   await page.getByRole('textbox', { name: /When Build comes in/ }).fill('9:00');
   await expect(page.getByRole('alert').filter({ hasText: 'After the end of the piece' })).toBeVisible();
+});
+
+test('Make my plan gives every scene loops, and only then does the check say Ready', async ({ page }) => {
+  await openLaptopBoard(page);
+  // Nothing saved yet: the plan's scenes are empty, and the check says the room would be silent.
+  await makePlan(page);
+  await step(page, 'Ending & check');
+  await expect(page.getByText('No loop plays in Arrival, Build, Open and Home')).toBeVisible();
+  await expect(checkSummary(page)).toHaveText(/needs? fixing before the piece/);
+  // Two loops, then the plan again: no scene is left without loops (T3-01).
+  await saveTwoLoops(page);
+  await step(page, 'Scenes');
+  await page.getByRole('button', { name: /Start again from the plan/ }).click();
+  await page.getByRole('button', { name: 'Make the plan' }).click();
+  for (const row of [/^0:00 · Arrival/, /^1:30 · Build/, /^3:30 · Open/, /^6:00 · Home/]) {
+    await expect(page.getByRole('button', { name: row })).not.toContainText('no loops');
+  }
+  await expect(page.getByRole('button', { name: /^3:30 · Open/ })).toContainText('Bed, Loop 2');
+  await step(page, 'Ending & check');
+  await expect(page.getByText(/^No loop plays/)).toHaveCount(0);
+  await expect(checkSummary(page)).toHaveText(/^Ready, with \d+ things? to check\.$/);
+  expect(pageErrors(page)).toEqual([]);
+});
+
+test('a scene with no loops is named by the check, until it is marked to play alone', async ({ page }) => {
+  await openLaptopBoard(page);
+  await saveTwoLoops(page);
+  await step(page, 'Scenes');
+  await page.getByRole('button', { name: /Make my plan/ }).click();
+  await page.getByRole('button', { name: /^3:30 · Open/ }).click();
+  const loops = page.getByRole('group', { name: 'Loops in this scene' });
+  await loops.getByRole('button', { name: '✓ Bed' }).click();
+  await loops.getByRole('button', { name: '✓ Loop 2' }).click();
+  await expect(page.getByRole('button', { name: /^3:30 · Open/ })).toContainText('no loops');
+  await step(page, 'Ending & check');
+  await expect(page.getByText('No loop plays in Open')).toBeVisible();
+  await expect(page.getByText('The room will be silent there unless Test plays: in Scenes, add a loop or tick “Test alone”.')).toBeVisible();
+  await expect(checkSummary(page)).toHaveText('1 thing needs fixing before the piece.');
+  // Marked to play alone, it is the plan: the check is ready.
+  await step(page, 'Scenes');
+  await page.getByRole('button', { name: /^3:30 · Open/ }).click();
+  await page.getByRole('checkbox', { name: 'Test alone: no loops, only what Test plays' }).check();
+  await expect(page.getByRole('button', { name: /^3:30 · Open/ })).toContainText('Test alone');
+  await step(page, 'Ending & check');
+  await expect(page.getByText('No loop plays in Open')).toHaveCount(0);
+  await expect(checkSummary(page)).toHaveText(/^Ready, with/);
+  expect(pageErrors(page)).toEqual([]);
+});
+
+test('a loop cleared while scenes use it: the check names it, and Take it out takes it out', async ({ page }) => {
+  await openLaptopBoard(page);
+  await saveTwoLoops(page);
+  await step(page, 'Scenes');
+  await page.getByRole('button', { name: /Make my plan/ }).click();
+  await step(page, 'Loops');
+  await page.getByRole('button', { name: 'Clear loop 1' }).click();
+  await page.getByRole('button', { name: 'Clear it' }).click();
+  await step(page, 'Ending & check');
+  await expect(page.getByText(/^Arrival, Build, Open and Home use (Bed|Loop 1), which is empty$/)).toBeVisible();
+  await page.getByRole('button', { name: /^Take it out: (Bed|Loop 1), from Arrival, Build, Open and Home$/ }).click();
+  await expect(page.getByText(/which is empty/)).toHaveCount(0);
+  // Arrival and Home had only that loop: now nothing plays in them, and the check says so.
+  await expect(page.getByText('No loop plays in Arrival and Home')).toBeVisible();
+  await step(page, 'Scenes');
+  await expect(page.getByRole('button', { name: /^1:30 · Build/ })).toContainText('Loop 2');
+  await expect(page.getByRole('button', { name: /^1:30 · Build/ })).not.toContainText('empty');
+  expect(pageErrors(page)).toEqual([]);
+});
+
+test('a scene time typed as 2.30 is 2:30; one it cannot read is refused and not saved', async ({ page }) => {
+  await openLaptopBoard(page);
+  await makePlan(page);
+  await page.getByRole('button', { name: /^1:30 · Build/ }).click();
+  const time = page.getByRole('textbox', { name: /When Build comes in/ });
+  await time.fill('2.30');
+  await time.press('Tab');
+  await expect(page.getByRole('button', { name: /^2:30 · Build/ })).toBeVisible();
+  await expect(time).toHaveValue('2:30');
+  await expect(page.getByRole('list', { name: 'Timeline of the scenes' }).getByRole('listitem')).toHaveText(['Arrival 0:00', 'Build 2:30', 'Open 3:30', 'Home 6:00']);
+  await time.fill('2.5');
+  await time.press('Tab');
+  await expect(page.getByRole('alert').filter({ hasText: 'Type a time as minutes:seconds, like 2:30, or leave it empty for by hand only.' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^2:30 · Build/ })).toBeVisible();
+  expect(pageErrors(page)).toEqual([]);
+});
+
+test('the piece is at most 7:00: a length of 8:00 is refused, says so, and is not saved', async ({ page }) => {
+  await openLaptopBoard(page);
+  await pieceStep(page, 'Ending & check');
+  const length = page.getByRole('textbox', { name: /Length of the piece/ });
+  await length.fill('8:00');
+  await length.press('Tab');
+  await expect(page.getByText('The piece can be at most 7:00.')).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Make a piece: steps' }).getByRole('button', { name: /Ending & check/ })).toContainText('7:00');
+  await expect(page.getByText(/^7:00 · fade over 2 passes/)).toBeVisible();
+  expect(pageErrors(page)).toEqual([]);
+});
+
+test('after a new time re-sorts the scenes, the open panel stays on the scene being edited', async ({ page }) => {
+  await openLaptopBoard(page);
+  await makePlan(page);
+  await page.getByRole('button', { name: /^1:30 · Build/ }).click();
+  const time = page.getByRole('textbox', { name: /When Build comes in/ });
+  await time.fill('5:00');
+  await time.press('Tab');
+  await expect(page.getByRole('list', { name: 'Timeline of the scenes' }).getByRole('listitem')).toHaveText(['Arrival 0:00', 'Open 3:30', 'Build 5:00', 'Home 6:00']);
+  await expect(page.getByRole('textbox', { name: 'Scene name' })).toHaveValue('Build');
+  await expect(page.getByRole('button', { name: /^5:00 · Build/ })).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.getByRole('button', { name: /^3:30 · Open/ })).toHaveAttribute('aria-expanded', 'false');
+  expect(pageErrors(page)).toEqual([]);
 });
 
 test('while the clock runs, Exit and Set up need a second press too', async ({ page }) => {

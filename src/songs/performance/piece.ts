@@ -111,25 +111,26 @@ export function decideClockTick(input: {
 }
 
 /** The plan's four sections, in proportion to the piece: 0:00, 1:30, 3:30, 6:00 of 7:00. */
-const PLAN: { name: string; at: number; band: BandLevel; fill: number; evolve: number; loops: 'first' | 'firstThree' | 'none' }[] = [
-  { name: 'Arrival', at: 0, band: 'gentle', fill: 0, evolve: 0, loops: 'first' },
-  { name: 'Build', at: 90 / 420, band: 'gentle', fill: 0.3, evolve: 0, loops: 'firstThree' },
-  { name: 'Open', at: 210 / 420, band: 'full', fill: 0.4, evolve: 0.5, loops: 'none' },
-  { name: 'Home', at: 360 / 420, band: 'off', fill: 0, evolve: 0, loops: 'first' },
+const PLAN: { name: string; at: number; band: BandLevel; fill: number; evolve: number; loops: 1 | 2 | 3 }[] = [
+  { name: 'Arrival', at: 0, band: 'gentle', fill: 0, evolve: 0, loops: 1 },
+  { name: 'Build', at: 90 / 420, band: 'gentle', fill: 0.3, evolve: 0, loops: 3 },
+  { name: 'Open', at: 210 / 420, band: 'full', fill: 0.4, evolve: 0.5, loops: 2 },
+  { name: 'Home', at: 360 / 420, band: 'off', fill: 0, evolve: 0, loops: 1 },
 ];
 
 /**
  * "Make my plan": four scenes — Arrival, Build, Open, Home — placed in proportion to the
  * piece's length, using the loops that have been saved (the first for the opening and
- * the return, the first three for the build). The sound world, phrases and tempo are the
- * ones set now, so the piece sounds like one instrument throughout.
+ * the return, the first three for the build, the first two for Open). No scene is left
+ * without loops while one is saved: the band and Extra notes only play while a counter
+ * is down, so a scene with none was minutes of silence. The sound world, phrases and
+ * tempo are the ones set now, so the piece sounds like one instrument throughout.
  */
 export function planScenes(
   lengthSec: number, loopSlots: readonly (readonly unknown[] | null)[], base: SceneSettings, idPrefix = `p${Date.now().toString(36)}`,
 ): Scene[] {
   const saved = Array.from({ length: LAUNCH_SLOTS }, (_, i) => i).filter((i) => (loopSlots[i]?.length ?? 0) > 0);
-  const pick = (which: 'first' | 'firstThree' | 'none'): number[] =>
-    which === 'none' ? [] : which === 'first' ? saved.slice(0, 1) : saved.slice(0, 3);
+  const pick = (n: number): number[] => saved.slice(0, n);
   return PLAN.map((p, i) => ({
     id: `${idPrefix}-${i}`,
     name: p.name,
@@ -137,4 +138,23 @@ export function planScenes(
     loops: pick(p.loops),
     settings: { ...base, band: p.band, fillAmount: p.fill, evolveAmount: p.evolve },
   }));
+}
+
+/**
+ * A scene with a change made to it. An emptied time makes it "by hand" only. Marking it
+ * to play alone takes its loops out; giving it a loop again, or unticking it, ends that.
+ */
+export function editedScene(scene: Scene, patch: Partial<Scene>): Scene {
+  const { at, alone, ...rest } = { ...scene, ...patch };
+  const isAlone = patch.alone === true || (alone === true && patch.alone !== false && rest.loops.length === 0);
+  return {
+    ...rest,
+    ...(typeof at === 'number' ? { at } : {}),
+    ...(isAlone ? { alone: true, loops: [] } : {}),
+  };
+}
+
+/** The scenes with one loop taken out of every scene that uses it (an empty loop, say). */
+export function takeLoopOut(scenes: readonly Scene[], slot: number): Scene[] {
+  return scenes.map((s) => (s.loops.includes(slot) ? { ...s, loops: s.loops.filter((x) => x !== slot) } : s));
 }

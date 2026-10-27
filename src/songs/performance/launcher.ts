@@ -62,6 +62,12 @@ export interface Scene {
   settings: SceneSettings;
   /** When the clock brings this scene in by itself, in seconds from the start; null = only by hand. */
   at?: number | null;
+  /**
+   * Meant to have no loops: only what the player plays sounds. The check treats a scene
+   * with no loops as a problem (the room goes silent unless the player plays) unless it is
+   * marked so. Absent on scenes saved before it existed; "Make my plan" never sets it.
+   */
+  alone?: boolean;
 }
 
 export const MAX_SCENES = 12;
@@ -143,6 +149,7 @@ export function sanitizeScenes(v: unknown, defaults: SceneSettings): Scene[] {
     out.push({
       id, name: cleanName(o.name) || `Scene ${out.length + 1}`, loops, settings: sanitizeSceneSettings(o.settings, defaults),
       ...(isNum(o.at) && o.at >= 0 ? { at: Math.round(o.at) } : {}),
+      ...(o.alone === true ? { alone: true } : {}),
     });
   }
   return out;

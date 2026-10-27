@@ -39,6 +39,15 @@ export interface PerformanceSettings {
 
 export const DEFAULT_PERFORMANCE: PerformanceSettings = { lengthSec: 7 * 60, ending: 'cue', style: 'fade', fadePasses: 2, startOn: 'play' };
 
+/**
+ * The longest a piece can be: the show's slot is 7:00, and a length typed one digit wrong
+ * the night before must not set up a show that runs over (decision F5). The ending is
+ * inside the length, and the backstop stops everything by it.
+ */
+export const MAX_PIECE_SEC = 7 * 60;
+/** The shortest a piece can be. */
+export const MIN_PIECE_SEC = 30;
+
 /** How long an ending style takes, in passes: the chord rings for one more. */
 export function endingPasses(settings: Pick<PerformanceSettings, 'style' | 'fadePasses'>): number {
   if (settings.style === 'stop') return 0;
@@ -156,14 +165,26 @@ export function scenesDue<T extends { at?: number | null }>(prevElapsedSec: numb
   return due.sort((a, b) => a.at - b.at).map((d) => d.i);
 }
 
-/** "2:30" or "150" → seconds; blank or nonsense → null. */
+/**
+ * A typed time → seconds; blank or unreadable → null. Minutes and seconds may be written
+ * "2:30", "2.30" or "2,30" (the way people write times); a plain whole number is seconds
+ * ("90" = 1:30). After a point or a comma the seconds take two digits: "2.5" could mean
+ * two and a half minutes or 2:05, so it is refused rather than guessed.
+ */
 export function parseClock(text: string): number | null {
   const t = text.trim();
   if (t === '') return null;
-  const m = /^(\d{1,3}):([0-5]?\d)$/.exec(t);
-  if (m) return Number(m[1]) * 60 + Number(m[2]);
-  const n = Number(t);
-  return Number.isFinite(n) && n >= 0 ? Math.round(n) : null;
+  const m = /^(\d{1,3})\s*(?::\s*([0-5]?\d)|[.,]\s*([0-5]\d))$/.exec(t);
+  if (m) return Number(m[1]) * 60 + Number(m[2] ?? m[3]);
+  return /^\d{1,4}$/.test(t) ? Number(t) : null;
+}
+
+/** What is wrong with a typed length (parsed by parseClock), in words; null when it is fine. */
+export function pieceLengthProblem(sec: number | null): string | null {
+  if (sec === null) return 'Type the length as minutes:seconds, like 7:00.';
+  if (sec < MIN_PIECE_SEC) return `A piece is at least ${formatClock(MIN_PIECE_SEC)}.`;
+  if (sec > MAX_PIECE_SEC) return `The piece can be at most ${formatClock(MAX_PIECE_SEC)}.`;
+  return null;
 }
 
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
@@ -176,7 +197,8 @@ export function sanitizePerformance(v: unknown): PerformanceSettings {
   const ending: EndingMode = o.ending === 'auto' || legacyStyle ? 'auto' : 'cue';
   const style: EndingStyle = ENDING_STYLES.includes(o.style as EndingStyle) ? (o.style as EndingStyle) : (legacyStyle ?? d.style);
   return {
-    lengthSec: isNum(o.lengthSec) ? Math.max(30, Math.min(60 * 60, Math.round(o.lengthSec))) : d.lengthSec,
+    // Saved before the 7:00 limit, a longer piece loads as 7:00.
+    lengthSec: isNum(o.lengthSec) ? Math.max(MIN_PIECE_SEC, Math.min(MAX_PIECE_SEC, Math.round(o.lengthSec))) : d.lengthSec,
     ending,
     style,
     fadePasses: isNum(o.fadePasses) && [1, 2, 4].includes(o.fadePasses) ? o.fadePasses : d.fadePasses,

@@ -217,8 +217,10 @@ const HELP: HelpEntry[] = [
     body: 'Three buttons at the top. Play: just play the board, with the Sound, Groove, Board '
       + 'and Connections tabs — no loops or scenes needed. Make a piece: three steps. '
       + '1 Loops: put counters down and press "Save the board here" on an empty loop, then '
-      + 'name it. 2 Scenes: "Make my plan" gives four scenes across the piece; tap one to '
-      + 'change it; ▶ From here rehearses from it. 3 Ending & check: the length, how it ends, '
+      + 'name it. 2 Scenes: "Make my plan" gives four scenes across the piece, each with your '
+      + 'loops; tap one to change it (a time can be typed 2:30 or 2.30); ▶ Rehearse from here '
+      + 'plays from it. A scene with no loops is silent unless the player plays: tick "alone" in it '
+      + 'only if that is the plan. 3 Ending & check: the length (at most 7:00), how it ends, '
       + 'and a check of everything. Each step is optional. Show: the board full screen with '
       + 'the clock and Now / Next, for the performance — Start the piece, Next, End, '
       + 'Capture; Stop needs two presses.',

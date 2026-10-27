@@ -119,6 +119,7 @@ import { BoardMidiPanel } from './boardSequencer/components/BoardMidiPanel';
 import { planFromConfig } from './boardSequencer/components/AbletonSoundsPanel';
 import { useBoardMidiPort } from './boardSequencer/useBoardMidiPort';
 import { abletonReadyItem, abletonTracksItem } from './boardSequencer/abletonReady';
+import { listNames, pieceCheckItems } from './boardSequencer/pieceCheck';
 import { aiOffLine } from './boardSequencer/aiStatus';
 import { BoardMidiSender, channelFor, colourChannelMap, configToSoundFrom, effectiveSound } from '../../midi/boardMidi';
 import { ABLETON_CHAINS, chainOnChannel, previewEvents } from '../../midi/abletonSounds';
@@ -129,10 +130,10 @@ import {
   LAUNCH_SLOTS, MAX_SCENES, loopLabel, nextSceneIndex, sceneFromNow, sceneSettingsToApply, slotState, toggleSlot, type PlayerStrip, type SceneSettings,
 } from '../../songs/performance/launcher';
 import {
-  clockView, cueText, describeEnding, endingTooLong, formatClock, CLOCK_NOT_STARTED,
+  clockView, cueText, describeEnding, formatClock, CLOCK_NOT_STARTED,
   type ClockView,
 } from '../../songs/performance/clock';
-import { decideClockTick, nowNext, planScenes, sceneAt, sceneTimeProblem, sortScenes } from '../../songs/performance/piece';
+import { decideClockTick, editedScene, nowNext, planScenes, sceneAt, sortScenes, takeLoopOut } from '../../songs/performance/piece';
 import { DEFAULT_LOOP_COLOUR_OPTIONS, initialLoopColourState, stepLoopColours } from '../../songs/performance/loopColours';
 import { SessionLog, sessionFileName, type LogActor } from '../../songs/sessionLog';
 import { diskState, onDiskState, restoreFromFile, scheduleDiskSave } from '../../storage/diskSync';
@@ -2810,9 +2811,21 @@ export default function BoardSequencerScreen() {
   const editScene = (i: number, patch: Partial<BoardSequencerStored['scenes'][number]>): void => {
     const c = configRef.current;
     if (!c.scenes[i]) return;
-    const scenes = c.scenes.map((x, k) => (k === i ? { ...x, ...patch, ...(patch.at === null ? { at: undefined } : {}) } : x));
+    const scenes = c.scenes.map((x, k) => (k === i ? editedScene(x, patch) : x));
     update(scenesInOrder(scenes, c.currentScene));
     sessionLogRef.current.action(logActorRef.current, `edit scene ${scenes[i].name}`);
+  };
+  /** The check's "Take it out": an empty loop out of every scene that uses it, with Undo. */
+  const takeEmptyLoopOut = (slot: number): void => {
+    const c = configRef.current;
+    const using = c.scenes.filter((sc) => sc.loops.includes(slot)).map((sc) => sc.name);
+    if (using.length === 0) return;
+    const before = c.scenes;
+    update({ scenes: takeLoopOut(c.scenes, slot) });
+    const text = `${loopLabel(c.loopNames, slot)} taken out of ${listNames(using)}.`;
+    setUndoOffer({ text, restore: () => update({ scenes: before }) });
+    sessionLogRef.current.action(logActorRef.current, `take loop ${slot + 1} out of the scenes`);
+    announce(text);
   };
   /** Replace a scene's loops and sound with what is playing now. */
   const updateSceneFromNow = (i: number): void => {
@@ -3830,21 +3843,11 @@ export default function BoardSequencerScreen() {
     items.push(c.channels.some((ch) => ch.role !== 'off')
       ? { label: 'Counter colours have jobs', state: 'ok' }
       : { label: 'No counter colour has a job', state: 'problem', fix: 'Set up: Colours.' });
-    const emptyUsed = c.scenes.filter((sc) => sc.loops.some((slot) => (c.loopSlots[slot]?.length ?? 0) === 0));
-    items.push(emptyUsed.length === 0
-      ? { label: 'Every loop the scenes use is saved', state: 'ok' }
-      : { label: `${emptyUsed.map((sc) => sc.name).join(', ')} ${emptyUsed.length === 1 ? 'uses' : 'use'} an empty loop`, state: 'problem', fix: 'Save the board into that loop, or take it out of the scene.' });
-    const timed = c.scenes.filter((sc) => typeof sc.at === 'number');
-    items.push(c.scenes.length === 0
-      ? { label: 'No scenes yet', state: 'warn', fix: 'Optional. Make a piece, step 2: Make my plan. Without scenes the piece does not change by itself.' }
-      : timed.some((sc) => sc.at === 0)
-        ? { label: `${timed.length} ${timed.length === 1 ? 'scene comes' : 'scenes come'} in on the clock, one at 0:00`, state: 'ok' }
-        : { label: 'No scene at 0:00', state: 'warn', fix: 'Give the opening scene the time 0:00, so the piece starts in it.' });
-    const badTimes = c.scenes.filter((sc, i) => sceneTimeProblem(typeof sc.at === 'number' ? sc.at : null, c.performance.lengthSec, c.scenes.filter((_, k) => k !== i).map((x) => x.at)) !== null);
-    if (badTimes.length > 0) items.push({ label: `Check the time of ${badTimes.map((sc) => sc.name).join(', ')}`, state: 'problem', fix: 'After the end of the piece, or two scenes at the same moment.' });
-    items.push(endingTooLong(c.performance, passSecNow)
-      ? { label: 'The ending is too long for the piece', state: 'problem', fix: 'Fewer passes, or a longer piece.' }
-      : { label: `Ending: ${describeEnding(c.performance)}, ${c.performance.ending === 'cue' ? 'when you press End' : 'at the time'}`, state: 'ok' });
+    // The piece itself: loops, scenes, times, length and ending (tested in pieceCheck).
+    items.push(...pieceCheckItems({
+      scenes: c.scenes, loopSlots: c.loopSlots, loopNames: c.loopNames, performance: c.performance, passSec: passSecNow,
+      playerName: activePlayer?.name ?? null, onTakeOut: takeEmptyLoopOut,
+    }));
     items.push(!remoteEnabled
       ? { label: 'iPad not in use', state: 'ok' }
       : remoteLink.others > 0
@@ -3892,6 +3895,7 @@ export default function BoardSequencerScreen() {
       restoreError={restoreError}
       worldOptions={worldOptions}
       readyItems={pieceStep === 'ending' ? readyItems() : []}
+      playerName={activePlayer?.name ?? null}
       onNewLoop={beginNewLoop}
       newLoop={newLoop ? (
         <NewLoopPanel
