@@ -103,3 +103,31 @@ describe('who is playing', () => {
     expect(askWhoIsPlaying(['tim'], 'gone')).toBe(true);
   });
 });
+
+import { openingView } from '../ui/screens/boardSequencer/boardSetupFlow';
+
+describe('where the screen opens', () => {
+  const ready = { boardSource: 'camera' as const, enabled: true, channels: [{ role: 'melody' as const }] };
+  const none = { setupRequested: false, pieceRunning: false };
+  it('nothing saved: set-up', () => {
+    expect(openingView(null, none)).toBe('setup');
+  });
+  it('a camera board with the board found and a colour with a job: Play', () => {
+    expect(openingView(ready, none)).toBe('play');
+  });
+  it('board not confirmed, or no colour with a job: set-up', () => {
+    expect(openingView({ ...ready, enabled: false }, none)).toBe('setup');
+    expect(openingView({ ...ready, channels: [{ role: 'off' }] }, none)).toBe('setup');
+  });
+  it('"Set up the board again" asked for: set-up', () => {
+    expect(openingView(ready, { ...none, setupRequested: true })).toBe('setup');
+  });
+  it('a laptop board: Play, unless set-up was asked for', () => {
+    const laptop = { boardSource: 'laptop' as const, enabled: false, channels: [] };
+    expect(openingView(laptop, none)).toBe('play');
+    expect(openingView(laptop, { ...none, setupRequested: true })).toBe('setup');
+  });
+  it('a reload mid-piece: Play, where Carry on is', () => {
+    expect(openingView({ ...ready, enabled: false }, { ...none, pieceRunning: true })).toBe('play');
+  });
+});

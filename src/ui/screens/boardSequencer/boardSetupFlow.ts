@@ -89,3 +89,17 @@ export function askWhoIsPlaying(playerIds: readonly string[], activeId: string |
   if (activeId !== null) return !playerIds.includes(activeId);
   return playerIds.length > 1;
 }
+
+/**
+ * Where the screen opens, decided once at mount. Play when there is nothing left to set up
+ * (a camera board found and a colour with a job, or a laptop board) or a piece was running
+ * at a reload; set-up when "Set up the board again" asked for it, or something is missing.
+ */
+export function openingView(
+  stored: { boardSource?: 'camera' | 'laptop'; enabled: boolean; channels: { role: ColourRole }[] } | null,
+  o: { setupRequested: boolean; pieceRunning: boolean },
+): 'play' | 'setup' {
+  if (stored === null || o.setupRequested) return 'setup';
+  if (o.pieceRunning || stored.boardSource === 'laptop') return 'play';
+  return stored.enabled && hasActiveChannel(stored) ? 'play' : 'setup';
+}

@@ -97,7 +97,7 @@ import { detectColours, type DetectedColour } from '../../tracking/boardColourDe
 import type { FiredNote } from '../../songs/BoardSequencerEngine';
 import {
   SETUP_STEPS, canOpenStep, canPlay, resolveEntry, stepIndicator,
-  setupRequestedOnOpen, clearSetupRequest, askWhoIsPlaying,
+  setupRequestedOnOpen, clearSetupRequest, askWhoIsPlaying, openingView,
   type CameraStatus, type SetupStep,
 } from './boardSequencer/boardSetupFlow';
 import {
@@ -433,12 +433,12 @@ export default function BoardSequencerScreen() {
   // Live control-counter values, for the legend (‖ = the counter is away, value held).
   const [controlState, setControlState] = useState<ControlsResult | null>(null);
 
-  // Guided Set up vs Play. The entry step is resolved once, from the config alone:
-  // routing never moves the player on its own. The Welcome screen can ask for Set up instead of Play.
-  const [view, setView] = useState<BoardScreenView>(() => (
-    // A reload mid-piece: straight to Play, where "Carry on" is.
-    (storedRef.current?.boardSource === 'laptop' || (storedRef.current !== null && readPieceRunning() !== null))
-      && !setupRequestedOnOpen() ? 'play' : 'setup'
+  // Guided Set up vs Play, resolved once from the config alone: routing never moves the
+  // player on its own. A board that is set up opens on Play (a reload mid-piece too, where
+  // "Carry on" is); the Welcome screen can ask for Set up instead.
+  const [view, setView] = useState<BoardScreenView>(() => openingView(
+    storedRef.current,
+    { setupRequested: setupRequestedOnOpen(), pieceRunning: readPieceRunning() !== null },
   ));
   // The counter a click on the laptop board puts down.
   const [laptopColour, setLaptopColour] = useState('');
