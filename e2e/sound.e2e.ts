@@ -250,3 +250,21 @@ test('Play on the laptop from Welcome: the laptop board, and a two-step set-up w
   await page.getByRole('button', { name: /Play/ }).filter({ hasText: '▶' }).first().click();
   await expect(page.getByRole('grid', { name: /Laptop board/ })).toBeVisible();
 });
+
+test('each new instrument loads and plays with ▶ Hear', async ({ page }) => {
+  await openLaptopBoard(page);
+  await page.getByRole('tab', { name: 'Sound' }).click();
+  const hearEach = async (job: RegExp, keys: string[]): Promise<void> => {
+    const red = page.getByRole('row', { name: job });
+    for (const key of keys) {
+      await red.getByRole('combobox', { name: 'Sound' }).selectOption(key);
+      await red.getByRole('button', { name: 'Hear Red' }).click();
+      await expect(red.getByText(/♪ Playing Red|didn't load in time|couldn't play/)).toHaveText(/♪ Playing Red/, { timeout: 8000 });
+      await expect(red.getByText(/♪ Playing Red/)).toBeHidden({ timeout: 4000 }); // the next one's note is its own
+    }
+  };
+  await hearEach(/^Red: Melody/, ['flute', 'saxophone', 'trumpet', 'xylophone', 'guitarAcoustic', 'guitarElectric']);
+  await page.getByRole('row', { name: /^Red: Melody/ }).getByRole('combobox', { name: 'Plays' }).selectOption('bass');
+  await hearEach(/^Red: Bass/, ['trombone', 'bassoon']);
+  expect(pageErrors(page)).toEqual([]);
+});
