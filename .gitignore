@@ -56,3 +56,6 @@ public/songs/*/analysis.*.bak.json
 
 # Local HTTPS certificate for the iPad (never commit)
 public/rootCA.pem
+
+# Test pictures from sessions with participants: never committed (CLAUDE.md, privacy rule)
+src/__tests__/fixtures/board-frames-local/
