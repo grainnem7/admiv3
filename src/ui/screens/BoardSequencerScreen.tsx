@@ -48,7 +48,7 @@ import { BoardCornerEditor } from './boardSequencer/components/BoardCornerEditor
 import { cellMap, LiveBoardView } from './boardSequencer/components/BoardView';
 import { createSessionArchive, indexedDbTakeStore, MAX_TAKES, type SessionArchive, type TakeSummary } from '../../storage/sessionArchive';
 import { forgetPieceRunning, readPieceRunning, rememberPieceRunning, rememberScene, rememberShowing, type PieceRunning } from '../../songs/performance/pieceRunning';
-import { keepCells } from '../../songs/performance/loopSounds';
+import { keepCells, loopChannelsFor } from '../../songs/performance/loopSounds';
 import { LinkQr } from './boardSequencer/components/LinkQr';
 import { createPopStore, soundingKey, type PopStore } from './boardSequencer/popStore';
 import { beyondLoopNote, beyondLoopSquares, playsTune } from '../../songs/beyondLoop';
@@ -2097,7 +2097,9 @@ export default function BoardSequencerScreen() {
     {
       engine.setLaunchFade(Math.round(cfg.loopFadePasses * cfg.cols * Math.max(1, cfg.numPages)));
       const slots = [...wantedRef.current].filter((s) => (cfg.loopSlots[s] ?? null) !== null).sort((a, b) => a - b);
-      engine.setLaunchedLoops(slots, slots.map((s) => (cfg.loopSlots[s] ?? []) as ActiveCell[]));
+      const played = slots.map((s) => loopChannelsFor(cfg.loopSlots[s] ?? [], cfg.channels));
+      const loopColours = [...new Map(played.flatMap((l) => l.channels).map((c) => [c.id, c])).values()];
+      engine.setLaunchedLoops(slots, played.map((l) => l.cells), loopColours);
     }
     // Stop may have been pressed while the samples were loading; the engine that is no
     // longer wanted is disposed rather than left playing with nothing able to stop it.
@@ -2707,14 +2709,17 @@ export default function BoardSequencerScreen() {
   // ---- performing: loops launched without a pad, and scenes ----
 
   /** Tell the engine which loops are wanted; it brings them in at the next pass. */
-  const pushLaunch = (extra?: { slot: number; cells: ActiveCell[] }): void => {
+  const pushLaunch = (extra?: { slot: number; cells: StoredLoopCell[] }): void => {
     const cfg = configRef.current;
     const want = new Set([...wantedRef.current, ...counterWantedRef.current]);
     if (extra) want.add(extra.slot);
-    const cellsOf = (s: number): ActiveCell[] | null => (extra && extra.slot === s ? extra.cells : (cfg.loopSlots[s] ?? null) as ActiveCell[] | null);
+    const cellsOf = (s: number): StoredLoopCell[] | null => (extra && extra.slot === s ? extra.cells : (cfg.loopSlots[s] ?? null));
     const slots = [...want].filter((s) => cellsOf(s) !== null).sort((a, b) => a - b);
     setWantedSlots(slots);
-    engineRef.current?.setLaunchedLoops(slots, slots.map((s) => cellsOf(s) ?? []));
+    // Each loop plays through its own loop colours (what it was kept as), beside the player's.
+    const played = slots.map((s) => loopChannelsFor(cellsOf(s) ?? [], cfg.channels));
+    const loopColours = [...new Map(played.flatMap((l) => l.channels).map((c) => [c.id, c])).values()];
+    engineRef.current?.setLaunchedLoops(slots, played.map((l) => l.cells), loopColours);
   };
   pushLaunchRef.current = pushLaunch;
   const toggleLoop = (slot: number): void => {
@@ -2914,7 +2919,7 @@ export default function BoardSequencerScreen() {
       return { ...prev, loopSlots };
     });
     wantedRef.current = new Set([...wantedRef.current, slot]);
-    pushLaunch({ slot, cells: cells as ActiveCell[] });
+    pushLaunch({ slot, cells });
     sessionLogRef.current.action(logActorRef.current, `capture to loop ${slot + 1}`);
     setBoardNotice(`Captured: ${loopLabel(cfg.loopNames, slot)}`);
     announce(`Captured ${cells.length} notes as ${loopLabel(cfg.loopNames, slot)}; it starts on the next pass.`);

@@ -280,6 +280,12 @@ export class BoardSequencerEngine {
   // or a stop takes effect at the next pass, so a tap is never off-beat; `pendingLaunch`
   // holds what is wanted until then.
   private launched: LaunchedLoop[] = [];
+  /**
+   * The colours a kept loop plays through (one per job + sound it was made with), beside
+   * the player's own. They come and go with the loops; the player's channels never hold
+   * them, so nothing is saved into a profile.
+   */
+  private loopColours: ColourChannel[] = [];
   private launchedSlots: number[] = [];
   private pendingLaunch: { slots: number[]; loops: ActiveCell[][] } | null = null;
   /** How many beats a launched loop takes to fade in or out; 0 = it starts and stops dead. */
@@ -461,45 +467,13 @@ export class BoardSequencerEngine {
     this.delayBus = delayBus;
 
     // Index channels for fast role/instrument lookup during scheduling.
-    this.channelById = new Map(this.cfg.channels.map((c) => [c.id, c]));
+    this.rebuildChannelIndex();
     const needsDrums = this.cfg.channels.some((c) => c.role === 'drums') || (this.cfg.band ?? 'off') !== 'off';
     if (needsDrums) await this.buildDrumKit();
     this.band = this.cfg.band ?? 'off';
     if (this.band !== 'off') this.buildBandVoices();
     // One sampled voice per melody/chord/bass channel → its own gain + FX sends.
-    for (const ch of this.cfg.channels) {
-      if (ch.role !== 'melody' && ch.role !== 'chord' && ch.role !== 'bass') continue;
-      const v = new BoardSequencerVoice(this.ctx, voiceSpecFor(ch, this.cfg.soundWorld ?? 'none'));
-      v.setBrightness(ch.tone ?? 1);
-      const gain = ctx.createGain();
-      gain.gain.value = ch.volume ?? 1;
-      v.connect(gain);
-      // Placement and ducking sit after the channel gain; the effect sends tap the gain
-      // itself, so a reverb tail neither pumps nor jumps sides.
-      const out = ducksForKick(ch) ? duckBus : mix;
-      const panBase = channelPan(this.cfg.channels, ch.id);
-      const pan = typeof ctx.createStereoPanner === 'function' ? ctx.createStereoPanner() : null;
-      if (pan) {
-        pan.pan.value = studio ? panBase : 0;
-        gain.connect(pan);
-        pan.connect(out);
-      } else {
-        gain.connect(out);
-      }
-      const revBase = ch.reverbSend ?? world?.reverbSend ?? 0.18;
-      const delBase = ch.delaySend ?? world?.delaySend ?? 0;
-      const rev = ctx.createGain();
-      rev.gain.value = revBase * this.reverbAmount;
-      gain.connect(rev);
-      rev.connect(reverbBus);
-      const del = ctx.createGain();
-      del.gain.value = delBase * this.delayAmount;
-      gain.connect(del);
-      del.connect(delayBus);
-      this.voiceByChannel.set(ch.id, {
-        voice: v, gain, rev, del, revBase, delBase, toneBase: ch.tone ?? 1, pan, panBase,
-      });
-    }
+    for (const ch of this.cfg.channels) this.buildVoice(ch);
     // The first beats must sound. The samples load in the background and a voice says
     // nothing until they arrive, while the lights, the pops and "Now:" (and the session
     // log) report every note — so the opening seconds of a piece were silent on screen
@@ -513,6 +487,51 @@ export class BoardSequencerEngine {
       volume: -14,
     });
     this.tick.connect(mix);
+  }
+
+  /**
+   * A colour's own voice: sampler → channel gain → (pan) → mix or duck bus, with reverb and
+   * delay sends tapping the gain. Nothing for a colour that is not melodic, or that has a
+   * voice already; nothing before init has made the buses.
+   */
+  private buildVoice(ch: ColourChannel): void {
+    if (ch.role !== 'melody' && ch.role !== 'chord' && ch.role !== 'bass') return;
+    if (this.voiceByChannel.has(ch.id)) return;
+    const { mix, duckBus, reverbBus, delayBus } = this;
+    if (!mix || !duckBus || !reverbBus || !delayBus) return;
+    const ctx = this.ctx;
+    const studio = this.studioOn();
+    const world = worldOf(this.cfg.soundWorld ?? 'none');
+    const v = new BoardSequencerVoice(this.ctx, voiceSpecFor(ch, this.cfg.soundWorld ?? 'none'));
+    v.setBrightness((ch.tone ?? 1) * this.toneScale);
+    const gain = ctx.createGain();
+    gain.gain.value = ch.volume ?? 1;
+    v.connect(gain);
+    // Placement and ducking sit after the channel gain; the effect sends tap the gain
+    // itself, so a reverb tail neither pumps nor jumps sides.
+    const out = ducksForKick(ch) ? duckBus : mix;
+    const panBase = channelPan(this.cfg.channels, ch.id);
+    const pan = typeof ctx.createStereoPanner === 'function' ? ctx.createStereoPanner() : null;
+    if (pan) {
+      pan.pan.value = studio ? panBase : 0;
+      gain.connect(pan);
+      pan.connect(out);
+    } else {
+      gain.connect(out);
+    }
+    const revBase = ch.reverbSend ?? world?.reverbSend ?? 0.18;
+    const delBase = ch.delaySend ?? world?.delaySend ?? 0;
+    const rev = ctx.createGain();
+    rev.gain.value = revBase * this.reverbAmount;
+    gain.connect(rev);
+    rev.connect(reverbBus);
+    const del = ctx.createGain();
+    del.gain.value = delBase * this.delayAmount;
+    gain.connect(del);
+    del.connect(delayBus);
+    this.voiceByChannel.set(ch.id, {
+      voice: v, gain, rev, del, revBase, delBase, toneBase: ch.tone ?? 1, pan, panBase,
+    });
   }
 
   /** The kit, its colour/level/room nodes, loaded. Shared by drum colours and the band. */
@@ -924,11 +943,12 @@ export class BoardSequencerEngine {
     if (channels === this.cfg.channels) return;
     const before = this.channelById;
     this.cfg.channels = channels;
-    this.channelById = new Map(channels.map((c) => [c.id, c]));
+    this.rebuildChannelIndex();
     for (const ch of channels) {
       const e = this.voiceByChannel.get(ch.id);
       const old = before.get(ch.id);
-      if (!e || !old || (old.instrument ?? '') === (ch.instrument ?? '')) continue;
+      if (!e) { this.buildVoice(ch); continue; }
+      if (!old || (old.instrument ?? '') === (ch.instrument ?? '')) continue;
       const next = new BoardSequencerVoice(this.ctx, voiceSpecFor(ch, this.cfg.soundWorld ?? 'none'));
       next.setBrightness(e.toneBase * this.toneScale);
       next.connect(e.gain);
@@ -936,6 +956,11 @@ export class BoardSequencerEngine {
       this.swapVoiceWhenReady(e, next);
     }
     this.syncAbleton();
+  }
+
+  /** The colour index: the player's channels, then the loops' own colours. */
+  private rebuildChannelIndex(): void {
+    this.channelById = new Map([...this.cfg.channels, ...this.loopColours].map((c) => [c.id, c]));
   }
 
   /** Counters play phrases (on) or one note each (off), from the next beat. */
@@ -1230,7 +1255,10 @@ export class BoardSequencerEngine {
    * the next pass (starting and stopping alike); while stopped, at once, so Play begins
    * with them.
    */
-  setLaunchedLoops(slots: number[], loops: ActiveCell[][]): void {
+  setLaunchedLoops(slots: number[], loops: ActiveCell[][], loopColours: ColourChannel[] = []): void {
+    this.loopColours = loopColours;
+    this.rebuildChannelIndex();
+    for (const ch of loopColours) this.buildVoice(ch);
     if (!this.timer) {
       this.launched = slots.map((slot, i) => ({ slot, cells: loops[i] ?? [] }));
       this.launchedSlots = slots;
