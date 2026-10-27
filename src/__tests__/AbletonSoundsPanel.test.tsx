@@ -41,7 +41,7 @@ describe('the Template checklist', () => {
   it('starts with how to change from the 16-sound racks', () => {
     render();
     expect(host.textContent).toContain(
-      'Changing from the 16-sound racks? On every track: rename chains 11, 14, 15 and 16, add chains 17 to 33 with the placeholder, then select every chain and choose Distribute Ranges Equally.',
+      'Changing from the 16-sound racks? On every track except the drums (channel 10): rename chains 11, 14, 15 and 16, add chains 17 to 33 with the placeholder, then select every chain and choose Distribute Ranges Equally. Then check in the ruler that chains 4, 18 and 30 start at 12, 66 and 112.',
     );
     expect(host.textContent).toContain('Placeholder: Operator with its default sound. In per-colour mode every colour’s track needs every sound real.');
   });

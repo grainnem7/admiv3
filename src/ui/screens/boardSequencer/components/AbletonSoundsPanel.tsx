@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  abletonChecklist, abletonPlan, CHAIN_CC, chainLabel, controlKey,
+  abletonChecklist, abletonPlan, CHAIN_CC, chainLabel, chainRange, controlKey,
 } from '../../../../midi/abletonSounds';
 import { colourChannelMap } from '../../../../midi/boardMidi';
 import type { BoardSequencerStored } from '../../../../profiles/BoardSequencerConfig';
@@ -98,8 +98,9 @@ export function AbletonSoundsPanel({ config, getLive, onSend, connected }: {
       </div>
       <Disclosure summary="Template checklist: the 33 sounds, and which each track holds">
         <span style={NOTE}>
-          Changing from the 16-sound racks? On every track: rename chains 11, 14, 15 and 16, add chains 17 to 33 with
-          the placeholder, then select every chain and choose Distribute Ranges Equally.
+          Changing from the 16-sound racks? On every track except the drums (channel 10): rename chains 11, 14, 15 and
+          16, add chains 17 to 33 with the placeholder, then select every chain and choose Distribute Ranges Equally.
+          Then check in the ruler that chains 4, 18 and 30 start at {chainRange(3)[0]}, {chainRange(17)[0]} and {chainRange(29)[0]}.
         </span>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ fontSize: 12, borderCollapse: 'collapse' }}>

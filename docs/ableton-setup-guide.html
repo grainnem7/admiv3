@@ -167,13 +167,14 @@ a:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
     <p class="note"><strong>The placeholder:</strong> Operator with its default sound (a plain tone). It costs almost nothing, and if you ever hear it you know a chain is missing its real instrument. ADMI never sends a track to a placeholder on purpose.</p>
 
     <h3>Changing from the 16-sound racks</h3>
-    <p>If your racks were built with the earlier 16 chains, convert every rack first, before anything else, so no track plays the wrong sound. On each track:</p>
+    <p>If your racks were built with the earlier 16 chains, convert every rack first, before anything else, so no track plays the wrong sound. On each track, but not the drums (channel 10), which keep their four kits:</p>
     <ol>
       <li>Rename chain 11 to <strong>Cello</strong>, 14 to <strong>Choir pad</strong>, 15 to <strong>Electric piano chords</strong> and 16 to <strong>Bells</strong>.</li>
       <li>Add chains 17 to 33 from the table below, each holding the placeholder.</li>
       <li>Show the <strong>Chain select ruler</strong> (the "Chain" button above the chain list), select every chain, right click a chain and choose <strong>Distribute Ranges Equally</strong>.</li>
+      <li><strong>Check the ranges</strong> in the ruler against the table below: chain 4 should start at 12, chain 18 should start at 66 and chain 30 should start at 112. If they don't, drag those chains' edges to match the table; otherwise ADMI would pick the sound next door.</li>
     </ol>
-    <p>Every track now plays correctly again, with the new sounds as placeholders. Put the real instruments in as below.</p>
+    <p>Every track now plays the right chain again, with the new sounds as placeholders. Choir pad, Electric piano chords and Bells still hold their old instruments (the old pad, stab and bell/pluck): give them their new ones as you put the real instruments in, as below.</p>
 
     <h3>The 33 chains</h3>
     <div class="scroll"><table>
@@ -215,12 +216,12 @@ a:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
       </tbody>
     </table></div>
     <p>The Suite packs to install (Live's browser, <strong>Packs</strong>, or your account on ableton.com): Orchestral Woodwinds, Orchestral Brass, Orchestral Strings, Orchestral Mallets, Guitar and Bass, Grand Piano and Electric Keyboards. Choose a plain version of each instrument (one way of playing), not the presets that load several at once.</p>
-    <p><strong>Saxophone</strong> (and any sound whose pack isn't installed): drag a <strong>Sampler</strong> into the chain and drop ADMI's own files for that instrument onto it, from <code>public/samples/instruments/saxophone</code> in the ADMI folder. Sampler places each file on the note in its name (C4, Fs4 and so on: s means sharp). Then it sounds at least as good as ADMI's own.</p>
+    <p><strong>Saxophone</strong> (and any sound whose pack isn't installed): drag a <strong>Sampler</strong> into the chain and drop ADMI's own files for that instrument onto it, from <code>public/samples/instruments/saxophone</code> in the ADMI folder. Check each file's root note in Sampler's Zone editor and set it by hand if needed: the note is in the file's name (C4, Fs4 and so on: s means sharp), but Ableton calls middle C C3 where ADMI's files call it C4, so ADMI's C4 file is Ableton's C3. Play a C on the track to check it isn't an octave out. Then it sounds at least as good as ADMI's own.</p>
     <p><strong>No effects inside the chains.</strong> A reverb in each of 33 chains keeps working even when silent. Space is the shared reverb on Return A (Send A), as below.</p>
 
     <h3>Building the racks</h3>
     <ol>
-      <li><strong>Melody first, with all 33 real.</strong> On the Melody track (channel 1), drag in an <strong>Instrument Rack</strong> (Instruments), show its <strong>Chain list</strong> and add the 33 chains above, <strong>in this order, named exactly</strong>, each with its real instrument. Then show the <strong>Chain select ruler</strong>, select every chain and choose <strong>Distribute Ranges Equally</strong>, with no fades.</li>
+      <li><strong>Melody first, with all 33 real.</strong> On the Melody track (channel 1), drag in an <strong>Instrument Rack</strong> (Instruments), show its <strong>Chain list</strong> and add the 33 chains above, <strong>in this order, named exactly</strong>, each with its real instrument. Then show the <strong>Chain select ruler</strong>, select every chain and choose <strong>Distribute Ranges Equally</strong>, with no fades, and check the ranges as above (chain 4 should start at 12, chain 18 should start at 66 and chain 30 should start at 112).</li>
       <li><strong>Check Melody</strong> before building the rest (next section).</li>
       <li><strong>Copy it</strong> to Bass (channel 2) and Chords (channel 3): select the Rack, <kbd>Ctrl</kbd> + <kbd>C</kbd>, select the other track's instrument, <kbd>Ctrl</kbd> + <kbd>V</kbd>. Swap the four World chains for sounds that suit that part.</li>
       <li><strong>Trim each track:</strong> on Melody, Bass and Chords, replace the instrument in every chain the Template checklist marks <strong>Placeholder</strong> for that track with the placeholder. The chain stays, with its name.</li>
@@ -233,7 +234,7 @@ a:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
           <li><strong>Space for the whole piece (CC 22 on channel 16):</strong> the A Reverb return's volume. Energy (CC 21) and Groove (CC 23) are optional. Echo (the Delay counter, CC 27) is optional too.</li>
         </ul>
       </li>
-      <li><strong>Loud that plays harder (worth it):</strong> wind, brass and string instruments from the Orchestral packs have an <strong>Expression</strong> or <strong>Dynamics</strong> control. Still in <kbd>Ctrl</kbd> + <kbd>M</kbd>, open each of those chains, click that control and press <span class="btn">Send</span> for Loud (CC 24) again. Ableton lets one controller move several controls, so Loud then makes a flute or trumpet play harder, not only louder.</li>
+      <li><strong>Loud that plays harder (worth it):</strong> wind, brass and string instruments from the Orchestral packs have an <strong>Expression</strong> or <strong>Dynamics</strong> control. Still in <kbd>Ctrl</kbd> + <kbd>M</kbd>, open each of those chains, click that control and press <span class="btn">Send</span> for Loud (CC 24) again. Ableton lets one controller move several controls, so Loud then makes a flute or trumpet play harder, not only louder. Give each Expression mapping Min 40% (Max 100%), or the Soft step is far too faint.</li>
       <li>Still in <kbd>Ctrl</kbd> + <kbd>M</kbd>, set each mapping's <strong>Min</strong> and <strong>Max</strong> in the Mappings list on the left: Loud Gain Min −18 dB, Max 0 dB; Send A Min −40 dB, Max 0 dB; Return A Min −24 dB, Max 0 dB; Bright Freq Min 600 Hz. Without a Min the lowest step is far too quiet. Leave Chain selectors at 0 to 127.</li>
       <li><strong>Drums (ch 10):</strong> an Instrument Rack holding four Drum Racks, one per World (Warm, Lo fi, Ambient, Electronic), zones 0 to 7, 8 to 15, 16 to 23, 24 to 31, its Chain selector on CC 30. The drums keep these four zones; they don't use the 33 chains.</li>
       <li>Save the Set as <strong>ADMI template</strong>.</li>
@@ -244,7 +245,7 @@ a:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
     <ol>
       <li><strong>Memory:</strong> open Task Manager (<kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Esc</kbd>) and note Ableton Live's memory before adding the rack and after.</li>
       <li><strong>Load time:</strong> save the Set, close Ableton, open the Set again and time it.</li>
-      <li><strong>Every chain answers:</strong> in ADMI, with Sound from Ableton, choose each sound for a melody colour in turn and press <span class="btn">▶ Hear</span>. Each should sound like its name. A plain tone means that chain still holds the placeholder.</li>
+      <li><strong>Every chain answers:</strong> in ADMI, with Sound from Ableton, choose each sound for a melody colour in turn and press <span class="btn">▶ Hear</span>. Each should sound like its name. A plain tone means that chain still holds the placeholder. The melody sounds don't reach every chain: when Bass and Chords are built, do the same with a bass colour and a chords colour.</li>
       <li><strong>A full run:</strong> play the whole 7-minute piece with the camera and ADMI running, watching Ableton's <strong>CPU</strong> meter (top right). Aim for under 60% with no crackles or dropouts.</li>
     </ol>
     <p>If it is too heavy, choose lighter versions of the heaviest instruments rather than fewer sounds. When Melody passes, build the rest, then do <strong>one final full run</strong> with the whole Set before relying on it in a show.</p>
