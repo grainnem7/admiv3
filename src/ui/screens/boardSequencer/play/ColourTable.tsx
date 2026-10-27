@@ -3,7 +3,7 @@
 // (Colours) and on the Play screen's Sound tab, so a sound can be tried with the player in
 // either place. The rest of a colour's sound lives in its row's More.
 
-import { useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Button } from '../ui/Button';
 import { Switch } from '../ui/Switch';
 import { SwatchChip } from '../ui/SwatchChip';
@@ -17,7 +17,7 @@ import {
 } from '../../../../tracking/boardColours';
 import type { BoardSequencerStored } from '../../../../profiles/BoardSequencerConfig';
 import { DRUM_OPTIONS, soundNameFor } from '../soundOptions';
-import { soundsFor } from '../soundCatalogue';
+import { soundOptionName, soundsFor } from '../soundCatalogue';
 import { channelFor, colourChannelMap, configToSoundFrom } from '../../../../midi/boardMidi';
 import { chainFor, chainLabel } from '../../../../midi/abletonSounds';
 import { playsTune } from '../../../../songs/beyondLoop';
@@ -34,6 +34,8 @@ export interface ColourTableProps {
   onHear(c: ColourChannel): void;
   /** The colour whose preview is loading, or null. */
   hearing: string | null;
+  /** What Hear is doing for one colour right now ("Playing…", "Couldn't load…"), shown on its row. */
+  hearNote?: { id: string; text: string } | null;
   /** Set-up's extras for a row (count on board, recalibrate, remove). */
   rowExtras?(c: ColourChannel): ReactNode;
   /** Shown inside a row's More, after the sound details (set-up: black darkness). */
@@ -64,14 +66,37 @@ const isMelodic = (c: ColourChannel): boolean => c.role === 'melody' || c.role =
 
 /** The value a colour's sound select stands on: its own pick, or '' for the world's. */
 const soundValue = (c: ColourChannel): string => (c.role === 'drums' ? c.drum ?? '' : c.instrument ?? '');
+/** Which field that value is: a drum colour's piece, or another colour's instrument. */
+const soundField = (c: ColourChannel): 'drum' | 'instrument' => (c.role === 'drums' ? 'drum' : 'instrument');
 
 export function ColourTable(p: ColourTableProps): JSX.Element {
-  // ↶: the sound each row had before its last change here (this session only).
+  // ↶: the sound each row had before its last change (this session only). Learnt from the
+  // colours as they change, so a change made outside the table (Reset every colour) counts
+  // too; a job change clears it, so a drum piece never comes back as an instrument.
   const [before, setBefore] = useState<Record<string, string>>({});
+  const seen = useRef(new Map<string, { field: 'drum' | 'instrument'; value: string }>());
+  useEffect(() => {
+    const changes: Record<string, string | null> = {};
+    for (const c of p.config.channels) {
+      const now = { field: soundField(c), value: soundValue(c) };
+      const was = seen.current.get(c.id);
+      if (was && was.field !== now.field) changes[c.id] = null;
+      else if (was && was.value !== now.value) changes[c.id] = was.value;
+      seen.current.set(c.id, now);
+    }
+    if (Object.keys(changes).length === 0) return;
+    setBefore((b) => {
+      const next = { ...b };
+      for (const [id, v] of Object.entries(changes)) {
+        if (v === null) delete next[id];
+        else next[id] = v;
+      }
+      return next;
+    });
+  }, [p.config.channels]);
   const colours = [...p.config.channels].sort((a, b) => rank(a.role) - rank(b.role));
 
   const pickSound = (c: ColourChannel, value: string): void => {
-    setBefore((b) => ({ ...b, [c.id]: soundValue(c) }));
     const v = value === '' ? undefined : value;
     p.setChannelSound(c.id, c.role === 'drums' ? { drum: v } : { instrument: v });
   };
@@ -93,11 +118,11 @@ export function ColourTable(p: ColourTableProps): JSX.Element {
           </tr>
         </thead>
         <tbody>
-          {colours.map((c, i) => (
+          {colours.map((c) => (
             <ColourRow
               key={c.id}
               c={c}
-              n={i + 1}
+              n={p.config.channels.indexOf(c) + 1}
               p={p}
               onSound={(v) => pickSound(c, v)}
               canGoBack={before[c.id] !== undefined}
@@ -121,6 +146,11 @@ function ColourRow({ c, n, p, onSound, canGoBack, onBack }: {
   const loading = p.hearing === c.id;
   const followName = soundNameFor({ ...c, instrument: undefined, drum: undefined }, p.config.soundWorld);
   const [open, setOpen] = useState(false);
+  const options = c.role === 'drums' ? DRUM_OPTIONS : soundsFor(c.role);
+  // A saved pick this job's list doesn't offer (an older choice, or one kept through a job
+  // change) is shown as itself: a select with no matching option shows its first one.
+  const own = soundValue(c) !== '' && !options.some((o) => o.key === soundValue(c)) ? soundValue(c) : null;
+  const note = p.hearNote && p.hearNote.id === c.id ? p.hearNote.text : null;
 
   const onPlays = (v: string): void => {
     if (v.startsWith('loop:')) {
@@ -152,7 +182,7 @@ function ColourRow({ c, n, p, onSound, canGoBack, onBack }: {
           </div>
           <div style={{ ...TWO, marginTop: 4 }}>
             <select
-              aria-label="Plays"
+              aria-label={`${name}: plays`}
               value={plays}
               disabled={p.roleLockedReason !== null}
               title={p.roleLockedReason ?? undefined}
@@ -170,16 +200,18 @@ function ColourRow({ c, n, p, onSound, canGoBack, onBack }: {
               </optgroup>
             </select>
             {hasSound ? (
-              <select aria-label="Sound" value={soundValue(c)} onChange={(e) => onSound(e.target.value)} style={SELECT}>
+              <select aria-label={`${name}: sound`} value={soundValue(c)} onChange={(e) => onSound(e.target.value)} style={SELECT}>
                 <option value="">
                   {c.role === 'drums'
                     ? `${followName} (by row)`
                     : world ? `${world.name}: ${followName}` : `Default: ${followName}`}
                 </option>
-                {(c.role === 'drums' ? DRUM_OPTIONS : soundsFor(c.role)).map((o) => <option key={o.key} value={o.key}>{o.name}</option>)}
+                {own && <option value={own}>{`${soundOptionName(own)} (own pick)`}</option>}
+                {options.map((o) => <option key={o.key} value={o.key}>{o.name}</option>)}
               </select>
             ) : <span aria-label="No sound of its own" style={{ alignSelf: 'center' }}>—</span>}
           </div>
+          {note && <div role="status" style={{ ...NOTE, marginTop: 4, color: 'var(--bs-accent)', fontWeight: 600 }}>{note}</div>}
         </td>
       </tr>
       {open && (

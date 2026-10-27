@@ -70,7 +70,7 @@ describe('the colour table', () => {
   it('a melody can choose from the melody sounds, and the choice is saved', () => {
     const p = props();
     render(p);
-    const sound = select(row('Red'), 'Sound');
+    const sound = select(row('Red'), 'Red: sound');
     const names = [...sound.options].map((o) => o.textContent);
     expect(names).toEqual(expect.arrayContaining(['Piano', 'Violin', 'Synth pluck']));
     choose(sound, 'harp');
@@ -86,8 +86,8 @@ describe('the colour table', () => {
       render({ ...p, config: { ...p.config, channels: current } });
     });
     render(p);
-    choose(select(row('Red'), 'Sound'), 'harp');
-    choose(select(row('Red'), 'Sound'), 'violin');
+    choose(select(row('Red'), 'Red: sound'), 'harp');
+    choose(select(row('Red'), 'Red: sound'), 'violin');
     act(() => button(row('Red'), /^Back to/).click());
     expect(p.setChannelSound).toHaveBeenLastCalledWith('m', { instrument: 'harp' });
     expect(button(row('Blue'), /^Back to|Back$/).disabled).toBe(true);
@@ -96,13 +96,13 @@ describe('the colour table', () => {
   it('Plays offers the five jobs; a change goes to onRole; locked while playing, saying why', () => {
     const p = props();
     render(p);
-    const plays = select(row('Red'), 'Plays');
+    const plays = select(row('Red'), 'Red: plays');
     const names = [...plays.options].map((o) => o.textContent);
     expect(names).toEqual(expect.arrayContaining(['Melody', 'Bass', 'Chords', 'Drums', 'Not used']));
     choose(plays, 'chord');
     expect(p.onRole).toHaveBeenCalledWith('m', 'chord');
     render(props({ roleLockedReason: 'Stop the board to change what a colour plays.' }));
-    expect(select(row('Red'), 'Plays').disabled).toBe(true);
+    expect(select(row('Red'), 'Red: plays').disabled).toBe(true);
     expect(host.textContent).toContain('Stop the board to change what a colour plays.');
   });
 
@@ -113,5 +113,53 @@ describe('the colour table', () => {
     expect(p.onHear).toHaveBeenCalledWith(expect.objectContaining({ id: 'm' }));
     render(props({ hearing: 'm' }));
     expect(button(row('Red'), /^Hear/).getAttribute('aria-busy')).toBe('true');
+  });
+
+  /** A table whose sound and job changes are saved and shown, as on the screen. */
+  function live(start: ColourChannel[] = channels): { p: ColourTableProps; set(next: ColourChannel[]): void } {
+    let current = start;
+    const p = props({ config: { ...DEFAULT_BOARD_SEQUENCER_CONFIG, soundWorld: 'warm', channels: current } });
+    const show = (): void => render({ ...p, config: { ...p.config, channels: current } });
+    p.setChannelSound = vi.fn((id: string, patch) => { current = current.map((c) => (c.id === id ? { ...c, ...patch } : c)); show(); });
+    p.onRole = vi.fn((id: string, role) => { current = current.map((c) => (c.id === id ? { ...c, role } : c)); show(); });
+    show();
+    return { p, set(next) { current = next; show(); } };
+  }
+
+  it('a saved sound outside its job’s list is shown as it is, not as another sound', () => {
+    render(props({ config: { ...DEFAULT_BOARD_SEQUENCER_CONFIG, soundWorld: 'warm', channels: channels.map((c) => (c.id === 'm' ? { ...c, instrument: 'cello' } : c)) } }));
+    const sound = select(row('Red'), 'Red: sound');
+    expect(sound.value).toBe('cello');
+    expect(sound.selectedOptions[0].textContent).toBe('Cello (own pick)');
+  });
+
+  it('↶ is off after a job change, so a drum name never lands on an instrument', () => {
+    live();
+    choose(select(row('Red'), 'Red: sound'), 'harp');
+    choose(select(row('Red'), 'Red: plays'), 'drums');
+    expect(button(row('Red'), /^Back to/).disabled).toBe(true);
+  });
+
+  it('↶ after "Reset every colour" goes back one step: to the sound before the reset', () => {
+    const t = live();
+    choose(select(row('Red'), 'Red: sound'), 'harp');
+    choose(select(row('Red'), 'Red: sound'), 'violin');
+    t.set(channels.map((c) => ({ ...c, instrument: undefined }))); // the reset, made outside the table
+    act(() => button(row('Red'), /^Back to/).click());
+    expect(t.p.setChannelSound).toHaveBeenLastCalledWith('m', { instrument: 'violin' });
+  });
+
+  it('colours are numbered as everywhere else: by their place in the colour list', () => {
+    render(props());
+    const chip = (r: HTMLElement): string | null | undefined => r.querySelector('span[aria-hidden="true"]')?.textContent;
+    expect(chip(row('Green'))).toBe('1'); // the tempo colour is first in config, though listed last
+    expect(chip(row('Red'))).toBe('2');
+  });
+
+  it('what Hear is doing is shown on its row', () => {
+    render(props({ hearNote: { id: 'm', text: 'Playing Red…' } }));
+    const status = row('Red').querySelector('[role="status"]');
+    expect(status?.textContent).toBe('Playing Red…');
+    expect(row('Blue').querySelector('[role="status"]')).toBeNull();
   });
 });

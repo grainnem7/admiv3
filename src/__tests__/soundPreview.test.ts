@@ -124,3 +124,16 @@ describe('the preview as MIDI notes, for Ableton', () => {
     expect(new Set(snare.map((x) => x.midi))).toEqual(new Set([KIT_GM_NOTE.snare]));
   });
 });
+
+import { previewChainCc } from '../audio/soundPreview';
+
+describe('the Ableton sound Hear chooses', () => {
+  const plan = { chains: new Map([[1, 6], [2, 12]]) };
+  it('stopped: the chain Play would send for that channel (a shared channel keeps its first colour’s)', () => {
+    expect(previewChainCc(plan, 1, false)).toBe(48);
+    expect(previewChainCc(plan, 3, false)).toBeNull();
+  });
+  it('playing: none, so the engine’s choice (Sounds change included) is never undone', () => {
+    expect(previewChainCc(plan, 1, true)).toBeNull();
+  });
+});

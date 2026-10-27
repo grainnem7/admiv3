@@ -11,6 +11,7 @@ import { voiceSpecFor, type SoundWorldChoice } from './worlds/soundWorlds';
 import type { ColourChannel } from '../tracking/boardColours';
 import { effectiveSound } from '../midi/boardMidi';
 import { KIT_GM_NOTE } from '../midi/gmDrums';
+import { chainCcValue } from '../midi/abletonSounds';
 
 /** How long Hear waits for a sound's samples before saying it couldn't. */
 const READY_MAX_MS = 4000;
@@ -58,6 +59,17 @@ export function previewRoute(
 ): 'admi' | 'ableton' {
   const route = effectiveSound(cfg, port.portConnected, port.holdOnAdmi);
   return route.midi && !route.internal ? 'ableton' : 'admi';
+}
+
+/**
+ * The chain Hear selects in Ableton (as its CC 30 value): while stopped, the one Play
+ * would send for that channel (a channel two colours share keeps its first colour's);
+ * while playing, none, so the engine's own choice (Sounds change included) stands.
+ */
+export function previewChainCc(plan: { chains: ReadonlyMap<number, number> }, channel: number, running: boolean): number | null {
+  if (running) return null;
+  const chain = plan.chains.get(channel);
+  return chain === undefined ? null : chainCcValue(chain);
 }
 
 /** Plays a colour's sound on demand. One per screen; voices are kept per sound. */

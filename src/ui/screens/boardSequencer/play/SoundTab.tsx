@@ -49,6 +49,7 @@ export interface SoundTabProps {
   /** ▶ Hear a colour's sound now, and which one is loading. */
   onHear(c: ColourChannel): void;
   hearing: string | null;
+  hearNote?: { id: string; text: string } | null;
   /** Swing and humanize also go to the running engine. */
   setGroove(swing: number, humanize: number): void;
   fill: HelperActions & { count: number; status: string | null };
@@ -190,6 +191,7 @@ export function SoundTab(p: SoundTabProps): JSX.Element {
               setChannelSound={p.setChannelSound}
               onHear={p.onHear}
               hearing={p.hearing}
+              hearNote={p.hearNote}
               liveValue={p.liveValue}
               abletonShares={p.abletonShares}
             />

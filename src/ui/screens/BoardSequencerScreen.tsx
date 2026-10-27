@@ -116,9 +116,9 @@ import { useBoardMidiPort } from './boardSequencer/useBoardMidiPort';
 import { abletonReadyItem, abletonTracksItem } from './boardSequencer/abletonReady';
 import { aiOffLine } from './boardSequencer/aiStatus';
 import { assignColourChannels, BoardMidiSender, channelFor, colourChannelMap, configToSoundFrom, effectiveSound } from '../../midi/boardMidi';
-import { ABLETON_CHAINS, chainCcValue, chainFor, previewEvents } from '../../midi/abletonSounds';
+import { ABLETON_CHAINS, chainFor, previewEvents } from '../../midi/abletonSounds';
 import { MIDIManager } from '../../midi/MIDIManager';
-import { previewNotesFor, previewRoute, SoundAuditioner } from '../../audio/soundPreview';
+import { previewChainCc, previewNotesFor, previewRoute, SoundAuditioner } from '../../audio/soundPreview';
 import { LoopEditor } from './boardSequencer/components/LoopEditor';
 import {
   LAUNCH_SLOTS, MAX_SCENES, loopLabel, nextSceneIndex, sceneFromNow, sceneSettingsToApply, slotState, toggleSlot, type PlayerStrip, type SceneSettings,
@@ -926,8 +926,20 @@ export default function BoardSequencerScreen() {
   const auditionerRef = useRef<SoundAuditioner | null>(null);
   const [hearing, setHearing] = useState<string | null>(null);
   useEffect(() => () => { auditionerRef.current?.dispose(); auditionerRef.current = null; }, []);
+  // Shown on the colour's row, not only spoken: a sighted facilitator, and a deaf or
+  // hard-of-hearing player, see that the sound played or why it didn't.
+  const [hearNote, setHearNote] = useState<{ id: string; text: string } | null>(null);
+  const hearNoteTimer = useRef<number | null>(null);
+  const showHearNote = useCallback((id: string, text: string, ms: number) => {
+    if (hearNoteTimer.current !== null) window.clearTimeout(hearNoteTimer.current);
+    setHearNote({ id, text });
+    announce(text);
+    hearNoteTimer.current = window.setTimeout(() => setHearNote((n) => (n?.id === id ? null : n)), ms);
+  }, [announce]);
+  useEffect(() => () => { if (hearNoteTimer.current !== null) window.clearTimeout(hearNoteTimer.current); }, []);
   const hearColour = useCallback((c: ColourChannel) => {
     const cfg = configRef.current;
+    const name = describeChannel(c);
     const key = { rootMidi: cfg.scaleRootMidi, semitones: cfg.scaleSemitones };
     if (previewRoute(cfg, midiPortRef.current) === 'ableton') {
       const out = MIDIManager.getConnectedSelectedOutput();
@@ -935,22 +947,25 @@ export default function BoardSequencerScreen() {
         channelMode: cfg.midiChannelMode,
         colourChannels: cfg.midiChannelMode === 'colour' ? colourChannelMap(cfg.channels) : undefined,
       });
-      if (!out || channel === null) return;
-      const chain = chainFor(c, cfg.soundWorld);
+      if (!out) { showHearNote(c.id, 'No MIDI port to Ableton: check the Connections tab.', 5000); return; }
+      if (channel === null) return;
       const now = performance.now();
-      for (const ev of previewEvents(channel, chain === null ? null : chainCcValue(chain), previewNotesFor(c, key))) {
-        out.send(ev.data, now + ev.atMs);
-      }
+      const chainCc = previewChainCc(planFromConfig(cfg), channel, runningRef.current);
+      for (const ev of previewEvents(channel, chainCc, previewNotesFor(c, key))) out.send(ev.data, now + ev.atMs);
+      showHearNote(c.id, `♪ Playing ${name} in Ableton…`, 1500);
       return;
     }
+    setHearing(c.id);
     void Tone.start().then(() => {
       auditionerRef.current ??= new SoundAuditioner();
-      setHearing(c.id);
       return auditionerRef.current.hear(c, cfg.soundWorld, key);
     }).then((result) => {
-      if (result === 'timeout') announce(`${describeChannel(c)}'s sound didn't load in time. Try again in a moment.`);
+      if (result === 'timeout') showHearNote(c.id, `${name}'s sound didn't load in time. Try again in a moment.`, 6000);
+      else showHearNote(c.id, `♪ Playing ${name}…`, 1500);
+    }).catch(() => {
+      showHearNote(c.id, `${name}'s sound couldn't play.`, 6000);
     }).finally(() => setHearing((h) => (h === c.id ? null : h)));
-  }, [announce]);
+  }, [showHearNote, announce]);
 
   // Pattern chaining: select which page the live camera edits.
   const selectPage = useCallback((i: number) => {
@@ -3494,6 +3509,7 @@ export default function BoardSequencerScreen() {
       onLoopSlot={(id, slot) => patchChannel(id, { loopSlot: slot })}
       onHear={hearColour}
       hearing={hearing}
+      hearNote={hearNote}
       setGroove={(swing, humanize) => {
         update({ swing, humanize });
         engineRef.current?.setSwing(swing);
@@ -3979,6 +3995,7 @@ export default function BoardSequencerScreen() {
       setChannelSound={setChannelSound}
       onHear={hearColour}
       hearing={hearing}
+      hearNote={hearNote}
       running={running}
       onRemove={removeChannel}
       onClearAll={clearChannels}

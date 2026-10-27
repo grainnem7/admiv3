@@ -58,6 +58,8 @@ export interface ColoursStepProps {
   onHear(c: ColourChannel): void;
   /** The colour whose ▶ Hear is loading, or null. */
   hearing: string | null;
+  /** What Hear is doing for one colour, shown on its row. */
+  hearNote?: { id: string; text: string } | null;
   /** For the "Plays a loop" job: which saved loop this colour's counter plays. */
   onLoopSlot(id: ColourId, slot: number): void;
   /**
@@ -113,7 +115,7 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
   const {
     channels, counts, palette, arming, pending, boardLearnt, onLearnBoard, learnMessage,
     onFindColours, onArmTap, onCancelArm,
-    onAddPending, onDiscardPending, onRecalibrate, onRole, onLoopSlot, onRemove, config, setChannelSound, onHear, hearing, onClearAll, isReferenced, running,
+    onAddPending, onDiscardPending, onRecalibrate, onRole, onLoopSlot, onRemove, config, setChannelSound, onHear, hearing, hearNote, onClearAll, isReferenced, running,
     minFilledFraction, readSettingsCustom, onMinFill, onResetReadSettings, counterHeight, onCounterHeight,
     settleWindowMs, onSettleWindow, onBlackDarkness, picker, onMovePicker, onSampleSquare, hands,
     finding, onCancelFind, found, onUseFound, onDiscardFound,
@@ -294,6 +296,7 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
           setChannelSound={setChannelSound}
           onHear={onHear}
           hearing={hearing}
+          hearNote={hearNote}
           rowExtras={(c) => (
             <span style={{ fontSize: 12, color: 'var(--bs-fg2)', whiteSpace: 'nowrap' }}>{`${counts[c.id] ?? 0} down`}</span>
           )}
