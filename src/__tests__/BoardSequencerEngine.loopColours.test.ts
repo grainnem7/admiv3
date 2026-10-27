@@ -100,6 +100,27 @@ describe('a launched loop plays through its own loop colours', () => {
     expect(p.voiceByChannel.has('blue')).toBe(true);
   });
 
+  it('while the clock runs, a loop that is no longer wanted keeps its colours until its fade ends', () => {
+    const { e, p } = engine();
+    const priv = e as unknown as Priv & { timer: unknown; launched: { slot: number }[]; pendingLaunch: unknown };
+    e.setLaunchedLoops([0], [[cell(1, 2, 'loop:melody:violin')]], loopChannels);
+    priv.timer = {}; // the clock is running: changes land at the next pass
+    e.setLaunchedLoops([], [], []);
+    // Not yet applied: the loop is still launched, and must still be playable.
+    expect(priv.launched.map((l) => l.slot)).toEqual([0]);
+    expect(p.channelById.has('loop:melody:violin')).toBe(true);
+    p.fireStep(2, 7.5, 1, null);
+    expect(e.drainFiredNotes()).toHaveLength(1);
+  });
+
+  it('a drums loop builds the kit even when today has no drum colour and no band', () => {
+    const { e, p } = engine();
+    p.drumKit = null;
+    const build = vi.spyOn(e as unknown as { buildDrumKit(): Promise<void> }, 'buildDrumKit').mockResolvedValue(undefined);
+    e.setLaunchedLoops([0], [[cell(3, 2, 'loop:drums:snare')]], loopChannels);
+    expect(build).toHaveBeenCalled();
+  });
+
   it('a stopped loop’s colours are forgotten; the player’s stay', () => {
     const { e, p } = engine();
     e.setLaunchedLoops([0], [[cell(1, 2, 'loop:melody:violin')]], loopChannels);

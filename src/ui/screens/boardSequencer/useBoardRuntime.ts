@@ -6,6 +6,7 @@
  */
 import { orientedSize } from '../../../tracking/frameOrientation';
 import { useCallback, useEffect, useRef, type MutableRefObject, type RefObject } from 'react';
+import { playerCellsFor, type NewLoopState } from '../../../songs/performance/newLoop';
 import { CameraManager, type CameraTrackInfo } from '../../../tracking/CameraManager';
 import { BoardReader } from '../../../tracking/BoardReader';
 import type { ActiveCell, BoardSequencerMode, CellReading } from '../../../tracking/BoardSequencerMode';
@@ -193,6 +194,8 @@ export function useBoardRuntime(opts: {
   capValuesRef?: MutableRefObject<Partial<Record<FaderRole, number>>>;
   /** Written every frame: when the board last changed and whether a hand is on it (the cap pauses). */
   boardActivityRef?: MutableRefObject<BoardActivity>;
+  /** New loop in progress: while it waits for an empty board the player's counters stay silent. */
+  newLoopRef?: MutableRefObject<NewLoopState | null>;
 }): BoardRuntimeRefs {
   const { cameraDeviceId, cameraRetry, calibrated, laptop, configRef, callbacksRef, capValuesRef, boardActivityRef } = opts;
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -563,7 +566,7 @@ export function useBoardRuntime(opts: {
       if (running && engine) {
         loopBankRef.current = frame.loopBank;
         if (frame.captured.length > 0) callbacksRef.current.onLoopSlotsCaptured(frame.loopBank.saved);
-        engine.setActiveCells(frame.patternCells);
+        engine.setActiveCells(playerCellsFor(opts.newLoopRef?.current ?? null, frame.patternCells));
         engine.setActiveLoops(frame.activeLoops);
         activeCellsRef.current = frame.patternCells;
         if (frame.fireTick) engine.fireTick();

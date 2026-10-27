@@ -48,7 +48,7 @@ import { BoardCornerEditor } from './boardSequencer/components/BoardCornerEditor
 import { cellMap, LiveBoardView } from './boardSequencer/components/BoardView';
 import { createSessionArchive, indexedDbTakeStore, MAX_TAKES, type SessionArchive, type TakeSummary } from '../../storage/sessionArchive';
 import { forgetPieceRunning, readPieceRunning, rememberPieceRunning, rememberScene, rememberShowing, type PieceRunning } from '../../songs/performance/pieceRunning';
-import { keepCells, loopChannelsFor, loopSwatch } from '../../songs/performance/loopSounds';
+import { drawCells, keepCells, loopChannelsFor, loopSwatch } from '../../songs/performance/loopSounds';
 import { boardSeen, engineSettingsFor, hearWith, startNewLoop, startWithThese, type NewLoopState } from '../../songs/performance/newLoop';
 import { NewLoopPanel } from './boardSequencer/play/NewLoopPanel';
 import { LinkQr } from './boardSequencer/components/LinkQr';
@@ -310,6 +310,8 @@ export default function BoardSequencerScreen() {
   const capPointerRef = useRef<{ x: number; y: number } | null>(null);
   // What the board is doing, so the cap holds still while counters are being moved.
   const boardActivityRef = useRef<BoardActivity>({ lastChangeMs: null, handSinceMs: null });
+  /** New loop in progress (state further down); the runtime reads it every frame to silence leftover counters. */
+  const newLoopRef = useRef<NewLoopState | null>(null);
   // The board camera actually in use: the cap must never take it.
   const [camInfo, setCamInfo] = useState<CameraTrackInfo | null>(null);
   const [capMouse, setCapMouse] = useState(false);
@@ -421,7 +423,7 @@ export default function BoardSequencerScreen() {
   const {
     videoRef, cameraRef, homographyRef, modeRef, engineRef, runningRef, loopBankRef, activeCellsRef,
     dismiss, letGoGhosts, knockRef, latestFrameRef, lastFrameAtRef,
-  } = useBoardRuntime({ cameraDeviceId: config.cameraDeviceId, cameraRetry, calibrated, laptop, configRef, callbacksRef, capValuesRef, boardActivityRef });
+  } = useBoardRuntime({ cameraDeviceId: config.cameraDeviceId, cameraRetry, calibrated, laptop, configRef, callbacksRef, capValuesRef, boardActivityRef, newLoopRef });
   const cap = useCapTracker({
     settings: config.cap,
     ranges: config.controlRanges,
@@ -559,7 +561,6 @@ export default function BoardSequencerScreen() {
    * the loop being heard alongside goes through pushLaunch. Never saved.
    */
   const [newLoop, setNewLoop] = useState<NewLoopState | null>(null);
-  const newLoopRef = useRef<NewLoopState | null>(null);
   newLoopRef.current = newLoop;
   // The running engine follows the config whenever it changes — a scene, the iPad, a
   // tab — whether or not camera frames are arriving.
@@ -2732,12 +2733,11 @@ export default function BoardSequencerScreen() {
   // ---- performing: loops launched without a pad, and scenes ----
 
   /** Tell the engine which loops are wanted; it brings them in at the next pass. */
-  const pushLaunch = (extra?: { slot: number; cells: StoredLoopCell[] }): void => {
+  const pushLaunch = (extra?: { slot: number; cells: StoredLoopCell[] }, nl: NewLoopState | null = newLoopRef.current): void => {
     const cfg = configRef.current;
     const want = new Set([...wantedRef.current, ...counterWantedRef.current]);
     if (extra) want.add(extra.slot);
     // While making a loop, only the loop asked for with "Hear it with…" plays.
-    const nl = newLoopRef.current;
     if (nl) { want.clear(); for (const s of engineSettingsFor(nl, cfg).loops) want.add(s); }
     const cellsOf = (s: number): StoredLoopCell[] | null => (extra && extra.slot === s ? extra.cells : (cfg.loopSlots[s] ?? null));
     const slots = [...want].filter((s) => cellsOf(s) !== null).sort((a, b) => a - b);
@@ -2748,6 +2748,9 @@ export default function BoardSequencerScreen() {
     engineRef.current?.setLaunchedLoops(slots, played.map((l) => l.cells), loopColours);
   };
   pushLaunchRef.current = pushLaunch;
+  // Entering, leaving and "Hear it with…" all change what plays through this one effect,
+  // after the state is set, so nothing reads it stale.
+  useEffect(() => { pushLaunch(undefined, newLoop); }, [newLoop]); // eslint-disable-line react-hooks/exhaustive-deps
   const toggleLoop = (slot: number): void => {
     const has = (configRef.current.loopSlots[slot] ?? null) !== null;
     if (!has) return;
@@ -2840,10 +2843,21 @@ export default function BoardSequencerScreen() {
   };
   const [pieceStep, setPieceStep] = useState<PieceStep>('loops');
   const countersNow = boardCellsNow().length;
-  // "Lift the counters to start from silence": the wait ends once the board is seen empty.
+  // "Lift the counters to start from silence": the wait ends once the board has been seen
+  // empty for the settle window — never from one flickery frame, and never from the first
+  // render after Play, when the running board has not been read yet.
+  const emptySinceRef = useRef<number | null>(null);
   useEffect(() => {
-    if (newLoopRef.current?.phase === 'waitEmpty') setNewLoop((n) => (n ? boardSeen(n, countersNow) : n));
-  }, [countersNow]);
+    if (newLoopRef.current?.phase !== 'waitEmpty') { emptySinceRef.current = null; return; }
+    if (countersNow > 0) { emptySinceRef.current = null; setNewLoop((n) => (n ? boardSeen(n, countersNow) : n)); return; }
+    if (runningRef.current && latestFrame === null) return; // nothing read yet
+    const settle = configRef.current.settleWindowMs;
+    emptySinceRef.current ??= performance.now();
+    const t = window.setTimeout(() => {
+      if (newLoopRef.current?.phase === 'waitEmpty' && boardCellsNow().length === 0) setNewLoop((n) => (n ? boardSeen(n, 0) : n));
+    }, Math.max(0, settle - (performance.now() - emptySinceRef.current)));
+    return () => window.clearTimeout(t);
+  }, [countersNow, latestFrame === null]); // eslint-disable-line react-hooks/exhaustive-deps
   /**
    * New loop: composing from silence. While it is set the engine plays only what
    * engineSettingsFor allows (never the player's band, Extra notes or Sounds change), and
@@ -2856,9 +2870,9 @@ export default function BoardSequencerScreen() {
     const count = boardCellsNow().length;
     setNewLoop(startNewLoop(count));
     setKeptLoop(null);
-    // Silence first: every loop stops along with the band and Extra notes.
+    // Silence first: every loop stops along with the band and Extra notes (the effect on
+    // newLoop pushes the empty set to the engine).
     wantedRef.current = new Set();
-    pushLaunchRef.current();
     sessionLogRef.current.action(logActorRef.current, 'new loop');
     announce(count > 0 ? `New loop. Lift the ${count} counters to start from silence.` : 'New loop: silent until a counter goes down.');
   };
@@ -2866,11 +2880,12 @@ export default function BoardSequencerScreen() {
     setNewLoop(null);
     setKeptLoop(null);
     wantedRef.current = new Set();
-    pushLaunchRef.current();
   };
   const keepNewLoop = (): void => {
     const slot = firstFreeSlot(configRef.current);
     if (slot === undefined) { announce('Every loop is full: clear one first.'); return; }
+    // Control counters are not a loop: nothing is kept, and nothing is said to be.
+    if (keepCells(boardCellsNow(), configRef.current.channels).length === 0) { announce('Nothing to keep yet: only control counters are down.'); return; }
     saveBoardToSlot(slot);
     setKeptLoop({ slot, name: configRef.current.loopNames[slot] ?? '' });
     announce(`Kept: ${loopLabel(configRef.current.loopNames, slot)}. Give it a name.`);
@@ -3735,7 +3750,7 @@ export default function BoardSequencerScreen() {
   const performLoops: PieceLoop[] = Array.from({ length: LAUNCH_SLOTS }, (_, slot) => {
     const cells = config.loopSlots[slot] ?? null;
     return {
-      slot, name: config.loopNames[slot] ?? '', notes: cells?.length ?? 0, cells: cells ?? [],
+      slot, name: config.loopNames[slot] ?? '', notes: cells?.length ?? 0, cells: drawCells(cells ?? []),
       state: slotState(slot, cells !== null && cells.length > 0, new Set(wantedSlots), new Set(appliedSlots)),
     };
   });
@@ -3839,7 +3854,7 @@ export default function BoardSequencerScreen() {
         <NewLoopPanel
           state={newLoop}
           loopNumber={(keptLoop?.slot ?? firstFreeSlot(config) ?? LAUNCH_SLOTS - 1) + 1}
-          countersOnBoard={countersNow}
+          countersOnBoard={keepCells(boardCellsNow(), config.channels).length}
           kept={keptLoop ? { slot: keptLoop.slot, name: config.loopNames[keptLoop.slot] ?? '' } : null}
           otherLoops={config.loopSlots.flatMap((s, i) => (s === null || i === keptLoop?.slot ? [] : [{ slot: i, name: config.loopNames[i] ?? '' }]))}
           onStartWithThese={() => setNewLoop((s) => (s ? startWithThese(s) : s))}
@@ -4380,7 +4395,7 @@ export default function BoardSequencerScreen() {
       reducedMotion={reducedMotion}
       fillMarks={running ? fillMarks : undefined}
       loopCells={running ? [
-        ...appliedSlots.flatMap((slot) => config.loopSlots[slot] ?? []),
+        ...appliedSlots.flatMap((slot) => drawCells(config.loopSlots[slot] ?? [])),
         ...(latestFrame?.frame.activeLoops ?? []).flat(),
       ] : undefined}
       band={running && bandStatus.playing ? { playing: true, beatOn } : null}

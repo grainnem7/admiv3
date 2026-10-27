@@ -81,6 +81,15 @@ export function loopChannelsFor(
   return { cells: out, channels: [...channels.values()] };
 }
 
+/**
+ * Kept cells as they should be drawn: a cell that carries a job is drawn as its loop
+ * colour (so loopSwatch gives today's colour for that sound, or grey), an older cell as
+ * its own colour. Positions and box detail are untouched.
+ */
+export function drawCells(cells: readonly StoredLoopCell[]): { row: number; col: number; colour: string }[] {
+  return cells.map((c) => ({ row: c.row, col: c.col, colour: c.job ? loopColourId(c.job, c.sound ?? '') : c.colour }));
+}
+
 /** What colour to draw a cell in: a loop colour as today's colour for that sound, a known colour as itself, else grey. */
 export function loopSwatch(colour: string, today: readonly ColourChannel[]): string {
   if (colour.startsWith(LOOP_PREFIX)) {

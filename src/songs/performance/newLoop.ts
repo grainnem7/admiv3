@@ -42,6 +42,14 @@ export function hearWith(s: NewLoopState, what: Partial<NewLoopState['with']>): 
   return { ...s, with: { ...s.with, ...what } };
 }
 
+/**
+ * The player's own counters as the engine should hear them: none while waiting for the
+ * board to be seen empty (counters left from before must not sound), all of them otherwise.
+ */
+export function playerCellsFor<C>(s: NewLoopState | null, cells: readonly C[]): C[] {
+  return s?.phase === 'waitEmpty' ? [] : [...cells];
+}
+
 /** How loud Extra notes are when asked for while composing: enough to hear, never busy. */
 const HEAR_FILL = 0.3;
 

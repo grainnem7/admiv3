@@ -82,3 +82,15 @@ describe('the screen draws every cell through loopSwatch', () => {
     expect(swatchFor('green')).not.toBe('#e23');
   });
 });
+
+describe('drawing a kept loop', () => {
+  it('cells that carry a job draw as their loop colour, so today’s violin colour or grey, never the stored colour', async () => {
+    const { drawCells } = await import('../songs/performance/loopSounds');
+    const kept: StoredLoopCell[] = [{ row: 1, col: 1, colour: 'green', job: 'melody', sound: 'violin' }, { row: 2, col: 2, colour: 'green' }];
+    expect(drawCells(kept).map((c) => c.colour)).toEqual(['loop:melody:violin', 'green']);
+  });
+
+  it('Keep has nothing to keep when only control counters are down', () => {
+    expect(keepCells([{ row: 0, col: 3, colour: 'white' }], [tempo])).toEqual([]);
+  });
+});

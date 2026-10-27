@@ -198,6 +198,8 @@ interface LaunchedLoop {
   slot: number;
   cells: ActiveCell[];
   fade?: { dir: 'in' | 'out'; start: number; beats: number };
+  /** The loop colours its cells play through (what it was kept as). */
+  colours?: ColourChannel[];
 }
 
 /** How long a replaced voice is kept so its last notes ring out. */
@@ -280,14 +282,8 @@ export class BoardSequencerEngine {
   // or a stop takes effect at the next pass, so a tap is never off-beat; `pendingLaunch`
   // holds what is wanted until then.
   private launched: LaunchedLoop[] = [];
-  /**
-   * The colours a kept loop plays through (one per job + sound it was made with), beside
-   * the player's own. They come and go with the loops; the player's channels never hold
-   * them, so nothing is saved into a profile.
-   */
-  private loopColours: ColourChannel[] = [];
   private launchedSlots: number[] = [];
-  private pendingLaunch: { slots: number[]; loops: ActiveCell[][] } | null = null;
+  private pendingLaunch: { slots: number[]; loops: ActiveCell[][]; colours: ColourChannel[] } | null = null;
   /** How many beats a launched loop takes to fade in or out; 0 = it starts and stops dead. */
   private launchFadeBeats = 0;
   // The ending: everything fades over `beats` from the pass boundary after `finish()` is
@@ -958,9 +954,14 @@ export class BoardSequencerEngine {
     this.syncAbleton();
   }
 
-  /** The colour index: the player's channels, then the loops' own colours. */
+  /**
+   * The colour index: the player's channels, then the loop colours of every loop that is
+   * launched (fading out included) or about to be. A loop keeps its colours until it has
+   * really left, so a fade-out is heard to the end.
+   */
   private rebuildChannelIndex(): void {
-    this.channelById = new Map([...this.cfg.channels, ...this.loopColours].map((c) => [c.id, c]));
+    const loopColours = [...this.launched.flatMap((l) => l.colours ?? []), ...(this.pendingLaunch?.colours ?? [])];
+    this.channelById = new Map([...this.cfg.channels, ...loopColours].map((c) => [c.id, c]));
   }
 
   /** Counters play phrases (on) or one note each (off), from the next beat. */
@@ -1256,18 +1257,21 @@ export class BoardSequencerEngine {
    * with them.
    */
   setLaunchedLoops(slots: number[], loops: ActiveCell[][], loopColours: ColourChannel[] = []): void {
-    this.loopColours = loopColours;
-    this.rebuildChannelIndex();
     for (const ch of loopColours) this.buildVoice(ch);
+    // A drums loop needs the kit, which init builds only when the player has drums or a band.
+    if (!this.drumKit && loopColours.some((c) => c.role === 'drums')) void this.buildDrumKit();
     if (!this.timer) {
-      this.launched = slots.map((slot, i) => ({ slot, cells: loops[i] ?? [] }));
+      this.launched = slots.map((slot, i) => ({ slot, cells: loops[i] ?? [], colours: loopColours }));
       this.launchedSlots = slots;
       this.pendingLaunch = null;
+      this.rebuildChannelIndex();
       return;
     }
     const playing = this.launched.filter((l) => l.fade?.dir !== 'out').map((l) => l.slot);
     const same = slots.length === playing.length && slots.every((s, i) => s === playing[i]);
-    this.pendingLaunch = same ? null : { slots, loops };
+    this.pendingLaunch = same ? null : { slots, loops, colours: loopColours };
+    // A loop still fading out keeps its colours; the ones coming in need theirs now.
+    this.rebuildChannelIndex();
   }
 
   /**
@@ -1371,10 +1375,10 @@ export class BoardSequencerEngine {
       const was = this.launched.find((l) => l.slot === slot);
       // Re-wanted while fading out, or still playing: carry on at full strength.
       if (was) {
-        out.push({ slot, cells: next.loops[i] ?? was.cells });
+        out.push({ slot, cells: next.loops[i] ?? was.cells, colours: next.colours });
         this.loopFades.delete(slot);
       } else {
-        out.push({ slot, cells: next.loops[i] ?? [], fade: fade > 0 ? { dir: 'in', start: beat, beats: fade } : undefined });
+        out.push({ slot, cells: next.loops[i] ?? [], colours: next.colours, fade: fade > 0 ? { dir: 'in', start: beat, beats: fade } : undefined });
         if (fade > 0) this.loopFades.set(slot, fadeTrack('in'));
         else this.loopFades.delete(slot);
       }
@@ -1382,6 +1386,7 @@ export class BoardSequencerEngine {
     this.launched = out;
     this.launchedSlots = out.map((l) => l.slot);
     this.pendingLaunch = null;
+    this.rebuildChannelIndex();
     this.releaseLoopChannels(stopped);
   }
 

@@ -48,3 +48,13 @@ describe('what the engine plays during a new loop', () => {
     expect(engineSettingsFor(hearWith(startNewLoop(0), { band: true, fill: true }), own).evolveAmount).toBe(0);
   });
 });
+
+describe('what the player’s own counters do during a new loop', () => {
+  it('while waiting for an empty board the counters are silent; once composing they sound', async () => {
+    const { playerCellsFor } = await import('../songs/performance/newLoop');
+    const cells = [{ row: 1, col: 1, colour: 'green' }];
+    expect(playerCellsFor(startNewLoop(1), cells)).toEqual([]);
+    expect(playerCellsFor(boardSeen(startNewLoop(1), 0), cells)).toEqual(cells);
+    expect(playerCellsFor(null, cells)).toEqual(cells);
+  });
+});
