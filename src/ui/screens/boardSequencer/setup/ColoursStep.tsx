@@ -109,6 +109,11 @@ export interface ColoursStepProps {
     onCheckHand(): void;
     checkResult: string | null;
   };
+  /**
+   * The laptop board: no camera, so no finding, tapping, learning or detection settings.
+   * Colours are added from ADMI's own set instead.
+   */
+  laptop?: { onAddColours(): void; onAddColour: (() => void) | null };
 }
 
 export function ColoursStep(props: ColoursStepProps): JSX.Element {
@@ -118,7 +123,7 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
     onAddPending, onDiscardPending, onRecalibrate, onRole, onLoopSlot, onRemove, config, setChannelSound, onHear, hearing, hearNote, onClearAll, isReferenced, running,
     minFilledFraction, readSettingsCustom, onMinFill, onResetReadSettings, counterHeight, onCounterHeight,
     settleWindowMs, onSettleWindow, onBlackDarkness, picker, onMovePicker, onSampleSquare, hands,
-    finding, onCancelFind, found, onUseFound, onDiscardFound,
+    finding, onCancelFind, found, onUseFound, onDiscardFound, laptop,
   } = props;
   const [confirm, setConfirm] = useState<{ kind: 'remove'; id: ColourId } | { kind: 'clear' } | null>(null);
 
@@ -126,7 +131,7 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
 
   return (
     <>
-      {boardLearnt === 0 && (
+      {!laptop && boardLearnt === 0 && (
         <div
           role="region"
           aria-label="Learn the empty board"
@@ -166,7 +171,13 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
           <Button tone="secondary" onClick={onCancelFind}>Cancel</Button>
         </div>
       )}
-      {!arming && !finding && !found && (
+      {laptop && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {channels.length === 0 && <Button tone="primary" onClick={laptop.onAddColours}>Add four colours</Button>}
+          {channels.length > 0 && laptop.onAddColour && <Button tone="secondary" onClick={laptop.onAddColour}>Add a colour</Button>}
+        </div>
+      )}
+      {!laptop && !arming && !finding && !found && (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <Button tone="primary" onClick={onFindColours}>Find colours</Button>
           <Button tone="secondary" onClick={onArmTap}>Tap a counter</Button>
@@ -273,7 +284,9 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
 
       {channels.length === 0 && !arming && (
         <p style={{ margin: 0, color: 'var(--bs-fg2)' }}>
-          No colours yet. Put one of each counter on the board, then add them one at a time.
+          {laptop
+            ? 'No colours yet. Add four to start: each gets a job and a sound in the table.'
+            : 'No colours yet. Put one of each counter on the board, then add them one at a time.'}
         </p>
       )}
 
@@ -297,16 +310,16 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
           onHear={onHear}
           hearing={hearing}
           hearNote={hearNote}
-          rowExtras={(c) => (
+          rowExtras={laptop ? undefined : (c) => (
             <span style={{ fontSize: 12, color: 'var(--bs-fg2)', whiteSpace: 'nowrap' }}>{`${counts[c.id] ?? 0} down`}</span>
           )}
           rowMore={(c) => (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                <Button tone="secondary" onClick={() => onRecalibrate(c.id)}>{`⟳ Recalibrate ${describeChannel(c)}`}</Button>
+                {!laptop && <Button tone="secondary" onClick={() => onRecalibrate(c.id)}>{`⟳ Recalibrate ${describeChannel(c)}`}</Button>}
                 <Button tone="quiet" onClick={() => setConfirm({ kind: 'remove', id: c.id })}>{`× Remove ${describeChannel(c)}`}</Button>
               </div>
-              {c.kind === 'black' && (
+              {!laptop && c.kind === 'black' && (
                 <LabeledSlider
                   label="Black darkness"
                   min={10}
@@ -321,6 +334,7 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
         />
       )}
 
+      {!laptop && (<>
       <Disclosure summary="Detection sensitivity">
         <LabeledSlider
           label="Piece coverage"
@@ -401,6 +415,7 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
           onChange={hands.onSensitivity}
         />
       </Disclosure>
+      </>)}
 
       {removeTarget && (
         <ConfirmDialog

@@ -3964,6 +3964,66 @@ export default function BoardSequencerScreen() {
     })
     : null;
 
+  /**
+   * Colours a laptop can add one at a time, each a clearly different hue so its name
+   * (taken from the hue) is its own. The four of "Add four colours" come first.
+   */
+  const LAPTOP_COLOURS: { hsv: { h: number; s: number; v: number }; swatch: string }[] = [
+    { hsv: { h: 2, s: 80, v: 80 }, swatch: '#d93a3a' },
+    { hsv: { h: 215, s: 75, v: 75 }, swatch: '#2f6fd6' },
+    { hsv: { h: 50, s: 85, v: 90 }, swatch: '#e8c21e' },
+    { hsv: { h: 135, s: 70, v: 65 }, swatch: '#2f9a52' },
+    { hsv: { h: 28, s: 85, v: 92 }, swatch: '#ea7a1f' },
+    { hsv: { h: 275, s: 60, v: 70 }, swatch: '#8a4fc0' },
+    { hsv: { h: 325, s: 65, v: 88 }, swatch: '#e04fa0' },
+    { hsv: { h: 185, s: 75, v: 78 }, swatch: '#1fb5c4' },
+    { hsv: { h: 0, s: 5, v: 95 }, swatch: '#f2f2f2' },
+    { hsv: { h: 0, s: 10, v: 12 }, swatch: '#1c1c1c' },
+  ];
+  /** The first ready-made colour not already used by a colour of the same name. */
+  const nextLaptopColour = (): typeof LAPTOP_COLOURS[number] | null => {
+    const names = new Set(config.channels.map((c) => describeChannel(c)));
+    for (const p of LAPTOP_COLOURS) {
+      const cal = calibrationFromHsv(p.hsv);
+      const probe: ColourChannel = { id: 'probe', kind: cal.kind, role: 'off', swatch: p.swatch, band: cal.band, blackBand: cal.blackBand, whiteBand: cal.whiteBand };
+      if (!names.has(describeChannel(probe))) return p;
+    }
+    return null;
+  };
+  const addLaptopColour = (role: ColourRole): void => {
+    const p = nextLaptopColour();
+    if (!p) return;
+    const cal = calibrationFromHsv(p.hsv);
+    setConfig((prev) => {
+      const id = freshChannelId(prev.channels.map((c) => c.id), allReferencedChannelIds());
+      const used = new Set(prev.channels.filter((c) => c.role === 'loop').map((c) => c.loopSlot ?? 0));
+      const loopSlot = role === 'loop' ? Array.from({ length: LAUNCH_SLOTS }, (_, i) => i).find((i) => !used.has(i)) ?? 0 : undefined;
+      const added: ColourChannel = { id, kind: cal.kind, role, swatch: p.swatch, band: cal.band, blackBand: cal.blackBand, whiteBand: cal.whiteBand, ...(loopSlot !== undefined ? { loopSlot } : {}) };
+      return { ...prev, channels: [...prev.channels, added] };
+    });
+    setLaptopColour('');
+    const probe: ColourChannel = { id: 'probe', kind: cal.kind, role, swatch: p.swatch, band: cal.band, blackBand: cal.blackBand, whiteBand: cal.whiteBand };
+    announce(`Added ${describeChannel(probe)}: ${ROLE_LABELS[role]}. Its sound is on the Sound tab; its job can be changed in Set up → Colours.`);
+  };
+  /** Four ready-made colours for a laptop that has never seen the board. */
+  const addLaptopColours = (): void => {
+    const presets: { hsv: { h: number; s: number; v: number }; swatch: string; role: ColourRole }[] = [
+      { hsv: { h: 2, s: 80, v: 80 }, swatch: '#d93a3a', role: 'melody' },
+      { hsv: { h: 215, s: 75, v: 75 }, swatch: '#2f6fd6', role: 'bass' },
+      { hsv: { h: 50, s: 85, v: 90 }, swatch: '#e8c21e', role: 'chord' },
+      { hsv: { h: 135, s: 70, v: 65 }, swatch: '#2f9a52', role: 'drums' },
+    ];
+    setConfig((prev) => {
+      const channels = [...prev.channels];
+      for (const p of presets) {
+        const id = freshChannelId(channels.map((c) => c.id), allReferencedChannelIds());
+        const cal = calibrationFromHsv(p.hsv);
+        channels.push({ id, kind: cal.kind, role: p.role, swatch: p.swatch, band: cal.band, blackBand: cal.blackBand, whiteBand: cal.whiteBand });
+      }
+      return { ...prev, channels };
+    });
+    announce('Added red melody, blue bass, yellow chords and green drums.');
+  };
   const setupStepBody = step === 'camera' ? (
     <>
     {/* Behind ?cameradebug=1. This is the screen a facilitator is actually on when a
@@ -4096,6 +4156,7 @@ export default function BoardSequencerScreen() {
         onCheckHand: startHandCheck,
         checkResult: handCheck.result,
       }}
+      laptop={laptop ? { onAddColours: addLaptopColours, onAddColour: nextLaptopColour() ? () => addLaptopColour('melody') : null } : undefined}
     />
   ) : (
     <ReadyStep
@@ -4119,8 +4180,10 @@ export default function BoardSequencerScreen() {
       hasStoredConfig={storedRef.current !== null}
       announce={announce}
       footerAlign={layout.footerAlign}
-      heading={SETUP_HEADINGS[step]}
-      hint={SETUP_HINTS[step]}
+      heading={laptop && step === 'colours' ? 'Choose the colours' : SETUP_HEADINGS[step]}
+      hint={laptop
+        ? (step === 'colours' ? 'Give each colour a job and a sound. ▶ Hear plays it.' : 'Press ▶ Play, then click squares to put counters down.')
+        : SETUP_HINTS[step]}
       skip={step === 'board' ? {
         label: "Skip, board hasn't moved",
         reason: !config.enabled ? 'Find the board first.'
@@ -4170,66 +4233,6 @@ export default function BoardSequencerScreen() {
     const ch = c ? channelById.get(c.colour) : undefined;
     if (!ch) return 'empty';
     return `${describeChannel(ch)}, ${ROLE_LABELS[ch.role]}${silentSquares.has(`${row},${col}`) ? ', past its loop: doesn’t play' : ''}`;
-  };
-  /**
-   * Colours a laptop can add one at a time, each a clearly different hue so its name
-   * (taken from the hue) is its own. The four of "Add four colours" come first.
-   */
-  const LAPTOP_COLOURS: { hsv: { h: number; s: number; v: number }; swatch: string }[] = [
-    { hsv: { h: 2, s: 80, v: 80 }, swatch: '#d93a3a' },
-    { hsv: { h: 215, s: 75, v: 75 }, swatch: '#2f6fd6' },
-    { hsv: { h: 50, s: 85, v: 90 }, swatch: '#e8c21e' },
-    { hsv: { h: 135, s: 70, v: 65 }, swatch: '#2f9a52' },
-    { hsv: { h: 28, s: 85, v: 92 }, swatch: '#ea7a1f' },
-    { hsv: { h: 275, s: 60, v: 70 }, swatch: '#8a4fc0' },
-    { hsv: { h: 325, s: 65, v: 88 }, swatch: '#e04fa0' },
-    { hsv: { h: 185, s: 75, v: 78 }, swatch: '#1fb5c4' },
-    { hsv: { h: 0, s: 5, v: 95 }, swatch: '#f2f2f2' },
-    { hsv: { h: 0, s: 10, v: 12 }, swatch: '#1c1c1c' },
-  ];
-  /** The first ready-made colour not already used by a colour of the same name. */
-  const nextLaptopColour = (): typeof LAPTOP_COLOURS[number] | null => {
-    const names = new Set(config.channels.map((c) => describeChannel(c)));
-    for (const p of LAPTOP_COLOURS) {
-      const cal = calibrationFromHsv(p.hsv);
-      const probe: ColourChannel = { id: 'probe', kind: cal.kind, role: 'off', swatch: p.swatch, band: cal.band, blackBand: cal.blackBand, whiteBand: cal.whiteBand };
-      if (!names.has(describeChannel(probe))) return p;
-    }
-    return null;
-  };
-  const addLaptopColour = (role: ColourRole): void => {
-    const p = nextLaptopColour();
-    if (!p) return;
-    const cal = calibrationFromHsv(p.hsv);
-    setConfig((prev) => {
-      const id = freshChannelId(prev.channels.map((c) => c.id), allReferencedChannelIds());
-      const used = new Set(prev.channels.filter((c) => c.role === 'loop').map((c) => c.loopSlot ?? 0));
-      const loopSlot = role === 'loop' ? Array.from({ length: LAUNCH_SLOTS }, (_, i) => i).find((i) => !used.has(i)) ?? 0 : undefined;
-      const added: ColourChannel = { id, kind: cal.kind, role, swatch: p.swatch, band: cal.band, blackBand: cal.blackBand, whiteBand: cal.whiteBand, ...(loopSlot !== undefined ? { loopSlot } : {}) };
-      return { ...prev, channels: [...prev.channels, added] };
-    });
-    setLaptopColour('');
-    const probe: ColourChannel = { id: 'probe', kind: cal.kind, role, swatch: p.swatch, band: cal.band, blackBand: cal.blackBand, whiteBand: cal.whiteBand };
-    announce(`Added ${describeChannel(probe)}: ${ROLE_LABELS[role]}. Its sound is on the Sound tab; its job can be changed in Set up → Colours.`);
-  };
-  /** Four ready-made colours for a laptop that has never seen the board. */
-  const addLaptopColours = (): void => {
-    const presets: { hsv: { h: number; s: number; v: number }; swatch: string; role: ColourRole }[] = [
-      { hsv: { h: 2, s: 80, v: 80 }, swatch: '#d93a3a', role: 'melody' },
-      { hsv: { h: 215, s: 75, v: 75 }, swatch: '#2f6fd6', role: 'bass' },
-      { hsv: { h: 50, s: 85, v: 90 }, swatch: '#e8c21e', role: 'chord' },
-      { hsv: { h: 135, s: 70, v: 65 }, swatch: '#2f9a52', role: 'drums' },
-    ];
-    setConfig((prev) => {
-      const channels = [...prev.channels];
-      for (const p of presets) {
-        const id = freshChannelId(channels.map((c) => c.id), allReferencedChannelIds());
-        const cal = calibrationFromHsv(p.hsv);
-        channels.push({ id, kind: cal.kind, role: p.role, swatch: p.swatch, band: cal.band, blackBand: cal.blackBand, whiteBand: cal.whiteBand });
-      }
-      return { ...prev, channels };
-    });
-    announce('Added red melody, blue bass, yellow chords and green drums.');
   };
   const laptopBar = (
     <LaptopBoardBar
