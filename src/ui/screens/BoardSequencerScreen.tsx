@@ -89,7 +89,7 @@ import { TRACK_SAVE_MS } from '../../tracking/handGuard/boardTrack';
 import { detectBoard, type BoardDetection } from '../../tracking/boardDetect/detectBoard';
 import { consensus, AGREE_COUNT } from '../../tracking/boardDetect/consensus';
 import { boardStillThere } from '../../tracking/boardDetect/boardStillThere';
-import { autoLearnAllowed } from './boardSequencer/learnGuard';
+import { autoLearnAllowed, learntSquares } from './boardSequencer/learnGuard';
 import { runFrameBurst } from './boardSequencer/useFrameBurst';
 import {
   buildSquareModel, modelHsv, warpToBoard, type SquareModel,
@@ -99,7 +99,7 @@ import { detectColours, type DetectedColour } from '../../tracking/boardColourDe
 import type { FiredNote } from '../../songs/BoardSequencerEngine';
 import {
   SETUP_STEPS, canOpenStep, canPlay, resolveEntry, stepIndicator,
-  setupRequestedOnOpen, clearSetupRequest, askWhoIsPlaying, openingView,
+  setupRequestedOnOpen, clearSetupRequest, askWhoIsPlaying, openingView, viewAfterPick, shouldCheckBoard,
   type CameraStatus, type SetupStep,
 } from './boardSequencer/boardSetupFlow';
 import {
@@ -752,7 +752,6 @@ export default function BoardSequencerScreen() {
       beat: running ? beatOn : false,
     };
     remoteLink.send({ type: 'state', state });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [remoteEnabled, remoteLink.others, config.bpm, config.velocity, config.fillAmount, config.evolveAmount,
     config.fillKept, config.evolveHoldLap, muted, running, config.remoteReach, reachLearning,
     config.loopSlots, config.loopNames, config.scenes, config.currentScene, wantedSlots, appliedSlots,
@@ -1789,6 +1788,10 @@ export default function BoardSequencerScreen() {
       setLearnMessage('Find the board and confirm its corners first.');
       return;
     }
+    if (opts.auto && !autoLearnAllowed({ hasLearnt: cfg.boardReference !== null, running: runningRef.current })) {
+      if (cfg.boardReference !== null) setLearnMessage('✓ Board found. The empty board learnt before is kept: More → Learn it again if the light has changed.');
+      return;
+    }
     const model = boardModelNow();
     if (!model) {
       setLearnMessage('Couldn’t read the board just now. Check the camera picture and try again.');
@@ -1797,10 +1800,6 @@ export default function BoardSequencerScreen() {
     const total = model.squares * model.squares;
     let covered = 0;
     for (let i = 0; i < total; i++) if (model.covered[i]) covered += 1;
-    if (opts.auto && !autoLearnAllowed(covered, total, cfg.boardReference !== null)) {
-      setLearnMessage('Counters seem to be on the board, so the empty board learnt before is kept.');
-      return;
-    }
     const unusual = covered > total * 0.12
       ? ` ${covered} squares look different from the others of their colour: lighter wood or a bright patch is fine. If anything is on them, take it off and learn it again.`
       : '';
@@ -1848,7 +1847,7 @@ export default function BoardSequencerScreen() {
       setLearnMessage(`${opts.auto ? '✓ Board found and learnt' : 'Learnt'} at ${at}.${unusual}`);
       announce(`Board learnt from ${colours.length} squares.`);
     })();
-  }, [configRef, boardModelNow, update, announce, videoRef]);
+  }, [configRef, boardModelNow, update, announce, videoRef, runningRef]);
 
   const handleCalibrated = useCallback(
     (corners: [BoardPoint, BoardPoint, BoardPoint, BoardPoint], patch: Partial<BoardSequencerStored> = {}) => {
@@ -1905,17 +1904,18 @@ export default function BoardSequencerScreen() {
         homographyRef.current = null;
       }
       setCalibrating(null);
-      // The board was asked for empty: learn it, once these corners are saved.
-      learnAfterConfirmRef.current = true;
+      // The board was asked for empty: learn it, once these corners are saved. A count,
+      // not a flag: corners confirmed unchanged still ask, and nothing is left armed.
+      setLearnRequest((n) => n + 1);
+      setBoardCheck(null);
     },
     [homographyRef, videoRef, announce, boardColoursNow],
   );
-  const learnAfterConfirmRef = useRef(false);
+  const [learnRequest, setLearnRequest] = useState(0);
   useEffect(() => {
-    if (!learnAfterConfirmRef.current || !config.enabled) return;
-    learnAfterConfirmRef.current = false;
-    learnBoard({ auto: true });
-  }, [config.corners, config.enabled, learnBoard]);
+    if (learnRequest > 0) learnBoard({ auto: true });
+    // Only a new request learns: learnBoard's identity changing must not.
+  }, [learnRequest]);
 
   const stop = useCallback(() => {
     startingRef.current = null;
@@ -2498,10 +2498,10 @@ export default function BoardSequencerScreen() {
   // Once per visit, when the camera is up: is the board still where it was?
   const cameraUp = camera.phase === 'running' || camera.phase === 'fallback';
   useEffect(() => {
-    if (boardCheckedRef.current || view !== 'play' || laptop || !config.enabled || !cameraUp || running) return;
+    if (!shouldCheckBoard({ checked: boardCheckedRef.current, view, laptop, enabled: config.enabled, cameraUp, running, chooserOpen })) return;
     boardCheckedRef.current = true;
     void checkBoard();
-  }, [view, laptop, config.enabled, cameraUp, running, checkBoard]);
+  }, [view, laptop, config.enabled, cameraUp, running, chooserOpen, checkBoard]);
   const headerNotice: HeaderNotice | null = saveFailed
     ? { kind: 'error', text: 'Changes are not being saved — the browser refused. Use Back up to a file (Make a piece, step 3) now.' }
     : otherTab
@@ -4003,7 +4003,7 @@ export default function BoardSequencerScreen() {
       nudgesEnabled={config.boardNudgesEnabled}
       running={running}
       editing={calibrating !== null}
-      boardLearnt={config.boardColours.length}
+      boardLearnt={learntSquares(config)}
       onLearnBoard={() => learnBoard()}
       learnMessage={learnMessage}
       detection={detectionSetup(config)}
@@ -4039,7 +4039,7 @@ export default function BoardSequencerScreen() {
         unsafe: pendingColour.unsafe === true,
         keeps: pendingColour.keeps,
       }}
-      boardLearnt={config.boardColours.length}
+      boardLearnt={learntSquares(config)}
       onLearnBoard={() => learnBoard()}
       learnMessage={learnMessage}
       onFindColours={() => void findColours()}
@@ -4802,6 +4802,16 @@ export default function BoardSequencerScreen() {
             loopBankRef.current = emptyLoopBank(0);
             storedRef.current = loadBoardSequencerConfig();
             setChooserOpen(false);
+            // Their board, not the last player's: checked afresh, and set-up if theirs
+            // isn't ready (stopped only — playing, nothing moves).
+            boardCheckAbortRef.current?.abort();
+            setBoardCheck(null);
+            boardCheckedRef.current = false;
+            const next = viewAfterPick(loaded, runningRef.current, view === 'setup' ? 'setup' : 'play');
+            if (view !== 'bigBoard' && next !== view) {
+              setView(next);
+              if (next === 'setup') setStep(resolveEntry({ enabled: loaded?.enabled ?? false, channels: loaded?.channels ?? [] }, loaded !== null));
+            }
           }}
           onCreate={(name, handedness) => {
             createBoardPlayer(name, handedness);

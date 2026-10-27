@@ -103,3 +103,17 @@ export function openingView(
   if (o.pieceRunning || stored.boardSource === 'laptop') return 'play';
   return stored.enabled && hasActiveChannel(stored) ? 'play' : 'setup';
 }
+
+/** After picking a player: stopped, wherever their own board needs them; playing, stay put. */
+export function viewAfterPick(
+  loaded: Parameters<typeof openingView>[0], running: boolean, current: 'play' | 'setup',
+): 'play' | 'setup' {
+  return running ? current : openingView(loaded, { setupRequested: false, pieceRunning: false });
+}
+
+/** The quiet board check on arriving at Play: once, with the camera up and nothing in front. */
+export function shouldCheckBoard(s: {
+  checked: boolean; view: string; laptop: boolean; enabled: boolean; cameraUp: boolean; running: boolean; chooserOpen: boolean;
+}): boolean {
+  return !s.checked && s.view === 'play' && !s.laptop && s.enabled && s.cameraUp && !s.running && !s.chooserOpen;
+}

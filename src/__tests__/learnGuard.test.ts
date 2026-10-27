@@ -1,14 +1,21 @@
 import { describe, it, expect } from 'vitest';
-import { autoLearnAllowed } from '../ui/screens/boardSequencer/learnGuard';
+import { autoLearnAllowed, learntSquares } from '../ui/screens/boardSequencer/learnGuard';
 
 describe('learning the empty board on its own, when the corners are confirmed', () => {
-  it('nothing learnt yet: learn, whatever is on it (something beats nothing)', () => {
-    expect(autoLearnAllowed(30, 64, false)).toBe(true);
+  it('nothing learnt yet and not playing: learn it', () => {
+    expect(autoLearnAllowed({ hasLearnt: false, running: false })).toBe(true);
   });
-  it('already learnt and the board looks empty: learn it again', () => {
-    expect(autoLearnAllowed(7, 64, true)).toBe(true);
+  it('already learnt: keep it (re-finding mid-session often has counters down); Learn it again is for that', () => {
+    expect(autoLearnAllowed({ hasLearnt: true, running: false })).toBe(false);
   });
-  it('already learnt and counters seem to be on it: keep the good one', () => {
-    expect(autoLearnAllowed(9, 64, true)).toBe(false);
+  it('never while the board plays', () => {
+    expect(autoLearnAllowed({ hasLearnt: false, running: true })).toBe(false);
+  });
+});
+
+describe('whether the board counts as learnt', () => {
+  it('learnt means the empty board itself was learnt, not only its colours', () => {
+    expect(learntSquares({ boardReference: null, boardColours: [1, 2, 3] })).toBe(0);
+    expect(learntSquares({ boardReference: {}, boardColours: [1, 2, 3] })).toBe(3);
   });
 });

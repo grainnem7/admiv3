@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Button } from '../ui/Button';
 import { Switch } from '../ui/Switch';
 import { SegmentedControl } from '../ui/SegmentedControl';
@@ -39,6 +40,10 @@ export function CameraStep({
   mirrorX, mirrorY, rotation, onTurn, onViewChange, onRefreshCameras, handedness,
 }: CameraStepProps): JSX.Element {
   const colourless = camera.colourless === true;
+  // Opened for a black-and-white picture, More stays open: the control just used (Picture
+  // size, usually) must not vanish the moment it works.
+  const [moreOpened, setMoreOpened] = useState(false);
+  if (colourless && !moreOpened) setMoreOpened(true);
   return (
     <>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -113,7 +118,7 @@ export function CameraStep({
 
       {/* Everything a working camera never needs. Opens by itself on a black-and-white
           picture, since Picture size is the usual fix. */}
-      <details open={colourless || undefined}>
+      <details open={moreOpened || undefined}>
         <summary style={{ cursor: 'pointer', color: 'var(--bs-fg2)', minHeight: 'var(--bs-target)', display: 'flex', alignItems: 'center' }}>More</summary>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 6 }}>
           <p style={{ margin: 0, color: 'var(--bs-fg2)', fontSize: 12 }}>

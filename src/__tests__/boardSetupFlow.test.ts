@@ -131,3 +131,30 @@ describe('where the screen opens', () => {
     expect(openingView({ ...ready, enabled: false }, { ...none, pieceRunning: true })).toBe('play');
   });
 });
+
+import { viewAfterPick, shouldCheckBoard } from '../ui/screens/boardSequencer/boardSetupFlow';
+
+describe('picking a player', () => {
+  const ready = { boardSource: 'camera' as const, enabled: true, channels: [{ role: 'melody' as const }] };
+  it('stopped: where their own board needs them (set-up if anything is missing)', () => {
+    expect(viewAfterPick({ ...ready, enabled: false }, false, 'play')).toBe('setup');
+    expect(viewAfterPick(ready, false, 'setup')).toBe('play');
+  });
+  it('playing: stays put', () => {
+    expect(viewAfterPick({ ...ready, enabled: false }, true, 'play')).toBe('play');
+  });
+});
+
+describe('when the board is checked on arrival', () => {
+  const ok = { checked: false, view: 'play' as const, laptop: false, enabled: true, cameraUp: true, running: false, chooserOpen: false };
+  it('on Play, camera up, board set up, not playing, nothing in front: check', () => {
+    expect(shouldCheckBoard(ok)).toBe(true);
+  });
+  it('not while Who’s playing is open, nor twice, nor on the laptop board, nor while playing', () => {
+    expect(shouldCheckBoard({ ...ok, chooserOpen: true })).toBe(false);
+    expect(shouldCheckBoard({ ...ok, checked: true })).toBe(false);
+    expect(shouldCheckBoard({ ...ok, laptop: true })).toBe(false);
+    expect(shouldCheckBoard({ ...ok, running: true })).toBe(false);
+    expect(shouldCheckBoard({ ...ok, cameraUp: false })).toBe(false);
+  });
+});

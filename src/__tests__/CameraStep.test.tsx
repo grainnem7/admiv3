@@ -61,4 +61,10 @@ describe('a quieter Camera step', () => {
     act(() => root.render(<CameraStep {...props({ camera: { phase: 'error', colourless: null } })} />));
     expect(visibleText()).toContain('Try again');
   });
+
+  it('once opened for a black-and-white picture, More stays open when the colour comes back', () => {
+    act(() => root.render(<CameraStep {...props({ camera: { phase: 'running', colourless: true } })} />));
+    act(() => root.render(<CameraStep {...props({ camera: { phase: 'running', colourless: false } })} />));
+    expect(more()?.open).toBe(true);
+  });
 });

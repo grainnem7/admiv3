@@ -1,11 +1,14 @@
 /**
- * Confirming the corners also learns the empty board. Re-finding the board mid-session
- * can happen with counters on it, so a board already learnt is only replaced when this
- * one looks empty: the same share of odd-looking squares the Learn button warns about.
+ * Confirming the corners also learns the empty board, but only the first time. Re-finding
+ * the board mid-session often happens with counters on it, and the board learnt before
+ * still fits (it is kept square by square, wherever the board now sits): More → Learn it
+ * again is there for a change of light. Never while the board plays.
  */
-export const AUTO_LEARN_MAX_COVERED = 0.12;
+export function autoLearnAllowed(o: { hasLearnt: boolean; running: boolean }): boolean {
+  return !o.hasLearnt && !o.running;
+}
 
-export function autoLearnAllowed(coveredSquares: number, totalSquares: number, hasLearnt: boolean): boolean {
-  if (!hasLearnt) return true;
-  return coveredSquares <= totalSquares * AUTO_LEARN_MAX_COVERED;
+/** Learnt means the empty board itself was learnt, not only its colours. */
+export function learntSquares(cfg: { boardReference: unknown; boardColours: readonly unknown[] }): number {
+  return cfg.boardReference === null ? 0 : cfg.boardColours.length;
 }
