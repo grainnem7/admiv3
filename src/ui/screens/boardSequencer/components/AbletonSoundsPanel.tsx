@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ABLETON_CHAINS, abletonPlan, CHAIN_CC, chainLabel, chainRange, controlKey,
+  abletonChecklist, abletonPlan, CHAIN_CC, chainLabel, controlKey,
 } from '../../../../midi/abletonSounds';
 import { colourChannelMap } from '../../../../midi/boardMidi';
 import type { BoardSequencerStored } from '../../../../profiles/BoardSequencerConfig';
@@ -41,6 +41,10 @@ export function AbletonSoundsPanel({ config, getLive, onSend, connected }: {
   connected: boolean;
 }): JSX.Element {
   const planned = useMemo(() => planFromConfig(config), [config]);
+  const checklist = useMemo(
+    () => abletonChecklist({ channelMode: config.midiChannelMode, loopChannels: config.midiLoopChannels }),
+    [config.midiChannelMode, config.midiLoopChannels],
+  );
   const [live, setLive] = useState<AbletonLiveState | null>(() => getLive());
   useEffect(() => {
     const id = window.setInterval(() => setLive(getLive()), 1000);
@@ -92,26 +96,36 @@ export function AbletonSoundsPanel({ config, getLive, onSend, connected }: {
         </Button>
         <span role="status" style={NOTE}>{sentNote ? 'Sent: every chain and macro.' : 'After Ableton is restarted, or if a track is on the wrong sound.'}</span>
       </div>
-      <Disclosure summary="Template checklist: the 16 chains and their zones">
-        <table style={{ fontSize: 12, borderCollapse: 'collapse' }}>
-          <caption style={{ ...NOTE, textAlign: 'left' }}>Every rack has these chains, named exactly, in this order</caption>
-          <thead>
-            <tr>
-              <th scope="col" style={{ textAlign: 'left' }}>Chain</th>
-              <th scope="col" style={{ textAlign: 'left' }}>Name</th>
-              <th scope="col" style={{ textAlign: 'left' }}>Zone (CC 30)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {ABLETON_CHAINS.map((c) => (
-              <tr key={c.index}>
-                <td>{c.index + 1}</td>
-                <td>{c.name}</td>
-                <td>{`${chainRange(c.index)[0]} to ${chainRange(c.index)[1]}`}</td>
+      <Disclosure summary="Template checklist: the 33 sounds, and which each track holds">
+        <span style={NOTE}>
+          Changing from the 16-sound racks? On every track: rename chains 11, 14, 15 and 16, add chains 17 to 33 with
+          the placeholder, then select every chain and choose Distribute Ranges Equally.
+        </span>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ fontSize: 12, borderCollapse: 'collapse' }}>
+            <caption style={{ ...NOTE, textAlign: 'left' }}>Every rack has these chains, named exactly, in this order. Real: a real instrument on that track. Placeholder: the light stand-in.</caption>
+            <thead>
+              <tr>
+                {['Chain', 'Name', 'CC 30 (about)', 'Melody', 'Chords', 'Bass', 'Band, Extra notes and Loops'].map((h) => (
+                  <th key={h} scope="col" style={{ textAlign: 'left', paddingRight: 8 }}>{h}</th>
+                ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {checklist.map((r) => (
+                <tr key={r.index}>
+                  <td>{r.index + 1}</td>
+                  <td>{r.name}</td>
+                  <td>{`${r.range[0]} to ${r.range[1]}`}</td>
+                  {[r.melody, r.chords, r.bass, r.others].map((real, i) => (
+                    <td key={i} style={{ color: real ? 'var(--bs-fg)' : 'var(--bs-fg2)', fontWeight: real ? 600 : 400 }}>{real ? 'Real' : 'Placeholder'}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <span style={NOTE}>Placeholder: Operator with its default sound. In per-colour mode every colour&rsquo;s track needs every sound real.</span>
         <span style={NOTE}>Macros on every chain: 1 Volume (CC 24), 2 Brightness (CC 25), 3 Space (CC 26). Echo is CC 27.</span>
       </Disclosure>
     </div>

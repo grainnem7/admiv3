@@ -172,6 +172,30 @@ export function filledChains(channel: number, opts: { channelMode: MidiChannelMo
   return followers.includes(channel) ? WORLD_ONLY : ALL_CHAINS;
 }
 
+/** One row of the template checklist: a chain, its expected CC 30 range, and which tracks hold it for real. */
+export interface ChecklistRow {
+  index: number;
+  name: string;
+  range: [number, number];
+  melody: boolean;
+  chords: boolean;
+  bass: boolean;
+  /** The band, Extra notes and the loops: the World chains only. */
+  others: boolean;
+}
+
+/** The template checklist, from the same rules ADMI sends by, so the two never drift. */
+export function abletonChecklist(opts: { channelMode: MidiChannelMode; loopChannels?: boolean }): ChecklistRow[] {
+  const melody = filledChains(ROLE_CHANNEL.melody, opts);
+  const chords = filledChains(ROLE_CHANNEL.chord, opts);
+  const bass = filledChains(ROLE_CHANNEL.bass, opts);
+  const others = filledChains(BAND_PAD_CHANNEL, opts);
+  return ABLETON_CHAINS.map((c) => ({
+    index: c.index, name: c.name, range: chainRange(c.index),
+    melody: melody.has(c.index), chords: chords.has(c.index), bass: bass.has(c.index), others: others.has(c.index),
+  }));
+}
+
 /**
  * The chain a colour's track is sent to: its own (or Evolve's) when that track holds it,
  * else the World's chain, so a pick the track doesn't hold (an older choice kept through a

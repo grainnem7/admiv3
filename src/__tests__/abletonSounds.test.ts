@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
 import {
   ABLETON_CHAINS, abletonMappingTargets, abletonPlan, CHAIN_CC, chainCcValue, chainFor, chainForVoice, chainRange,
-  changedControls, chainOnChannel, controlKey, counterControls, filledChains, grooveCc, type AbletonPlanInput,
+  abletonChecklist, changedControls, chainOnChannel, controlKey, counterControls, filledChains, grooveCc, type AbletonPlanInput,
 } from '../midi/abletonSounds';
 import { allEvolveVoices, evolveVoicesFor } from '../audio/evolve/evolve';
 import { soundsFor } from '../ui/screens/boardSequencer/soundCatalogue';
@@ -107,6 +107,17 @@ describe('which slots a track fills', () => {
     expect(plan.controls.get(controlKey(1, CHAIN_CC))?.value).toBe(chainCcValue(1, 1));
     expect(chainOnChannel(colour('m', 'melody', { instrument: 'tuba' }), 1, 'lofi', part)).toBe(1);
     expect(chainOnChannel(colour('m', 'melody', { instrument: 'flute' }), 1, 'lofi', part)).toBe(19);
+  });
+});
+
+describe('the template checklist', () => {
+  it('33 rows; each says which tracks hold that sound for real', () => {
+    const rows = abletonChecklist({ channelMode: 'part' });
+    expect(rows).toHaveLength(33);
+    expect(rows[19]).toMatchObject({ index: 19, name: 'Flute', melody: true, chords: false, bass: false, others: false });
+    expect(rows[0]).toMatchObject({ melody: true, chords: true, bass: true, others: true });
+    expect(rows[22]).toMatchObject({ name: 'Trombone', melody: false, bass: true });
+    expect(rows[6].range).toEqual(chainRange(6));
   });
 });
 
