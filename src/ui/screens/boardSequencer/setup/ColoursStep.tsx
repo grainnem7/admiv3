@@ -295,25 +295,25 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
           onHear={onHear}
           hearing={hearing}
           rowExtras={(c) => (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
-              <span style={{ fontSize: 12, color: 'var(--bs-fg2)', flex: 1 }}>{`${counts[c.id] ?? 0} on board`}</span>
-              <Button tone="secondary" aria-label={`Recalibrate ${describeChannel(c)}`} onClick={() => onRecalibrate(c.id)}>
-                <span aria-hidden="true">⟳</span>
-              </Button>
-              <Button tone="quiet" aria-label={`Remove ${describeChannel(c)}`} onClick={() => setConfirm({ kind: 'remove', id: c.id })}>
-                <span aria-hidden="true">×</span>
-              </Button>
-            </div>
+            <span style={{ fontSize: 12, color: 'var(--bs-fg2)', whiteSpace: 'nowrap' }}>{`${counts[c.id] ?? 0} down`}</span>
           )}
-          rowMore={(c) => c.kind === 'black' && (
-            <LabeledSlider
-              label="Black darkness"
-              min={10}
-              max={70}
-              value={c.blackBand?.maxValue ?? 45}
-              display={String(c.blackBand?.maxValue ?? 45)}
-              onChange={(v) => onBlackDarkness(c.id, v)}
-            />
+          rowMore={(c) => (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <Button tone="secondary" onClick={() => onRecalibrate(c.id)}>{`⟳ Recalibrate ${describeChannel(c)}`}</Button>
+                <Button tone="quiet" onClick={() => setConfirm({ kind: 'remove', id: c.id })}>{`× Remove ${describeChannel(c)}`}</Button>
+              </div>
+              {c.kind === 'black' && (
+                <LabeledSlider
+                  label="Black darkness"
+                  min={10}
+                  max={70}
+                  value={c.blackBand?.maxValue ?? 45}
+                  display={String(c.blackBand?.maxValue ?? 45)}
+                  onChange={(v) => onBlackDarkness(c.id, v)}
+                />
+              )}
+            </div>
           )}
         />
       )}

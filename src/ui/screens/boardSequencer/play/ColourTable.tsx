@@ -5,7 +5,6 @@
 
 import { useState, type CSSProperties, type ReactNode } from 'react';
 import { Button } from '../ui/Button';
-import { Disclosure } from '../ui/Disclosure';
 import { Switch } from '../ui/Switch';
 import { SwatchChip } from '../ui/SwatchChip';
 import { StepRow } from './StepRow';
@@ -46,8 +45,13 @@ export interface ColourTableProps {
 }
 
 const NOTE: CSSProperties = { fontSize: 12, color: 'var(--bs-fg2)' };
-const CELL: CSSProperties = { padding: '6px 4px', borderTop: '1px solid var(--bs-border)', verticalAlign: 'top' };
-const SELECT: CSSProperties = { minHeight: 'var(--bs-target)', maxWidth: '100%' };
+const CELL: CSSProperties = { padding: '6px 3px', borderTop: '1px solid var(--bs-border)', verticalAlign: 'middle' };
+// The Play screen's side panel is narrow: the selects take their column's width, and
+// show as much of a long name as fits.
+const SELECT: CSSProperties = { minHeight: 'var(--bs-target)', width: '100%', minWidth: 0, textOverflow: 'ellipsis' };
+const ICON: CSSProperties = { minWidth: 'var(--bs-target)', padding: '0 8px' };
+/** Plays and Sounds like, side by side, the same width on every row. */
+const TWO: CSSProperties = { display: 'grid', gridTemplateColumns: '2fr 3fr', gap: 6 };
 
 const SOUND_JOBS: ColourRole[] = ['melody', 'bass', 'chord', 'drums', 'off'];
 const CONTROL_JOBS: ColourRole[] = [...FADER_ROLES, ...TOGGLE_ROLES];
@@ -80,13 +84,12 @@ export function ColourTable(p: ColourTableProps): JSX.Element {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       {p.roleLockedReason && <span role="note" style={NOTE}>{p.roleLockedReason}</span>}
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14, tableLayout: 'fixed' }}>
         <thead>
           <tr style={{ ...NOTE, textAlign: 'left' }}>
-            <th scope="col" style={{ padding: 4 }}>Colour</th>
-            <th scope="col" style={{ padding: 4 }}>Plays</th>
-            <th scope="col" style={{ padding: 4 }}>Sounds like</th>
-            <th scope="col" style={{ padding: 4 }}><span className="sr-only">Hear and go back</span></th>
+            <th scope="col" style={{ padding: 3 }}>
+              <div style={TWO}><span>Plays</span><span>Sounds like</span></div>
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -117,6 +120,7 @@ function ColourRow({ c, n, p, onSound, canGoBack, onBack }: {
   const hasSound = melodic || c.role === 'drums';
   const loading = p.hearing === c.id;
   const followName = soundNameFor({ ...c, instrument: undefined, drum: undefined }, p.config.soundWorld);
+  const [open, setOpen] = useState(false);
 
   const onPlays = (v: string): void => {
     if (v.startsWith('loop:')) {
@@ -131,62 +135,60 @@ function ColourRow({ c, n, p, onSound, canGoBack, onBack }: {
     <>
       <tr aria-label={`${name}: ${jobName(c.role)}`}>
         <td style={CELL}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <SwatchChip swatch={c.swatch} palette={p.palette} number={n} size={24} />
-            <span style={{ fontWeight: 600 }}>{name}</span>
+          {/* Two lines, to fit a narrow panel: the colour and its buttons, then its two choices. */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+            <SwatchChip swatch={c.swatch} palette={p.palette} number={n} size={22} />
+            <span style={{ fontWeight: 600, flex: 1 }}>{name}</span>
+            {p.rowExtras?.(c)}
+            {hasSound && (
+              <>
+                <Button tone="secondary" aria-label={`Hear ${name}`} aria-busy={loading} title={loading ? 'Loading the sound…' : 'Hear it'} onClick={() => p.onHear(c)} style={ICON}>
+                  {loading ? '…' : '▶ Hear'}
+                </Button>
+                <Button tone="quiet" aria-label={`Back to ${name}'s sound before`} title="The sound before" disabled={!canGoBack} onClick={onBack} style={ICON}>↶</Button>
+              </>
+            )}
+            <Button tone="quiet" aria-label={`More for ${name}`} aria-expanded={open} title="More" onClick={() => setOpen((o) => !o)} style={ICON}>⋯</Button>
           </div>
-          {p.rowExtras?.(c)}
-        </td>
-        <td style={CELL}>
-          <select
-            aria-label="Plays"
-            value={plays}
-            disabled={p.roleLockedReason !== null}
-            title={p.roleLockedReason ?? undefined}
-            onChange={(e) => onPlays(e.target.value)}
-            style={SELECT}
-          >
-            {SOUND_JOBS.map((r) => <option key={r} value={r}>{jobName(r)}</option>)}
-            <optgroup label="Control">
-              {CONTROL_JOBS.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
-            </optgroup>
-            <optgroup label="Loop">
-              {p.config.loopNames.map((ln, slot) => (
-                <option key={slot} value={`loop:${slot}`}>{ln && ln.length > 0 ? `Loop ${slot + 1}: ${ln}` : `Loop ${slot + 1}`}</option>
-              ))}
-            </optgroup>
-          </select>
-        </td>
-        <td style={CELL}>
-          {hasSound ? (
-            <select aria-label="Sound" value={soundValue(c)} onChange={(e) => onSound(e.target.value)} style={SELECT}>
-              <option value="">
-                {c.role === 'drums'
-                  ? `${followName} (by row)`
-                  : world ? `${world.name} world's sound (${followName})` : `Default (${followName})`}
-              </option>
-              {(c.role === 'drums' ? DRUM_OPTIONS : soundsFor(c.role)).map((o) => <option key={o.key} value={o.key}>{o.name}</option>)}
+          <div style={{ ...TWO, marginTop: 4 }}>
+            <select
+              aria-label="Plays"
+              value={plays}
+              disabled={p.roleLockedReason !== null}
+              title={p.roleLockedReason ?? undefined}
+              onChange={(e) => onPlays(e.target.value)}
+              style={SELECT}
+            >
+              {SOUND_JOBS.map((r) => <option key={r} value={r}>{jobName(r)}</option>)}
+              <optgroup label="Control">
+                {CONTROL_JOBS.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+              </optgroup>
+              <optgroup label="Loop">
+                {p.config.loopNames.map((ln, slot) => (
+                  <option key={slot} value={`loop:${slot}`}>{ln && ln.length > 0 ? `Loop ${slot + 1}: ${ln}` : `Loop ${slot + 1}`}</option>
+                ))}
+              </optgroup>
             </select>
-          ) : <span aria-label="No sound of its own">—</span>}
-        </td>
-        <td style={{ ...CELL, whiteSpace: 'nowrap' }}>
-          {hasSound && (
-            <>
-              <Button tone="secondary" aria-label={`Hear ${name}`} onClick={() => p.onHear(c)}>
-                {loading ? 'Loading…' : '▶ Hear'}
-              </Button>
-              <Button tone="quiet" aria-label={`Back to ${name}'s sound before`} disabled={!canGoBack} onClick={onBack}>↶</Button>
-            </>
-          )}
+            {hasSound ? (
+              <select aria-label="Sound" value={soundValue(c)} onChange={(e) => onSound(e.target.value)} style={SELECT}>
+                <option value="">
+                  {c.role === 'drums'
+                    ? `${followName} (by row)`
+                    : world ? `${world.name}: ${followName}` : `Default: ${followName}`}
+                </option>
+                {(c.role === 'drums' ? DRUM_OPTIONS : soundsFor(c.role)).map((o) => <option key={o.key} value={o.key}>{o.name}</option>)}
+              </select>
+            ) : <span aria-label="No sound of its own" style={{ alignSelf: 'center' }}>—</span>}
+          </div>
         </td>
       </tr>
-      <tr>
-        <td colSpan={4} style={{ padding: '0 4px 6px' }}>
-          <Disclosure summary={`More for ${name}`}>
+      {open && (
+        <tr>
+          <td style={{ padding: '0 4px 8px' }}>
             <ColourMore c={c} p={p} />
-          </Disclosure>
-        </td>
-      </tr>
+          </td>
+        </tr>
+      )}
     </>
   );
 }

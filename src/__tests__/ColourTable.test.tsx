@@ -112,6 +112,6 @@ describe('the colour table', () => {
     act(() => button(row('Red'), /^Hear/).click());
     expect(p.onHear).toHaveBeenCalledWith(expect.objectContaining({ id: 'm' }));
     render(props({ hearing: 'm' }));
-    expect(button(row('Red'), /^Hear/).textContent).toContain('Loading');
+    expect(button(row('Red'), /^Hear/).getAttribute('aria-busy')).toBe('true');
   });
 });
