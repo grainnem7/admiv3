@@ -74,7 +74,7 @@ Already bundled but not offered: violin, upright bass (contrabass), tuba, choir 
 1. **A Sound world never overwrites a row's own choice.** As today, a colour with its own pick keeps it; the others follow the world. "Sounds like" shows "Warm world's sound (Piano + soft pad)" as its first option, so a row following the world reads plainly. A "Reset every colour to the world" action sits beside the world choice. "My picks" (no world) stays; the world still sets the drums' tone, the room and the swing.
 2. **Every colour is a row.** "Plays" also offers Control (with which one: Speed, Volume, Extra notes…) and Loop (which loop). Those rows show "—" under "Sounds like" and are grouped after the sound rows, so the table stays about sounds without hiding any colour.
 3. **In Ableton mode** "Sounds like" shows Ableton's sound for that colour (as today), and ▶ Hear sends a short preview phrase to Ableton on that colour's channel (the test-note path), so it is heard where the audience hears it.
-4. **Choosing the player on a returning session** is decided in stage 2, after stage 1 has been tried.
+4. **Choosing the player on a returning session** (decided by the owner, 2026-10-27): remember the last player. "Play my board" opens Play with whoever played last; the header's player button changes player.
 
 ## Left to the builder
 
