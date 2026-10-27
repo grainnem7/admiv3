@@ -171,10 +171,20 @@ export const SAMPLE_CONFIGS = {
   clarinet:    { urls: noteMap(['As3','As4','D3','D4','D5']),                       baseUrl: local('clarinet'),     attack: 0.08,  release: 0.3 },
   frenchHorn:  { urls: noteMap(['A3','C4','D3','D5','F3','G2']),                    baseUrl: local('french-horn'),  attack: 0.1,   release: 0.4 },
   tuba:        { urls: noteMap(['As1','As2','D3','F2','F3']),                       baseUrl: local('tuba'),         attack: 0.08,  release: 0.4 },
+  flute:       { urls: noteMap(['C4','E4','A4','C5','E5','A5','C6','E6']),          baseUrl: local('flute'),        attack: 0.05,  release: 0.4 },
+  saxophone:   { urls: noteMap(['Cs3','F3','Gs3','C4','E4','Gs4','C5','E5','A5']),  baseUrl: local('saxophone'),    attack: 0.03,  release: 0.35 },
+  trumpet:     { urls: noteMap(['F3','A3','C4','Ds4','G4','As4','D5','F5','A5','C6']), baseUrl: local('trumpet'),   attack: 0.03,  release: 0.35 },
+  trombone:    { urls: noteMap(['As1','Ds2','Gs2','C3','F3','As3','D4','F4']),      baseUrl: local('trombone'),     attack: 0.05,  release: 0.4 },
+  bassoon:     { urls: noteMap(['G2','A2','C3','G3','A3','C4','E4','G4','A4','C5']), baseUrl: local('bassoon'),     attack: 0.05,  release: 0.35 },
 
   // Plucked (nbrosowsky)
   harp:        { urls: noteMap(['C3','C5','G3','G5']),                              baseUrl: local('harp'),         attack: 0.005, release: 0.8 },
   guitarNylon: { urls: noteMap(['A2','A4','B3','D3','E2','E4','G3']),               baseUrl: local('guitar-nylon'), attack: 0.005, release: 0.3 },
+  guitarAcoustic:{ urls: noteMap(['E2','Gs2','C3','E3','Gs3','C4','E4','Gs4','C5']), baseUrl: local('guitar-acoustic'), attack: 0.005, release: 0.6 },
+  guitarElectric:{ urls: noteMap(['E2','A2','C3','Fs3','A3','C4','Fs4','A4','C5','Ds5','Fs5','A5','C6']), baseUrl: local('guitar-electric'), attack: 0.005, release: 0.5 },
+
+  // Tuned percussion (nbrosowsky)
+  xylophone:   { urls: noteMap(['G4','C5','G5','C6','G6','C7','G7','C8']),          baseUrl: local('xylophone'),    attack: 0.002, release: 0.6 },
 
   // Keys (nbrosowsky)
   organ:       { urls: noteMap(['C2','C3','C4','C5']),                              baseUrl: local('organ'),        attack: 0.01,  release: 0.3 },
