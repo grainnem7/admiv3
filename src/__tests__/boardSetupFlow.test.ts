@@ -158,3 +158,18 @@ describe('when the board is checked on arrival', () => {
     expect(shouldCheckBoard({ ...ok, cameraUp: false })).toBe(false);
   });
 });
+
+import { setupSteps } from '../ui/screens/boardSequencer/boardSetupFlow';
+
+describe('the steps on each board', () => {
+  it('the laptop board has only the colours and Ready: no camera, no board to find', () => {
+    expect(setupSteps(true)).toEqual(['colours', 'ready']);
+    expect(prevStep('colours', true)).toBeNull();
+    expect(nextStep('colours', true)).toBe('ready');
+    expect(prevStep('ready', true)).toBe('colours');
+  });
+  it('the camera board keeps all four', () => {
+    expect(setupSteps(false)).toEqual(['camera', 'board', 'colours', 'ready']);
+    expect(prevStep('colours')).toBe('board');
+  });
+});

@@ -1,7 +1,7 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { Button } from '../ui/Button';
 import {
-  SETUP_STEPS, canContinue, cameraSatisfied, continueLabel, nextStep, prevStep,
+  setupSteps, canContinue, cameraSatisfied, continueLabel, nextStep, prevStep,
   type CameraStatus, type SetupConfigView, type SetupStep,
 } from '../boardSetupFlow';
 
@@ -39,6 +39,8 @@ export interface SetupFlowProps {
   footerAlign?: 'start' | 'end';
   heading: string;
   hint?: ReactNode;
+  /** The laptop board: only the colours and Ready. */
+  laptop?: boolean;
 }
 
 /**
@@ -48,25 +50,26 @@ export interface SetupFlowProps {
  */
 export function SetupFlow({
   step, onStepChange, cfg, camera, hasStoredConfig, children, skip = null, announce,
-  footerAlign = 'end', heading, hint,
+  footerAlign = 'end', heading, hint, laptop = false,
 }: SetupFlowProps): JSX.Element {
   const headingRef = useRef<HTMLHeadingElement | null>(null);
-  const index = SETUP_STEPS.indexOf(step);
+  const steps = setupSteps(laptop);
+  const index = steps.indexOf(step);
 
   useEffect(() => {
     headingRef.current?.focus();
-    announce(`Step ${index + 1} of ${SETUP_STEPS.length}: ${STEP_LABELS[step]}`);
-  }, [step, index, announce]);
+    announce(`Step ${index + 1} of ${steps.length}: ${STEP_LABELS[step]}`);
+  }, [step, index, steps.length, announce]);
 
-  const back = prevStep(step);
-  const next = nextStep(step);
+  const back = prevStep(step, laptop);
+  const next = nextStep(step, laptop);
   const canGo = canContinue(step, cfg, camera, hasStoredConfig);
   const continueReason = canGo ? null : reasonFor(step, cfg, camera, hasStoredConfig);
 
   return (
     <section
       style={{ display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0, flex: 1 }}
-      aria-label={`Set up, step ${index + 1} of ${SETUP_STEPS.length}`}
+      aria-label={`Set up, step ${index + 1} of ${steps.length}`}
     >
       <div>
         <h2 ref={headingRef} tabIndex={-1} style={{ margin: 0, fontSize: 20 }}>{heading}</h2>

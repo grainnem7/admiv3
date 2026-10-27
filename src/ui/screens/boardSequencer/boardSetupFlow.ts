@@ -70,13 +70,21 @@ export function continueLabel(step: SetupStep, camera: CameraStatus): string {
   return step === 'camera' && camera.colourless === true ? 'Continue anyway' : 'Continue';
 }
 
-export function nextStep(step: SetupStep): SetupStep | null {
-  return SETUP_STEPS[SETUP_STEPS.indexOf(step) + 1] ?? null;
+/** The laptop board has no camera and no board to find: only the colours and Ready. */
+export function setupSteps(laptop: boolean): SetupStep[] {
+  return laptop ? ['colours', 'ready'] : SETUP_STEPS;
 }
 
-export function prevStep(step: SetupStep): SetupStep | null {
-  const i = SETUP_STEPS.indexOf(step);
-  return i > 0 ? SETUP_STEPS[i - 1] : null;
+export function nextStep(step: SetupStep, laptop = false): SetupStep | null {
+  const steps = setupSteps(laptop);
+  const i = steps.indexOf(step);
+  return i >= 0 ? steps[i + 1] ?? null : null;
+}
+
+export function prevStep(step: SetupStep, laptop = false): SetupStep | null {
+  const steps = setupSteps(laptop);
+  const i = steps.indexOf(step);
+  return i > 0 ? steps[i - 1] : null;
 }
 
 /**

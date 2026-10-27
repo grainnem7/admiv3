@@ -98,7 +98,7 @@ import { bandKeeps, coloursFromBlobs, fitSafeBand } from '../../tracking/boardCo
 import { detectColours, type DetectedColour } from '../../tracking/boardColourDetect/detectColours';
 import type { FiredNote } from '../../songs/BoardSequencerEngine';
 import {
-  SETUP_STEPS, canOpenStep, canPlay, resolveEntry, stepIndicator,
+  setupSteps, canOpenStep, canPlay, resolveEntry, stepIndicator,
   setupRequestedOnOpen, clearSetupRequest, askWhoIsPlaying, openingView, viewAfterPick, shouldCheckBoard,
   type CameraStatus, type SetupStep,
 } from './boardSequencer/boardSetupFlow';
@@ -4113,8 +4113,9 @@ export default function BoardSequencerScreen() {
     <SetupFlow
       step={step}
       onStepChange={setStep}
+      laptop={laptop}
       cfg={setupCfg}
-      camera={camera}
+      camera={cameraGate}
       hasStoredConfig={storedRef.current !== null}
       announce={announce}
       footerAlign={layout.footerAlign}
@@ -4863,7 +4864,7 @@ export default function BoardSequencerScreen() {
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             {boardSourceButton}
             <StepIndicator
-              steps={SETUP_STEPS.map((id) => ({
+              steps={setupSteps(laptop).map((id) => ({
                 id,
                 label: STEP_LABELS[id],
                 state: stepIndicator(id, step, setupCfg, cameraGate, storedRef.current !== null),
