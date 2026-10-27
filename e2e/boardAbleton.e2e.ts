@@ -161,7 +161,7 @@ test('a 40 second piece in Ableton mode is silent by 0:40', async ({ page }) => 
 const lastCc = async (page: Page, since: number, cc: number, channel: number): Promise<number | undefined> =>
   (await sentSince(page, since)).filter((m) => isCc(m, cc) && (m.d[0] & 0x0f) + 1 === channel).at(-1)?.d[2];
 
-test('picking Harp on a card switches that channel’s Ableton chain (CC 30 = 25)', async ({ page }) => {
+test('picking Harp on a card switches that channel’s Ableton chain (CC 30 = 22)', async ({ page }) => {
   await openLaptopBoard(page);
   await pickColour(page, 'Red');
   await place(page, [[3, 1]]);
@@ -171,7 +171,7 @@ test('picking Harp on a card switches that channel’s Ableton chain (CC 30 = 25
   await page.getByRole('tab', { name: 'Sound' }).click();
   const t = await now(page);
   await page.getByRole('row', { name: /^Red: Melody/ }).getByRole('combobox', { name: 'Sound' }).selectOption('harp');
-  await expect.poll(() => lastCc(page, t, 30, 1), { timeout: 5_000 }).toBe(25);
+  await expect.poll(() => lastCc(page, t, 30, 1), { timeout: 5_000 }).toBe(22);
   await page.getByRole('button', { name: 'More for Red' }).click();
   await expect(page.getByText(/Ableton sound: Harp \(chain 7\)/).first()).toBeVisible();
   expect(pageErrors(page)).toEqual([]);
@@ -189,8 +189,8 @@ test('changing World switches every channel without its own sound', async ({ pag
   await page.getByRole('tab', { name: 'Sound' }).click();
   const t = await now(page);
   await page.getByRole('radiogroup', { name: 'Sound world' }).getByRole('radio', { name: 'Ambient' }).click();
-  // Ambient is chain 3: the middle of its share (9) on the sound tracks, × 8 (16) on the drums' kit rack.
-  for (const ch of [1, 2, 3, 11, 12, 13]) await expect.poll(() => lastCc(page, t, 30, ch), { timeout: 5_000 }).toBe(9);
+  // Ambient is chain 3: the middle of its zone (6 to 8, so 7) on the sound tracks, × 8 (16) on the drums' kit rack.
+  for (const ch of [1, 2, 3, 11, 12, 13]) await expect.poll(() => lastCc(page, t, 30, ch), { timeout: 5_000 }).toBe(7);
   await expect.poll(() => lastCc(page, t, 30, 10), { timeout: 5_000 }).toBe(16);
 });
 

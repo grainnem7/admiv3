@@ -88,10 +88,13 @@ Sub bass → 31, and so on.
 ## How ADMI picks a chain (decided here)
 
 - The rack's chain selector covers 0–127, and the zones are made with Ableton's
-  **Distribute Ranges Equally** (one click with every chain selected). ADMI sends the
-  **middle** of chain *i*'s share: `floor((i + 0.5) × 128 / 33)`. Each share is about four
-  values wide, so the middle lands inside it however Ableton rounds the edges. The
-  checklist shows each chain's expected range so it can be compared by eye.
+  **Distribute Ranges Equally** (with every chain selected, after widening chain 33's zone to end at
+  127: new chains all sit on 0, and Distribute only spreads them over the range they already cover).
+- **Measured in Live 12.4.6 (2026-10-27):** Ableton doesn't split evenly. With 33 chains the first 4
+  get 3 values (0–2, 3–5, 6–8, 9–11) and the other 29 get 4 (chain *n* runs 4n−8 to 4n−5). ADMI's
+  `chainRange` follows that rule (each chain gets ceil(128 / n) values, the first few one fewer, until
+  the total is 128) and sends the middle of the zone. The first version assumed an even split and
+  would have played the next sound along for chains 3–17.
 - The drum channel (10) keeps `index × 8`.
 - Adding a sound later means one more chain at the end and Distribute Ranges Equally again.
   ADMI's numbers follow from the length of the list.

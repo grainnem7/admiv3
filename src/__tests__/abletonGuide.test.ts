@@ -25,6 +25,10 @@ describe('the Ableton setup guide', () => {
     for (const i of [3, 17, 29]) expect(text).toContain(`chain ${i + 1} should start at ${chainRange(i)[0]}`);
   });
 
+  it('widens chain 33 to 127 before Distribute Ranges Equally (new chains all sit on 0)', () => {
+    expect(text).toContain('drag the right-hand edge of chain 33’s zone out to 127');
+  });
+
   it('keeps the drums’ kit rack out of Distribute Ranges Equally', () => {
     expect(text).toContain('not the drums (channel 10)');
   });

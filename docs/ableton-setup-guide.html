@@ -171,44 +171,44 @@ a:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
     <ol>
       <li>Rename chain 11 to <strong>Cello</strong>, 14 to <strong>Choir pad</strong>, 15 to <strong>Electric piano chords</strong> and 16 to <strong>Bells</strong>.</li>
       <li>Add chains 17 to 33 from the table below, each holding the placeholder.</li>
-      <li>Show the <strong>Chain select ruler</strong> (the "Chain" button above the chain list), select every chain, right click a chain and choose <strong>Distribute Ranges Equally</strong>.</li>
-      <li><strong>Check the ranges</strong> in the ruler against the table below: chain 4 should start at 12, chain 18 should start at 66 and chain 30 should start at 112. If they don't, drag those chains' edges to match the table; otherwise ADMI would pick the sound next door.</li>
+      <li>Show the <strong>Chain select ruler</strong> (the "Chain" button above the chain list). First drag the right-hand edge of chain 33’s zone out to 127: new chains all sit on 0, and Distribute Ranges Equally only spreads the chains over the range they already cover. Then select every chain, right click a chain and choose <strong>Distribute Ranges Equally</strong>.</li>
+      <li><strong>Check the zones</strong> in the ruler against the table below (press and hold on a zone, without moving it, to see its range): chain 4 should start at 9, chain 18 should start at 64 and chain 30 should start at 112. Ableton gives the first four chains 3 values and the rest 4, and ADMI's numbers follow that. If yours differ, drag those chains' edges to match the table; otherwise ADMI would pick the sound next door.</li>
     </ol>
     <p>Every track now plays the right chain again, with the new sounds as placeholders. Choir pad, Electric piano chords and Bells still hold their old instruments (the old pad, stab and bell/pluck): give them their new ones as you put the real instruments in, as below.</p>
 
     <h3>The 33 chains</h3>
     <div class="scroll"><table>
-      <thead><tr><th scope="col">Chain</th><th scope="col">Name</th><th scope="col">CC 30 (about)</th><th scope="col">Suggested Suite sound</th></tr></thead>
+      <thead><tr><th scope="col">Chain</th><th scope="col">Name</th><th scope="col">Zone (CC 30)</th><th scope="col">Suggested Suite sound</th></tr></thead>
       <tbody>
-        <tr><td>1</td><td>World: Warm</td><td>0 to 3</td><td>the Warm sounds in section 3</td></tr>
-        <tr><td>2</td><td>World: Lo-fi</td><td>4 to 7</td><td>the Lo fi sounds in section 3</td></tr>
-        <tr><td>3</td><td>World: Ambient</td><td>8 to 11</td><td>the Ambient sounds in section 3</td></tr>
-        <tr><td>4</td><td>World: Electronic</td><td>12 to 15</td><td>the Electronic sounds in section 3</td></tr>
-        <tr><td>5</td><td>Piano</td><td>16 to 18</td><td>a piano from Grand Piano</td></tr>
-        <tr><td>6</td><td>Electric piano</td><td>19 to 22</td><td>an electric piano from Electric Keyboards</td></tr>
-        <tr><td>7</td><td>Harp</td><td>23 to 26</td><td>a harp from the Orchestral packs, or Collision</td></tr>
-        <tr><td>8</td><td>Organ</td><td>27 to 30</td><td>an organ from Electric Keyboards</td></tr>
-        <tr><td>9</td><td>Clarinet</td><td>31 to 34</td><td>a clarinet from Orchestral Woodwinds</td></tr>
-        <tr><td>10</td><td>French horn</td><td>35 to 38</td><td>a French horn from Orchestral Brass</td></tr>
-        <tr><td>11</td><td>Cello</td><td>39 to 42</td><td>a cello from Orchestral Strings</td></tr>
-        <tr><td>12</td><td>Nylon guitar</td><td>43 to 46</td><td>a nylon guitar from Guitar and Bass</td></tr>
-        <tr><td>13</td><td>Electric bass</td><td>47 to 49</td><td>an electric bass from Guitar and Bass</td></tr>
-        <tr><td>14</td><td>Choir pad</td><td>50 to 53</td><td>a Meld or Wavetable choir pad</td></tr>
-        <tr><td>15</td><td>Electric piano chords</td><td>54 to 57</td><td>an electric piano from Electric Keyboards (it plays chords)</td></tr>
-        <tr><td>16</td><td>Bells</td><td>58 to 61</td><td>an Operator or Wavetable bell</td></tr>
-        <tr><td>17</td><td>Violin</td><td>62 to 65</td><td>a violin from Orchestral Strings</td></tr>
-        <tr><td>18</td><td>Upright bass</td><td>66 to 69</td><td>a double bass from Orchestral Strings</td></tr>
-        <tr><td>19</td><td>Tuba</td><td>70 to 73</td><td>a tuba from Orchestral Brass</td></tr>
-        <tr><td>20</td><td>Flute</td><td>74 to 77</td><td>a flute from Orchestral Woodwinds</td></tr>
-        <tr><td>21</td><td>Saxophone</td><td>78 to 80</td><td>Sampler with ADMI&rsquo;s own saxophone files (see below), unless a Suite saxophone is installed</td></tr>
-        <tr><td>22</td><td>Trumpet</td><td>81 to 84</td><td>a trumpet from Orchestral Brass</td></tr>
-        <tr><td>23</td><td>Trombone</td><td>85 to 88</td><td>a trombone from Orchestral Brass</td></tr>
-        <tr><td>24</td><td>Bassoon</td><td>89 to 92</td><td>a bassoon from Orchestral Woodwinds</td></tr>
-        <tr><td>25</td><td>Xylophone</td><td>93 to 96</td><td>a xylophone from Orchestral Mallets</td></tr>
-        <tr><td>26</td><td>Acoustic guitar</td><td>97 to 100</td><td>an acoustic guitar from Guitar and Bass</td></tr>
-        <tr><td>27</td><td>Electric guitar</td><td>101 to 104</td><td>an electric guitar from Guitar and Bass</td></tr>
-        <tr><td>28</td><td>Synth pluck</td><td>105 to 108</td><td>a Drift or Wavetable pluck</td></tr>
-        <tr><td>29</td><td>Synth keys</td><td>109 to 111</td><td>a Drift or Operator keys sound</td></tr>
+        <tr><td>1</td><td>World: Warm</td><td>0 to 2</td><td>the Warm sounds in section 3</td></tr>
+        <tr><td>2</td><td>World: Lo-fi</td><td>3 to 5</td><td>the Lo fi sounds in section 3</td></tr>
+        <tr><td>3</td><td>World: Ambient</td><td>6 to 8</td><td>the Ambient sounds in section 3</td></tr>
+        <tr><td>4</td><td>World: Electronic</td><td>9 to 11</td><td>the Electronic sounds in section 3</td></tr>
+        <tr><td>5</td><td>Piano</td><td>12 to 15</td><td>a piano from Grand Piano</td></tr>
+        <tr><td>6</td><td>Electric piano</td><td>16 to 19</td><td>an electric piano from Electric Keyboards</td></tr>
+        <tr><td>7</td><td>Harp</td><td>20 to 23</td><td>a harp from the Orchestral packs, or Collision</td></tr>
+        <tr><td>8</td><td>Organ</td><td>24 to 27</td><td>an organ from Electric Keyboards</td></tr>
+        <tr><td>9</td><td>Clarinet</td><td>28 to 31</td><td>a clarinet from Orchestral Woodwinds</td></tr>
+        <tr><td>10</td><td>French horn</td><td>32 to 35</td><td>a French horn from Orchestral Brass</td></tr>
+        <tr><td>11</td><td>Cello</td><td>36 to 39</td><td>a cello from Orchestral Strings</td></tr>
+        <tr><td>12</td><td>Nylon guitar</td><td>40 to 43</td><td>a nylon guitar from Guitar and Bass</td></tr>
+        <tr><td>13</td><td>Electric bass</td><td>44 to 47</td><td>an electric bass from Guitar and Bass</td></tr>
+        <tr><td>14</td><td>Choir pad</td><td>48 to 51</td><td>a Meld or Wavetable choir pad</td></tr>
+        <tr><td>15</td><td>Electric piano chords</td><td>52 to 55</td><td>an electric piano from Electric Keyboards (it plays chords)</td></tr>
+        <tr><td>16</td><td>Bells</td><td>56 to 59</td><td>an Operator or Wavetable bell</td></tr>
+        <tr><td>17</td><td>Violin</td><td>60 to 63</td><td>a violin from Orchestral Strings</td></tr>
+        <tr><td>18</td><td>Upright bass</td><td>64 to 67</td><td>a double bass from Orchestral Strings</td></tr>
+        <tr><td>19</td><td>Tuba</td><td>68 to 71</td><td>a tuba from Orchestral Brass</td></tr>
+        <tr><td>20</td><td>Flute</td><td>72 to 75</td><td>a flute from Orchestral Woodwinds</td></tr>
+        <tr><td>21</td><td>Saxophone</td><td>76 to 79</td><td>Sampler with ADMI&rsquo;s own saxophone files (see below), unless a Suite saxophone is installed</td></tr>
+        <tr><td>22</td><td>Trumpet</td><td>80 to 83</td><td>a trumpet from Orchestral Brass</td></tr>
+        <tr><td>23</td><td>Trombone</td><td>84 to 87</td><td>a trombone from Orchestral Brass</td></tr>
+        <tr><td>24</td><td>Bassoon</td><td>88 to 91</td><td>a bassoon from Orchestral Woodwinds</td></tr>
+        <tr><td>25</td><td>Xylophone</td><td>92 to 95</td><td>a xylophone from Orchestral Mallets</td></tr>
+        <tr><td>26</td><td>Acoustic guitar</td><td>96 to 99</td><td>an acoustic guitar from Guitar and Bass</td></tr>
+        <tr><td>27</td><td>Electric guitar</td><td>100 to 103</td><td>an electric guitar from Guitar and Bass</td></tr>
+        <tr><td>28</td><td>Synth pluck</td><td>104 to 107</td><td>a Drift or Wavetable pluck</td></tr>
+        <tr><td>29</td><td>Synth keys</td><td>108 to 111</td><td>a Drift or Operator keys sound</td></tr>
         <tr><td>30</td><td>Soft synth pad</td><td>112 to 115</td><td>a Meld or Wavetable soft pad</td></tr>
         <tr><td>31</td><td>Wide synth chords</td><td>116 to 119</td><td>a wide Wavetable or Drift chord sound</td></tr>
         <tr><td>32</td><td>Sub bass</td><td>120 to 123</td><td>an Operator or Drift sub bass</td></tr>
@@ -221,7 +221,7 @@ a:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 
     <h3>Building the racks</h3>
     <ol>
-      <li><strong>Melody first, with all 33 real.</strong> On the Melody track (channel 1), drag in an <strong>Instrument Rack</strong> (Instruments), show its <strong>Chain list</strong> and add the 33 chains above, <strong>in this order, named exactly</strong>, each with its real instrument. Then show the <strong>Chain select ruler</strong>, select every chain and choose <strong>Distribute Ranges Equally</strong>, with no fades, and check the ranges as above (chain 4 should start at 12, chain 18 should start at 66 and chain 30 should start at 112).</li>
+      <li><strong>Melody first, with all 33 real.</strong> On the Melody track (channel 1), drag in an <strong>Instrument Rack</strong> (Instruments), show its <strong>Chain list</strong> and add the 33 chains above, <strong>in this order, named exactly</strong>, each with its real instrument. Then show the <strong>Chain select ruler</strong>, drag the right-hand edge of chain 33’s zone out to 127, select every chain and choose <strong>Distribute Ranges Equally</strong>, with no fades, and check the zones as above (chain 4 should start at 9, chain 18 should start at 64 and chain 30 should start at 112).</li>
       <li><strong>Check Melody</strong> before building the rest (next section).</li>
       <li><strong>Copy it</strong> to Bass (channel 2) and Chords (channel 3): select the Rack, <kbd>Ctrl</kbd> + <kbd>C</kbd>, select the other track's instrument, <kbd>Ctrl</kbd> + <kbd>V</kbd>. Swap the four World chains for sounds that suit that part.</li>
       <li><strong>Trim each track:</strong> on Melody, Bass and Chords, replace the instrument in every chain the Template checklist marks <strong>Placeholder</strong> for that track with the placeholder. The chain stays, with its name.</li>

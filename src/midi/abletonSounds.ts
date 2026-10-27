@@ -2,8 +2,8 @@
  * ADMI's sound choices, carried over to Ableton (Phase 2).
  *
  * Each Ableton track holds an Instrument Rack whose chains are ADMI's sounds, one per sound.
- * CC 30 on the track's channel picks the chain (the middle of that chain's equal share of
- * 0–127; the drums' kit rack keeps index × 8), so a colour card's sound,
+ * CC 30 on the track's channel picks the chain (the middle of that chain's zone after
+ * Distribute Ranges Equally; the drums' kit rack keeps index × 8), so a colour card's sound,
  * the World, a scene's World and Evolve's instrument changes all switch Ableton's sound
  * too. Every chain is already loaded, so a switch is instant and safe mid-piece.
  *
@@ -87,21 +87,30 @@ const ELECTRIC_BASS = 12;
 const BELLS = 15;
 
 /**
- * CC 30's value for a chain on a channel. Racks share 0–127 equally between their chains
- * (Ableton's Distribute Ranges Equally), so ADMI sends the middle of the chain's share: it
- * lands inside however Ableton rounds the edges. The drums' kit rack keeps its four zones
- * of 8 (index × 8).
+ * A chain's zone in a rack whose zones were spread over 0–127 with Ableton's Distribute Ranges
+ * Equally. Ableton doesn't split evenly: with 33 chains (measured in Live 12.4.6, 2026-10-27)
+ * the first 4 get 3 values and the other 29 get 4. So each chain gets ceil(128 / n) values,
+ * except the first few, one fewer each, until the total is 128. With 16 chains every zone is 8.
+ */
+export function chainRange(index: number): [number, number] {
+  const n = ABLETON_CHAINS.length;
+  const wide = Math.ceil(128 / n);
+  const narrow = wide * n - 128; // how many chains get one value fewer, at the start
+  const i = Math.max(0, Math.min(n - 1, Math.round(index)));
+  const start = i < narrow ? i * (wide - 1) : narrow * (wide - 1) + (i - narrow) * wide;
+  const width = i < narrow ? wide - 1 : wide;
+  return [start, start + width - 1];
+}
+
+/**
+ * CC 30's value for a chain on a channel: the middle of its zone, so it lands inside even if
+ * an edge is a value out. The drums' kit rack keeps its four zones of 8 (index × 8).
  */
 export function chainCcValue(index: number, channel: number): number {
   const i = Math.round(index);
   if (channel === ROLE_CHANNEL.drums) return Math.max(0, Math.min(127, i * 8));
-  return Math.max(0, Math.min(127, Math.floor(((i + 0.5) * 128) / ABLETON_CHAINS.length)));
-}
-
-/** The chain's expected range after Distribute Ranges Equally, for the checklist. */
-export function chainRange(index: number): [number, number] {
-  const n = ABLETON_CHAINS.length;
-  return [Math.round((index * 128) / n), Math.round(((index + 1) * 128) / n) - 1];
+  const [lo, hi] = chainRange(i);
+  return lo + Math.floor((hi - lo + 1) / 2);
 }
 
 /** The chain an ADMI instrument key stands for, or null. */

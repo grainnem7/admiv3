@@ -99,15 +99,16 @@ export function AbletonSoundsPanel({ config, getLive, onSend, connected }: {
       <Disclosure summary="Template checklist: the 33 sounds, and which each track holds">
         <span style={NOTE}>
           Changing from the 16-sound racks? On every track except the drums (channel 10): rename chains 11, 14, 15 and
-          16, add chains 17 to 33 with the placeholder, then select every chain and choose Distribute Ranges Equally.
-          Then check in the ruler that chains 4, 18 and 30 start at {chainRange(3)[0]}, {chainRange(17)[0]} and {chainRange(29)[0]}.
+          16, add chains 17 to 33 with the placeholder, then drag chain 33&rsquo;s zone out to end at 127, select every
+          chain and choose Distribute Ranges Equally. Then check in the ruler that chains 4, 18 and 30 start at{' '}
+          {chainRange(3)[0]}, {chainRange(17)[0]} and {chainRange(29)[0]}.
         </span>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ fontSize: 12, borderCollapse: 'collapse' }}>
             <caption style={{ ...NOTE, textAlign: 'left' }}>Every rack has these chains, named exactly, in this order. Real: a real instrument on that track. Placeholder: the light stand-in.</caption>
             <thead>
               <tr>
-                {['Chain', 'Name', 'CC 30 (about)', 'Melody', 'Chords', 'Bass', 'Band, Extra notes and Loops'].map((h) => (
+                {['Chain', 'Name', 'Zone (CC 30)', 'Melody', 'Chords', 'Bass', 'Band, Extra notes and Loops'].map((h) => (
                   <th key={h} scope="col" style={{ textAlign: 'left', paddingRight: 8 }}>{h}</th>
                 ))}
               </tr>

@@ -29,7 +29,7 @@ describe('the Template checklist', () => {
     expect(host.textContent).toContain('Template checklist: the 33 sounds, and which each track holds');
     const t = checklist();
     expect([...t.querySelectorAll('thead th')].map((th) => th.textContent)).toEqual(
-      ['Chain', 'Name', 'CC 30 (about)', 'Melody', 'Chords', 'Bass', 'Band, Extra notes and Loops'],
+      ['Chain', 'Name', 'Zone (CC 30)', 'Melody', 'Chords', 'Bass', 'Band, Extra notes and Loops'],
     );
     const rows = [...t.querySelectorAll('tbody tr')];
     expect(rows).toHaveLength(33);
@@ -41,7 +41,7 @@ describe('the Template checklist', () => {
   it('starts with how to change from the 16-sound racks', () => {
     render();
     expect(host.textContent).toContain(
-      'Changing from the 16-sound racks? On every track except the drums (channel 10): rename chains 11, 14, 15 and 16, add chains 17 to 33 with the placeholder, then select every chain and choose Distribute Ranges Equally. Then check in the ruler that chains 4, 18 and 30 start at 12, 66 and 112.',
+      'Changing from the 16-sound racks? On every track except the drums (channel 10): rename chains 11, 14, 15 and 16, add chains 17 to 33 with the placeholder, then drag chain 33’s zone out to end at 127, select every chain and choose Distribute Ranges Equally. Then check in the ruler that chains 4, 18 and 30 start at 9, 64 and 112.',
     );
     expect(host.textContent).toContain('Placeholder: Operator with its default sound. In per-colour mode every colour’s track needs every sound real.');
   });

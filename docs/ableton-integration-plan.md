@@ -311,7 +311,7 @@ now. Loading takes a moment and can click or drop out mid-show. It may come back
 rehearsal preparation with Phase 4.)
 
 ### 5.2 The chain list (fixed: the same on every track)
-*Changed 2026-10-27 by docs/superpowers/specs/2026-10-27-ableton-every-sound-design.md: 33 chains, one per ADMI sound; CC 30 is the middle of each chain’s equal share (drums keep × 8); each track fills only the chains it can reach, the rest hold a placeholder.*
+*Changed 2026-10-27 by docs/superpowers/specs/2026-10-27-ableton-every-sound-design.md: 33 chains, one per ADMI sound; CC 30 is the middle of each chain’s zone as Ableton’s Distribute Ranges Equally makes it (drums keep × 8); each track fills only the chains it can reach, the rest hold a placeholder.*
 
 **CC 30 on the track's channel chooses the chain**: value = chain index × 8. Each chain's
 zone in the Rack's chain selector is `index*8 … index*8+7`.
@@ -401,7 +401,7 @@ In per-colour mode every colour is independent.
     their racks.
 
 ### 5.6 The template (`docs/ableton-setup-guide.html`, new section)
-*Changed 2026-10-27 by docs/superpowers/specs/2026-10-27-ableton-every-sound-design.md: 33 chains, one per ADMI sound; CC 30 is the middle of each chain’s equal share (drums keep × 8); each track fills only the chains it can reach, the rest hold a placeholder.*
+*Changed 2026-10-27 by docs/superpowers/specs/2026-10-27-ableton-every-sound-design.md: 33 chains, one per ADMI sound; CC 30 is the middle of each chain’s zone as Ableton’s Distribute Ranges Equally makes it (drums keep × 8); each track fills only the chains it can reach, the rest hold a placeholder.*
 
 Step by step, for a facilitator:
 1. On each track (1, 2, 3, 11, 12, 13, and each per-colour channel), replace the

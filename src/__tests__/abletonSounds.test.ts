@@ -25,7 +25,7 @@ const base = (channels: ColourChannel[], extra: Partial<AbletonPlanInput> = {}):
 });
 
 describe('the chain list', () => {
-  it('33 chains; CC 30 is the middle of each chain’s share; drums keep × 8', () => {
+  it('33 chains; CC 30 is the middle of each chain’s zone; drums keep × 8', () => {
     expect(ABLETON_CHAINS).toHaveLength(33);
     expect(ABLETON_CHAINS.map((c) => c.index)).toEqual(Array.from({ length: 33 }, (_, i) => i));
     expect(ABLETON_CHAINS.map((c) => c.name)).toEqual([
@@ -34,7 +34,11 @@ describe('the chain list', () => {
       'Violin', 'Upright bass', 'Tuba', 'Flute', 'Saxophone', 'Trumpet', 'Trombone', 'Bassoon', 'Xylophone',
       'Acoustic guitar', 'Electric guitar', 'Synth pluck', 'Synth keys', 'Soft synth pad', 'Wide synth chords', 'Sub bass', 'Synth bass',
     ]);
-    expect([0, 4, 6, 19, 32].map((i) => chainCcValue(i, 1))).toEqual([1, 17, 25, 75, 126]);
+    expect([0, 4, 6, 19, 32].map((i) => chainCcValue(i, 1))).toEqual([1, 14, 22, 74, 126]);
+    // As measured in Live 12.4.6 (2026-10-27) after Distribute Ranges Equally over 0–127: the first
+    // four chains get 3 values, the other 29 get 4.
+    const measured = (n: number): [number, number] => (n <= 4 ? [3 * (n - 1), 3 * n - 1] : [4 * n - 8, 4 * n - 5]);
+    for (const c of ABLETON_CHAINS) expect(chainRange(c.index), c.name).toEqual(measured(c.index + 1));
     expect(chainCcValue(2, 10)).toBe(16);
     let next = 0;
     for (const c of ABLETON_CHAINS) {
@@ -171,7 +175,7 @@ describe('chainForVoice: Evolve', () => {
 describe('the plan', () => {
   it('per part: the first colour of a part owns the channel, and the share is reported', () => {
     const plan = abletonPlan(base([colour('cyan', 'melody', { instrument: 'harp' }), colour('pink', 'melody', { instrument: 'organ' })]));
-    expect(plan.controls.get(controlKey(1, CHAIN_CC))?.value).toBe(25);
+    expect(plan.controls.get(controlKey(1, CHAIN_CC))?.value).toBe(22);
     expect(plan.shares.get('pink')).toEqual({ channel: 1, withId: 'cyan' });
   });
   it('per colour: each colour on its own channel, independent', () => {
@@ -227,7 +231,7 @@ describe('the plan', () => {
   });
   it('mapping targets: chain selectors, then macros, then channel 16, each left where ADMI wants it', () => {
     const t = abletonMappingTargets(abletonPlan(base([colour('a', 'melody', { instrument: 'harp' })])));
-    expect(t[0]).toMatchObject({ channel: 1, cc: 30, value: 25 });
+    expect(t[0]).toMatchObject({ channel: 1, cc: 30, value: 22 });
     expect(t.some((x) => x.cc === 24 && x.channel === 1)).toBe(true);
     expect(t.at(-1)?.channel).toBe(16);
   });
@@ -328,12 +332,12 @@ describe('engine: sound choices reach Ableton', () => {
     expect(ccs(30)).toHaveLength(0);
   });
 
-  it('picking Harp on the card sends CC 30 = 25 on its channel, once', () => {
+  it('picking Harp on the card sends CC 30 = 22 on its channel, once', () => {
     const { e } = engine();
     e.setMidiOut({ enabled: true, sends: 'all' }, 'p1');
     port.send.mockClear();
     e.setChannels([colour('m', 'melody', { instrument: 'harp' })]);
-    expect(ccs(30, 1).map((x) => x.d[2])).toEqual([25]);
+    expect(ccs(30, 1).map((x) => x.d[2])).toEqual([22]);
     expect(ccs(30, 10)).toHaveLength(0);
   });
 
