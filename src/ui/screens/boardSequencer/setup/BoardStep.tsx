@@ -102,20 +102,21 @@ export function BoardStep({
           border: '1px solid var(--bs-border-control)',
         }}
         >
-          <span style={{ fontWeight: 600 }}>Learn the empty board</span>
-          <p style={{ margin: 0, color: 'var(--bs-fg2)', fontSize: 13 }}>
-            Take every counter off, then press the button. ADMI remembers how the empty
-            board looks, so anything new on it is a counter. Do it again if the light
-            in the room changes.
-          </p>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <Button tone="primary" onClick={onLearnBoard} reason={running ? 'Stop the board first.' : null}>
-              {boardLearnt > 0 ? 'Learn it again' : 'Learn the board'}
-            </Button>
-            <span style={{ fontSize: 13, color: boardLearnt > 0 ? 'var(--bs-ok)' : 'var(--bs-warn)' }}>
-              {boardLearnt > 0 ? '✓ Learnt' : 'Not learnt yet'}
-            </span>
-          </div>
+          <span style={{ fontWeight: 600, color: boardLearnt > 0 ? 'var(--bs-ok)' : 'var(--bs-warn)' }}>
+            {boardLearnt > 0 ? '✓ Board found and learnt' : 'Not learnt yet'}
+          </span>
+          {/* Learning is part of Looks right; the button is on show only when it hasn't happened. */}
+          {boardLearnt === 0 && (
+            <>
+              <p style={{ margin: 0, color: 'var(--bs-fg2)', fontSize: 13 }}>
+                Take every counter off, then press the button. ADMI remembers how the empty
+                board looks, so anything new on it is a counter.
+              </p>
+              <div>
+                <Button tone="primary" onClick={onLearnBoard} reason={running ? 'Stop the board first.' : null}>Learn the board</Button>
+              </div>
+            </>
+          )}
           {learnMessage && (
             <p role="status" aria-live="polite" style={{ margin: 0, fontSize: 13, color: 'var(--bs-fg)' }}>
               {learnMessage}
@@ -125,123 +126,140 @@ export function BoardStep({
           {detection.mode !== 'board' && (boardLearnt > 0 || counterDetection === 'bands') && (
             <span role="status" style={{ fontSize: 13, color: 'var(--bs-warn)' }}>
               {counterDetection === 'bands'
-                ? 'Counters are found by colour only (the old way, chosen under For testing).'
+                ? 'Counters are found by colour only (the old way, chosen under More → For testing).'
                 : detection.reason}
             </span>
           )}
-          <details>
-            <summary style={{ cursor: 'pointer', fontSize: 13, color: 'var(--bs-fg2)' }}>For testing</summary>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 6 }}>
-              <SegmentedControl<'board' | 'bands'>
-                label="How counters are found"
-                value={counterDetection}
-                onChange={onCounterDetection}
-                options={[
-                  { value: 'board', label: 'Compare with the empty board' },
-                  { value: 'bands', label: 'By colour only (old way)' },
-                ]}
-              />
-              <p style={{ margin: 0, fontSize: 13, color: 'var(--bs-fg2)' }}>
-                Saves ten camera pictures to a file, with the corners and colours, so counter
-                detection can be tested on this real board. Say what is on the board (for
-                example &ldquo;empty&rdquo;, &ldquo;one of each colour&rdquo;, &ldquo;hand over the left side&rdquo;).
-              </p>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 13 }}>
-                What is on the board
-                <input type="text" value={testNote} onChange={(e) => setTestNote(e.target.value)} style={{ minHeight: 'var(--bs-target)' }} />
-              </label>
-              <div>
-                <Button tone="secondary" onClick={() => onSaveTestPictures(testNote)}>Save 10 test pictures</Button>
-              </div>
-              {testPicturesMessage && <span role="status" style={{ fontSize: 13 }}>{testPicturesMessage}</span>}
-            </div>
-          </details>
         </div>
       )}
 
-      <div>
-        <span style={{ fontWeight: 600, display: 'block', marginBottom: 4 }}>Squares on your board</span>
-        <SegmentedControl<BoardSquares>
-          label="Board size"
-          value={boardSquares}
-          onChange={onBoardSquares}
-          disabled={running}
-          options={[{ value: 8, label: '8 × 8' }, { value: 10, label: '10 × 10' }]}
-        />
-      </div>
-
-      <div>
-        <span style={{ fontWeight: 600, display: 'block', marginBottom: 4 }}>Rows</span>
-        <SegmentedControl<number>
-          label="Rows"
-          value={rows}
-          onChange={(v) => onGrid({ rows: v })}
-          disabled={running}
-          options={options.divisors.map((n) => ({ value: n, label: String(n) }))}
-        />
-      </div>
-      <div>
-        <span style={{ fontWeight: 600, display: 'block', marginBottom: 4 }}>Steps</span>
-        <SegmentedControl<number>
-          label="Steps"
-          value={cols}
-          onChange={(v) => onGrid({ cols: v })}
-          disabled={running}
-          options={options.divisors.map((n) => ({ value: n, label: String(n) }))}
-        />
-      </div>
-      {/* Board size and the playing grid are different things, and the screen only ever
-          shows the grid — so say which one the player will see. */}
-      <p role="status" style={{ margin: 0, fontSize: 13, color: 'var(--bs-fg2)' }}>
-        {`You will play on a ${rows} × ${cols} grid.`}
-        {boardSquares % rows === 0 && boardSquares % cols === 0 && (rows < boardSquares || cols < boardSquares)
-          ? ` Each box covers ${boardSquares / rows} × ${boardSquares / cols} squares. For one box per square, choose ${boardSquares} rows and ${boardSquares} steps.`
-          : ''}
-      </p>
-
-      <Disclosure summary="More sizes…" defaultOpen={moreOpen}>
-        <p style={{ margin: 0, fontSize: 12, color: 'var(--bs-fg2)' }}>
-          Cells won&apos;t line up with the squares; detection may be less reliable.
-        </p>
-        <SegmentedControl<number>
-          label="Rows, all sizes"
-          value={rows}
-          onChange={(v) => { onGrid({ rows: v }); setMoreOpen(true); }}
-          disabled={running}
-          options={options.moreRows.map((n) => ({ value: n, label: String(n) }))}
-        />
-        <SegmentedControl<number>
-          label="Steps, all sizes"
-          value={cols}
-          onChange={(v) => { onGrid({ cols: v }); setMoreOpen(true); }}
-          disabled={running}
-          options={options.moreCols.map((n) => ({ value: n, label: String(n) }))}
-        />
-        {offNearest && (
-          <Button
-            tone="secondary"
-            onClick={() => onGrid({ rows: options.nearest.rows, cols: options.nearest.cols })}
+      {/* Everything a usual session never needs. Opens by itself when the sizes don't line
+          up with the squares, since the fix is in here. */}
+      <details open={offNearest || undefined}>
+        <summary style={{ cursor: 'pointer', color: 'var(--bs-fg2)', minHeight: 'var(--bs-target)', display: 'flex', alignItems: 'center' }}>More</summary>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 6 }}>
+          {boardLearnt > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div>
+                <Button tone="secondary" onClick={onLearnBoard} reason={running ? 'Stop the board first.' : null}>Learn it again</Button>
+              </div>
+              <p style={{ margin: 0, color: 'var(--bs-fg2)', fontSize: 12 }}>
+                With every counter off. Do it again if the light in the room changes a lot.
+              </p>
+            </div>
+          )}
+        <div>
+          <span style={{ fontWeight: 600, display: 'block', marginBottom: 4 }}>Squares on your board</span>
+          <SegmentedControl<BoardSquares>
+            label="Board size"
+            value={boardSquares}
+            onChange={onBoardSquares}
             disabled={running}
-          >
-            {`Use ${options.nearest.rows} × ${options.nearest.cols} to match the squares`}
-          </Button>
-        )}
-      </Disclosure>
+            options={[{ value: 8, label: '8 × 8' }, { value: 10, label: '10 × 10' }]}
+          />
+        </div>
 
-      <Disclosure summary="Details">
-        <Switch
-          label="Follow small nudges"
-          checked={trackingEnabled}
-          onChange={onTrackingEnabled}
-          hint="If the board is knocked a little, the grid follows it without stopping the music. A bigger move still asks you to find the board again."
-        />
-        <Switch
-          label="Show the “Board moved?” hint"
-          checked={nudgesEnabled}
-          onChange={onNudgesEnabled}
-          hint="Tells you when the board seems to have shifted. Nothing moves on its own."
-        />
-      </Disclosure>
+        <div>
+          <span style={{ fontWeight: 600, display: 'block', marginBottom: 4 }}>Rows</span>
+          <SegmentedControl<number>
+            label="Rows"
+            value={rows}
+            onChange={(v) => onGrid({ rows: v })}
+            disabled={running}
+            options={options.divisors.map((n) => ({ value: n, label: String(n) }))}
+          />
+        </div>
+        <div>
+          <span style={{ fontWeight: 600, display: 'block', marginBottom: 4 }}>Steps</span>
+          <SegmentedControl<number>
+            label="Steps"
+            value={cols}
+            onChange={(v) => onGrid({ cols: v })}
+            disabled={running}
+            options={options.divisors.map((n) => ({ value: n, label: String(n) }))}
+          />
+        </div>
+        {/* Board size and the playing grid are different things, and the screen only ever
+            shows the grid — so say which one the player will see. */}
+        <p role="status" style={{ margin: 0, fontSize: 13, color: 'var(--bs-fg2)' }}>
+          {`You will play on a ${rows} × ${cols} grid.`}
+          {boardSquares % rows === 0 && boardSquares % cols === 0 && (rows < boardSquares || cols < boardSquares)
+            ? ` Each box covers ${boardSquares / rows} × ${boardSquares / cols} squares. For one box per square, choose ${boardSquares} rows and ${boardSquares} steps.`
+            : ''}
+        </p>
+
+        <Disclosure summary="More sizes…" defaultOpen={moreOpen}>
+          <p style={{ margin: 0, fontSize: 12, color: 'var(--bs-fg2)' }}>
+            Cells won&apos;t line up with the squares; detection may be less reliable.
+          </p>
+          <SegmentedControl<number>
+            label="Rows, all sizes"
+            value={rows}
+            onChange={(v) => { onGrid({ rows: v }); setMoreOpen(true); }}
+            disabled={running}
+            options={options.moreRows.map((n) => ({ value: n, label: String(n) }))}
+          />
+          <SegmentedControl<number>
+            label="Steps, all sizes"
+            value={cols}
+            onChange={(v) => { onGrid({ cols: v }); setMoreOpen(true); }}
+            disabled={running}
+            options={options.moreCols.map((n) => ({ value: n, label: String(n) }))}
+          />
+          {offNearest && (
+            <Button
+              tone="secondary"
+              onClick={() => onGrid({ rows: options.nearest.rows, cols: options.nearest.cols })}
+              disabled={running}
+            >
+              {`Use ${options.nearest.rows} × ${options.nearest.cols} to match the squares`}
+            </Button>
+          )}
+        </Disclosure>
+
+        <Disclosure summary="Details">
+          <Switch
+            label="Follow small nudges"
+            checked={trackingEnabled}
+            onChange={onTrackingEnabled}
+            hint="If the board is knocked a little, the grid follows it without stopping the music. A bigger move still asks you to find the board again."
+          />
+          <Switch
+            label="Show the “Board moved?” hint"
+            checked={nudgesEnabled}
+            onChange={onNudgesEnabled}
+            hint="Tells you when the board seems to have shifted. Nothing moves on its own."
+          />
+        </Disclosure>
+        <details>
+          <summary style={{ cursor: 'pointer', fontSize: 13, color: 'var(--bs-fg2)' }}>For testing</summary>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 6 }}>
+            <SegmentedControl<'board' | 'bands'>
+              label="How counters are found"
+              value={counterDetection}
+              onChange={onCounterDetection}
+              options={[
+                { value: 'board', label: 'Compare with the empty board' },
+                { value: 'bands', label: 'By colour only (old way)' },
+              ]}
+            />
+            <p style={{ margin: 0, fontSize: 13, color: 'var(--bs-fg2)' }}>
+              Saves ten camera pictures to a file, with the corners and colours, so counter
+              detection can be tested on this real board. Say what is on the board (for
+              example &ldquo;empty&rdquo;, &ldquo;one of each colour&rdquo;, &ldquo;hand over the left side&rdquo;).
+            </p>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 13 }}>
+              What is on the board
+              <input type="text" value={testNote} onChange={(e) => setTestNote(e.target.value)} style={{ minHeight: 'var(--bs-target)' }} />
+            </label>
+            <div>
+              <Button tone="secondary" onClick={() => onSaveTestPictures(testNote)}>Save 10 test pictures</Button>
+            </div>
+            {testPicturesMessage && <span role="status" style={{ fontSize: 13 }}>{testPicturesMessage}</span>}
+          </div>
+        </details>
+        </div>
+      </details>
     </>
   );
 }

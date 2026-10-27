@@ -35,7 +35,7 @@ describe('learning the empty board', () => {
   it('says it plainly: learnt or not, and no choice of how counters are found', () => {
     act(() => root.render(<BoardStep {...props()} />));
     const text = visibleText();
-    expect(text).toContain('✓ Learnt');
+    expect(text).toContain('✓ Board found and learnt');
     expect(text).not.toMatch(/Colour ranges|Against the learnt board|Counter detection/);
   });
 
@@ -55,3 +55,34 @@ describe('learning the empty board', () => {
     expect(visibleText()).toMatch(/old way/);
   });
 });
+
+describe('the Board step: the main path, the rest under More', () => {
+  const more = (): HTMLDetailsElement | undefined => [...host.querySelectorAll('details')]
+    .find((d) => d.querySelector(':scope > summary')?.textContent === 'More');
+
+  it('shows Find board and whether the board is learnt; sizes and tools are not on show', () => {
+    act(() => root.render(<BoardStep {...props()} />));
+    const text = visibleText();
+    expect(text).toContain('Find board');
+    expect(text).toContain('✓ Board found and learnt');
+    expect(text).not.toMatch(/Squares on your board|Follow small nudges|Learn it again/);
+  });
+
+  it('More holds the sizes, Learn it again, the switches and For testing', () => {
+    act(() => root.render(<BoardStep {...props()} />));
+    const t = more()?.textContent ?? '';
+    for (const s of ['Squares on your board', 'Learn it again', 'Follow small nudges', 'For testing']) expect(t).toContain(s);
+  });
+
+  it('not learnt yet: says so, and Learn the board is on show', () => {
+    act(() => root.render(<BoardStep {...props({ boardLearnt: 0 })} />));
+    expect(visibleText()).toContain('Not learnt yet');
+    expect(visibleText()).toContain('Learn the board');
+  });
+
+  it('sizes that don’t line up with the squares: More starts open', () => {
+    act(() => root.render(<BoardStep {...props({ rows: 3 })} />));
+    expect(more()?.open).toBe(true);
+  });
+});
+
