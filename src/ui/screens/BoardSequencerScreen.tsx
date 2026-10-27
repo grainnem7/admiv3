@@ -89,6 +89,7 @@ import { TRACK_SAVE_MS } from '../../tracking/handGuard/boardTrack';
 import { detectBoard, type BoardDetection } from '../../tracking/boardDetect/detectBoard';
 import { consensus, AGREE_COUNT } from '../../tracking/boardDetect/consensus';
 import { boardStillThere } from '../../tracking/boardDetect/boardStillThere';
+import { autoLearnAllowed } from './boardSequencer/learnGuard';
 import { runFrameBurst } from './boardSequencer/useFrameBurst';
 import {
   buildSquareModel, modelHsv, warpToBoard, type SquareModel,
@@ -1782,7 +1783,7 @@ export default function BoardSequencerScreen() {
    * (Learning each square exactly as it is, golden walnut and all, is the whole point of
    * the board reference.)
    */
-  const learnBoard = useCallback(() => {
+  const learnBoard = useCallback((opts: { auto?: boolean } = {}) => {
     const cfg = configRef.current;
     if (!cfg.enabled) {
       setLearnMessage('Find the board and confirm its corners first.');
@@ -1796,6 +1797,10 @@ export default function BoardSequencerScreen() {
     const total = model.squares * model.squares;
     let covered = 0;
     for (let i = 0; i < total; i++) if (model.covered[i]) covered += 1;
+    if (opts.auto && !autoLearnAllowed(covered, total, cfg.boardReference !== null)) {
+      setLearnMessage('Counters seem to be on the board, so the empty board learnt before is kept.');
+      return;
+    }
     const unusual = covered > total * 0.12
       ? ` ${covered} squares look different from the others of their colour: lighter wood or a bright patch is fine. If anything is on them, take it off and learn it again.`
       : '';
@@ -1840,7 +1845,7 @@ export default function BoardSequencerScreen() {
       // of squares, so a bare count is indistinguishable from the button doing nothing —
       // and a control that gives no sign it ran is a control you cannot trust.
       const at = new Date().toLocaleTimeString();
-      setLearnMessage(`Learnt at ${at}.${unusual}`);
+      setLearnMessage(`${opts.auto ? '✓ Board found and learnt' : 'Learnt'} at ${at}.${unusual}`);
       announce(`Board learnt from ${colours.length} squares.`);
     })();
   }, [configRef, boardModelNow, update, announce, videoRef]);
@@ -1900,9 +1905,17 @@ export default function BoardSequencerScreen() {
         homographyRef.current = null;
       }
       setCalibrating(null);
+      // The board was asked for empty: learn it, once these corners are saved.
+      learnAfterConfirmRef.current = true;
     },
     [homographyRef, videoRef, announce, boardColoursNow],
   );
+  const learnAfterConfirmRef = useRef(false);
+  useEffect(() => {
+    if (!learnAfterConfirmRef.current || !config.enabled) return;
+    learnAfterConfirmRef.current = false;
+    learnBoard({ auto: true });
+  }, [config.corners, config.enabled, learnBoard]);
 
   const stop = useCallback(() => {
     startingRef.current = null;
@@ -3991,7 +4004,7 @@ export default function BoardSequencerScreen() {
       running={running}
       editing={calibrating !== null}
       boardLearnt={config.boardColours.length}
-      onLearnBoard={learnBoard}
+      onLearnBoard={() => learnBoard()}
       learnMessage={learnMessage}
       detection={detectionSetup(config)}
       counterDetection={config.counterDetection}
@@ -4027,7 +4040,7 @@ export default function BoardSequencerScreen() {
         keeps: pendingColour.keeps,
       }}
       boardLearnt={config.boardColours.length}
-      onLearnBoard={learnBoard}
+      onLearnBoard={() => learnBoard()}
       learnMessage={learnMessage}
       onFindColours={() => void findColours()}
       finding={findingColours}
