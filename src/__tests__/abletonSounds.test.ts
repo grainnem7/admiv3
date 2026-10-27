@@ -1,13 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
 import {
   ABLETON_CHAINS, abletonMappingTargets, abletonPlan, CHAIN_CC, chainCcValue, chainFor, chainForVoice, chainRange,
-  changedControls, controlKey, counterControls, grooveCc, type AbletonPlanInput,
+  changedControls, chainOnChannel, controlKey, counterControls, filledChains, grooveCc, type AbletonPlanInput,
 } from '../midi/abletonSounds';
-import { allEvolveVoices } from '../audio/evolve/evolve';
+import { allEvolveVoices, evolveVoicesFor } from '../audio/evolve/evolve';
 import { soundsFor } from '../ui/screens/boardSequencer/soundCatalogue';
 import { SOUND_WORLDS } from '../audio/worlds/soundWorlds';
 import {
-  assignColourChannels, channelFor, channelsInUse, loopSlotOf, testSequenceEvents, TEST_CHANNELS, TEST_GAP_MS,
+  assignColourChannels, channelFor, channelsInUse, loopSlotOf, ROLE_CHANNEL, testSequenceEvents, TEST_CHANNELS, TEST_GAP_MS,
 } from '../midi/boardMidi';
 import type { ColourChannel } from '../tracking/boardColours';
 import { aiOffLine } from '../ui/screens/boardSequencer/aiStatus';
@@ -65,6 +65,48 @@ describe('the chain list', () => {
       }
     }
     for (const [chain, keys] of byChain) expect([...keys], `chain ${chain}`).toHaveLength(1);
+  });
+});
+
+describe('which slots a track fills', () => {
+  const part = { channelMode: 'part' as const };
+  const JOB_CHANNEL = { melody: ROLE_CHANNEL.melody, chord: ROLE_CHANNEL.chord, bass: ROLE_CHANNEL.bass } as const;
+
+  it('every sound a job or Evolve can reach is filled on its track', () => {
+    for (const job of ['melody', 'chord', 'bass'] as const) {
+      const filled = filledChains(JOB_CHANNEL[job], part);
+      for (const o of soundsFor(job)) expect(filled.has(chainFor(colour('a', job, { instrument: o.key }), 'none') as number), `${job}: ${o.key}`).toBe(true);
+      const voices = evolveVoicesFor(job);
+      expect(voices.length, job).toBeGreaterThan(0);
+      for (const v of voices) expect(filled.has(chainForVoice(v)), `${job}: Evolve ${v.name}`).toBe(true);
+      for (const w of [0, 1, 2, 3]) expect(filled.has(w)).toBe(true);
+      expect(filled.has(job === 'bass' ? 12 : 5)).toBe(true);
+    }
+  });
+
+  it('melody does not fill bass-only sounds', () => {
+    const melody = filledChains(1, part);
+    for (const chain of [18, 22, 31]) expect(melody.has(chain), String(chain)).toBe(false);
+  });
+
+  it('the band, Extra notes, drums and loops fill only the World chains', () => {
+    for (const ch of [10, 11, 12, 13, 4, 5, 6, 7, 8, 9]) {
+      expect([...filledChains(ch, { channelMode: 'part', loopChannels: true })].sort((a, b) => a - b), `ch ${ch}`).toEqual([0, 1, 2, 3]);
+    }
+  });
+
+  it('per-colour mode: every colour channel fills all 33', () => {
+    expect(filledChains(1, { channelMode: 'colour' }).size).toBe(33);
+    expect(filledChains(14, { channelMode: 'colour' }).size).toBe(33);
+    expect(filledChains(11, { channelMode: 'colour' }).size).toBe(4);
+  });
+
+  it('a pick outside the track’s slots plays the World instead', () => {
+    const plan = abletonPlan(base([colour('m', 'melody', { instrument: 'tuba' })], { world: 'lofi' }));
+    expect(plan.chains.get(1)).toBe(1);
+    expect(plan.controls.get(controlKey(1, CHAIN_CC))?.value).toBe(chainCcValue(1, 1));
+    expect(chainOnChannel(colour('m', 'melody', { instrument: 'tuba' }), 1, 'lofi', part)).toBe(1);
+    expect(chainOnChannel(colour('m', 'melody', { instrument: 'flute' }), 1, 'lofi', part)).toBe(19);
   });
 });
 

@@ -118,7 +118,7 @@ import { useBoardMidiPort } from './boardSequencer/useBoardMidiPort';
 import { abletonReadyItem, abletonTracksItem } from './boardSequencer/abletonReady';
 import { aiOffLine } from './boardSequencer/aiStatus';
 import { assignColourChannels, BoardMidiSender, channelFor, colourChannelMap, configToSoundFrom, effectiveSound } from '../../midi/boardMidi';
-import { ABLETON_CHAINS, chainFor, previewEvents } from '../../midi/abletonSounds';
+import { ABLETON_CHAINS, chainOnChannel, previewEvents } from '../../midi/abletonSounds';
 import { MIDIManager } from '../../midi/MIDIManager';
 import { previewChainCc, previewNotesFor, previewRoute, SoundAuditioner } from '../../audio/soundPreview';
 import { LoopEditor } from './boardSequencer/components/LoopEditor';
@@ -854,7 +854,7 @@ export default function BoardSequencerScreen() {
       colourChannels: config.midiChannelMode === 'colour' ? colourChannelMap(config.channels) : undefined,
     });
     if (ch === null) return own;
-    const chain = chainFor(c, config.soundWorld);
+    const chain = chainOnChannel(c, ch, config.soundWorld, { channelMode: config.midiChannelMode, loopChannels: config.midiLoopChannels });
     const ableton = `MIDI ch ${ch}${chain !== null ? ` · ${ABLETON_CHAINS[chain].name}` : ''}`;
     return soundFrom === 'both' && own ? `${own} · ${ableton}` : ableton;
   };

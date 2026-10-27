@@ -14,13 +14,14 @@
  * Everything here is pure: what should be sent, never the sending.
  */
 
-import type { NamedVoice } from '../audio/evolve/evolve';
+import { evolveVoicesFor, type NamedVoice } from '../audio/evolve/evolve';
 import type { LayeredVoiceSpec, SoundWorldChoice } from '../audio/worlds/soundWorlds';
 import { synthLayerOf, worldOf } from '../audio/worlds/soundWorlds';
 import { BRIGHT, ENERGY, LOUD, SPACE_ALL, SPACE_SEND, stepCc } from '../audio/soundSteps';
 import type { ColourChannel } from '../tracking/boardColours';
+import { soundsFor } from '../ui/screens/boardSequencer/soundCatalogue';
 import {
-  BAND_BASS_CHANNEL, BAND_PAD_CHANNEL, channelFor, EXTRA_NOTES_CHANNEL, gainToCc, hasColourChannel,
+  BAND_BASS_CHANNEL, BAND_PAD_CHANNEL, channelFor, colourChannelPool, EXTRA_NOTES_CHANNEL, gainToCc, hasColourChannel,
   LOOP_CHANNELS, ROLE_CHANNEL, VOLUME_CHANNEL, type MappingTarget, type MidiChannelMode, type MidiEvent,
 } from './boardMidi';
 
@@ -135,6 +136,56 @@ const SYNTH_CHAIN: Record<string, number> = {
   bell: BELLS, pluck: 27, keys: 28, pad: 29, supersaw: 30, sub: 31, sawBass: 32,
 };
 
+const WORLD_CHAINS: readonly number[] = [0, 1, 2, 3];
+
+/** What a part's track must hold: the World chains, its default, every sound its job offers and every Evolve voice for it. */
+function partChains(role: 'melody' | 'chord' | 'bass'): ReadonlySet<number> {
+  const out = new Set<number>([...WORLD_CHAINS, role === 'bass' ? ELECTRIC_BASS : ELECTRIC_PIANO]);
+  for (const o of soundsFor(role)) {
+    const chain = chainFor({ role, instrument: o.key }, 'none');
+    if (chain !== null) out.add(chain);
+  }
+  for (const v of evolveVoicesFor(role)) out.add(chainForVoice(v));
+  return out;
+}
+
+let partSets: Record<'melody' | 'chord' | 'bass', ReadonlySet<number>> | null = null;
+const ALL_CHAINS: ReadonlySet<number> = new Set(ABLETON_CHAINS.map((c) => c.index));
+const WORLD_ONLY: ReadonlySet<number> = new Set(WORLD_CHAINS);
+
+/**
+ * The chains a track's rack holds as real instruments; the rest are placeholders. Melody,
+ * Chords and Bass hold what their job can reach; the band, Extra notes, the drums and the
+ * loops only follow the World. In per-colour mode a colour's track can play any job, so it
+ * holds everything; so does any channel not named here, to be safe.
+ */
+export function filledChains(channel: number, opts: { channelMode: MidiChannelMode; loopChannels?: boolean }): ReadonlySet<number> {
+  const followers = [ROLE_CHANNEL.drums, BAND_PAD_CHANNEL, BAND_BASS_CHANNEL, EXTRA_NOTES_CHANNEL, ...(opts.loopChannels ? LOOP_CHANNELS : [])];
+  if (opts.channelMode === 'colour') {
+    if (colourChannelPool(opts.loopChannels).includes(channel)) return ALL_CHAINS;
+    return followers.includes(channel) ? WORLD_ONLY : ALL_CHAINS;
+  }
+  partSets ??= { melody: partChains('melody'), chord: partChains('chord'), bass: partChains('bass') };
+  if (channel === ROLE_CHANNEL.melody) return partSets.melody;
+  if (channel === ROLE_CHANNEL.chord) return partSets.chord;
+  if (channel === ROLE_CHANNEL.bass) return partSets.bass;
+  return followers.includes(channel) ? WORLD_ONLY : ALL_CHAINS;
+}
+
+/**
+ * The chain a colour's track is sent to: its own (or Evolve's) when that track holds it,
+ * else the World's chain, so a pick the track doesn't hold (an older choice kept through a
+ * job change) plays the World's sound, never a placeholder.
+ */
+export function chainOnChannel(
+  ch: Pick<ColourChannel, 'role' | 'instrument'>, channel: number, world: SoundWorldChoice,
+  opts: { channelMode: MidiChannelMode; loopChannels?: boolean }, evolved: NamedVoice | null = null,
+): number | null {
+  const chain = evolved ? chainForVoice(evolved) : chainFor(ch, world);
+  if (chain === null) return null;
+  return filledChains(channel, opts).has(chain) ? chain : worldChain(world);
+}
+
 /** The nearest chain to an Evolve instrument: by its sample first, then by its synth layer. */
 export function chainForVoice(voice: NamedVoice | LayeredVoiceSpec | string): number {
   const spec: LayeredVoiceSpec | string = typeof voice === 'object' && 'spec' in voice ? voice.spec : voice;
@@ -209,7 +260,7 @@ export function abletonPlan(input: AbletonPlanInput): AbletonPlan {
     }
     owner.set(channel, ch.id);
     const evolved = input.evolveVoices?.get(ch.id) ?? null;
-    const chain = evolved ? chainForVoice(evolved) : chainFor(ch, input.world);
+    const chain = chainOnChannel(ch, channel, input.world, { channelMode: input.channelMode, loopChannels: input.loopChannels }, evolved);
     if (chain === null) continue;
     chains.set(channel, chain);
     set(channel, CHAIN_CC, chainCcValue(chain, channel));

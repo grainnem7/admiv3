@@ -19,7 +19,7 @@ import type { BoardSequencerStored } from '../../../../profiles/BoardSequencerCo
 import { DRUM_OPTIONS, soundNameFor } from '../soundOptions';
 import { soundOptionGroups, soundOptionName, soundsFor } from '../soundCatalogue';
 import { channelFor, colourChannelMap, configToSoundFrom } from '../../../../midi/boardMidi';
-import { chainFor, chainLabel } from '../../../../midi/abletonSounds';
+import { chainLabel, chainOnChannel } from '../../../../midi/abletonSounds';
 import { playsTune } from '../../../../songs/beyondLoop';
 import type { ChannelSoundPatch } from './SoundTab';
 
@@ -240,7 +240,7 @@ function ColourMore({ c, p }: { c: ColourChannel; p: ColourTableProps }): JSX.El
     channelMode: config.midiChannelMode,
     colourChannels: config.midiChannelMode === 'colour' ? colourChannelMap(config.channels) : undefined,
   });
-  const chain = soundFrom === 'admi' ? null : chainFor(c, config.soundWorld);
+  const chain = midiCh === null ? null : chainOnChannel(c, midiCh, config.soundWorld, { channelMode: config.midiChannelMode, loopChannels: config.midiLoopChannels });
   const share = soundFrom === 'admi' ? undefined : p.abletonShares?.get(c.id);
   const shareName = share ? describeChannel(config.channels.find((x) => x.id === share.withId) ?? c) : null;
   const live = p.liveValue?.(c) ?? null;

@@ -145,6 +145,15 @@ describe('the colour table', () => {
     expect(sound.querySelector('optgroup[label="Wind and brass"] option[value="flute"]')).not.toBeNull();
   });
 
+  it('the Ableton note names what Ableton actually plays', () => {
+    render(props({ config: {
+      ...DEFAULT_BOARD_SEQUENCER_CONFIG, soundWorld: 'warm', midiEnabled: true, midiKeepSound: false,
+      channels: channels.map((c) => (c.id === 'm' ? { ...c, instrument: 'tuba' } : c)),
+    } }));
+    act(() => button(row('Red'), /^More for Red/).click());
+    expect(host.textContent).toContain('Ableton sound: World: Warm (chain 1)');
+  });
+
   it('↶ is off after a job change, so a drum name never lands on an instrument', () => {
     live();
     choose(select(row('Red'), 'Red: sound'), 'harp');

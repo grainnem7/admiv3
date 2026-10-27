@@ -105,6 +105,11 @@ export function allEvolveVoices(): NamedVoice[] {
   return Object.values(PALETTE).flatMap((parts) => Object.values(parts).flat());
 }
 
+/** Every instrument Evolve can move one part to, in every world (what that part's Ableton track must hold). */
+export function evolveVoicesFor(role: 'melody' | 'chord' | 'bass'): NamedVoice[] {
+  return Object.values(PALETTE).flatMap((parts) => parts[role]);
+}
+
 export interface EvolveState {
   /** Multiplies the part's own Tone (brightness). */
   brightness: number;

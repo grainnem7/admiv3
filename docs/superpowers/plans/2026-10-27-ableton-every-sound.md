@@ -85,7 +85,7 @@
 - [ ] **Step 2: Run** `npx vitest run src/__tests__/abletonSounds.test.ts src/__tests__/ColourTable.test.tsx`. Expected: the new tests FAIL (missing exports; Tuba sent as chain 18).
 - [ ] **Step 3: Implement** the three exports.
   - `filledChains`:
-    - part mode: channels 1/2/3 use their job's set;
+    - part mode: the Melody, Bass and Chords channels (`ROLE_CHANNEL`: 1, 2, 3) use their job's set;
     - drums, band, Extra notes and loop channels are World-only;
     - in colour mode, channels in `colourChannelPool(loopChannels)` get all;
     - any other channel gets all, the safe side.

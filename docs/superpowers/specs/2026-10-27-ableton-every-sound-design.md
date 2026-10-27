@@ -101,7 +101,7 @@ Sub bass → 31, and so on.
 A pure function in the code gives, for a channel, the set of chains that must hold a real
 instrument:
 
-- **Melody (1), Chords (2), Bass (3):** World 0–3; every sound `soundsFor(job)` offers; every
+- **Melody (1), Bass (2), Chords (3):** World 0–3; every sound `soundsFor(job)` offers; every
   Evolve voice for that job in every World, mapped to its chain; the "My picks" default
   (Electric piano for melody and chords, Electric bass for bass).
 - **Band (11, 12), Extra notes (13), Loops (4–9):** World 0–3 only.
