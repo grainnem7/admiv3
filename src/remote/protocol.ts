@@ -36,8 +36,13 @@ export const REMOTE_PLAY_EXTRAS: RemotePlayExtra[] = ['endPiece', 'nextScene', '
 export interface RemoteTouch {
   /** A pad acts when the finger lands, or only when it lifts (for a finger that lands roughly). */
   actOn: 'touch' | 'lift';
-  /** How long the second tap of a two-tap pad (End piece, Stop all) is waited for, in seconds. */
+  /** How long the second tap of a two-tap pad (End piece, Stop all, Mute) is waited for, in seconds. */
   confirmSec: number;
+  /**
+   * The bounce guard: a second touch sooner than this after the first (ms) is not the
+   * confirming tap. A shaky press often lands as two touches 60-250 ms apart.
+   */
+  secondTapMinMs: number;
   /** Pads added to the Play page. */
   playExtras: RemotePlayExtra[];
   /** Loops (by slot) with a pad on the Play page. */
@@ -45,8 +50,10 @@ export interface RemoteTouch {
   /** Show Next scene on the iPad at all. */
   showNext: boolean;
 }
-export const DEFAULT_REMOTE_TOUCH: RemoteTouch = { actOn: 'touch', confirmSec: 6, playExtras: [], playLoops: [], showNext: true };
+export const DEFAULT_REMOTE_TOUCH: RemoteTouch = { actOn: 'touch', confirmSec: 6, secondTapMinMs: 500, playExtras: [], playLoops: [], showNext: true };
 export const CONFIRM_SECONDS = [3, 6, 10] as const;
+/** The bounce guard's choices: all well under the shortest second-tap window. */
+export const SECOND_TAP_MIN_MS = [300, 500, 800, 1200] as const;
 
 export function sanitizeRemoteTouch(v: unknown): RemoteTouch {
   const o = (typeof v === 'object' && v !== null ? v : {}) as Record<string, unknown>;
@@ -54,6 +61,7 @@ export function sanitizeRemoteTouch(v: unknown): RemoteTouch {
   return {
     actOn: o.actOn === 'lift' ? 'lift' : 'touch',
     confirmSec: (CONFIRM_SECONDS as readonly number[]).includes(o.confirmSec as number) ? (o.confirmSec as number) : d.confirmSec,
+    secondTapMinMs: (SECOND_TAP_MIN_MS as readonly number[]).includes(o.secondTapMinMs as number) ? (o.secondTapMinMs as number) : d.secondTapMinMs,
     playExtras: Array.isArray(o.playExtras) ? REMOTE_PLAY_EXTRAS.filter((x) => (o.playExtras as unknown[]).includes(x)) : [],
     playLoops: Array.isArray(o.playLoops)
       ? [...new Set((o.playLoops as unknown[]).filter((x): x is number => typeof x === 'number' && Number.isInteger(x) && x >= 0 && x < 8))].sort((a, b) => a - b)
@@ -61,6 +69,21 @@ export function sanitizeRemoteTouch(v: unknown): RemoteTouch {
     showNext: o.showNext !== false,
   };
 }
+
+/**
+ * A two-tap pad (End piece, Stop all, Mute), touched at `now`: the first tap arms it, and a
+ * second tap confirms it only if it comes at least `minMs` after the arming tap and inside
+ * the window. A touch sooner than `minMs` is a bounce of the same press: it neither
+ * confirms nor re-arms, so the wait is still timed from the first touch. Once the window
+ * has lapsed, a tap arms again.
+ */
+export function secondTap(
+  armedAt: number | null, now: number, rule: { minMs: number; windowMs: number },
+): 'arm' | 'confirm' | 'ignore' {
+  if (armedAt === null || now - armedAt >= rule.windowMs) return 'arm';
+  return now - armedAt < rule.minMs ? 'ignore' : 'confirm';
+}
+
 export interface RemoteScene { name: string; active: boolean }
 
 /**

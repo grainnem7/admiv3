@@ -138,8 +138,120 @@ test('the iPad joins with the code, shows the piece, and its End piece reaches t
   await expect(ipad.getByText('Now: Arrival')).toBeVisible();
   const end = ipad.getByRole('button', { name: 'End the piece' });
   await end.dispatchEvent('pointerdown', { pointerType: 'touch', pointerId: 1, width: 30, height: 30 });
+  await ipad.waitForTimeout(600); // a real second tap, not a bounce
   await ipad.getByRole('button', { name: 'Tap again to end the piece' }).dispatchEvent('pointerdown', { pointerType: 'touch', pointerId: 1, width: 30, height: 30 });
   await expect(page.getByRole('button', { name: 'Cancel the ending' }).first()).toBeVisible();
+  expect(pageErrors(page)).toEqual([]);
+});
+
+test("a bounce on the iPad's End piece never ends the piece; a second tap after it does", async ({ page, context }) => {
+  await openLaptopBoard(page);
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1]]);
+  await makePlan(page);
+  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await page.getByRole('tab', { name: 'Connections' }).click();
+  await page.getByRole('switch', { name: 'iPad controls' }).click();
+  // A new player's iPad has the safe show layout: End piece is on the page Tim plays on.
+  await expect(page.getByRole('checkbox', { name: 'End piece' })).toBeChecked();
+  // The shortest window, so each try can start afresh sooner.
+  await page.getByRole('radiogroup', { name: 'Time for the second tap' }).getByRole('radio', { name: '3 seconds' }).click();
+  const code = await page.evaluate(() => localStorage.getItem('admi-remote-code'));
+  await startPiece(page);
+
+  const ipad = await context.newPage();
+  await ipad.setViewportSize({ width: 1180, height: 820 });
+  await ipad.goto(`/?remote=${code}`);
+  await expect(ipad.getByText('Now: Arrival')).toBeVisible();
+  const touch = { pointerType: 'touch', pointerId: 1, width: 30, height: 30 };
+  const endPad = ipad.getByRole('button', { name: /end the piece/i }); // "End the piece" or "Tap again to end the piece"
+  const ending = page.getByRole('button', { name: 'Cancel the ending' });
+  for (const gap of [60, 120, 250]) {
+    await expect(ipad.getByRole('button', { name: 'End the piece', exact: true })).toBeVisible({ timeout: 10_000 });
+    // One shaky press: two touches this far apart.
+    await endPad.dispatchEvent('pointerdown', touch);
+    await ipad.waitForTimeout(gap);
+    await endPad.dispatchEvent('pointerdown', touch);
+    // It only got ready: the piece plays on.
+    await expect(ipad.getByRole('button', { name: 'Tap again to end the piece' })).toBeVisible();
+    await page.waitForTimeout(800);
+    await expect(ending).toHaveCount(0);
+  }
+  // A real second tap, after the bounce guard and inside the window, ends it.
+  await expect(ipad.getByRole('button', { name: 'End the piece', exact: true })).toBeVisible({ timeout: 10_000 });
+  await endPad.dispatchEvent('pointerdown', touch);
+  await ipad.waitForTimeout(700);
+  await endPad.dispatchEvent('pointerdown', touch);
+  await expect(ending.first()).toBeVisible();
+  expect(pageErrors(page)).toEqual([]);
+});
+
+test('"when the finger lifts": a real touch that slides off a pad before lifting does nothing', async ({ page, context }) => {
+  await openLaptopBoard(page);
+  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await page.getByRole('tab', { name: 'Connections' }).click();
+  await page.getByRole('switch', { name: 'iPad controls' }).click();
+  await page.getByRole('radiogroup', { name: 'A pad acts' }).getByRole('radio', { name: 'When the finger lifts' }).click();
+  const code = await page.evaluate(() => localStorage.getItem('admi-remote-code'));
+
+  const ipad = await context.newPage();
+  await ipad.setViewportSize({ width: 1180, height: 820 });
+  // Chrome's own touch input, as on an iPad: the browser holds a touch on the pad it lands
+  // on (a dispatched pointer event would not show that).
+  const cdp = await context.newCDPSession(ipad);
+  await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
+  const finger = (type: 'touchStart' | 'touchMove' | 'touchEnd', x = 0, y = 0) => cdp.send('Input.dispatchTouchEvent', {
+    type, touchPoints: type === 'touchEnd' ? [] : [{ x, y, radiusX: 15, radiusY: 15, force: 1, id: 1 }],
+  });
+  await ipad.goto(`/?remote=${code}`);
+  // New idea turns Extra notes on, which its strip shows: that is how a press is seen here.
+  const extraNotes = ipad.getByRole('slider', { name: 'Extra notes' });
+  await expect(extraNotes).toHaveAttribute('aria-valuetext', 'Off');
+  const box = (await ipad.getByRole('button', { name: /New idea/ }).boundingBox())!;
+  const [x, y] = [box.x + box.width / 2, box.y + box.height / 2];
+
+  // Lands on New idea, slides well off it (to the status line at the top), lifts there.
+  await finger('touchStart', x, y);
+  for (const step of [0.25, 0.5, 0.75, 1]) await finger('touchMove', x, y - (y - 20) * step);
+  await finger('touchEnd');
+  await ipad.waitForTimeout(1500);
+  await expect(extraNotes).toHaveAttribute('aria-valuetext', 'Off');
+
+  // Lands, slides off, comes back, lifts on the pad: still nothing.
+  await finger('touchStart', x, y);
+  await finger('touchMove', x, 20);
+  await finger('touchMove', x, y);
+  await finger('touchEnd');
+  await ipad.waitForTimeout(1500);
+  await expect(extraNotes).toHaveAttribute('aria-valuetext', 'Off');
+
+  // The same pad, landed on and lifted from: it works.
+  await finger('touchStart', x, y);
+  await finger('touchEnd');
+  await expect(extraNotes).toHaveAttribute('aria-valuetext', /%/);
+  expect(pageErrors(page)).toEqual([]);
+});
+
+test('"Use the safe show layout" sets out the iPad for the show and says what it did', async ({ page }) => {
+  await openLaptopBoard(page);
+  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await page.getByRole('tab', { name: 'Connections' }).click();
+  await page.getByRole('switch', { name: 'iPad controls' }).click();
+  // A new player starts with it.
+  await expect(page.getByText('✓ The iPad has the safe show layout.')).toBeVisible();
+  // Things added back for a rehearsal...
+  await page.getByRole('checkbox', { name: 'Mute', exact: true }).check();
+  await page.getByRole('checkbox', { name: 'Loops & scenes page' }).check();
+  await page.getByRole('checkbox', { name: '🔒 Speed' }).uncheck();
+  await expect(page.getByText('✓ The iPad has the safe show layout.')).toHaveCount(0);
+  // ...and one button for the show.
+  await page.getByRole('button', { name: 'Use the safe show layout' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Done: the iPad now shows only the Extra notes strip, New idea and End piece' })).toBeVisible();
+  await expect(page.getByRole('checkbox', { name: 'Mute', exact: true })).not.toBeChecked();
+  await expect(page.getByRole('checkbox', { name: 'Loops & scenes page' })).not.toBeChecked();
+  await expect(page.getByRole('checkbox', { name: '🔒 Speed' })).toBeChecked();
+  await expect(page.getByRole('checkbox', { name: 'Extra notes', exact: true })).toBeChecked();
+  await expect(page.getByRole('checkbox', { name: 'End piece' })).toBeChecked();
   expect(pageErrors(page)).toEqual([]);
 });
 
@@ -245,6 +357,7 @@ test('the iPad Loops page shows only the saved loops, and a tap turns one on and
   await page.getByRole('button', { name: 'Play', exact: true }).click();
   await page.getByRole('tab', { name: 'Connections' }).click();
   await page.getByRole('switch', { name: 'iPad controls' }).click();
+  await page.getByRole('checkbox', { name: 'Loops & scenes page' }).check();
   const code = await page.evaluate(() => localStorage.getItem('admi-remote-code'));
   await page.getByRole('button', { name: '▶ Play' }).first().click();
 
@@ -267,5 +380,40 @@ test('the iPad Loops page shows only the saved loops, and a tap turns one on and
   await ipad.waitForTimeout(700);
   await ipad.getByRole('button', { name: /^Bells: / }).dispatchEvent('pointerdown', touch);
   await expect(ipad.getByRole('button', { name: /^Bells: (OFF|stopping|fading out)/ })).toBeVisible({ timeout: 15_000 });
+  expect(pageErrors(page)).toEqual([]);
+});
+
+test('an iPad loop tap while the laptop is stopped is refused, says why, and Play brings no loop in', async ({ page, context }) => {
+  await openLaptopBoard(page);
+  await pieceStep(page, 'Loops');
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1], [5, 3]]);
+  await page.getByRole('button', { name: 'Save the board here' }).first().click();
+  await page.getByRole('textbox', { name: 'Name of loop 1' }).fill('Bells');
+  await page.getByRole('button', { name: 'Clear the board' }).click();
+  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await page.getByRole('tab', { name: 'Connections' }).click();
+  await page.getByRole('switch', { name: 'iPad controls' }).click();
+  await page.getByRole('checkbox', { name: 'Loops & scenes page' }).check();
+  const code = await page.evaluate(() => localStorage.getItem('admi-remote-code'));
+
+  const ipad = await context.newPage();
+  await ipad.setViewportSize({ width: 1180, height: 820 });
+  await ipad.goto(`/?remote=${code}`);
+  await expect(ipad.getByText('Connected · press Play on the laptop')).toBeVisible();
+  const touch = { pointerType: 'touch', pointerId: 1, width: 30, height: 30 };
+  await ipad.getByRole('tab', { name: 'Loops', exact: true }).dispatchEvent('pointerdown', touch);
+  await ipad.getByRole('button', { name: /^Bells: OFF/ }).dispatchEvent('pointerdown', touch);
+  // Refused, in words, on the iPad; nothing waits to start.
+  await expect(ipad.getByRole('alert')).toHaveText('Press Play on the laptop first');
+  await expect(ipad.getByRole('button', { name: /^Bells: OFF/ })).toBeVisible();
+  // ▶ Play on the laptop: the board plays, and no loop comes in by itself.
+  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await expect(ipad.getByText('Connected · playing')).toBeVisible();
+  await page.waitForTimeout(3000);
+  await expect(ipad.getByRole('button', { name: /^Bells: OFF/ })).toBeVisible();
+  await page.getByRole('button', { name: 'Make a piece', exact: true }).click();
+  await expect(page.getByRole('listitem', { name: /^Loop 1: Bells/ })).toBeVisible();
+  await expect(page.getByRole('listitem', { name: /^Loop 1: Bells, (▶ playing|starting|fading in)/ })).toHaveCount(0);
   expect(pageErrors(page)).toEqual([]);
 });

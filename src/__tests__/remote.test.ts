@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { WebSocket } from 'ws';
-import { DEFAULT_REMOTE_TOUCH, sanitizeRemoteTouch } from '../remote/protocol';
+import { CONFIRM_SECONDS, DEFAULT_REMOTE_TOUCH, sanitizeRemoteTouch, SECOND_TAP_MIN_MS, secondTap } from '../remote/protocol';
 import {
   dynamicsFromValue, isRemoteCode, makeRemoteCode, parseRemoteMessage, REMOTE_PATH, stripValue,
   STRIP_STEP, tempoFromValue, TEMPO_MAX, TEMPO_MIN, valueFromTempo, valueFromVelocity,
@@ -283,8 +283,62 @@ describe('the clock on the iPad, and the End and Capture pads', () => {
 describe('the player touch settings', () => {
   it('are made safe: unknown pads dropped, loops in range, the second-tap window one of the choices', () => {
     expect(sanitizeRemoteTouch(null)).toEqual(DEFAULT_REMOTE_TOUCH);
-    expect(sanitizeRemoteTouch({ actOn: 'lift', confirmSec: 10, playExtras: ['endPiece', 'explode'], playLoops: [3, 3, 9, -1, 1], showNext: false }))
-      .toEqual({ actOn: 'lift', confirmSec: 10, playExtras: ['endPiece'], playLoops: [1, 3], showNext: false });
+    expect(sanitizeRemoteTouch({ actOn: 'lift', confirmSec: 10, secondTapMinMs: 800, playExtras: ['endPiece', 'explode'], playLoops: [3, 3, 9, -1, 1], showNext: false }))
+      .toEqual({ actOn: 'lift', confirmSec: 10, secondTapMinMs: 800, playExtras: ['endPiece'], playLoops: [1, 3], showNext: false });
     expect(sanitizeRemoteTouch({ confirmSec: 4 }).confirmSec).toBe(DEFAULT_REMOTE_TOUCH.confirmSec);
+  });
+
+  it('the bounce guard is half a second unless chosen, and an old or odd value falls back to that', () => {
+    expect(DEFAULT_REMOTE_TOUCH.secondTapMinMs).toBe(500);
+    // A player saved before the guard existed.
+    expect(sanitizeRemoteTouch({ actOn: 'lift', confirmSec: 3 }).secondTapMinMs).toBe(500);
+    for (const ms of SECOND_TAP_MIN_MS) expect(sanitizeRemoteTouch({ secondTapMinMs: ms }).secondTapMinMs).toBe(ms);
+    for (const odd of [0, 120, -500, 99999, '500', null]) expect(sanitizeRemoteTouch({ secondTapMinMs: odd }).secondTapMinMs).toBe(500);
+    // Every choice is shorter than the shortest window, so a second tap can always count.
+    for (const ms of SECOND_TAP_MIN_MS) expect(ms).toBeLessThan(Math.min(...CONFIRM_SECONDS) * 1000);
+  });
+
+  it('travels to the iPad with the rest of the state', () => {
+    const base = { values: { tempo: 0, dynamics: 0, fill: 0, evolve: 0 }, labels: { tempo: '', dynamics: '', fill: '', evolve: '' } };
+    const m = parseRemoteMessage({ type: 'state', state: { ...base, touch: { ...DEFAULT_REMOTE_TOUCH, secondTapMinMs: 1200 } } });
+    expect(m && m.type === 'state' ? m.state.touch?.secondTapMinMs : null).toBe(1200);
+  });
+});
+
+describe('two taps, safe from a bounce (End piece, Stop all, Mute)', () => {
+  const rule = { minMs: 500, windowMs: 6000 };
+
+  it('the first tap arms', () => {
+    expect(secondTap(null, 1000, rule)).toBe('arm');
+  });
+
+  it('a bounce 60, 120 or 250 ms after the arming tap never confirms, and does not re-arm', () => {
+    for (const gap of [60, 120, 250]) expect(secondTap(1000, 1000 + gap, rule)).toBe('ignore');
+    expect(secondTap(1000, 1000 + 499, rule)).toBe('ignore');
+  });
+
+  it('a second tap 600 ms after the first, inside the window, confirms', () => {
+    expect(secondTap(1000, 1600, rule)).toBe('confirm');
+    expect(secondTap(1000, 1500, rule)).toBe('confirm');
+    expect(secondTap(1000, 1000 + 5999, rule)).toBe('confirm');
+  });
+
+  it('is timed from the arming tap, not from the bounces after it', () => {
+    // Touches at 0, 60, 250 (one shaky press), then a deliberate tap at 600.
+    const armedAt = 1000;
+    expect(secondTap(armedAt, 1060, rule)).toBe('ignore');
+    expect(secondTap(armedAt, 1250, rule)).toBe('ignore');
+    expect(secondTap(armedAt, 1600, rule)).toBe('confirm');
+  });
+
+  it('after the window lapses, a tap arms again rather than confirming', () => {
+    expect(secondTap(1000, 1000 + 6000, rule)).toBe('arm');
+    expect(secondTap(1000, 1000 + 60_000, rule)).toBe('arm');
+  });
+
+  it('follows the player setting', () => {
+    expect(secondTap(1000, 1600, { minMs: 800, windowMs: 3000 })).toBe('ignore');
+    expect(secondTap(1000, 1900, { minMs: 800, windowMs: 3000 })).toBe('confirm');
+    expect(secondTap(1000, 4100, { minMs: 800, windowMs: 3000 })).toBe('arm');
   });
 });

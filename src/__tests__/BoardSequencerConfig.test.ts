@@ -6,8 +6,11 @@ import {
   clearBoardSequencerConfig,
   DEFAULT_BOARD_SEQUENCER_CONFIG,
   referencedChannelIds,
+  safeShowLayout,
+  isSafeShowLayout,
   type BoardSequencerStored,
 } from '../profiles/BoardSequencerConfig';
+import { DEFAULT_REMOTE_TOUCH } from '../remote/protocol';
 
 describe('BoardSequencerConfig', () => {
   beforeEach(() => localStorage.clear());
@@ -451,5 +454,65 @@ describe('two lanes that would sit on top of each other', () => {
     });
     expect(cfg.loopZone).toEqual({ mode: 'row', index: 3 });
     expect(cfg.loopBankEnabled).toBe(true);
+  });
+});
+
+describe("the safe show layout for Tim's iPad", () => {
+  const touch = { ...DEFAULT_REMOTE_TOUCH, actOn: 'lift' as const, confirmSec: 10, secondTapMinMs: 800, playExtras: ['stopAll' as const, 'capture' as const], playLoops: [0, 2], showNext: true };
+
+  it('shows only the Extra notes strip, New idea and End piece, and locks Speed', () => {
+    const l = safeShowLayout(touch);
+    expect(l.remoteStrips).toEqual(['fill']);
+    expect(l.remotePads).toEqual(['newIdea']);
+    expect(l.remoteTouch.playExtras).toEqual(['endPiece']);
+    expect(l.remoteLocked).toContain('tempo');
+    expect(l.remoteLocked).not.toContain('fill');
+  });
+
+  it('hides Mute, the loop pads and pages, the scene pads, Next scene, Capture and Stop all', () => {
+    const l = safeShowLayout(touch);
+    expect(l.remotePads).not.toContain('mute');
+    expect(l.remoteLoopsPage).toBe(false); // the Loops and Loops & scenes pages: loop pads, scene pads, Next, Capture, Stop all
+    expect(l.remoteTouch.playLoops).toEqual([]);
+    expect(l.remoteTouch.playExtras).not.toContain('nextScene');
+    expect(l.remoteTouch.playExtras).not.toContain('capture');
+    expect(l.remoteTouch.playExtras).not.toContain('stopAll');
+    expect(l.remoteTouch.showNext).toBe(false);
+  });
+
+  it("keeps how the player's touch is read: act on lift, the second-tap window, the bounce guard", () => {
+    const l = safeShowLayout(touch);
+    expect(l.remoteTouch).toMatchObject({ actOn: 'lift', confirmSec: 10, secondTapMinMs: 800 });
+  });
+
+  it('is recognised, and anything added back on top of it is not', () => {
+    const cfg = { ...DEFAULT_BOARD_SEQUENCER_CONFIG, ...safeShowLayout(touch) };
+    expect(isSafeShowLayout(cfg)).toBe(true);
+    expect(isSafeShowLayout({ ...cfg, remotePads: ['newIdea', 'mute'] })).toBe(false);
+    expect(isSafeShowLayout({ ...cfg, remoteLoopsPage: true })).toBe(false);
+    expect(isSafeShowLayout({ ...cfg, remoteLocked: [] })).toBe(false);
+    expect(isSafeShowLayout({ ...cfg, remoteTouch: { ...cfg.remoteTouch, playExtras: ['endPiece', 'stopAll'] } })).toBe(false);
+  });
+
+  it('is where a new player starts', () => {
+    expect(isSafeShowLayout(DEFAULT_BOARD_SEQUENCER_CONFIG)).toBe(true);
+  });
+
+  it('leaves a player saved before it exactly as they were', () => {
+    // Saved before the layout existed: everything shown, nothing locked.
+    const old = loadWith({
+      bpm: 96, remoteStrips: ['tempo', 'dynamics', 'fill', 'evolve'], remotePads: ['newIdea', 'newSound', 'keep', 'mute'],
+      remoteLoopsPage: true, remoteLocked: [], remoteTouch: { actOn: 'touch', confirmSec: 6, playExtras: ['stopAll'], playLoops: [1], showNext: true },
+    });
+    expect(old.remoteStrips).toEqual(['tempo', 'dynamics', 'fill', 'evolve']);
+    expect(old.remotePads).toEqual(['newIdea', 'newSound', 'keep', 'mute']);
+    expect(old.remoteLoopsPage).toBe(true);
+    expect(old.remoteLocked).toEqual([]);
+    expect(old.remoteTouch).toEqual({ actOn: 'touch', confirmSec: 6, secondTapMinMs: 500, playExtras: ['stopAll'], playLoops: [1], showNext: true });
+    // And one saved before the iPad settings existed at all.
+    const older = loadWith({ bpm: 96 });
+    expect(older.remotePads).toEqual(['newIdea', 'newSound', 'keep', 'mute']);
+    expect(older.remoteLoopsPage).toBe(true);
+    expect(isSafeShowLayout(older)).toBe(false);
   });
 });

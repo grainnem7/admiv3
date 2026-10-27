@@ -251,15 +251,21 @@ const HELP: HelpEntry[] = [
   },
   {
     title: 'The iPad for a player without fine control',
-    body: 'Connections tab → iPad controls. Untick the strips and pads this player '
+    body: 'Connections tab → iPad controls. "Use the safe show layout" sets the iPad for the '
+      + 'show: only the Extra notes strip, New idea and End piece, with Speed locked, so a '
+      + 'stray touch cannot stop, jump or silence the piece. New players start with it. '
+      + 'Otherwise, untick the strips and pads this player '
       + 'will not use: fewer things means bigger things. Lock a strip (a speed that must not '
       + 'change mid-piece) and it ignores touch. "A touch on a strip": Jumps to the finger '
       + '(like ThumbJam) or Follows the movement (landing changes nothing; sliding moves the '
       + 'value from where it was — for a finger that lands roughly). Learn reach makes a '
       + 'short slide the whole range. "A pad acts" when the finger lands or when it lifts '
-      + '(sliding onto a pad then does nothing). "Time for the second tap" for End piece and '
-      + 'Stop all: 3, 6 or 10 seconds. "Also on the Play page" puts End piece, Next scene, '
-      + 'Capture, Stop all or loops on the page the player plays on. A resting palm is '
+      + '(sliding onto a pad, or off it before lifting, then does nothing). End piece, Stop all '
+      + 'and Mute need two taps: "Time for the second tap" is 3, 6 or 10 seconds, and a second '
+      + 'touch sooner than the bounce time (half a second unless changed) is ignored, so one '
+      + 'shaky press only gets them ready. "Also on the Play page" puts End piece, Next scene, '
+      + 'Capture, Stop all or loops on the page the player plays on. A loop pad works only '
+      + 'while the laptop plays. A resting palm is '
       + 'ignored on every pad, and from the iPad Keep only keeps.',
   },
   {

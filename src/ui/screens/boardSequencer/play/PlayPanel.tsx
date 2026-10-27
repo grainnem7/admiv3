@@ -76,7 +76,7 @@ export function PlayPanel({
           ? <Button tone="primary" onClick={onStop} style={{ minWidth: '7.5em' }}>{stopArmed ? '■ Press again to stop' : '■ Stop'}</Button>
           : <Button tone="primary" onClick={onStart} style={{ minWidth: '7.5em' }}>▶ Play</Button>}
         <Button tone="secondary" aria-pressed={muted} onClick={onToggleMute} disabled={!running} title={running ? undefined : 'Mute works while playing.'}>
-          {muted ? 'Sound off' : 'Mute'}
+          {muted ? 'Muted' : 'Mute'}
         </Button>
       </div>
       <span

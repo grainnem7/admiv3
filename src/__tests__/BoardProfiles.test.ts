@@ -4,7 +4,7 @@ import {
   loadActiveBoardConfig, saveActiveBoardConfig, listBoardPlayers, getActiveBoardPlayer,
   createBoardPlayer, updateBoardPlayer, setActiveBoardPlayer, splitBoardConfig, resolveBoardConfig, allReferencedChannelIds,
 } from '../profiles/BoardProfiles';
-import { DEFAULT_BOARD_SEQUENCER_CONFIG, type BoardSequencerStored } from '../profiles/BoardSequencerConfig';
+import { DEFAULT_BOARD_SEQUENCER_CONFIG, isSafeShowLayout, type BoardSequencerStored } from '../profiles/BoardSequencerConfig';
 import { suggestReadSettings } from '../tracking/boardGrid';
 
 const withColours = (): BoardSequencerStored => ({
@@ -64,6 +64,22 @@ describe('BoardProfiles', () => {
     expect(p1.bpm).toBe(120);                  // player field untouched
     expect(p1.mirrorX).toBe(true);             // rig field shared
     expect(p1.channels.map((c) => c.role)).toEqual(['melody', 'drums']);
+  });
+
+  it("a new player's iPad starts with the safe show layout; a player already saved keeps theirs", () => {
+    const everything = {
+      remoteStrips: ['tempo', 'dynamics', 'fill', 'evolve'], remotePads: ['newIdea', 'newSound', 'keep', 'mute'],
+      remoteLoopsPage: true, remoteLocked: [], remoteTouch: { actOn: 'lift', confirmSec: 10, playExtras: ['stopAll'], playLoops: [0], showNext: true },
+    };
+    localStorage.setItem(LEGACY_KEY, JSON.stringify({ ...withColours(), ...everything }));
+    const first = loadActiveBoardConfig()!;
+    expect(first).toMatchObject({ ...everything, remoteTouch: { ...everything.remoteTouch, secondTapMinMs: 500 } });
+    createBoardPlayer('Tim', 'left');
+    const tim = loadActiveBoardConfig()!;
+    expect(isSafeShowLayout(tim)).toBe(true);
+    expect(tim.remoteTouch.secondTapMinMs).toBe(500);
+    setActiveBoardPlayer(listBoardPlayers().find((p) => p.name === 'Player 1')!.id);
+    expect(loadActiveBoardConfig()).toMatchObject({ ...everything, remoteTouch: { ...everything.remoteTouch, secondTapMinMs: 500 } });
   });
 
   it('a removed colour disappears for every player', () => {

@@ -410,6 +410,39 @@ export const READ_SETTINGS_REV = 2;
  */
 export const NEW_PLAYER_SOUND = { fillAmount: 0, evolveAmount: 0 } as const;
 
+/** What the iPad shows and how it behaves for a player: the settings the safe show layout sets. */
+export type RemoteLayout = Pick<BoardSequencerStored, 'remoteStrips' | 'remotePads' | 'remoteLoopsPage' | 'remoteLocked' | 'remoteTouch'>;
+
+/**
+ * The safe show layout for a player's iPad (show decision F3): only the Extra notes strip,
+ * New idea and End piece (two taps, bounce-proof). Mute, the loop pads and pages, the scene
+ * pads, Next scene, Capture and Stop all are hidden, and Speed is locked, so no stray touch
+ * can silence, jump, stop or speed up the show. How the player's touch is read (on landing
+ * or lifting, the second-tap window, the bounce guard) is theirs and is kept.
+ */
+export function safeShowLayout(touch: RemoteTouch): RemoteLayout {
+  return {
+    remoteStrips: ['fill'],
+    remotePads: ['newIdea'],
+    remoteLoopsPage: false,
+    remoteLocked: ['tempo'],
+    remoteTouch: { ...touch, playExtras: ['endPiece'], playLoops: [], showNext: false },
+  };
+}
+
+/** Whether the iPad is set out as the safe show layout (nothing added back, Speed still locked). */
+export function isSafeShowLayout(c: RemoteLayout): boolean {
+  const safe = safeShowLayout(c.remoteTouch);
+  const same = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && a.every((x) => b.includes(x));
+  return same(c.remoteStrips, safe.remoteStrips)
+    && same(c.remotePads, safe.remotePads)
+    && c.remoteLoopsPage === safe.remoteLoopsPage
+    && c.remoteLocked.includes('tempo') && !c.remoteLocked.includes('fill')
+    && same(c.remoteTouch.playExtras, safe.remoteTouch.playExtras)
+    && c.remoteTouch.playLoops.length === 0
+    && c.remoteTouch.showNext === safe.remoteTouch.showNext;
+}
+
 export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   version: CONFIG_VERSION,
   enabled: false,
@@ -472,12 +505,10 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   performance: DEFAULT_PERFORMANCE,
   boardSource: 'camera',
   laptopBoard: [],
-  remoteStrips: [...REMOTE_CONTROLS],
-  remotePads: ['newIdea', 'newSound', 'keep', 'mute'],
-  remoteLoopsPage: true,
-  remoteLocked: [],
+  // New players start with the safe show layout on the iPad. A player saved before it keeps
+  // what they had (sanitize fills a missing field with "everything shown").
+  ...safeShowLayout(DEFAULT_REMOTE_TOUCH),
   remoteStripMode: 'jump',
-  remoteTouch: DEFAULT_REMOTE_TOUCH,
   loopStepsRed: 0,
   loopStepsBlack: 0,
   loopStepsBlue: 0,

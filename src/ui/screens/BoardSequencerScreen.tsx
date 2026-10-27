@@ -140,7 +140,7 @@ import { backupFileName, parseBoardBackup, snapshotStorage, summariseBackup, typ
 import { useRemoteLink } from '../../remote/useRemoteLink';
 import {
   dynamicsFromValue, fullReachMap, makeRemoteCode, reachFromSamples, REMOTE_CONTROLS, REMOTE_INFO_PATH,
-  tempoFromValue, valueFromTempo, valueFromVelocity,
+  SECOND_TAP_MIN_MS, tempoFromValue, valueFromTempo, valueFromVelocity,
   type RemoteControlName, type RemoteMessage, type RemoteState, type RemoteTriggerName,
 } from '../../remote/protocol';
 import { rotateCorners } from '../../tracking/boardDetect/orientation';
@@ -184,6 +184,7 @@ import { SCALE_PRESETS, NOTE_NAMES } from '../../songs/boardSequencerScale';
 import { clearLoopSlot, emptyLoopBank, seedLoopBank } from '../../songs/loopBank';
 import {
   CONTROL_RANGE_LIMITS, clampToControl, DEFAULT_BOARD_SEQUENCER_CONFIG, NEW_PLAYER_SOUND, type BoardSequencerStored, type BoardPoint, type StoredLoopCell,
+  isSafeShowLayout, safeShowLayout,
 } from '../../profiles/BoardSequencerConfig';
 import {
   loadActiveBoardConfig as loadBoardSequencerConfig, saveActiveBoardConfig as saveBoardSequencerConfig,
@@ -720,6 +721,8 @@ export default function BoardSequencerScreen() {
   const [remoteInfo, setRemoteInfo] = useState<{ addresses: string[]; port: number | null; lan: boolean } | null>(null);
   /** The last thing the iPad did, shown on screen for a moment so it is seen, not only heard. */
   const [remoteNote, setRemoteNote] = useState<{ text: string; at: number } | null>(null);
+  /** "Use the safe show layout" was just pressed: say what it did. */
+  const [safeLayoutSet, setSafeLayoutSet] = useState(false);
   // Learning the player's reach: the strips report raw finger positions until Done.
   const [reachLearning, setReachLearning] = useState(false);
   const reachSamplesRef = useRef<Record<RemoteControlName, number[]>>({ tempo: [], dynamics: [], fill: [], evolve: [] });
@@ -3159,6 +3162,12 @@ export default function BoardSequencerScreen() {
     } else if (msg.type === 'reach') {
       reachSamplesRef.current[msg.name].push(msg.fraction);
     } else if (msg.type === 'loop') {
+      // Refused while stopped: it would wait in silence and start by itself with Play. The
+      // iPad says "Press Play on the laptop first"; this is for an iPad that is behind.
+      if (!runningRef.current) {
+        setRemoteNote({ text: `iPad: ${loopLabel(c.loopNames, msg.index)} not started (press ▶ Play first)`, at: performance.now() });
+        return;
+      }
       toggleLoop(msg.index);
       setRemoteNote({ text: `iPad: ${loopLabel(c.loopNames, msg.index)}`, at: performance.now() });
     } else if (msg.type === 'scene') {
@@ -3282,6 +3291,32 @@ export default function BoardSequencerScreen() {
               </Button>
             </div>
           </div>
+          {/* For the show: one button sets out the iPad so a stray touch cannot stop, jump,
+              silence or speed up the piece (show decision F3). New players start with it. */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
+            <span style={{ fontWeight: 600, fontSize: 13 }}>For the show</span>
+            <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
+              The safe show layout: the iPad shows only the Extra notes strip, New idea and End piece (two taps).
+              Mute, the loop and scene pads, Next scene, Capture and Stop all are hidden, and Speed is locked.
+            </span>
+            <div>
+              <Button
+                tone="secondary"
+                onClick={() => {
+                  update(safeShowLayout(configRef.current.remoteTouch));
+                  setSafeLayoutSet(true);
+                }}
+              >
+                Use the safe show layout
+              </Button>
+            </div>
+            <span role="status" style={{ fontSize: 12, fontWeight: 600, color: 'var(--bs-ok)' }}>
+              {!isSafeShowLayout(config) ? ''
+                : safeLayoutSet
+                  ? 'Done: the iPad now shows only the Extra notes strip, New idea and End piece. Speed is locked. Mute, the loops, the scenes, Next scene, Capture and Stop all are hidden.'
+                  : '✓ The iPad has the safe show layout.'}
+            </span>
+          </div>
           {/* Fewer, bigger targets: the facilitator chooses what the iPad shows. */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
             <span style={{ fontWeight: 600, fontSize: 13 }}>What the iPad shows</span>
@@ -3349,13 +3384,24 @@ export default function BoardSequencerScreen() {
                 ? 'Quickest. A resting palm is always ignored.'
                 : 'Nothing happens until the finger comes off the pad it started on, so sliding onto a pad by accident does nothing.'}
             </span>
-            <span style={{ fontWeight: 600, fontSize: 13, marginTop: 4 }}>Time for the second tap (End piece, Stop all)</span>
+            <span style={{ fontWeight: 600, fontSize: 13, marginTop: 4 }}>Time for the second tap (End piece, Stop all, Mute)</span>
             <SegmentedControl<number>
               label="Time for the second tap"
               value={config.remoteTouch.confirmSec}
               onChange={(confirmSec) => update({ remoteTouch: { ...config.remoteTouch, confirmSec } })}
               options={[{ value: 3, label: '3 seconds' }, { value: 6, label: '6 seconds' }, { value: 10, label: '10 seconds' }]}
             />
+            <span style={{ fontWeight: 600, fontSize: 13, marginTop: 4 }}>A second touch sooner than this is a bounce</span>
+            <SegmentedControl<number>
+              label="A second touch sooner than this is a bounce"
+              value={config.remoteTouch.secondTapMinMs}
+              onChange={(secondTapMinMs) => update({ remoteTouch: { ...config.remoteTouch, secondTapMinMs } })}
+              options={SECOND_TAP_MIN_MS.map((ms) => ({ value: ms, label: `${ms / 1000} seconds` }))}
+            />
+            <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
+              A shaky press can land as two quick touches. A touch this soon after the first is ignored, so it never
+              counts as the second tap: End piece, Stop all and Mute wait for a real second tap.
+            </span>
             <span style={{ fontWeight: 600, fontSize: 13, marginTop: 4 }}>Also on the Play page</span>
             <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
               Put what the player needs during the piece on the page they play on, so they never have to switch page.
@@ -4858,7 +4904,7 @@ export default function BoardSequencerScreen() {
       >
         {running && <Button tone="secondary" onClick={requestStop}>{stopArmed ? '■ Press again to stop' : '■ Stop'}</Button>}
         <Button tone="secondary" aria-pressed={muted} disabled={!running} onClick={toggleMuted}>
-          {muted ? 'Sound off' : 'Mute'}
+          {muted ? 'Muted' : 'Mute'}
         </Button>
         {soundFrom !== 'admi' && (
           <Button tone="secondary" onClick={midiPanic} aria-label="Panic: stop every note Ableton is holding">
