@@ -127,7 +127,7 @@ export function AbletonSoundsPanel({ config, getLive, onSend, connected }: {
             </tbody>
           </table>
         </div>
-        <span style={NOTE}>Placeholder: Operator with its default sound. In per-colour mode every colour&rsquo;s track needs every sound real.</span>
+        <span style={NOTE}>Placeholder: Operator with its default sound. In One per colour mode the melody colours use tracks 1, 14 and 15: build three Melody tracks.</span>
         <span style={NOTE}>Macros on every chain: 1 Volume (CC 24), 2 Brightness (CC 25), 3 Space (CC 26). Echo is CC 27.</span>
       </Disclosure>
     </div>

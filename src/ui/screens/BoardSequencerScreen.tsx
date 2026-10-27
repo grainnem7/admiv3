@@ -117,7 +117,7 @@ import { planFromConfig } from './boardSequencer/components/AbletonSoundsPanel';
 import { useBoardMidiPort } from './boardSequencer/useBoardMidiPort';
 import { abletonReadyItem, abletonTracksItem } from './boardSequencer/abletonReady';
 import { aiOffLine } from './boardSequencer/aiStatus';
-import { assignColourChannels, BoardMidiSender, channelFor, colourChannelMap, configToSoundFrom, effectiveSound } from '../../midi/boardMidi';
+import { BoardMidiSender, channelFor, colourChannelMap, configToSoundFrom, effectiveSound } from '../../midi/boardMidi';
 import { ABLETON_CHAINS, chainOnChannel, previewEvents } from '../../midi/abletonSounds';
 import { MIDIManager } from '../../midi/MIDIManager';
 import { previewChainCc, previewNotesFor, previewRoute, SoundAuditioner } from '../../audio/soundPreview';
@@ -882,13 +882,6 @@ export default function BoardSequencerScreen() {
     sessionLogRef.current.action(logActorRef.current, 'sent sound choices to Ableton');
   }, [engineRef, configRef]);
 
-  // Per colour channels are given once, the first time per colour mode is used, and saved.
-  useEffect(() => {
-    if (config.midiChannelMode !== 'colour') return;
-    const next = assignColourChannels(config.channels, config.midiLoopChannels);
-    if (next) update({ channels: next });
-  }, [config.midiChannelMode, config.midiLoopChannels, config.channels, update]);
-
   // Grid changes re-suggest the read settings (unless the user has tuned them).
   const updateGrid = useCallback((patch: Partial<Pick<BoardSequencerStored, 'rows' | 'cols' | 'boardSquares'>>) => {
     setConfig((prev) => {
@@ -970,7 +963,7 @@ export default function BoardSequencerScreen() {
       if (channel === null) return;
       const now = performance.now();
       const chainCc = previewChainCc(planFromConfig(cfg), channel, runningRef.current);
-      for (const ev of previewEvents(channel, chainCc, previewNotesFor(c, key))) out.send(ev.data, now + ev.atMs);
+      for (const ev of previewEvents(channel, chainCc, previewNotesFor(c, key), { wake: !runningRef.current })) out.send(ev.data, now + ev.atMs);
       showHearNote(c.id, `♪ Playing ${name} in Ableton…`, 1500);
       return;
     }

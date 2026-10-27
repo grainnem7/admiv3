@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-  BAND_BASS_CHANNEL, BAND_PAD_CHANNEL, colourChannelPool, configToSoundFrom, EXTRA_NOTES_CHANNEL, hasColourChannel, LOOP_CHANNELS,
+  BAND_BASS_CHANNEL, BAND_PAD_CHANNEL, colourChannelMap, configToSoundFrom, EXTRA_NOTES_CHANNEL, hasColourChannel, LOOP_CHANNELS,
   MAX_MIDI_LEAD_MS, ROLE_CHANNEL, sharedColourChannels, soundFromToConfig, VOLUME_CHANNEL,
   type MidiChannelMode, type MidiSends, type SoundFrom,
 } from '../../../../midi/boardMidi';
@@ -82,6 +82,7 @@ export function BoardMidiPanel({
 
   const sounding = config.channels.filter((c) => hasColourChannel(c.role));
   const shared = sharedColourChannels(config.channels);
+  const colourChannels = colourChannelMap(config.channels);
   const chosen = port.devices.find((d) => d.id === config.midiDeviceId) ?? null;
 
   return (
@@ -164,7 +165,6 @@ export function BoardMidiPanel({
               <span style={{ display: 'block', ...NOTE }}>
                 Loops 1 to 6 play their melody, bass and chords on channels 4 to 9, so each loop has its own Ableton
                 track and fades smoothly. A loop&apos;s drums stay on the drum track (10) and fade by how hard they play.
-                Colours with their own channel then use 1 to 3 and 14 to 15.
               </span>
             </span>
           </label>
@@ -175,6 +175,13 @@ export function BoardMidiPanel({
             onChange={(v) => onChange({ midiChannelMode: v })}
             options={[{ value: 'part', label: 'One per part' }, { value: 'colour', label: 'One per colour' }]}
           />
+          {config.midiChannelMode === 'colour' && (
+            <span style={NOTE}>
+              Each colour gets a track for its job: melody colours 1, 14 and 15 in turn, bass 2, chords 3. New colours
+              each session are fine: they take their job&apos;s tracks in the order of the colour list, so turning one off
+              moves the later ones up.
+            </span>
+          )}
           <table style={{ fontSize: 13, borderCollapse: 'collapse' }}>
             <caption style={{ ...NOTE, textAlign: 'left' }}>What goes out on each MIDI channel</caption>
             <thead>
@@ -187,18 +194,7 @@ export function BoardMidiPanel({
                     <span aria-hidden="true" style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 6, background: c.swatch, marginRight: 6, verticalAlign: 'middle' }} />
                     {`${describeChannel(c)} · ${ROLE_LABELS[c.role]}`}
                   </td>
-                  <td>
-                    <select
-                      aria-label={`MIDI channel for ${describeChannel(c)}`}
-                      value={c.midiChannel ?? ''}
-                      onChange={(e) => onChange({
-                        channels: config.channels.map((x) => (x.id === c.id ? { ...x, midiChannel: Number(e.target.value) } : x)),
-                      })}
-                    >
-                      {c.midiChannel === undefined && <option value="">…</option>}
-                      {colourChannelPool(config.midiLoopChannels).map((n) => <option key={n} value={n}>{n}</option>)}
-                    </select>
-                  </td>
+                  <td>{colourChannels.get(c.id) ?? ''}</td>
                 </tr>
               ))}
               {(config.midiChannelMode === 'part' ? PART_ROWS : PART_ROWS.slice(3)).map((r) => (

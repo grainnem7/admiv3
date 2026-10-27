@@ -249,7 +249,9 @@ function ColourMore({ c, p }: { c: ColourChannel; p: ColourTableProps }): JSX.El
       {midiCh !== null && <span style={NOTE}>{`MIDI ch ${midiCh}${chain !== null && !share ? ` · Ableton sound: ${chainLabel(chain)}` : ''}`}</span>}
       {share && shareName && (
         <span role="note" style={{ ...NOTE, color: 'var(--bs-warn)' }}>
-          {`Shares channel ${share.channel} with ${shareName}: Ableton plays one sound for both. Choose One per colour on the Connections tab to give each its own.`}
+          {config.midiChannelMode === 'colour'
+            ? `Shares track ${share.channel} with ${shareName}: only three melody colours, one bass and one chords colour get a track of their own.`
+            : `Shares channel ${share.channel} with ${shareName}: Ableton plays one sound for both. Choose One per colour on the Connections tab to give each its own.`}
         </span>
       )}
       {live && <span style={NOTE}>{live}</span>}

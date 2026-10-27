@@ -57,6 +57,16 @@ describe('the preview sent to Ableton', () => {
   it('without a chain, only the notes', () => {
     expect(previewEvents(3, null, [{ midi: 60, atMs: 0, durMs: 200 }]).some((e) => (e.data[0] & 0xf0) === 0xb0)).toBe(false);
   });
+
+  it('while stopped, it turns the track back up first: Stop leaves Expression (CC 11) at 0, so the notes would be silent', () => {
+    const ev = previewEvents(3, 7, [{ midi: 60, atMs: 0, durMs: 200 }], { wake: true });
+    const expr = ev.findIndex((e) => e.data[0] === 0xb2 && e.data[1] === 11);
+    const on = ev.findIndex((e) => e.data[0] === 0x92 && e.data[1] === 60);
+    expect(expr).toBeGreaterThanOrEqual(0);
+    expect(ev[expr].data[2]).toBe(127);
+    expect(ev[expr].atMs).toBe(0);
+    expect(expr).toBeLessThan(on);
+  });
 });
 
 describe('hearing a colour while the board is stopped', () => {

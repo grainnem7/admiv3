@@ -192,7 +192,7 @@ const HELP: HelpEntry[] = [
       + 'goes to Ableton over MIDI (the loopMIDI port called ADMI) and Ableton makes the sound; ADMI '
       + 'still draws every note. Both: the two together, for checking the timing. Channels: melody 1, '
       + 'bass 2, chords 3, all drums 10, band chords 11, band bass 12, Extra notes 13, or one per colour '
-      + '(shown as "MIDI ch" on each colour card). Fades and Mute go out as CC 11, the Volume counter as '
+      + '(melody colours 1, 14 and 15 in turn, bass 2, chords 3; shown as "MIDI ch" on each colour card). Fades and Mute go out as CC 11, the Volume counter as '
       + 'CC 7 on channel 16. If the port goes during a piece, ADMI plays its own sound at once and waits '
       + 'for "Switch to Ableton". Panic stops any stuck note. Play test note checks Ableton is listening. '
       + 'Chrome and Edge only. Full setup: docs/ableton-setup-guide.html. With Instrument Racks in the '

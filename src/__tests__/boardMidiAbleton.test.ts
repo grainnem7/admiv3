@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
 import {
-  assignColourChannels, channelFor, channelsInUse, clampLeadMs, colourChannelMap, configToSoundFrom, effectiveSound,
+  channelFor, channelsInUse, COLOUR_JOB_CHANNELS, mappingTargets, clampLeadMs, colourChannelMap, configToSoundFrom, effectiveSound,
   gainToCc, MAX_MIDI_LEAD_MS, midiEventsFor, panicEvents, releaseEvents, RELEASE_REPEAT_MS, sendAtMs, sendsFor,
   sharedColourChannels, soundFromToConfig, trackHeld, volumeEvent, BoardMidiSender,
   type HeldNote, type MidiEvent, type MidiNoteLike, type SoundFrom,
@@ -82,39 +82,48 @@ describe('channels', () => {
     expect(channelFor({ role: 'melody', origin: 'placed', colour: 'red' }, { channelMode: 'part', colourChannels: map })).toBe(1);
   });
 
-  it('auto assigned once: the lowest free channel, skipping 10 to 13', () => {
-    const out = assignColourChannels([colour('a', 'melody', 1), colour('b', 'melody'), colour('d', 'drums'), colour('c', 'bass')]);
-    expect(out?.map((c) => c.midiChannel)).toEqual([1, 2, undefined, 3]);
-    const full = Array.from({ length: 9 }, (_, i) => colour(`c${i}`, 'melody', i + 1));
-    const next = assignColourChannels([...full, colour('x', 'chord')]);
-    expect(next?.at(-1)?.midiChannel).toBe(14);
-    expect(assignColourChannels([colour('a', 'melody', 1)])).toBeNull();
+  it('one per colour, by job: melody colours on 1, 14 and 15 in list order, bass on 2, chords on 3', () => {
+    const map = colourChannelMap([colour('m1', 'melody'), colour('d', 'drums'), colour('m2', 'melody'), colour('b', 'bass'), colour('c', 'chord'), colour('m3', 'melody'), colour('t', 'tempo'), colour('o', 'off')]);
+    expect([...map.entries()]).toEqual([['m1', 1], ['m2', 14], ['b', 2], ['c', 3], ['m3', 15]]);
   });
 
-  it('never reassigned when colours move, are added or change part', () => {
-    const first = assignColourChannels([colour('a', 'melody'), colour('b', 'chord')]) ?? [];
-    const moved = [first[1], colour('new', 'melody'), first[0]];
-    const after = assignColourChannels(moved) ?? moved;
-    expect(after.find((c) => c.id === 'a')?.midiChannel).toBe(1);
-    expect(after.find((c) => c.id === 'b')?.midiChannel).toBe(2);
-    expect(after.find((c) => c.id === 'new')?.midiChannel).toBe(3);
-    // Turned into drums and back: it keeps its channel.
-    const asDrums = after.map((c) => (c.id === 'a' ? { ...c, role: 'drums' as const } : c));
-    expect((assignColourChannels(asDrums) ?? asDrums).find((c) => c.id === 'a')?.midiChannel).toBe(1);
+  it('fresh colours each session: the channel comes from the job and the order, never a stored one', () => {
+    expect(colourChannelMap([colour('new', 'melody', 7), colour('b', 'bass', 16)])).toEqual(new Map([['new', 1], ['b', 2]]));
   });
 
-  it('more colours than channels: they share, and the sharing is reported', () => {
-    const many = Array.from({ length: 13 }, (_, i) => colour(`c${i}`, 'melody'));
-    const out = assignColourChannels(many) ?? [];
-    expect(new Set(out.map((c) => c.midiChannel)).size).toBe(12);
-    expect(out.every((c) => c.midiChannel !== undefined && (c.midiChannel < 10 || c.midiChannel > 13))).toBe(true);
-    expect(sharedColourChannels(out).size).toBe(1);
-    expect(sharedColourChannels([colour('a', 'melody', 4), colour('b', 'melody', 5)]).size).toBe(0);
+  it('a colour that changes job moves to its new job’s channel', () => {
+    const before = [colour('a', 'melody'), colour('b', 'melody')];
+    expect(colourChannelMap(before).get('b')).toBe(14);
+    expect(colourChannelMap([before[0], { ...before[1], role: 'bass' as const }]).get('b')).toBe(2);
+  });
+
+  it('more colours of a job than its channels: they share the job’s last channel, and the sharing is reported', () => {
+    const four = [colour('a', 'melody'), colour('b', 'melody'), colour('c', 'melody'), colour('d', 'melody'), colour('x', 'bass'), colour('y', 'bass')];
+    const map = colourChannelMap(four);
+    expect(map.get('d')).toBe(15);
+    expect(map.get('y')).toBe(2);
+    expect([...sharedColourChannels(four).entries()]).toEqual([[15, ['c', 'd']], [2, ['x', 'y']]]);
+    expect(sharedColourChannels([colour('a', 'melody'), colour('b', 'melody')]).size).toBe(0);
+  });
+
+  it('no colour is ever given a loop channel (4 to 9) or the whole-instrument channel (16)', () => {
+    const many = Array.from({ length: 12 }, (_, i) => colour(`c${i}`, (['melody', 'bass', 'chord'] as const)[i % 3]));
+    const used = new Set(colourChannelMap(many).values());
+    for (const ch of [4, 5, 6, 7, 8, 9, 16]) expect(used.has(ch), String(ch)).toBe(false);
+    expect(Object.values(COLOUR_JOB_CHANNELS).flat().sort((a, b) => a - b)).toEqual([1, 2, 3, 14, 15]);
+  });
+
+  it('Map in Ableton, one per colour: every colour track, 14 and 15 too, even with one melody colour now', () => {
+    const t = mappingTargets(colourChannelMap([colour('a', 'melody')]));
+    const what = t.map((x) => x.what);
+    expect(what).toContain('Melody 2 (ch 14): Utility Gain');
+    expect(what).toContain('Melody 3 (ch 15): Utility Gain');
+    expect(what).toContain('Bass (ch 2): Utility Gain');
   });
 
   it('channels in use: the parts, the band, Extra notes, and the colours\u2019 own', () => {
     expect(channelsInUse()).toEqual([1, 2, 3, 10, 11, 12, 13]);
-    expect(channelsInUse(colourChannelMap([colour('a', 'melody', 5), colour('b', 'melody', 16)]))).toEqual([1, 2, 3, 5, 10, 11, 12, 13, 16]);
+    expect(channelsInUse(colourChannelMap([colour('a', 'melody'), colour('b', 'melody')]))).toEqual([1, 2, 3, 10, 11, 12, 13, 14]);
   });
 });
 
@@ -409,8 +418,9 @@ describe('mapping in Ableton', () => {
     const t = mappingTargets();
     expect(t.map((x) => `${x.cc}:${x.channel}`)).toEqual(['11:1', '11:2', '11:3', '11:10', '11:11', '11:12', '11:13', '7:16']);
     expect(t[0].what).toContain('Melody');
-    const withColours = mappingTargets(new Map([['red', 5]]));
-    expect(withColours.some((x) => x.channel === 5 && x.cc === 11)).toBe(true);
+    // One per colour: every colour track (1, 2, 3, 14, 15), never a loop channel.
+    const withColours = mappingTargets(new Map([['red', 1]]));
+    expect(withColours.filter((x) => x.cc === 11).map((x) => x.channel)).toEqual([1, 2, 3, 10, 11, 12, 13, 14, 15]);
   });
 
   it('sends one controller on one channel only, ending Expression at 0', () => {

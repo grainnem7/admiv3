@@ -7,7 +7,7 @@ import { allEvolveVoices, evolveVoicesFor } from '../audio/evolve/evolve';
 import { soundsFor } from '../ui/screens/boardSequencer/soundCatalogue';
 import { SOUND_WORLDS } from '../audio/worlds/soundWorlds';
 import {
-  assignColourChannels, channelFor, channelsInUse, loopSlotOf, ROLE_CHANNEL, testSequenceEvents, TEST_CHANNELS, TEST_GAP_MS,
+  channelFor, channelsInUse, loopSlotOf, ROLE_CHANNEL, testSequenceEvents, TEST_CHANNELS, TEST_GAP_MS,
 } from '../midi/boardMidi';
 import type { ColourChannel } from '../tracking/boardColours';
 import { aiOffLine } from '../ui/screens/boardSequencer/aiStatus';
@@ -99,10 +99,14 @@ describe('which slots a track fills', () => {
     }
   });
 
-  it('per-colour mode: every colour channel fills all 33', () => {
-    expect(filledChains(1, { channelMode: 'colour' }).size).toBe(33);
-    expect(filledChains(14, { channelMode: 'colour' }).size).toBe(33);
-    expect(filledChains(11, { channelMode: 'colour' }).size).toBe(4);
+  it('per-colour mode: tracks 1, 14 and 15 hold the melody sounds, 2 the bass, 3 the chords', () => {
+    const colourMode = { channelMode: 'colour' as const };
+    for (const ch of [1, 14, 15]) expect([...filledChains(ch, colourMode)].sort((a, b) => a - b), `ch ${ch}`).toEqual([...filledChains(ROLE_CHANNEL.melody, part)].sort((a, b) => a - b));
+    expect(filledChains(2, colourMode)).toEqual(filledChains(ROLE_CHANNEL.bass, part));
+    expect(filledChains(3, colourMode)).toEqual(filledChains(ROLE_CHANNEL.chord, part));
+    expect(filledChains(14, colourMode).has(18)).toBe(false); // no Tuba on a melody track
+    for (const ch of [10, 11, 12, 13]) expect(filledChains(ch, colourMode).size, `ch ${ch}`).toBe(4);
+    for (const ch of [4, 9]) expect(filledChains(ch, { channelMode: 'colour', loopChannels: true }).size, `ch ${ch}`).toBe(4);
   });
 
   it('a pick outside the track’s slots plays the World instead', () => {
@@ -181,11 +185,20 @@ describe('the plan', () => {
   it('per colour: each colour on its own channel, independent', () => {
     const plan = abletonPlan(base(
       [colour('cyan', 'melody', { instrument: 'harp' }), colour('pink', 'melody', { instrument: 'organ' })],
-      { channelMode: 'colour', colourChannels: new Map([['cyan', 1], ['pink', 4]]) },
+      { channelMode: 'colour', colourChannels: new Map([['cyan', 1], ['pink', 14]]) },
     ));
-    expect(plan.controls.get(controlKey(4, CHAIN_CC))?.value).toBe(chainCcValue(7, 4)); // Organ
+    expect(plan.controls.get(controlKey(14, CHAIN_CC))?.value).toBe(chainCcValue(7, 14)); // Organ
     expect(plan.shares.size).toBe(0);
   });
+  it('per colour: tracks 14 and 15 are set and listed for mapping even with one melody colour now', () => {
+    const plan = abletonPlan(base([colour('a', 'melody', { instrument: 'harp' })], { channelMode: 'colour', colourChannels: new Map([['a', 1]]), world: 'lofi' }));
+    for (const ch of [14, 15, 2, 3]) expect(plan.chains.get(ch), `ch ${ch}`).toBe(1);
+    const what = abletonMappingTargets(plan).map((t) => t.what);
+    expect(what).toContain('Melody 2 (ch 14): Rack Chain selector');
+    expect(what).toContain('Melody 3 (ch 15): Loud (a Utility Gain)');
+    expect(what).toContain('Bass (ch 2): Rack Chain selector');
+  });
+
   it('band, Extra notes and drums follow the World; loops too when they have channels', () => {
     const plan = abletonPlan(base([colour('a', 'melody', { instrument: 'harp' })], { world: 'ambient', loopChannels: true }));
     for (const ch of [11, 12, 13, 4, 9]) expect(plan.controls.get(controlKey(ch, CHAIN_CC))?.value).toBe(chainCcValue(2, ch));
@@ -248,11 +261,6 @@ describe('loops on their own channels', () => {
     expect(loopSlotOf('slot3')).toBe(3);
     expect(loopSlotOf('bank1')).toBe(1);
     expect(loopSlotOf(undefined)).toBeNull();
-  });
-  it('turning loop channels on moves colours off 4 to 9, into 1 to 3 and 14 to 15', () => {
-    const out = assignColourChannels([colour('a', 'melody', { midiChannel: 1 }), colour('b', 'melody', { midiChannel: 5 })], true) ?? [];
-    expect(out.map((c) => c.midiChannel)).toEqual([1, 2]);
-    expect(assignColourChannels([colour('b', 'melody', { midiChannel: 5 })], false)).toBeNull();
   });
 });
 

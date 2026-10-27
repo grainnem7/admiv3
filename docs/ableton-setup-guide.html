@@ -152,13 +152,13 @@ a:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 
   <section id="colours" aria-labelledby="h-colours">
     <h2 id="h-colours">5. A track per colour (optional)</h2>
-    <p>Two melody colours share channel 1 in the usual setting, so they play the same Ableton instrument. To give each colour its own:</p>
+    <p>In the usual setting every melody colour shares channel 1, so they all play the same Ableton sound. To have several melody instruments at once, give each colour its own track:</p>
     <ol>
       <li>On the Connections tab, under <strong>Channels</strong>, choose <span class="btn">One per colour</span>.</li>
-      <li>Each colour gets its own channel (from 1 to 9, then 14 to 16) and keeps it, even if colours are moved or added. You can change it in the table there; each colour card on the Sound tab shows <strong>MIDI ch</strong> and its number.</li>
-      <li>In Ableton, add a MIDI track for each of those channels (MIDI From ADMI, that channel, Monitor In), with a Utility mapped to CC 11 as above.</li>
+      <li>Each colour then goes to a track for its job: the melody colours use tracks 1, 14 and 15 in turn (the first melody colour in the colour list on 1, the second on 14, the third on 15), bass 2, chords 3. New colours each session are fine: they take their job's tracks in the order of the colour list, so turning one off or changing its job moves the later ones up. A fourth melody colour, or a second bass or chords colour, shares that job's last track, and the colour card says so. Each colour card on the Sound tab shows <strong>MIDI ch</strong> and its number.</li>
+      <li>In Ableton, add two more Melody tracks for channels 14 and 15 (MIDI From ADMI, that channel, Monitor In): copy the Melody track (channel 1) twice, rack, Utility, Loud and Bright included, and set each copy's channel. Map their chain selector, Loud, Bright, Space and the Utility (CC 11) as in sections 3 and 5a.</li>
     </ol>
-    <p>Drums, the band and the Extra notes stay on 10, 11, 12 and 13.</p>
+    <p>Tracks 1, 2 and 3 are the same in both settings, and channels 4 to 9 stay free for the loops, so this works with or without <strong>A fader per loop</strong>. Drums, the band and the Extra notes stay on 10, 11, 12 and 13.</p>
   </section>
 
   <section id="racks" aria-labelledby="h-racks">
@@ -251,7 +251,7 @@ a:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
     <p>If it is too heavy, choose lighter versions of the heaviest instruments rather than fewer sounds. When Melody passes, build the rest, then do <strong>one final full run</strong> with the whole Set before relying on it in a show.</p>
 
     <p class="note">If Ableton was restarted, or a track is on the wrong sound, press <span class="btn">Send sound choices to Ableton</span> on the Connections tab. ADMI also sends them all on Play.</p>
-    <p class="note">With one channel per part, two melody colours share channel 1 and so share one Ableton sound: the colour card says so. Choose <strong>One per colour</strong> to give each its own; then every colour's track needs all 33 chains real.</p>
+    <p class="note">With one channel per part, two melody colours share channel 1 and so share one Ableton sound: the colour card says so. Choose <strong>One per colour</strong> to give each its own track (section 5): the melody colours then use tracks 1, 14 and 15, each a copy of the Melody track.</p>
   </section>
 
   <section id="loops" aria-labelledby="h-loops">
@@ -259,7 +259,7 @@ a:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
     <p>ADMI fades a loop in and out by making its notes softer. Many Ableton instruments hardly change volume with that, so a loop would play at full level and then stop. With loops on their own tracks, each loop fades smoothly and has its own fader.</p>
     <ol>
       <li>In ADMI, Connections tab, tick <strong>A fader per loop in Ableton</strong>. Loops 1 to 6 now send their melody, bass and chords on channels <strong>4 to 9</strong> (loop 7 and after share 9). A loop's drums stay on the drum track (10), and fade by how hard they play.</li>
-      <li>Colours with their own channel then use 1 to 3 and 14 to 15 (ADMI moves them for you).</li>
+      <li>With One per colour, colours use only tracks 1, 2, 3, 14 and 15 (section 5), so the loops keep 4 to 9.</li>
       <li>In Ableton add six MIDI tracks, named Loop 1 to Loop 6: MIDI From the ADMI port, channels 4 to 9, Monitor In. Each needs an instrument (or an Instrument Rack, as in 5a) and a <strong>Utility</strong> at the end.</li>
       <li>Map each loop track's Utility Gain to CC 11 with <strong>Map in Ableton</strong> → <strong>Fades and volume</strong>: the loop channels are in its list. Set each mapping's Max to 0 dB.</li>
     </ol>

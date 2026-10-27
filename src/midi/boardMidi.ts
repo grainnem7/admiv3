@@ -66,17 +66,19 @@ export const BAND_BASS_CHANNEL = 12;
 export const EXTRA_NOTES_CHANNEL = 13;
 /** The whole instrument: the Volume counter as CC 7. */
 export const VOLUME_CHANNEL = 16;
-/** Channels a colour may be given in per colour mode: 10 is the drums, 11 to 13 the band and Extra notes. */
-export const COLOUR_CHANNEL_POOL: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 14, 15, 16];
+/**
+ * One channel per colour, grouped by job: each Ableton track has a fixed job, so it only
+ * needs that job's sounds, and fresh colours each session always land on a track that has
+ * them. Melody colours take 1, 14 and 15 in turn; bass 2; chords 3. Never 4 to 9 (the
+ * loops' own channels) or 16 (the whole instrument), so it works with loop faders on or off.
+ */
+export const COLOUR_JOB_CHANNELS: Record<'melody' | 'bass' | 'chord', readonly number[]> = {
+  melody: [1, 14, 15],
+  bass: [2],
+  chord: [3],
+};
 /** Loops 1 to 6 on their own channels (loop 7 and after share channel 9). */
 export const LOOP_CHANNELS: readonly number[] = [4, 5, 6, 7, 8, 9];
-/** With loops on their own channels, colours keep to these (16 is the Volume channel). */
-export const COLOUR_CHANNEL_POOL_WITH_LOOPS: readonly number[] = [1, 2, 3, 14, 15];
-
-/** The channels a colour may have, given whether loops have theirs. */
-export function colourChannelPool(loopChannels = false): readonly number[] {
-  return loopChannels ? COLOUR_CHANNEL_POOL_WITH_LOOPS : COLOUR_CHANNEL_POOL;
-}
 
 /** A loop slot's channel (0 based slot). */
 export function loopChannel(slot: number): number {
@@ -219,46 +221,27 @@ export function channelFor(
   return ROLE_CHANNEL[role];
 }
 
-/** Each colour's stored channel, for the sender. */
+/**
+ * Each sounding colour's channel in per colour mode: by its job and its place among that
+ * job's colours in the colour list. A colour beyond its job's channels shares the last one.
+ * A colour's stored `midiChannel` (from before channels went by job) is not read.
+ */
 export function colourChannelMap(channels: readonly ColourChannel[]): Map<string, number> {
   const map = new Map<string, number>();
-  for (const c of channels) if (isChannel(c.midiChannel)) map.set(c.id, c.midiChannel);
-  return map;
-}
-
-/**
- * Give every sounding colour without a channel the lowest free one from the pool (1 to 9,
- * 14 to 16; with loops on their own channels, 1 to 3 and 14 to 15). A channel already
- * given is never changed, even when colours are moved, added or change part; only turning
- * loop channels on moves a colour off a loop's channel. When the pool runs out, the least
- * used channel is shared. Returns the new list, or null when nothing needed a channel.
- */
-export function assignColourChannels(channels: readonly ColourChannel[], loopChannels = false): ColourChannel[] | null {
-  const pool = colourChannelPool(loopChannels);
-  const fits = (ch: number | undefined): ch is number => isChannel(ch) && pool.includes(ch);
-  const uses = new Map<number, number>(pool.map((ch) => [ch, 0]));
+  const taken = { melody: 0, bass: 0, chord: 0 };
   for (const c of channels) {
-    if (hasColourChannel(c.role) && fits(c.midiChannel)) uses.set(c.midiChannel, (uses.get(c.midiChannel) ?? 0) + 1);
+    if (c.role !== 'melody' && c.role !== 'bass' && c.role !== 'chord') continue;
+    const pool = COLOUR_JOB_CHANNELS[c.role];
+    map.set(c.id, pool[Math.min(taken[c.role], pool.length - 1)]);
+    taken[c.role] += 1;
   }
-  let changed = false;
-  const out = channels.map((c) => {
-    if (!hasColourChannel(c.role) || fits(c.midiChannel) || (isChannel(c.midiChannel) && !loopChannels)) return c;
-    let best = pool[0];
-    for (const ch of pool) if ((uses.get(ch) ?? 0) < (uses.get(best) ?? 0)) best = ch;
-    uses.set(best, (uses.get(best) ?? 0) + 1);
-    changed = true;
-    return { ...c, midiChannel: best };
-  });
-  return changed ? out : null;
+  return map;
 }
 
 /** Channels two or more sounding colours share, with those colours' ids. */
 export function sharedColourChannels(channels: readonly ColourChannel[]): Map<number, string[]> {
   const by = new Map<number, string[]>();
-  for (const c of channels) {
-    if (!hasColourChannel(c.role) || !isChannel(c.midiChannel)) continue;
-    by.set(c.midiChannel, [...(by.get(c.midiChannel) ?? []), c.id]);
-  }
+  for (const [id, ch] of colourChannelMap(channels)) by.set(ch, [...(by.get(ch) ?? []), id]);
   for (const [ch, ids] of by) if (ids.length < 2) by.delete(ch);
   return by;
 }
@@ -292,6 +275,8 @@ const PART_NAMES: Record<number, string> = {
   [BAND_PAD_CHANNEL]: 'Band chords',
   [BAND_BASS_CHANNEL]: 'Band bass',
   [EXTRA_NOTES_CHANNEL]: 'Extra notes',
+  14: 'Melody 2',
+  15: 'Melody 3',
 };
 
 /**
@@ -304,7 +289,10 @@ export function mappingTargets(colourChannels?: ReadonlyMap<string, number>, loo
     const i = loopChannels ? LOOP_CHANNELS.indexOf(channel) : -1;
     return i < 0 ? null : i === LOOP_CHANNELS.length - 1 ? `Loop ${i + 1} and after` : `Loop ${i + 1}`;
   };
-  const out: MappingTarget[] = channelsInUse(colourChannels, loopChannels).map((channel) => ({
+  // One per colour: every colour track, so tracks 14 and 15 are mapped once even if fewer
+  // melody colours exist today (fresh colours next session may need them).
+  const allColourTracks = colourChannels ? new Map(Object.values(COLOUR_JOB_CHANNELS).flat().map((ch) => [`track${ch}`, ch])) : undefined;
+  const out: MappingTarget[] = channelsInUse(allColourTracks ?? colourChannels, loopChannels).map((channel) => ({
     channel, cc: 11, what: `${loopName(channel) ?? PART_NAMES[channel] ?? 'Colour'} (ch ${channel}): Utility Gain`,
   }));
   out.push({ channel: VOLUME_CHANNEL, cc: 7, what: `Volume (ch ${VOLUME_CHANNEL}): Main track volume` });

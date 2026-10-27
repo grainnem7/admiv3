@@ -21,7 +21,7 @@ import { BRIGHT, ENERGY, LOUD, SPACE_ALL, SPACE_SEND, stepCc } from '../audio/so
 import type { ColourChannel } from '../tracking/boardColours';
 import { soundsFor } from '../ui/screens/boardSequencer/soundCatalogue';
 import {
-  BAND_BASS_CHANNEL, BAND_PAD_CHANNEL, channelFor, colourChannelPool, EXTRA_NOTES_CHANNEL, gainToCc, hasColourChannel,
+  BAND_BASS_CHANNEL, BAND_PAD_CHANNEL, channelFor, COLOUR_JOB_CHANNELS, EXTRA_NOTES_CHANNEL, gainToCc, hasColourChannel,
   LOOP_CHANNELS, ROLE_CHANNEL, VOLUME_CHANNEL, type MappingTarget, type MidiChannelMode, type MidiEvent,
 } from './boardMidi';
 
@@ -34,6 +34,8 @@ export const CC_ECHO = 27;
 export const CC_ENERGY = 21;
 export const CC_SPACE_ALL = 22;
 export const CC_GROOVE = 23;
+/** Expression: the ending's fades and Mute (sent by boardMidi); Stop leaves it at 0. */
+const CC_EXPRESSION = 11;
 
 export interface AbletonChain {
   index: number;
@@ -163,21 +165,19 @@ const ALL_CHAINS: ReadonlySet<number> = new Set(ABLETON_CHAINS.map((c) => c.inde
 const WORLD_ONLY: ReadonlySet<number> = new Set(WORLD_CHAINS);
 
 /**
- * The chains a track's rack holds as real instruments; the rest are placeholders. Melody,
- * Chords and Bass hold what their job can reach; the band, Extra notes, the drums and the
- * loops only follow the World. In per-colour mode a colour's track can play any job, so it
- * holds everything; so does any channel not named here, to be safe.
+ * The chains a track's rack holds as real instruments; the rest are placeholders. Each
+ * melody, bass and chords track holds what its job can reach: in the usual mode the parts'
+ * tracks (1, 2, 3); with one channel per colour, each job's own tracks (melody 1, 14 and 15,
+ * bass 2, chords 3), since colours go to a track by job. The band, Extra notes, the drums and
+ * the loops only follow the World. Any other channel holds everything, to be safe.
  */
 export function filledChains(channel: number, opts: { channelMode: MidiChannelMode; loopChannels?: boolean }): ReadonlySet<number> {
   const followers = [ROLE_CHANNEL.drums, BAND_PAD_CHANNEL, BAND_BASS_CHANNEL, EXTRA_NOTES_CHANNEL, ...(opts.loopChannels ? LOOP_CHANNELS : [])];
-  if (opts.channelMode === 'colour') {
-    if (colourChannelPool(opts.loopChannels).includes(channel)) return ALL_CHAINS;
-    return followers.includes(channel) ? WORLD_ONLY : ALL_CHAINS;
-  }
   partSets ??= { melody: partChains('melody'), chord: partChains('chord'), bass: partChains('bass') };
-  if (channel === ROLE_CHANNEL.melody) return partSets.melody;
-  if (channel === ROLE_CHANNEL.chord) return partSets.chord;
-  if (channel === ROLE_CHANNEL.bass) return partSets.bass;
+  const jobs = opts.channelMode === 'colour'
+    ? COLOUR_JOB_CHANNELS
+    : { melody: [ROLE_CHANNEL.melody], bass: [ROLE_CHANNEL.bass], chord: [ROLE_CHANNEL.chord] };
+  for (const job of ['melody', 'bass', 'chord'] as const) if (jobs[job].includes(channel)) return partSets[job];
   return followers.includes(channel) ? WORLD_ONLY : ALL_CHAINS;
 }
 
@@ -301,6 +301,20 @@ export function abletonPlan(input: AbletonPlanInput): AbletonPlan {
     set(channel, CC_BRIGHT, stepCc(BRIGHT, ch.tone ?? 1));
     set(channel, CC_SPACE, stepCc(SPACE_SEND, ch.reverbSend ?? world?.reverbSend ?? 0.18));
   }
+  // One per colour: a job's track with no colour on it today still gets the World's sound and
+  // the usual Loud, Bright and Space, so it is ready (and listed for mapping) when a colour
+  // arrives on it, in this session or a later one with fresh colours.
+  if (input.channelMode === 'colour') {
+    for (const channel of Object.values(COLOUR_JOB_CHANNELS).flat()) {
+      if (owner.has(channel)) continue;
+      const wc = worldChain(input.world);
+      chains.set(channel, wc);
+      set(channel, CHAIN_CC, chainCcValue(wc, channel));
+      set(channel, CC_LOUD, stepCc(LOUD, 1));
+      set(channel, CC_BRIGHT, stepCc(BRIGHT, 1));
+      set(channel, CC_SPACE, stepCc(SPACE_SEND, world?.reverbSend ?? 0.18));
+    }
+  }
   // The band, the Extra notes and the drums follow the World. They have no card, so their
   // Bright and Space rest at open and the World's reverb: the Tone and Reverb counters move
   // them, and this is where they come back to when the counter is lifted.
@@ -349,6 +363,7 @@ export function chainLabel(index: number): string {
 }
 
 const TRACK_NAMES: Record<number, string> = {
+  [ROLE_CHANNEL.melody]: 'Melody', [ROLE_CHANNEL.bass]: 'Bass', [ROLE_CHANNEL.chord]: 'Chords', 14: 'Melody 2', 15: 'Melody 3',
   [ROLE_CHANNEL.drums]: 'Drums', [BAND_PAD_CHANNEL]: 'Band chords', [BAND_BASS_CHANNEL]: 'Band bass', [EXTRA_NOTES_CHANNEL]: 'Extra notes',
 };
 
@@ -381,13 +396,17 @@ export function abletonMappingTargets(plan: AbletonPlan, names: ReadonlyMap<numb
 
 /**
  * ▶ Hear in Ableton: the colour's chain chosen on its channel (when given, as the CC 30
- * value), then the phrase's notes there, each with its Note Off.
+ * value), then the phrase's notes there, each with its Note Off. With `wake` (the board is
+ * stopped), Expression goes back to full first: Stop leaves CC 11 at 0 on every channel so
+ * queued notes come out silent, and Hear's notes would otherwise be silent too.
  */
 export function previewEvents(
   channel: number, chainCc: number | null, notes: readonly { midi: number; atMs: number; durMs: number }[],
+  opts: { wake?: boolean } = {},
 ): MidiEvent[] {
   const ch = (channel - 1) & 0x0f;
   const out: MidiEvent[] = [];
+  if (opts.wake) out.push({ data: [0xb0 | ch, CC_EXPRESSION, 127], atMs: 0 });
   if (chainCc !== null) out.push({ data: [0xb0 | ch, CHAIN_CC, chainCc], atMs: 0 });
   for (const n of notes) {
     out.push({ data: [0x90 | ch, n.midi, 100], atMs: n.atMs });

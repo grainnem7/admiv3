@@ -154,6 +154,19 @@ describe('the colour table', () => {
     expect(host.textContent).toContain('Ableton sound: World: Warm (chain 1)');
   });
 
+  it('one per colour: a colour sharing its job’s last track is told why, not to choose One per colour', () => {
+    const chords = [...channels, { id: 'c2', kind: 'hue' as const, role: 'chord' as const, swatch: '#f0f', band: band(300) }];
+    render(props({
+      config: { ...DEFAULT_BOARD_SEQUENCER_CONFIG, soundWorld: 'warm', midiEnabled: true, midiKeepSound: false, midiChannelMode: 'colour', channels: chords },
+      abletonShares: new Map([['c2', { channel: 3, withId: 'c' }]]),
+    }));
+    const row2 = rows().find((r) => r.getAttribute('aria-label')?.includes('Chords') && !r.getAttribute('aria-label')?.startsWith('Yellow'));
+    if (!row2) throw new Error('no second chords row');
+    act(() => button(row2, /^More for /).click());
+    expect(host.textContent).toContain('Shares track 3 with Yellow: only three melody colours, one bass and one chords colour get a track of their own.');
+    expect(host.textContent).not.toContain('Choose One per colour');
+  });
+
   it('↶ is off after a job change, so a drum name never lands on an instrument', () => {
     live();
     choose(select(row('Red'), 'Red: sound'), 'harp');

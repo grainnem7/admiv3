@@ -43,6 +43,6 @@ describe('the Template checklist', () => {
     expect(host.textContent).toContain(
       'Changing from the 16-sound racks? On every track except the drums (channel 10): rename chains 11, 14, 15 and 16, add chains 17 to 33 with the placeholder, then drag chain 33’s zone out to end at 127, select every chain and choose Distribute Ranges Equally. Then check in the ruler that chains 4, 18 and 30 start at 9, 64 and 112.',
     );
-    expect(host.textContent).toContain('Placeholder: Operator with its default sound. In per-colour mode every colour’s track needs every sound real.');
+    expect(host.textContent).toContain('Placeholder: Operator with its default sound. In One per colour mode the melody colours use tracks 1, 14 and 15: build three Melody tracks.');
   });
 });

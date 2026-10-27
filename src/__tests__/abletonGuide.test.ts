@@ -13,6 +13,14 @@ function chainRows(): { n: number; name: string }[] {
 }
 
 describe('the Ableton setup guide', () => {
+  it('one per colour: tracks by job, melody 1, 14 and 15, bass 2, chords 3, fresh colours fine', () => {
+    const colours = guide.slice(guide.indexOf('id="h-colours"'), guide.indexOf('id="h-racks"')).replace(/<[^>]+>/g, '').replace(/\s+/g, ' ');
+    expect(colours).toContain('melody colours use tracks 1, 14 and 15');
+    expect(colours).toContain('bass 2, chords 3');
+    expect(colours).toContain('New colours each session are fine');
+    expect(colours).not.toContain('1 to 9, then 14 to 16');
+  });
+
   it('the guide’s chain table matches ABLETON_CHAINS, in order', () => {
     const rows = chainRows();
     expect(rows.map((r) => r.name)).toEqual(ABLETON_CHAINS.map((c) => c.name));
