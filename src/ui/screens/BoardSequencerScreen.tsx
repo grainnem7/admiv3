@@ -3726,6 +3726,9 @@ export default function BoardSequencerScreen() {
   };
 
   const loopSlotCount = zoneSlotCount(config.loopZone, config.rows, config.cols);
+  // The Loop bank (counters on the bottom row as save slots) is the old way to make a
+  // loop. New loop replaces it; it is shown only for a profile that already saved into it.
+  const loopBankInUse = loopBankRef.current.saved.some((s) => s !== null && s.length > 0);
 
   // ---- the Perform tab: the whole piece in one place ----
   const passSecNow = (config.cols * Math.max(1, config.numPages) * 60) / Math.max(20, config.bpm);
@@ -3994,7 +3997,7 @@ export default function BoardSequencerScreen() {
               )}
               {/* The lane picker above is the only switch: a second one could disagree
                   with it, and the runtime follows the lane. */}
-              {loopSlotCount > 0 && (
+              {loopSlotCount > 0 && loopBankInUse && (
                 <LoopBankView
                   rows={config.rows}
                   cols={config.cols}

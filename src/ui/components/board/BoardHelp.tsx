@@ -117,13 +117,6 @@ const HELP: HelpEntry[] = [
       + 'phrase. The arrow shows the direction.',
   },
   {
-    title: 'Loop bank',
-    body: 'Turn on Loop bank and the bottom row becomes save slots. Put a counter on an empty '
-      + 'slot and, once the pattern has been still for a moment, it is saved and keeps '
-      + 'looping. Lift the counter to pause it, put it back to resume. Loops layer. Clear '
-      + 'empties a slot.',
-  },
-  {
     title: 'Two players, one board',
     body: 'Each player has their own grid, jobs, sounds and loops; the board, camera and '
       + 'counter colours are shared. Switch with the Player button — no need to find the '
@@ -251,11 +244,10 @@ const HELP: HelpEntry[] = [
   {
     title: 'Using saved loops live',
     body: 'Give each scene a time ("at 2:30") and the clock brings it in by itself; the '
-      + 'player plays over the top and can still take any part. Capture (laptop or iPad) '
-      + 'saves what is on the board into the first free slot and starts it — the looper '
-      + 'gesture. A colour can be given the job "Plays a loop": put that counter anywhere '
-      + 'on the board and its loop plays (Hold) or flips on and off (Toggle) — the green '
-      + 'counter is the chorus. A loop colour never plays a note of its own.',
+      + 'player plays over the top and can still take any part. To make a loop, press New '
+      + 'loop (Make a piece → Loops): everything stops, only the counters sound, and Keep '
+      + 'saves them as a loop with a name. Hear it with… lets you try the band, Extra notes '
+      + 'or another loop first.',
   },
   {
     title: 'The iPad for a player without fine control',

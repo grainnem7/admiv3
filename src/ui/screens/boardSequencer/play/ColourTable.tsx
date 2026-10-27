@@ -193,11 +193,15 @@ function ColourRow({ c, n, p, onSound, canGoBack, onBack }: {
               <optgroup label="Control">
                 {CONTROL_JOBS.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
               </optgroup>
-              <optgroup label="Loop">
-                {p.config.loopNames.map((ln, slot) => (
-                  <option key={slot} value={`loop:${slot}`}>{ln && ln.length > 0 ? `Loop ${slot + 1}: ${ln}` : `Loop ${slot + 1}`}</option>
-                ))}
-              </optgroup>
+              {/* One way to make and start a loop (New loop, and the piece). A colour saved as
+                  "Plays a loop" keeps its option so an older profile loads as it was. */}
+              {c.role === 'loop' && (
+                <optgroup label="Loop">
+                  {p.config.loopNames.map((ln, slot) => (
+                    <option key={slot} value={`loop:${slot}`}>{ln && ln.length > 0 ? `Loop ${slot + 1}: ${ln}` : `Loop ${slot + 1}`}</option>
+                  ))}
+                </optgroup>
+              )}
             </select>
             {hasSound ? (
               <select aria-label={`${name}: sound`} value={soundValue(c)} onChange={(e) => onSound(e.target.value)} style={SELECT}>

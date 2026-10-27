@@ -167,6 +167,18 @@ describe('the colour table', () => {
     expect(host.textContent).not.toContain('Choose One per colour');
   });
 
+  it('one way to make a loop: Plays no longer offers "Plays a loop", unless the colour already has it', () => {
+    render(props());
+    const plays = select(row('Red'), 'Red: plays');
+    expect([...plays.options].map((o) => o.value)).not.toContainEqual(expect.stringMatching(/^loop:/));
+    expect(plays.querySelector('optgroup[label="Loop"]')).toBeNull();
+    // A saved colour that still plays a loop keeps its option, so the profile loads as it was.
+    const legacy = channels.map((c) => (c.id === 'm' ? { ...c, role: 'loop' as const, loopSlot: 0 } : c));
+    render(props({ config: { ...DEFAULT_BOARD_SEQUENCER_CONFIG, soundWorld: 'warm', channels: legacy } }));
+    const legacyPlays = select(rows().find((r) => r.getAttribute('aria-label')?.startsWith('Red')) as HTMLElement, 'Red: plays');
+    expect(legacyPlays.value).toBe('loop:0');
+  });
+
   it('↶ is off after a job change, so a drum name never lands on an instrument', () => {
     live();
     choose(select(row('Red'), 'Red: sound'), 'harp');
