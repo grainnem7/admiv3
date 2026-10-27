@@ -136,3 +136,14 @@ export function shouldCheckBoard(s: {
 export function stepOnBoard(step: SetupStep, laptop: boolean): SetupStep {
   return setupSteps(laptop).includes(step) ? step : 'colours';
 }
+
+/**
+ * A new player's config: their own as loaded, or on a first run (nothing saved yet) what
+ * the screen already holds, with the hand they just chose — so a left-handed player's
+ * controls are on their side from the start, and that is what gets saved.
+ */
+export function configForNewPlayer<C extends { handedness: 'left' | 'right' }>(
+  loaded: C | null, shown: C, handedness: 'left' | 'right',
+): C {
+  return loaded ?? { ...shown, handedness };
+}

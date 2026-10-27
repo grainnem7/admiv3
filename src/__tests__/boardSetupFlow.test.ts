@@ -201,3 +201,18 @@ describe('a step the board doesn’t have', () => {
     expect(stepOnBoard('camera', false)).toBe('camera');
   });
 });
+
+import { configForNewPlayer } from '../ui/screens/boardSequencer/boardSetupFlow';
+
+describe('a new player', () => {
+  it('nothing saved yet (a first run): the screen keeps its settings, with the hand they chose', () => {
+    const shown = { handedness: 'right' as const, boardSource: 'laptop' as const };
+    expect(configForNewPlayer(null, shown, 'left')).toEqual({ handedness: 'left', boardSource: 'laptop' });
+  });
+  it('a saved rig: their own config as loaded', () => {
+    type C = { handedness: 'left' | 'right'; boardSource: 'camera' | 'laptop' };
+    const loaded: C = { handedness: 'left', boardSource: 'camera' };
+    const shown: C = { handedness: 'right', boardSource: 'laptop' };
+    expect(configForNewPlayer(loaded, shown, 'left')).toBe(loaded);
+  });
+});

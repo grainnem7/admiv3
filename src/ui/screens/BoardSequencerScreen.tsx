@@ -99,7 +99,7 @@ import { detectColours, type DetectedColour } from '../../tracking/boardColourDe
 import type { FiredNote } from '../../songs/BoardSequencerEngine';
 import {
   setupSteps, canOpenStep, canPlay, resolveEntry, stepIndicator,
-  setupRequestedOnOpen, clearSetupRequest, laptopRequestedOnOpen, stepOnBoard, askWhoIsPlaying, openingView, viewAfterPick, shouldCheckBoard,
+  setupRequestedOnOpen, clearSetupRequest, laptopRequestedOnOpen, stepOnBoard, configForNewPlayer, askWhoIsPlaying, openingView, viewAfterPick, shouldCheckBoard,
   type CameraStatus, type SetupStep,
 } from './boardSequencer/boardSetupFlow';
 import {
@@ -4310,7 +4310,8 @@ export default function BoardSequencerScreen() {
       band={running && bandStatus.playing ? { playing: true, beatOn } : null}
       spans={running && config.phrases ? spans : undefined}
       notice={running ? boardNotice : null}
-      onCellTap={laptop ? tapLaptopCell : undefined}
+      // Counters go down on Play, where the colour picker is; in set-up the board only shows.
+      onCellTap={laptop && view === 'play' ? tapLaptopCell : undefined}
       describeCell={laptop ? describeLaptopCell : undefined}
       silent={silentSquares}
     />
@@ -4832,7 +4833,7 @@ export default function BoardSequencerScreen() {
           onCreate={(name, handedness) => {
             createBoardPlayer(name, handedness);
             const loaded = loadBoardSequencerConfig();
-            if (loaded) setConfig(loaded);
+            setConfig((prev) => configForNewPlayer(loaded, prev, handedness));
             setPlayers(listBoardPlayers());
             setActivePlayerState(getActiveBoardPlayer());
             loopBankRef.current = emptyLoopBank(0);
