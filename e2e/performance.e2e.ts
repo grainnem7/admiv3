@@ -300,10 +300,13 @@ test("a bounce on the iPad's End piece never ends the piece; a second tap after 
   const ending = page.getByRole('button', { name: 'Cancel the ending' });
   for (const gap of [60, 120, 250]) {
     await expect(ipad.getByRole('button', { name: 'End the piece', exact: true })).toBeVisible({ timeout: 10_000 });
-    // One shaky press: two touches this far apart.
-    await endPad.dispatchEvent('pointerdown', touch);
-    await ipad.waitForTimeout(gap);
-    await endPad.dispatchEvent('pointerdown', touch);
+    // One shaky press: two touches this far apart, timed inside the page, so a busy test
+    // runner cannot stretch the gap past the bounce guard.
+    await endPad.evaluate((el, ms) => new Promise<void>((done) => {
+      const down = (): void => { el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerType: 'touch', pointerId: 1, width: 30, height: 30 })); };
+      down();
+      setTimeout(() => { down(); done(); }, ms);
+    }), gap);
     // It only got ready: the piece plays on.
     await expect(ipad.getByRole('button', { name: 'Tap again to end the piece' })).toBeVisible();
     await page.waitForTimeout(800);
