@@ -102,48 +102,45 @@ export function BoardStep({
           border: '1px solid var(--bs-border-control)',
         }}
         >
-          <span style={{ fontWeight: 600 }}>Learn this board</span>
+          <span style={{ fontWeight: 600 }}>Learn the empty board</span>
           <p style={{ margin: 0, color: 'var(--bs-fg2)', fontSize: 13 }}>
-            With nothing on the board, this learns what every part of its squares looks
-            like, over about a second. While playing, a counter is then found by being
-            unlike the board where it sits, with the light corrected from the board
-            itself &mdash; so wood grain, shadows and the camera adjusting itself stop
-            looking like counters. Learn it again if the light in the room changes a lot.
+            Take every counter off, then press the button. ADMI remembers how the empty
+            board looks, so anything new on it is a counter. Do it again if the light
+            in the room changes.
           </p>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <Button tone="primary" onClick={onLearnBoard} reason={running ? 'Stop the board first.' : null}>
               {boardLearnt > 0 ? 'Learn it again' : 'Learn the board'}
             </Button>
             <span style={{ fontSize: 13, color: boardLearnt > 0 ? 'var(--bs-ok)' : 'var(--bs-warn)' }}>
-              {boardLearnt > 0 ? `✓ Learnt from ${boardLearnt} squares` : 'Not learnt yet'}
+              {boardLearnt > 0 ? '✓ Learnt' : 'Not learnt yet'}
             </span>
           </div>
           {learnMessage && (
-            <p
-              role="status"
-              aria-live="polite"
-              style={{ margin: 0, fontSize: 13, color: 'var(--bs-fg)', fontWeight: 600 }}
-            >
+            <p role="status" aria-live="polite" style={{ margin: 0, fontSize: 13, color: 'var(--bs-fg)' }}>
               {learnMessage}
             </p>
           )}
-          <span role="status" style={{ fontSize: 13, color: detection.mode === 'board' ? 'var(--bs-ok)' : 'var(--bs-warn)' }}>
-            {detection.mode === 'board'
-              ? '✓ Counters are found against the learnt board'
-              : detection.reason ?? 'Counters are found by their colour ranges (the old way).'}
-          </span>
-          <SegmentedControl<'board' | 'bands'>
-            label="Counter detection"
-            value={counterDetection}
-            onChange={onCounterDetection}
-            options={[
-              { value: 'board', label: 'Against the learnt board' },
-              { value: 'bands', label: 'Colour ranges (old)' },
-            ]}
-          />
+          {/* Only when something is wrong: "not learnt yet" already says the usual reason. */}
+          {detection.mode !== 'board' && (boardLearnt > 0 || counterDetection === 'bands') && (
+            <span role="status" style={{ fontSize: 13, color: 'var(--bs-warn)' }}>
+              {counterDetection === 'bands'
+                ? 'Counters are found by colour only (the old way, chosen under For testing).'
+                : detection.reason}
+            </span>
+          )}
           <details>
-            <summary style={{ cursor: 'pointer', fontSize: 13, color: 'var(--bs-fg2)' }}>For testing: save pictures of the board</summary>
+            <summary style={{ cursor: 'pointer', fontSize: 13, color: 'var(--bs-fg2)' }}>For testing</summary>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 6 }}>
+              <SegmentedControl<'board' | 'bands'>
+                label="How counters are found"
+                value={counterDetection}
+                onChange={onCounterDetection}
+                options={[
+                  { value: 'board', label: 'Compare with the empty board' },
+                  { value: 'bands', label: 'By colour only (old way)' },
+                ]}
+              />
               <p style={{ margin: 0, fontSize: 13, color: 'var(--bs-fg2)' }}>
                 Saves ten camera pictures to a file, with the corners and colours, so counter
                 detection can be tested on this real board. Say what is on the board (for

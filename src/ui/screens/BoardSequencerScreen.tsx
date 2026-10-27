@@ -1798,7 +1798,7 @@ export default function BoardSequencerScreen() {
       // of squares, so a bare count is indistinguishable from the button doing nothing —
       // and a control that gives no sign it ran is a control you cannot trust.
       const at = new Date().toLocaleTimeString();
-      setLearnMessage(`Learnt from ${colours.length} squares and ${frames.length} pictures at ${at}.${unusual}`);
+      setLearnMessage(`Learnt at ${at}.${unusual}`);
       announce(`Board learnt from ${colours.length} squares.`);
     })();
   }, [configRef, boardModelNow, update, announce, videoRef]);
@@ -3626,10 +3626,10 @@ export default function BoardSequencerScreen() {
     if (!laptop) {
       const det = detectionSetup(c);
       items.push(det.mode === 'board'
-        ? { label: 'Counters are found against the learnt board', state: 'ok' }
+        ? { label: 'The empty board is learnt', state: 'ok' }
         : c.counterDetection === 'bands'
-          ? { label: 'Counters are found by colour ranges (the old way)', state: 'warn', fix: 'Set up → Board: switch Counter detection to "Against the learnt board".' }
-          : { label: 'Counters are found by colour ranges for now', state: 'warn', fix: det.reason ?? 'Learn the board in Set up → Board.' });
+          ? { label: 'Counters are found by colour only (the old way)', state: 'warn', fix: 'Set up → Board → For testing: choose "Compare with the empty board".' }
+          : { label: 'Counters are found by colour only for now', state: 'warn', fix: det.reason ?? 'Learn the board in Set up → Board.' });
     }
     items.push(c.channels.some((ch) => ch.role !== 'off')
       ? { label: 'Counter colours have jobs', state: 'ok' }
