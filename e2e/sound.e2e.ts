@@ -225,3 +225,26 @@ test('after saving the board as a loop, its name is ready to type', async ({ pag
   await page.keyboard.type('Intro');
   await expect(page.getByRole('textbox', { name: 'Name of loop 1' })).toHaveValue('Intro');
 });
+
+test('Play on the laptop from Welcome: the laptop board, and a two-step set-up with no camera', async ({ page }) => {
+  await page.route('**/admi-store**', (route) => (route.request().method() === 'GET'
+    ? route.fulfill({ status: 404, body: '' })
+    : route.fulfill({ status: 204, body: '' })));
+  await page.route('**/magentadata/**', (route) => route.abort());
+  await page.goto('/');
+  await page.getByRole('button', { name: /Play on the laptop/ }).click();
+  await page.getByRole('region', { name: "Who's playing?" }).getByRole('textbox', { name: 'Name' }).fill('Test');
+  await page.getByRole('button', { name: 'Create' }).click();
+  await expect(page.getByRole('button', { name: /Laptop board: play on the laptop/ })).toHaveAttribute('aria-pressed', 'true');
+  // A new player starts at the colours: no camera, no board to find.
+  await expect(page.getByRole('region', { name: 'Set up, step 1 of 2' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Choose the colours' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Find colours' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '← Back' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Add four colours' }).click();
+  await expect(page.getByRole('combobox', { name: 'Red: plays' })).toBeVisible();
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.getByRole('region', { name: 'Set up, step 2 of 2' })).toBeVisible();
+  await page.getByRole('button', { name: /Play/ }).filter({ hasText: '▶' }).first().click();
+  await expect(page.getByRole('grid', { name: /Laptop board/ })).toBeVisible();
+});

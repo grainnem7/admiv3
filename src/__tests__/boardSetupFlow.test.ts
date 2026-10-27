@@ -173,3 +173,31 @@ describe('the steps on each board', () => {
     expect(prevStep('colours')).toBe('board');
   });
 });
+
+import { requestLaptopOnOpen, laptopRequestedOnOpen, clearSetupRequest as clearRequests } from '../ui/screens/boardSequencer/boardSetupFlow';
+
+describe('"Play on the laptop" from Welcome', () => {
+  const camera = { boardSource: 'camera' as const, enabled: false, channels: [] };
+  const none = { setupRequested: false, pieceRunning: false };
+  it('opens on Play, even for a board that isn’t set up, or nothing saved yet', () => {
+    expect(openingView(camera, { ...none, laptopRequested: true })).toBe('play');
+    expect(openingView(null, { ...none, laptopRequested: true })).toBe('play');
+  });
+  it('is asked for once, and cleared with the other requests', () => {
+    requestLaptopOnOpen();
+    expect(laptopRequestedOnOpen()).toBe(true);
+    clearRequests();
+    expect(laptopRequestedOnOpen()).toBe(false);
+  });
+});
+
+import { stepOnBoard } from '../ui/screens/boardSequencer/boardSetupFlow';
+
+describe('a step the board doesn’t have', () => {
+  it('the laptop board never shows the camera or board step: it goes to the colours', () => {
+    expect(stepOnBoard('camera', true)).toBe('colours');
+    expect(stepOnBoard('board', true)).toBe('colours');
+    expect(stepOnBoard('ready', true)).toBe('ready');
+    expect(stepOnBoard('camera', false)).toBe('camera');
+  });
+});

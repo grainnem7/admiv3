@@ -11,7 +11,7 @@ import { useEffect, useState } from 'react';
 import { useAppStore, useHasCompletedSetup } from '../../state/store';
 import { getAudioEngine } from '../../sound/AudioEngine';
 import { loadActiveBoardConfig } from '../../profiles/BoardProfiles';
-import { requestSetupOnOpen } from './boardSequencer/boardSetupFlow';
+import { requestSetupOnOpen, requestLaptopOnOpen } from './boardSequencer/boardSetupFlow';
 import {
   IconSequencer, IconCamera, IconMusic, IconArrowRight, IconInfo, IconCalibrate, IconBody,
 } from '../design-system/Icons';
@@ -55,6 +55,28 @@ function WelcomeScreen() {
     setCurrentScreen('boardSequencer');
   };
 
+  const openLaptopBoard = () => {
+    requestLaptopOnOpen();
+    setCurrentScreen('boardSequencer');
+  };
+  // With no camera and nothing set up yet, the laptop board is the way in.
+  const laptopFirst = cameraStatus === 'unavailable' && !hasBoard;
+  const laptopButton = (
+    <button
+      className={`btn ${laptopFirst ? 'btn--primary btn--lg welcome-board-btn' : 'btn--ghost'}`}
+      onClick={openLaptopBoard}
+    >
+      {laptopFirst ? (
+        <>
+          <span className="welcome-board-btn__label">Play on the laptop</span>
+          <span className="welcome-board-btn__sub">No camera or board needed</span>
+        </>
+      ) : (
+        <><span aria-hidden="true">💻</span> Play on the laptop (no camera)</>
+      )}
+    </button>
+  );
+
   return (
     <div className="welcome-screen" role="main">
       {/* Logo */}
@@ -96,8 +118,9 @@ function WelcomeScreen() {
 
       {/* Main action: the board. Its name keeps "Board Sequencer" for the e2e tests. */}
       <div className="welcome-actions">
+        {laptopFirst && laptopButton}
         <button
-          className="btn btn--primary btn--lg welcome-board-btn"
+          className={`btn ${laptopFirst ? 'btn--ghost' : 'btn--primary btn--lg welcome-board-btn'}`}
           onClick={() => setCurrentScreen('boardSequencer')}
         >
           <span className="welcome-board-btn__label">{hasBoard ? 'Play my board' : 'Set up the board'}</span>
@@ -108,6 +131,7 @@ function WelcomeScreen() {
             <IconCalibrate size={16} /> Set up the board again
           </button>
         )}
+        {!laptopFirst && laptopButton}
         <button
           className="btn btn--ghost"
           onClick={() => setCurrentScreen('info')}

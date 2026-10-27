@@ -16,7 +16,11 @@ const hasActiveChannel = (cfg: SetupConfigView): boolean => cfg.channels.some((c
 let setupRequested = false;
 export function requestSetupOnOpen(): void { setupRequested = true; }
 export function setupRequestedOnOpen(): boolean { return setupRequested; }
-export function clearSetupRequest(): void { setupRequested = false; }
+// The Welcome screen's "Play on the laptop": the next mount opens on the laptop board.
+let laptopRequested = false;
+export function requestLaptopOnOpen(): void { laptopRequested = true; }
+export function laptopRequestedOnOpen(): boolean { return laptopRequested; }
+export function clearSetupRequest(): void { setupRequested = false; laptopRequested = false; }
 
 /** Resolved once at mount from config only; routing never moves the user on its own. */
 export function resolveEntry(cfg: SetupConfigView, hasStoredConfig: boolean): SetupStep {
@@ -105,9 +109,11 @@ export function askWhoIsPlaying(playerIds: readonly string[], activeId: string |
  */
 export function openingView(
   stored: { boardSource?: 'camera' | 'laptop'; enabled: boolean; channels: { role: ColourRole }[] } | null,
-  o: { setupRequested: boolean; pieceRunning: boolean },
+  o: { setupRequested: boolean; pieceRunning: boolean; laptopRequested?: boolean },
 ): 'play' | 'setup' {
-  if (stored === null || o.setupRequested) return 'setup';
+  if (o.setupRequested) return 'setup';
+  if (o.laptopRequested) return 'play';
+  if (stored === null) return 'setup';
   if (o.pieceRunning || stored.boardSource === 'laptop') return 'play';
   return stored.enabled && hasActiveChannel(stored) ? 'play' : 'setup';
 }
@@ -124,4 +130,9 @@ export function shouldCheckBoard(s: {
   checked: boolean; view: string; laptop: boolean; enabled: boolean; cameraUp: boolean; running: boolean; chooserOpen: boolean;
 }): boolean {
   return !s.checked && s.view === 'play' && !s.laptop && s.enabled && s.cameraUp && !s.running && !s.chooserOpen;
+}
+
+/** A step this board doesn't have (the camera's, on the laptop board) shows the colours. */
+export function stepOnBoard(step: SetupStep, laptop: boolean): SetupStep {
+  return setupSteps(laptop).includes(step) ? step : 'colours';
 }

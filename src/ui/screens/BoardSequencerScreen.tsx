@@ -99,7 +99,7 @@ import { detectColours, type DetectedColour } from '../../tracking/boardColourDe
 import type { FiredNote } from '../../songs/BoardSequencerEngine';
 import {
   setupSteps, canOpenStep, canPlay, resolveEntry, stepIndicator,
-  setupRequestedOnOpen, clearSetupRequest, askWhoIsPlaying, openingView, viewAfterPick, shouldCheckBoard,
+  setupRequestedOnOpen, clearSetupRequest, laptopRequestedOnOpen, stepOnBoard, askWhoIsPlaying, openingView, viewAfterPick, shouldCheckBoard,
   type CameraStatus, type SetupStep,
 } from './boardSequencer/boardSetupFlow';
 import {
@@ -308,8 +308,12 @@ export default function BoardSequencerScreen() {
 
   const storedRef = useRef<BoardSequencerStored | null>(loadBoardSequencerConfig());
   const [config, setConfig] = useState<BoardSequencerStored>(
-    // A first run is a new player: it starts generative (NEW_PLAYER_SOUND). A saved one keeps its own.
-    () => storedRef.current ?? { ...DEFAULT_BOARD_SEQUENCER_CONFIG, ...NEW_PLAYER_SOUND },
+    // A first run is a new player: it starts generative (NEW_PLAYER_SOUND). A saved one keeps
+    // its own. "Play on the laptop" on Welcome opens on the laptop board, whichever was last.
+    () => {
+      const start = storedRef.current ?? { ...DEFAULT_BOARD_SEQUENCER_CONFIG, ...NEW_PLAYER_SOUND };
+      return laptopRequestedOnOpen() ? { ...start, boardSource: 'laptop' } : start;
+    },
   );
   // Corners the board tracker has moved since the last save. They must survive a render,
   // so they are merged into the ref the runtime reads rather than living in React state
@@ -440,17 +444,25 @@ export default function BoardSequencerScreen() {
   // "Carry on" is); the Welcome screen can ask for Set up instead.
   const [view, setView] = useState<BoardScreenView>(() => openingView(
     storedRef.current,
-    { setupRequested: setupRequestedOnOpen(), pieceRunning: readPieceRunning() !== null },
+    { setupRequested: setupRequestedOnOpen(), pieceRunning: readPieceRunning() !== null, laptopRequested: laptopRequestedOnOpen() },
   ));
   // The counter a click on the laptop board puts down.
   const [laptopColour, setLaptopColour] = useState('');
-  const [step, setStep] = useState<SetupStep>(() => (
-    storedRef.current?.boardSource === 'laptop' && setupRequestedOnOpen() ? 'colours' : resolveEntry(
-      { enabled: storedRef.current?.enabled ?? false, channels: storedRef.current?.channels ?? [] },
-      storedRef.current !== null,
-    )
+  const [chosenStep, setStep] = useState<SetupStep>(() => resolveEntry(
+    { enabled: storedRef.current?.enabled ?? false, channels: storedRef.current?.channels ?? [] },
+    storedRef.current !== null,
   ));
-  useEffect(() => { clearSetupRequest(); }, []);
+  // The laptop board has no camera or board step: whatever sent it to one (a new player,
+  // a switch of board), it shows the colours.
+  const step = stepOnBoard(chosenStep, laptop);
+  useEffect(() => {
+    // "Play on the laptop" for a saved player: keep the switch, as the header's would. (A
+    // first run saves it with the first change, once the player is named.)
+    if (laptopRequestedOnOpen() && storedRef.current !== null && storedRef.current.boardSource !== 'laptop') {
+      setConfig((prev) => ({ ...prev, boardSource: 'laptop' }));
+    }
+    clearSetupRequest();
+  }, []);
   const [players, setPlayers] = useState<BoardPlayerProfile[]>(() => listBoardPlayers());
   const [activePlayer, setActivePlayerState] = useState<BoardPlayerProfile | null>(() => getActiveBoardPlayer());
   activePlayerIdRef.current = activePlayer?.id ?? activePlayerIdRef.current;
@@ -4440,7 +4452,7 @@ export default function BoardSequencerScreen() {
           saveReason={emptyLoopSlot ? null : 'Turn the loop bank on and leave a slot free to save it.'}
         />
       )}
-      {laptop && view !== 'bigBoard' && laptopBar}
+      {laptop && view === 'play' && laptopBar}
       {/* Play is just playing: the piece's strip (Start clock, Next, End) only once there
           is a piece to steer — scenes, or its clock running. With neither, Next did
           nothing and Start clock began a countdown that faded the music out by itself. */}
