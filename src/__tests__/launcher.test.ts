@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { fakeVoiceEntry } from './helpers/fakeVoiceEntry';
 import {
-  LAUNCH_SLOTS, loopLabel, nextSceneIndex, sanitizeLoopNames, sanitizeScenes, sceneFromNow, sceneSettingsToApply, slotState, toggleSlot,
-  type SceneSettings,
+  LAUNCH_SLOTS, loopLabel, nextSceneIndex, sanitizeLoopNames, sanitizeScenes, sceneFromNow, sceneSettingsOf, sceneSettingsToApply,
+  SCENE_SETTING_KEYS, slotState, toggleSlot, withOwnSettings, type SceneSettings,
 } from '../songs/performance/launcher';
 
 const settings: SceneSettings = { soundWorld: 'warm', band: 'gentle', phrases: true, fillAmount: 0.3, evolveAmount: 0.4, bpm: 96 };
@@ -358,5 +358,30 @@ describe('scenes and the player', () => {
     expect(out).toMatchObject({ soundWorld: 'warm', band: 'gentle', evolveAmount: 0.4, bpm: 96 });
     // Switched off: the scene sets everything, as before.
     expect(sceneSettingsToApply(settings, touched, false)).toEqual(settings);
+  });
+});
+
+describe("a scene's settings are for the run only (T2-05, T3-17)", () => {
+  const own: SceneSettings = { soundWorld: 'lofi', band: 'off', phrases: false, fillAmount: 0, evolveAmount: 0, bpm: 100 };
+  const open: SceneSettings = { soundWorld: 'warm', band: 'full', phrases: true, fillAmount: 0.4, evolveAmount: 0.5, bpm: 90 };
+
+  it("the player's own settings are read from the config as it is", () => {
+    const config = { ...own, rows: 8, currentScene: null };
+    expect(sceneSettingsOf(config)).toEqual(own);
+  });
+
+  it("while a run holds the player's own, what is saved is theirs, every one of the six, and no scene is on", () => {
+    const live = { ...open, rows: 8, cols: 16, currentScene: 2 };
+    const saved = withOwnSettings(live, own);
+    for (const k of SCENE_SETTING_KEYS) expect(saved[k]).toEqual(own[k]);
+    expect(saved.currentScene).toBeNull();
+    // Everything else is saved as it is now (a scene edited mid-run, a loop kept…).
+    expect(saved.rows).toBe(8);
+    expect(saved.cols).toBe(16);
+  });
+
+  it('with no run holding them, the config is saved as it is', () => {
+    const live = { ...own, rows: 8, currentScene: null };
+    expect(withOwnSettings(live, null)).toBe(live);
   });
 });

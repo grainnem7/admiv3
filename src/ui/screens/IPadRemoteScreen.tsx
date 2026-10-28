@@ -189,19 +189,28 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
   };
   // A loop tapped while the laptop is stopped would wait in silence and start by itself
   // with Play, so it is refused, and the iPad says why. Once Play is pressed (the sound
-  // may still be loading) the tap is taken: the loop comes in as the sound starts.
+  // may still be loading) the tap is taken: the loop comes in as the sound starts. A scene
+  // pad is refused the same way: a scene's settings are for a run only, and while stopped
+  // it changed the player's own for good (T2-05).
   const [refusal, setRefusal] = useState<string | null>(null);
   const refusalTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (refusalTimer.current) clearTimeout(refusalTimer.current); }, []);
   useEffect(() => { if (state?.playing || state?.starting) setRefusal(null); }, [state?.playing, state?.starting]);
+  const refusedWhileStopped = (takenWhileStarting = true): boolean => {
+    if (state?.playing || (takenWhileStarting && state?.starting)) return false;
+    setRefusal('Press Play on the laptop first');
+    if (refusalTimer.current) clearTimeout(refusalTimer.current);
+    refusalTimer.current = setTimeout(() => setRefusal(null), REFUSAL_MS);
+    return true;
+  };
   const loopTap = (i: number): void => {
-    if (!state?.playing && !state?.starting) {
-      setRefusal('Press Play on the laptop first');
-      if (refusalTimer.current) clearTimeout(refusalTimer.current);
-      refusalTimer.current = setTimeout(() => setRefusal(null), REFUSAL_MS);
-      return;
-    }
+    if (refusedWhileStopped()) return;
     padTap(`loop${i}`, { type: 'loop', index: i });
+  };
+  const sceneTap = (i: number | 'next'): void => {
+    // Not while Play is starting either: the laptop changes scenes only once it plays.
+    if (refusedWhileStopped(false)) return;
+    padTap(i === 'next' ? 'next' : `scene${i}`, { type: 'scene', index: i });
   };
 
   const onMessage = useCallback((msg: RemoteMessage) => {
@@ -507,7 +516,7 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
                   type="button"
                   aria-pressed={sc?.active === true}
                   disabled={!sc}
-                  {...padProps(`scene${k}`, () => { if (sc) padTap(`scene${i}`, { type: 'scene', index: i }); })}
+                  {...padProps(`scene${k}`, () => { if (sc) sceneTap(i); })}
                   style={{
                     borderRadius: 20, touchAction: 'none', color: '#eef1f7', fontSize: 20, fontWeight: 800,
                     border: `4px solid ${sc?.active ? '#ce93d8' : '#3a4152'}`, background: sc?.active ? '#4a2f55' : '#232836',
@@ -531,7 +540,7 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
             {showNext ? <button
               type="button"
               disabled={!state?.scenes || state.scenes.length === 0}
-              {...padProps('next', () => padTap('next', { type: 'scene', index: 'next' }))}
+              {...padProps('next', () => sceneTap('next'))}
               style={{ borderRadius: 20, touchAction: 'none', color: '#eef1f7', fontSize: 26, fontWeight: 800, border: '4px solid #ce93d8', background: '#232836', opacity: state?.scenes?.length ? 1 : 0.35 }}
             >
               Next scene ▶
@@ -666,7 +675,7 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
           {(state?.touch?.playExtras ?? []).map((x) => {
             if (x === 'nextScene') {
               return showNext ? (
-                <button key="x-next" type="button" disabled={!state?.scenes?.length} {...padProps('x-next', () => padTap('next', { type: 'scene', index: 'next' }))}
+                <button key="x-next" type="button" disabled={!state?.scenes?.length} {...padProps('x-next', () => sceneTap('next'))}
                   style={{ borderRadius: 20, touchAction: 'none', color: '#eef1f7', fontSize: 24, fontWeight: 800, border: '4px solid #ce93d8', background: '#232836' }}>
                   Next scene ▶
                 </button>

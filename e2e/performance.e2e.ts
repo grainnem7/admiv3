@@ -20,6 +20,46 @@ async function step(page: Page, name: 'Loops' | 'Scenes' | 'Ending & check'): Pr
   await page.getByRole('navigation', { name: 'Make a piece: steps' }).getByRole('button', { name: new RegExp(`· ${name}`) }).click();
 }
 
+/** The player's scene settings as saved in the browser: what a reload or the next session gets. */
+async function savedOwn(page: Page): Promise<{ band: unknown; fillAmount: unknown; evolveAmount: unknown; bpm: unknown; currentScene: unknown }> {
+  return page.evaluate(() => {
+    const id = localStorage.getItem('admi-board-active-player');
+    const players = JSON.parse(localStorage.getItem('admi-board-players') ?? '[]') as { id: string; settings: Record<string, unknown> }[];
+    const s = (players.find((p) => p.id === id) ?? players[0])?.settings ?? {};
+    return { band: s.band, fillAmount: s.fillAmount, evolveAmount: s.evolveAmount, bpm: s.bpm, currentScene: s.currentScene ?? null };
+  });
+}
+
+/**
+ * The piece has started: its clock counts down. That is when the page remembers it for a
+ * reload, once the sound is ready, which can take seconds on a busy machine.
+ */
+async function pieceClockRunning(page: Page): Promise<void> {
+  await expect(page.getByRole('timer').first()).toBeVisible({ timeout: 20_000 });
+}
+
+/** A pause measured inside the page (the runner can lag by hundreds of milliseconds). */
+const pause = (page: Page, ms: number) => page.evaluate((t) => new Promise((r) => setTimeout(r, t)), ms);
+
+/** The player's own sound for these tests: no band, no extra notes, sounds stay. */
+async function ownSoundIsPlain(page: Page): Promise<void> {
+  await page.getByRole('tab', { name: 'Sound' }).click();
+  await page.getByRole('group', { name: 'Band' }).getByRole('radio', { name: 'Off', exact: true }).click();
+  await page.getByRole('group', { name: 'Extra notes' }).getByRole('radio', { name: 'Off', exact: true }).click();
+  await page.getByRole('group', { name: 'Sounds change' }).getByRole('radio', { name: 'Off', exact: true }).click();
+}
+
+/** The Sound tab shows the player's own plain sound again. */
+async function expectPlainSound(page: Page): Promise<void> {
+  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await page.getByRole('tab', { name: 'Sound' }).click();
+  await expect(page.getByRole('group', { name: 'Band' }).getByRole('radio', { name: 'Off', exact: true })).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByRole('group', { name: 'Extra notes' }).getByRole('radio', { name: 'Off', exact: true })).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByRole('group', { name: 'Sounds change' }).getByRole('radio', { name: 'Off', exact: true })).toHaveAttribute('aria-checked', 'true');
+}
+
+const PLAIN = { band: 'off', fillAmount: 0, evolveAmount: 0, currentScene: null };
+
 /** The check's summary line ("2 things need fixing…" or "Ready, with…"). */
 const checkSummary = (page: Page) => page.getByRole('status').filter({ hasText: /(needs? fixing before the piece|^Ready, with|^Everything is ready)/ });
 
@@ -415,6 +455,57 @@ test('rehearse from a scene: the clock starts there, in that scene', async ({ pa
   // 7:00 piece from 6:00: about a minute left.
   await expect(strip.getByRole('timer')).toHaveText(/^(1:00|0:5\d)$/);
   await expect.poll(() => notesPlayed(page), { timeout: 20_000 }).toBeGreaterThan(0);
+  expect(pageErrors(page)).toEqual([]);
+});
+
+test('Jump here now is there only while the board plays; the scene is for that run, never saved, and Stop gives the player their own sound back', async ({ page }) => {
+  await openLaptopBoard(page);
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1]]);
+  await ownSoundIsPlain(page);
+  await makePlan(page);
+  // Stopped: each scene offers Rehearse from here; a jump would only have changed settings.
+  await expect(page.getByRole('button', { name: /^Rehearse from Open/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Jump to Open now' })).toHaveCount(0);
+  // Playing: Open (full band, extra notes, sounds change) comes in at once…
+  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await page.getByRole('button', { name: 'Jump to Open now' }).click();
+  await expect(page.getByRole('button', { name: 'Jump to Open now' })).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await page.getByRole('tab', { name: 'Sound' }).click();
+  await expect(page.getByRole('group', { name: 'Band' }).getByRole('radio', { name: 'Full', exact: true })).toHaveAttribute('aria-checked', 'true');
+  // …for this run only: what is saved stays the player's own (saves are gathered for a moment).
+  await pause(page, 1200);
+  expect(await savedOwn(page)).toMatchObject(PLAIN);
+  // Stop: their own sound is back, on screen and saved.
+  await page.getByRole('button', { name: '■ Stop' }).first().click();
+  await expectPlainSound(page);
+  await pause(page, 1200);
+  expect(await savedOwn(page)).toMatchObject(PLAIN);
+  expect(pageErrors(page)).toEqual([]);
+});
+
+test("a rehearsal never saves a scene's settings as the player's own: reloaded mid-rehearsal, carried on and stopped, their own sound is back", async ({ page }) => {
+  await openLaptopBoard(page);
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1]]);
+  await ownSoundIsPlain(page);
+  await makePlan(page);
+  await page.getByRole('button', { name: /Rehearse from Open/ }).click();
+  const strip = page.getByRole('region', { name: 'Now and next' });
+  await expect(strip).toContainText('Now: Open');
+  await pieceClockRunning(page);
+  await pause(page, 1200);
+  expect(await savedOwn(page)).toMatchObject(PLAIN);
+  // A reload (or a crash) mid-rehearsal: carry on, then stop (T3-17).
+  await page.reload();
+  await page.getByRole('alert').filter({ hasText: 'The piece was playing' }).getByRole('button', { name: /Carry on from/ }).click();
+  await expect(strip).toContainText('Now: Open');
+  await page.getByRole('button', { name: '■ Stop' }).first().click();
+  await page.getByRole('button', { name: '■ Press again to stop' }).first().click();
+  await expectPlainSound(page);
+  await pause(page, 1200);
+  expect(await savedOwn(page)).toMatchObject(PLAIN);
   expect(pageErrors(page)).toEqual([]);
 });
 

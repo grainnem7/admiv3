@@ -341,14 +341,14 @@ function ScenesStep(p: PieceStepsProps): JSX.Element {
             })}
             {elapsed !== null && <span aria-hidden="true" style={{ position: 'absolute', top: 0, bottom: 0, width: 3, left: `${Math.min(100, (elapsed / p.lengthSec) * 100)}%`, background: 'var(--bs-fg)' }} />}
           </div>
-          <p style={note}>{`Tap a scene to change it. ▶ Rehearse from here plays the piece from that moment; Jump here now switches to it straight away. 1 pass = ${p.passSec.toFixed(1)} s.`}</p>
+          <p style={note}>{`Tap a scene to change it. ▶ Rehearse from here plays the piece from that moment. While the board plays, Jump here now switches to a scene straight away; Stop gives ${who.name} their own sound back. 1 pass = ${p.passSec.toFixed(1)} s.`}</p>
           {p.scenes.map((s, i) => (
             <SceneRow
               key={s.id} colour={colourOf(s)} scene={s} open={selected === s.id} current={p.currentScene === i}
               lengthSec={p.lengthSec} otherTimes={p.scenes.filter((_, k) => k !== i).map((x) => x.at)}
               loops={p.loops} worldOptions={p.worldOptions} playerName={p.playerName}
               onToggleOpen={() => setSelected(selected === s.id ? null : s.id)}
-              onGo={() => p.onGoScene(i)}
+              onGo={p.running ? () => p.onGoScene(i) : undefined}
               onRehearse={!p.running && typeof s.at === 'number' ? () => p.onRehearseFrom(s.at as number) : undefined}
               onUpdateFromNow={() => p.onUpdateSceneFromNow(i)}
               onEdit={(patch) => p.onEditScene(i, patch)}
@@ -506,7 +506,12 @@ interface SceneRowProps {
   worldOptions: { value: SoundWorldChoice; label: string }[];
   playerName: string | null;
   onToggleOpen(): void;
-  onGo(): void;
+  /**
+   * Switch to this scene now (only while the board plays). A scene's settings are for the
+   * run: while stopped there was nothing to hear, and the jump changed the player's own
+   * sound, band, Extra notes and tempo for good (T2-05).
+   */
+  onGo?(): void;
   /** Play from this scene's time (only while stopped). */
   onRehearse?(): void;
   onUpdateFromNow(): void;
@@ -563,7 +568,9 @@ function SceneRow(r: SceneRowProps): JSX.Element {
             ▶ Rehearse from here
           </Button>
         )}
-        <Button tone={r.current ? 'primary' : 'secondary'} aria-pressed={r.current} onClick={r.onGo} aria-label={`Jump to ${s.name} now`}>{r.current ? 'On now' : 'Jump here now'}</Button>
+        {r.onGo && (
+          <Button tone={r.current ? 'primary' : 'secondary'} aria-pressed={r.current} onClick={r.onGo} aria-label={`Jump to ${s.name} now`}>{r.current ? 'On now' : 'Jump here now'}</Button>
+        )}
       </div>
       {r.open && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingLeft: 4 }}>

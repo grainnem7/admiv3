@@ -54,6 +54,21 @@ export interface SceneSettings {
 }
 export const SCENE_SETTING_KEYS: (keyof SceneSettings)[] = ['soundWorld', 'band', 'phrases', 'fillAmount', 'evolveAmount', 'bpm'];
 
+/** The scene settings as they are in a config now: the player's own, when no run is on. */
+export function sceneSettingsOf(c: SceneSettings): SceneSettings {
+  return { soundWorld: c.soundWorld, band: c.band, phrases: c.phrases, fillAmount: c.fillAmount, evolveAmount: c.evolveAmount, bpm: c.bpm };
+}
+
+/**
+ * What is saved while a run (the piece, a rehearsal, a jump to a scene) holds the player's
+ * own settings: theirs, never the scene's, and no scene on. A scene's settings are for the
+ * run only, so neither Stop, a reload, a crash nor leaving can leave them behind as the
+ * player's (T2-05, T3-17). Everything else is saved as it is.
+ */
+export function withOwnSettings<T extends SceneSettings & { currentScene: number | null }>(c: T, own: SceneSettings | null): T {
+  return own ? { ...c, ...sceneSettingsOf(own), currentScene: null } : c;
+}
+
 export interface Scene {
   id: string;
   name: string;

@@ -127,7 +127,7 @@ import { MIDIManager } from '../../midi/MIDIManager';
 import { previewChainCc, previewNotesFor, previewRoute, SoundAuditioner } from '../../audio/soundPreview';
 import { LoopEditor } from './boardSequencer/components/LoopEditor';
 import {
-  LAUNCH_SLOTS, MAX_SCENES, loopLabel, nextSceneIndex, sceneFromNow, sceneSettingsToApply, slotState, toggleSlot, type PlayerStrip, type SceneSettings,
+  LAUNCH_SLOTS, MAX_SCENES, loopLabel, nextSceneIndex, sceneFromNow, sceneSettingsOf, sceneSettingsToApply, slotState, toggleSlot, withOwnSettings, type PlayerStrip, type SceneSettings,
 } from '../../songs/performance/launcher';
 import {
   clockView, cueText, describeEnding, formatClock, CLOCK_NOT_STARTED,
@@ -373,7 +373,8 @@ export default function BoardSequencerScreen() {
     const playerId = activePlayerIdRef.current;
     // A change for a different player (a switch) writes the last one's first.
     if (pendingSaveRef.current && pendingSaveRef.current.playerId !== playerId) flushSave();
-    pendingSaveRef.current = { config, playerId };
+    // While a run holds the player's own settings, theirs are saved, never the scene's.
+    pendingSaveRef.current = { config: withOwnSettings(config, homeSettingsRef.current), playerId };
     if (saveTimerRef.current === null) saveTimerRef.current = window.setTimeout(flushSave, SAVE_GATHER_MS);
   }, [config, flushSave]);
   // Two tabs on the same address save over each other. Each tab says hello on a shared
@@ -698,10 +699,11 @@ export default function BoardSequencerScreen() {
   const rehearseFromRef = useRef<number | null>(null);
   /** Carrying on after a reload: the scene that was playing, if later than the plan's. */
   const resumeSceneRef = useRef<number | null>(null);
-  // The player's own settings from before the piece began. Scenes change tempo, sound
-  // and band as the piece runs; when it is over they come back, so a rehearsal never
-  // leaves the player's settings wherever the last scene put them.
-  const homeSettingsRef = useRef<{ soundWorld: BoardSequencerStored['soundWorld']; band: BoardSequencerStored['band']; phrases: boolean; fillAmount: number; evolveAmount: number; bpm: number } | null>(null);
+  // The player's own settings from before the piece (or a jump to a scene) began. Scenes
+  // change tempo, sound and band as the piece runs; when it is over they come back, so a
+  // rehearsal never leaves the player's settings wherever the last scene put them. While
+  // it is set, these are what is saved (withOwnSettings), so a reload or a crash can't either.
+  const homeSettingsRef = useRef<SceneSettings | null>(null);
   const [ending, setEnding] = useState(false);
   const clockTickRef = useRef<() => void>(() => {});
   // Counters as loops: the debounced view of each loop colour, and the slots they want.
@@ -2156,7 +2158,7 @@ export default function BoardSequencerScreen() {
     runningRef.current = true;
     clockStartRef.current = clockOn ? performance.now() - startSec * 1000 : null;
     if (clockOn) rememberPieceRunning(Date.now() - startSec * 1000, home.performance.lengthSec);
-    if (clockStartRef.current !== null) homeSettingsRef.current = { soundWorld: home.soundWorld, band: home.band, phrases: home.phrases, fillAmount: home.fillAmount, evolveAmount: home.evolveAmount, bpm: home.bpm };
+    if (clockStartRef.current !== null) homeSettingsRef.current = sceneSettingsOf(home);
     // The opening scene is already in: the clock must not bring it in again.
     // From part-way: the scenes and cues before that moment are already past, not due.
     clockPrevRef.current = startSec > 0
@@ -3024,9 +3026,15 @@ export default function BoardSequencerScreen() {
     announce(`Scene ${d.scene.name} is back.`);
   };
   const goScene = (i: number): void => {
+    // A scene's settings are for a run. While stopped there is nothing to hear, and a jump
+    // changed the player's own settings for good (T2-05): the laptop offers ▶ Rehearse from
+    // here instead, and the iPad says "Press Play on the laptop first".
+    if (!runningRef.current) return;
     const c = configRef.current;
     const scene = c.scenes[i];
     if (!scene) return;
+    // The player's own settings, kept for Stop (and saved meanwhile in place of the scene's).
+    if (homeSettingsRef.current === null) homeSettingsRef.current = sceneSettingsOf(c);
     const apply = sceneSettingsToApply(scene.settings, stripsTouchedRef.current, c.sceneRespectsPlayer);
     const kept = [...stripsTouchedRef.current].filter(() => c.sceneRespectsPlayer);
     stripsTouchedRef.current = new Set();
@@ -3051,7 +3059,8 @@ export default function BoardSequencerScreen() {
     if (newLoopRef.current) leaveNewLoop(); // the piece and a new loop never run together (F2)
     clockStartRef.current = performance.now();
     rememberPieceRunning(Date.now(), configRef.current.performance.lengthSec);
-    homeSettingsRef.current = sceneSettingsNow(configRef.current);
+    // A scene jumped to before the clock started already holds the player's own settings.
+    if (homeSettingsRef.current === null) homeSettingsRef.current = sceneSettingsOf(configRef.current);
     clockPrevRef.current = { remaining: Infinity, elapsed: CLOCK_NOT_STARTED };
     autoEndedRef.current = false;
     hardStoppedRef.current = false;

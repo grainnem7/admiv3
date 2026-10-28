@@ -383,6 +383,25 @@ describe('a loop pad while the laptop is stopped', () => {
     expect(el.textContent).not.toContain(PRESS_PLAY);
   });
 
+  it('a scene pad or Next scene while stopped: refused the same way, so no scene changes the player settings', async () => {
+    const scenes = [{ name: 'Arrival', active: false }, { name: 'Open', active: false }];
+    await act(async () => { onMsg?.({ ...STATE, state: { ...STATE.state, playing: false, scenes } }); });
+    const tab = [...el.querySelectorAll('[role="tab"]')].find((b) => b.textContent === 'Loops & scenes')!;
+    await act(async () => { pointer('pointerdown', tab, 10); });
+    const scene = [...el.querySelectorAll('button')].find((b) => b.textContent === 'Scene 2: Open')!;
+    await act(async () => { pointer('pointerdown', scene, 100); });
+    now += 1000;
+    const next = [...el.querySelectorAll('button')].find((b) => b.textContent?.startsWith('Next scene'))!;
+    await act(async () => { pointer('pointerdown', next, 100); });
+    expect(sent.filter((m) => (m as { type: string }).type === 'scene')).toEqual([]);
+    expect(el.textContent).toContain(PRESS_PLAY);
+    // Playing: the same pad changes the scene.
+    await act(async () => { onMsg?.({ ...STATE, state: { ...STATE.state, scenes } }); });
+    now += 1000;
+    await act(async () => { pointer('pointerdown', [...el.querySelectorAll('button')].find((b) => b.textContent === 'Scene 2: Open')!, 100); });
+    expect(sent).toContainEqual({ type: 'scene', index: 1 });
+  });
+
   it('once the laptop plays, the same tap starts the loop', async () => {
     await act(async () => { onMsg?.({ ...STATE, state: { ...STATE.state, playing: false } }); });
     const tab = [...el.querySelectorAll('[role="tab"]')].find((b) => b.textContent === 'Loops')!;
