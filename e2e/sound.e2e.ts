@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { notesPlayed, openLaptopBoard, pageErrors, pickColour, pieceStep, place } from './app';
+import { listenToOutput, makePlan, notesPlayed, openLaptopBoard, outputLevels, pageErrors, pickColour, pieceStep, place, pressAndListen } from './app';
 
 /**
  * The Sound tab and the loop edit window, as a musician uses them: each colour's own
@@ -346,5 +346,43 @@ test('a "d" typed on a button or in a list never opens a Debug Panel (only ?debu
   await page.keyboard.press('d');
   await expect(page.getByText('Debug Panel')).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Debug information' })).toHaveCount(0);
+  expect(pageErrors(page)).toEqual([]);
+});
+
+test('▶ Play and ▶ Start the piece on an empty board send nothing to the speakers: no click (T1-03)', async ({ page }) => {
+  test.setTimeout(240_000);
+  await listenToOutput(page);
+  await openLaptopBoard(page);
+  // Digital silence is 0. A click, however short, would be a sample far above this.
+  const CLICK = 0.01;
+  const gap = (ms: number) => page.evaluate((t) => new Promise((r) => setTimeout(r, t)), ms);
+  const loudest: number[] = [];
+  for (let run = 0; run < 5; run++) {
+    const levels = await pressAndListen(page, '▶ Play', 40, 20); // 800 ms from the press
+    expect(levels).toHaveLength(40);
+    loudest.push(Math.max(...levels));
+    await page.getByRole('button', { name: '■ Stop' }).first().click();
+    await expect(page.getByRole('button', { name: '▶ Play' }).first()).toBeVisible();
+    await gap(600); // past Play's bounce guard
+  }
+  // The piece: Show → Start the piece, with the plan's band and no counter down.
+  await makePlan(page);
+  for (let run = 0; run < 3; run++) {
+    await page.getByRole('button', { name: /^Show: the board, the clock/ }).click();
+    const levels = await pressAndListen(page, '▶ Start the piece', 40, 20);
+    expect(levels).toHaveLength(40);
+    loudest.push(Math.max(...levels));
+    await page.getByRole('button', { name: 'Leave Show' }).click();
+    await page.getByRole('button', { name: '■ Stop' }).first().click();
+    await page.getByRole('button', { name: '■ Press again to stop' }).first().click();
+    await expect(page.getByRole('button', { name: '▶ Play' }).first()).toBeVisible();
+    await gap(600);
+  }
+  expect(loudest.every((v) => v < CLICK), `loudest sample after each press: ${loudest.join(', ')}`).toBe(true);
+  // The meter does hear: one counter down, and Play is heard.
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1], [5, 3], [3, 5], [5, 7]]);
+  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await expect.poll(async () => Math.max(0, ...await outputLevels(page, 4)), { timeout: 20_000 }).toBeGreaterThan(0.02);
   expect(pageErrors(page)).toEqual([]);
 });

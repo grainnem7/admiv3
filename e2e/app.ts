@@ -125,3 +125,32 @@ export async function outputLevels(page: Page, bins: number, binMs = 250): Promi
     return out;
   }, { bins, binMs });
 }
+
+/**
+ * Press a button and listen to the speakers from that moment: the loudest single sample
+ * (not an average, so a click can't hide) in each of `bins` stretches of `binMs`. Pressed
+ * and measured inside the page, so the runner's lag stays out of the timing. Needs
+ * listenToOutput; it hears only what goes to the speakers, never the reverb's tail being
+ * worked out off-line (an OfflineAudioContext), which an earlier probe took for a click.
+ */
+export async function pressAndListen(page: Page, buttonText: string, bins = 40, binMs = 20): Promise<number[]> {
+  return page.evaluate(async ({ buttonText, bins, binMs }) => {
+    const an = (window as unknown as { __admiMeter?: AnalyserNode }).__admiMeter;
+    const button = [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === buttonText);
+    if (!an || !button) return [];
+    const buf = new Float32Array(an.fftSize);
+    const out: number[] = [];
+    button.click();
+    const t0 = performance.now();
+    for (let b = 0; b < bins; b++) {
+      let peak = 0;
+      do {
+        an.getFloatTimeDomainData(buf);
+        for (const v of buf) peak = Math.max(peak, Math.abs(v));
+        await new Promise((r) => setTimeout(r, 4));
+      } while (performance.now() < t0 + (b + 1) * binMs);
+      out.push(peak);
+    }
+    return out;
+  }, { buttonText, bins, binMs });
+}
