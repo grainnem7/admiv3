@@ -44,6 +44,11 @@ describe('Help says how things work now', () => {
     expect(entry('The iPad for a player without fine control')).toContain('only the Extra notes strip, New idea and End piece, with Speed locked');
   });
 
+  it('the band\'s middle level is Quiet, as on the Sound tab and in a scene (T1-12)', () => {
+    expect(entry('The band')).toMatch(/^Off, Quiet or Full\./);
+    expect(all()).not.toMatch(/\bGentle\b/);
+  });
+
   it('buttons are called what they are called on screen', () => {
     // Scenes come in with Next or Jump here now (there is no Go); the laptop says Freeze.
     expect(all()).not.toMatch(/with Go\b|Keep freezes|Hold freezes/);

@@ -8,7 +8,8 @@
 export type BoardScreenView = 'setup' | 'play' | 'bigBoard';
 
 const CONTROL_SELECTOR = [
-  'button', 'select', 'input', 'textarea', 'a[href]',
+  // A <summary> opens and closes its list ("Earlier takes"): Space is its own (R2-T4-05).
+  'button', 'select', 'input', 'textarea', 'a[href]', 'summary',
   '[role="switch"]', '[role="tab"]', '[role="radio"]', '[role="slider"]',
   '[contenteditable="true"]',
 ].join(', ');

@@ -127,6 +127,7 @@ import { abletonReadyItem, abletonTracksItem } from './boardSequencer/abletonRea
 import { aloneLine, ipadCheckItems, listNames, pieceCheckItems, playerWords, updatedFromNowLine } from './boardSequencer/pieceCheck';
 import { colourUses, type ColourUses } from './boardSequencer/colourRemoval';
 import { aiOffLine } from './boardSequencer/aiStatus';
+import { bandLine } from './boardSequencer/bandLine';
 import { BoardMidiSender, channelFor, colourChannelMap, configToSoundFrom, effectiveSound } from '../../midi/boardMidi';
 import { ABLETON_CHAINS, chainOnChannel, previewEvents } from '../../midi/abletonSounds';
 import { MIDIManager } from '../../midi/MIDIManager';
@@ -3676,7 +3677,8 @@ export default function BoardSequencerScreen() {
               ))}
               <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13 }}>
                 <input type="checkbox" checked={config.remoteLoopsPage} onChange={(e) => update({ remoteLoopsPage: e.target.checked })} />
-                Loops &amp; scenes page
+                {/* One tick brings back all of these: said, so it is never a surprise (R2-T3-06). */}
+                Loops &amp; scenes page (also shows Capture, Stop all and End piece)
               </label>
             </div>
             <span style={{ fontWeight: 600, fontSize: 13, marginTop: 4 }}>Locked strips</span>
@@ -5234,11 +5236,7 @@ export default function BoardSequencerScreen() {
       )}
       {/* The band as the engine has it: in a new loop it is off unless asked for (T1-09). */}
       {view === 'play' && running && bandStatus.level !== 'off' && (
-        <p style={{ margin: 0, fontSize: 12, color: 'var(--bs-fg2)' }}>
-          {bandStatus.playing
-            ? `Band (${bandStatus.level}): ${bandStatus.parts.length > 0 ? bandStatus.parts.join(' · ') : 'you have taken every part'}`
-            : active.length > 0 ? 'Band: joining on the next pass…' : 'Band: waiting for your first counter.'}
-        </p>
+        <p style={{ margin: 0, fontSize: 12, color: 'var(--bs-fg2)' }}>{bandLine(bandStatus, active.length > 0)}</p>
       )}
       {view === 'play' && running && !newLoop && config.evolveAmount > 0 && evolveLabels.size > 0 && (
         <p style={{ margin: 0, fontSize: 12, color: 'var(--bs-fg2)' }}>

@@ -313,7 +313,7 @@ test('the iPad joins with the code, shows the piece, and its End piece reaches t
   await page.getByRole('button', { name: 'Play', exact: true }).click();
   await page.getByRole('tab', { name: 'Connections' }).click();
   await page.getByRole('switch', { name: 'iPad controls' }).click();
-  await page.getByRole('checkbox', { name: 'End piece' }).check();
+  await page.getByRole('checkbox', { name: 'End piece', exact: true }).check();
   const code = await page.evaluate(() => localStorage.getItem('admi-remote-code'));
   expect(code).toMatch(/^\d{4}$/);
   await startPiece(page);
@@ -339,7 +339,7 @@ test("a bounce on the iPad's End piece never ends the piece; a second tap after 
   await page.getByRole('tab', { name: 'Connections' }).click();
   await page.getByRole('switch', { name: 'iPad controls' }).click();
   // A new player's iPad has the safe show layout: End piece is on the page Tim plays on.
-  await expect(page.getByRole('checkbox', { name: 'End piece' })).toBeChecked();
+  await expect(page.getByRole('checkbox', { name: 'End piece', exact: true })).toBeChecked();
   // The shortest window, so each try can start afresh sooner.
   await page.getByRole('radiogroup', { name: 'Time for the second tap' }).getByRole('radio', { name: '3 seconds' }).click();
   const code = await page.evaluate(() => localStorage.getItem('admi-remote-code'));
@@ -475,7 +475,8 @@ test('"Use the safe show layout" sets out the iPad for the show and says what it
   await expect(page.getByText('✓ The iPad has the safe show layout.')).toBeVisible();
   // Things added back for a rehearsal...
   await page.getByRole('checkbox', { name: 'Mute', exact: true }).check();
-  await page.getByRole('checkbox', { name: 'Loops & scenes page' }).check();
+  // The one tick also brings back Capture, Stop all and End piece, and says so (R2-T3-06).
+  await page.getByRole('checkbox', { name: 'Loops & scenes page (also shows Capture, Stop all and End piece)', exact: true }).check();
   await page.getByRole('checkbox', { name: '🔒 Speed' }).uncheck();
   await expect(page.getByText('✓ The iPad has the safe show layout.')).toHaveCount(0);
   // ...and one button for the show.
@@ -485,7 +486,7 @@ test('"Use the safe show layout" sets out the iPad for the show and says what it
   await expect(page.getByRole('checkbox', { name: 'Loops & scenes page' })).not.toBeChecked();
   await expect(page.getByRole('checkbox', { name: '🔒 Speed' })).toBeChecked();
   await expect(page.getByRole('checkbox', { name: 'Extra notes', exact: true })).toBeChecked();
-  await expect(page.getByRole('checkbox', { name: 'End piece' })).toBeChecked();
+  await expect(page.getByRole('checkbox', { name: 'End piece', exact: true })).toBeChecked();
   expect(pageErrors(page)).toEqual([]);
 });
 

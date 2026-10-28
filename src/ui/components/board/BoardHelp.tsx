@@ -147,7 +147,7 @@ const HELP: HelpEntry[] = [
   },
   {
     title: 'The band',
-    body: 'Off, Gentle or Full. A pad, a bass and a groove that join in on the pass after the '
+    body: 'Off, Quiet or Full. A pad, a bass and a groove that join in on the pass after the '
       + 'first counter goes down, follow the chords, and stop once the pass the last counter '
       + 'left in has finished. It builds with you: a soft pad under your first counters, the '
       + 'bass from three counters, the drums from five. Put down a bass, chord or drum counter and the band hands that '

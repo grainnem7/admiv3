@@ -27,6 +27,13 @@ describe('spaceTogglesPlay', () => {
     expect(spaceTogglesPlay('play', el('<button><span>Corner 1</span></button>').firstElementChild!)).toBe(false);
   });
 
+  it('Space on "Earlier takes (n)" opens and closes the list, never the board (R2-T4-05)', () => {
+    const summary = el('<details><summary>Earlier takes (2)</summary><ul><li>a take</li></ul></details>').firstElementChild!;
+    expect(spaceTogglesPlay('play', summary)).toBe(false);
+    expect(spaceAction('play', summary, { running: false, offerShowing: false, msSinceStop: Infinity })).toBe('none');
+    expect(spaceAction('play', summary, { running: true, offerShowing: false, msSinceStop: Infinity })).toBe('none');
+  });
+
   it('a plain region is not a control, so Space still toggles', () => {
     expect(spaceTogglesPlay('play', el('<div tabindex="-1">board</div>'))).toBe(true);
   });

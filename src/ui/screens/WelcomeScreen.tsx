@@ -186,12 +186,7 @@ function WelcomeScreen() {
           )}
         </div>
       </section>
-
-      {/* Footer hints */}
-      <footer className="welcome-footer">
-        <span><kbd>Space</kbd> Mute</span>
-        <span><kbd>D</kbd> Debug</span>
-      </footer>
+      {/* No key hints here: "Space Mute" and "D Debug" were not true on the board (R2-T4-07). */}
     </div>
   );
 }
