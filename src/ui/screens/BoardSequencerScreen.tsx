@@ -3545,8 +3545,8 @@ export default function BoardSequencerScreen() {
               options={SECOND_TAP_MIN_MS.map((ms) => ({ value: ms, label: `${ms / 1000} seconds` }))}
             />
             <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
-              A shaky press can land as two quick touches. A touch this soon after the first is ignored, so it never
-              counts as the second tap: End piece, Stop all and Mute wait for a real second tap.
+              A shaky press can land as several quick touches. A touch this soon after the one before it is ignored, so
+              a press never counts as its own second tap: End piece, Stop all and Mute wait for a real second tap.
             </span>
             <span style={{ fontWeight: 600, fontSize: 13, marginTop: 4 }}>Also on the Play page</span>
             <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>

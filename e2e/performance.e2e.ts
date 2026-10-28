@@ -375,6 +375,51 @@ test("a bounce on the iPad's End piece never ends the piece; a second tap after 
   expect(pageErrors(page)).toEqual([]);
 });
 
+test("a press on the iPad's End piece that chatters at 0, 200, 400 and 600 ms never ends the piece; a tap after quiet does", async ({ page, context }) => {
+  await openLaptopBoard(page);
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1]]);
+  await makePlan(page);
+  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await page.getByRole('tab', { name: 'Connections' }).click();
+  await page.getByRole('switch', { name: 'iPad controls' }).click();
+  // The longest window, so the runner's own pauses can't let it lapse before the last tap.
+  await page.getByRole('radiogroup', { name: 'Time for the second tap' }).getByRole('radio', { name: '10 seconds' }).click();
+  const code = await page.evaluate(() => localStorage.getItem('admi-remote-code'));
+  await startPiece(page);
+
+  const ipad = await context.newPage();
+  await ipad.setViewportSize({ width: 1180, height: 820 });
+  await ipad.goto(`/?remote=${code}`);
+  await expect(ipad.getByText('Now: Arrival')).toBeVisible();
+  const endPad = ipad.getByRole('button', { name: /end the piece/i });
+  const ending = page.getByRole('button', { name: 'Cancel the ending' });
+  await expect(ipad.getByRole('button', { name: 'End the piece', exact: true })).toBeVisible();
+  // One press that chatters for longer than the bounce guard (half a second): four touches
+  // 200 ms apart, timed inside the page. Each lands within the guard of the one before.
+  const gaps = await endPad.evaluate((el) => new Promise<number[]>((done) => {
+    const at: number[] = [];
+    const down = (): void => {
+      at.push(performance.now());
+      el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerType: 'touch', pointerId: 1, width: 30, height: 30 }));
+    };
+    down();
+    setTimeout(down, 200);
+    setTimeout(down, 400);
+    setTimeout(() => { down(); done(at.slice(1).map((t, i) => t - at[i])); }, 600);
+  }));
+  // The touches really came that close together (a busy machine could have spread them).
+  for (const gap of gaps) expect(gap).toBeLessThan(500);
+  // Only got ready: the piece plays on.
+  await expect(ipad.getByRole('button', { name: 'Tap again to end the piece' })).toBeVisible();
+  await pause(page, 1000);
+  await expect(ending).toHaveCount(0);
+  // A tap after a moment's quiet, still inside the window, ends it.
+  await endPad.dispatchEvent('pointerdown', { pointerType: 'touch', pointerId: 1, width: 30, height: 30 });
+  await expect(ending.first()).toBeVisible();
+  expect(pageErrors(page)).toEqual([]);
+});
+
 test('"when the finger lifts": a real touch that slides off a pad before lifting does nothing', async ({ page, context }) => {
   await openLaptopBoard(page);
   await page.getByRole('button', { name: 'Play', exact: true }).click();

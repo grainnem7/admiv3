@@ -39,8 +39,8 @@ export interface RemoteTouch {
   /** How long the second tap of a two-tap pad (End piece, Stop all, Mute) is waited for, in seconds. */
   confirmSec: number;
   /**
-   * The bounce guard: a second touch sooner than this after the first (ms) is not the
-   * confirming tap. A shaky press often lands as two touches 60-250 ms apart.
+   * The bounce guard: a touch sooner than this (ms) after the pad's latest touch is not the
+   * confirming tap. A shaky press often lands as two or more touches 60-250 ms apart.
    */
   secondTapMinMs: number;
   /** Pads added to the Play page. */
@@ -70,18 +70,25 @@ export function sanitizeRemoteTouch(v: unknown): RemoteTouch {
   };
 }
 
+/** What a two-tap pad remembers: when it was armed (null = not armed), and its latest touch. */
+export interface TwoTapPad { armedAt: number | null; lastTouch: number | null }
+export const TWO_TAP_IDLE: TwoTapPad = { armedAt: null, lastTouch: null };
+
 /**
- * A two-tap pad (End piece, Stop all, Mute), touched at `now`: the first tap arms it, and a
- * second tap confirms it only if it comes at least `minMs` after the arming tap and inside
- * the window. A touch sooner than `minMs` is a bounce of the same press: it neither
- * confirms nor re-arms, so the wait is still timed from the first touch. Once the window
- * has lapsed, a tap arms again.
+ * A two-tap pad (End piece, Stop all, Mute), touched at `now`. A touch within `minMs` of
+ * the pad's latest touch (arming, ignored or confirming) is a bounce of the same press: it
+ * neither arms nor confirms, and the quiet starts again from it. So a press that chatters
+ * for longer than the guard (touches at 0, 200, 400, 600 ms) never confirms, and a touch
+ * just after a confirm never arms the pad again. Otherwise the first tap arms it and the
+ * next confirms it, if it comes inside the window (timed from the arming tap). Once the
+ * window has lapsed, a tap arms again.
  */
 export function secondTap(
-  armedAt: number | null, now: number, rule: { minMs: number; windowMs: number },
-): 'arm' | 'confirm' | 'ignore' {
-  if (armedAt === null || now - armedAt >= rule.windowMs) return 'arm';
-  return now - armedAt < rule.minMs ? 'ignore' : 'confirm';
+  pad: TwoTapPad, now: number, rule: { minMs: number; windowMs: number },
+): { step: 'arm' | 'confirm' | 'ignore'; pad: TwoTapPad } {
+  if (pad.lastTouch !== null && now - pad.lastTouch < rule.minMs) return { step: 'ignore', pad: { ...pad, lastTouch: now } };
+  if (pad.armedAt === null || now - pad.armedAt >= rule.windowMs) return { step: 'arm', pad: { armedAt: now, lastTouch: now } };
+  return { step: 'confirm', pad: { armedAt: null, lastTouch: now } };
 }
 
 export interface RemoteScene { name: string; active: boolean }

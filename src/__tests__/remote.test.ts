@@ -2,7 +2,9 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { WebSocket } from 'ws';
-import { CONFIRM_SECONDS, DEFAULT_REMOTE_TOUCH, sanitizeRemoteTouch, SECOND_TAP_MIN_MS, secondTap } from '../remote/protocol';
+import {
+  CONFIRM_SECONDS, DEFAULT_REMOTE_TOUCH, sanitizeRemoteTouch, SECOND_TAP_MIN_MS, secondTap, TWO_TAP_IDLE, type TwoTapPad,
+} from '../remote/protocol';
 import {
   dynamicsFromValue, isRemoteCode, makeRemoteCode, parseRemoteMessage, REMOTE_PATH, stripValue,
   STRIP_STEP, tempoFromValue, TEMPO_MAX, TEMPO_MIN, valueFromTempo, valueFromVelocity,
@@ -321,38 +323,60 @@ describe('Play starting on the laptop', () => {
 
 describe('two taps, safe from a bounce (End piece, Stop all, Mute)', () => {
   const rule = { minMs: 500, windowMs: 6000 };
+  /** What each touch did, for touches at these moments on one pad (from nothing armed). */
+  const steps = (times: number[], r = rule): string[] => {
+    let pad: TwoTapPad = TWO_TAP_IDLE;
+    return times.map((t) => {
+      const out = secondTap(pad, t, r);
+      pad = out.pad;
+      return out.step;
+    });
+  };
 
   it('the first tap arms', () => {
-    expect(secondTap(null, 1000, rule)).toBe('arm');
+    expect(steps([1000])).toEqual(['arm']);
   });
 
   it('a bounce 60, 120 or 250 ms after the arming tap never confirms, and does not re-arm', () => {
-    for (const gap of [60, 120, 250]) expect(secondTap(1000, 1000 + gap, rule)).toBe('ignore');
-    expect(secondTap(1000, 1000 + 499, rule)).toBe('ignore');
+    for (const gap of [60, 120, 250, 499]) expect(steps([1000, 1000 + gap])).toEqual(['arm', 'ignore']);
   });
 
   it('a second tap 600 ms after the first, inside the window, confirms', () => {
-    expect(secondTap(1000, 1600, rule)).toBe('confirm');
-    expect(secondTap(1000, 1500, rule)).toBe('confirm');
-    expect(secondTap(1000, 1000 + 5999, rule)).toBe('confirm');
+    expect(steps([0, 600])).toEqual(['arm', 'confirm']);
+    expect(steps([1000, 1500])).toEqual(['arm', 'confirm']);
+    expect(steps([1000, 1000 + 5999])).toEqual(['arm', 'confirm']);
   });
 
-  it('is timed from the arming tap, not from the bounces after it', () => {
-    // Touches at 0, 60, 250 (one shaky press), then a deliberate tap at 600.
-    const armedAt = 1000;
-    expect(secondTap(armedAt, 1060, rule)).toBe('ignore');
-    expect(secondTap(armedAt, 1250, rule)).toBe('ignore');
-    expect(secondTap(armedAt, 1600, rule)).toBe('confirm');
+  it('a press that chatters longer than the guard never confirms: touches at 0, 200, 400, 600', () => {
+    // Each touch is within the guard of the one before, so each is a bounce of the same
+    // press and restarts the quiet. Measured from the arming touch, 600 confirmed.
+    expect(steps([0, 200, 400, 600])).toEqual(['arm', 'ignore', 'ignore', 'ignore']);
+    expect(steps([0, 200, 400, 600, 800, 1000, 1200])).not.toContain('confirm');
   });
 
-  it('after the window lapses, a tap arms again rather than confirming', () => {
-    expect(secondTap(1000, 1000 + 6000, rule)).toBe('arm');
-    expect(secondTap(1000, 1000 + 60_000, rule)).toBe('arm');
+  it('a confirming tap needs the guard of quiet after the last bounce: 0, 200, then 1000 confirms', () => {
+    expect(steps([0, 200, 1000])).toEqual(['arm', 'ignore', 'confirm']);
+    expect(steps([0, 200, 650])).toEqual(['arm', 'ignore', 'ignore']);
+  });
+
+  it('right after a confirm, a touch is a bounce: it is ignored and arms nothing', () => {
+    expect(steps([0, 600, 700])).toEqual(['arm', 'confirm', 'ignore']);
+    // Still chattering: still nothing armed. Once quiet, a touch arms afresh.
+    expect(steps([0, 600, 700, 900, 1300, 1900])).toEqual(['arm', 'confirm', 'ignore', 'ignore', 'ignore', 'arm']);
+  });
+
+  it('the window is timed from the arming tap: after it lapses, a tap arms again rather than confirming', () => {
+    expect(steps([1000, 1000 + 6000])).toEqual(['arm', 'arm']);
+    expect(steps([1000, 1000 + 60_000])).toEqual(['arm', 'arm']);
+    // Bounces do not stretch the window.
+    expect(steps([0, 300, 5800, 6100])).toEqual(['arm', 'ignore', 'confirm', 'ignore']);
+    expect(steps([0, 300, 6100])).toEqual(['arm', 'ignore', 'arm']);
   });
 
   it('follows the player setting', () => {
-    expect(secondTap(1000, 1600, { minMs: 800, windowMs: 3000 })).toBe('ignore');
-    expect(secondTap(1000, 1900, { minMs: 800, windowMs: 3000 })).toBe('confirm');
-    expect(secondTap(1000, 4100, { minMs: 800, windowMs: 3000 })).toBe('arm');
+    const slow = { minMs: 800, windowMs: 3000 };
+    expect(steps([1000, 1600], slow)).toEqual(['arm', 'ignore']);
+    expect(steps([1000, 1900], slow)).toEqual(['arm', 'confirm']);
+    expect(steps([1000, 4100], slow)).toEqual(['arm', 'arm']);
   });
 });

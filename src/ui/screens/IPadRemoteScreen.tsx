@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import {
-  DEFAULT_REMOTE_TOUCH, FULL_REACH, mapReach, REMOTE_CONTROLS, secondTap, stripValue, STRIP_STEP, TAP_REPEAT_MS, unmapReach,
-  type RemoteControlName, type RemoteLoopState, type RemoteMessage, type RemoteState, type RemoteTriggerName,
+  DEFAULT_REMOTE_TOUCH, FULL_REACH, mapReach, REMOTE_CONTROLS, secondTap, stripValue, STRIP_STEP, TAP_REPEAT_MS, TWO_TAP_IDLE, unmapReach,
+  type RemoteControlName, type RemoteLoopState, type RemoteMessage, type RemoteState, type RemoteTriggerName, type TwoTapPad,
 } from '../../remote/protocol';
 import { useRemoteLink } from '../../remote/useRemoteLink';
 
@@ -136,10 +136,11 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
   }, [beat, state?.playing]);
   const reducedMotion = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
   const showNext = state?.touch?.showNext !== false;
-  // End piece, Stop all and Mute wait for a second tap: which are waiting, since when, and
-  // the timers that stop the wait when the window runs out.
+  // End piece, Stop all and Mute wait for a second tap: which are waiting, what each pad
+  // remembers (when it was armed, its latest touch), and the timers that stop the wait
+  // when the window runs out.
   const [armed, setArmed] = useState<ReadonlySet<TwoTapName>>(() => new Set());
-  const armedAt = useRef(new Map<TwoTapName, number>());
+  const twoTapPads = useRef(new Map<TwoTapName, TwoTapPad>());
   const armTimers = useRef(new Map<TwoTapName, ReturnType<typeof setTimeout>>());
   useEffect(() => {
     const timers = armTimers.current;
@@ -151,31 +152,42 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
     if (on) next.add(name); else next.delete(name);
     return next;
   });
+  /** Stop waiting for a pad's second tap (its latest touch is still remembered, for bounces). */
+  const disarm = (name: TwoTapName): void => {
+    clearTimeout(armTimers.current.get(name));
+    armTimers.current.delete(name);
+    const pad = twoTapPads.current.get(name);
+    if (pad) twoTapPads.current.set(name, { ...pad, armedAt: null });
+    setArmedFlag(name, false);
+  };
   /**
-   * A pad that needs two taps: the first arms it, and the second acts only if it comes at
-   * least the player's bounce guard after the first and within their window. A touch
-   * sooner than that is the same shaky press landing twice: it is ignored.
+   * A pad that needs two taps: the first arms it, and the second acts only after the
+   * player's bounce guard of quiet and within their window. A touch sooner than that after
+   * the pad's latest touch is the same shaky press landing again: it is ignored, and the
+   * quiet starts again from it (see secondTap).
    */
   const twoTap = (name: TwoTapName, act: () => void): void => {
     const now = performance.now();
-    const step = secondTap(armedAt.current.get(name) ?? null, now, { minMs: secondTapMinMs, windowMs: confirmMs });
+    const { step, pad } = secondTap(twoTapPads.current.get(name) ?? TWO_TAP_IDLE, now, { minMs: secondTapMinMs, windowMs: confirmMs });
+    twoTapPads.current.set(name, pad);
     if (step === 'ignore') return;
     clearTimeout(armTimers.current.get(name));
     armTimers.current.delete(name);
     if (step === 'confirm') {
-      armedAt.current.delete(name);
       setArmedFlag(name, false);
       act();
       return;
     }
-    armedAt.current.set(name, now);
     setArmedFlag(name, true);
-    armTimers.current.set(name, setTimeout(() => {
-      armedAt.current.delete(name);
-      armTimers.current.delete(name);
-      setArmedFlag(name, false);
-    }, confirmMs));
+    armTimers.current.set(name, setTimeout(() => disarm(name), confirmMs));
   };
+  // The laptop stopped: nothing stays armed, so one tap in the next run can't end it.
+  const wasPlaying = useRef(false);
+  const playingNow = state?.playing === true;
+  useEffect(() => {
+    if (wasPlaying.current && !playingNow) for (const name of ['endPiece', 'stopAll', 'mute'] as const) disarm(name);
+    wasPlaying.current = playingNow;
+  }, [playingNow]); // eslint-disable-line react-hooks/exhaustive-deps
   const confirmEnd = armed.has('endPiece');
   const confirmStop = armed.has('stopAll');
   const endTap = (): void => twoTap('endPiece', () => padTap('endPiece', { type: 'trigger', name: 'endPiece' }));

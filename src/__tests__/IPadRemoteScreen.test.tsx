@@ -200,14 +200,46 @@ describe('two taps, safe from a bounce: End piece, Stop all and Mute', () => {
     }
   });
 
-  it('End piece: a second tap 600 ms after the first ends the piece; bounces in between change nothing', async () => {
+  it('End piece: a second tap after the guard of quiet ends the piece; bounces in between change nothing', async () => {
     await act(async () => { onMsg?.(withTouch({ playExtras: ['endPiece'] })); });
     await touchAt(20_000, () => button('End the piece'));
     await touchAt(20_060, () => button('Tap again to end'));
     await touchAt(20_250, () => button('Tap again to end'));
-    expect(sent).not.toContainEqual(END);
+    // 600 ms after the first touch, but only 350 after the last bounce: the same press.
     await touchAt(20_600, () => button('Tap again to end'));
+    expect(sent).not.toContainEqual(END);
+    await touchAt(21_200, () => button('Tap again to end'));
     expect(sent.filter((m) => JSON.stringify(m) === JSON.stringify(END))).toHaveLength(1);
+  });
+
+  it('End piece: a press that chatters at 0, 200, 400 and 600 ms never ends the piece', async () => {
+    await act(async () => { onMsg?.(withTouch({ playExtras: ['endPiece'] })); });
+    for (const t of [20_000, 20_200, 20_400, 20_600]) await touchAt(t, endPad);
+    expect(sent).not.toContainEqual(END);
+    // Still only armed, by the first touch.
+    expect(button('Tap again to end')).toBeTruthy();
+  });
+
+  it('End piece: a touch 100 ms after the confirming tap is a bounce: it does not arm End piece again', async () => {
+    await act(async () => { onMsg?.(withTouch({ playExtras: ['endPiece'] })); });
+    await touchAt(20_000, endPad);
+    await touchAt(20_600, endPad);
+    expect(sent.filter((m) => JSON.stringify(m) === JSON.stringify(END))).toHaveLength(1);
+    await touchAt(20_700, endPad);
+    expect(button('Tap again to end')).toBeUndefined();
+    expect(button('End the piece')).toBeTruthy();
+  });
+
+  it('End piece: armed, then the laptop stops: the pad is no longer waiting, and the next piece needs two taps again', async () => {
+    await act(async () => { onMsg?.(withTouch({ playExtras: ['endPiece'] })); });
+    await touchAt(20_000, endPad);
+    expect(button('Tap again to end')).toBeTruthy();
+    await act(async () => { onMsg?.(withTouch({ playExtras: ['endPiece'] }, { playing: false })); });
+    expect(button('Tap again to end')).toBeUndefined();
+    await act(async () => { onMsg?.(withTouch({ playExtras: ['endPiece'] })); });
+    await touchAt(21_000, endPad);
+    expect(sent).not.toContainEqual(END);
+    expect(button('Tap again to end')).toBeTruthy();
   });
 
   it('End piece: after the window lapses, a tap arms again rather than ending', async () => {
@@ -233,16 +265,16 @@ describe('two taps, safe from a bounce: End piece, Stop all and Mute', () => {
     await touchAt(20_000, () => button('End the piece'));
     await touchAt(20_800, () => button('Tap again to end'));
     expect(sent).not.toContainEqual(END);
-    await touchAt(21_300, () => button('Tap again to end'));
+    await touchAt(22_100, () => button('Tap again to end'));
     expect(sent).toContainEqual(END);
   });
 
-  it('Stop all: a bounce 120 ms after the first touch never stops the loops; 600 ms does', async () => {
+  it('Stop all: a bounce 120 ms after the first touch never stops the loops; a tap 580 ms after the bounce does', async () => {
     await act(async () => { onMsg?.(withTouch({ playExtras: ['stopAll'] })); });
     await touchAt(20_000, () => button('Stop all loops'));
     await touchAt(20_120, () => button('Tap again to stop all'));
     expect(sent).not.toContainEqual(STOP);
-    await touchAt(20_600, () => button('Tap again to stop all'));
+    await touchAt(20_700, () => button('Tap again to stop all'));
     expect(sent).toContainEqual(STOP);
   });
 
@@ -253,7 +285,7 @@ describe('two taps, safe from a bounce: End piece, Stop all and Mute', () => {
     expect(mute().textContent).toContain('Tap again to mute');
     await touchAt(20_120, mute); // a bounce
     expect(sent).not.toContainEqual(MUTE);
-    await touchAt(20_600, mute);
+    await touchAt(20_700, mute);
     expect(sent).toContainEqual(MUTE);
   });
 
