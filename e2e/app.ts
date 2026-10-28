@@ -31,6 +31,13 @@ export async function openLaptopSetup(page: Page): Promise<void> {
   await expect(page.getByRole('heading', { name: 'Choose the colours' })).toBeVisible();
 }
 
+/** Welcome, as on a first run: nothing saved, cut off from the laptop's copy. */
+export async function openWelcome(page: Page): Promise<void> {
+  await cutOff(page);
+  await page.goto('/');
+  await expect(page.getByRole('button', { name: /Set up the board/ })).toBeVisible();
+}
+
 /** Record the page's errors, and cut it off from the laptop's copy and from the internet. */
 async function cutOff(page: Page): Promise<void> {
   const errors: string[] = [];

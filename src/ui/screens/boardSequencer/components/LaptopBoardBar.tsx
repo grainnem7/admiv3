@@ -106,7 +106,19 @@ export function LaptopBoardBar({
       <span style={{ fontSize: 12, color: 'var(--bs-fg2)', flex: '1 1 160px' }}>
         {`${count} on the board. Click a square to put a counter down, click it again to lift it.`}
       </span>
-      <Button tone="quiet" onClick={onClear} reason={count === 0 ? 'The board is already empty.' : null}>Clear the board</Button>
+      <Button
+        tone="quiet"
+        reason={count === 0 ? 'The board is already empty.' : null}
+        onClick={() => {
+          onClear();
+          // It turns itself off: focus goes to the colour a click puts down, as Add four
+          // colours does, before the button goes (R2-T1-02).
+          const radio = (which: string): HTMLElement | null => pickerRef.current?.querySelector<HTMLElement>(which) ?? null;
+          (radio('[aria-checked="true"]') ?? radio('[role="radio"]'))?.focus();
+        }}
+      >
+        Clear the board
+      </Button>
     </div>
   );
 }

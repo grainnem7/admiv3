@@ -182,7 +182,7 @@ test('Clear the board can be undone', async ({ page }) => {
   await page.getByRole('button', { name: 'Clear the board' }).click();
   const grid = page.getByRole('grid', { name: /Laptop board/ });
   await expect(grid.getByRole('button', { name: /^Row 3 from the bottom, step 1: empty$/ })).toBeVisible();
-  await expect(page.getByRole('status').filter({ hasText: 'Board cleared (2 counters).' })).toBeVisible();
+  await expect(page.getByRole('status').filter({ hasText: 'Board cleared.' }).filter({ has: page.getByRole('button', { name: 'Undo' }) })).toBeVisible();
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
   await expect(grid.getByRole('button', { name: /^Row 3 from the bottom, step 1: Red/ })).toBeVisible();
   await expect(grid.getByRole('button', { name: /^Row 5 from the bottom, step 3: Red/ })).toBeVisible();

@@ -704,6 +704,17 @@ export default function BoardSequencerScreen() {
     const id = window.setTimeout(() => setUndoOffer(null), UNDO_MS);
     return () => window.clearTimeout(id);
   }, [undoOffer]);
+  const undoButtonRef = useRef<HTMLButtonElement | null>(null);
+  // "Clear it" in the question about clearing a loop: the question goes, and so does the ✕
+  // that asked it. Focus goes to Undo, its opposite, as after Delete scene, not to the
+  // heading at the top of the page (R2-T1-04). Set on Clear it, read once the question has
+  // gone (its own focus-return runs first).
+  const focusUndoRef = useRef(false);
+  useEffect(() => {
+    if (!focusUndoRef.current || clearSlotTarget !== null) return;
+    focusUndoRef.current = false;
+    undoButtonRef.current?.focus();
+  }, [clearSlotTarget, undoOffer]);
   // The scene just deleted, for Undo: one tap next to Go must be reversible.
   const [deletedScene, setDeletedScene] = useState<{ scene: BoardSequencerStored['scenes'][number]; index: number; wasCurrent: boolean } | null>(null);
   useEffect(() => {
@@ -4649,6 +4660,7 @@ export default function BoardSequencerScreen() {
       step={step}
       onStepChange={setStep}
       laptop={laptop}
+      holdFocus={chooserOpen}
       cfg={setupCfg}
       camera={cameraGate}
       hasStoredConfig={storedRef.current !== null}
@@ -4718,20 +4730,32 @@ export default function BoardSequencerScreen() {
       onClear={() => {
         const before = configRef.current.laptopBoard;
         update({ laptopBoard: [] });
-        setUndoOffer({ text: `Board cleared (${before.length} ${before.length === 1 ? 'counter' : 'counters'}).`, restore: () => update({ laptopBoard: before }) });
+        // Shown with Undo, and read out: a line that appears is not always read (R2-T1-02).
+        setUndoOffer({ text: 'Board cleared.', restore: () => update({ laptopBoard: before }) });
+        announce('Board cleared.');
       }}
       onAddColours={addLaptopColours}
       onAddColour={nextLaptopColour() ? addLaptopColour : null}
       palette={palette}
     />
   );
-  const switchBoardSource = (to: 'camera' | 'laptop'): void => {
+  const switchBoardSource = (to: 'camera' | 'laptop', pressed: HTMLElement): void => {
     if (running) stop();
     update({ boardSource: to });
     if (to === 'laptop') { setError(null); setCamNotice(null); }
     if (to === 'laptop') setView('play');
     else { setView('setup'); setStep(resolveEntry({ enabled: config.enabled, channels: config.channels }, storedRef.current !== null)); }
     announce(to === 'laptop' ? 'Laptop board: click squares to place counters. No camera needed.' : 'Back to the camera and the real board.');
+    // From set-up the button moves with the header, and focus fell to the page (R2-T4-02).
+    // Play has no step heading: focus goes to where the laptop board starts, the colour a
+    // click puts down (or Add four colours, with none yet). The camera's set-up step takes
+    // focus to its own heading.
+    if (to === 'laptop') {
+      void focusWhenGone(() => {
+        const bar = document.querySelector<HTMLElement>('[role="group"][aria-label="Laptop board"]');
+        return bar?.querySelector<HTMLElement>('[aria-checked="true"]') ?? bar?.querySelector<HTMLElement>('button:not([disabled])');
+      }, pressed);
+    }
   };
   // Which board is in use, always visible: a planning session left on the laptop board
   // must not surprise anyone on the day.
@@ -4742,7 +4766,7 @@ export default function BoardSequencerScreen() {
           key={src}
           tone={config.boardSource === src ? 'primary' : 'secondary'}
           aria-pressed={config.boardSource === src}
-          onClick={() => { if (config.boardSource !== src) switchBoardSource(src); }}
+          onClick={(e) => { if (config.boardSource !== src) switchBoardSource(src, e.currentTarget); }}
           aria-label={src === 'laptop' ? 'Laptop board: play on the laptop, without the camera or board' : 'Camera board: the camera and the real board'}
         >
           {src === 'laptop' ? '💻 Laptop' : '📷 Camera'}
@@ -4900,6 +4924,7 @@ export default function BoardSequencerScreen() {
         <div role="status" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', padding: '6px 12px', borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-raised)', border: '1px solid var(--bs-border)' }}>
           <span style={{ flex: '1 1 200px' }}>{undoOffer.text}</span>
           <Button
+            ref={undoButtonRef}
             tone="secondary"
             onClick={() => { undoOffer.restore(); setUndoOffer(null); announce('Undone.'); }}
           >
@@ -5497,7 +5522,7 @@ export default function BoardSequencerScreen() {
                 ? `${label} is used in ${listNames(using)}. Clear it and take it out of ${using.length === 1 ? 'that scene' : 'those scenes'}?`
                 : `${label} is deleted for this player.`} You can undo it for a few seconds afterwards.`}
               confirmLabel="Clear it"
-              onConfirm={() => { setClearSlotTarget(null); clearLoopEverywhere(slot); }}
+              onConfirm={() => { setClearSlotTarget(null); clearLoopEverywhere(slot); focusUndoRef.current = true; }}
               onCancel={() => setClearSlotTarget(null)}
             />
           );

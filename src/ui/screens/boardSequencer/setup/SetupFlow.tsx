@@ -41,6 +41,12 @@ export interface SetupFlowProps {
   hint?: ReactNode;
   /** The laptop board: only the colours and Ready. */
   laptop?: boolean;
+  /**
+   * Something covers set-up (Who's playing?): the heading waits, and takes focus once it
+   * has gone. Taken while covered, focus left the name box for a heading about to be made
+   * inert, and fell to the page (R2-T4-02).
+   */
+  holdFocus?: boolean;
 }
 
 /**
@@ -50,16 +56,17 @@ export interface SetupFlowProps {
  */
 export function SetupFlow({
   step, onStepChange, cfg, camera, hasStoredConfig, children, skip = null, announce,
-  footerAlign = 'end', heading, hint, laptop = false,
+  footerAlign = 'end', heading, hint, laptop = false, holdFocus = false,
 }: SetupFlowProps): JSX.Element {
   const headingRef = useRef<HTMLHeadingElement | null>(null);
   const steps = setupSteps(laptop);
   const index = steps.indexOf(step);
 
   useEffect(() => {
+    if (holdFocus) return;
     headingRef.current?.focus();
     announce(`Step ${index + 1} of ${steps.length}: ${STEP_LABELS[step]}`);
-  }, [step, index, steps.length, announce]);
+  }, [step, index, steps.length, announce, holdFocus]);
 
   const back = prevStep(step, laptop);
   const next = nextStep(step, laptop);
