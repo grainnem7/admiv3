@@ -277,6 +277,12 @@ describe('Loops: one way to make a loop (F1, T1-01, T2-14)', () => {
     render(props({ step: 'loops', canSaveBoard: false, newLoop: <p>making</p> }));
     expect(text()).not.toContain('To make a loop, press New loop.');
   });
+
+  it('every loop full: no note to press New loop, which is off (R3-TB-03)', () => {
+    render(props({ step: 'loops', canSaveBoard: false, loopsFull: true }));
+    expect(text()).toContain('Every loop is full');
+    expect(text()).not.toContain('To make a loop, press New loop.');
+  });
 });
 
 describe('Scenes: Update from now copies only what is really playing (R2-T2-02)', () => {

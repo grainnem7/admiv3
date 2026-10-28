@@ -91,7 +91,7 @@ import { loadCameraChoice, saveCameraChoice } from '../../tracking/cameraChoice'
 import { CameraDebugPanel } from '../components/camera/CameraDebugPanel';
 import { ConfirmDialog } from './boardSequencer/ui/ConfirmDialog';
 import { colourMatchesBoardRaw, type NudgeSignal } from './boardSequencer/playNudge';
-import { PLAY_AFTER_STOP_MS, spaceAction, spaceTogglesPlay, type BoardScreenView } from './boardSequencer/spaceKey';
+import { START_AFTER_PIECE_MS, spaceAction, spaceTogglesPlay, startTooSoon, type BoardScreenView } from './boardSequencer/spaceKey';
 import { ghostsForSave } from '../../tracking/handGuard/knockGuard';
 import { TRACK_SAVE_MS } from '../../tracking/handGuard/boardTrack';
 import { detectBoard, type BoardDetection } from '../../tracking/boardDetect/detectBoard';
@@ -700,12 +700,22 @@ export default function BoardSequencerScreen() {
   // Undo for anything that throws work away — the board cleared, a loop cleared, the
   // scenes replaced by a plan — for a while afterwards, the same way every time.
   const [undoOffer, setUndoOffer] = useState<{ text: string; restore: () => void } | null>(null);
+  const undoButtonRef = useRef<HTMLButtonElement | null>(null);
+  /**
+   * The Undo line goes, pressed or run out: focus on its Undo moves first to ▶ Play / ■ Stop
+   * (Show itself in Show), so it never falls to the page with the line.
+   */
+  const dropUndoOffer = (): void => {
+    const undo = undoButtonRef.current;
+    if (undo !== null && document.activeElement === undo) (document.getElementById(PLAY_STOP_ID) ?? bigBoardRef.current)?.focus();
+    setUndoOffer(null);
+  };
   useEffect(() => {
     if (!undoOffer) return;
-    const id = window.setTimeout(() => setUndoOffer(null), UNDO_MS);
+    const id = window.setTimeout(dropUndoOffer, UNDO_MS);
     return () => window.clearTimeout(id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- dropUndoOffer reads refs only
   }, [undoOffer]);
-  const undoButtonRef = useRef<HTMLButtonElement | null>(null);
   // "Clear it" in the question about clearing a loop: the question goes, and so does the ✕
   // that asked it. Focus goes to Undo, its opposite, as after Delete scene, not to the
   // heading at the top of the page (R2-T1-04). Set on Clear it, read once the question has
@@ -741,6 +751,18 @@ export default function BoardSequencerScreen() {
   const hardStoppedRef = useRef(false);
   /** When the board last stopped, for ▶ Play's bounce guard. */
   const stoppedAtRef = useRef(-Infinity);
+  /** When the piece last ended by itself (its ending rang out, or the end time came). */
+  const pieceEndedAtRef = useRef(-Infinity);
+  /**
+   * A start pressed too soon starts nothing (startTooSoon): a bounce of Stop, or the second
+   * press of a Stop the piece's own end overtook. Straight after the end it says so.
+   */
+  const startRefused = (): boolean => {
+    const now = performance.now();
+    if (!startTooSoon(now - stoppedAtRef.current, now - pieceEndedAtRef.current)) return false;
+    if (now - pieceEndedAtRef.current < START_AFTER_PIECE_MS) announce('The piece has just ended.');
+    return true;
+  };
   /**
    * A start of the piece is loading (▶ Start the piece, ▶ Rehearse from here, Carry on): its
    * clock runs only once the sound is ready, and no loop is made meanwhile either (F2).
@@ -2396,7 +2418,10 @@ export default function BoardSequencerScreen() {
       const act = spaceAction(view, e.target, {
         running: runningRef.current, offerShowing: reloadNoticeRef.current,
         msSinceStop: performance.now() - stoppedAtRef.current,
+        msSincePieceEnded: performance.now() - pieceEndedAtRef.current,
+        pieceOn: clockStartRef.current !== null || endingRef.current || pieceStartingRef.current,
       });
+      if (act === 'none' && !runningRef.current) startRefused();
       if (act === 'stop') requestStop();
       else if (act === 'play') void start();
       else if (act === 'startPiece') startThePieceRef.current();
@@ -3217,7 +3242,7 @@ export default function BoardSequencerScreen() {
     if (!runningRef.current) {
       // As ▶ Play: a press straight after Stop is a bounce (focus lands here after the
       // second press of Stop), never a new start of the piece.
-      if (performance.now() - stoppedAtRef.current < PLAY_AFTER_STOP_MS) return;
+      if (startRefused()) return;
       // The piece and a new loop never run together (F2): starting the piece ends it.
       if (newLoopRef.current) leaveNewLoop();
       void start({ fromSec: 0 });
@@ -3275,6 +3300,7 @@ export default function BoardSequencerScreen() {
       if (engineRef.current !== engine) return;
       sessionLogRef.current.action('laptop', 'piece ended');
       stop();
+      pieceEndedAtRef.current = performance.now();
       // The piece is over: nothing stays armed, and the next run starts from the top.
       wantedRef.current = new Set();
       setWantedSlots([]);
@@ -3353,6 +3379,7 @@ export default function BoardSequencerScreen() {
       setTimeout(() => {
         if (engineRef.current !== engine) return;
         stop();
+        pieceEndedAtRef.current = performance.now();
         wantedRef.current = new Set();
         setWantedSlots([]);
         update({ currentScene: null });
@@ -4245,7 +4272,7 @@ export default function BoardSequencerScreen() {
           onRename={renameLoop}
           onLeave={leaveNewLoop}
           stopped={newLoopStopped}
-          onPlay={() => { if (performance.now() - stoppedAtRef.current >= PLAY_AFTER_STOP_MS) void start(); }}
+          onPlay={() => { if (!startRefused()) void start(); }}
         />
       ) : null}
       onToggleLoop={toggleLoop}
@@ -4928,7 +4955,7 @@ export default function BoardSequencerScreen() {
           <Button
             ref={undoButtonRef}
             tone="secondary"
-            onClick={() => { undoOffer.restore(); setUndoOffer(null); announce('Undone.'); }}
+            onClick={() => { undoOffer.restore(); dropUndoOffer(); announce('Undone.'); }}
           >
             Undo
           </Button>
@@ -5579,7 +5606,7 @@ export default function BoardSequencerScreen() {
               <PlayPanel
                 running={running}
                 muted={muted}
-                onStart={() => { if (performance.now() - stoppedAtRef.current >= PLAY_AFTER_STOP_MS) void start(); }}
+                onStart={() => { if (!startRefused()) void start(); }}
                 onStop={requestStop}
                 stopArmed={stopArmed}
                 onToggleMute={toggleMuted}

@@ -233,8 +233,9 @@ function LoopsStep(p: PieceStepsProps): JSX.Element {
           <p style={note}>Everything stops; only the counters sound. Keep makes the loop.</p>
         </div>
       )}
-      {/* A note, not a warning: an empty board is where New loop starts (R2-T1-07). */}
-      {!p.canSaveBoard && oldWays && <p style={note}>To make a loop, press New loop.</p>}
+      {/* A note, not a warning: an empty board is where New loop starts (R2-T1-07). Not with
+          every loop full: New loop is off then, and says why (R3-TB-03). */}
+      {!p.canSaveBoard && oldWays && !p.loopsFull && <p style={note}>To make a loop, press New loop.</p>}
       <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
         {p.loops.map((l) => {
           const empty = l.state === 'empty';

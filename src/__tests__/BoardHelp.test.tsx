@@ -34,8 +34,8 @@ describe('Help says how things work now', () => {
     expect(entry('Play, Make a piece, Show')).toContain('while the piece plays, Stop needs two presses');
   });
 
-  it('Space: ▶ Play on the board, ▶ Start the piece in Show (R2-T4-01)', () => {
-    expect(entry('Keyboard')).toContain('Space: ▶ Play on the board. In Show: ▶ Start the piece. While playing: Stop (press twice while the piece plays).');
+  it('Space: ▶ Play on the board, ▶ Start the piece in Show, also while the board plays (R2-T4-01, R3-TA-01)', () => {
+    expect(entry('Keyboard')).toContain('Space: ▶ Play on the board, and Stop while it plays. In Show: ▶ Start the piece, also while the board plays; once the piece plays, Stop (press twice).');
     expect(all()).not.toContain('Start clock');
   });
 

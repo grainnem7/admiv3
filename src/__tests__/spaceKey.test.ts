@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { PLAY_AFTER_STOP_MS, spaceAction, spaceTogglesPlay } from '../ui/screens/boardSequencer/spaceKey';
+import { PLAY_AFTER_STOP_MS, START_AFTER_PIECE_MS, spaceAction, spaceTogglesPlay, startTooSoon } from '../ui/screens/boardSequencer/spaceKey';
 
 afterEach(() => { document.body.innerHTML = ''; });
 
@@ -30,8 +30,8 @@ describe('spaceTogglesPlay', () => {
   it('Space on "Earlier takes (n)" opens and closes the list, never the board (R2-T4-05)', () => {
     const summary = el('<details><summary>Earlier takes (2)</summary><ul><li>a take</li></ul></details>').firstElementChild!;
     expect(spaceTogglesPlay('play', summary)).toBe(false);
-    expect(spaceAction('play', summary, { running: false, offerShowing: false, msSinceStop: Infinity })).toBe('none');
-    expect(spaceAction('play', summary, { running: true, offerShowing: false, msSinceStop: Infinity })).toBe('none');
+    expect(spaceAction('play', summary, { running: false, offerShowing: false, msSinceStop: Infinity, msSincePieceEnded: Infinity, pieceOn: false })).toBe('none');
+    expect(spaceAction('play', summary, { running: true, offerShowing: false, msSinceStop: Infinity, msSincePieceEnded: Infinity, pieceOn: false })).toBe('none');
   });
 
   it('a plain region is not a control, so Space still toggles', () => {
@@ -40,8 +40,8 @@ describe('spaceTogglesPlay', () => {
 });
 
 describe('spaceAction: what one Space press does (R2-T4-01, ledger M7)', () => {
-  const stopped = { running: false, offerShowing: false, msSinceStop: Infinity };
-  const playing = { running: true, offerShowing: false, msSinceStop: Infinity };
+  const stopped = { running: false, offerShowing: false, msSinceStop: Infinity, msSincePieceEnded: Infinity, pieceOn: false };
+  const playing = { running: true, offerShowing: false, msSinceStop: Infinity, msSincePieceEnded: Infinity, pieceOn: false };
   const region = (): Element => el('<div role="region" aria-label="Show" tabindex="-1">Show</div>');
 
   it('in Show, stopped, with focus on no control: ▶ Start the piece', () => {
@@ -49,9 +49,17 @@ describe('spaceAction: what one Space press does (R2-T4-01, ledger M7)', () => {
     expect(spaceAction('bigBoard', document.body, stopped)).toBe('startPiece');
   });
 
-  it('in Show, playing, with or without the piece: Stop', () => {
-    expect(spaceAction('bigBoard', region(), playing)).toBe('stop');
-    expect(spaceAction('bigBoard', document.body, playing)).toBe('stop');
+  it('in Show, while the piece plays: Stop (two presses, as the button)', () => {
+    const piece = { ...playing, pieceOn: true };
+    expect(spaceAction('bigBoard', region(), piece)).toBe('stop');
+    expect(spaceAction('bigBoard', document.body, piece)).toBe('stop');
+  });
+
+  it('in Show, while the board plays without the piece (Tim warming up): ▶ Start the piece, with no gap (R3-TA-01)', () => {
+    expect(spaceAction('bigBoard', region(), playing)).toBe('startPiece');
+    expect(spaceAction('bigBoard', document.body, playing)).toBe('startPiece');
+    // In Play it stays Stop: plain play there, and the piece starts from Show.
+    expect(spaceAction('play', document.body, playing)).toBe('stop');
   });
 
   it('in Play: ▶ Play when stopped (plain play, never the piece), Stop while playing', () => {
@@ -65,6 +73,23 @@ describe('spaceAction: what one Space press does (R2-T4-01, ledger M7)', () => {
     expect(spaceAction('bigBoard', region(), justStopped)).toBe('none');
     expect(spaceAction('bigBoard', region(), { ...stopped, msSinceStop: PLAY_AFTER_STOP_MS - 1 })).toBe('none');
     expect(spaceAction('bigBoard', region(), { ...stopped, msSinceStop: PLAY_AFTER_STOP_MS })).toBe('startPiece');
+  });
+
+  it('for 5 s after the piece ends by itself, Space starts nothing: the second press of a Stop pressed during the ending', () => {
+    // ■ Stop waits 4 s for its second press; the piece can end inside that wait.
+    expect(START_AFTER_PIECE_MS).toBeGreaterThan(4000);
+    const justEnded = { ...stopped, msSinceStop: 1500, msSincePieceEnded: 1500 };
+    expect(spaceAction('bigBoard', region(), justEnded)).toBe('none');
+    expect(spaceAction('play', document.body, justEnded)).toBe('none');
+    const later = { ...stopped, msSinceStop: START_AFTER_PIECE_MS, msSincePieceEnded: START_AFTER_PIECE_MS };
+    expect(spaceAction('bigBoard', region(), later)).toBe('startPiece');
+  });
+
+  it('startTooSoon: 0.4 s after any Stop, 5 s after the piece ended by itself', () => {
+    expect(startTooSoon(200, Infinity)).toBe(true);
+    expect(startTooSoon(PLAY_AFTER_STOP_MS, Infinity)).toBe(false);
+    expect(startTooSoon(3900, 3900)).toBe(true);
+    expect(startTooSoon(START_AFTER_PIECE_MS, START_AFTER_PIECE_MS)).toBe(false);
   });
 
   it('while the Carry on offer is on screen, Space on anything but a control does nothing', () => {

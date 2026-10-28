@@ -1,4 +1,6 @@
+import { useRef } from 'react';
 import { Button } from '../ui/Button';
+import { focusWhenGone } from '../ui/focusNext';
 
 export type CheckState = 'ok' | 'warn' | 'problem';
 
@@ -23,9 +25,12 @@ const WORD: Record<CheckState, string> = { ok: 'ready', warn: 'check', problem: 
 export function ReadyList({ items }: { items: ReadyItem[] }): JSX.Element {
   const problems = items.filter((i) => i.state === 'problem').length;
   const warns = items.filter((i) => i.state === 'warn').length;
+  // A fix button goes with the line it fixed: focus goes to the summary, which says what is
+  // left, never to the page (R3-TB-01).
+  const summaryRef = useRef<HTMLParagraphElement | null>(null);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
-      <p role="status" style={{ margin: 0, fontWeight: 700 }}>
+      <p ref={summaryRef} tabIndex={-1} role="status" style={{ margin: 0, fontWeight: 700 }}>
         {problems > 0 ? `${problems} ${problems === 1 ? 'thing needs' : 'things need'} fixing before the piece.`
           : warns > 0 ? `Ready, with ${warns} ${warns === 1 ? 'thing' : 'things'} to check.` : 'Everything is ready.'}
       </p>
@@ -39,7 +44,13 @@ export function ReadyList({ items }: { items: ReadyItem[] }): JSX.Element {
               {i.fix && i.state !== 'ok' && <span style={{ display: 'block', fontSize: 13, color: 'var(--bs-fg2)' }}>{i.fix}</span>}
               {i.action && i.state !== 'ok' && (
                 <span style={{ display: 'block', marginTop: 4 }}>
-                  <Button tone="secondary" aria-label={i.action.name} onClick={i.action.onClick}>{i.action.label}</Button>
+                  <Button
+                    tone="secondary"
+                    aria-label={i.action.name}
+                    onClick={(e) => { i.action?.onClick(); void focusWhenGone(() => summaryRef.current, e.currentTarget); }}
+                  >
+                    {i.action.label}
+                  </Button>
                 </span>
               )}
             </span>

@@ -294,6 +294,60 @@ test('End now: the chosen ending runs, then the piece stops by itself', async ({
   expect(pageErrors(page)).toEqual([]);
 });
 
+/**
+ * Inside the page, from the moment the piece has ended by itself (`ended` says when): press
+ * `first` 1 s after, read what it did 1.5 s later, then Space at 3 s, and read again.
+ */
+const pressesAfterTheEnd = (page: Page, view: 'play' | 'show'): Promise<{ first: string; space: string; said: string }> => page.evaluate(async (v) => {
+  const show = (): Element | null => document.querySelector('[role="region"][aria-label="Show"]');
+  const button = (text: string): HTMLButtonElement | undefined =>
+    [...(v === 'show' ? show()! : document).querySelectorAll('button')].find((b) => b.textContent === text);
+  const ended = (): boolean => (v === 'show' ? button('▶ Start the piece') !== undefined : document.getElementById('bs-play-stop')?.textContent === '▶ Play');
+  const state = (): string => `${v === 'show' ? (button('▶ Start the piece') ? 'Start the piece' : 'no Start') : document.getElementById('bs-play-stop')?.textContent}${document.querySelector('[role="timer"]') ? ' + clock' : ''}`;
+  const wait = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+  while (!ended()) await new Promise((r) => requestAnimationFrame(r));
+  await wait(1000);
+  (v === 'show' ? button('▶ Start the piece') : document.getElementById('bs-play-stop'))?.click();
+  await wait(1500);
+  const first = state();
+  const said = document.querySelector('[aria-live="polite"].visually-hidden')?.textContent ?? '';
+  (document.activeElement as HTMLElement | null)?.blur();
+  document.body.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+  await wait(1200);
+  return { first, space: state(), said };
+}, view);
+
+test('straight after the piece ends by itself, ▶ Play and Space start nothing (the second press of a ■ Stop pressed during the ending); 5 s on, ▶ Play plays', async ({ page }) => {
+  await openLaptopBoard(page);
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1]]);
+  await makePlan(page);
+  await startPiece(page);
+  await page.getByRole('region', { name: 'Now and next' }).getByRole('button', { name: '⏹ End' }).click();
+  expect(await pressesAfterTheEnd(page, 'play')).toEqual({ first: '▶ Play', space: '▶ Play', said: 'The piece has just ended.' });
+  // Only for a moment: 5 s on, ▶ Play plays.
+  await page.waitForTimeout(1500);
+  await page.locator('#bs-play-stop').click();
+  await expect(page.locator('#bs-play-stop')).toHaveText('■ Stop', { timeout: 20_000 });
+  expect(pageErrors(page)).toEqual([]);
+});
+
+test('in Show, straight after the piece ends by itself, ▶ Start the piece and Space start nothing; 5 s on, ▶ Start the piece starts it', async ({ page }) => {
+  await openLaptopBoard(page);
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1]]);
+  await makePlan(page);
+  await page.getByRole('button', { name: /^Show: the board, the clock/ }).click();
+  const show = page.getByRole('region', { name: 'Show', exact: true });
+  await show.getByRole('button', { name: '▶ Start the piece' }).click();
+  await show.getByRole('button', { name: '⏹ End' }).click();
+  expect(await pressesAfterTheEnd(page, 'show')).toEqual({ first: 'Start the piece', space: 'Start the piece', said: 'The piece has just ended.' });
+  await page.waitForTimeout(1500);
+  await show.getByRole('button', { name: '▶ Start the piece' }).click();
+  await expect(show.getByRole('timer')).toBeVisible({ timeout: 20_000 });
+  expect(pageErrors(page)).toEqual([]);
+});
+
 test('step 3 checks what is ready, and says what to fix', async ({ page }) => {
   await openLaptopBoard(page);
   await pieceStep(page, 'Ending & check');
@@ -1125,6 +1179,39 @@ test('Space in Show starts the piece: the clock, the opening scene and its loop,
   await page.keyboard.press('Space');
   await expect(show.getByRole('button', { name: '▶ Start the piece' })).toBeVisible();
   await expect(show.getByRole('timer')).toHaveCount(0);
+  expect(pageErrors(page)).toEqual([]);
+});
+
+test('Space in Show while Tim warms up starts the piece at once: the board never stops (R3-TA-01)', async ({ page }) => {
+  await openLaptopBoard(page);
+  await saveBedAndPulse(page);
+  await makePlan(page); // Arrival, at 0:00, has Bed
+  await page.getByRole('button', { name: '▶ Play', exact: true }).first().click();
+  await expect(page.locator('#bs-play-stop')).toHaveText('■ Stop', { timeout: 20_000 });
+  await page.getByRole('button', { name: /^Show: the board, the clock/ }).click();
+  const show = page.getByRole('region', { name: 'Show', exact: true });
+  await expect(show.getByRole('button', { name: '■ Stop', exact: true })).toBeVisible();
+  // Space on Show itself; watched inside the page from that moment until the clock shows:
+  // ■ Stop must be there throughout (the board stopping takes it away).
+  const stopped = await page.evaluate(async () => {
+    const region = document.querySelector('[role="region"][aria-label="Show"]') as HTMLElement;
+    const stopThere = (): boolean => [...region.querySelectorAll('button')].some((b) => /^■ (Stop|Press again to stop)$/.test(b.textContent ?? ''));
+    let gone = false;
+    const watch = new MutationObserver(() => { if (!stopThere()) gone = true; });
+    watch.observe(region, { childList: true, subtree: true, characterData: true });
+    region.focus();
+    region.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true }));
+    const until = Date.now() + 20_000;
+    while (region.querySelector('[role="timer"]') === null && Date.now() < until) await new Promise((r) => requestAnimationFrame(r));
+    watch.disconnect();
+    return { gone, timer: region.querySelector('[role="timer"]') !== null };
+  });
+  expect(stopped).toEqual({ gone: false, timer: true });
+  await expect(show.getByRole('region', { name: 'Now and next' })).toContainText('Now: Arrival');
+  // Now the piece plays: Space is Stop again, two presses.
+  await show.focus();
+  await page.keyboard.press('Space');
+  await expect(show.getByRole('button', { name: '■ Press again to stop' })).toBeVisible();
   expect(pageErrors(page)).toEqual([]);
 });
 

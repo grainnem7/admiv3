@@ -21,6 +21,19 @@ const CONTROL_SELECTOR = [
  */
 export const PLAY_AFTER_STOP_MS = 400;
 
+/**
+ * After the piece ends by itself (its ending has rung out, or the end time came), nothing
+ * starts for a while: ■ Stop pressed once during the ending waits 4 s for its second press,
+ * and the piece can end inside that wait. The second press found ▶ Start the piece there and
+ * began the whole piece again, straight after its last chord.
+ */
+export const START_AFTER_PIECE_MS = 5000;
+
+/** A start now would be the same press bouncing, or the second press of a Stop the piece's end overtook. */
+export function startTooSoon(msSinceStop: number, msSincePieceEnded: number): boolean {
+  return msSinceStop < PLAY_AFTER_STOP_MS || msSincePieceEnded < START_AFTER_PIECE_MS;
+}
+
 export function spaceTogglesPlay(view: BoardScreenView, target: EventTarget | null): boolean {
   if (view === 'setup') return false;
   if (target instanceof Element && target.closest(CONTROL_SELECTOR) !== null) return false;
@@ -30,21 +43,23 @@ export function spaceTogglesPlay(view: BoardScreenView, target: EventTarget | nu
 export type SpaceAction = 'startPiece' | 'play' | 'stop' | 'none';
 
 /**
- * What one Space press does (R2-T4-01). In Show, stopped, it is ▶ Start the piece — the
- * piece, with its clock and its opening scene, never plain play (Show is for the piece,
- * and Space is the owner's play key). In Play it is ▶ Play: plain play. Playing, it is
- * ■ Stop (two presses while the piece's clock runs, as the button). A press straight after
+ * What one Space press does (R2-T4-01). In Show it is ▶ Start the piece — the piece, with
+ * its clock and its opening scene, never plain play (Show is for the piece, and Space is the
+ * owner's play key) — stopped, and also while Tim warms up on a playing board, where it
+ * starts the piece with no gap (R3-TA-01: Space stopped him first); once the piece plays
+ * (`pieceOn`: its clock, its ending, or its start loading) it is ■ Stop, two presses as the
+ * button. In Play it is ▶ Play: plain play, and ■ Stop while playing. A press straight after
  * a Stop starts nothing, as with the buttons; and while the offer to carry on after a
  * reload is on screen, nothing — plain Play under it would hide the offer and start the
  * board with no piece.
  */
 export function spaceAction(
   view: BoardScreenView, target: EventTarget | null,
-  s: { running: boolean; offerShowing: boolean; msSinceStop: number },
+  s: { running: boolean; offerShowing: boolean; msSinceStop: number; msSincePieceEnded: number; pieceOn: boolean },
 ): SpaceAction {
   if (!spaceTogglesPlay(view, target)) return 'none';
   if (s.offerShowing) return 'none';
-  if (s.running) return 'stop';
-  if (s.msSinceStop < PLAY_AFTER_STOP_MS) return 'none';
+  if (s.running) return view === 'bigBoard' && !s.pieceOn ? 'startPiece' : 'stop';
+  if (startTooSoon(s.msSinceStop, s.msSincePieceEnded)) return 'none';
   return view === 'bigBoard' ? 'startPiece' : 'play';
 }

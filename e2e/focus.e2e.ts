@@ -157,6 +157,29 @@ test('Clear it, in the question about clearing a loop: focus goes to Undo, not t
   expect(pageErrors(page)).toEqual([]);
 });
 
+test('Undo on the line under the board: the line goes, and focus goes to ▶ Play, not the page', async ({ page }) => {
+  await openLaptopBoard(page);
+  await pickColour(page, 'Red');
+  // The ▶ Play / ■ Stop button by its id: the Loops step has a ▶ Play of its own as well.
+  const play = page.locator('#bs-play-stop');
+  // After Clear the board, and after Clear it on a loop: the same Undo line, the same rule.
+  await place(page, [[3, 1]]);
+  await page.getByRole('button', { name: 'Clear the board' }).click();
+  await enter(page, page.getByRole('button', { name: 'Undo', exact: true }));
+  expect(await focusNow(page)).not.toBe('BODY');
+  await focusIsOn(play);
+  expect(await focusLater(page)).toBe('BUTTON:▶ Play');
+  await pieceStep(page, 'Loops');
+  await page.getByRole('button', { name: 'Save the board here' }).first().click();
+  await enter(page, page.getByRole('button', { name: 'Clear loop 1' }));
+  await enter(page, page.getByRole('dialog', { name: 'Clear Loop 1?' }).getByRole('button', { name: 'Clear it' }));
+  await focusIsOn(page.getByRole('button', { name: 'Undo', exact: true }));
+  await page.keyboard.press('Enter');
+  await focusIsOn(play);
+  expect(await focusLater(page)).toBe('BUTTON:▶ Play');
+  expect(pageErrors(page)).toEqual([]);
+});
+
 /**
  * The camera path from Welcome, by keyboard (R2-T4-02): Set up the board, the name, Create,
  * then the laptop board. Run with no camera, and with Chromium's fake camera below.
