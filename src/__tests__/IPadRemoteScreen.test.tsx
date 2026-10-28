@@ -373,6 +373,16 @@ describe('a loop pad while the laptop is stopped', () => {
     expect(sent.filter((m) => (m as { type: string }).type === 'loop')).toEqual([]);
   });
 
+  it('while Play is starting on the laptop (the sound still loading), the tap is taken, not refused', async () => {
+    await act(async () => { onMsg?.({ ...STATE, state: { ...STATE.state, playing: false, starting: true } }); });
+    const tab = [...el.querySelectorAll('[role="tab"]')].find((b) => b.textContent === 'Loops')!;
+    await act(async () => { pointer('pointerdown', tab, 10); });
+    const loop = [...el.querySelectorAll('button')].find((b) => b.getAttribute('aria-label')?.startsWith('Bass:'))!;
+    await act(async () => { pointer('pointerdown', loop, 100); });
+    expect(sent).toContainEqual({ type: 'loop', index: 0 });
+    expect(el.textContent).not.toContain(PRESS_PLAY);
+  });
+
   it('once the laptop plays, the same tap starts the loop', async () => {
     await act(async () => { onMsg?.({ ...STATE, state: { ...STATE.state, playing: false } }); });
     const tab = [...el.querySelectorAll('[role="tab"]')].find((b) => b.textContent === 'Loops')!;

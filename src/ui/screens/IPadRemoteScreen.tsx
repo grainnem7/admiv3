@@ -188,13 +188,14 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
     link.send(msg);
   };
   // A loop tapped while the laptop is stopped would wait in silence and start by itself
-  // with Play, so it is refused, and the iPad says why.
+  // with Play, so it is refused, and the iPad says why. Once Play is pressed (the sound
+  // may still be loading) the tap is taken: the loop comes in as the sound starts.
   const [refusal, setRefusal] = useState<string | null>(null);
   const refusalTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (refusalTimer.current) clearTimeout(refusalTimer.current); }, []);
-  useEffect(() => { if (state?.playing) setRefusal(null); }, [state?.playing]);
+  useEffect(() => { if (state?.playing || state?.starting) setRefusal(null); }, [state?.playing, state?.starting]);
   const loopTap = (i: number): void => {
-    if (!state?.playing) {
+    if (!state?.playing && !state?.starting) {
       setRefusal('Press Play on the laptop first');
       if (refusalTimer.current) clearTimeout(refusalTimer.current);
       refusalTimer.current = setTimeout(() => setRefusal(null), REFUSAL_MS);

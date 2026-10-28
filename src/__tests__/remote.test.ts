@@ -305,6 +305,20 @@ describe('the player touch settings', () => {
   });
 });
 
+describe('Play starting on the laptop', () => {
+  const base = { values: { tempo: 0, dynamics: 0, fill: 0, evolve: 0 }, labels: { tempo: '', dynamics: '', fill: '', evolve: '' } };
+
+  it('reaches the iPad, so a loop tap while the sound loads is not refused', () => {
+    const m = parseRemoteMessage({ type: 'state', state: { ...base, playing: false, starting: true } });
+    expect(m && m.type === 'state' ? m.state.starting : null).toBe(true);
+  });
+
+  it('is left out unless it is exactly true', () => {
+    const m = parseRemoteMessage({ type: 'state', state: { ...base, starting: 'yes' } });
+    expect(m && m.type === 'state' ? 'starting' in m.state : null).toBe(false);
+  });
+});
+
 describe('two taps, safe from a bounce (End piece, Stop all, Mute)', () => {
   const rule = { minMs: 500, windowMs: 6000 };
 

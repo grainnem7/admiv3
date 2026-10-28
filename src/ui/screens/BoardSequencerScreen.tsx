@@ -558,6 +558,8 @@ export default function BoardSequencerScreen() {
   selectedPageRef.current = selectedPage;
   const [playingPage, setPlayingPage] = useState(0);
   const [running, setRunning] = useState(false);
+  // Play pressed, the sound still starting (samples loading): the iPad takes loop taps now.
+  const [starting, setStarting] = useState(false);
   // The MIDI port (Ableton), watched for the whole screen; see "Sound from Ableton" below.
   const midiPort = useBoardMidiPort(config.midiEnabled, config.midiDeviceId);
   const [midiHold, setMidiHold] = useState(false);
@@ -778,6 +780,7 @@ export default function BoardSequencerScreen() {
       kept: config.fillKept !== null || config.evolveHoldLap !== null,
       muted,
       playing: running,
+      ...(starting && !running ? { starting: true } : {}),
       reach: config.remoteReach,
       ...(reachLearning ? { learning: true } : {}),
       loops: Array.from({ length: LAUNCH_SLOTS }, (_, i) => ({
@@ -799,7 +802,7 @@ export default function BoardSequencerScreen() {
     };
     remoteLink.send({ type: 'state', state });
   }, [remoteEnabled, remoteLink.others, config.bpm, config.velocity, config.fillAmount, config.evolveAmount,
-    config.fillKept, config.evolveHoldLap, muted, running, config.remoteReach, reachLearning,
+    config.fillKept, config.evolveHoldLap, muted, running, starting, config.remoteReach, reachLearning,
     config.loopSlots, config.loopNames, config.scenes, config.currentScene, wantedSlots, appliedSlots,
     config.remoteStrips, config.remotePads, config.remoteLoopsPage, config.remoteLocked, config.remoteStripMode, config.loopFadePasses, clock,
     config.remoteTouch, beatOn]);
@@ -1959,6 +1962,7 @@ export default function BoardSequencerScreen() {
   const stop = useCallback(() => {
     stoppedAtRef.current = performance.now();
     startingRef.current = null;
+    setStarting(false);
     runningRef.current = false;
     engineRef.current?.dispose();
     engineRef.current = null;
@@ -2205,6 +2209,7 @@ export default function BoardSequencerScreen() {
     setBoardCheck(null);
     startingRef.current = performance.now();
     const generation = startingRef.current;
+    setStarting(true);
     setSoundError(null);
     try {
       await startEngine(generation);
@@ -2217,6 +2222,7 @@ export default function BoardSequencerScreen() {
       stop();
     } finally {
       if (startingRef.current === generation) startingRef.current = null;
+      setStarting(startingRef.current !== null);
     }
   }, [startEngine, startingRef, stop, announce]);
 
@@ -3271,7 +3277,8 @@ export default function BoardSequencerScreen() {
     } else if (msg.type === 'loop') {
       // Refused while stopped: it would wait in silence and start by itself with Play. The
       // iPad says "Press Play on the laptop first"; this is for an iPad that is behind.
-      if (!runningRef.current) {
+      // While Play is starting (the sound loading) it is taken and comes in with the sound.
+      if (!runningRef.current && startingRef.current === null) {
         setRemoteNote({ text: `iPad: ${loopLabel(c.loopNames, msg.index)} not started (press ▶ Play first)`, at: performance.now() });
         return;
       }

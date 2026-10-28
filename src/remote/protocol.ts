@@ -106,6 +106,11 @@ export interface RemoteState {
   kept: boolean;
   muted: boolean;
   playing: boolean;
+  /**
+   * Play has been pressed and the sound is still starting (the samples can take a few
+   * seconds to load): a loop tapped now is taken, and comes in as the sound starts.
+   */
+  starting?: boolean;
   /** This player's reach on each strip (missing = the whole strip). */
   reach?: Record<RemoteControlName, Reach>;
   /** True while the laptop is learning the player's reach: strips report, not control. */
@@ -223,6 +228,7 @@ export function parseRemoteMessage(raw: unknown): RemoteMessage | null {
         kept: s.kept === true,
         muted: s.muted === true,
         playing: s.playing === true,
+        ...(s.starting === true ? { starting: true } : {}),
         ...(reach ? { reach } : {}),
         ...(s.learning === true ? { learning: true } : {}),
         ...(Array.isArray(s.loops) ? { loops: sanitizeLoops(s.loops) } : {}),
