@@ -1,5 +1,6 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import { Button } from '../ui/Button';
+import { focusDropped, focusWhenGone } from '../ui/focusNext';
 import { quickName, type NewLoopState } from '../../../../songs/performance/newLoop';
 
 /** The names a loop most often gets, one tap each; typing is still there. */
@@ -33,6 +34,12 @@ const card = { padding: 12, borderRadius: 'var(--bs-radius-md)', background: 'va
  */
 export function NewLoopPanel(p: NewLoopPanelProps): JSX.Element {
   const nameRef = useRef<HTMLInputElement>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const hearId = useId();
+  // Opening it takes New loop away: focus goes to the heading, never to the page (T1-04,
+  // T4-09). Only when focus has fallen to the page: shown again by going back to step 1,
+  // focus stays on the step's button.
+  useEffect(() => { if (focusDropped()) headingRef.current?.focus(); }, []);
   // Next comes the name: focus goes there once, when a loop is kept. Keyed on the slot, not
   // on `kept` (a new object every render): following every render pulled focus back to
   // this box while the board played, so Done could never be reached and typing in another
@@ -44,9 +51,14 @@ export function NewLoopPanel(p: NewLoopPanelProps): JSX.Element {
   const hearing = p.state.with;
   const full = p.loopNumber === null && !p.kept;
   const keepReason = full ? 'Every loop is full: clear one first' : p.countersOnBoard > 0 ? null : 'Nothing to keep yet';
+  // What is true now: nothing sounds while it waits for a clear board; then the counters
+  // sound, and nothing is kept until Keep (T4-10).
+  const now = p.kept ? 'kept' : waiting ? 'silent' : 'not kept yet';
   return (
     <section aria-labelledby="new-loop" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <h3 id="new-loop" style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>{`New loop${p.loopNumber === null ? '' : ` ${p.loopNumber}`} · silent`}</h3>
+      <h3 id="new-loop" ref={headingRef} tabIndex={-1} style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>
+        {`New loop${p.loopNumber === null ? '' : ` ${p.loopNumber}`} · ${now}`}
+      </h3>
       {waiting ? (
         <div style={card}>
           <p role="status" style={{ margin: 0 }}>
@@ -57,13 +69,22 @@ export function NewLoopPanel(p: NewLoopPanelProps): JSX.Element {
               : 'Ready: the board is clear.'}
           </p>
           <p style={NOTE}>Nothing sounds until the board is empty. Or keep what is down and start with it:</p>
-          <div><Button tone="secondary" onClick={p.onStartWithThese}>Start with these</Button></div>
+          <div>
+            <Button
+              tone="secondary"
+              // The button goes once composing starts: focus goes to the heading, which says so.
+              onClick={(e) => { p.onStartWithThese(); void focusWhenGone(() => headingRef.current, e.currentTarget); }}
+            >
+              Start with these
+            </Button>
+          </div>
         </div>
       ) : (
         <div style={card}>
           <p style={{ margin: 0 }}>Only the counters sound. Put them down, listen, change them.</p>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <span style={NOTE}>Hear it with…</span>
+          {/* A group named by its words, so Band is heard as "Hear it with…, Band", not the Sound tab's Band. */}
+          <div role="group" aria-labelledby={hearId} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span id={hearId} style={NOTE}>Hear it with…</span>
             <Button tone={hearing.band ? 'primary' : 'secondary'} aria-pressed={hearing.band} onClick={() => p.onHearWith({ band: !hearing.band })}>Band</Button>
             <Button tone={hearing.fill ? 'primary' : 'secondary'} aria-pressed={hearing.fill} onClick={() => p.onHearWith({ fill: !hearing.fill })}>Extra notes</Button>
             <select
@@ -76,7 +97,7 @@ export function NewLoopPanel(p: NewLoopPanelProps): JSX.Element {
               {p.otherLoops.map((l) => <option key={l.slot} value={l.slot}>{l.name || `Loop ${l.slot + 1}`}</option>)}
             </select>
           </div>
-          <p style={NOTE}>Nothing is kept until you press Keep.</p>
+          {!p.kept && <p style={NOTE}>Nothing is kept until you press Keep.</p>}
         </div>
       )}
       {p.kept ? (
@@ -90,7 +111,7 @@ export function NewLoopPanel(p: NewLoopPanelProps): JSX.Element {
               style={{ minHeight: 'var(--bs-target)', maxWidth: 240 }}
             />
           </label>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <div role="group" aria-label="Name this loop" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {QUICK_NAMES.map((n) => quickName(n, p.takenNames)).map((n) => (
               <Button key={n} tone="secondary" onClick={() => p.onRename(p.kept?.slot ?? 0, n)}>{n}</Button>
             ))}

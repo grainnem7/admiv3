@@ -209,3 +209,86 @@ describe('Loops: one way to make a loop (F1, T1-01, T2-14)', () => {
     expect(p.onNewLoop).not.toHaveBeenCalled();
   });
 });
+
+describe('focus never drops to the page (T1-04, T4-09)', () => {
+  /** A few frames: focus waits for the pressed button to go (setTimeout 16 ms in the tests). */
+  const frames = (): Promise<void> => act(async () => { await new Promise((r) => setTimeout(r, 80)); });
+  const pressWithKeyboard = (b: HTMLButtonElement | undefined): void => { act(() => b?.focus()); act(() => b?.click()); };
+
+  it('New loop is off while the piece plays, and its reason is tied to it', () => {
+    render(props({ step: 'loops', running: true, clock: { phase: 'running', text: '6:30', remainingSec: 390, elapsedSec: 30 } }));
+    const id = button('New loop')?.getAttribute('aria-describedby') ?? '';
+    expect(document.getElementById(id)?.textContent).toBe('Stop the piece to make a loop');
+  });
+
+  it('Done or Leave closes New loop: focus goes back to New loop, one Enter from the next loop', () => {
+    const p = props({ step: 'loops', newLoop: <button type="button">Done</button> });
+    render(p);
+    pressWithKeyboard(button('Done'));
+    render({ ...p, newLoop: null });
+    expect(document.activeElement).toBe(button('New loop'));
+  });
+
+  it('Make my plan: focus goes to the first scene', async () => {
+    const p = props({ scenes: [] });
+    render(p);
+    pressWithKeyboard(button(/Make my plan/));
+    render({ ...p, scenes: [scene('Arrival', 0), scene('Build', 90)] });
+    await frames();
+    expect(document.activeElement).toBe(button(/^0:00 · Arrival/));
+  });
+
+  it('Delete scene: focus goes to Undo; Undo: to the scene that came back', async () => {
+    const p = props();
+    render(p);
+    act(() => button(/^1:30 · Build/)?.click());
+    pressWithKeyboard(button('Delete scene'));
+    expect(p.onDeleteScene).toHaveBeenCalledWith(1);
+    render({ ...p, scenes: [scene('Arrival', 0), scene('Open', 210)], deletedSceneName: 'Build' });
+    await frames();
+    expect(document.activeElement).toBe(button('Undo'));
+    act(() => button('Undo')?.click());
+    render({ ...p, deletedSceneName: null });
+    await frames();
+    expect(document.activeElement).toBe(button(/^1:30 · Build/));
+  });
+
+  it('Undo that runs out of time: focus goes to the Scenes heading, never the page', async () => {
+    const p = props();
+    render(p);
+    act(() => button(/^1:30 · Build/)?.click());
+    pressWithKeyboard(button('Delete scene'));
+    render({ ...p, scenes: [scene('Arrival', 0), scene('Open', 210)], deletedSceneName: 'Build' });
+    await frames();
+    expect(document.activeElement).toBe(button('Undo'));
+    render({ ...p, scenes: [scene('Arrival', 0), scene('Open', 210)], deletedSceneName: null });
+    await frames();
+    expect(document.activeElement).toBe(host.querySelector('h3#piece-scenes'));
+  });
+
+  it('deleting the last scene (no Undo there): focus goes to the Scenes heading', async () => {
+    const p = props({ scenes: [scene('Arrival', 0)] });
+    render(p);
+    act(() => button(/^0:00 · Arrival/)?.click());
+    pressWithKeyboard(button('Delete scene'));
+    render({ ...p, scenes: [], deletedSceneName: 'Arrival' });
+    await frames();
+    expect(document.activeElement).toBe(host.querySelector('h3#piece-scenes'));
+  });
+
+  it('Rehearse from here: focus goes to ▶ Play / ■ Stop once the rehearsal plays', async () => {
+    const transport = document.createElement('button');
+    transport.id = 'bs-play-stop';
+    transport.textContent = '■ Stop';
+    document.body.appendChild(transport);
+    try {
+      const p = props();
+      render(p);
+      pressWithKeyboard(button(/Rehearse from here/));
+      expect(p.onRehearseFrom).toHaveBeenCalled();
+      render({ ...p, running: true });
+      await frames();
+      expect(document.activeElement).toBe(transport);
+    } finally { transport.remove(); }
+  });
+});

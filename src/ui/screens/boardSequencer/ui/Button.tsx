@@ -1,4 +1,4 @@
-import { forwardRef } from 'react';
+import { forwardRef, useId } from 'react';
 import type { ButtonHTMLAttributes, CSSProperties, ReactNode } from 'react';
 
 export type ButtonTone = 'primary' | 'secondary' | 'quiet' | 'danger';
@@ -7,8 +7,9 @@ export interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement
   tone?: ButtonTone;
   children: ReactNode;
   /**
-   * Why the button is disabled, shown in reserved space beneath it — a disabled control
-   * that doesn't say why is a dead end.
+   * Why the button is disabled, shown in reserved space beneath it and tied to the button
+   * as its description, so a screen reader says why too — a disabled control that doesn't
+   * say why is a dead end.
    */
   reason?: string | null;
   /**
@@ -29,6 +30,8 @@ const TONE_STYLE: Record<ButtonTone, CSSProperties> = {
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
   { tone = 'secondary', children, reason = null, reserveReason = false, full = false, disabled, style, ...rest }, ref,
 ) {
+  const reasonId = useId();
+  const describedBy = [rest['aria-describedby'], reason ? reasonId : null].filter(Boolean).join(' ') || undefined;
   const button = (
     <button
       ref={ref}
@@ -46,6 +49,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
         ...style,
       }}
       {...rest}
+      aria-describedby={describedBy}
     >
       {children}
     </button>
@@ -55,7 +59,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
     <span style={{ display: full ? 'block' : 'inline-block' }}>
       {button}
       {/* Reserved space: showing a reason must never shift what sits under the pointer. */}
-      <span style={{
+      <span id={reasonId} style={{
         display: 'block', minHeight: 16, fontSize: 12, color: 'var(--bs-fg2)',
         // Reserved: exactly one line, whatever the reason says, so its coming and going
         // moves nothing (a wrapped reason was taller than the space kept for it).

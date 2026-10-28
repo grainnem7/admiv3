@@ -22,7 +22,8 @@ function props(channels: ColourChannel[], over: Partial<ColoursStepProps> = {}):
     boardLearnt: 0, onLearnBoard: vi.fn(), learnMessage: null, onFindColours: vi.fn(), onArmTap: vi.fn(),
     onCancelArm: vi.fn(), onAddPending: vi.fn(), onDiscardPending: vi.fn(), onRecalibrate: vi.fn(), onRole: vi.fn(),
     config: { ...DEFAULT_BOARD_SEQUENCER_CONFIG, channels }, setChannelSound: vi.fn(), onHear: vi.fn(), hearing: null,
-    onLoopSlot: vi.fn(), running: false, onRemove: vi.fn(), onClearAll: vi.fn(), isReferenced: () => false,
+    onLoopSlot: vi.fn(), running: false, onRemove: vi.fn(), onClearAll: vi.fn(),
+    usesOf: () => ({ loopsPlayOn: false, quietNotes: 0, quietLoops: [], pageCounters: 0 }),
     minFilledFraction: 0.2, readSettingsCustom: false, onMinFill: vi.fn(), counterHeight: 0.3, onCounterHeight: vi.fn(),
     onResetReadSettings: vi.fn(), settleWindowMs: 300, onSettleWindow: vi.fn(), onBlackDarkness: vi.fn(),
     picker: null, onMovePicker: vi.fn(), onSampleSquare: vi.fn(), finding: false, onCancelFind: vi.fn(),
@@ -60,5 +61,45 @@ describe('the Colours step on the laptop board', () => {
     act(() => root.render(<ColoursStep {...props([red])} />));
     expect(text()).toMatch(/Find colours/);
     expect(text()).toMatch(/0 down/);
+  });
+});
+
+describe('removing colours: the warning says what really happens (T1-06)', () => {
+  const green: ColourChannel = { id: 'g', kind: 'hue', role: 'melody', swatch: '#0f0', band: { hue: 120 } as TrackedColor };
+  const dialogText = (): string => document.querySelector('[role="dialog"], [role="alertdialog"]')?.textContent ?? '';
+
+  it('Remove Red: kept loops play on, so nothing says loops will go quiet', () => {
+    const usesOf = vi.fn(() => ({ loopsPlayOn: true, quietNotes: 0, quietLoops: [], pageCounters: 0 }));
+    act(() => root.render(<ColoursStep {...props([red, green], { usesOf })} />));
+    act(() => (host.querySelector('button[aria-label="More for Red"]') as HTMLButtonElement).click());
+    act(() => button('× Remove Red')?.click());
+    expect(usesOf).toHaveBeenCalledWith(['r']);
+    expect(dialogText()).toContain('Loops keep the sounds they were made with, so they play on.');
+    expect(dialogText()).not.toMatch(/Saved loops and pages that use .* will go quiet/);
+  });
+
+  it('Remove all colours: says what goes quiet, counted', () => {
+    const usesOf = vi.fn(() => ({ loopsPlayOn: false, quietNotes: 2, quietLoops: ['Bed'], pageCounters: 0 }));
+    act(() => root.render(<ColoursStep {...props([red, green], { usesOf })} />));
+    act(() => button('Remove all colours')?.click());
+    expect(usesOf).toHaveBeenCalledWith(['r', 'g']);
+    expect(dialogText()).toContain('Every colour is removed for every player on this board. 2 notes in Bed will go quiet.');
+    expect(dialogText()).not.toContain('Saved loops and pages that use them will go quiet.');
+  });
+});
+
+describe('the Colours step: focus never drops to the page (T4-09)', () => {
+  it('Add four colours: focus goes to "Your colours (4)", the list they were added to', async () => {
+    const laptop = { onAddColours: vi.fn(), onAddColour: vi.fn() };
+    act(() => root.render(<ColoursStep {...props([], { laptop })} />));
+    const add = button('Add four colours') as HTMLButtonElement;
+    act(() => add.focus());
+    act(() => add.click());
+    const four = ['r', 'b', 'y', 'g'].map((id, i) => ({ ...red, id, swatch: ['#f00', '#00f', '#ff0', '#0f0'][i] }));
+    act(() => root.render(<ColoursStep {...props(four, { laptop })} />));
+    await act(async () => { await new Promise((r) => setTimeout(r, 80)); });
+    const heading = document.activeElement as HTMLElement;
+    expect(heading.tagName).toBe('H3');
+    expect(heading.textContent).toBe('Your colours (4)');
   });
 });

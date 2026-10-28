@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import { Button } from '../ui/Button';
+import { focusWhenGone, PLAY_STOP_ID } from '../ui/focusNext';
 import { SwatchChip } from '../ui/SwatchChip';
 import type { BoardPalette } from '../theme/boardTokens';
 import { describeChannel, type ColourChannel, type ColourId } from '../../../../tracking/boardColours';
@@ -52,7 +53,15 @@ export function ReadyStep({
         </div>
       )}
 
-      <Button tone="primary" full onClick={onPlay} reason={playReason}>▶ Play</Button>
+      <Button
+        tone="primary"
+        full
+        // Set up gives way to Play: focus goes to ▶ Play / ■ Stop, one press from stopping.
+        onClick={(e) => { onPlay(); void focusWhenGone(() => document.getElementById(PLAY_STOP_ID), e.currentTarget, 20_000); }}
+        reason={playReason}
+      >
+        ▶ Play
+      </Button>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
         {channels.map((c, i) => (

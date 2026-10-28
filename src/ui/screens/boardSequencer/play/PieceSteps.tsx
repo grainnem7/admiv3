@@ -1,5 +1,6 @@
-import { useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Button } from '../ui/Button';
+import { focusDropped, focusWhenGone, PLAY_STOP_ID } from '../ui/focusNext';
 import { LabeledSlider } from '../ui/LabeledSlider';
 import { SegmentedControl } from '../ui/SegmentedControl';
 import { Switch } from '../ui/Switch';
@@ -204,13 +205,21 @@ function LoopsStep(p: PieceStepsProps): JSX.Element {
   // but never inside New loop or during the piece, where they made a second, different
   // loop under the New loop heading (F1).
   const oldWays = !making && !pieceOn;
+  // Done or Leave closes New loop: focus goes back to New loop, one Enter from the next
+  // loop, never to the page (T1-04). (Opening it, the panel takes focus itself.)
+  const newLoopRef = useRef<HTMLButtonElement>(null);
+  const wasMaking = useRef(making);
+  useEffect(() => {
+    if (wasMaking.current && !making && focusDropped()) newLoopRef.current?.focus();
+    wasMaking.current = making;
+  }, [making]);
   return (
     <section aria-labelledby="piece-loops" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <h3 id="piece-loops" style={heading}>1 · Loops</h3>
       {p.newLoop ?? (
         <div style={card}>
           <p style={{ margin: 0 }}>A loop is something the player makes with counters, from silence, that then plays by itself.</p>
-          <div><Button tone="primary" onClick={p.onNewLoop} reason={pieceOn ? 'Stop the piece to make a loop' : null}>New loop</Button></div>
+          <div><Button ref={newLoopRef} tone="primary" onClick={p.onNewLoop} reason={pieceOn ? 'Stop the piece to make a loop' : null}>New loop</Button></div>
           <p style={note}>Everything stops; only the counters sound. Keep makes the loop.</p>
         </div>
       )}
@@ -307,16 +316,28 @@ function ScenesStep(p: PieceStepsProps): JSX.Element {
   const saved = p.loops.filter((l) => l.state !== 'empty');
   const colourOf = sceneColours(p.scenes);
   const who = playerWords(p.playerName);
+  // Focus never drops to the page when a pressed button goes (T4-09): these are where it goes.
+  const sectionRef = useRef<HTMLElement>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const undoRef = useRef<HTMLButtonElement>(null);
+  const sceneRow = (id?: string): HTMLElement | null => [...(sectionRef.current?.querySelectorAll<HTMLElement>('[data-scene-row]') ?? [])]
+    .find((b) => id === undefined || b.dataset.sceneRow === id) ?? null;
   return (
-    <section aria-labelledby="piece-scenes" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <h3 id="piece-scenes" style={heading}>2 · Scenes</h3>
+    <section ref={sectionRef} aria-labelledby="piece-scenes" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <h3 id="piece-scenes" ref={headingRef} tabIndex={-1} style={heading}>2 · Scenes</h3>
       <div style={card}>
         <p style={{ margin: 0 }}>A scene says which loops play and how it sounds. The clock brings each scene in at its time while the player plays on top.</p>
         <p style={note}>Optional: without scenes, the piece doesn&rsquo;t change by itself.</p>
       </div>
       {p.scenes.length === 0 ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-start' }}>
-          <Button tone="primary" onClick={p.onMakePlan}>{`✦ Make my plan: 4 scenes over ${formatClock(p.lengthSec)}`}</Button>
+          <Button
+            tone="primary"
+            // The plan's scenes take its place: focus goes to the first of them.
+            onClick={(e) => { p.onMakePlan(); void focusWhenGone(() => sceneRow(), e.currentTarget); }}
+          >
+            {`✦ Make my plan: 4 scenes over ${formatClock(p.lengthSec)}`}
+          </Button>
           <p style={note}>Arrival, Build, Open and Home, using {saved.length > 0 ? 'your saved loops' : `no loops yet (make some in step 1 first: a scene without loops is silent unless ${who.name} plays)`}. Every scene can be changed afterwards.</p>
         </div>
       ) : (
@@ -352,13 +373,22 @@ function ScenesStep(p: PieceStepsProps): JSX.Element {
               onRehearse={!p.running && typeof s.at === 'number' ? () => p.onRehearseFrom(s.at as number) : undefined}
               onUpdateFromNow={() => p.onUpdateSceneFromNow(i)}
               onEdit={(patch) => p.onEditScene(i, patch)}
-              onDelete={() => { setSelected(null); p.onDeleteScene(i); }}
+              onDelete={(pressed) => {
+                setSelected(null);
+                p.onDeleteScene(i);
+                // Onto Undo, its opposite (or the heading, with no scene left to show it
+                // beside). When Undo goes, pressed or after its time, onto the scene if it
+                // came back, else the heading.
+                void focusWhenGone(() => undoRef.current ?? headingRef.current, pressed).then((undo) => {
+                  if (undo !== null && undo === undoRef.current) void focusWhenGone(() => sceneRow(s.id) ?? headingRef.current, undo, 20_000);
+                });
+              }}
             />
           ))}
           {p.deletedSceneName && (
             <div role="status" style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 }}>
               <span>{`Deleted “${p.deletedSceneName}”.`}</span>
-              <Button tone="secondary" onClick={p.onUndoDelete}>Undo</Button>
+              <Button ref={undoRef} tone="secondary" onClick={p.onUndoDelete}>Undo</Button>
             </div>
           )}
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -516,7 +546,8 @@ interface SceneRowProps {
   onRehearse?(): void;
   onUpdateFromNow(): void;
   onEdit(patch: Partial<Scene>): void;
-  onDelete(): void;
+  /** Delete it; `pressed` is the Delete button, for where focus goes next. */
+  onDelete(pressed: HTMLElement): void;
 }
 
 /** One scene: a line saying what it is, opening into everything it sets, editable there. */
@@ -557,14 +588,19 @@ function SceneRow(r: SceneRowProps): JSX.Element {
     >
       <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
         <button
-          type="button" aria-expanded={r.open} onClick={r.onToggleOpen}
+          type="button" aria-expanded={r.open} onClick={r.onToggleOpen} data-scene-row={s.id}
           style={{ flex: '1 1 200px', minHeight: 'var(--bs-target)', textAlign: 'left', background: 'transparent', border: 'none', color: 'inherit', cursor: 'pointer' }}
         >
           <span style={{ fontWeight: 700 }}>{`${typeof s.at === 'number' ? formatClock(s.at) : 'by hand'} · ${s.name}${r.current ? ' · on now' : ''}`}</span>
           <span style={{ display: 'block', fontSize: 12, color: 'var(--bs-fg2)' }}>{summary}</span>
         </button>
         {r.onRehearse && (
-          <Button tone="secondary" onClick={r.onRehearse} aria-label={`Rehearse from ${s.name}: play the piece from ${typeof s.at === 'number' ? formatClock(s.at) : ''}`}>
+          <Button
+            tone="secondary"
+            // It goes once the rehearsal plays: focus goes to ■ Stop, one press from stopping it.
+            onClick={(e) => { r.onRehearse?.(); void focusWhenGone(() => document.getElementById(PLAY_STOP_ID), e.currentTarget, 20_000); }}
+            aria-label={`Rehearse from ${s.name}: play the piece from ${typeof s.at === 'number' ? formatClock(s.at) : ''}`}
+          >
             ▶ Rehearse from here
           </Button>
         )}
@@ -661,7 +697,7 @@ function SceneRow(r: SceneRowProps): JSX.Element {
           <LabeledSlider label="Tempo" min={40} max={160} value={s.settings.bpm} display={`${s.settings.bpm} BPM`} onChange={(v) => set({ bpm: Math.round(v) })} />
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             <Button tone="secondary" onClick={r.onUpdateFromNow} title="Replace this scene's loops and sound with what is playing now">Update from now</Button>
-            <Button tone="quiet" onClick={r.onDelete}>Delete scene</Button>
+            <Button tone="quiet" onClick={(e) => r.onDelete(e.currentTarget)}>Delete scene</Button>
           </div>
         </div>
       )}

@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { SwatchChip } from '../ui/SwatchChip';
 import { Button } from '../ui/Button';
+import { focusWhenGone } from '../ui/focusNext';
 import type { BoardPalette } from '../theme/boardTokens';
 import { describeChannel, ROLE_LABELS, type ColourChannel, type ColourRole } from '../../../../tracking/boardColours';
 
@@ -37,6 +38,8 @@ export function LaptopBoardBar({
   channels, knownColours, selected, onSelect, count, onClear, onAddColours, onAddColour, palette,
 }: LaptopBoardBarProps): JSX.Element {
   const [adding, setAdding] = useState(false);
+  // Add four colours goes once they are added: focus goes to the colour a click puts down.
+  const pickerRef = useRef<HTMLDivElement>(null);
   if (channels.length === 0) {
     return (
       <div role="group" aria-label="Laptop board" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -45,13 +48,25 @@ export function LaptopBoardBar({
             ? 'No counter colours yet. Add four to play with now; the real counters can be added later in Set up → Colours.'
             : 'No colour has a job yet. Give one a job in Set up → Colours, or add four ready-made colours.'}
         </span>
-        <Button tone="primary" onClick={onAddColours}>Add four colours</Button>
+        <Button
+          // Its own key: without it React reused this button as "+ Add a colour", and focus
+          // stayed there, on a button that now did something else.
+          key="add-four"
+          tone="primary"
+          onClick={(e) => {
+            onAddColours();
+            const radio = (which: string): HTMLElement | null => pickerRef.current?.querySelector<HTMLElement>(which) ?? null;
+            void focusWhenGone(() => radio('[aria-checked="true"]') ?? radio('[role="radio"]'), e.currentTarget);
+          }}
+        >
+          Add four colours
+        </Button>
       </div>
     );
   }
   return (
     <div role="group" aria-label="Laptop board" style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-      <div role="radiogroup" aria-label="Counter to put down" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+      <div ref={pickerRef} role="radiogroup" aria-label="Counter to put down" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         {channels.map((c, i) => (
           <button
             key={c.id}

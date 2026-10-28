@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react';
 import { NewLoopPanel, type NewLoopPanelProps } from '../ui/screens/boardSequencer/play/NewLoopPanel';
-import { startNewLoop } from '../songs/performance/newLoop';
+import { startNewLoop, startWithThese } from '../songs/performance/newLoop';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -114,7 +114,7 @@ describe('New loop: every loop full (T4-04)', () => {
   it('the heading has no number, Keep is off, and the reason is on screen', () => {
     render(props({ loopNumber: null, countersOnBoard: 2 }));
     const h = host.querySelector('h3');
-    expect(h?.textContent).toBe('New loop · silent');
+    expect(h?.textContent).toBe('New loop · not kept yet');
     expect(button('Keep')?.disabled).toBe(true);
     expect(text()).toContain('Every loop is full: clear one first');
     expect(text()).not.toContain('Nothing to keep yet');
@@ -131,3 +131,91 @@ describe('New loop: quick names (T1-08)', () => {
   });
 });
 
+
+/** What a screen reader calls an element: its aria-label, or the text of what labels it. */
+const nameOf = (el: Element): string => el.getAttribute('aria-label')
+  ?? (el.getAttribute('aria-labelledby') ?? '').split(' ').map((id) => document.getElementById(id)?.textContent ?? '').join(' ').trim();
+const group = (name: string): Element | undefined => [...host.querySelectorAll('[role="group"]')].find((g) => nameOf(g) === name);
+/** The text a control is described by (aria-describedby). */
+const describedBy = (el: Element | undefined): string => (el?.getAttribute('aria-describedby') ?? '').split(' ')
+  .map((id) => document.getElementById(id)?.textContent ?? '').join(' ').trim();
+const heading = (): string => host.querySelector('h3')?.textContent ?? '';
+
+describe('New loop: names a screen reader can follow (T4-10)', () => {
+  it('"Hear it with…" is the name of a group holding Band, Extra notes and the loop to hear with', () => {
+    render(props({ countersOnBoard: 2 }));
+    const g = group('Hear it with…');
+    expect(g).toBeDefined();
+    expect(g?.contains(button('Band') ?? null)).toBe(true);
+    expect(g?.contains(button('Extra notes') ?? null)).toBe(true);
+    expect(g?.querySelector('select[aria-label="Hear it with a loop"]')).not.toBeNull();
+  });
+
+  it('the quick names are a group that names the loop', () => {
+    render(props({ kept: { slot: 3, name: '' } }));
+    const g = group('Name this loop');
+    expect(g).toBeDefined();
+    for (const quick of ['Bed', 'Pulse', 'Beat', 'Shine']) expect(g?.contains(button(quick) ?? null)).toBe(true);
+  });
+
+  it('Keep, while off, is described by why: nothing to keep yet', () => {
+    render(props({ countersOnBoard: 0 }));
+    expect(describedBy(button('Keep'))).toBe('Nothing to keep yet');
+  });
+
+  it('Keep, while off, is described by why: every loop is full', () => {
+    render(props({ loopNumber: null, countersOnBoard: 2 }));
+    expect(describedBy(button('Keep'))).toBe('Every loop is full: clear one first');
+  });
+
+  it('Keep that can be pressed has no reason attached', () => {
+    render(props({ countersOnBoard: 2 }));
+    expect(button('Keep')?.hasAttribute('aria-describedby')).toBe(false);
+  });
+});
+
+describe('New loop: the heading says what is true (T4-10, T1-09)', () => {
+  it('silent while it waits for the board to be clear', () => {
+    render(props({ state: startNewLoop(2), countersOnBoard: 2 }));
+    expect(heading()).toBe('New loop 4 · silent');
+  });
+
+  it('never "silent" while the counters sound: not kept yet', () => {
+    render(props({ countersOnBoard: 2 }));
+    expect(heading()).toBe('New loop 4 · not kept yet');
+    expect(heading()).not.toMatch(/silent/);
+  });
+
+  it('after Keep: kept, and "Nothing is kept until you press Keep." is gone', () => {
+    render(props({ countersOnBoard: 0 }));
+    expect(text()).toContain('Nothing is kept until you press Keep.');
+    render(props({ countersOnBoard: 2, kept: { slot: 3, name: 'Bed' } }));
+    expect(heading()).toBe('New loop 4 · kept');
+    expect(text()).not.toContain('Nothing is kept until you press Keep.');
+  });
+
+  it('every loop full: no number, and still never "silent" while composing', () => {
+    render(props({ loopNumber: null, countersOnBoard: 2 }));
+    expect(heading()).toBe('New loop · not kept yet');
+  });
+});
+
+describe('New loop: focus never drops to the page (T1-04, T4-09)', () => {
+  it('opening it, with focus fallen to the page (New loop has gone), puts focus on its heading', () => {
+    render(props({ state: startNewLoop(2), countersOnBoard: 2 }));
+    expect(document.activeElement).toBe(host.querySelector('h3'));
+    expect(host.querySelector('h3')?.tabIndex).toBe(-1);
+  });
+
+  it('Start with these: focus goes to the heading, which now says the loop is not kept yet', async () => {
+    const p = props({ state: startNewLoop(2), countersOnBoard: 2 });
+    render(p);
+    const start = button('Start with these') as HTMLButtonElement;
+    act(() => start.focus());
+    act(() => start.click());
+    render({ ...p, state: startWithThese(p.state) });
+    await act(async () => { await new Promise((r) => setTimeout(r, 60)); });
+    expect(document.activeElement).toBe(host.querySelector('h3'));
+    expect(heading()).toBe('New loop 4 · not kept yet');
+  });
+});

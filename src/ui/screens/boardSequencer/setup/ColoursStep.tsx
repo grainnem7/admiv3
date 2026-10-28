@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Button } from '../ui/Button';
+import { focusWhenGone } from '../ui/focusNext';
+import { removalWarning, type ColourUses } from '../colourRemoval';
 import { Disclosure } from '../ui/Disclosure';
 import { Switch } from '../ui/Switch';
 import { LabeledSlider } from '../ui/LabeledSlider';
@@ -71,8 +73,8 @@ export interface ColoursStepProps {
   running: boolean;
   onRemove(id: ColourId): void;
   onClearAll(): void;
-  /** True when saved pages or loops reference this colour, for the confirmation wording. */
-  isReferenced(id: ColourId): boolean;
+  /** What removing these colours does to every player's loops and pages, for the warning. */
+  usesOf(ids: readonly ColourId[]): ColourUses;
   minFilledFraction: number;
   readSettingsCustom: boolean;
   onMinFill(value: number): void;
@@ -120,12 +122,14 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
   const {
     channels, counts, palette, arming, pending, boardLearnt, onLearnBoard, learnMessage,
     onFindColours, onArmTap, onCancelArm,
-    onAddPending, onDiscardPending, onRecalibrate, onRole, onLoopSlot, onRemove, config, setChannelSound, onHear, hearing, hearNote, onClearAll, isReferenced, running,
+    onAddPending, onDiscardPending, onRecalibrate, onRole, onLoopSlot, onRemove, config, setChannelSound, onHear, hearing, hearNote, onClearAll, usesOf, running,
     minFilledFraction, readSettingsCustom, onMinFill, onResetReadSettings, counterHeight, onCounterHeight,
     settleWindowMs, onSettleWindow, onBlackDarkness, picker, onMovePicker, onSampleSquare, hands,
     finding, onCancelFind, found, onUseFound, onDiscardFound, laptop,
   } = props;
   const [confirm, setConfirm] = useState<{ kind: 'remove'; id: ColourId } | { kind: 'clear' } | null>(null);
+  // Add four colours goes once they are added: focus goes to the list of them (T4-09).
+  const coloursHeadingRef = useRef<HTMLHeadingElement>(null);
 
   const removeTarget = confirm?.kind === 'remove' ? channels.find((c) => c.id === confirm.id) : null;
 
@@ -173,7 +177,14 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
       )}
       {laptop && (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {channels.length === 0 && <Button tone="primary" onClick={laptop.onAddColours}>Add four colours</Button>}
+          {channels.length === 0 && (
+            <Button
+              tone="primary"
+              onClick={(e) => { laptop.onAddColours(); void focusWhenGone(() => coloursHeadingRef.current, e.currentTarget); }}
+            >
+              Add four colours
+            </Button>
+          )}
           {channels.length > 0 && laptop.onAddColour && <Button tone="secondary" onClick={laptop.onAddColour}>Add a colour</Button>}
         </div>
       )}
@@ -294,7 +305,7 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
           an earlier setup is common, and one by one is slow. */}
       {channels.length > 1 && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ fontWeight: 600, flex: 1 }}>{`Your colours (${channels.length})`}</span>
+          <h3 ref={coloursHeadingRef} tabIndex={-1} style={{ margin: 0, fontSize: 'inherit', fontWeight: 600, flex: 1 }}>{`Your colours (${channels.length})`}</h3>
           <Button tone="secondary" onClick={() => setConfirm({ kind: 'clear' })}>Remove all colours</Button>
         </div>
       )}
@@ -420,12 +431,7 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
       {removeTarget && (
         <ConfirmDialog
           title={`Remove ${describeChannel(removeTarget)}?`}
-          body={[
-            'It is removed for every player on this board.',
-            isReferenced(removeTarget.id)
-              ? `Saved loops and pages that use ${describeChannel(removeTarget)} will go quiet.`
-              : '',
-          ].filter(Boolean).join(' ')}
+          body={removalWarning(describeChannel(removeTarget), usesOf([removeTarget.id]))}
           confirmLabel="Remove"
           onConfirm={() => { onRemove(removeTarget.id); setConfirm(null); }}
           onCancel={() => setConfirm(null)}
@@ -434,7 +440,7 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
       {confirm?.kind === 'clear' && (
         <ConfirmDialog
           title="Remove all colours?"
-          body="Every colour is removed for every player on this board. Saved loops and pages that use them will go quiet."
+          body={removalWarning(null, usesOf(channels.map((c) => c.id)))}
           confirmLabel="Remove all"
           onConfirm={() => { onClearAll(); setConfirm(null); }}
           onCancel={() => setConfirm(null)}

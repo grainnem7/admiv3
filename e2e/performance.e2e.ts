@@ -749,7 +749,7 @@ test('with every loop full, Keep says so on screen and is off; the heading claim
   // Clear one (still possible inside New loop): now there is a place for it.
   await page.getByRole('button', { name: 'Clear loop 8' }).click();
   await page.getByRole('dialog', { name: 'Clear Loop 8?' }).getByRole('button', { name: 'Clear it' }).click();
-  await expect(page.getByRole('heading', { name: 'New loop 8 · silent' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'New loop 8 · not kept yet' })).toBeVisible();
   await expect(keep).toBeEnabled();
   await expect(page.getByText('Every loop is full: clear one first')).toHaveCount(0);
   expect(pageErrors(page)).toEqual([]);
@@ -778,7 +778,7 @@ test('inside New loop there is one way to make a loop: Keep', async ({ page }) =
   await openLaptopBoard(page);
   await saveTwoLoops(page);
   await page.getByRole('button', { name: 'New loop' }).click();
-  await expect(page.getByRole('heading', { name: 'New loop 3 · silent' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'New loop 3 · not kept yet' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Save the board here' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: /Overwrite/ })).toHaveCount(0);
   await expect(page.getByRole('button', { name: /Edit the notes of loop/ })).toHaveCount(0);

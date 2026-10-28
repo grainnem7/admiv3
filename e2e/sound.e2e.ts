@@ -306,9 +306,9 @@ test('New loop starts from silence, Keep names it, Leave restores the player’s
   await page.getByRole('button', { name: '▶ Play' }).first().click();
   await expect.poll(() => notesPlayed(page), { timeout: 15_000 }).toBeGreaterThan(0);
 
-  // New loop: everything stops; the board is empty, so it is ready to compose.
+  // New loop: everything stops; the board is empty, so it is ready to compose (nothing kept yet).
   await page.getByRole('button', { name: 'New loop' }).click();
-  await expect(page.getByRole('heading', { name: /New loop 2 · silent/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'New loop 2 · not kept yet' })).toBeVisible();
   await expect(page.getByRole('listitem', { name: /^Loop 1: .*1 note$/ })).toBeVisible();
   const quiet = await notesPlayed(page);
   await page.waitForTimeout(2500);

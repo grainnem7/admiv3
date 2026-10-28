@@ -80,6 +80,7 @@ import { SegmentedControl } from './boardSequencer/ui/SegmentedControl';
 import { clampZone, describeZone, NO_ZONE, zoneSlotCount, zonesCollide, type Zone, type ZoneMode } from '../../tracking/zones';
 import { LabeledSlider } from './boardSequencer/ui/LabeledSlider';
 import { Button } from './boardSequencer/ui/Button';
+import { focusDropped } from './boardSequencer/ui/focusNext';
 import { inertOutside, Modal } from './boardSequencer/ui/Modal';
 import { cameraDebugEnabled } from '../../tracking/cameraDebugFlag';
 import { loadCameraChoice, saveCameraChoice } from '../../tracking/cameraChoice';
@@ -120,6 +121,7 @@ import { planFromConfig } from './boardSequencer/components/AbletonSoundsPanel';
 import { useBoardMidiPort } from './boardSequencer/useBoardMidiPort';
 import { abletonReadyItem, abletonTracksItem } from './boardSequencer/abletonReady';
 import { listNames, pieceCheckItems } from './boardSequencer/pieceCheck';
+import { colourUses, type ColourUses } from './boardSequencer/colourRemoval';
 import { aiOffLine } from './boardSequencer/aiStatus';
 import { BoardMidiSender, channelFor, colourChannelMap, configToSoundFrom, effectiveSound } from '../../midi/boardMidi';
 import { ABLETON_CHAINS, chainOnChannel, previewEvents } from '../../midi/abletonSounds';
@@ -191,7 +193,7 @@ import {
 } from '../../profiles/BoardSequencerConfig';
 import {
   loadActiveBoardConfig as loadBoardSequencerConfig, saveActiveBoardConfig as saveBoardSequencerConfig,
-  allReferencedChannelIds,
+  allReferencedChannelIds, savedPlayersWork,
 } from '../../profiles/BoardProfiles';
 import LoopBankView from '../components/board/LoopBankView';
 import BoardHelp from '../components/board/BoardHelp';
@@ -1287,6 +1289,14 @@ export default function BoardSequencerScreen() {
       bigBoardButtonRef.current?.focus();
     };
   }, [view]);
+  // Show: ▶ Start the piece and ■ Stop take each other's place, and focus goes with them,
+  // never to the page (T4-09): onto ■ Stop once the piece plays, back onto Start when it
+  // stops (the second press of Stop, the end of the piece, or the iPad's End piece).
+  const showStartRef = useRef<HTMLButtonElement | null>(null);
+  const showStopRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    if (view === 'bigBoard' && focusDropped()) (running ? showStopRef : showStartRef).current?.focus();
+  }, [view, running]);
 
   /**
    * Find the board: take a few frames, ask each one where the board is, and trust the
@@ -2516,6 +2526,11 @@ export default function BoardSequencerScreen() {
       return next;
     });
   }, []);
+  /** What removing these colours does to every player's loops and pages: this player's as they are now. */
+  const colourUsesNow = (ids: readonly ColourId[]): ColourUses => colourUses([
+    { player: null, work: configRef.current },
+    ...savedPlayersWork().filter((w) => w.id !== activePlayer?.id).map((w) => ({ player: w.name, work: w.work })),
+  ], new Set(ids));
 
   // Per-render derived: the calibrated channels, whether any drums (drives the
   // per-row drum picker), and a colour-id → channel lookup for labels/swatches.
@@ -4394,7 +4409,7 @@ export default function BoardSequencerScreen() {
       running={running}
       onRemove={removeChannel}
       onClearAll={clearChannels}
-      isReferenced={(id) => allReferencedChannelIds().has(id)}
+      usesOf={colourUsesNow}
       minFilledFraction={config.minFilledFraction}
       readSettingsCustom={config.readSettingsCustom}
       onMinFill={(v) => update({ minFilledFraction: v, readSettingsCustom: true })}
@@ -5003,6 +5018,8 @@ export default function BoardSequencerScreen() {
     <div
       ref={bigBoardRef}
       tabIndex={-1}
+      role="region"
+      aria-label="Show"
             data-bs-style="calm"
       data-bs-mode={config.themeMode}
       style={{
@@ -5019,7 +5036,20 @@ export default function BoardSequencerScreen() {
       {midiBannerView}
       {running ? bigNowNextStrip : (
         <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap', padding: '10px 14px', borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-elev)' }}>
-          <Button tone="primary" onClick={() => { rehearseFromRef.current = 0; void start(); }} style={{ fontSize: 22, padding: '10px 26px' }}>▶ Start the piece</Button>
+          <Button
+            ref={showStartRef}
+            tone="primary"
+            onClick={() => {
+              // As ▶ Play: a press straight after Stop is a bounce (focus lands here after
+              // the second press of Stop), never a new start of the piece.
+              if (performance.now() - stoppedAtRef.current < PLAY_AFTER_STOP_MS) return;
+              rehearseFromRef.current = 0;
+              void start();
+            }}
+            style={{ fontSize: 22, padding: '10px 26px' }}
+          >
+            ▶ Start the piece
+          </Button>
           <span style={{ fontSize: 16 }}>
             {`${formatClock(config.performance.lengthSec)} · ${config.scenes.length === 0 ? 'no scenes' : `${config.scenes.length} ${config.scenes.length === 1 ? 'scene' : 'scenes'}`} · ${describeEnding(config.performance)}`}
           </span>
@@ -5035,7 +5065,7 @@ export default function BoardSequencerScreen() {
           justifyContent: layout.bigBoardControls === 'left' ? 'flex-start' : 'flex-end',
         }}
       >
-        {running && <Button tone="secondary" onClick={requestStop}>{stopArmed ? '■ Press again to stop' : '■ Stop'}</Button>}
+        {running && <Button ref={showStopRef} tone="secondary" onClick={requestStop}>{stopArmed ? '■ Press again to stop' : '■ Stop'}</Button>}
         <Button tone="secondary" aria-pressed={muted} disabled={!running} onClick={toggleMuted}>
           {muted ? 'Muted' : 'Mute'}
         </Button>

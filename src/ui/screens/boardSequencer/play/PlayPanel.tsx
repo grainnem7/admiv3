@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { Button } from '../ui/Button';
+import { PLAY_STOP_ID } from '../ui/focusNext';
 import { Tabs } from '../ui/Tabs';
 
 export interface PlayPanelProps {
@@ -72,9 +73,10 @@ export function PlayPanel({
       }}
     >
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        {/* One button whose words change (the same element), so focus stays on it. */}
         {running
-          ? <Button tone="primary" onClick={onStop} style={{ minWidth: '7.5em' }}>{stopArmed ? '■ Press again to stop' : '■ Stop'}</Button>
-          : <Button tone="primary" onClick={onStart} style={{ minWidth: '7.5em' }}>▶ Play</Button>}
+          ? <Button id={PLAY_STOP_ID} tone="primary" onClick={onStop} style={{ minWidth: '7.5em' }}>{stopArmed ? '■ Press again to stop' : '■ Stop'}</Button>
+          : <Button id={PLAY_STOP_ID} tone="primary" onClick={onStart} style={{ minWidth: '7.5em' }}>▶ Play</Button>}
         <Button tone="secondary" aria-pressed={muted} onClick={onToggleMute} disabled={!running} title={running ? undefined : 'Mute works while playing.'}>
           {muted ? 'Muted' : 'Mute'}
         </Button>

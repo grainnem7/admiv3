@@ -5,6 +5,13 @@ import { expect, type BrowserContext, type Page } from '@playwright/test';
  * from the server's copy of saved work so every test starts from nothing.
  */
 export async function openLaptopBoard(page: Page): Promise<void> {
+  await openEmptyLaptopBoard(page);
+  await page.getByRole('button', { name: 'Add four colours' }).click();
+  await expect(page.getByRole('radiogroup', { name: 'Counter to put down' })).toBeVisible();
+}
+
+/** The laptop board with no colours yet: only "Add four colours" above it. */
+export async function openEmptyLaptopBoard(page: Page): Promise<void> {
   await cutOff(page);
   await page.goto('/');
   await page.getByRole('button', { name: /Board Sequencer/ }).click();
@@ -12,8 +19,16 @@ export async function openLaptopBoard(page: Page): Promise<void> {
   await page.getByRole('region', { name: "Who's playing?" }).getByRole('textbox', { name: 'Name' }).fill('Test');
   await page.getByRole('button', { name: 'Create' }).click();
   await page.getByRole('button', { name: /Laptop board: play on the laptop/ }).click();
-  await page.getByRole('button', { name: 'Add four colours' }).click();
-  await expect(page.getByRole('radiogroup', { name: 'Counter to put down' })).toBeVisible();
+}
+
+/** A new player's set-up on the laptop, from Welcome → Play on the laptop: step 1, the colours. */
+export async function openLaptopSetup(page: Page): Promise<void> {
+  await cutOff(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: /Play on the laptop/ }).click();
+  await page.getByRole('region', { name: "Who's playing?" }).getByRole('textbox', { name: 'Name' }).fill('Test');
+  await page.getByRole('button', { name: 'Create' }).click();
+  await expect(page.getByRole('heading', { name: 'Choose the colours' })).toBeVisible();
 }
 
 /** Record the page's errors, and cut it off from the laptop's copy and from the internet. */

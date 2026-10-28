@@ -239,6 +239,14 @@ export function setActiveBoardPlayer(id: string): void {
   if (listBoardPlayers().some((p) => p.id === id)) setActiveId(id);
 }
 
+/** Each player's saved loops and pages, as saved, for what removing a colour would do to them. */
+export function savedPlayersWork(): { id: string; name: string; work: Pick<BoardSequencerStored, 'loopSlots' | 'loopNames' | 'pages'> }[] {
+  return listBoardPlayers().flatMap((p) => {
+    const cfg = sanitizeBoardSequencerConfig({ ...p.settings });
+    return cfg ? [{ id: p.id, name: p.name, work: cfg }] : [];
+  });
+}
+
 /** Channel ids referenced by any player's saved pages or loop slots. */
 export function allReferencedChannelIds(): Set<string> {
   const ids = new Set<string>();
