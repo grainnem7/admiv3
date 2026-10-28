@@ -167,16 +167,29 @@ export function scenesDue<T extends { at?: number | null }>(prevElapsedSec: numb
 
 /**
  * A typed time → seconds; blank or unreadable → null. Minutes and seconds may be written
- * "2:30", "2.30" or "2,30" (the way people write times); a plain whole number is seconds
- * ("90" = 1:30). After a point or a comma the seconds take two digits: "2.5" could mean
- * two and a half minutes or 2:05, so it is refused rather than guessed.
+ * "2:30", "2.30" or "2,30" (the way people write times). A plain whole number is refused
+ * (plainNumberProblem says how to write it): read as seconds, "3" was 0:03, and an owner
+ * typing 3 means 3:00. Only "0" is clear: 0:00. After a point or a comma the seconds take
+ * two digits: "2.5" could mean two and a half minutes or 2:05, so it is refused too.
  */
 export function parseClock(text: string): number | null {
   const t = text.trim();
   if (t === '') return null;
   const m = /^(\d{1,3})\s*(?::\s*([0-5]?\d)|[.,]\s*([0-5]\d))$/.exec(t);
   if (m) return Number(m[1]) * 60 + Number(m[2] ?? m[3]);
-  return /^\d{1,4}$/.test(t) ? Number(t) : null;
+  return /^0+$/.test(t) ? 0 : null;
+}
+
+/**
+ * What to say when a plain whole number is typed as a time (parseClock refuses it): how to
+ * write it, with the number as minutes where that fits a piece ("3" → like 3:00). Null
+ * for anything else.
+ */
+export function plainNumberProblem(text: string): string | null {
+  const t = text.trim();
+  if (!/^\d+$/.test(t) || /^0+$/.test(t)) return null;
+  const n = Number(t);
+  return `Type minutes and seconds, like ${n <= MAX_PIECE_SEC / 60 ? n : 3}:00.`;
 }
 
 /** What is wrong with a typed length (parsed by parseClock), in words; null when it is fine. */

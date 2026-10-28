@@ -611,6 +611,19 @@ test('a reload mid-piece offers to carry on from where the clock would be', asyn
   expect(pageErrors(page)).toEqual([]);
 });
 
+test('the Carry on offer goes once the piece would be over: it never offers to carry on from the end', async ({ page }) => {
+  await openLaptopBoard(page);
+  // A 0:30 piece that started 15 s ago, remembered as a closed or reloaded tab leaves it.
+  await page.evaluate(() => localStorage.setItem('admi-piece-running', JSON.stringify({ startedAt: Date.now() - 15_000, lengthSec: 30, show: false })));
+  await page.reload();
+  const offer = page.getByRole('alert').filter({ hasText: 'The piece was playing' });
+  await expect(offer.getByRole('button', { name: /Carry on from 0:[12]\d/ })).toBeVisible();
+  // Its time runs out while the offer waits: the offer goes, rather than "Carry on from 0:30".
+  await expect(offer).toHaveCount(0, { timeout: 30_000 });
+  await expect(page.getByRole('button', { name: /Carry on from/ })).toHaveCount(0);
+  expect(pageErrors(page)).toEqual([]);
+});
+
 test('a closed laptop tab, reopened within the piece, offers Carry on; a second tab never does while the first still plays it', async ({ page, context }) => {
   await openLaptopBoard(page);
   await pickColour(page, 'Red');

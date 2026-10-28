@@ -35,7 +35,8 @@ import { suggestRole } from './boardSequencer/roles';
 import { controlOwners, disabledReason, legendValue } from './boardSequencer/controlOwnership';
 import './boardSequencer/theme/boardTheme.css';
 import { BOARD_TOKENS } from './boardSequencer/theme/boardTokens';
-import { BoardHeader, type CameraNotice as HeaderNotice } from './boardSequencer/BoardHeader';
+import { BoardHeader } from './boardSequencer/BoardHeader';
+import { headerNoticeFor } from './boardSequencer/headerNotice';
 import { CameraSurface } from './boardSequencer/CameraSurface';
 import { PlayerChooser } from './boardSequencer/PlayerChooser';
 import { StepIndicator } from './boardSequencer/ui/StepIndicator';
@@ -2233,10 +2234,14 @@ export default function BoardSequencerScreen() {
   // And which scene is on, so a Next taken before a reload isn't lost.
   useEffect(() => { if (running) rememberScene(config.currentScene); }, [config.currentScene, running]);
   // The reload banner's times count on while it waits (they were frozen at the reload).
+  // Once the piece would be over, the banner goes: carrying on from the end is no piece.
   const [, setBannerTick] = useState(0);
   useEffect(() => {
     if (!resumeFrom || running) return undefined;
-    const id = window.setInterval(() => setBannerTick((n) => n + 1), 1000);
+    const id = window.setInterval(() => {
+      if (readPieceRunning() === null) setResumeFrom(null);
+      else setBannerTick((n) => n + 1);
+    }, 1000);
     return () => window.clearInterval(id);
   }, [resumeFrom, running]);
 
@@ -2612,21 +2617,10 @@ export default function BoardSequencerScreen() {
     boardCheckedRef.current = true;
     void checkBoard();
   }, [view, laptop, config.enabled, cameraUp, running, chooserOpen, checkBoard]);
-  const headerNotice: HeaderNotice | null = saveFailed
-    ? { kind: 'error', text: 'Changes are not being saved — the browser refused. Use Back up to a file (Make a piece, step 3) now.' }
-    : otherTab
-      ? savingGuarded()
-        ? { kind: 'changed', text: "ADMI is also open in another tab. That tab can't save: only this one does." }
-        : { kind: 'error', text: 'ADMI is open in another tab or window. Close all but one, or they will save over each other.' }
-      : error
-    ? { kind: 'error', text: error }
-    : soundError
-      ? { kind: 'error', text: soundError }
-      : laptop ? null : camNotice;
-
-
-  // Change camera belongs beside a camera problem, not beside "another tab" or "not saved".
-  const cameraHeaderNotice = !saveFailed && !otherTab && (error !== null || (!soundError && !laptop && camNotice !== null));
+  // The header's one notice, most urgent first; Change camera only beside a camera problem.
+  const { notice: headerNotice, changeCamera: cameraHeaderNotice } = headerNoticeFor({
+    saveFailed, otherTab, guarded: savingGuarded(), error, soundError, laptop, camNotice,
+  });
 
   const playReason = canPlay(setupCfg, cameraGate)
     ? null
@@ -4700,6 +4694,7 @@ export default function BoardSequencerScreen() {
     <div style={{ flex: layout.mode === 'stacked' ? 'none' : '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
       {resumeFrom && !running && (() => {
         const at = Math.round((Date.now() - resumeFrom.startedAt) / 1000);
+        if (at >= resumeFrom.lengthSec) return null; // over: the tick takes the offer away
         return (
           <div role="alert" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', padding: '8px 12px', borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-warn)', color: 'var(--bs-bg)', fontWeight: 600 }}>
             <span style={{ flex: '1 1 240px' }}>{`The piece was playing when the page closed or reloaded. The clock would be at ${formatClock(Math.min(at, resumeFrom.lengthSec))} now.`}</span>
@@ -4708,6 +4703,8 @@ export default function BoardSequencerScreen() {
               onClick={() => {
                 const now = Math.round((Date.now() - resumeFrom.startedAt) / 1000);
                 setResumeFrom(null);
+                // Over since the banner last looked: nothing is left to carry on.
+                if (readPieceRunning() === null) return;
                 resumeSceneRef.current = resumeFrom.scene ?? null;
                 rehearseFrom(Math.max(0, now));
                 // Back where it was: Show, if Show was open.

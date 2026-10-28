@@ -7,7 +7,7 @@ import { Switch } from '../ui/Switch';
 import type { BandLevel } from '../../../../songs/band/band';
 import type { SoundWorldChoice } from '../../../../audio/worlds/soundWorlds';
 import {
-  describeEnding, endingTooLong, formatClock, parseClock, pieceLengthProblem,
+  describeEnding, endingTooLong, formatClock, parseClock, pieceLengthProblem, plainNumberProblem,
   type ClockView, type EndingMode, type EndingStyle, type PerformanceSettings,
 } from '../../../../songs/performance/clock';
 import { MAX_SCENES, type LoopSlotState, type Scene } from '../../../../songs/performance/launcher';
@@ -492,7 +492,7 @@ function LengthField({ lengthSec, scenes, onChange }: { lengthSec: number; scene
   const [text, setText] = useState(formatClock(lengthSec));
   const [changed, setChanged] = useState(false);
   const parsed = parseClock(text);
-  const problem = pieceLengthProblem(parsed);
+  const problem = plainNumberProblem(text) ?? pieceLengthProblem(parsed);
   const late = scenes.filter((s) => typeof s.at === 'number' && s.at >= lengthSec).map((s) => s.name);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
@@ -557,7 +557,9 @@ function SceneRow(r: SceneRowProps): JSX.Element {
   const [timeText, setTimeText] = useState(typeof s.at === 'number' ? formatClock(s.at) : '');
   const parsed = timeText.trim() === '' ? null : parseClock(timeText);
   const typo = timeText.trim() !== '' && parsed === null;
-  const problem = typo ? 'Type a time as minutes:seconds, like 2:30, or leave it empty for by hand only.' : sceneTimeProblem(parsed, r.lengthSec, r.otherTimes);
+  const problem = typo
+    ? (plainNumberProblem(timeText) ?? 'Type a time as minutes:seconds, like 2:30, or leave it empty for by hand only.')
+    : sceneTimeProblem(parsed, r.lengthSec, r.otherTimes);
   const saved = r.loops.filter((l) => l.state !== 'empty');
   // A loop the scene uses that holds nothing still shows, marked, so it can be taken out (T2-06).
   const emptyInScene = r.loops.filter((l) => l.state === 'empty' && s.loops.includes(l.slot));
@@ -627,7 +629,7 @@ function SceneRow(r: SceneRowProps): JSX.Element {
                 onBlur={() => {
                   // Unreadable: refused beside the field, and not saved.
                   if (typo) return;
-                  // Shown back as it was read ("2.30" → 2:30, "90" → 1:30), so a misreading is seen.
+                  // Shown back as it was read ("2.30" → 2:30, "0" → 0:00), so a misreading is seen.
                   setTimeText(parsed === null ? '' : formatClock(parsed));
                   if (parsed !== (typeof s.at === 'number' ? s.at : null)) r.onEdit({ at: parsed });
                 }}

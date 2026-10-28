@@ -95,6 +95,27 @@ describe('Scenes: typed times (T2-04)', () => {
     }
   });
 
+  it('a plain number is refused beside the field, saying how to write it, and not saved', () => {
+    const p = props();
+    render(p);
+    act(() => button(/^1:30 · Build/)?.click());
+    const field = input(/When Build comes in/)!;
+    typeAndLeave(field, '3');
+    expect(p.onEditScene).not.toHaveBeenCalled();
+    expect(host.querySelector('[role="alert"]')?.textContent).toBe('Type minutes and seconds, like 3:00.');
+    expect(field.value).toBe('3'); // left as typed, to be put right
+  });
+
+  it('"0" is the start of the piece, 0:00', () => {
+    const p = props();
+    render(p);
+    act(() => button(/^1:30 · Build/)?.click());
+    const field = input(/When Build comes in/)!;
+    typeAndLeave(field, '0');
+    expect(p.onEditScene).toHaveBeenCalledWith(1, { at: 0 });
+    expect(field.value).toBe('0:00');
+  });
+
   it('a time it cannot read is refused beside the field, and not saved', () => {
     const p = props();
     render(p);
@@ -152,6 +173,14 @@ describe('Ending & check: the length (T2-07, F5, T2-09)', () => {
     typeAndLeave(input(/Length of the piece/)!, '8:00');
     expect(p.onPerformance).not.toHaveBeenCalled();
     expect(text()).toContain('The piece can be at most 7:00.');
+  });
+
+  it('a plain number is refused with how to write it, and not saved', () => {
+    const p = props({ step: 'ending' });
+    render(p);
+    typeAndLeave(input(/Length of the piece/)!, '7');
+    expect(p.onPerformance).not.toHaveBeenCalled();
+    expect(text()).toContain('Type minutes and seconds, like 7:00.');
   });
 
   it('6.30 saves as 6:30, and says the scenes keep their times', () => {

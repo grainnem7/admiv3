@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   clockView, cuesCrossed, cueText, DEFAULT_PERFORMANCE, describeEnding, endingDue, endingLeadSec, endingPasses, formatClock,
-  parseClock, sanitizePerformance, scenesDue, endingTooLong, CLOCK_NOT_STARTED, MAX_PIECE_SEC, pieceLengthProblem,
+  parseClock, sanitizePerformance, scenesDue, endingTooLong, CLOCK_NOT_STARTED, MAX_PIECE_SEC, pieceLengthProblem, plainNumberProblem,
 } from '../songs/performance/clock';
 import { DEFAULT_LOOP_COLOUR_OPTIONS, initialLoopColourState, stepLoopColours } from '../songs/performance/loopColours';
 
@@ -83,7 +83,6 @@ describe('the performance clock', () => {
   it('reads and writes mm:ss', () => {
     expect(formatClock(425)).toBe('7:05');
     expect(parseClock('2:30')).toBe(150);
-    expect(parseClock('90')).toBe(90);
     expect(parseClock('')).toBeNull();
     expect(parseClock('x')).toBeNull();
   });
@@ -93,12 +92,25 @@ describe('the performance clock', () => {
     expect(parseClock('7.00')).toBe(420);
     expect(parseClock('0.45')).toBe(45);
     expect(parseClock('1:5')).toBe(65); // a colon is minutes:seconds, as before
-    expect(parseClock('90')).toBe(90); // a plain whole number is seconds, as before
     // "2.5" could be two and a half minutes or 2:05: refused, never guessed. "2.30" read
     // as 2.3 seconds put a scene 2 s into the piece with no message.
     for (const t of ['2.5', '2,5', '2.300', '2.75', '2:75', '2m30', '1e2', '-30', '0x10', '1:30:00', '2.3.0', '.30']) {
       expect(parseClock(t)).toBeNull();
     }
+  });
+
+  it('a plain whole number is refused, never guessed: "3" was 0:03, and an owner typing 3 means 3:00', () => {
+    for (const t of ['3', '7', '90', '300', ' 3 ', '0003']) expect(parseClock(t)).toBeNull();
+    // Only nought is clear: 0:00.
+    expect(parseClock('0')).toBe(0);
+    expect(parseClock('00')).toBe(0);
+  });
+
+  it('says how to write a time when a plain number is typed, with the number as minutes where it fits a piece', () => {
+    expect(plainNumberProblem('3')).toBe('Type minutes and seconds, like 3:00.');
+    expect(plainNumberProblem(' 7 ')).toBe('Type minutes and seconds, like 7:00.');
+    expect(plainNumberProblem('90')).toBe('Type minutes and seconds, like 3:00.');
+    for (const t of ['0', '00', '2:30', '2.30', '2.5', 'x', '']) expect(plainNumberProblem(t)).toBeNull();
   });
 
   it('a piece is at most 7:00 (F5) and at least 0:30, and says so in words', () => {
