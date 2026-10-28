@@ -48,7 +48,9 @@ import { ReadyStep } from './boardSequencer/setup/ReadyStep';
 import { BoardCornerEditor } from './boardSequencer/components/BoardCornerEditor';
 import { cellMap, LiveBoardView } from './boardSequencer/components/BoardView';
 import { createSessionArchive, indexedDbTakeStore, MAX_TAKES, type SessionArchive, type TakeSummary } from '../../storage/sessionArchive';
-import { forgetPieceRunning, readPieceRunning, rememberPieceRunning, rememberScene, rememberShowing, type PieceRunning } from '../../songs/performance/pieceRunning';
+import {
+  forgetPieceRunning, readPieceRunning, rememberEnding, rememberPieceRunning, rememberScene, rememberShowing, reloadOffer, type PieceRunning,
+} from '../../songs/performance/pieceRunning';
 import { drawCells, keepCells, loopChannelsFor, loopColourLabel, loopSwatch } from '../../songs/performance/loopSounds';
 import { boardSeen, engineSettingsFor, hearWith, loopsToPlay, playerCellsFor, slotForKeep, startNewLoop, startWithThese, stopHearing, type NewLoopState } from '../../songs/performance/newLoop';
 import { NewLoopPanel } from './boardSequencer/play/NewLoopPanel';
@@ -138,7 +140,9 @@ import {
   clockView, cueText, describeEnding, formatClock, CLOCK_NOT_STARTED,
   type ClockView,
 } from '../../songs/performance/clock';
-import { decideClockTick, editedScene, nowNext, openingScene, planScenes, putLoopBack, sortScenes, takeLoopOut, withSceneAdded } from '../../songs/performance/piece';
+import {
+  decideClockTick, editedScene, nowNext, openingScene, pieceEndingLeadSec, planScenes, putLoopBack, sortScenes, takeLoopOut, withSceneAdded,
+} from '../../songs/performance/piece';
 import { DEFAULT_LOOP_COLOUR_OPTIONS, initialLoopColourState, stepLoopColours } from '../../songs/performance/loopColours';
 import { SessionLog, sessionFileName, type LogActor } from '../../songs/sessionLog';
 import { diskState, onDiskState, restoreFromFile, scheduleDiskSave } from '../../storage/diskSync';
@@ -271,9 +275,13 @@ const SAVE_GATHER_MS = 400;
 const STOP_CONFIRM_MS = 4000;
 /**
  * A start that runs the piece's clock: from where (seconds into the piece) and, carrying on
- * after a reload, the scene that was on.
+ * after a reload, when the piece first started (Date.now()) and the scene that was on.
  */
-interface PieceStart { fromSec: number; scene?: number | null }
+interface PieceStart { fromSec: number; startedAt?: number; scene?: number | null }
+/** How long before its end this piece's ending begins, at the slowest tempo it can be at. */
+const endingLeadOf = (c: BoardSequencerStored): number => pieceEndingLeadSec(
+  c.performance, c.cols * Math.max(1, c.numPages), [c.bpm, ...c.scenes.map((s) => s.settings.bpm)],
+);
 /** Where Play / Make a piece is remembered. */
 const WORKSPACE_KEY = 'admi-board-workspace';
 /** How long Undo stays on offer after the board, a loop or the scenes are thrown away. */
@@ -432,9 +440,18 @@ export default function BoardSequencerScreen() {
   // plays on from the last pattern, but the board is no longer being read — say so.
   const [cameraStalled, setCameraStalled] = useState(false);
   // The page reloaded (a crash, a mistaken refresh) while a piece was playing: offer to
-  // pick it up where the clock would be now, in the scene on at that moment.
-  const [resumeFrom, setResumeFrom] = useState<PieceRunning | null>(() => readPieceRunning());
+  // pick it up where the clock would be now, in the scene on at that moment — only while
+  // its ending has not begun and is still more than a few seconds off. Otherwise the piece
+  // has ended: a fade can't be picked up where it was, and starting it again was louder
+  // and ran past the end (R2-T3-01), or forgot End (R2-T3-02).
+  const [reloadAtOpen] = useState(() => {
+    const p = readPieceRunning();
+    return { p, offer: reloadOffer(p, Date.now(), endingLeadOf(storedRef.current ?? DEFAULT_BOARD_SEQUENCER_CONFIG)) };
+  });
+  const [resumeFrom, setResumeFrom] = useState<PieceRunning | null>(() => (reloadAtOpen.offer === 'carryOn' ? reloadAtOpen.p : null));
+  const [endedNotice, setEndedNotice] = useState(() => reloadAtOpen.offer === 'ended');
   const carryOnRef = useRef<HTMLButtonElement | null>(null);
+  const endedLineRef = useRef<HTMLDivElement | null>(null);
   // How the corner editor was opened: 'tap' starts from nothing, 'review' checks corners
   // that already exist. "Tap corners myself" must mean tapping, even for a board that is
   // already set up.
@@ -477,10 +494,14 @@ export default function BoardSequencerScreen() {
   // Guided Set up vs Play, resolved once from the config alone: routing never moves the
   // player on its own. A board that is set up opens on Play (a reload mid-piece too, where
   // "Carry on" is); the Welcome screen can ask for Set up instead.
-  const [view, setView] = useState<BoardScreenView>(() => openingView(
-    storedRef.current,
-    { setupRequested: setupRequestedOnOpen(), pieceRunning: readPieceRunning() !== null, laptopRequested: laptopRequestedOnOpen() },
-  ));
+  const [view, setView] = useState<BoardScreenView>(() => {
+    const v = openingView(
+      storedRef.current,
+      { setupRequested: setupRequestedOnOpen(), pieceRunning: reloadAtOpen.p !== null, laptopRequested: laptopRequestedOnOpen() },
+    );
+    // A piece that has ended across the reload comes back where it was: Show, if Show was open.
+    return v === 'play' && reloadAtOpen.offer === 'ended' && reloadAtOpen.p?.show === true ? 'bigBoard' : v;
+  });
   // The counter a click on the laptop board puts down.
   const [laptopColour, setLaptopColour] = useState('');
   const [chosenStep, setStep] = useState<SetupStep>(() => resolveEntry(
@@ -2204,8 +2225,11 @@ export default function BoardSequencerScreen() {
     }
     startSecRef.current = Tone.now();
     runningRef.current = true;
-    clockStartRef.current = clockOn ? performance.now() - startSec * 1000 : null;
-    if (clockOn) rememberPieceRunning(Date.now() - startSec * 1000, home.performance.lengthSec);
+    // Carrying on keeps the piece's first start, so its end never moves: started again once
+    // the sound was ready, every Carry on ran the piece over by the time that took.
+    const firstStart = piece?.startedAt ?? Date.now() - startSec * 1000;
+    clockStartRef.current = clockOn ? performance.now() - (Date.now() - firstStart) : null;
+    if (clockOn) rememberPieceRunning(firstStart, home.performance.lengthSec);
     if (clockStartRef.current !== null) homeSettingsRef.current = sceneSettingsOf(home);
     // The opening scene sets everything: a strip the player moved before the piece is no
     // longer theirs to keep from the next scene.
@@ -2239,27 +2263,32 @@ export default function BoardSequencerScreen() {
   // And which scene is on, so a Next taken before a reload isn't lost.
   useEffect(() => { if (running) rememberScene(config.currentScene); }, [config.currentScene, running]);
   // The reload banner's times count on while it waits (they were frozen at the reload).
-  // Once the piece would be over, the banner goes: carrying on from the end is no piece.
+  // Once Carry on would come too close to the ending, the offer changes at once to the
+  // piece having ended; once the piece would be over, it goes: carrying on from the end is
+  // no piece.
   const [, setBannerTick] = useState(0);
   useEffect(() => {
     if (!resumeFrom || running) return undefined;
     const id = window.setInterval(() => {
-      if (readPieceRunning() === null) setResumeFrom(null);
-      else setBannerTick((n) => n + 1);
-    }, 1000);
+      const offer = reloadOffer(readPieceRunning(), Date.now(), endingLeadOf(configRef.current));
+      if (offer === 'carryOn') { setBannerTick((n) => n + 1); return; }
+      setResumeFrom(null);
+      if (offer === 'ended') setEndedNotice(true);
+    }, 250);
     return () => window.clearInterval(id);
   }, [resumeFrom, running]);
-  // Space does nothing while the offer to carry on is on screen.
+  // Space does nothing while the offer (or the line saying the piece has ended) is on screen.
   const reloadNoticeRef = useRef(false);
-  reloadNoticeRef.current = resumeFrom !== null && !running;
-  // The offer takes focus when it appears, so Space or Enter on it is ▶ Carry on. Only from
-  // the page or Show itself: focus somewhere else is left where it is.
-  const offerShown = resumeFrom !== null && !running;
+  reloadNoticeRef.current = (resumeFrom !== null || endedNotice) && !running;
+  // The offer takes focus when it appears, so Space or Enter on it is ▶ Carry on; the line
+  // that the piece has ended is read out, and Space there does nothing. Only from the page
+  // or Show itself: focus somewhere else is left where it is.
+  const reloadKind = running ? null : resumeFrom !== null ? 'carryOn' : endedNotice ? 'ended' : null;
   useEffect(() => {
-    if (!offerShown) return;
+    if (reloadKind === null) return;
     if (!focusDropped() && document.activeElement !== bigBoardRef.current) return;
-    carryOnRef.current?.focus();
-  }, [offerShown]);
+    (reloadKind === 'carryOn' ? carryOnRef.current : endedLineRef.current)?.focus();
+  }, [reloadKind]);
 
   /** Rehearse from a point in the piece: Play, with the clock already at `sec`. */
   const rehearseFrom = (sec: number): void => {
@@ -2278,6 +2307,11 @@ export default function BoardSequencerScreen() {
     startingRef.current = performance.now();
     const generation = startingRef.current;
     setStarting(true);
+    if (piece !== null) {
+      // A new start of the piece takes the place of the one remembered across a reload.
+      setResumeFrom(null);
+      setEndedNotice(false);
+    }
     setSoundError(null);
     try {
       await startEngine(generation, piece);
@@ -3152,6 +3186,8 @@ export default function BoardSequencerScreen() {
     autoEndedRef.current = false;
     hardStoppedRef.current = false;
     setClock(clockView(clockStartRef.current, performance.now(), c.performance.lengthSec, false));
+    setResumeFrom(null);
+    setEndedNotice(false);
     sessionLogRef.current.action(logActorRef.current, 'start the piece');
     if (opening) {
       setBoardNotice(`Scene: ${opening.name}`);
@@ -3172,6 +3208,8 @@ export default function BoardSequencerScreen() {
     const beats = style === 'stop' ? 0 : c.performance.fadePasses * cycle;
     endingRef.current = true;
     setEnding(true);
+    // Remembered across a reload: once the ending has begun, a reload ends the piece.
+    rememberEnding(true);
     engine.finish(beats, () => {
       // Said once the sound has rung out; by then the player may have pressed Stop and
       // Play again, and a new run must not be stopped by the old one finishing.
@@ -3193,6 +3231,7 @@ export default function BoardSequencerScreen() {
     engineRef.current?.cancelFinish();
     endingRef.current = false;
     setEnding(false);
+    rememberEnding(false);
     sessionLogRef.current.action(logActorRef.current, 'ending cancelled');
     announce('Ending cancelled: carrying on.');
   };
@@ -4752,34 +4791,54 @@ export default function BoardSequencerScreen() {
   const nowNextStrip = <NowNextStrip {...nowNextProps} />;
   const bigNowNextStrip = <NowNextStrip {...nowNextProps} big />;
 
-  /** ▶ Carry on after a reload: from where the clock would be now, in the scene that was on. */
+  /**
+   * ▶ Carry on after a reload: from where the clock is now, counted from when the piece
+   * first started, so its end never moves. Looked at again on the press: an offer run out
+   * since the banner last looked starts nothing, and says the piece has ended.
+   */
   const carryOn = (): void => {
-    if (!resumeFrom) return;
-    const now = Math.round((Date.now() - resumeFrom.startedAt) / 1000);
+    const p = readPieceRunning();
+    const now = Date.now();
+    const offer = reloadOffer(p, now, endingLeadOf(configRef.current));
     setResumeFrom(null);
-    // Over since the banner last looked: nothing is left to carry on.
-    if (readPieceRunning() === null) return;
-    announce(`Carrying on from ${formatClock(Math.max(0, now))}.`);
-    void start({ fromSec: Math.max(0, now), scene: resumeFrom.scene ?? null });
+    if (offer !== 'carryOn' || p === null) {
+      if (offer === 'ended') setEndedNotice(true);
+      return;
+    }
+    const fromSec = (now - p.startedAt) / 1000;
+    announce(`Carrying on from ${formatClock(fromSec)}.`);
+    void start({ fromSec, startedAt: p.startedAt, scene: p.scene ?? null });
     // Back where it was: Show, if Show was open.
-    if (resumeFrom.show) setView('bigBoard');
+    if (p.show) setView('bigBoard');
   };
+  /** No, or OK: the reload notice goes, and focus goes back to Show or to ▶ Play. */
+  const dismissReloadNotice = (): void => {
+    setResumeFrom(null);
+    setEndedNotice(false);
+    forgetPieceRunning();
+    void focusWhenGone(() => (view === 'bigBoard' ? bigBoardRef.current : document.getElementById(PLAY_STOP_ID)));
+  };
+  const reloadNoticeView = running ? null : resumeFrom !== null ? (() => {
+    const at = (Date.now() - resumeFrom.startedAt) / 1000;
+    if (at >= resumeFrom.lengthSec) return null; // over: the tick takes the offer away
+    return (
+      <div role="alert" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', padding: '8px 12px', borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-warn)', color: 'var(--bs-bg)', fontWeight: 600 }}>
+        <span style={{ flex: '1 1 240px' }}>{`The piece was playing when the page closed or reloaded. The clock would be at ${formatClock(at)} now.`}</span>
+        <Button ref={carryOnRef} tone="primary" onClick={carryOn}>{`▶ Carry on from ${formatClock(at)}`}</Button>
+        <Button tone="secondary" onClick={dismissReloadNotice}>No</Button>
+      </div>
+    );
+  })() : endedNotice ? (
+    // Calm, not the orange alert: nothing is wrong, and nothing is asked.
+    <div ref={endedLineRef} tabIndex={-1} role="status" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', padding: '8px 12px', borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-raised)', border: '1px solid var(--bs-border)' }}>
+      <span style={{ flex: '1 1 240px' }}>The piece was ending when the page closed or reloaded, so it has ended.</span>
+      <Button tone="secondary" onClick={dismissReloadNotice}>OK</Button>
+    </div>
+  ) : null;
 
   const stage = (
     <div style={{ flex: layout.mode === 'stacked' ? 'none' : '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
-      {resumeFrom && !running && (() => {
-        const at = Math.round((Date.now() - resumeFrom.startedAt) / 1000);
-        if (at >= resumeFrom.lengthSec) return null; // over: the tick takes the offer away
-        return (
-          <div role="alert" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', padding: '8px 12px', borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-warn)', color: 'var(--bs-bg)', fontWeight: 600 }}>
-            <span style={{ flex: '1 1 240px' }}>{`The piece was playing when the page closed or reloaded. The clock would be at ${formatClock(Math.min(at, resumeFrom.lengthSec))} now.`}</span>
-            <Button ref={carryOnRef} tone="primary" onClick={carryOn}>
-              {`▶ Carry on from ${formatClock(Math.min(at, resumeFrom.lengthSec))}`}
-            </Button>
-            <Button tone="secondary" onClick={() => { setResumeFrom(null); forgetPieceRunning(); }}>No</Button>
-          </div>
-        );
-      })()}
+      {view !== 'bigBoard' && reloadNoticeView}
       {undoOffer && (
         <div role="status" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', padding: '6px 12px', borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-raised)', border: '1px solid var(--bs-border)' }}>
           <span style={{ flex: '1 1 200px' }}>{undoOffer.text}</span>
@@ -5134,6 +5193,7 @@ export default function BoardSequencerScreen() {
       }}
     >
       {midiBannerView}
+      {reloadNoticeView}
       {running ? bigNowNextStrip : (
         <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap', padding: '10px 14px', borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-elev)' }}>
           <Button

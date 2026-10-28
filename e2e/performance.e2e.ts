@@ -611,16 +611,20 @@ test('a reload mid-piece offers to carry on from where the clock would be', asyn
   expect(pageErrors(page)).toEqual([]);
 });
 
-test('the Carry on offer goes once the piece would be over: it never offers to carry on from the end', async ({ page }) => {
+test('the Carry on offer runs out before the ending would begin: it never offers to carry on into the ending, or from the end (R2-T3-01)', async ({ page }) => {
   await openLaptopBoard(page);
-  // A 0:30 piece that started 15 s ago, remembered as a closed or reloaded tab leaves it.
-  await page.evaluate(() => localStorage.setItem('admi-piece-running', JSON.stringify({ startedAt: Date.now() - 15_000, lengthSec: 30, show: false })));
+  // A 7:00 piece with 0:30 left, remembered as a closed or reloaded tab leaves it. Its
+  // ending begins about 0:17 before the end (90 BPM, 8 steps, a 2-pass fade), so Carry on
+  // is offered until about 0:22 left.
+  await page.evaluate(() => localStorage.setItem('admi-piece-running', JSON.stringify({ startedAt: Date.now() - 390_000, lengthSec: 420, show: false })));
   await page.reload();
   const offer = page.getByRole('alert').filter({ hasText: 'The piece was playing' });
-  await expect(offer.getByRole('button', { name: /Carry on from 0:[12]\d/ })).toBeVisible();
-  // Its time runs out while the offer waits: the offer goes, rather than "Carry on from 0:30".
-  await expect(offer).toHaveCount(0, { timeout: 30_000 });
+  await expect(offer.getByRole('button', { name: /Carry on from 6:3\d/ })).toBeVisible();
+  // Its time runs out while the offer waits: the offer changes to the piece having ended.
+  await expect(endedLine(page)).toBeVisible({ timeout: 15_000 });
+  await expect(offer).toHaveCount(0);
   await expect(page.getByRole('button', { name: /Carry on from/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '■ Stop' })).toHaveCount(0);
   expect(pageErrors(page)).toEqual([]);
 });
 
@@ -1059,6 +1063,7 @@ test('two tabs: only the first saves; the second says why and saves nothing; whe
   await expect(second.getByRole('textbox', { name: 'Name of loop 3' })).toHaveValue('Kept in A');
   expect(pageErrors(page)).toEqual([]);
 });
+
 // ---- WP-F2a: starting and ending the piece (round 2's Blockers F2-1, F2-2, F2-3) ----
 
 /** The piece's length, typed in Make a piece → Ending & check ("1:00"). */
@@ -1076,12 +1081,26 @@ async function saveBedAndPulse(page: Page): Promise<void> {
   await page.getByRole('textbox', { name: 'Name of loop 2' }).press('Tab');
 }
 
+/**
+ * Wait, inside the page, until the remembered piece's clock (counted from its first start,
+ * the page's own piece marker) reaches `sec`. Resolves with that first start (Date.now()).
+ */
+const untilPieceAt = (page: Page, sec: number): Promise<number> => page.evaluate(async (s) => {
+  const p = JSON.parse(localStorage.getItem('admi-piece-running') ?? 'null') as { startedAt: number } | null;
+  if (!p) throw new Error('no piece remembered');
+  while (Date.now() - p.startedAt < s * 1000) await new Promise((r) => setTimeout(r, 20));
+  return p.startedAt;
+}, sec);
+
 /** The timer's words at the moment the Now / Next strip first names `scene` (read in the page). */
 const timerWhenNow = (page: Page, scene: string, timeout = 30_000): Promise<string> => page.waitForFunction((name) => {
   const strip = document.querySelector('[role="region"][aria-label="Now and next"]');
   if (!strip?.textContent?.includes(`Now: ${name}`)) return false;
   return strip.querySelector('[role="timer"]')?.textContent ?? '';
 }, scene, { timeout }).then((h) => h.jsonValue() as Promise<string>);
+
+/** The line saying the piece ended across a reload. */
+const endedLine = (page: Page) => page.getByRole('status').filter({ hasText: 'The piece was ending when the page closed or reloaded, so it has ended.' });
 
 test('Space in Show starts the piece: the clock, the opening scene and its loop, focus on ■ Stop; Space twice stops it (R2-T4-01)', async ({ page }) => {
   await openLaptopBoard(page);
@@ -1242,5 +1261,168 @@ test('the first scene at 0:10 and a later one left on by a jump: Start the piece
   await expect(strip).toContainText(/Next: Arrival in 0:(09|10)/);
   expect(await timerWhenNow(page, 'Arrival')).toMatch(/^0:(49|50|51)$/);
   expect(await timerWhenNow(page, 'Build')).toMatch(/^0:4[678]$/);
+  expect(pageErrors(page)).toEqual([]);
+});
+
+test('a reload in the last seconds (rehearse from Home, reload at 0:54 of 1:00): no Carry on, the piece has ended, silence', async ({ page }) => {
+  await listenToOutput(page);
+  await openLaptopBoard(page);
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1]]);
+  await pieceLength(page, '1:00');
+  await makePlan(page); // Home at 0:51
+  await page.getByRole('button', { name: /Rehearse from Home/ }).click();
+  await pieceClockRunning(page);
+  await untilPieceAt(page, 54);
+  await page.reload();
+  await expect(endedLine(page)).toBeVisible();
+  await expect(page.getByRole('button', { name: /Carry on from/ })).toHaveCount(0);
+  const levels = await outputLevels(page, 12, 250); // 3 s
+  expect(levels.every((v) => v === 0), `levels after the reload: ${levels.join(', ')}`).toBe(true);
+  await expect(page.getByRole('timer')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '▶ Play' }).first()).toBeVisible();
+  // OK: the line goes, and nothing starts.
+  await endedLine(page).getByRole('button', { name: 'OK' }).click();
+  await expect(endedLine(page)).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '■ Stop' })).toHaveCount(0);
+  expect(pageErrors(page)).toEqual([]);
+});
+
+test('a reload with the automatic ending under way: no Carry on, the piece has ended', async ({ page }) => {
+  await openLaptopBoard(page);
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1]]);
+  await pieceLength(page, '1:00');
+  await makePlan(page); // Open at 0:30; the ending begins by itself about 0:17 before the end
+  await page.getByRole('button', { name: /Rehearse from Open/ }).click();
+  await pieceClockRunning(page);
+  await expect(page.getByRole('button', { name: 'Cancel the ending' }).first()).toBeVisible({ timeout: 30_000 });
+  await page.reload();
+  await expect(endedLine(page)).toBeVisible();
+  await expect(page.getByRole('button', { name: /Carry on from/ })).toHaveCount(0);
+  expect(pageErrors(page)).toEqual([]);
+});
+
+test('⏹ End in Show, then a reload with a minute left: the piece has ended, in Show, with no Bed (R2-T3-02)', async ({ page }) => {
+  await listenToOutput(page);
+  await openLaptopBoard(page);
+  await saveTwoLoops(page);
+  await makePlan(page); // 7:00; Home at 6:00 has Bed
+  await page.getByRole('button', { name: /Rehearse from Home/ }).click();
+  await pieceClockRunning(page);
+  await page.getByRole('button', { name: /^Show: the board, the clock/ }).click();
+  const show = page.getByRole('region', { name: 'Show', exact: true });
+  await untilPieceAt(page, 362);
+  await show.getByRole('button', { name: '⏹ End' }).click();
+  await expect(show.getByRole('button', { name: 'Cancel the ending' })).toBeVisible();
+  await pause(page, 3000);
+  await page.reload();
+  // Back where it was, in Show: stopped, silent, and saying why.
+  const showAgain = page.getByRole('region', { name: 'Show', exact: true });
+  await expect(showAgain.getByRole('button', { name: 'Leave Show' })).toBeVisible();
+  await expect(showAgain.getByRole('status').filter({ hasText: 'so it has ended' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Carry on from/ })).toHaveCount(0);
+  // Space does nothing while the line is up: no new piece.
+  await page.keyboard.press('Space');
+  const levels = await outputLevels(page, 12, 250);
+  expect(levels.every((v) => v === 0), `levels after the reload: ${levels.join(', ')}`).toBe(true);
+  await expect(showAgain.getByRole('timer')).toHaveCount(0);
+  await expect(showAgain.getByRole('button', { name: '▶ Start the piece' })).toBeVisible();
+  expect(pageErrors(page)).toEqual([]);
+});
+
+test('a reload with more left than the ending needs: Carry on, the ending begins on time, the last sound is by the first start + length, and no louder (R2-T3-01)', async ({ page }) => {
+  test.setTimeout(180_000);
+  await listenToOutput(page);
+  await openLaptopBoard(page);
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1], [5, 3]]);
+  await ownSoundIsPlain(page);
+  await pieceLength(page, '5:00');
+  await makePlan(page); // Home at 4:17, 0:43 before the end
+  await page.getByRole('button', { name: /Rehearse from Home/ }).click();
+  await pieceClockRunning(page);
+  const startedAt = await untilPieceAt(page, 258);
+  const before = Math.max(...await outputLevels(page, 20, 250)); // the 5 s before the reload
+  expect(before).toBeGreaterThan(0.001);
+  await page.reload();
+  await page.getByRole('alert').filter({ hasText: 'The piece was playing' }).getByRole('button', { name: /Carry on from 4:2\d/ }).click();
+  // From here on, measured in the page against the first start, on its wall clock.
+  const r = await page.evaluate(async ({ startedAt, lengthMs }) => {
+    const buf = new Float32Array(2048);
+    let endingAt: number | null = null;
+    let peakAfter = 0;
+    let lastSound = 0;
+    while (Date.now() < startedAt + lengthMs + 2000) {
+      const an = (window as unknown as { __admiMeter?: AnalyserNode }).__admiMeter;
+      let level = 0;
+      if (an) {
+        an.getFloatTimeDomainData(buf);
+        let sum = 0;
+        for (const v of buf) sum += v * v;
+        level = Math.sqrt(sum / buf.length);
+      }
+      if (endingAt === null && document.querySelector('[role="timer"]')?.textContent?.startsWith('ending')) endingAt = Date.now();
+      if (endingAt !== null) peakAfter = Math.max(peakAfter, level);
+      if (level > 0.001) lastSound = Date.now();
+      await new Promise((res) => setTimeout(res, 15));
+    }
+    return { endingAt: endingAt === null ? null : (endingAt - startedAt) / 1000, peakAfter, lastSound: (lastSound - startedAt) / 1000 };
+  }, { startedAt, lengthMs: 300_000 });
+  // The ending begins 16.8 s before the end (90 BPM, 8 steps, a 2-pass fade), on the clock
+  // counted from the first start: not later by however long the sound took to come back.
+  expect(r.endingAt).not.toBeNull();
+  expect(r.endingAt!).toBeGreaterThanOrEqual(300 - 16.8 - 0.5);
+  expect(r.endingAt!).toBeLessThanOrEqual(300 - 16.8 + 0.75);
+  expect(r.lastSound).toBeGreaterThan(270);
+  expect(r.lastSound).toBeLessThanOrEqual(300.5);
+  // Never louder: the fade starts from where the music was (a little measuring slack).
+  expect(r.peakAfter, `before ${before}, after the ending began ${r.peakAfter}`).toBeLessThanOrEqual(before * 1.15 + 0.002);
+  expect(pageErrors(page)).toEqual([]);
+});
+
+test('two reloads mid-piece, each carried on: silent by the first start + the length on the wall clock', async ({ page }) => {
+  test.setTimeout(180_000);
+  await listenToOutput(page);
+  await openLaptopBoard(page);
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1], [5, 3]]);
+  await pieceLength(page, '1:00');
+  await makePlan(page);
+  await startPiece(page);
+  await pieceClockRunning(page);
+  const startedAt = await untilPieceAt(page, 10);
+  for (const at of [10, 20]) {
+    await untilPieceAt(page, at);
+    await page.reload();
+    await page.getByRole('alert').filter({ hasText: 'The piece was playing' }).getByRole('button', { name: /Carry on from/ }).click();
+    await pieceClockRunning(page);
+  }
+  // The clock carried on from the first start: it reads the time since then.
+  const left = await page.evaluate((s) => {
+    const text = document.querySelector('[role="timer"]')?.textContent ?? '';
+    const m = /(\d+):(\d\d)$/.exec(text);
+    return m ? { shown: Number(m[1]) * 60 + Number(m[2]), real: 60 - (Date.now() - s) / 1000 } : null;
+  }, startedAt);
+  expect(left).not.toBeNull();
+  expect(Math.abs(left!.shown - left!.real)).toBeLessThanOrEqual(1);
+  const lastSound = await page.evaluate(async (s) => {
+    const buf = new Float32Array(2048);
+    let last = 0;
+    while (Date.now() < s + 62_000) {
+      const an = (window as unknown as { __admiMeter?: AnalyserNode }).__admiMeter;
+      if (an) {
+        an.getFloatTimeDomainData(buf);
+        let sum = 0;
+        for (const v of buf) sum += v * v;
+        if (Math.sqrt(sum / buf.length) > 0.001) last = Date.now();
+      }
+      await new Promise((res) => setTimeout(res, 15));
+    }
+    return (last - s) / 1000;
+  }, startedAt);
+  expect(lastSound).toBeGreaterThan(30); // it played
+  expect(lastSound).toBeLessThanOrEqual(60.5);
+  await expect(page.getByRole('button', { name: '▶ Play' }).first()).toBeVisible();
   expect(pageErrors(page)).toEqual([]);
 });

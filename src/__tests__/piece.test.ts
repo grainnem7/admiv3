@@ -211,3 +211,19 @@ describe('the piece — "on now" always comes from the plan at a start (R2-T2-01
   });
 });
 
+describe('the piece — how long before its end the ending begins, for a reload (R2-T3-01)', () => {
+  it('at 90 BPM, 8 steps a pass and a 2-pass fade it is about 17 s, so Carry on stops at about 0:22 left', async () => {
+    const { pieceEndingLeadSec } = await import('../songs/performance/piece');
+    const perf = { ...DEFAULT_PERFORMANCE, style: 'fade' as const, fadePasses: 2 };
+    expect(pieceEndingLeadSec(perf, 8, [90])).toBeCloseTo(16.8, 1);
+  });
+
+  it('is taken at the slowest tempo the piece can be at (the player’s own or any scene’s): the ending is never offered as later than it is', async () => {
+    const { pieceEndingLeadSec } = await import('../songs/performance/piece');
+    const perf = { ...DEFAULT_PERFORMANCE, style: 'fade' as const, fadePasses: 2 };
+    expect(pieceEndingLeadSec(perf, 8, [90, 120, 60])).toBeCloseTo(pieceEndingLeadSec(perf, 8, [60]), 6);
+    expect(pieceEndingLeadSec(perf, 8, [60])).toBeGreaterThan(pieceEndingLeadSec(perf, 8, [90]));
+    // A tempo the engine would never play (below 20 BPM) counts as 20.
+    expect(pieceEndingLeadSec(perf, 8, [5])).toBeCloseTo(pieceEndingLeadSec(perf, 8, [20]), 6);
+  });
+});

@@ -313,6 +313,12 @@ export class BoardSequencerEngine {
   private thinning = false;
   /** The ending has run its course: nothing more is scheduled while the last sound rings. */
   private ended = false;
+  /**
+   * The end-time backstop has begun its fade (fadeOutNow): from then until the board stops
+   * nothing raises the ending gain again — not an ending starting at a pass boundary, not
+   * the final chord, not Cancel the ending (R2-T3-01: a chord swelled after the end time).
+   */
+  private backstop = false;
   // Pattern chaining: captured page snapshots (the selected page plays live from
   // `active`; other pages play from their stored snapshot here).
   private pages: ActiveCell[][] = [];
@@ -1134,6 +1140,8 @@ export class BoardSequencerEngine {
   } {
     const g = this.endGain?.gain;
     const track = this.endTrack;
+    // After the backstop's fade, the level is left where it took it: at 0.
+    if (this.backstop) return { set: () => {}, linear: () => {}, target: () => {}, cancel: () => {} };
     return {
       set: (v, t) => { g?.setValueAtTime(v, t); track.setValueAtTime(v, t); },
       linear: (v, t) => { g?.linearRampToValueAtTime(v, t); track.linearRampToValueAtTime(v, t); },
@@ -1306,12 +1314,16 @@ export class BoardSequencerEngine {
     this.ended = false;
   }
 
-  /** The end time has come: everything fades out over `sec`, whatever else is going on. */
+  /**
+   * The end time has come: everything fades out over `sec`, whatever else is going on, and
+   * nothing brings the sound back until the board stops.
+   */
   fadeOutNow(sec: number): void {
     const t = Tone.immediate();
     const end = this.endAuto();
     end.cancel(t);
     end.target(0, t, Math.max(0.02, sec / 4));
+    this.backstop = true;
   }
 
   /**
@@ -1816,6 +1828,7 @@ export class BoardSequencerEngine {
     this.lastTickTime = 0;
     this.fired = [];
     // Play: nothing is fading, and the receiving end hears full Expression again.
+    this.backstop = false;
     this.endTrack.reset(1);
     this.exprLast.clear();
     this.exprUntil = 0;
@@ -1994,7 +2007,7 @@ export class BoardSequencerEngine {
           this.applyBpm(f.startBpm * (1 - 0.45 * k));
         }
         if (f.style === 'chord' && f.chordAt !== undefined) {
-          if (beat === f.chordAt) {
+          if (beat === f.chordAt && !this.backstop) {
             const end = this.endAuto();
             end.cancel(cellTime);
             end.set(0.35, cellTime);

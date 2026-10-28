@@ -5,7 +5,7 @@
  */
 
 import type { BandLevel } from '../band/band';
-import { cuesCrossed, endingDue, scenesDue, type PerformanceSettings } from './clock';
+import { cuesCrossed, endingDue, endingLeadSec, scenesDue, type PerformanceSettings } from './clock';
 import { LAUNCH_SLOTS, type Scene, type SceneSettings } from './launcher';
 
 /** Scenes that come in at a time first, in time order; untimed ones after, as they were. */
@@ -131,6 +131,17 @@ export function decideClockTick(input: {
   // Ableton as well as in ADMI).
   const hardStop = input.now.elapsed >= 5 && input.now.remaining <= HARD_STOP_LEAD_SEC;
   return { cues, scene, end, hardStop };
+}
+
+/**
+ * How long before the end the ending begins (endingLeadSec), at the slowest tempo the piece
+ * can be at: the player's own or any scene's (`bpms`), never below the 20 BPM the clock
+ * counts with. After a reload, Carry on is offered only while the ending is further off
+ * than this: taken at a faster tempo, it could be offered into the ending itself.
+ */
+export function pieceEndingLeadSec(performance: PerformanceSettings, beatsPerPass: number, bpms: readonly number[]): number {
+  const slowest = Math.max(20, Math.min(...bpms));
+  return endingLeadSec(performance, (beatsPerPass * 60) / slowest);
 }
 
 /** The plan's four sections, in proportion to the piece: 0:00, 1:30, 3:30, 6:00 of 7:00. */

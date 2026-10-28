@@ -259,6 +259,23 @@ describe('engine — the ending', () => {
     expect(p.endGain.gain.linearRampToValueAtTime).not.toHaveBeenCalled();
   });
 
+  it('once the end-time backstop has begun its fade, an ending that starts at a pass boundary leaves the level at 0 (R2-T3-01)', () => {
+    const { e, p } = endEngine();
+    const level = (t: number) => (p as unknown as { endTrack: { valueAt(t: number): number } }).endTrack.valueAt(t);
+    p.fireStep(0, 0, 1, null);
+    e.finish(8, vi.fn(), 'fade');             // End pressed very late: its boundary is after the backstop
+    e.fadeOutNow(0.8);                        // the end time: everything fades out
+    expect(level(2)).toBeLessThan(0.001);
+    for (let b = 1; b < 8; b++) p.fireStep(b, b, 1, null);  // the boundary at 4: before, the ending set it back to 1
+    expect(level(4.01)).toBeLessThan(0.001);
+    expect(level(6)).toBeLessThan(0.001);
+    expect(p.endGain.gain.setValueAtTime).not.toHaveBeenCalledWith(1, expect.any(Number));
+    // Cancel the ending, or anything else, raises nothing either.
+    e.cancelFinish();
+    expect(level(9)).toBeLessThan(0.001);
+    expect(p.endGain.gain.setTargetAtTime).not.toHaveBeenCalledWith(1, expect.any(Number), expect.any(Number));
+  });
+
   it('cancelling brings the sound back and the clock carries on', () => {
     const { e, p } = endEngine();
     const finished = vi.fn();
@@ -349,6 +366,18 @@ describe('engine — the musical endings', () => {
     expect(e.drainFiredNotes()).toEqual([]);
   });
 
+  it('final chord: one due after the end-time backstop has begun stays at 0, and is not played (R2-T3-01)', () => {
+    const { e, p } = endEngine();
+    const level = (t: number) => (p as unknown as { endTrack: { valueAt(t: number): number } }).endTrack.valueAt(t);
+    e.finish(4, vi.fn(), 'chord');
+    for (let b = 0; b < 4; b++) p.fireStep(b, b, 1, null);   // the thinning pass
+    e.fadeOutNow(0.8);
+    e.drainFiredNotes();
+    p.fireStep(4, 4, 1, null);                               // the chord was due here
+    expect(e.drainFiredNotes().some((f) => f.colour === 'band:final')).toBe(false);
+    expect(level(4.05)).toBeLessThan(0.001);
+    expect(level(5)).toBeLessThan(0.001);
+  });
 });
 
 describe('scenes and the player', () => {
