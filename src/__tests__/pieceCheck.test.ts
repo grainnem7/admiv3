@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { ipadCheckItems, pieceCheckItems, type IpadCheckInput, type PieceCheckInput } from '../ui/screens/boardSequencer/pieceCheck';
+import { aloneLine, ipadCheckItems, pieceCheckItems, updatedFromNowLine, type IpadCheckInput, type PieceCheckInput } from '../ui/screens/boardSequencer/pieceCheck';
 import { DEFAULT_PERFORMANCE } from '../songs/performance/clock';
 import type { Scene, SceneSettings } from '../songs/performance/launcher';
 
@@ -199,5 +199,18 @@ describe('the check — the iPad', () => {
     expect(labels(ipad({ playerName: null, safeLayout: false, pageOutOfDate: true }))).toEqual([
       'iPad connected', "The player's iPad page is out of date: reload it on the iPad.", "The player's iPad is not in the safe show layout",
     ]);
+  });
+});
+
+describe('the lines shown with Undo after a scene changes', () => {
+  it('Update from now names the loops and the band now (R2-T2-02)', () => {
+    expect(updatedFromNowLine('Open', ['Bed', 'Beat'], 'full')).toBe('Open now has what is playing: Bed, Beat · full band.');
+    expect(updatedFromNowLine('Build', ['Bed'], 'gentle')).toBe('Build now has what is playing: Bed · quiet band.');
+    expect(updatedFromNowLine('Home', [], 'off')).toBe('Home now has what is playing: no loops · no band.');
+  });
+
+  it('ticking "alone" names the loops it took out (R2-T2-03)', () => {
+    expect(aloneLine('Open', 'Tim', ['Bed', 'Pulse'])).toBe('Open is now Tim alone: Bed and Pulse taken out.');
+    expect(aloneLine('Home', null, ['Bed'])).toBe('Home is now the player alone: Bed taken out.');
   });
 });

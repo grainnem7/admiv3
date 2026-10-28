@@ -6,6 +6,26 @@ import { quickName, type NewLoopState } from '../../../../songs/performance/newL
 /** The names a loop most often gets, one tap each; typing is still there. */
 const QUICK_NAMES = ['Bed', 'Pulse', 'Beat', 'Shine'];
 
+/**
+ * The board is stopped while New loop is open: `why` is what stops it starting (the reason
+ * ▶ Play would give, or a sound problem), or null when ▶ Play would start it; `canPlay` is
+ * false when ▶ Play can't (no board found, no camera, no colour with a job).
+ */
+export interface NewLoopStopped { why: string | null; canPlay: boolean }
+
+const STOPPED_LINE = 'Stopped. Press ▶ Play to hear the counters.';
+const LEAVE_LINE = 'Keep it or leave in Make a piece, 1 · Loops.';
+
+/**
+ * The line under the board while New loop is open: never "only the counters sound" while
+ * nothing sounds at all (R2-T1-01).
+ */
+export function newLoopStatusLine(stopped: NewLoopStopped | null): string {
+  return stopped === null
+    ? `Making a new loop: only the counters sound. ${LEAVE_LINE}`
+    : `Making a new loop. ${stopped.why ?? STOPPED_LINE} ${LEAVE_LINE}`;
+}
+
 export interface NewLoopPanelProps {
   state: NewLoopState;
   /** Which loop this will be (counting from 1), for the header; null when every loop is full. */
@@ -18,6 +38,10 @@ export interface NewLoopPanelProps {
   otherLoops: { slot: number; name: string }[];
   /** The names the other loops already have, so a quick name never makes a second "Bed". */
   takenNames: string[];
+  /** Set while the board is stopped (not while it plays or is starting). */
+  stopped: NewLoopStopped | null;
+  /** ▶ Play, from inside the panel: plain play, as the transport's. */
+  onPlay(): void;
   onStartWithThese(): void;
   onHearWith(what: Partial<NewLoopState['with']>): void;
   onKeep(): void;
@@ -36,6 +60,7 @@ export function NewLoopPanel(p: NewLoopPanelProps): JSX.Element {
   const nameRef = useRef<HTMLInputElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const hearId = useId();
+  const stoppedId = useId();
   // Opening it takes New loop away: focus goes to the heading, never to the page (T1-04,
   // T4-09). Only when focus has fallen to the page: shown again by going back to step 1,
   // focus stays on the step's button.
@@ -59,6 +84,22 @@ export function NewLoopPanel(p: NewLoopPanelProps): JSX.Element {
       <h3 id="new-loop" ref={headingRef} tabIndex={-1} style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>
         {`New loop${p.loopNumber === null ? '' : ` ${p.loopNumber}`} · ${now}`}
       </h3>
+      {p.stopped && (
+        // Stopped (Stop pressed, or the board couldn't start): say so, and ▶ Play is right
+        // here. Finding ▶ Play took 39 key presses (R2-T1-01).
+        <div style={card}>
+          <p id={stoppedId} role="status" style={{ margin: 0, fontWeight: 600 }}>{p.stopped.why ?? STOPPED_LINE}</p>
+          <div>
+            <Button
+              tone="primary" disabled={!p.stopped.canPlay} aria-describedby={p.stopped.canPlay ? undefined : stoppedId}
+              // The button goes once the board plays: focus goes to the heading.
+              onClick={(e) => { p.onPlay(); void focusWhenGone(() => headingRef.current, e.currentTarget); }}
+            >
+              ▶ Play
+            </Button>
+          </div>
+        </div>
+      )}
       {waiting ? (
         <div style={card}>
           <p role="status" style={{ margin: 0 }}>
@@ -81,7 +122,7 @@ export function NewLoopPanel(p: NewLoopPanelProps): JSX.Element {
         </div>
       ) : (
         <div style={card}>
-          <p style={{ margin: 0 }}>Only the counters sound. Put them down, listen, change them.</p>
+          {!p.stopped && <p style={{ margin: 0 }}>Only the counters sound. Put them down, listen, change them.</p>}
           {/* A group named by its words, so Band is heard as "Hear it with…, Band", not the Sound tab's Band. */}
           <div role="group" aria-labelledby={hearId} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <span id={hearId} style={NOTE}>Hear it with…</span>

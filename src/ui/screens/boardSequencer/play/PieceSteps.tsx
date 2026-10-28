@@ -12,7 +12,7 @@ import {
 } from '../../../../songs/performance/clock';
 import { MAX_SCENES, type LoopSlotState, type Scene } from '../../../../songs/performance/launcher';
 import { sceneTimeProblem } from '../../../../songs/performance/piece';
-import { listNames, playerWords } from '../pieceCheck';
+import { BAND_WORDS, listNames, playerWords } from '../pieceCheck';
 import { ReadyList, type ReadyItem } from './ReadyCheck';
 
 export interface PieceLoop {
@@ -43,6 +43,8 @@ export interface PieceStepsProps {
   respectPlayer: boolean;
   /** Counters are on the board now, so there is something to save. */
   canSaveBoard: boolean;
+  /** Every loop is full: Keep would have nowhere to put a new one. */
+  loopsFull: boolean;
   deletedSceneName: string | null;
   diskLine: string;
   restoreError: string | null;
@@ -102,7 +104,6 @@ export function LoopThumb({ cells, rows, cols, swatchFor, width = 64 }: {
 /** Scene amounts as named steps: the same words as the Sound tab's helpers. */
 const FILL_STEPS = [{ label: 'Off', value: 0 }, { label: 'A few', value: 0.25 }, { label: 'Some', value: 0.5 }, { label: 'Lots', value: 0.8 }];
 const EVOLVE_STEPS = [{ label: 'Off', value: 0 }, { label: 'Slowly', value: 0.35 }, { label: 'More', value: 0.7 }];
-const BAND_WORDS: Record<BandLevel, string> = { off: 'no band', gentle: 'quiet band', full: 'full band' };
 function nearestStep(steps: { label: string; value: number }[], v: number): number {
   let best = 0;
   for (let i = 1; i < steps.length; i++) if (Math.abs(steps[i].value - v) < Math.abs(steps[best].value - v)) best = i;
@@ -219,11 +220,21 @@ function LoopsStep(p: PieceStepsProps): JSX.Element {
       {p.newLoop ?? (
         <div style={card}>
           <p style={{ margin: 0 }}>A loop is something the player makes with counters, from silence, that then plays by itself.</p>
-          <div><Button ref={newLoopRef} tone="primary" onClick={p.onNewLoop} reason={pieceOn ? 'Stop the piece to make a loop' : null}>New loop</Button></div>
+          {/* Off while the piece plays (F2), and with no loop left to keep it in: nobody
+              clears the board for a loop that can't be kept (R2-T4-04). */}
+          <div>
+            <Button
+              ref={newLoopRef} tone="primary" onClick={p.onNewLoop}
+              reason={pieceOn ? 'Stop the piece to make a loop' : p.loopsFull ? 'Every loop is full: clear one first' : null}
+            >
+              New loop
+            </Button>
+          </div>
           <p style={note}>Everything stops; only the counters sound. Keep makes the loop.</p>
         </div>
       )}
-      {!p.canSaveBoard && oldWays && <p role="status" style={{ ...note, color: 'var(--bs-warn)' }}>The board is empty: put counters on it to save a loop.</p>}
+      {/* A note, not a warning: an empty board is where New loop starts (R2-T1-07). */}
+      {!p.canSaveBoard && oldWays && <p style={note}>To make a loop, press New loop.</p>}
       <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
         {p.loops.map((l) => {
           const empty = l.state === 'empty';
@@ -371,7 +382,7 @@ function ScenesStep(p: PieceStepsProps): JSX.Element {
               onToggleOpen={() => setSelected(selected === s.id ? null : s.id)}
               onGo={p.running ? () => p.onGoScene(i) : undefined}
               onRehearse={!p.running && typeof s.at === 'number' ? () => p.onRehearseFrom(s.at as number) : undefined}
-              onUpdateFromNow={() => p.onUpdateSceneFromNow(i)}
+              onUpdateFromNow={p.running ? () => p.onUpdateSceneFromNow(i) : undefined}
               onEdit={(patch) => p.onEditScene(i, patch)}
               onDelete={(pressed) => {
                 setSelected(null);
@@ -544,7 +555,11 @@ interface SceneRowProps {
   onGo?(): void;
   /** Play from this scene's time (only while stopped). */
   onRehearse?(): void;
-  onUpdateFromNow(): void;
+  /**
+   * Copy what is playing into this scene (only while the board plays). Stopped, it copied
+   * nothing into the scene's loops and the player's own sound into its settings (R2-T2-02).
+   */
+  onUpdateFromNow?(): void;
   onEdit(patch: Partial<Scene>): void;
   /** Delete it; `pressed` is the Delete button, for where focus goes next. */
   onDelete(pressed: HTMLElement): void;
@@ -558,7 +573,7 @@ function SceneRow(r: SceneRowProps): JSX.Element {
   const parsed = timeText.trim() === '' ? null : parseClock(timeText);
   const typo = timeText.trim() !== '' && parsed === null;
   const problem = typo
-    ? (plainNumberProblem(timeText) ?? 'Type a time as minutes:seconds, like 2:30, or leave it empty for by hand only.')
+    ? (plainNumberProblem(timeText) ?? 'Type a time as minutes:seconds, like 2:30.')
     : sceneTimeProblem(parsed, r.lengthSec, r.otherTimes);
   const saved = r.loops.filter((l) => l.state !== 'empty');
   // A loop the scene uses that holds nothing still shows, marked, so it can be taken out (T2-06).
@@ -624,7 +639,7 @@ function SceneRow(r: SceneRowProps): JSX.Element {
             <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4, fontSize: 13 }}>
               Comes in at
               <input
-                type="text" value={timeText} placeholder="m:ss" aria-invalid={problem !== null} aria-label={`When ${s.name} comes in (minutes:seconds; empty = by hand only)`}
+                type="text" value={timeText} placeholder="m:ss" aria-invalid={problem !== null} aria-label={`When ${s.name} comes in (minutes:seconds)`}
                 onChange={(e) => setTimeText(e.target.value)}
                 onBlur={() => {
                   // Unreadable: refused beside the field, and not saved.
@@ -697,8 +712,11 @@ function SceneRow(r: SceneRowProps): JSX.Element {
             options={EVOLVE_STEPS.map((x, k) => ({ value: k, label: x.label }))}
           />
           <LabeledSlider label="Tempo" min={40} max={160} value={s.settings.bpm} display={`${s.settings.bpm} BPM`} onChange={(v) => set({ bpm: Math.round(v) })} />
+          {!r.onUpdateFromNow && <p style={note}>While the board plays, Update from now copies what is playing into this scene.</p>}
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            <Button tone="secondary" onClick={r.onUpdateFromNow} title="Replace this scene's loops and sound with what is playing now">Update from now</Button>
+            {r.onUpdateFromNow && (
+              <Button tone="secondary" onClick={r.onUpdateFromNow} title="Replace this scene's loops and sound with what is playing now">Update from now</Button>
+            )}
             <Button tone="quiet" onClick={(e) => r.onDelete(e.currentTarget)}>Delete scene</Button>
           </div>
         </div>

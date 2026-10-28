@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react';
-import { NewLoopPanel, type NewLoopPanelProps } from '../ui/screens/boardSequencer/play/NewLoopPanel';
+import { NewLoopPanel, newLoopStatusLine, type NewLoopPanelProps } from '../ui/screens/boardSequencer/play/NewLoopPanel';
 import { startNewLoop, startWithThese } from '../songs/performance/newLoop';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -15,6 +15,7 @@ function props(over: Partial<NewLoopPanelProps> = {}): NewLoopPanelProps {
   return {
     state: startNewLoop(0), loopNumber: 4, countersOnBoard: 0, kept: null,
     otherLoops: [{ slot: 0, name: 'Bed' }, { slot: 1, name: '' }], takenNames: [],
+    stopped: null, onPlay: vi.fn(),
     onStartWithThese: vi.fn(), onHearWith: vi.fn(), onKeep: vi.fn(), onRename: vi.fn(), onLeave: vi.fn(),
     ...over,
   };
@@ -217,5 +218,67 @@ describe('New loop: focus never drops to the page (T1-04, T4-09)', () => {
     await act(async () => { await new Promise((r) => setTimeout(r, 60)); });
     expect(document.activeElement).toBe(host.querySelector('h3'));
     expect(heading()).toBe('New loop 4 · not kept yet');
+  });
+});
+
+describe('New loop on a stopped board (R2-T1-01)', () => {
+  const STOPPED = 'Stopped. Press ▶ Play to hear the counters.';
+
+  it('stopped inside New loop: says so, with a ▶ Play inside the panel, and never "only the counters sound"', () => {
+    const p = props({ countersOnBoard: 2, stopped: { why: null, canPlay: true } });
+    render(p);
+    expect(text()).toContain(STOPPED);
+    expect(text().toLowerCase()).not.toContain('only the counters sound');
+    const play = button('▶ Play');
+    expect(play?.disabled).toBe(false);
+    act(() => play?.click());
+    expect(p.onPlay).toHaveBeenCalled();
+    // Keep still keeps what is on the board.
+    expect(button('Keep')?.disabled).toBe(false);
+  });
+
+  it('while it plays: no "Press ▶ Play" line and no ▶ Play in the panel', () => {
+    render(props({ countersOnBoard: 2, stopped: null }));
+    expect(text()).not.toContain('Press ▶ Play');
+    expect(button('▶ Play')).toBeUndefined();
+    expect(text()).toContain('Only the counters sound.');
+  });
+
+  it('when the board can\'t start: the reason ▶ Play would give, ▶ Play off and described by it', () => {
+    render(props({ countersOnBoard: 2, stopped: { why: "The camera isn't working.", canPlay: false } }));
+    expect(text()).toContain("The camera isn't working.");
+    expect(text()).not.toContain(STOPPED);
+    expect(text().toLowerCase()).not.toContain('only the counters sound');
+    expect(button('▶ Play')?.disabled).toBe(true);
+    expect(describedBy(button('▶ Play'))).toBe("The camera isn't working.");
+  });
+
+  it('a sound problem: said, and ▶ Play can try again', () => {
+    render(props({ countersOnBoard: 2, stopped: { why: 'Could not start. The sound device is busy.', canPlay: true } }));
+    expect(text()).toContain('Could not start. The sound device is busy.');
+    expect(button('▶ Play')?.disabled).toBe(false);
+  });
+
+  it('waiting for the board to be clear while stopped: both are said', () => {
+    render(props({ state: startNewLoop(3), countersOnBoard: 3, stopped: { why: null, canPlay: true } }));
+    expect(text()).toContain(STOPPED);
+    expect(text()).toContain('Lift the 3 counters to start from silence.');
+  });
+
+  it('▶ Play in the panel: once the board plays, focus goes to the heading, never the page', async () => {
+    const p = props({ countersOnBoard: 2, stopped: { why: null, canPlay: true } });
+    render(p);
+    const play = button('▶ Play') as HTMLButtonElement;
+    act(() => play.focus());
+    act(() => play.click());
+    render({ ...p, stopped: null });
+    await act(async () => { await new Promise((r) => setTimeout(r, 60)); });
+    expect(document.activeElement).toBe(host.querySelector('h3'));
+  });
+
+  it('the status line under the board says the same', () => {
+    expect(newLoopStatusLine(null)).toBe('Making a new loop: only the counters sound. Keep it or leave in Make a piece, 1 · Loops.');
+    expect(newLoopStatusLine({ why: null, canPlay: true })).toBe(`Making a new loop. ${STOPPED} Keep it or leave in Make a piece, 1 · Loops.`);
+    expect(newLoopStatusLine({ why: "The camera isn't working.", canPlay: false })).toBe("Making a new loop. The camera isn't working. Keep it or leave in Make a piece, 1 · Loops.");
   });
 });

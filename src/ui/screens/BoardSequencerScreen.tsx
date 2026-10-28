@@ -53,7 +53,7 @@ import {
 } from '../../songs/performance/pieceRunning';
 import { drawCells, keepCells, loopChannelsFor, loopColourLabel, loopSwatch } from '../../songs/performance/loopSounds';
 import { boardSeen, engineSettingsFor, hearWith, loopsToPlay, playerCellsFor, slotForKeep, startNewLoop, startWithThese, stopHearing, type NewLoopState } from '../../songs/performance/newLoop';
-import { NewLoopPanel } from './boardSequencer/play/NewLoopPanel';
+import { NewLoopPanel, newLoopStatusLine, type NewLoopStopped } from './boardSequencer/play/NewLoopPanel';
 import { LinkQr } from './boardSequencer/components/LinkQr';
 import { createPopStore, soundingKey, type PopStore } from './boardSequencer/popStore';
 import { beyondLoopNote, beyondLoopSquares, playsTune } from '../../songs/beyondLoop';
@@ -124,7 +124,7 @@ import { BoardMidiPanel } from './boardSequencer/components/BoardMidiPanel';
 import { planFromConfig } from './boardSequencer/components/AbletonSoundsPanel';
 import { useBoardMidiPort } from './boardSequencer/useBoardMidiPort';
 import { abletonReadyItem, abletonTracksItem } from './boardSequencer/abletonReady';
-import { ipadCheckItems, listNames, pieceCheckItems, playerWords } from './boardSequencer/pieceCheck';
+import { aloneLine, ipadCheckItems, listNames, pieceCheckItems, playerWords, updatedFromNowLine } from './boardSequencer/pieceCheck';
 import { colourUses, type ColourUses } from './boardSequencer/colourRemoval';
 import { aiOffLine } from './boardSequencer/aiStatus';
 import { BoardMidiSender, channelFor, colourChannelMap, configToSoundFrom, effectiveSound } from '../../midi/boardMidi';
@@ -2966,13 +2966,27 @@ export default function BoardSequencerScreen() {
     const r = sortScenes(scenes, current);
     return { scenes: r.scenes, currentScene: r.current };
   };
+  /** A scene put back exactly as it was (Undo), wherever the list has it now. */
+  const restoreScene = (old: BoardSequencerStored['scenes'][number]): void => {
+    const c = configRef.current;
+    if (!c.scenes.some((x) => x.id === old.id)) return;
+    update(scenesInOrder(c.scenes.map((x) => (x.id === old.id ? old : x)), c.currentScene));
+  };
   /** A change to one scene, made where it is listed. The list stays in time order. */
   const editScene = (i: number, patch: Partial<BoardSequencerStored['scenes'][number]>): void => {
     const c = configRef.current;
-    if (!c.scenes[i]) return;
+    const old = c.scenes[i];
+    if (!old) return;
     const scenes = c.scenes.map((x, k) => (k === i ? editedScene(x, patch) : x));
     update(scenesInOrder(scenes, c.currentScene));
     sessionLogRef.current.action(logActorRef.current, `edit scene ${scenes[i].name}`);
+    // Ticking "alone" takes the scene's loops out (WP-B): said, with Undo, which puts them
+    // back and unticks it. Unticking alone left them gone (R2-T2-03).
+    if (patch.alone === true && old.alone !== true && old.loops.length > 0) {
+      const text = aloneLine(old.name, activePlayer?.name ?? null, old.loops.map((sl) => loopLabel(c.loopNames, sl)));
+      setUndoOffer({ text, restore: () => restoreScene(old) });
+      announce(text);
+    }
   };
   /** The check's "Take it out": an empty loop out of every scene that uses it, with Undo. */
   const takeEmptyLoopOut = (slot: number): void => {
@@ -3024,14 +3038,23 @@ export default function BoardSequencerScreen() {
       },
     });
   };
-  /** Replace a scene's loops and sound with what is playing now. */
+  /**
+   * Update from now: the scene gets the loops wanted now and the sound now (sound world,
+   * band, Extra notes, Sounds change, tempo), with Undo, which puts it back exactly. Only
+   * while the board plays: stopped, it emptied the scene's loops and swapped its sound for
+   * the player's own, with no way back (R2-T2-02).
+   */
   const updateSceneFromNow = (i: number): void => {
+    if (!runningRef.current) return;
     const c = configRef.current;
     const old = c.scenes[i];
     if (!old) return;
     const fresh = sceneFromNow(old.name, wantedRef.current, sceneSettingsNow(c), old.id);
     editScene(i, { loops: fresh.loops, settings: fresh.settings });
-    announce(`${old.name} now has the loops and the sound playing now.`);
+    const text = updatedFromNowLine(old.name, fresh.loops.map((sl) => loopLabel(c.loopNames, sl)), fresh.settings.band);
+    setUndoOffer({ text, restore: () => restoreScene(old) });
+    sessionLogRef.current.action(logActorRef.current, `update scene ${old.name} from now`);
+    announce(text);
   };
   const [planConfirm, setPlanConfirm] = useState(false);
   // A cue ("30 seconds left") stays large in the Now / Next strip for a few seconds, so
@@ -3069,8 +3092,12 @@ export default function BoardSequencerScreen() {
    */
   const [keptLoop, setKeptLoop] = useState<{ slot: number; name: string } | null>(null);
   const beginNewLoop = (): void => {
-    // New loop silences everything, so never while the piece plays (F2).
-    if (clockStartRef.current !== null) { announce('Stop the piece to make a loop.'); return; }
+    // New loop silences everything, so never while the piece plays (F2), nor while a start
+    // of the piece is loading (the piece would open with a new loop in it).
+    if (clockStartRef.current !== null || pieceStartingRef.current) { announce('Stop the piece to make a loop.'); return; }
+    // Nowhere to keep it: said before the board is cleared for a loop that can't be kept.
+    const now = configRef.current;
+    if (slotForKeep(now.loopSlots, now.scenes) === null) { announce('Every loop is full: clear one first.'); return; }
     const count = soundingOnBoard();
     const nl = startNewLoop(count);
     newLoopRef.current = nl;
@@ -3087,8 +3114,13 @@ export default function BoardSequencerScreen() {
       engine.setActiveCells(playerCellsFor(nl, activeCellsRef.current));
       engine.silenceNow();
     }
+    // On a stopped board it starts the board as ▶ Play does: plain play, with no clock, no
+    // scene and no loops, and the New loop rules from the first beat (the counters already
+    // down wait to be lifted). Pressed after a Stop it was silent while it said "only the
+    // counters sound" (R2-T1-01). If the board can't start, the panel says why.
+    if (!runningRef.current && startingRef.current === null && playReason === null) void start();
     sessionLogRef.current.action(logActorRef.current, 'new loop');
-    announce(count > 0 ? `New loop. Lift the ${count} ${count === 1 ? 'counter' : 'counters'} to start from silence.` : 'New loop: silent until a counter goes down.');
+    announce(`${count > 0 ? `New loop. Lift the ${count} ${count === 1 ? 'counter' : 'counters'} to start from silence.` : 'New loop: silent until a counter goes down.'}${playReason ? ` ${playReason}` : ''}`);
   };
   const leaveNewLoop = (): void => {
     newLoopRef.current = null;
@@ -4153,6 +4185,12 @@ export default function BoardSequencerScreen() {
   };
 
   const keepSlotNow = slotForKeep(config.loopSlots, config.scenes);
+  // New loop on a stopped board (Stop pressed inside it, or a start that failed): what
+  // stops the counters sounding, and whether ▶ Play can start them (R2-T1-01).
+  const newLoopStopped: NewLoopStopped | null = running || starting ? null : {
+    why: playReason ?? (soundError !== null ? `Could not start. ${soundError}` : null),
+    canPlay: playReason === null,
+  };
   const pieceTab = (
     <PieceSteps
       rows={config.rows}
@@ -4171,6 +4209,7 @@ export default function BoardSequencerScreen() {
       performance={config.performance}
       respectPlayer={config.sceneRespectsPlayer}
       canSaveBoard={countersNow > 0}
+      loopsFull={keepSlotNow === null}
       deletedSceneName={deletedScene?.scene.name ?? null}
       diskLine={diskLine}
       restoreError={restoreError}
@@ -4192,6 +4231,8 @@ export default function BoardSequencerScreen() {
           onKeep={keepNewLoop}
           onRename={renameLoop}
           onLeave={leaveNewLoop}
+          stopped={newLoopStopped}
+          onPlay={() => { if (performance.now() - stoppedAtRef.current >= PLAY_AFTER_STOP_MS) void start(); }}
         />
       ) : null}
       onToggleLoop={toggleLoop}
@@ -5164,9 +5205,7 @@ export default function BoardSequencerScreen() {
       {view === 'play' && newLoop && (
         // New loop holds the band, Extra notes and the loops off: say so here too, so this
         // view never looks as if they should be playing (T1-09).
-        <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--bs-accent)' }}>
-          Making a new loop: only the counters sound. Keep it or leave in Make a piece, 1 · Loops.
-        </p>
+        <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--bs-accent)' }}>{newLoopStatusLine(newLoopStopped)}</p>
       )}
       {/* The band as the engine has it: in a new loop it is off unless asked for (T1-09). */}
       {view === 'play' && running && bandStatus.level !== 'off' && (

@@ -23,7 +23,7 @@ function props(over: Partial<PieceStepsProps> = {}): PieceStepsProps {
     step: 'scenes', onStep: vi.fn(), running: false, lengthSec: 420, passSec: 5, clock: null,
     scenes: [scene('Arrival', 0), scene('Build', 90), scene('Open', 210)], currentScene: null,
     loops: [loop(0, 'Bed'), loop(1, 'Pulse'), ...[2, 3, 4, 5, 6, 7].map((s) => loop(s, '', true))],
-    loopFadePasses: 1, performance: { ...DEFAULT_PERFORMANCE }, respectPlayer: true, canSaveBoard: false,
+    loopFadePasses: 1, performance: { ...DEFAULT_PERFORMANCE }, respectPlayer: true, canSaveBoard: false, loopsFull: false,
     deletedSceneName: null, diskLine: '', restoreError: null, worldOptions: [{ value: 'warm', label: 'Warm' }],
     readyItems: [], rows: 8, cols: 8, swatchFor: () => '#000', newLoop: null, playerName: 'Tim',
     onNewLoop: vi.fn(), onToggleLoop: vi.fn(), onSaveBoardToLoop: vi.fn(), onDrawLoop: vi.fn(), onClearLoop: vi.fn(),
@@ -123,7 +123,14 @@ describe('Scenes: typed times (T2-04)', () => {
     typeAndLeave(input(/When Build comes in/)!, '2.5');
     expect(p.onEditScene).not.toHaveBeenCalled();
     const alert = host.querySelector('[role="alert"]');
-    expect(alert?.textContent).toBe('Type a time as minutes:seconds, like 2:30, or leave it empty for by hand only.');
+    expect(alert?.textContent).toBe('Type a time as minutes:seconds, like 2:30.');
+  });
+
+  it('the field is named for its scene in minutes:seconds, and never invites "empty = by hand only" (R2-T2-06)', () => {
+    render(props());
+    act(() => button(/^1:30 · Build/)?.click());
+    expect(input('When Build comes in (minutes:seconds)')).toBeDefined();
+    expect(host.innerHTML).not.toMatch(/by hand only/);
   });
 });
 
@@ -236,6 +243,58 @@ describe('Loops: one way to make a loop (F1, T1-01, T2-14)', () => {
     expect(text()).toContain('Stop the piece to make a loop');
     act(() => nl?.click());
     expect(p.onNewLoop).not.toHaveBeenCalled();
+  });
+
+  it('with every loop full, New loop is off, saying why beside it, tied to it (R2-T1-05, R2-T4-04)', () => {
+    const p = props({ step: 'loops', loopsFull: true });
+    render(p);
+    const nl = button('New loop');
+    expect(nl?.disabled).toBe(true);
+    const id = nl?.getAttribute('aria-describedby') ?? '';
+    expect(document.getElementById(id)?.textContent).toBe('Every loop is full: clear one first');
+    act(() => nl?.click());
+    expect(p.onNewLoop).not.toHaveBeenCalled();
+  });
+
+  it('while the piece plays and every loop is full, the piece is the reason given (F2)', () => {
+    render(props({ step: 'loops', loopsFull: true, running: true, clock: { phase: 'running', text: '6:30', remainingSec: 390, elapsedSec: 30 } }));
+    expect(text()).toContain('Stop the piece to make a loop');
+    expect(text()).not.toContain('Every loop is full');
+  });
+
+  it('outside New loop with an empty board: a plain note, "To make a loop, press New loop." (R2-T1-07)', () => {
+    render(props({ step: 'loops', canSaveBoard: false }));
+    expect(text()).toContain('To make a loop, press New loop.');
+    expect(text()).not.toContain('The board is empty');
+    const line = [...host.querySelectorAll('p')].find((x) => x.textContent === 'To make a loop, press New loop.');
+    expect(line?.getAttribute('role')).toBeNull();
+    expect(line?.getAttribute('style') ?? '').not.toContain('bs-warn');
+  });
+
+  it('the note goes once counters are down, and inside New loop', () => {
+    render(props({ step: 'loops', canSaveBoard: true }));
+    expect(text()).not.toContain('To make a loop, press New loop.');
+    render(props({ step: 'loops', canSaveBoard: false, newLoop: <p>making</p> }));
+    expect(text()).not.toContain('To make a loop, press New loop.');
+  });
+});
+
+describe('Scenes: Update from now copies only what is really playing (R2-T2-02)', () => {
+  it('stopped: no Update from now in an open scene, and its note says when it can be used', () => {
+    const p = props({ running: false });
+    render(p);
+    act(() => button(/^3:30 · Open/)?.click());
+    expect(button('Update from now')).toBeUndefined();
+    expect(text()).toContain('While the board plays, Update from now copies what is playing into this scene.');
+  });
+
+  it('playing: Update from now is there, and asks for this scene', () => {
+    const p = props({ running: true });
+    render(p);
+    act(() => button(/^3:30 · Open/)?.click());
+    expect(text()).not.toContain('While the board plays, Update from now');
+    act(() => button('Update from now')?.click());
+    expect(p.onUpdateSceneFromNow).toHaveBeenCalledWith(2);
   });
 });
 

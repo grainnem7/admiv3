@@ -8,6 +8,7 @@ import {
   describeEnding, endingLeadSec, endingTooLong, formatClock, MAX_PIECE_SEC, type PerformanceSettings,
 } from '../../../songs/performance/clock';
 import { loopLabel, type Scene } from '../../../songs/performance/launcher';
+import type { BandLevel } from '../../../songs/band/band';
 import type { ReadyItem } from './play/ReadyCheck';
 
 export interface PieceCheckInput {
@@ -33,6 +34,19 @@ export function listNames(names: readonly string[]): string {
 export function playerWords(name: string | null): { name: string; Name: string } {
   const n = name?.trim() ?? '';
   return n.length > 0 ? { name: n, Name: n } : { name: 'the player', Name: 'The player' };
+}
+
+/** A scene's band in words: the same as the Band buttons (Off, Quiet, Full). */
+export const BAND_WORDS: Record<BandLevel, string> = { off: 'no band', gentle: 'quiet band', full: 'full band' };
+
+/** What Update from now put in a scene, shown with Undo: "Open now has what is playing: Bed, Beat · full band." */
+export function updatedFromNowLine(scene: string, loops: readonly string[], band: BandLevel): string {
+  return `${scene} now has what is playing: ${loops.length > 0 ? loops.join(', ') : 'no loops'} · ${BAND_WORDS[band]}.`;
+}
+
+/** What ticking "alone" took out of a scene, shown with Undo: "Open is now Tim alone: Bed and Pulse taken out." */
+export function aloneLine(scene: string, player: string | null, loops: readonly string[]): string {
+  return `${scene} is now ${playerWords(player).name} alone: ${listNames(loops)} taken out.`;
 }
 
 export function pieceCheckItems(p: PieceCheckInput): ReadyItem[] {

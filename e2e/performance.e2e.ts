@@ -216,7 +216,7 @@ test('a scene time typed as 2.30 is 2:30; one it cannot read is refused and not 
   await expect(page.getByRole('list', { name: 'Timeline of the scenes' }).getByRole('listitem')).toHaveText(['Arrival 0:00', 'Build 2:30', 'Open 3:30', 'Home 6:00']);
   await time.fill('2.5');
   await time.press('Tab');
-  await expect(page.getByRole('alert').filter({ hasText: 'Type a time as minutes:seconds, like 2:30, or leave it empty for by hand only.' })).toBeVisible();
+  await expect(page.getByRole('alert').filter({ hasText: 'Type a time as minutes:seconds, like 2:30.' })).toBeVisible();
   await expect(page.getByRole('button', { name: /^2:30 · Build/ })).toBeVisible();
   expect(pageErrors(page)).toEqual([]);
 });
@@ -893,7 +893,7 @@ test('New loop silences the notes still ringing at once, as Stop does; after the
   expect(pageErrors(page)).toEqual([]);
 });
 
-test('with every loop full, Keep says so on screen and is off; the heading claims no number', async ({ page }) => {
+test('with every loop full, New loop is off and says why beside it; clearing one lets a new loop in (R2-T1-05, R2-T4-04)', async ({ page }) => {
   await openLaptopBoard(page);
   await pieceStep(page, 'Loops');
   await pickColour(page, 'Red');
@@ -902,18 +902,20 @@ test('with every loop full, Keep says so on screen and is off; the heading claim
     await page.getByRole('button', { name: 'Save the board here' }).first().click();
     await expect(page.getByRole('listitem', { name: new RegExp(`^Loop ${i}: Loop ${i}, 1 note$`) })).toBeVisible();
   }
-  await page.getByRole('button', { name: 'New loop' }).click();
-  await expect(page.getByRole('heading', { name: 'New loop · silent' })).toBeVisible();
-  await page.getByRole('button', { name: 'Start with these' }).click();
-  const keep = page.getByRole('button', { name: 'Keep', exact: true });
-  await expect(keep).toBeDisabled();
+  // No loop can be kept, so New loop is off before the board is cleared for one.
+  const newLoop = page.getByRole('button', { name: 'New loop', exact: true });
+  await expect(newLoop).toBeDisabled();
+  await expect(newLoop).toHaveAccessibleDescription('Every loop is full: clear one first');
   await expect(page.getByText('Every loop is full: clear one first')).toBeVisible();
-  // Clear one (still possible inside New loop): now there is a place for it.
+  // Clear one: now there is a place for it.
   await page.getByRole('button', { name: 'Clear loop 8' }).click();
   await page.getByRole('dialog', { name: 'Clear Loop 8?' }).getByRole('button', { name: 'Clear it' }).click();
-  await expect(page.getByRole('heading', { name: 'New loop 8 · not kept yet' })).toBeVisible();
-  await expect(keep).toBeEnabled();
+  await expect(newLoop).toBeEnabled();
   await expect(page.getByText('Every loop is full: clear one first')).toHaveCount(0);
+  await newLoop.click();
+  await expect(page.getByRole('heading', { name: 'New loop 8 · silent' })).toBeVisible();
+  await page.getByRole('button', { name: 'Start with these' }).click();
+  await expect(page.getByRole('button', { name: 'Keep', exact: true })).toBeEnabled();
   expect(pageErrors(page)).toEqual([]);
 });
 
@@ -1466,5 +1468,144 @@ test('while ▶ Start the piece loads, an iPad Capture is refused and the iPad s
   await page.getByRole('button', { name: 'Make a piece', exact: true }).click();
   await page.getByRole('navigation', { name: 'Make a piece: steps' }).getByRole('button', { name: /· Loops/ }).click();
   await expect(page.getByRole('listitem', { name: 'Loop 1: Loop 1, empty' })).toBeVisible();
+  expect(pageErrors(page)).toEqual([]);
+});
+
+// ---- WP-F2b: Update from now, Tim alone, New loop from a stopped board ----
+
+/** A scene as saved in the browser: what a reload, the next session and the show get. */
+async function savedScene(page: Page, name: string): Promise<Record<string, unknown> | null> {
+  return page.evaluate((name) => {
+    const id = localStorage.getItem('admi-board-active-player');
+    const players = JSON.parse(localStorage.getItem('admi-board-players') ?? '[]') as { id: string; settings: { scenes?: { name: string }[] } }[];
+    const s = (players.find((p) => p.id === id) ?? players[0])?.settings ?? {};
+    return (s.scenes ?? []).find((sc) => sc.name === name) ?? null;
+  }, name);
+}
+
+/** The sound the player has now, as saved: what Update from now copies into a scene. */
+async function savedSoundNow(page: Page): Promise<Record<string, unknown>> {
+  return page.evaluate(() => {
+    const id = localStorage.getItem('admi-board-active-player');
+    const players = JSON.parse(localStorage.getItem('admi-board-players') ?? '[]') as { id: string; settings: Record<string, unknown> }[];
+    const s = (players.find((p) => p.id === id) ?? players[0])?.settings ?? {};
+    return { soundWorld: s.soundWorld, band: s.band, phrases: s.phrases, fillAmount: s.fillAmount, evolveAmount: s.evolveAmount, bpm: s.bpm };
+  });
+}
+
+test('Update from now: not there while stopped; while playing it copies the loops and the sound now, and Undo puts the scene back exactly (R2-T2-02)', async ({ page }) => {
+  await openLaptopBoard(page);
+  await saveTwoLoops(page);
+  await step(page, 'Scenes');
+  await page.getByRole('button', { name: /Make my plan/ }).click();
+  await page.getByRole('button', { name: /^3:30 · Open/ }).click();
+  // Stopped: nothing plays, so there is nothing to copy (it emptied the scene and lost its sound).
+  await expect(page.getByRole('button', { name: 'Update from now' })).toHaveCount(0);
+  await expect(page.getByText('While the board plays, Update from now copies what is playing into this scene.')).toBeVisible();
+  await pause(page, 800); // saves are gathered for a moment
+  const before = await savedScene(page, 'Open');
+  expect(before).not.toBeNull();
+  // The sound now: a full band and some extra notes; then the board plays, with Bed on.
+  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await page.getByRole('tab', { name: 'Sound' }).click();
+  await page.getByRole('group', { name: 'Band' }).getByRole('radio', { name: 'Full' }).click();
+  await page.getByRole('group', { name: 'Extra notes' }).getByRole('radio', { name: 'Some' }).click();
+  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await expect(page.getByRole('status').filter({ hasText: 'Playing' }).first()).toBeVisible({ timeout: 20_000 });
+  await pieceStep(page, 'Loops');
+  await page.getByRole('listitem', { name: /^Loop 1: Bed/ }).getByRole('button', { name: '▶ Play' }).click();
+  await step(page, 'Scenes');
+  await page.getByRole('button', { name: /^3:30 · Open/ }).click();
+  await expect(page.getByText('While the board plays, Update from now')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Update from now' }).click();
+  const line = page.getByRole('status').filter({ hasText: 'Open now has what is playing: Bed · full band.' }).filter({ has: page.getByRole('button', { name: 'Undo' }) });
+  await expect(line).toBeVisible();
+  await expect(page.getByRole('button', { name: /^3:30 · Open/ })).toContainText(/Bed · .+ · full band · some extra notes/);
+  await expect.poll(async () => (await savedScene(page, 'Open'))?.loops).toEqual([0]);
+  const sound = await savedSoundNow(page);
+  expect(sound.band).toBe('full');
+  expect(sound.fillAmount).toBe(0.5);
+  expect((await savedScene(page, 'Open'))?.settings).toEqual(sound);
+  // Undo: the scene exactly as it was.
+  await line.getByRole('button', { name: 'Undo' }).click();
+  await expect.poll(() => savedScene(page, 'Open')).toEqual(before);
+  expect(pageErrors(page)).toEqual([]);
+});
+
+test('ticking "Test alone" on a scene with loops says what was taken out, and Undo puts them back and unticks it (R2-T2-03)', async ({ page }) => {
+  await openLaptopBoard(page);
+  await saveTwoLoops(page);
+  await step(page, 'Scenes');
+  await page.getByRole('button', { name: /Make my plan/ }).click();
+  const open = page.getByRole('button', { name: /^3:30 · Open/ });
+  await expect(open).toContainText('Bed, Loop 2');
+  await open.click();
+  const alone = page.getByRole('checkbox', { name: 'Test alone: no loops, only what Test plays' });
+  await alone.check();
+  await expect(open).toContainText('Test alone');
+  const line = page.getByRole('status').filter({ hasText: 'Open is now Test alone: Bed and Loop 2 taken out.' }).filter({ has: page.getByRole('button', { name: 'Undo' }) });
+  await expect(line).toBeVisible();
+  await line.getByRole('button', { name: 'Undo' }).click();
+  await expect(open).toContainText('Bed, Loop 2');
+  await expect(alone).not.toBeChecked();
+  expect(pageErrors(page)).toEqual([]);
+});
+
+test('New loop on a stopped board starts it, as ▶ Play does: a fresh player\'s counters are heard within 2 s of the sound being ready (R2-T1-01)', async ({ page }) => {
+  await listenToOutput(page);
+  await openLaptopBoard(page);
+  await pieceStep(page, 'Loops');
+  await expect(page.getByRole('status').filter({ hasText: 'Stopped' }).first()).toBeVisible();
+  await page.getByRole('button', { name: 'New loop', exact: true }).click();
+  await expect(page.getByRole('heading', { name: /^New loop 1/ })).toBeVisible();
+  // Plain play: the board plays, with no clock and no scene.
+  await expect(page.getByRole('status').filter({ hasText: 'Playing' }).first()).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole('timer')).toHaveCount(0);
+  await expect(page.getByText(/Press ▶ Play/)).toHaveCount(0);
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1], [5, 3], [3, 5], [5, 7]]);
+  // Two seconds, measured in the page from the last counter.
+  const levels = await outputLevels(page, 8, 250);
+  expect(levels.length).toBe(8);
+  expect(Math.max(...levels)).toBeGreaterThan(0.01);
+  await expect.poll(() => notesPlayed(page), { timeout: 5_000 }).toBeGreaterThan(0);
+  expect(pageErrors(page)).toEqual([]);
+});
+
+test('decision F2\'s path: after Stop ×2, New loop starts the board and the counters are heard; stopped inside New loop it says how to hear them, with ▶ Play there (R2-T1-01)', async ({ page }) => {
+  await listenToOutput(page);
+  await openLaptopBoard(page);
+  await startPiece(page);
+  await pieceClockRunning(page);
+  await pieceStep(page, 'Loops');
+  const newLoop = page.getByRole('button', { name: 'New loop', exact: true });
+  await expect(newLoop).toBeDisabled();
+  await expect(page.getByText('Stop the piece to make a loop')).toBeVisible();
+  await page.getByRole('button', { name: '■ Stop', exact: true }).first().click();
+  await page.getByRole('button', { name: '■ Press again to stop' }).first().click();
+  await expect(page.getByRole('status').filter({ hasText: 'Stopped' }).first()).toBeVisible();
+  await newLoop.click();
+  await expect(page.getByRole('status').filter({ hasText: 'Playing' }).first()).toBeVisible({ timeout: 20_000 });
+  const stopped = 'Stopped. Press ▶ Play to hear the counters.';
+  await expect(page.getByText(stopped)).toHaveCount(0);
+  await pickColour(page, 'Blue');
+  await place(page, [[1, 1], [1, 5]]);
+  await expect.poll(async () => Math.max(0, ...await outputLevels(page, 4)), { timeout: 20_000 }).toBeGreaterThan(0.01);
+  await expect(page.getByText(stopped)).toHaveCount(0);
+  // Stopped inside New loop: the panel and the line under the board say how to hear the counters.
+  await page.getByRole('button', { name: '■ Stop', exact: true }).first().click();
+  await expect(page.getByRole('status').filter({ hasText: 'Stopped' }).first()).toBeVisible();
+  const panel = page.getByRole('region', { name: /^New loop 1/ });
+  await expect(panel.getByText(stopped)).toBeVisible();
+  await expect(page.getByText(`Making a new loop. ${stopped} Keep it or leave in Make a piece, 1 · Loops.`)).toBeVisible();
+  await expect(page.getByText(/only the counters sound/i)).toHaveCount(0);
+  // Keep still keeps the counters on the board.
+  await expect(panel.getByRole('button', { name: 'Keep', exact: true })).toBeEnabled();
+  // ▶ Play in the panel: the counters are heard again.
+  await pause(page, 600); // ▶ Play ignores a press straight after Stop (a bounce): this is a new press
+  await panel.getByRole('button', { name: '▶ Play' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Playing' }).first()).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText(stopped)).toHaveCount(0);
+  await expect.poll(async () => Math.max(0, ...await outputLevels(page, 4)), { timeout: 20_000 }).toBeGreaterThan(0.01);
   expect(pageErrors(page)).toEqual([]);
 });
