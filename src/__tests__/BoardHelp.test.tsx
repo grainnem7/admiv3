@@ -34,6 +34,11 @@ describe('Help says how things work now', () => {
     expect(entry('Play, Make a piece, Show')).toContain('while the piece plays, Stop needs two presses');
   });
 
+  it('Space: ▶ Play on the board, ▶ Start the piece in Show (R2-T4-01)', () => {
+    expect(entry('Keyboard')).toContain('Space: ▶ Play on the board. In Show: ▶ Start the piece. While playing: Stop (press twice while the piece plays).');
+    expect(all()).not.toContain('Start clock');
+  });
+
   it('the iPad: Mute needs two taps; the safe show layout has three things', () => {
     expect(entry('iPad controls')).toContain('Mute needs two');
     expect(entry('The iPad for a player without fine control')).toContain('only the Extra notes strip, New idea and End piece, with Speed locked');

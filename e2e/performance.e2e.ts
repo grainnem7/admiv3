@@ -1069,12 +1069,94 @@ async function pieceLength(page: Page, text: string): Promise<void> {
   await length.press('Tab');
 }
 
+/** Make a piece → Loops: "Bed" (two yellow counters) and "Pulse" (one blue). */
+async function saveBedAndPulse(page: Page): Promise<void> {
+  await saveTwoLoops(page);
+  await page.getByRole('textbox', { name: 'Name of loop 2' }).fill('Pulse');
+  await page.getByRole('textbox', { name: 'Name of loop 2' }).press('Tab');
+}
+
 /** The timer's words at the moment the Now / Next strip first names `scene` (read in the page). */
 const timerWhenNow = (page: Page, scene: string, timeout = 30_000): Promise<string> => page.waitForFunction((name) => {
   const strip = document.querySelector('[role="region"][aria-label="Now and next"]');
   if (!strip?.textContent?.includes(`Now: ${name}`)) return false;
   return strip.querySelector('[role="timer"]')?.textContent ?? '';
 }, scene, { timeout }).then((h) => h.jsonValue() as Promise<string>);
+
+test('Space in Show starts the piece: the clock, the opening scene and its loop, focus on ■ Stop; Space twice stops it (R2-T4-01)', async ({ page }) => {
+  await openLaptopBoard(page);
+  await saveBedAndPulse(page);
+  await makePlan(page); // Arrival, at 0:00, has Bed
+  await page.getByRole('button', { name: /^Show: the board, the clock/ }).click(); // by mouse
+  const show = page.getByRole('region', { name: 'Show', exact: true });
+  await expect(show).toBeFocused();
+  await page.keyboard.press('Space');
+  await expect(show.getByRole('timer')).toBeVisible({ timeout: 20_000 });
+  const strip = show.getByRole('region', { name: 'Now and next' });
+  await expect(strip).toContainText('Now: Arrival');
+  await expect(strip.getByLabel(/^Loops playing: .*Bed/)).toBeVisible();
+  await expect(show.getByRole('button', { name: '■ Stop', exact: true })).toBeFocused();
+  // Space twice, with focus on Show itself: the first only gets Stop ready.
+  await show.focus();
+  await page.keyboard.press('Space');
+  await expect(show.getByRole('button', { name: '■ Press again to stop' })).toBeVisible();
+  await page.keyboard.press('Space');
+  await expect(show.getByRole('button', { name: '▶ Start the piece' })).toBeVisible();
+  await expect(show.getByRole('timer')).toHaveCount(0);
+  expect(pageErrors(page)).toEqual([]);
+});
+
+test('a Space 200 ms after a Stop starts nothing, in Show and in Play (ledger M7)', async ({ page }) => {
+  await openLaptopBoard(page);
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1]]);
+  await makePlan(page);
+  // Space pressed on the page 200 ms after `presses` of Stop, all timed inside the page.
+  const spaceAfterStop = (presses: number) => page.evaluate(async (n) => {
+    const stopButton = () => [...document.querySelectorAll('button')].find((b) => /^■ (Stop|Press again to stop)$/.test(b.textContent ?? ''));
+    for (let i = 0; i < n; i++) stopButton()?.click();
+    await new Promise((r) => setTimeout(r, 200));
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true }));
+    await new Promise((r) => setTimeout(r, 2500)); // long enough for a start to be playing
+  }, presses);
+  // Show, the piece playing: Stop twice, then Space.
+  await page.getByRole('button', { name: /^Show: the board, the clock/ }).click();
+  const show = page.getByRole('region', { name: 'Show', exact: true });
+  await show.getByRole('button', { name: '▶ Start the piece' }).click();
+  await expect(show.getByRole('timer')).toBeVisible({ timeout: 20_000 });
+  await spaceAfterStop(2);
+  await expect(show.getByRole('button', { name: '▶ Start the piece' })).toBeVisible();
+  await expect(show.getByRole('button', { name: /■ Stop|Press again to stop/ })).toHaveCount(0);
+  // Play, plain play: one Stop, then Space.
+  await show.getByRole('button', { name: 'Leave Show' }).click();
+  await pause(page, 500);
+  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await expect(page.getByRole('button', { name: '■ Stop' }).first()).toBeVisible();
+  await spaceAfterStop(1);
+  await expect(page.getByRole('button', { name: '▶ Play' }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: '■ Stop' })).toHaveCount(0);
+  expect(pageErrors(page)).toEqual([]);
+});
+
+test('the Carry on offer takes focus; Space on the page under it starts nothing, and the offer stays', async ({ page }) => {
+  await openLaptopBoard(page);
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1]]);
+  await makePlan(page);
+  await startPiece(page);
+  await pieceClockRunning(page);
+  await page.reload();
+  const offer = page.getByRole('alert').filter({ hasText: 'The piece was playing when the page closed or reloaded' });
+  const carryOn = offer.getByRole('button', { name: /Carry on from/ });
+  await expect(carryOn).toBeFocused();
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await page.keyboard.press('Space');
+  await pause(page, 2000);
+  await expect(carryOn).toBeVisible();
+  await expect(page.getByRole('button', { name: '▶ Play' }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: '■ Stop' })).toHaveCount(0);
+  expect(pageErrors(page)).toEqual([]);
+});
 
 test('▶ Start the piece while the board plays after a jump (route A): it opens in Arrival at the full length, the next scene comes in at its time, and Stop gives the own sound back (R2-T2-01)', async ({ page }) => {
   await openLaptopBoard(page);

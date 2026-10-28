@@ -89,7 +89,7 @@ import { loadCameraChoice, saveCameraChoice } from '../../tracking/cameraChoice'
 import { CameraDebugPanel } from '../components/camera/CameraDebugPanel';
 import { ConfirmDialog } from './boardSequencer/ui/ConfirmDialog';
 import { colourMatchesBoardRaw, type NudgeSignal } from './boardSequencer/playNudge';
-import { spaceTogglesPlay, type BoardScreenView } from './boardSequencer/spaceKey';
+import { PLAY_AFTER_STOP_MS, spaceAction, spaceTogglesPlay, type BoardScreenView } from './boardSequencer/spaceKey';
 import { ghostsForSave } from '../../tracking/handGuard/knockGuard';
 import { TRACK_SAVE_MS } from '../../tracking/handGuard/boardTrack';
 import { detectBoard, type BoardDetection } from '../../tracking/boardDetect/detectBoard';
@@ -270,11 +270,6 @@ const SAVE_GATHER_MS = 400;
 /** How long the first press of Stop during a piece waits for the second. */
 const STOP_CONFIRM_MS = 4000;
 /**
- * ▶ Play takes the place of ■ Stop: a press this soon after a stop is the same press
- * bouncing, not a wish to play again (T4-16: "press twice" restarted the board).
- */
-const PLAY_AFTER_STOP_MS = 400;
-/**
  * A start that runs the piece's clock: from where (seconds into the piece) and, carrying on
  * after a reload, the scene that was on.
  */
@@ -439,6 +434,7 @@ export default function BoardSequencerScreen() {
   // The page reloaded (a crash, a mistaken refresh) while a piece was playing: offer to
   // pick it up where the clock would be now, in the scene on at that moment.
   const [resumeFrom, setResumeFrom] = useState<PieceRunning | null>(() => readPieceRunning());
+  const carryOnRef = useRef<HTMLButtonElement | null>(null);
   // How the corner editor was opened: 'tap' starts from nothing, 'review' checks corners
   // that already exist. "Tap corners myself" must mean tapping, even for a board that is
   // already set up.
@@ -1323,8 +1319,15 @@ export default function BoardSequencerScreen() {
   // stops (the second press of Stop, the end of the piece, or the iPad's End piece).
   const showStartRef = useRef<HTMLButtonElement | null>(null);
   const showStopRef = useRef<HTMLButtonElement | null>(null);
+  // Started or stopped by Space, focus was on Show itself: it moves the same way.
+  const wasRunningRef = useRef(running);
   useEffect(() => {
-    if (view === 'bigBoard' && focusDropped()) (running ? showStopRef : showStartRef).current?.focus();
+    const changed = wasRunningRef.current !== running;
+    wasRunningRef.current = running;
+    if (view !== 'bigBoard') return;
+    if (focusDropped() || (changed && document.activeElement === bigBoardRef.current)) {
+      (running ? showStopRef : showStartRef).current?.focus();
+    }
   }, [view, running]);
 
   /**
@@ -2246,6 +2249,17 @@ export default function BoardSequencerScreen() {
     }, 1000);
     return () => window.clearInterval(id);
   }, [resumeFrom, running]);
+  // Space does nothing while the offer to carry on is on screen.
+  const reloadNoticeRef = useRef(false);
+  reloadNoticeRef.current = resumeFrom !== null && !running;
+  // The offer takes focus when it appears, so Space or Enter on it is ▶ Carry on. Only from
+  // the page or Show itself: focus somewhere else is left where it is.
+  const offerShown = resumeFrom !== null && !running;
+  useEffect(() => {
+    if (!offerShown) return;
+    if (!focusDropped() && document.activeElement !== bigBoardRef.current) return;
+    carryOnRef.current?.focus();
+  }, [offerShown]);
 
   /** Rehearse from a point in the piece: Play, with the clock already at `sec`. */
   const rehearseFrom = (sec: number): void => {
@@ -2310,15 +2324,21 @@ export default function BoardSequencerScreen() {
   const requestStop = useCallback((): void => confirmThen('stop', stop), [confirmThen, stop]);
   const stopArmed = armed === 'stop';
 
-  // Space starts and stops the board in Play and Big board. The global handler in
-  // App.tsx stands down on this screen, so this is the only one listening.
+  // Space starts and stops the board in Play and Show (spaceAction says what it does). The
+  // global handler in App.tsx stands down on this screen, so this is the only one listening.
+  const startThePieceRef = useRef<() => void>(() => {});
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent): void => {
       if (e.key !== ' ' || e.repeat) return;
       if (!spaceTogglesPlay(view, e.target)) return;
       e.preventDefault();
-      if (runningRef.current) requestStop();
-      else void start();
+      const act = spaceAction(view, e.target, {
+        running: runningRef.current, offerShowing: reloadNoticeRef.current,
+        msSinceStop: performance.now() - stoppedAtRef.current,
+      });
+      if (act === 'stop') requestStop();
+      else if (act === 'play') void start();
+      else if (act === 'startPiece') startThePieceRef.current();
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
@@ -3141,6 +3161,7 @@ export default function BoardSequencerScreen() {
     // The button pressed gives way to the clock: focus goes on to ■ Stop.
     void focusWhenGone(() => (view === 'bigBoard' ? showStopRef.current : document.getElementById(PLAY_STOP_ID)));
   };
+  startThePieceRef.current = startThePiece;
   /** The chosen ending, now: a fade over the fade passes (or a stop at the end of the pass). */
   const endPiece = (): void => {
     const engine = engineRef.current;
@@ -4752,7 +4773,7 @@ export default function BoardSequencerScreen() {
         return (
           <div role="alert" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', padding: '8px 12px', borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-warn)', color: 'var(--bs-bg)', fontWeight: 600 }}>
             <span style={{ flex: '1 1 240px' }}>{`The piece was playing when the page closed or reloaded. The clock would be at ${formatClock(Math.min(at, resumeFrom.lengthSec))} now.`}</span>
-            <Button tone="primary" onClick={carryOn}>
+            <Button ref={carryOnRef} tone="primary" onClick={carryOn}>
               {`▶ Carry on from ${formatClock(Math.min(at, resumeFrom.lengthSec))}`}
             </Button>
             <Button tone="secondary" onClick={() => { setResumeFrom(null); forgetPieceRunning(); }}>No</Button>

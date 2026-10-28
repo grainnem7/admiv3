@@ -278,8 +278,9 @@ const HELP: HelpEntry[] = [
   },
   {
     title: 'Keyboard',
-    body: 'Space starts and stops while playing (never during Set up, and never when a button '
-      + 'or slider has focus). Tabs move with the arrow keys. ▶ Show fills the screen; '
+    body: 'Space: ▶ Play on the board. In Show: ▶ Start the piece. While playing: Stop (press '
+      + 'twice while the piece plays). Never during Set up, and never when a button or slider '
+      + 'has focus. Tabs move with the arrow keys. ▶ Show fills the screen; '
       + 'Leave Show (or Esc) goes back. When a button goes away, focus moves to what takes '
       + 'its place: Start the piece and Stop to each other, Done and Leave back to New loop.',
   },
