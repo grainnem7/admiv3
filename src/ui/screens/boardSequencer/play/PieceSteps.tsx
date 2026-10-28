@@ -786,7 +786,7 @@ function SceneRow(r: SceneRowProps): JSX.Element {
             onChange={(k) => set({ evolveAmount: EVOLVE_STEPS[k].value })}
             options={EVOLVE_STEPS.map((x, k) => ({ value: k, label: x.label }))}
           />
-          <LabeledSlider label="Tempo" min={40} max={160} value={s.settings.bpm} display={`${s.settings.bpm} BPM`} onChange={(v) => set({ bpm: Math.round(v) })} />
+          <LabeledSlider label="Tempo" min={40} max={240} value={s.settings.bpm} display={`${s.settings.bpm} BPM`} onChange={(v) => set({ bpm: Math.round(v) })} />
           {/* Gradually: when it comes in while the board plays, from the speed then to this one. */}
           <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>Reach this speed</span>
           <SegmentedControl<'once' | 'gradually'>

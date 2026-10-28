@@ -456,6 +456,12 @@ describe('Scenes: reach this speed at once, or gradually', () => {
     expect(p.onEditScene).toHaveBeenLastCalledWith(1, { glideSec: 8 });
   });
 
+  it("a scene's own speed reaches Fastest's default, 240, as the hat does", () => {
+    render(props());
+    act(() => button(/^1:30 · Build/)?.click());
+    expect(slider(/^Tempo/)?.max).toBe('240');
+  });
+
   it('a gliding scene shows its time, says so in its line, and goes back to at once', () => {
     const p = props({ scenes: [scene('Arrival', 0), scene('Build', 90, [0], { glideSec: 12 }), scene('Open', 210)] });
     render(p);
