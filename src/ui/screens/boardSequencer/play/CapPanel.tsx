@@ -2,7 +2,7 @@
 // movements drive. Calm and explicit: what the camera sees, whether the cap is found,
 // what each direction is doing now, and a lock that freezes it all.
 
-import { useEffect, useRef, type CSSProperties, type MutableRefObject } from 'react';
+import { useEffect, useId, useRef, useState, type CSSProperties, type MutableRefObject } from 'react';
 import { Button } from '../ui/Button';
 import { SegmentedControl } from '../ui/SegmentedControl';
 import { Switch } from '../ui/Switch';
@@ -11,8 +11,10 @@ import {
   CAP_RESUME_MAX_MS, CAP_RESUME_MIN_MS, CAP_REST_MAX_MS, CAP_REST_MIN_MS, CAP_REWIND_MAX_MS,
   type CapColour, type CapRole, type CapSettings,
 } from '../../../../tracking/cap/capTracker';
+import { HAT_SURE_MAX, HAT_SURE_MIN } from '../../../../tracking/cap/hatColour';
+import type { HatBox } from '../../../../tracking/cap/learnHat';
 import type { ControlRange, FaderRole } from '../../../../profiles/BoardSequencerConfig';
-import type { CapPause, CapPreview, CapView } from '../useCapTracker';
+import type { CapPause, CapPreview, CapView, HatLearningView, HatResult, HatStep } from '../useCapTracker';
 
 export const CAP_ROLE_LABELS: Record<CapRole, string> = {
   off: 'Nothing', volume: 'Volume', tempo: 'Speed', reverb: 'Reverb', delay: 'Echo',
@@ -28,6 +30,59 @@ export const CAP_PAUSE_TEXT: Record<CapPause, string> = {
 };
 
 const seconds = (ms: number): string => `${(ms / 1000).toFixed(1)} s`;
+
+/** What a step of Learn the hat came to, in words (shown, and said aloud). */
+export function hatResultText(r: HatResult): string {
+  if (r.step === 'room') {
+    return r.ok ? 'Room learnt. Now put the hat on and press 2.'
+      : 'Couldn’t see the room well enough: too few pictures came from the camera. Check the camera, then try again.';
+  }
+  switch (r.outcome) {
+    case 'no-room': return 'Learn the room first, with the hat off.';
+    case 'ok': return `Hat learnt: it stands out well from the room. It found the hat in ${r.found} of ${r.of} pictures.`;
+    case 'look-alike': return 'Hat learnt, but something in the room looks like it (outlined in the picture). Move it out of shot or learn again.';
+    case 'hard': return `The hat is hard to tell from the room here: it found the hat in only ${r.found} of ${r.of} pictures. `
+      + 'Check the hat stays in the picture, and try more light or a hat in a stronger colour. Nothing was changed.';
+    case 'not-seen': return 'Couldn’t see the hat. Check it is in the picture and learn the hat again. '
+      + 'If something in the room is the same colour as the hat, move it out of shot first. Nothing was changed.';
+  }
+}
+
+/** A step of Learn the hat under way, in words. */
+function hatLearningText(h: HatLearningView): string {
+  const what = h.step === 'room' ? 'the room' : 'the hat';
+  if (h.phase === 'ready') return `Learning ${what}: starts in ${h.seconds}…`;
+  return h.step === 'room' ? `Watching the room: ${h.seconds} s. The hat stays off.`
+    : `Watching the hat: ${h.seconds} s. Move the head a little, any way.`;
+}
+
+/** "28 Oct, 14:05". */
+const when = (ms: number): string =>
+  new Date(ms).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+
+/** The tint over what is taken for the hat: a light blue, clear against red. */
+const HAT_TINT: readonly [number, number, number] = [80, 220, 255];
+const LOOK_ALIKE = '#ffd60a';
+
+/** A dashed yellow box around something that looks like the hat (a box 0..1), labelled. */
+function outlineLookAlike(ctx: CanvasRenderingContext2D, look: HatBox): void {
+  const x = look.x * PREVIEW_W - 3; const y = look.y * PREVIEW_H - 3;
+  const w = look.w * PREVIEW_W + 6; const h = look.h * PREVIEW_H + 6;
+  ctx.strokeStyle = LOOK_ALIKE;
+  ctx.lineWidth = 3;
+  ctx.setLineDash([6, 3]);
+  ctx.strokeRect(x, y, w, h);
+  ctx.setLineDash([]);
+  const label = 'looks like the hat';
+  ctx.font = '12px sans-serif';
+  const tw = ctx.measureText(label).width + 8;
+  const ly = y > 20 ? y - 18 : Math.min(PREVIEW_H - 18, y + h + 2);
+  const lx = Math.max(0, Math.min(PREVIEW_W - tw, x));
+  ctx.fillStyle = '#000000b0';
+  ctx.fillRect(lx, ly, tw, 16);
+  ctx.fillStyle = LOOK_ALIKE;
+  ctx.fillText(label, lx + 4, ly + 12);
+}
 
 /** A control's value in words: "96 BPM", "70%". */
 export function capValueText(role: FaderRole, v: number | undefined): string {
@@ -46,6 +101,10 @@ export interface CapPanelProps {
   cameras: MediaDeviceInfo[];
   learnReach(seconds: number): void;
   learnSide(seconds: number): void;
+  /** Learn the hat: start step 1 (the room) or step 2 (the hat). */
+  learnHatStep(step: HatStep): void;
+  /** Forget what the last step of Learn the hat came to. */
+  clearHatResult(): void;
   colourAt(x: number, y: number): CapColour | null;
   ranges: Record<FaderRole, ControlRange>;
   announce(text: string): void;
@@ -60,12 +119,17 @@ const CARD: CSSProperties = {
 };
 const PREVIEW_W = 320;
 const PREVIEW_H = 240;
-
-/** What the camera sees, with the cap marked, the face outlined and the learnt reach. */
-function Preview(p: CapPanelProps): JSX.Element {
+/**
+ * What the camera sees, with the cap marked, the face outlined and the learnt reach; and,
+ * from Learn the hat, what is taken for the hat (tinted, with anything else taken for it
+ * outlined) and a look-alike in the room found while learning (outlined).
+ */
+function Preview(p: CapPanelProps & { showHat: boolean; lookAlike: HatBox | null }): JSX.Element {
   const ref = useRef<HTMLCanvasElement>(null);
   const settingsRef = useRef(p.settings);
   settingsRef.current = p.settings;
+  const shownRef = useRef({ showHat: p.showHat, lookAlike: p.lookAlike });
+  shownRef.current = { showHat: p.showHat, lookAlike: p.lookAlike };
   useEffect(() => {
     let raf = 0;
     let last = 0;
@@ -77,16 +141,35 @@ function Preview(p: CapPanelProps): JSX.Element {
       const cv = ref.current;
       const ctx = cv?.getContext('2d');
       if (!cv || !ctx) return;
-      const { frame, sighting, face } = p.previewRef.current;
+      const { frame, sighting, face, mask, others } = p.previewRef.current;
       const s = settingsRef.current;
+      const shown = shownRef.current;
       ctx.fillStyle = '#20232a';
       ctx.fillRect(0, 0, PREVIEW_W, PREVIEW_H);
       if (frame) {
         scratch.width = frame.width;
         scratch.height = frame.height;
-        scratch.getContext('2d')?.putImageData(new ImageData(new Uint8ClampedArray(frame.data), frame.width, frame.height), 0, 0);
+        const img = new ImageData(new Uint8ClampedArray(frame.data), frame.width, frame.height);
+        // Show what it sees as the hat: those pixels tinted.
+        if (shown.showHat && mask && mask.length === frame.width * frame.height) {
+          const px = img.data;
+          for (let i = 0; i < mask.length; i++) {
+            if (!mask[i]) continue;
+            const k = i * 4;
+            px[k] = px[k] * 0.3 + HAT_TINT[0] * 0.7;
+            px[k + 1] = px[k + 1] * 0.3 + HAT_TINT[1] * 0.7;
+            px[k + 2] = px[k + 2] * 0.3 + HAT_TINT[2] * 0.7;
+          }
+        }
+        scratch.getContext('2d')?.putImageData(img, 0, 0);
         ctx.imageSmoothingEnabled = true;
         ctx.drawImage(scratch, 0, 0, PREVIEW_W, PREVIEW_H);
+      }
+      // Something in the room that looks like the hat (from Learn the hat): outlined. And,
+      // while showing what it sees as the hat, anything else taken for it right now.
+      if (shown.lookAlike) outlineLookAlike(ctx, shown.lookAlike);
+      if (shown.showHat && frame) {
+        for (const c of others) outlineLookAlike(ctx, { x: c.x0, y: c.y0, w: c.x1 - c.x0, h: c.y1 - c.y0 });
       }
       // The learnt reach.
       if (s.reachX || s.reachY) {
@@ -132,18 +215,134 @@ function Preview(p: CapPanelProps): JSX.Element {
       role="img"
       aria-label={p.mouse
         ? 'Test area: move the mouse over it as if it were the cap'
-        : `What the cap camera sees. ${p.view.seen ? 'The cap is found.' : 'The cap is not in sight.'} Click the cap to learn its colour.`}
+        : `What the cap camera sees. ${p.view.seen ? 'The cap is found.' : 'The cap is not in sight.'} ${p.settings.learntHat
+          ? 'The learnt hat is in use.' : 'Click the cap to learn its colour.'}${p.showHat
+          ? ' What it takes for the hat is tinted blue. Anything else taken for it is outlined in yellow.' : ''}${p.lookAlike
+          ? ' Something that looks like the hat is outlined in yellow.' : ''}`}
       style={{ width: '100%', maxWidth: PREVIEW_W, aspectRatio: '4 / 3', borderRadius: 'var(--bs-radius-md)', cursor: 'crosshair', touchAction: 'none' }}
       onPointerMove={(e) => { if (p.mouse) p.pointerRef.current = at(e); }}
       onPointerLeave={() => { if (p.mouse) p.pointerRef.current = null; }}
       onClick={(e) => {
         if (p.mouse) return;
+        if (p.settings.learntHat) {
+          p.announce('The learnt hat is in use, so clicking the picture changes nothing. To go back to a clicked colour, forget the learnt hat.');
+          return;
+        }
         const pt = at(e);
         const colour = p.colourAt(pt.x, pt.y);
         if (colour) { p.onChange({ colour }); p.announce('Cap colour learnt.'); }
         else p.announce('That is not a colour the cap can be tracked by. Click on the red of the cap.');
       }}
     />
+  );
+}
+
+/**
+ * Learn the hat: two short steps against the room, so other red things in shot aren't taken
+ * for the hat and a change of light doesn't lose it. The step buttons stay put and are never
+ * disabled (a disabled button loses focus to the page): while a step runs a second press does
+ * nothing, and without the camera a press says why.
+ */
+function LearnHat(p: CapPanelProps & { showHat: boolean; onShowHat(on: boolean): void }): JSX.Element {
+  const { settings: s, view, onChange } = p;
+  const headingId = useId();
+  const noteId = useId();
+  const headingRef = useRef<HTMLSpanElement>(null);
+  const roomRef = useRef<HTMLButtonElement>(null);
+  const h = view.hatLearning;
+  const learnt = s.learntHat;
+  const noCamera = view.camera === 'mouse' ? 'Learning the hat needs the camera: stop the mouse test first.'
+    : view.camera !== 'running' ? 'Learning the hat needs the camera picture.' : null;
+  const press = (step: HatStep): void => {
+    if (h) return;
+    if (noCamera) { p.announce(noCamera); return; }
+    p.learnHatStep(step);
+    // Without the room, the hook says at once that it comes first.
+    if (step === 'room') p.announce('Learning the room in 2 seconds. The hat off, please.');
+    else if (view.roomLearnt) p.announce('Learning the hat in 2 seconds. The hat on, and move the head a little.');
+  };
+  const forget = (): void => {
+    // Focus first, to what takes the button's place: it is about to go.
+    (roomRef.current ?? headingRef.current)?.focus();
+    onChange({ learntHat: null });
+    p.clearHatResult();
+    p.announce('The learnt hat is forgotten. The cap is found by its colour again.');
+  };
+  const r = view.hatResult;
+  const line = r ? hatResultText(r)
+    : learnt ? `A learnt hat is in use${learnt.learntAt > 0 ? ` (learnt ${when(learnt.learntAt)})` : ''}.`
+      : 'Not learnt yet: the cap is found by its colour.';
+  const good = r ? (r.step === 'room' ? r.ok : r.outcome === 'ok') : learnt !== null;
+  return (
+    <div style={CARD} role="group" aria-labelledby={headingId}>
+      <span id={headingId} ref={headingRef} tabIndex={-1} style={{ fontWeight: 600 }}>Learn the hat</span>
+      <p style={NOTE}>
+        Teaches the camera this hat in this room, so other red things in the room are not taken
+        for it and a change of light doesn&rsquo;t lose it. With the player in their playing
+        place: first the room with the hat off, then the hat on. About 10 seconds in all.
+      </p>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <Button
+          ref={roomRef}
+          tone={view.roomLearnt ? 'secondary' : 'primary'}
+          aria-disabled={h || noCamera ? true : undefined}
+          aria-describedby={noCamera ? noteId : undefined}
+          onClick={() => press('room')}
+        >
+          1 · Learn the room (hat off)
+        </Button>
+        <Button
+          tone={view.roomLearnt && !learnt ? 'primary' : 'secondary'}
+          aria-disabled={h || noCamera ? true : undefined}
+          aria-describedby={noCamera ? noteId : undefined}
+          onClick={() => press('hat')}
+        >
+          2 · Learn the hat (hat on)
+        </Button>
+      </div>
+      {noCamera && <span id={noteId} style={NOTE}>{noCamera}</span>}
+      {/* Reserved: the countdown and progress come and go without moving what is below. */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <span style={{ fontSize: 13, minHeight: 18 }}>{h ? hatLearningText(h) : ''}</span>
+        <div
+          role={h ? 'progressbar' : undefined}
+          aria-label={h ? `Learning ${h.step === 'room' ? 'the room' : 'the hat'}: how far it has got` : undefined}
+          aria-valuemin={h ? 0 : undefined}
+          aria-valuemax={h ? 100 : undefined}
+          aria-valuenow={h ? Math.round(h.progress * 100) : undefined}
+          style={{ height: 8, borderRadius: 4, background: 'var(--bs-elev)', overflow: 'hidden', visibility: h ? 'visible' : 'hidden' }}
+        >
+          {/* The progress comes once a second: the bar glides through each second to it. */}
+          <div style={{
+            width: `${Math.round((h?.progress ?? 0) * 100)}%`, height: '100%', background: 'var(--bs-accent)',
+            transition: h?.phase === 'watching' ? 'width 1s linear' : 'none',
+          }}
+          />
+        </div>
+      </div>
+      <span style={{ fontSize: 13, fontWeight: 600, color: good ? 'var(--bs-ok)' : 'var(--bs-warn)' }}>{line}</span>
+      {learnt && (
+        <>
+          <LabeledSlider
+            label="How sure before it counts"
+            min={HAT_SURE_MIN} max={HAT_SURE_MAX} step={0.05}
+            value={learnt.sure} display={`${Math.round(learnt.sure * 100)}%`}
+            onChange={(sure) => onChange({ learntHat: { ...learnt, sure } })}
+          />
+          <p style={NOTE}>
+            Higher: other things are less likely to be taken for the hat, but the hat can be missed
+            in poor light. Lower: the other way round.
+          </p>
+        </>
+      )}
+      <Switch
+        label="Show what it sees as the hat"
+        checked={p.showHat}
+        onChange={p.onShowHat}
+        hint="In the picture above: what it takes for the hat now is tinted blue, and anything else taken for it is outlined in yellow."
+      />
+      {learnt && <div><Button tone="quiet" onClick={forget}>Forget the learnt hat</Button></div>}
+    </div>
   );
 }
 
@@ -164,6 +363,9 @@ function Bar({ label, role, pos, value }: { label: string; role: CapRole; pos: n
 
 export function CapPanel(p: CapPanelProps): JSX.Element {
   const { settings: s, onChange, view } = p;
+  const [showHat, setShowHat] = useState(false);
+  // The look-alike from the last Learn the hat, while that hat is in use.
+  const lookAlike = s.learntHat && view.hatResult?.step === 'hat' ? view.hatResult.lookAlike : null;
   const status = !s.enabled ? 'Off.'
     : view.camera === 'mouse' ? 'Mouse test: move the mouse over the picture.'
       : view.camera === 'no-camera' ? 'The camera could not be opened. Choose another below, or check it is plugged in.'
@@ -183,8 +385,9 @@ export function CapPanel(p: CapPanelProps): JSX.Element {
       {s.enabled && (
         <>
           <div style={CARD}>
-            <Preview {...p} />
+            <Preview {...p} showHat={showHat} lookAlike={lookAlike} />
             <span role="status" aria-live="polite" style={{ fontSize: 13, fontWeight: 600, color: view.seen ? 'var(--bs-ok)' : 'var(--bs-warn)' }}>{status}</span>
+            {!p.mouse && <span style={NOTE}>{s.learntHat ? 'Looking for the learnt hat.' : 'Looking for the cap’s colour.'}</span>}
             {s.faceAssist && !p.mouse && (
               <span style={NOTE}>
                 {view.face === 'on' ? 'Face check on: only a red patch on the head counts, and the face bridges moments when the cap is hidden.'
@@ -213,8 +416,14 @@ export function CapPanel(p: CapPanelProps): JSX.Element {
             {p.cameras.length < 2 && (
               <span style={NOTE}>Only one camera is connected. The cap needs its own camera facing the player (a phone through Camo, or the laptop&rsquo;s own webcam).</span>
             )}
-            <p style={NOTE}>Click the red of the cap in the picture to teach it the colour (it starts on "any strong red").</p>
           </div>
+
+          <LearnHat {...p} showHat={showHat} onShowHat={setShowHat} />
+          <p style={NOTE}>
+            {s.learntHat
+              ? 'The learnt hat is in use, so clicking the picture isn’t needed. To go back to a clicked colour, forget the learnt hat.'
+              : 'Without learning the hat: click the red of the cap in the picture to teach it the colour (it starts on "any strong red").'}
+          </p>
 
           <div style={CARD}>
             <span style={{ fontWeight: 600 }}>Your range</span>

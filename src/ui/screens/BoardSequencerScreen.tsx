@@ -70,7 +70,7 @@ import { LoopThumb, PieceSteps, type PieceLoop, type PieceStep } from './boardSe
 import { NowNextStrip } from './boardSequencer/play/NowNextStrip';
 import type { ReadyItem } from './boardSequencer/play/ReadyCheck';
 import { PlayPanel } from './boardSequencer/play/PlayPanel';
-import { CapPanel, CAP_ROLE_LABELS, CAP_PAUSE_TEXT, capValueText } from './boardSequencer/play/CapPanel';
+import { CapPanel, CAP_ROLE_LABELS, CAP_PAUSE_TEXT, capValueText, hatResultText } from './boardSequencer/play/CapPanel';
 import { useCapTracker } from './boardSequencer/useCapTracker';
 import { useEmptyBoardWait } from './boardSequencer/useEmptyBoardWait';
 import type { BoardActivity, CapSettings } from '../../tracking/cap/capTracker';
@@ -481,6 +481,11 @@ export default function BoardSequencerScreen() {
     onSideLearnt: (sideArc) => {
       if (sideArc) update({ cap: { ...configRef.current.cap, sideArc } });
       announce(sideArc ? 'Your side to side is learnt.' : 'The cap didn\u2019t move far enough sideways to learn it. Try again, a little further each way.');
+    },
+    // Learn the hat: a hat good enough to use is kept for this player; otherwise nothing changes.
+    onHatLearnt: (result, learntHat) => {
+      if (learntHat) update({ cap: { ...configRef.current.cap, learntHat } });
+      announce(hatResultText(result));
     },
   });
   // Colour calibration armed for the next camera click: add a new channel, or
@@ -4178,7 +4183,9 @@ export default function BoardSequencerScreen() {
           ? { label: 'Red cap: no camera of its own (the only one is the board’s)', state: 'problem', fix: 'Connect a second camera facing the player, or switch the cap off.' }
         : cap.view.seen
           ? { label: `Red cap: ${cap.view.source === 'face' ? 'following the face' : 'found'}`, state: 'ok' }
-          : { label: 'Red cap: not in sight', state: 'warn', fix: 'Cap tab: check the camera sees the player and click the cap to learn its colour.' });
+          : { label: 'Red cap: not in sight', state: 'warn', fix: c.cap.learntHat
+            ? 'Cap tab: check the camera sees the player, or learn the hat again.'
+            : 'Cap tab: check the camera sees the player and click the cap to learn its colour.' });
     }
     if (!laptop) {
       const det = detectionSetup(c);
@@ -4845,6 +4852,8 @@ export default function BoardSequencerScreen() {
       cameras={cap.cameras}
       learnReach={cap.learnReach}
       learnSide={cap.learnSide}
+      learnHatStep={cap.learnHatStep}
+      clearHatResult={cap.clearHatResult}
       boardCameraId={(!laptop && camInfo?.deviceId) || config.cameraDeviceId}
       colourAt={cap.colourAt}
       ranges={config.controlRanges}

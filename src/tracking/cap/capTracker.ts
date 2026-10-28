@@ -15,6 +15,7 @@
 import { rgbToHsv } from '../ColorTracker';
 import { applyAxisCalibration, type AxisRange } from '../../remix/batonCalibration';
 import type { ControlRange, FaderRole } from '../../profiles/BoardSequencerConfig';
+import { hatMask, sanitizeLearntHat, type HatModel, type StoredLearntHat } from './hatColour';
 
 export interface CapColour {
   /** Hue 0..360 (red ≈ 0). */
@@ -56,48 +57,118 @@ export function matchesCap(r: number, g: number, b: number, c: CapColour): boole
   return hsv.s >= c.minSaturation && hsv.v >= c.minValue && hueDistance(hsv.h, c.hue) <= c.hueTolerance;
 }
 
-/**
- * Find the cap: the biggest patch of cap colour, preferring the one nearest where it was
- * last time (a red jumper or a poster elsewhere in the room shouldn't steal it). Null when
- * nothing cap-coloured is big enough.
- */
-export function findCap(f: Frame, colour: CapColour, prev: { x: number; y: number } | null = null): CapSighting | null {
+/** The pixels of the clicked cap colour (1 = cap colour). */
+export function capMask(f: Frame, colour: CapColour): Uint8Array {
   const { width: w, height: h, data } = f;
   const n = w * h;
   const mask = new Uint8Array(n);
   for (let i = 0; i < n; i++) {
     if (matchesCap(data[i * 4], data[i * 4 + 1], data[i * 4 + 2], colour)) mask[i] = 1;
   }
-  const seen = new Uint8Array(n);
+  return mask;
+}
+
+/** A connected patch of a mask, big enough to be a cap. */
+export interface CapPatch {
+  /** Its centre, 0..1 across and down the picture. */
+  x: number;
+  y: number;
+  /** Its size, as a share of the picture. */
+  area: number;
+  /** The box around it, 0..1. */
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+  /** Its number in `labels`. */
+  id: number;
+}
+
+/**
+ * The patches of a mask (each pixel joined to the four next to it) at least the size floor,
+ * in the order they are first met; `labels` gives each pixel's patch number (0 = none).
+ */
+export function capPatches(mask: Uint8Array, w: number, h: number): { patches: CapPatch[]; labels: Int32Array } {
+  const n = w * h;
+  const labels = new Int32Array(n);
   const stack = new Int32Array(n);
-  let best: CapSighting | null = null;
-  let bestScore = 0;
+  const patches: CapPatch[] = [];
+  let id = 0;
   for (let start = 0; start < n; start++) {
-    if (!mask[start] || seen[start]) continue;
+    if (!mask[start] || labels[start]) continue;
+    id++;
     let top = 0;
     stack[top++] = start;
-    seen[start] = 1;
+    labels[start] = id;
     let count = 0; let sx = 0; let sy = 0;
+    let x0 = w; let y0 = h; let x1 = 0; let y1 = 0;
     while (top > 0) {
       const p = stack[--top];
       const x = p % w; const y = (p - x) / w;
       count++; sx += x; sy += y;
-      if (x > 0 && mask[p - 1] && !seen[p - 1]) { seen[p - 1] = 1; stack[top++] = p - 1; }
-      if (x < w - 1 && mask[p + 1] && !seen[p + 1]) { seen[p + 1] = 1; stack[top++] = p + 1; }
-      if (y > 0 && mask[p - w] && !seen[p - w]) { seen[p - w] = 1; stack[top++] = p - w; }
-      if (y < h - 1 && mask[p + w] && !seen[p + w]) { seen[p + w] = 1; stack[top++] = p + w; }
+      if (x < x0) x0 = x;
+      if (x > x1) x1 = x;
+      if (y < y0) y0 = y;
+      if (y > y1) y1 = y;
+      if (x > 0 && mask[p - 1] && !labels[p - 1]) { labels[p - 1] = id; stack[top++] = p - 1; }
+      if (x < w - 1 && mask[p + 1] && !labels[p + 1]) { labels[p + 1] = id; stack[top++] = p + 1; }
+      if (y > 0 && mask[p - w] && !labels[p - w]) { labels[p - w] = id; stack[top++] = p - w; }
+      if (y < h - 1 && mask[p + w] && !labels[p + w]) { labels[p + w] = id; stack[top++] = p + w; }
     }
     const area = count / n;
     if (area < MIN_CAP_AREA) continue;
-    const cx = (sx / count + 0.5) / w;
-    const cy = (sy / count + 0.5) / h;
+    patches.push({
+      x: (sx / count + 0.5) / w, y: (sy / count + 0.5) / h, area,
+      x0: x0 / w, y0: y0 / h, x1: (x1 + 1) / w, y1: (y1 + 1) / h, id,
+    });
+  }
+  return { patches, labels };
+}
+
+/**
+ * The cap among the patches: the biggest, preferring the one nearest where it was last time
+ * (a red jumper or a poster elsewhere in the room shouldn't steal it). Null when none.
+ */
+export function pickCap(patches: readonly CapPatch[], prev: { x: number; y: number } | null): CapSighting | null {
+  let best: CapSighting | null = null;
+  let bestScore = 0;
+  for (const c of patches) {
     // Nearness to the last sighting counts as much as size: a patch half as big right
     // where the cap was beats a bigger one across the room.
-    const near = prev ? 1 / (1 + 4 * Math.hypot(cx - prev.x, cy - prev.y)) : 1;
-    const score = area * near;
-    if (score > bestScore) { bestScore = score; best = { x: cx, y: cy, area }; }
+    const near = prev ? 1 / (1 + 4 * Math.hypot(c.x - prev.x, c.y - prev.y)) : 1;
+    const score = c.area * near;
+    if (score > bestScore) { bestScore = score; best = { x: c.x, y: c.y, area: c.area }; }
   }
   return best;
+}
+
+/**
+ * Find the cap by its clicked colour: the biggest patch of cap colour, preferring the one
+ * nearest where it was last time. Null when nothing cap-coloured is big enough.
+ */
+export function findCap(f: Frame, colour: CapColour, prev: { x: number; y: number } | null = null): CapSighting | null {
+  return pickCap(capPatches(capMask(f, colour), f.width, f.height).patches, prev);
+}
+
+/**
+ * Find the cap by the learnt hat (Learn the hat): the same patches, size floor and choice as
+ * `findCap`, from the pixels the learnt model takes for the hat. The mask and the patches
+ * come back too, so the preview can show what is taken for the hat.
+ */
+export function findLearntHat(
+  f: Frame, model: HatModel, sure: number, prev: { x: number; y: number } | null,
+): { sighting: CapSighting | null; mask: Uint8Array; patches: CapPatch[] } {
+  const mask = hatMask(f, model, sure);
+  const { patches } = capPatches(mask, f.width, f.height);
+  return { sighting: pickCap(patches, prev), mask, patches };
+}
+
+/**
+ * Everything else taken for the cap, besides the patch it follows (`pickCap` gives that
+ * patch's own centre): what "Show what it sees as the hat" outlines as looking like the hat.
+ */
+export function lookAlikes(patches: readonly CapPatch[], followed: CapSighting | null): CapPatch[] {
+  return patches.filter((c) => !followed || c.x !== followed.x || c.y !== followed.y);
 }
 
 /**
@@ -190,6 +261,11 @@ export interface CapSettings {
   /** The camera facing the player ('' = the first one found). */
   cameraId: string;
   colour: CapColour;
+  /**
+   * The hat learnt against the room (Learn the hat): when there is one, it finds the cap
+   * instead of the clicked colour. Null = not learnt: the clicked colour, as before.
+   */
+  learntHat: StoredLearntHat | null;
   /** The player's comfortable reach, learnt; null = the whole picture. */
   reachX: AxisRange | null;
   reachY: AxisRange | null;
@@ -238,6 +314,7 @@ export const DEFAULT_CAP_SETTINGS: CapSettings = {
   enabled: false,
   cameraId: '',
   colour: DEFAULT_CAP_COLOUR,
+  learntHat: null,
   reachX: null,
   reachY: null,
   xRole: 'tempo',
@@ -560,6 +637,7 @@ export function sanitizeCapSettings(v: unknown): CapSettings {
       minSaturation: num(c.minSaturation, 10, 100, d.colour.minSaturation),
       minValue: num(c.minValue, 0, 100, d.colour.minValue),
     },
+    learntHat: sanitizeLearntHat(o.learntHat),
     reachX: range(o.reachX),
     reachY: range(o.reachY),
     xRole: ROLES.includes(o.xRole as CapRole) ? (o.xRole as CapRole) : d.xRole,
