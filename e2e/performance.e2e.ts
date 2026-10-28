@@ -516,7 +516,7 @@ test('a reload mid-piece offers to carry on from where the clock would be', asyn
   await makePlan(page);
   await startPiece(page);
   await expect(page.getByRole('region', { name: 'Now and next' })).toContainText('Now: Arrival');
-  await page.waitForTimeout(1500); // let the board be saved
+  await pieceClockRunning(page);
   await page.reload();
   // Straight back to the board: no home screen, no hunting for it.
   const offer = page.getByRole('alert').filter({ hasText: 'The piece was playing when the page closed or reloaded' });
@@ -558,7 +558,10 @@ test('a reload during Show carries on in Show', async ({ page }) => {
   await page.getByRole('button', { name: /^Show: the board, the clock/ }).click();
   await page.getByRole('button', { name: '▶ Start the piece' }).click();
   await expect(page.getByRole('button', { name: 'Leave Show' })).toBeVisible();
-  await page.waitForTimeout(1500); // let the board be saved
+  // Not a fixed wait: the piece starts once its sound is ready (up to 4 s on a busy
+  // machine), and a reload before that has no piece to carry on: the flake that landed on
+  // the home screen.
+  await pieceClockRunning(page);
   await page.reload();
   await page.getByRole('alert').filter({ hasText: 'The piece was playing' }).getByRole('button', { name: /Carry on from/ }).click();
   await expect(page.getByRole('button', { name: 'Leave Show' })).toBeVisible();
