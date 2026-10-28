@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { fakeVoiceEntry } from './helpers/fakeVoiceEntry';
 import {
   LAUNCH_SLOTS, loopLabel, nextSceneIndex, sanitizeLoopNames, sanitizeScenes, sceneFromNow, sceneSettingsOf, sceneSettingsToApply,
-  SCENE_SETTING_KEYS, slotState, toggleSlot, withOwnSettings, type SceneSettings,
+  SCENE_SETTING_KEYS, slotState, stoppedConfig, toggleSlot, withOwnSettings, type SceneSettings,
 } from '../songs/performance/launcher';
 
 const settings: SceneSettings = { soundWorld: 'warm', band: 'gentle', phrases: true, fillAmount: 0.3, evolveAmount: 0.4, bpm: 96 };
@@ -348,6 +348,7 @@ describe('engine — the musical endings', () => {
     p.fireStep(9, 9, 1, null);
     expect(e.drainFiredNotes()).toEqual([]);
   });
+
 });
 
 describe('scenes and the player', () => {
@@ -383,5 +384,16 @@ describe("a scene's settings are for the run only (T2-05, T3-17)", () => {
   it('with no run holding them, the config is saved as it is', () => {
     const live = { ...own, rows: 8, currentScene: null };
     expect(withOwnSettings(live, null)).toBe(live);
+  });
+
+  it("Stop: the player's own settings back, and no scene on now — also when no run held them (R2-T2-01)", () => {
+    const live = { ...open, rows: 8, currentScene: 2 };
+    const held = stoppedConfig(live, own);
+    for (const k of SCENE_SETTING_KEYS) expect(held[k]).toEqual(own[k]);
+    expect(held.currentScene).toBeNull();
+    // A scene left "on now" with nothing holding the player's settings (a scene added
+    // while playing, an older save): Stop still clears it, and changes nothing else.
+    const plain = stoppedConfig({ ...own, rows: 8, currentScene: 1 }, null);
+    expect(plain).toEqual({ ...own, rows: 8, currentScene: null });
   });
 });

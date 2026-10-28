@@ -69,6 +69,15 @@ export function withOwnSettings<T extends SceneSettings & { currentScene: number
   return own ? { ...c, ...sceneSettingsOf(own), currentScene: null } : c;
 }
 
+/**
+ * The config once the board stops: the player's own settings back (when a run held them),
+ * and no scene on now, whatever put one there. A stopped board has no scene on; one left
+ * marked made the next piece open in it and skip every scene before it (R2-T2-01).
+ */
+export function stoppedConfig<T extends SceneSettings & { currentScene: number | null }>(c: T, own: SceneSettings | null): T {
+  return { ...withOwnSettings(c, own), currentScene: null };
+}
+
 export interface Scene {
   id: string;
   name: string;

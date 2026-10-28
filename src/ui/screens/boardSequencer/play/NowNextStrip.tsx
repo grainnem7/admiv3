@@ -9,7 +9,8 @@ export interface NowNextStripProps {
   /** The loops playing (or starting), by name. */
   loops: string[];
   ending: boolean;
-  onStartClock(): void;
+  /** ▶ Start the piece: from 0:00, whether the board is stopped or already playing. */
+  onStartPiece(): void;
   onNext(): void;
   onEnd(): void;
   onCancelEnding(): void;
@@ -46,7 +47,7 @@ export function NowNextStrip(p: NowNextStripProps): JSX.Element {
           {phase === 'ending' ? `ending ${p.clock.text}` : p.clock.text}
         </span>
       ) : (
-        <Button tone="primary" onClick={p.onStartClock}>⏱ Start clock</Button>
+        <Button tone="primary" onClick={p.onStartPiece}>▶ Start the piece</Button>
       )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, flex: '1 1 200px' }}>
         <span style={{ fontSize: 18 * size, fontWeight: 700 }}>{p.nowName ? `Now: ${p.nowName}` : 'Now: no scene'}</span>

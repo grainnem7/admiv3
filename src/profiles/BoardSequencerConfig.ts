@@ -158,7 +158,7 @@ export interface BoardSequencerStored {
   loopNames: string[];
   /** Scenes: prepared sets of loops and settings, recalled with one tap (see performance/launcher). */
   scenes: Scene[];
-  /** The scene recalled last, for "Next scene"; null = none yet. */
+  /** The scene recalled last, for "Next scene"; null = none yet. Never kept past a run. */
   currentScene: number | null;
   /** How many passes a launched loop takes to come in and go out (0 = at once). */
   loopFadePasses: number;
@@ -859,7 +859,10 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     scenes: sanitizeScenes(o.scenes, {
       soundWorld: d.soundWorld, band: d.band, phrases: d.phrases, fillAmount: d.fillAmount, evolveAmount: d.evolveAmount, bpm: d.bpm,
     }),
-    currentScene: isNum(o.currentScene) && o.currentScene >= 0 ? Math.round(o.currentScene) : null,
+    // A saved board is a stopped board, and a stopped board has no scene on now: one left
+    // marked (a scene added while stopped, a save from before) made the next piece open in
+    // it and skip every scene before it (R2-T2-01). A reload carries on from pieceRunning.
+    currentScene: null,
     loopFadePasses: [0, 0.5, 1, 2].includes(num(o.loopFadePasses, 1)) ? num(o.loopFadePasses, 1) : 1,
     sceneRespectsPlayer: o.sceneRespectsPlayer !== false,
     performance: sanitizePerformance(o.performance),

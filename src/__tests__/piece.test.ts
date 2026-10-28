@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { decideClockTick, editedScene, nowNext, planScenes, sceneAt, sceneTimeProblem, sortScenes, takeLoopOut } from '../songs/performance/piece';
+import { decideClockTick, editedScene, nowNext, openingScene, planScenes, sceneAt, sceneTimeProblem, sortScenes, takeLoopOut, withSceneAdded } from '../songs/performance/piece';
 import { CLOCK_NOT_STARTED, DEFAULT_PERFORMANCE } from '../songs/performance/clock';
 import type { Scene, SceneSettings } from '../songs/performance/launcher';
 
@@ -162,3 +162,52 @@ describe('the piece — a cleared loop put back (Undo)', () => {
     expect(putLoopBack(back, 2, ['a']).map((s) => s.loops)).toEqual([[0, 2], [2], [1]]);
   });
 });
+
+describe('the piece — "on now" always comes from the plan at a start (R2-T2-01)', () => {
+  const perf = { ...DEFAULT_PERFORMANCE, ending: 'auto' as const, style: 'fade' as const, fadePasses: 2, lengthSec: 420 };
+  const plan = [scene('arrival', 0), scene('build', 90), scene('open', 210), scene('home', 360)];
+
+  it('a start opens in the scene the plan has on at that moment, or in none', () => {
+    expect(openingScene(plan, 0)).toBe(0);
+    expect(openingScene(plan, 215)).toBe(2);
+    expect(openingScene([scene('late', 10), scene('later', 90)], 0)).toBeNull();
+    expect(openingScene([], 0)).toBeNull();
+  });
+
+  it("carrying on: the scene that was on wins only when it is later than the plan's", () => {
+    expect(openingScene(plan, 100, 3)).toBe(3);   // a Next taken before the reload is kept
+    expect(openingScene(plan, 215, 0)).toBe(2);   // never back to an earlier one
+    expect(openingScene(plan, 100, 9)).toBe(1);   // a scene no longer there counts for nothing
+    expect(openingScene([scene('late', 10)], 0, null)).toBeNull();
+  });
+
+  it('after any start the clock rule gets the opening scene or none, never a stale one: with the first scene at 0:10, it comes in at 0:10', () => {
+    const scenes = [scene('a', 10), scene('b', 90), scene('c', 210)];
+    // Before: "on now" was left on c from an earlier run, and a and b never came in.
+    const current = openingScene(scenes, 0);
+    expect(current).toBeNull();
+    const tick = (from: number, to: number) => decideClockTick({
+      prev: { remaining: 420 - from, elapsed: from }, now: { remaining: 420 - to, elapsed: to },
+      scenes, current, performance: perf, passSec: 5, ending: false, autoEnded: false,
+    });
+    expect(tick(CLOCK_NOT_STARTED, 0.25).scene).toBeNull(); // no scene yet: Now reads "no scene"
+    expect(tick(9.8, 10.05).scene).toBe(0);
+    expect(decideClockTick({
+      prev: { remaining: 330.2, elapsed: 89.8 }, now: { remaining: 329.9, elapsed: 90.1 },
+      scenes, current: 0, performance: perf, passSec: 5, ending: false, autoEnded: false,
+    }).scene).toBe(1);
+  });
+
+  it('adding a scene never marks it on now, and never changes which scene is on now', () => {
+    const added = withSceneAdded(plan, null, scene('coda', 390));
+    expect(added.scenes.map((s) => s.id)).toEqual(['arrival', 'build', 'open', 'home', 'coda']);
+    expect(added.current).toBeNull();
+    // During a run, the one on now stays on, wherever the new one sorts to.
+    const during = withSceneAdded(plan, 2, scene('early', 30));
+    expect(during.scenes.map((s) => s.id)).toEqual(['arrival', 'early', 'build', 'open', 'home']);
+    expect(during.scenes[during.current ?? -1]?.id).toBe('open');
+    const byHand = withSceneAdded(plan, 1, scene('spare', null));
+    expect(byHand.scenes[byHand.current ?? -1]?.id).toBe('build');
+  });
+});
+

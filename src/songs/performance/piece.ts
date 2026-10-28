@@ -29,6 +29,29 @@ export function sceneAt(scenes: readonly Scene[], sec: number): number {
   return best;
 }
 
+/**
+ * The scene a piece opens in when its clock starts at `startSec`: the one the plan has on
+ * then, or — carrying on after a reload — the scene that was on, when it is later than
+ * the plan's (a Next taken before the reload is kept). null = none: Now reads "no scene"
+ * and the first timed scene comes in at its time. Every start takes "on now" from here,
+ * never from before: a scene left on by an earlier jump made the clock skip every scene
+ * up to it (R2-T2-01).
+ */
+export function openingScene(scenes: readonly Scene[], startSec: number, remembered: number | null = null): number | null {
+  const planned = sceneAt(scenes, startSec);
+  const carried = remembered !== null && remembered >= 0 && remembered < scenes.length ? remembered : -1;
+  const i = Math.max(planned, carried);
+  return i >= 0 ? i : null;
+}
+
+/**
+ * A scene added to the list, kept in time order. The scene on now stays the one on now:
+ * adding a scene never marks it, or the clock skipped every scene before it (R2-T2-01).
+ */
+export function withSceneAdded(scenes: readonly Scene[], current: number | null, scene: Scene): { scenes: Scene[]; current: number | null } {
+  return sortScenes([...scenes, scene], current);
+}
+
 /** What is wrong with a scene's time, in words, or null when it is fine. */
 export function sceneTimeProblem(at: number | null, lengthSec: number, others: readonly (number | null | undefined)[]): string | null {
   if (at === null) return null;

@@ -1059,3 +1059,106 @@ test('two tabs: only the first saves; the second says why and saves nothing; whe
   await expect(second.getByRole('textbox', { name: 'Name of loop 3' })).toHaveValue('Kept in A');
   expect(pageErrors(page)).toEqual([]);
 });
+// ---- WP-F2a: starting and ending the piece (round 2's Blockers F2-1, F2-2, F2-3) ----
+
+/** The piece's length, typed in Make a piece → Ending & check ("1:00"). */
+async function pieceLength(page: Page, text: string): Promise<void> {
+  await pieceStep(page, 'Ending & check');
+  const length = page.getByRole('textbox', { name: /Length of the piece/ });
+  await length.fill(text);
+  await length.press('Tab');
+}
+
+/** The timer's words at the moment the Now / Next strip first names `scene` (read in the page). */
+const timerWhenNow = (page: Page, scene: string, timeout = 30_000): Promise<string> => page.waitForFunction((name) => {
+  const strip = document.querySelector('[role="region"][aria-label="Now and next"]');
+  if (!strip?.textContent?.includes(`Now: ${name}`)) return false;
+  return strip.querySelector('[role="timer"]')?.textContent ?? '';
+}, scene, { timeout }).then((h) => h.jsonValue() as Promise<string>);
+
+test('▶ Start the piece while the board plays after a jump (route A): it opens in Arrival at the full length, the next scene comes in at its time, and Stop gives the own sound back (R2-T2-01)', async ({ page }) => {
+  await openLaptopBoard(page);
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1]]);
+  await ownSoundIsPlain(page);
+  await pieceLength(page, '1:00');
+  await makePlan(page); // Arrival 0:00, Build 0:13, Open 0:30, Home 0:51
+  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await page.getByRole('button', { name: 'Jump to Build now' }).click();
+  await expect(page.getByRole('button', { name: 'Jump to Build now' })).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', { name: /^Show: the board, the clock/ }).click();
+  const show = page.getByRole('region', { name: 'Show', exact: true });
+  const strip = show.getByRole('region', { name: 'Now and next' });
+  await expect(strip).toContainText('Now: Build');
+  // One name for one thing: no "Start clock".
+  await expect(page.getByRole('button', { name: /Start clock/ })).toHaveCount(0);
+  await strip.getByRole('button', { name: '▶ Start the piece' }).click();
+  await expect(strip).toContainText('Now: Arrival');
+  await expect(strip).toContainText(/Next: Build in 0:1[23]/);
+  await expect(strip.getByRole('timer')).toHaveText(/^(1:00|0:5\d)$/);
+  await expect(show.getByRole('button', { name: '■ Stop', exact: true })).toBeFocused();
+  // Build at 0:13: 0:47 left.
+  expect(await timerWhenNow(page, 'Build')).toMatch(/^0:4[678]$/);
+  await show.getByRole('button', { name: 'Leave Show' }).click();
+  await page.getByRole('button', { name: '■ Stop' }).first().click();
+  await page.getByRole('button', { name: '■ Press again to stop' }).first().click();
+  await expectPlainSound(page);
+  await pieceStep(page, 'Scenes');
+  await expect(page.getByRole('button', { name: /· on now/ })).toHaveCount(0);
+  expect(pageErrors(page)).toEqual([]);
+});
+
+test('a scene added while stopped is never "on now" (route B): after a reload, ▶ Play, Show, Start the piece opens in Arrival, and the new scene comes in at its time', async ({ page }) => {
+  await openLaptopBoard(page);
+  await saveTwoLoops(page); // Bed, and Loop 2
+  await pieceLength(page, '1:00');
+  await makePlan(page);
+  await page.getByRole('textbox', { name: 'Name for a new scene' }).fill('Coda');
+  await page.getByRole('button', { name: /Add a scene from what/ }).click();
+  await page.getByRole('button', { name: /^by hand · Coda/ }).click();
+  await page.getByRole('group', { name: 'Loops in this scene' }).getByRole('button', { name: 'Bed' }).click();
+  const time = page.getByRole('textbox', { name: /When Coda comes in/ });
+  await time.fill('0:20');
+  await time.press('Tab');
+  await expect(page.getByRole('button', { name: /^0:20 · Coda/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /· on now/ })).toHaveCount(0);
+  await pause(page, 800); // saves are gathered for a moment
+  await page.reload();
+  await page.getByRole('button', { name: /Board Sequencer/ }).click(); // no piece playing: Welcome
+  await pieceStep(page, 'Scenes');
+  await expect(page.getByRole('button', { name: /^0:20 · Coda/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /· on now/ })).toHaveCount(0);
+  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await expect(page.getByRole('button', { name: '■ Stop' }).first()).toBeVisible();
+  await page.getByRole('button', { name: /^Show: the board, the clock/ }).click();
+  const strip = page.getByRole('region', { name: 'Show', exact: true }).getByRole('region', { name: 'Now and next' });
+  await strip.getByRole('button', { name: '▶ Start the piece' }).click();
+  await expect(strip).toContainText('Now: Arrival');
+  // Build at 0:13, then Coda at 0:20: 0:40 left.
+  expect(await timerWhenNow(page, 'Build')).toMatch(/^0:4[678]$/);
+  expect(await timerWhenNow(page, 'Coda')).toMatch(/^0:(39|40|41)$/);
+  expect(pageErrors(page)).toEqual([]);
+});
+
+test('the first scene at 0:10 and a later one left on by a jump: Start the piece reads "no scene" until 0:10, then each scene comes in at its time', async ({ page }) => {
+  await openLaptopBoard(page);
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1]]);
+  await pieceLength(page, '1:00');
+  await makePlan(page);
+  await page.getByRole('button', { name: /^0:00 · Arrival/ }).click();
+  const time = page.getByRole('textbox', { name: /When Arrival comes in/ });
+  await time.fill('0:10');
+  await time.press('Tab');
+  await expect(page.getByRole('button', { name: /^0:10 · Arrival/ })).toBeVisible();
+  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await page.getByRole('button', { name: 'Jump to Open now' }).click();
+  await page.getByRole('button', { name: /^Show: the board, the clock/ }).click();
+  const strip = page.getByRole('region', { name: 'Show', exact: true }).getByRole('region', { name: 'Now and next' });
+  await strip.getByRole('button', { name: '▶ Start the piece' }).click();
+  await expect(strip).toContainText('Now: no scene');
+  await expect(strip).toContainText(/Next: Arrival in 0:(09|10)/);
+  expect(await timerWhenNow(page, 'Arrival')).toMatch(/^0:(49|50|51)$/);
+  expect(await timerWhenNow(page, 'Build')).toMatch(/^0:4[678]$/);
+  expect(pageErrors(page)).toEqual([]);
+});

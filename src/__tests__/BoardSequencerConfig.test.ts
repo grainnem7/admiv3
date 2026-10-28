@@ -437,6 +437,18 @@ describe('saved work that has to survive a reload', () => {
   });
 });
 
+describe('a saved board is a stopped board (R2-T2-01)', () => {
+  it('loads with no scene on now, whatever was saved: the next piece opens in its plan, not in a scene left marked', () => {
+    const scene = (name: string, at: number) => ({
+      id: name, name, loops: [], at,
+      settings: { soundWorld: 'warm', band: 'off', phrases: false, fillAmount: 0, evolveAmount: 0, bpm: 90 },
+    });
+    const cfg = loadWith({ scenes: [scene('Arrival', 0), scene('Coda', 390)], currentScene: 1 });
+    expect(cfg.scenes.map((s) => s.name)).toEqual(['Arrival', 'Coda']);
+    expect(cfg.currentScene).toBeNull();
+  });
+});
+
 describe('a piece saved before the 7:00 limit and "alone" scenes', () => {
   it('loads: its scenes as they were, a length over 7:00 as 7:00', () => {
     const scene = {

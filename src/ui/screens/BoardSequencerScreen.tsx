@@ -82,7 +82,7 @@ import { SegmentedControl } from './boardSequencer/ui/SegmentedControl';
 import { clampZone, describeZone, NO_ZONE, zoneSlotCount, zonesCollide, type Zone, type ZoneMode } from '../../tracking/zones';
 import { LabeledSlider } from './boardSequencer/ui/LabeledSlider';
 import { Button } from './boardSequencer/ui/Button';
-import { focusDropped } from './boardSequencer/ui/focusNext';
+import { focusDropped, focusWhenGone, PLAY_STOP_ID } from './boardSequencer/ui/focusNext';
 import { inertOutside, Modal } from './boardSequencer/ui/Modal';
 import { cameraDebugEnabled } from '../../tracking/cameraDebugFlag';
 import { loadCameraChoice, saveCameraChoice } from '../../tracking/cameraChoice';
@@ -131,13 +131,14 @@ import { MIDIManager } from '../../midi/MIDIManager';
 import { previewChainCc, previewNotesFor, previewRoute, SoundAuditioner } from '../../audio/soundPreview';
 import { LoopEditor } from './boardSequencer/components/LoopEditor';
 import {
-  LAUNCH_SLOTS, MAX_SCENES, loopLabel, nextSceneIndex, sceneFromNow, sceneSettingsOf, sceneSettingsToApply, slotState, toggleSlot, withOwnSettings, type PlayerStrip, type SceneSettings,
+  LAUNCH_SLOTS, MAX_SCENES, loopLabel, nextSceneIndex, sceneFromNow, sceneSettingsOf, sceneSettingsToApply, slotState, stoppedConfig, toggleSlot, withOwnSettings,
+  type PlayerStrip, type SceneSettings,
 } from '../../songs/performance/launcher';
 import {
   clockView, cueText, describeEnding, formatClock, CLOCK_NOT_STARTED,
   type ClockView,
 } from '../../songs/performance/clock';
-import { decideClockTick, editedScene, nowNext, planScenes, putLoopBack, sceneAt, sortScenes, takeLoopOut } from '../../songs/performance/piece';
+import { decideClockTick, editedScene, nowNext, openingScene, planScenes, putLoopBack, sortScenes, takeLoopOut, withSceneAdded } from '../../songs/performance/piece';
 import { DEFAULT_LOOP_COLOUR_OPTIONS, initialLoopColourState, stepLoopColours } from '../../songs/performance/loopColours';
 import { SessionLog, sessionFileName, type LogActor } from '../../songs/sessionLog';
 import { diskState, onDiskState, restoreFromFile, scheduleDiskSave } from '../../storage/diskSync';
@@ -273,6 +274,11 @@ const STOP_CONFIRM_MS = 4000;
  * bouncing, not a wish to play again (T4-16: "press twice" restarted the board).
  */
 const PLAY_AFTER_STOP_MS = 400;
+/**
+ * A start that runs the piece's clock: from where (seconds into the piece) and, carrying on
+ * after a reload, the scene that was on.
+ */
+interface PieceStart { fromSec: number; scene?: number | null }
 /** Where Play / Make a piece is remembered. */
 const WORKSPACE_KEY = 'admi-board-workspace';
 /** How long Undo stays on offer after the board, a loop or the scenes are thrown away. */
@@ -706,10 +712,6 @@ export default function BoardSequencerScreen() {
   const hardStoppedRef = useRef(false);
   /** When the board last stopped, for ▶ Play's bounce guard. */
   const stoppedAtRef = useRef(-Infinity);
-  /** Where the next Play starts the clock, when rehearsing from a scene (seconds; null = the top). */
-  const rehearseFromRef = useRef<number | null>(null);
-  /** Carrying on after a reload: the scene that was playing, if later than the plan's. */
-  const resumeSceneRef = useRef<number | null>(null);
   // The player's own settings from before the piece (or a jump to a scene) began. Scenes
   // change tempo, sound and band as the piece runs; when it is over they come back, so a
   // rehearsal never leaves the player's settings wherever the last scene put them. While
@@ -2018,10 +2020,11 @@ export default function BoardSequencerScreen() {
     endingRef.current = false;
     setEnding(false);
     forgetPieceRunning();
-    // The piece is over (or stopped): the player's own settings come back.
+    // The piece is over (or stopped): the player's own settings come back, and no scene is
+    // on now, whatever put one there (R2-T2-01).
     const home = homeSettingsRef.current;
     homeSettingsRef.current = null;
-    if (home) setConfig((prev) => ({ ...prev, ...home, currentScene: null }));
+    setConfig((prev) => stoppedConfig(prev, home));
     // Stop means silence: no loop is left waiting to start with Play.
     stopAllLoopsRef.current();
     setWantedSlots([]);
@@ -2074,7 +2077,7 @@ export default function BoardSequencerScreen() {
     }
   }, []);
 
-  const startEngine = useCallback(async (generation: number) => {
+  const startEngine = useCallback(async (generation: number, piece: PieceStart | null) => {
     await Tone.start();
     if (engineRef.current) {
       engineRef.current.dispose();
@@ -2084,23 +2087,19 @@ export default function BoardSequencerScreen() {
     // first note: its loops play from the first beat and its sound is the one the engine
     // is built with. Applied on the first clock tick instead, its loops waited a whole pass.
     const home = configRef.current;
-    // Rehearsing from a scene: the clock starts part-way, in the scene on at that moment.
-    const from = rehearseFromRef.current;
-    rehearseFromRef.current = null;
     // ▶ Play just plays: the piece (its clock, scenes, band and loops) starts only from
-    // Show's "Start the piece" or "Rehearse from here" — both of which set `from`. Play
-    // used to start the piece whenever one existed, so making a loop or trying drums alone
-    // got the opening scene's band and loops, and loops changing at 1:30.
-    const clockOn = from !== null;
-    const startSec = from ?? 0;
-    const resumeScene = resumeSceneRef.current;
-    resumeSceneRef.current = null;
-    // Carrying on: the clock never brings back a scene earlier than the one that was on.
-    const planned = clockOn ? sceneAt(home.scenes, startSec) : -1;
-    const openingIndex = clockOn && resumeScene !== null && resumeScene < home.scenes.length
-      ? Math.max(planned, resumeScene) : planned;
-    const opening = openingIndex >= 0 ? home.scenes[openingIndex] : null;
-    const cfg: BoardSequencerStored = opening ? { ...home, ...opening.settings, currentScene: openingIndex } : home;
+    // Show's "Start the piece", "Rehearse from here" or Carry on — each of which passes
+    // `piece`. Play used to start the piece whenever one existed, so making a loop or trying
+    // drums alone got the opening scene's band and loops, and loops changing at 1:30.
+    // Rehearsing from a scene, or carrying on, the clock starts part-way.
+    const clockOn = piece !== null;
+    const startSec = piece?.fromSec ?? 0;
+    // "On now" comes from the plan at every start, never from before (R2-T2-01); carrying
+    // on, the scene that was on wins when it is later than the plan's.
+    const openingIndex = piece !== null ? openingScene(home.scenes, startSec, piece.scene ?? null) : null;
+    const opening = openingIndex !== null ? home.scenes[openingIndex] ?? null : null;
+    const cfg: BoardSequencerStored = opening ? { ...home, ...opening.settings, currentScene: openingIndex }
+      : clockOn ? { ...home, currentScene: null } : home;
     if (opening) {
       // Wanted and shown together, before the sound loads: the iPad (and the loop list) show
       // the opening loops on while it does. Shown off, a tap meant to turn one on turned it
@@ -2205,15 +2204,19 @@ export default function BoardSequencerScreen() {
     clockStartRef.current = clockOn ? performance.now() - startSec * 1000 : null;
     if (clockOn) rememberPieceRunning(Date.now() - startSec * 1000, home.performance.lengthSec);
     if (clockStartRef.current !== null) homeSettingsRef.current = sceneSettingsOf(home);
+    // The opening scene sets everything: a strip the player moved before the piece is no
+    // longer theirs to keep from the next scene.
+    if (clockOn) stripsTouchedRef.current = new Set();
     // The opening scene is already in: the clock must not bring it in again.
-    // From part-way: the scenes and cues before that moment are already past, not due.
+    // From part-way: the scenes and cues before that moment are already past, not due; any
+    // that came due while the sound loaded come in on the first tick.
     clockPrevRef.current = startSec > 0
       ? { remaining: home.performance.lengthSec - startSec, elapsed: startSec }
       : { remaining: Infinity, elapsed: opening ? 0 : CLOCK_NOT_STARTED };
     if (opening) {
       setConfig((prev) => ({ ...prev, ...opening.settings, currentScene: openingIndex }));
       setBoardNotice(`Scene: ${opening.name}`);
-    }
+    } else if (clockOn) setConfig((prev) => (prev.currentScene === null ? prev : { ...prev, currentScene: null }));
     autoEndedRef.current = false;
     hardStoppedRef.current = false;
     endingRef.current = false;
@@ -2228,7 +2231,6 @@ export default function BoardSequencerScreen() {
     setRunning(true);
   }, [engineRef, homographyRef, loopBankRef, modeRef, runningRef, startingRef, videoRef]);
 
-  /** Rehearse from a point in the piece: Play, with the clock already at `sec`. */
   // Whether Show is open, for the piece remembered across a reload (when there is one).
   useEffect(() => { if (running) rememberShowing(view === 'bigBoard'); }, [view, running]);
   // And which scene is on, so a Next taken before a reload isn't lost.
@@ -2245,16 +2247,17 @@ export default function BoardSequencerScreen() {
     return () => window.clearInterval(id);
   }, [resumeFrom, running]);
 
+  /** Rehearse from a point in the piece: Play, with the clock already at `sec`. */
   const rehearseFrom = (sec: number): void => {
     if (runningRef.current) return;
     // The piece and a new loop never run together (F2): starting the piece ends it.
     if (newLoopRef.current) leaveNewLoop();
-    rehearseFromRef.current = sec;
     announce(`Rehearsing from ${formatClock(sec)}.`);
-    void start();
+    void start({ fromSec: sec });
   };
 
-  const start = useCallback(async () => {
+  /** ▶ Play (no `piece`: plain play), or a start of the piece, its clock from `piece.fromSec`. */
+  const start = useCallback(async (piece: PieceStart | null = null) => {
     if (startingRef.current) return;
     boardCheckAbortRef.current?.abort();
     setBoardCheck(null);
@@ -2263,7 +2266,7 @@ export default function BoardSequencerScreen() {
     setStarting(true);
     setSoundError(null);
     try {
-      await startEngine(generation);
+      await startEngine(generation, piece);
     } catch (err) {
       // Without this the button simply did nothing: no sound, no error, no reason — and
       // the player presses it again and again.
@@ -2883,7 +2886,9 @@ export default function BoardSequencerScreen() {
     // Storage keeps twelve; a thirteenth would play now and vanish on the next reload.
     if (c.scenes.length >= MAX_SCENES) { announce('Twelve scenes is the most. Delete one first.'); return; }
     const scene = sceneFromNow(name || `Scene ${c.scenes.length + 1}`, wantedRef.current, sceneSettingsNow(c));
-    update(scenesInOrder([...c.scenes, scene], c.scenes.length));
+    // Never marked on now: that made the next piece open in it (R2-T2-01).
+    const added = withSceneAdded(c.scenes, c.currentScene, scene);
+    update({ scenes: added.scenes, currentScene: added.current });
     sessionLogRef.current.action(logActorRef.current, `save scene ${scene.name}`);
     announce(`Scene saved: ${scene.name}.`);
   };
@@ -3086,19 +3091,55 @@ export default function BoardSequencerScreen() {
     if (i !== null) goScene(i);
     else if (c.scenes.length > 0) { setBoardNotice('Last scene'); announce('That was the last scene.'); }
   };
-  /** Start the countdown by hand (when it is not set to start with Play). */
-  const startClock = (): void => {
-    if (!runningRef.current) return;
-    if (newLoopRef.current) leaveNewLoop(); // the piece and a new loop never run together (F2)
+  /**
+   * ▶ Start the piece: always the piece from 0:00. Stopped, the board starts with it.
+   * Playing (Tim warming up), the sound carries on with no restart and no gap: a scene
+   * jumped to is dropped, the player's own settings come back, and the piece opens over
+   * them exactly as from stopped — the clock at the full length, the scene at 0:00 in at
+   * once (its settings now, its loops from the next pass), every other loop fading out.
+   * "⏱ Start clock" opened in whatever scene was marked on now and skipped every scene
+   * before it (R2-T2-01).
+   */
+  const startThePiece = (): void => {
+    if (!runningRef.current) {
+      // As ▶ Play: a press straight after Stop is a bounce (focus lands here after the
+      // second press of Stop), never a new start of the piece.
+      if (performance.now() - stoppedAtRef.current < PLAY_AFTER_STOP_MS) return;
+      // The piece and a new loop never run together (F2): starting the piece ends it.
+      if (newLoopRef.current) leaveNewLoop();
+      void start({ fromSec: 0 });
+      return;
+    }
+    // Already the piece, or an ending still under way: nothing to start.
+    if (clockStartRef.current !== null || endingRef.current) return;
+    if (newLoopRef.current) leaveNewLoop();
+    const c = configRef.current;
+    // The player's own settings: from before a jump to a scene, if there was one.
+    const own = homeSettingsRef.current ?? sceneSettingsOf(c);
+    homeSettingsRef.current = own;
+    const openingIndex = openingScene(c.scenes, 0);
+    const opening = openingIndex !== null ? c.scenes[openingIndex] ?? null : null;
+    const settings = opening ? { ...own, ...opening.settings } : own;
+    stripsTouchedRef.current = new Set();
+    update({ ...settings, currentScene: openingIndex });
+    engineRef.current?.setBpm(settings.bpm);
+    wantedRef.current = new Set((opening?.loops ?? []).filter((sl) => (c.loopSlots[sl] ?? null) !== null));
+    pushLaunch();
     clockStartRef.current = performance.now();
-    rememberPieceRunning(Date.now(), configRef.current.performance.lengthSec);
-    // A scene jumped to before the clock started already holds the player's own settings.
-    if (homeSettingsRef.current === null) homeSettingsRef.current = sceneSettingsOf(configRef.current);
-    clockPrevRef.current = { remaining: Infinity, elapsed: CLOCK_NOT_STARTED };
+    rememberPieceRunning(Date.now(), c.performance.lengthSec, view === 'bigBoard', openingIndex ?? undefined);
+    // The opening scene is in: the clock must not bring it in again.
+    clockPrevRef.current = { remaining: Infinity, elapsed: opening ? 0 : CLOCK_NOT_STARTED };
     autoEndedRef.current = false;
     hardStoppedRef.current = false;
-    sessionLogRef.current.action(logActorRef.current, 'start clock');
-    announce(`Clock started: ${formatClock(configRef.current.performance.lengthSec)}.`);
+    setClock(clockView(clockStartRef.current, performance.now(), c.performance.lengthSec, false));
+    sessionLogRef.current.action(logActorRef.current, 'start the piece');
+    if (opening) {
+      setBoardNotice(`Scene: ${opening.name}`);
+      sessionLogRef.current.action(logActorRef.current, `scene ${opening.name}`);
+    }
+    announce(`The piece has started${opening ? `, in ${opening.name}` : ''}: ${formatClock(c.performance.lengthSec)}.`);
+    // The button pressed gives way to the clock: focus goes on to ■ Stop.
+    void focusWhenGone(() => (view === 'bigBoard' ? showStopRef.current : document.getElementById(PLAY_STOP_ID)));
   };
   /** The chosen ending, now: a fade over the fade passes (or a stop at the end of the pass). */
   const endPiece = (): void => {
@@ -4681,7 +4722,7 @@ export default function BoardSequencerScreen() {
     next: nn.next ? { name: nn.next.scene.name, inSec: nn.next.inSec } : null,
     loops: performLoops.filter((l) => l.state === 'playing' || l.state === 'starting').map((l) => (l.name.length > 0 ? l.name : `Loop ${l.slot + 1}`)),
     ending,
-    onStartClock: startClock,
+    onStartPiece: startThePiece,
     onNext: nextScene,
     onEnd: endPiece,
     onCancelEnding: cancelEnding,
@@ -4689,6 +4730,19 @@ export default function BoardSequencerScreen() {
   };
   const nowNextStrip = <NowNextStrip {...nowNextProps} />;
   const bigNowNextStrip = <NowNextStrip {...nowNextProps} big />;
+
+  /** ▶ Carry on after a reload: from where the clock would be now, in the scene that was on. */
+  const carryOn = (): void => {
+    if (!resumeFrom) return;
+    const now = Math.round((Date.now() - resumeFrom.startedAt) / 1000);
+    setResumeFrom(null);
+    // Over since the banner last looked: nothing is left to carry on.
+    if (readPieceRunning() === null) return;
+    announce(`Carrying on from ${formatClock(Math.max(0, now))}.`);
+    void start({ fromSec: Math.max(0, now), scene: resumeFrom.scene ?? null });
+    // Back where it was: Show, if Show was open.
+    if (resumeFrom.show) setView('bigBoard');
+  };
 
   const stage = (
     <div style={{ flex: layout.mode === 'stacked' ? 'none' : '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
@@ -4698,19 +4752,7 @@ export default function BoardSequencerScreen() {
         return (
           <div role="alert" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', padding: '8px 12px', borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-warn)', color: 'var(--bs-bg)', fontWeight: 600 }}>
             <span style={{ flex: '1 1 240px' }}>{`The piece was playing when the page closed or reloaded. The clock would be at ${formatClock(Math.min(at, resumeFrom.lengthSec))} now.`}</span>
-            <Button
-              tone="primary"
-              onClick={() => {
-                const now = Math.round((Date.now() - resumeFrom.startedAt) / 1000);
-                setResumeFrom(null);
-                // Over since the banner last looked: nothing is left to carry on.
-                if (readPieceRunning() === null) return;
-                resumeSceneRef.current = resumeFrom.scene ?? null;
-                rehearseFrom(Math.max(0, now));
-                // Back where it was: Show, if Show was open.
-                if (resumeFrom.show) setView('bigBoard');
-              }}
-            >
+            <Button tone="primary" onClick={carryOn}>
               {`▶ Carry on from ${formatClock(Math.min(at, resumeFrom.lengthSec))}`}
             </Button>
             <Button tone="secondary" onClick={() => { setResumeFrom(null); forgetPieceRunning(); }}>No</Button>
@@ -4761,9 +4803,9 @@ export default function BoardSequencerScreen() {
         />
       )}
       {laptop && view === 'play' && laptopBar}
-      {/* Play is just playing: the piece's strip (Start clock, Next, End) only once there
-          is a piece to steer — scenes, or its clock running. With neither, Next did
-          nothing and Start clock began a countdown that faded the music out by itself. */}
+      {/* Play is just playing: the piece's strip (Start the piece, Next, End) only once
+          there is a piece to steer — scenes, or its clock running. With neither, Next did
+          nothing and the clock began a countdown that faded the music out by itself. */}
       {view === 'play' && running && (config.scenes.length > 0 || (clock !== null && clock.phase !== 'idle')) && nowNextStrip}
       {/* The board is the instrument: never squeezed below about half the screen. */}
       {(view === 'play' || laptop) && <div style={{ flex: 1, minHeight: 'clamp(240px, 52vh, 560px)' }}>{boardView}</div>}
@@ -5076,13 +5118,7 @@ export default function BoardSequencerScreen() {
           <Button
             ref={showStartRef}
             tone="primary"
-            onClick={() => {
-              // As ▶ Play: a press straight after Stop is a bounce (focus lands here after
-              // the second press of Stop), never a new start of the piece.
-              if (performance.now() - stoppedAtRef.current < PLAY_AFTER_STOP_MS) return;
-              rehearseFromRef.current = 0;
-              void start();
-            }}
+            onClick={startThePiece}
             style={{ fontSize: 22, padding: '10px 26px' }}
           >
             ▶ Start the piece
