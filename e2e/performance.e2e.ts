@@ -735,6 +735,66 @@ test('the iPad Loops page shows only the saved loops, and a tap turns one on and
   expect(pageErrors(page)).toEqual([]);
 });
 
+test('while Start the piece loads, the iPad shows the opening loops on, and a loop tapped then joins them', async ({ page, context }) => {
+  await openLaptopBoard(page);
+  await saveTwoLoops(page); // Bed, and Loop 2
+  await makePlan(page); // Arrival, at 0:00, has Bed
+  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await page.getByRole('tab', { name: 'Connections' }).click();
+  await page.getByRole('switch', { name: 'iPad controls' }).click();
+  await page.getByRole('checkbox', { name: 'Loops & scenes page' }).check();
+  const code = await page.evaluate(() => localStorage.getItem('admi-remote-code'));
+
+  const ipad = await context.newPage();
+  await ipad.setViewportSize({ width: 1180, height: 820 });
+  await ipad.goto(`/?remote=${code}`);
+  await expect(ipad.getByText('Connected · press Play on the laptop')).toBeVisible();
+  const touch = { pointerType: 'touch', pointerId: 1, width: 30, height: 30 };
+  await ipad.getByRole('tab', { name: 'Loops', exact: true }).dispatchEvent('pointerdown', touch);
+  await expect(ipad.getByRole('button', { name: /^Bed: OFF/ })).toBeVisible();
+  // The sounds are slow to arrive, so Start the piece waits for them (a few seconds at most).
+  let release = (): void => {};
+  const held = new Promise<void>((r) => { release = r; });
+  await page.route('**/samples/**', async (route) => { await held; await route.continue(); });
+  await page.getByRole('button', { name: /^Show: the board, the clock/ }).click();
+  await page.getByRole('button', { name: '▶ Start the piece' }).click();
+  // Still loading: Bed, Arrival's loop, is already on, as it will be. Shown off, a tap
+  // meant to turn it on turned it off, and Arrival opened without its loop.
+  await expect(ipad.getByRole('button', { name: /^Bed: ON · starts with Play/ })).toBeVisible({ timeout: 3000 });
+  await ipad.getByRole('button', { name: /^Loop 2: OFF/ }).dispatchEvent('pointerdown', touch);
+  release();
+  await expect(ipad.getByText('Connected · playing')).toBeVisible({ timeout: 20_000 });
+  await expect(ipad.getByRole('button', { name: /^Bed: (ON|starting|coming in)/ })).toBeVisible();
+  await expect(ipad.getByRole('button', { name: /^Loop 2: (ON|starting|coming in)/ })).toBeVisible();
+  expect(pageErrors(page)).toEqual([]);
+});
+
+test("Capture from an iPad while the piece plays makes no loop, and the laptop says why", async ({ page }) => {
+  await openLaptopBoard(page);
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1], [5, 3]]);
+  await makePlan(page);
+  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await page.getByRole('tab', { name: 'Connections' }).click();
+  await page.getByRole('switch', { name: 'iPad controls' }).click();
+  const code = await page.evaluate(() => localStorage.getItem('admi-remote-code'));
+  await startPiece(page);
+  await pieceClockRunning(page);
+  // An iPad page that still offers Capture during the piece (one from before this rule).
+  await page.evaluate((code) => new Promise<void>((done) => {
+    const ws = new WebSocket(`ws://${location.host}/admi-remote?code=${code}&role=remote`);
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ type: 'trigger', name: 'capture' }));
+      setTimeout(() => { ws.close(); done(); }, 300);
+    };
+  }), code);
+  await expect(page.getByText('iPad: Capture not taken (stop the piece to make a loop)')).toBeVisible();
+  await page.getByRole('button', { name: 'Make a piece', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Make a piece: steps' }).getByRole('button', { name: /· Loops/ }).click();
+  await expect(page.getByRole('listitem', { name: 'Loop 1: Loop 1, empty' })).toBeVisible();
+  expect(pageErrors(page)).toEqual([]);
+});
+
 test('an iPad loop tap while the laptop is stopped is refused, says why, and Play brings no loop in', async ({ page, context }) => {
   await openLaptopBoard(page);
   await pieceStep(page, 'Loops');

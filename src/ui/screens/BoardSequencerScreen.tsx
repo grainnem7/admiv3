@@ -69,6 +69,7 @@ import type { ReadyItem } from './boardSequencer/play/ReadyCheck';
 import { PlayPanel } from './boardSequencer/play/PlayPanel';
 import { CapPanel, CAP_ROLE_LABELS, CAP_PAUSE_TEXT, capValueText } from './boardSequencer/play/CapPanel';
 import { useCapTracker } from './boardSequencer/useCapTracker';
+import { useEmptyBoardWait } from './boardSequencer/useEmptyBoardWait';
 import type { BoardActivity, CapSettings } from '../../tracking/cap/capTracker';
 import { BoardLegend } from './boardSequencer/components/BoardLegend';
 import { soundNameFor } from './boardSequencer/soundOptions';
@@ -266,8 +267,6 @@ const CUE_SHOWN_MS = 5000;
 const SAVE_GATHER_MS = 400;
 /** How long the first press of Stop during a piece waits for the second. */
 const STOP_CONFIRM_MS = 4000;
-/** While New loop waits for an empty board, how often it looks again. */
-const EMPTY_CHECK_MS = 100;
 /**
  * ▶ Play takes the place of ■ Stop: a press this soon after a stop is the same press
  * bouncing, not a wish to play again (T4-16: "press twice" restarted the board).
@@ -2101,7 +2100,13 @@ export default function BoardSequencerScreen() {
       ? Math.max(planned, resumeScene) : planned;
     const opening = openingIndex >= 0 ? home.scenes[openingIndex] : null;
     const cfg: BoardSequencerStored = opening ? { ...home, ...opening.settings, currentScene: openingIndex } : home;
-    if (opening) wantedRef.current = new Set(opening.loops.filter((sl) => (home.loopSlots[sl] ?? null) !== null));
+    if (opening) {
+      // Wanted and shown together, before the sound loads: the iPad (and the loop list) show
+      // the opening loops on while it does. Shown off, a tap meant to turn one on turned it
+      // off, and the scene opened without its loop.
+      wantedRef.current = new Set(opening.loops.filter((sl) => (home.loopSlots[sl] ?? null) !== null));
+      setWantedSlots([...wantedRef.current].sort((a, b) => a - b));
+    }
     const video = videoRef.current;
     // The laptop board has no camera picture to map, and a laptop that has never seen
     // the real board has no corners to map it with.
@@ -2206,7 +2211,6 @@ export default function BoardSequencerScreen() {
       : { remaining: Infinity, elapsed: opening ? 0 : CLOCK_NOT_STARTED };
     if (opening) {
       setConfig((prev) => ({ ...prev, ...opening.settings, currentScene: openingIndex }));
-      setWantedSlots([...wantedRef.current].sort((a, b) => a - b));
       setBoardNotice(`Scene: ${opening.name}`);
     }
     autoEndedRef.current = false;
@@ -2981,30 +2985,15 @@ export default function BoardSequencerScreen() {
   };
   const [pieceStep, setPieceStep] = useState<PieceStep>('loops');
   const countersNow = boardCellsNow().length;
-  // "Lift the counters to start from silence": the wait ends once the board is empty. On
-  // the laptop board at once (a click is certain); a camera board must stay empty for the
-  // settle window, never ending on one flickery frame. Looked at again and again while it
-  // waits, so one look that still saw a counter can never leave it waiting for good, on
-  // "Lift the 0 counters" (T2-03, T1-05).
-  const waitingForEmpty = newLoop?.phase === 'waitEmpty';
-  const emptySinceRef = useRef<number | null>(null);
-  useEffect(() => {
-    emptySinceRef.current = null;
-    if (!waitingForEmpty) return undefined;
-    const check = (): void => {
-      const n = soundingOnBoard();
-      if (n > 0) { emptySinceRef.current = null; setNewLoop((s) => (s ? boardSeen(s, n) : s)); return; }
-      const c = configRef.current;
-      if (c.boardSource !== 'laptop') {
-        emptySinceRef.current ??= performance.now();
-        if (performance.now() - emptySinceRef.current < c.settleWindowMs) return;
-      }
-      setNewLoop((s) => (s ? boardSeen(s, 0) : s));
-    };
-    check();
-    const id = window.setInterval(check, EMPTY_CHECK_MS);
-    return () => window.clearInterval(id);
-  }, [waitingForEmpty]); // eslint-disable-line react-hooks/exhaustive-deps
+  // "Lift the counters to start from silence": the wait ends once the board is empty (on a
+  // camera board, empty for the settle window). Each look reads this render's board: on a
+  // stopped camera board that is `active`, which the look from when the wait began never saw
+  // change (useEmptyBoardWait).
+  useEmptyBoardWait(
+    newLoop?.phase === 'waitEmpty',
+    () => ({ sounding: soundingOnBoard(), settleMs: configRef.current.boardSource === 'laptop' ? null : configRef.current.settleWindowMs }),
+    (n) => setNewLoop((s) => (s ? boardSeen(s, n) : s)),
+  );
   /**
    * New loop: composing from silence. While it is set the engine plays only what
    * engineSettingsFor allows (never the player's band, Extra notes or Sounds change), and
@@ -3372,7 +3361,12 @@ export default function BoardSequencerScreen() {
       else if (msg.name === 'mute') toggleMuted();
       else if (msg.name === 'stopAll') stopAllLoops();
       else if (msg.name === 'endPiece') endPiece();
-      else captureLoop();
+      else if (clockStartRef.current !== null) {
+        // Capture makes a loop, and no loop is made while the piece plays (F2). Today's iPad
+        // greys its Capture out then; this is for one that is behind.
+        setRemoteNote({ text: 'iPad: Capture not taken (stop the piece to make a loop)', at: performance.now() });
+        return;
+      } else captureLoop();
       setRemoteNote({ text: `iPad: ${REMOTE_TRIGGER_WORDS[msg.name]}`, at: performance.now() });
     }
   };

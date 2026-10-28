@@ -496,3 +496,38 @@ describe('an iPad page of another build than the laptop', () => {
     expect(el.textContent).not.toMatch(/out of date|reload|build/i);
   });
 });
+
+describe('Capture while the piece clock runs (no new loop during the piece, F2)', () => {
+  const CAPTURE = { type: 'trigger', name: 'capture' };
+  const capturePad = () => [...el.querySelectorAll('button')].find((b) => (b.getAttribute('aria-label') ?? '').startsWith('Capture'))!;
+
+  it('looks unavailable and sends nothing, with no warning on the iPad; once the piece is over it works again', async () => {
+    await act(async () => { onMsg?.(withTouch({ playExtras: ['capture'] }, { clock: { text: '5:12', phase: 'running' } })); });
+    expect(capturePad().disabled).toBe(true);
+    await act(async () => { pointer('pointerdown', capturePad(), 300); });
+    expect(sent).not.toContainEqual(CAPTURE);
+    expect(el.textContent).not.toMatch(/stop the piece|not now|can't/i);
+    // The piece over (no clock running): Capture is there again.
+    now += 1000;
+    await act(async () => { onMsg?.(withTouch({ playExtras: ['capture'] })); });
+    expect(capturePad().disabled).toBe(false);
+    await act(async () => { pointer('pointerdown', capturePad(), 300); });
+    expect(sent).toContainEqual(CAPTURE);
+  });
+
+  it('the same on the Loops & scenes page, in every phase of the clock but idle', async () => {
+    for (const phase of ['running', 'lastMinute', 'lastMoments', 'ending', 'over'] as const) {
+      await act(async () => { onMsg?.({ ...STATE, state: { ...STATE.state, clock: { text: '0:20', phase } } }); });
+      const tab = [...el.querySelectorAll('[role="tab"]')].find((b) => b.textContent === 'Loops & scenes')!;
+      await act(async () => { pointer('pointerdown', tab, 10); });
+      now += 1000;
+      await act(async () => { pointer('pointerdown', capturePad(), 300); });
+      expect(capturePad().disabled).toBe(true);
+    }
+    expect(sent).not.toContainEqual(CAPTURE);
+    await act(async () => { onMsg?.({ ...STATE, state: { ...STATE.state, clock: { text: '7:00', phase: 'idle' } } }); });
+    now += 1000;
+    await act(async () => { pointer('pointerdown', capturePad(), 300); });
+    expect(sent).toContainEqual(CAPTURE);
+  });
+});
