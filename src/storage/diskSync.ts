@@ -7,6 +7,10 @@
 import {
   applyBackup, hasBoardData, parseBoardBackup, shouldRestore, snapshotStorage, SAVED_AT_KEY, type BoardBackup,
 } from './boardBackup';
+import { canSave } from './tabSaving';
+
+/** Said wherever a tab that can't save is asked to (src/storage/tabSaving.ts). */
+export const OTHER_TAB_SAVES = "ADMI is open in another tab. This one can't save: close the other tab to save here.";
 
 export const STORE_PATH = '/admi-store';
 const SAVE_DELAY_MS = 800;
@@ -69,6 +73,8 @@ export async function readDiskBackup(timeoutMs = 1500): Promise<BoardBackup | nu
  * replaces is sent to the laptop's backups folder first, so nothing is ever lost.
  */
 export async function restoreFromDisk(): Promise<'restored' | 'kept'> {
+  // Only the tab that saves puts the laptop's copy in place: it writes the browser's store.
+  if (!canSave()) return 'kept';
   try {
     const disk = await readDiskBackup();
     const local = snapshotStorage(localStorage);
@@ -84,6 +90,8 @@ export async function restoreFromDisk(): Promise<'restored' | 'kept'> {
 /** Send this browser's data to the laptop now. */
 export async function flushDiskSave(keepalive = false): Promise<boolean> {
   if (timer) { clearTimeout(timer); timer = null; }
+  // A tab waiting for another never sends its copy: it would replace the saving tab's.
+  if (!canSave()) return false;
   try {
     const snap = snapshotStorage(localStorage);
     if (!hasBoardData(snap)) return false;
@@ -97,6 +105,7 @@ export async function flushDiskSave(keepalive = false): Promise<boolean> {
 
 /** Call after the app saves: records the time and sends a copy once saving settles. */
 export function scheduleDiskSave(): void {
+  if (!canSave()) return;
   try { localStorage.setItem(SAVED_AT_KEY, String(Date.now())); } catch { /* not saved anyway */ }
   if (timer) clearTimeout(timer);
   timer = setTimeout(() => { void flushDiskSave(); }, SAVE_DELAY_MS);
@@ -109,6 +118,7 @@ if (typeof window !== 'undefined') {
 
 /** Restore a backup file the facilitator chose: it becomes the newest copy everywhere. */
 export async function restoreFromFile(b: BoardBackup): Promise<void> {
+  if (!canSave()) throw new Error(OTHER_TAB_SAVES);
   const local = snapshotStorage(localStorage);
   if (hasBoardData(local)) await post(`${STORE_PATH}/replaced`, local);
   applyBackup(localStorage, b, Date.now());

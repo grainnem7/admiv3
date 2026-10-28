@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { listenToOutput, makePlan, notesPlayed, openLaptopBoard, outputLevels, pageErrors, pickColour, pieceStep, place, startPiece } from './app';
+import { listenToOutput, makePlan, notesPlayed, openAnotherTab, openLaptopBoard, outputLevels, pageErrors, pickColour, pieceStep, place, startPiece } from './app';
 
 /** Make a piece → Loops: two loops, "Bed" (two yellow counters) and an unnamed one (one blue). */
 async function saveTwoLoops(page: Page): Promise<void> {
@@ -519,11 +519,35 @@ test('a reload mid-piece offers to carry on from where the clock would be', asyn
   await page.waitForTimeout(1500); // let the board be saved
   await page.reload();
   // Straight back to the board: no home screen, no hunting for it.
-  const offer = page.getByRole('alert').filter({ hasText: 'The piece was playing when the page reloaded' });
+  const offer = page.getByRole('alert').filter({ hasText: 'The piece was playing when the page closed or reloaded' });
   await expect(offer).toBeVisible();
   await offer.getByRole('button', { name: /Carry on from/ }).click();
   await expect(page.getByRole('region', { name: 'Now and next' })).toContainText('Now: Arrival');
   expect(pageErrors(page)).toEqual([]);
+});
+
+test('a closed laptop tab, reopened within the piece, offers Carry on; a second tab never does while the first still plays it', async ({ page, context }) => {
+  await openLaptopBoard(page);
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1]]);
+  await makePlan(page);
+  await page.getByRole('button', { name: /^Show: the board, the clock/ }).click();
+  await page.getByRole('button', { name: '▶ Start the piece' }).click();
+  await pieceClockRunning(page);
+  // A second tab while the first plays the piece: only why it can't save, no Carry on.
+  const second = await openAnotherTab(context);
+  await expect(second.getByRole('heading', { name: 'ADMI is open in another tab' })).toBeVisible();
+  await expect(second.getByText(/The piece was playing/)).toHaveCount(0);
+  await second.close();
+  // The laptop's tab closes mid-piece (a slip, or a crash), and ADMI is opened again (T3-08).
+  await page.close();
+  const again = await openAnotherTab(context);
+  const offer = again.getByRole('alert').filter({ hasText: 'The piece was playing' });
+  await expect(offer.getByRole('button', { name: /Carry on from 0:\d\d/ })).toBeVisible();
+  await offer.getByRole('button', { name: /Carry on from/ }).click();
+  await expect(again.getByRole('button', { name: 'Leave Show' })).toBeVisible();
+  await expect(again.getByRole('region', { name: 'Now and next' })).toContainText('Now: Arrival');
+  expect(pageErrors(again)).toEqual([]);
 });
 
 test('a reload during Show carries on in Show', async ({ page }) => {
@@ -805,5 +829,72 @@ test('■ Stop pressed twice quickly, with no piece clock, stops and stays stopp
   await page.waitForTimeout(1500);
   await expect(page.getByRole('button', { name: '▶ Play' }).first()).toBeVisible();
   await expect(page.getByRole('button', { name: '■ Stop' })).toHaveCount(0);
+  expect(pageErrors(page)).toEqual([]);
+});
+
+test('two tabs: only the first saves; the second says why and saves nothing; when the first closes, the second takes over with every loop', async ({ page, context }) => {
+  await openLaptopBoard(page);
+  await saveTwoLoops(page);
+  await pause(page, 800); // saves are gathered for a moment
+
+  // A second tab of ADMI: it counts every write it would make, to the browser or the laptop.
+  const second = await context.newPage();
+  const sentToLaptop: string[] = [];
+  await second.route('**/admi-store**', (route) => {
+    if (route.request().method() !== 'GET') sentToLaptop.push(route.request().method());
+    return route.request().method() === 'GET' ? route.fulfill({ status: 404, body: '' }) : route.fulfill({ status: 204, body: '' });
+  });
+  await second.route('**/magentadata/**', (route) => route.abort());
+  await second.addInitScript(() => {
+    const w = window as unknown as { __writes: string[] };
+    w.__writes = [];
+    const set = Storage.prototype.setItem;
+    const remove = Storage.prototype.removeItem;
+    Storage.prototype.setItem = function (this: Storage, k: string, v: string) { if (this === localStorage) w.__writes.push(k); return set.call(this, k, v); };
+    Storage.prototype.removeItem = function (this: Storage, k: string) { if (this === localStorage) w.__writes.push(`-${k}`); return remove.call(this, k); };
+  });
+  await second.goto('/');
+  await expect(second.getByRole('heading', { name: 'ADMI is open in another tab' })).toBeVisible();
+  await expect(second.getByText("This one can't save: close the other tab to save here.")).toBeVisible();
+  // Nothing to press: no screen, so no Keep, no Save, no clearing, no player to change.
+  await expect(second.getByRole('button')).toHaveCount(0);
+  // The first tab knows, and is the one that saves.
+  await expect(page.getByText("ADMI is also open in another tab. That tab can't save: only this one does.")).toBeVisible();
+
+  // The first tab reloads (by mistake, mid-session): it is still the one that saves, and the
+  // second still waits, for longer than it would take to replace a tab that had closed.
+  await page.reload();
+  await page.getByRole('button', { name: /Board Sequencer/ }).click();
+  await expect(page.getByRole('heading', { name: 'ADMI is open in another tab' })).toHaveCount(0);
+  await pause(second, 7000);
+  await expect(second.getByRole('heading', { name: 'ADMI is open in another tab' })).toBeVisible();
+  await pieceStep(page, 'Loops');
+
+  // A loop kept in the first tab while the second is open.
+  await pickColour(page, 'Green');
+  await place(page, [[6, 2]]);
+  await page.getByRole('button', { name: 'Save the board here' }).first().click();
+  await page.getByRole('textbox', { name: 'Name of loop 3' }).fill('Kept in A');
+  await page.getByRole('textbox', { name: 'Name of loop 3' }).press('Tab');
+  await pause(page, 800);
+  expect(await second.evaluate(() => (window as unknown as { __writes: string[] }).__writes)).toEqual([]);
+  expect(sentToLaptop).toEqual([]);
+
+  // The first tab closes: the second takes over, with every loop the first one kept.
+  await page.close();
+  await second.getByRole('button', { name: /Board Sequencer/ }).click();
+  await pieceStep(second, 'Loops');
+  await expect(second.getByRole('textbox', { name: 'Name of loop 1' })).toHaveValue('Bed');
+  await expect(second.getByRole('textbox', { name: 'Name of loop 3' })).toHaveValue('Kept in A');
+  // It saves now, and a plain reload of it (the only tab) keeps what it saved.
+  await second.getByRole('textbox', { name: 'Name of loop 2' }).fill('Kept in B');
+  await second.getByRole('textbox', { name: 'Name of loop 2' }).press('Tab');
+  await pause(second, 800);
+  await second.reload();
+  await expect(second.getByRole('heading', { name: 'ADMI is open in another tab' })).toHaveCount(0);
+  await second.getByRole('button', { name: /Board Sequencer/ }).click();
+  await pieceStep(second, 'Loops');
+  await expect(second.getByRole('textbox', { name: 'Name of loop 2' })).toHaveValue('Kept in B');
+  await expect(second.getByRole('textbox', { name: 'Name of loop 3' })).toHaveValue('Kept in A');
   expect(pageErrors(page)).toEqual([]);
 });

@@ -1,10 +1,23 @@
-import { expect, type Page } from '@playwright/test';
+import { expect, type BrowserContext, type Page } from '@playwright/test';
 
 /**
  * Open the Board Sequencer on the laptop board with four ready-made colours, cut off
  * from the server's copy of saved work so every test starts from nothing.
  */
 export async function openLaptopBoard(page: Page): Promise<void> {
+  await cutOff(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: /Board Sequencer/ }).click();
+  // The first run asks who is playing and which hand they use.
+  await page.getByRole('region', { name: "Who's playing?" }).getByRole('textbox', { name: 'Name' }).fill('Test');
+  await page.getByRole('button', { name: 'Create' }).click();
+  await page.getByRole('button', { name: /Laptop board: play on the laptop/ }).click();
+  await page.getByRole('button', { name: 'Add four colours' }).click();
+  await expect(page.getByRole('radiogroup', { name: 'Counter to put down' })).toBeVisible();
+}
+
+/** Record the page's errors, and cut it off from the laptop's copy and from the internet. */
+async function cutOff(page: Page): Promise<void> {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   (page as Page & { admiErrors?: string[] }).admiErrors = errors;
@@ -15,14 +28,14 @@ export async function openLaptopBoard(page: Page): Promise<void> {
   // No Magenta models in the tests: they come from the internet, and without them Extra
   // notes uses its own rules. (They load in a worker now, so they no longer freeze the page.)
   await page.route('**/magentadata/**', (route) => route.abort());
+}
+
+/** ADMI opened in another tab of the same browser (the same saved data). */
+export async function openAnotherTab(context: BrowserContext): Promise<Page> {
+  const page = await context.newPage();
+  await cutOff(page);
   await page.goto('/');
-  await page.getByRole('button', { name: /Board Sequencer/ }).click();
-  // The first run asks who is playing and which hand they use.
-  await page.getByRole('region', { name: "Who's playing?" }).getByRole('textbox', { name: 'Name' }).fill('Test');
-  await page.getByRole('button', { name: 'Create' }).click();
-  await page.getByRole('button', { name: /Laptop board: play on the laptop/ }).click();
-  await page.getByRole('button', { name: 'Add four colours' }).click();
-  await expect(page.getByRole('radiogroup', { name: 'Counter to put down' })).toBeVisible();
+  return page;
 }
 
 /** Pick a colour above the laptop board ("Red", "Blue", "Yellow", "Green"). */

@@ -3,7 +3,7 @@
  */
 
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware';
 import type {
   AppState,
   AppActions,
@@ -30,6 +30,17 @@ import type { NoteName, ScaleType } from '../sound/MusicTheory';
 import { AUDIO } from '../utils/constants';
 import { DEFAULT_MUSIC_SETTINGS } from './musicSettingsDefaults';
 import { readPieceRunning } from '../songs/performance/pieceRunning';
+import { canSave } from '../storage/tabSaving';
+
+/**
+ * The browser's store, written only by the tab that saves: a second tab of ADMI reads it
+ * but never writes over the first one's (src/storage/tabSaving.ts).
+ */
+const savingStorage: StateStorage = {
+  getItem: (name) => localStorage.getItem(name),
+  setItem: (name, value) => { if (canSave()) localStorage.setItem(name, value); },
+  removeItem: (name) => { if (canSave()) localStorage.removeItem(name); },
+};
 
 const initialState: AppState = {
   // Tracking
@@ -334,6 +345,7 @@ export const useAppStore = create<AppState & AppActions>()(
     }),
     {
       name: 'admi-storage',
+      storage: createJSONStorage(() => savingStorage),
       partialize: (state) => ({
         // Only persist these fields
         availableProfiles: state.availableProfiles,

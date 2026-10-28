@@ -5,7 +5,7 @@
  * Pro-audio inspired interface with DAW-like layout.
  */
 
-import { lazy, Suspense, useEffect } from 'react';
+import { lazy, Suspense, useEffect, useSyncExternalStore } from 'react';
 import { useAppStore, useCurrentScreen, useShowDebugPanel, useIsMuted, useUISize } from '../state/store';
 import { getAudioEngine } from '../sound/AudioEngine';
 
@@ -33,6 +33,8 @@ import GuidedOverlay from './components/performance/GuidedOverlay';
 import CalibrationModal from './components/performance/CalibrationModal';
 import AriaLiveAnnouncer from './components/AriaLiveAnnouncer';
 import ScreenTransition from './components/ScreenTransition';
+import OtherTabNotice from './components/OtherTabNotice';
+import { onTabState, tabState } from '../storage/tabSaving';
 
 // The Debug Panel is a programmer's tool. import.meta.env.DEV is false in the production
 // build, so the panel's code is left out of it entirely; in development it opens only with
@@ -41,7 +43,17 @@ const DebugPanel = import.meta.env.DEV ? lazy(() => import('./facilitator/DebugP
 const debugAllowed = DebugPanel !== null
   && debugPanelAllowed({ dev: import.meta.env.DEV, search: typeof window === 'undefined' ? '' : window.location.search });
 
+/**
+ * One tab of ADMI saves (src/storage/tabSaving.ts). Any other shows why, and nothing else:
+ * no screen, no camera, no sound, no iPad link, nothing that could save. When the tab that
+ * saves closes, this one has read what it saved and ADMI opens here, fresh from that.
+ */
 function App() {
+  const tab = useSyncExternalStore(onTabState, tabState);
+  return tab === 'waiting' ? <OtherTabNotice /> : <AppScreens />;
+}
+
+function AppScreens() {
   const screen = useCurrentScreen();
   const showDebug = useShowDebugPanel();
   const isMuted = useIsMuted();

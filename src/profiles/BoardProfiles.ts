@@ -10,6 +10,7 @@ import {
   type BoardSequencerStored,
 } from './BoardSequencerConfig';
 import { applyGridChange } from '../tracking/boardGrid';
+import { canSave } from '../storage/tabSaving';
 
 export const RIG_KEY = 'admi-board-rig';
 export const PLAYERS_KEY = 'admi-board-players';
@@ -43,7 +44,12 @@ function readJson(key: string): unknown {
   }
 }
 
+/**
+ * Every write of the board's players and rig goes through here or setActiveId: a tab that
+ * waits for another tab of ADMI writes nothing (src/storage/tabSaving.ts).
+ */
 function writeJson(key: string, value: unknown): boolean {
+  if (!canSave()) return false;
   try {
     localStorage.setItem(key, JSON.stringify(value));
     return true;
@@ -51,6 +57,10 @@ function writeJson(key: string, value: unknown): boolean {
     console.warn(`[BoardProfiles] Failed to save ${key}:`, error);
     return false;
   }
+}
+
+function setActiveId(id: string): void {
+  if (canSave()) localStorage.setItem(ACTIVE_PLAYER_KEY, id);
 }
 
 export function splitBoardConfig(cfg: BoardSequencerStored): {
@@ -139,7 +149,7 @@ function migrateLegacy(): void {
   writeJson(RIG_KEY, rig);
   const p1: BoardPlayerProfile = { id: 'p1', name: 'Player 1', settings, channelSettings };
   savePlayers([p1]);
-  localStorage.setItem(ACTIVE_PLAYER_KEY, p1.id);
+  setActiveId(p1.id);
 }
 
 /** The player chosen last time, exactly as stored (null if none): who plays again. */
@@ -187,11 +197,11 @@ export function saveActiveBoardConfig(cfg: BoardSequencerStored, playerId?: stri
     if (!active) {
       const p1: BoardPlayerProfile = { id: 'p1', name: 'Player 1', settings, channelSettings };
       const ok = savePlayers([p1]);
-      localStorage.setItem(ACTIVE_PLAYER_KEY, p1.id);
+      setActiveId(p1.id);
       return rigOk && ok;
     }
     const ok = savePlayers(players.map((p) => (p.id === active.id ? { ...p, settings, channelSettings } : p)));
-    localStorage.setItem(ACTIVE_PLAYER_KEY, active.id);
+    setActiveId(active.id);
     return rigOk && ok;
   } catch (error) {
     console.warn('[BoardProfiles] Failed to save:', error);
@@ -210,7 +220,7 @@ export function createBoardPlayer(name: string, handedness: 'left' | 'right'): B
   const { settings } = splitBoardConfig(applyGridChange(base, {}));
   const player: BoardPlayerProfile = { id: freshPlayerId(players), name: name.trim() || 'Player', settings, channelSettings: {} };
   savePlayers([...players, player]);
-  localStorage.setItem(ACTIVE_PLAYER_KEY, player.id);
+  setActiveId(player.id);
   return player;
 }
 
@@ -226,7 +236,7 @@ export function updateBoardPlayer(id: string, change: { name?: string; handednes
 }
 
 export function setActiveBoardPlayer(id: string): void {
-  if (listBoardPlayers().some((p) => p.id === id)) localStorage.setItem(ACTIVE_PLAYER_KEY, id);
+  if (listBoardPlayers().some((p) => p.id === id)) setActiveId(id);
 }
 
 /** Channel ids referenced by any player's saved pages or loop slots. */

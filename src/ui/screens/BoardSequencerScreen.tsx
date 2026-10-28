@@ -137,6 +137,8 @@ import { decideClockTick, editedScene, nowNext, planScenes, putLoopBack, sceneAt
 import { DEFAULT_LOOP_COLOUR_OPTIONS, initialLoopColourState, stepLoopColours } from '../../songs/performance/loopColours';
 import { SessionLog, sessionFileName, type LogActor } from '../../songs/sessionLog';
 import { diskState, onDiskState, restoreFromFile, scheduleDiskSave } from '../../storage/diskSync';
+import { savingGuarded } from '../../storage/tabSaving';
+import { TABS_CHANNEL } from '../components/OtherTabNotice';
 import { backupFileName, parseBoardBackup, snapshotStorage, summariseBackup, type BoardBackup } from '../../storage/boardBackup';
 import { useRemoteLink } from '../../remote/useRemoteLink';
 import {
@@ -377,12 +379,13 @@ export default function BoardSequencerScreen() {
     pendingSaveRef.current = { config: withOwnSettings(config, homeSettingsRef.current), playerId };
     if (saveTimerRef.current === null) saveTimerRef.current = window.setTimeout(flushSave, SAVE_GATHER_MS);
   }, [config, flushSave]);
-  // Two tabs on the same address save over each other. Each tab says hello on a shared
-  // channel; any tab that hears another says so on screen.
+  // Another tab of ADMI is open. Only one tab saves (src/storage/tabSaving.ts): any other
+  // shows why and nothing else. Each tab says hello on a shared channel; this one hears
+  // the other and says so on screen. (Without Web Locks both would save: then it warns.)
   const [otherTab, setOtherTab] = useState(false);
   useEffect(() => {
     if (typeof BroadcastChannel === 'undefined') return;
-    const ch = new BroadcastChannel('admi-board-tabs');
+    const ch = new BroadcastChannel(TABS_CHANNEL);
     ch.onmessage = (e: MessageEvent) => {
       if (e.data === 'hello') { setOtherTab(true); ch.postMessage('here'); }
       else if (e.data === 'here') setOtherTab(true);
@@ -2566,13 +2569,18 @@ export default function BoardSequencerScreen() {
   const headerNotice: HeaderNotice | null = saveFailed
     ? { kind: 'error', text: 'Changes are not being saved — the browser refused. Use Back up to a file (Make a piece, step 3) now.' }
     : otherTab
-      ? { kind: 'error', text: 'ADMI is open in another tab or window. Close all but one, or they will save over each other.' }
+      ? savingGuarded()
+        ? { kind: 'changed', text: "ADMI is also open in another tab. That tab can't save: only this one does." }
+        : { kind: 'error', text: 'ADMI is open in another tab or window. Close all but one, or they will save over each other.' }
       : error
     ? { kind: 'error', text: error }
     : soundError
       ? { kind: 'error', text: soundError }
       : laptop ? null : camNotice;
 
+
+  // Change camera belongs beside a camera problem, not beside "another tab" or "not saved".
+  const cameraHeaderNotice = !saveFailed && !otherTab && (error !== null || (!soundError && !laptop && camNotice !== null));
 
   const playReason = canPlay(setupCfg, cameraGate)
     ? null
@@ -4643,7 +4651,7 @@ export default function BoardSequencerScreen() {
         const at = Math.round((Date.now() - resumeFrom.startedAt) / 1000);
         return (
           <div role="alert" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', padding: '8px 12px', borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-warn)', color: 'var(--bs-bg)', fontWeight: 600 }}>
-            <span style={{ flex: '1 1 240px' }}>{`The piece was playing when the page reloaded. The clock would be at ${formatClock(Math.min(at, resumeFrom.lengthSec))} now.`}</span>
+            <span style={{ flex: '1 1 240px' }}>{`The piece was playing when the page closed or reloaded. The clock would be at ${formatClock(Math.min(at, resumeFrom.lengthSec))} now.`}</span>
             <Button
               tone="primary"
               onClick={() => {
@@ -5134,7 +5142,7 @@ export default function BoardSequencerScreen() {
           onSwitchPlayer={() => setChooserOpen(true)}
           switchPlayerDisabledReason={running ? 'Stop playing to switch player.' : null}
           notice={headerNotice}
-          onChangeCamera={() => { stop(); setView('setup'); setStep('camera'); }}
+          onChangeCamera={cameraHeaderNotice ? () => { stop(); setView('setup'); setStep('camera'); } : undefined}
           right={view === 'setup' ? (
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             {boardSourceButton}
