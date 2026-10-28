@@ -319,6 +319,13 @@ describe('Play starting on the laptop', () => {
     const m = parseRemoteMessage({ type: 'state', state: { ...base, starting: 'yes' } });
     expect(m && m.type === 'state' ? 'starting' in m.state : null).toBe(false);
   });
+
+  it('a start of the piece still loading reaches the iPad too (no Capture then), and only when exactly true', () => {
+    const m = parseRemoteMessage({ type: 'state', state: { ...base, playing: false, starting: true, pieceStarting: true } });
+    expect(m && m.type === 'state' ? m.state.pieceStarting : null).toBe(true);
+    const no = parseRemoteMessage({ type: 'state', state: { ...base, starting: true, pieceStarting: 1 } });
+    expect(no && no.type === 'state' ? 'pieceStarting' in no.state : null).toBe(false);
+  });
 });
 
 describe('two taps, safe from a bounce (End piece, Stop all, Mute)', () => {

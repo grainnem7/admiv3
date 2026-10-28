@@ -118,6 +118,11 @@ export interface RemoteState {
    * seconds to load): a loop tapped now is taken, and comes in as the sound starts.
    */
   starting?: boolean;
+  /**
+   * What is starting is the piece (its clock runs once the sound is ready): no loop is made
+   * then, so Capture is unavailable, as while the clock runs (F2).
+   */
+  pieceStarting?: boolean;
   /** This player's reach on each strip (missing = the whole strip). */
   reach?: Record<RemoteControlName, Reach>;
   /** True while the laptop is learning the player's reach: strips report, not control. */
@@ -252,6 +257,7 @@ export function parseRemoteMessage(raw: unknown): RemoteMessage | null {
         muted: s.muted === true,
         playing: s.playing === true,
         ...(s.starting === true ? { starting: true } : {}),
+        ...(s.pieceStarting === true ? { pieceStarting: true } : {}),
         ...(reach ? { reach } : {}),
         ...(s.learning === true ? { learning: true } : {}),
         ...(Array.isArray(s.loops) ? { loops: sanitizeLoops(s.loops) } : {}),

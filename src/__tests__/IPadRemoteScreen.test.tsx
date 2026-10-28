@@ -515,6 +515,24 @@ describe('Capture while the piece clock runs (no new loop during the piece, F2)'
     expect(sent).toContainEqual(CAPTURE);
   });
 
+  it('while the laptop is starting the piece (its sound still loading), Capture looks unavailable and sends nothing, on both pages', async () => {
+    const loading = { playing: false, starting: true, pieceStarting: true };
+    await act(async () => { onMsg?.(withTouch({ playExtras: ['capture'] }, loading)); });
+    expect(capturePad().disabled).toBe(true);
+    await act(async () => { pointer('pointerdown', capturePad(), 300); });
+    const tab = [...el.querySelectorAll('[role="tab"]')].find((b) => b.textContent === 'Loops & scenes')!;
+    await act(async () => { pointer('pointerdown', tab, 10); });
+    now += 1000;
+    await act(async () => { pointer('pointerdown', capturePad(), 300); });
+    expect(capturePad().disabled).toBe(true);
+    expect(sent).not.toContainEqual(CAPTURE);
+    // Plain Play starting (no piece): Capture works as it always has.
+    await act(async () => { onMsg?.({ ...STATE, state: { ...STATE.state, playing: false, starting: true } }); });
+    now += 1000;
+    await act(async () => { pointer('pointerdown', capturePad(), 300); });
+    expect(sent).toContainEqual(CAPTURE);
+  });
+
   it('the same on the Loops & scenes page, in every phase of the clock but idle', async () => {
     for (const phase of ['running', 'lastMinute', 'lastMoments', 'ending', 'over'] as const) {
       await act(async () => { onMsg?.({ ...STATE, state: { ...STATE.state, clock: { text: '0:20', phase } } }); });

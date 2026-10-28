@@ -729,6 +729,12 @@ export default function BoardSequencerScreen() {
   const hardStoppedRef = useRef(false);
   /** When the board last stopped, for ▶ Play's bounce guard. */
   const stoppedAtRef = useRef(-Infinity);
+  /**
+   * A start of the piece is loading (▶ Start the piece, ▶ Rehearse from here, Carry on): its
+   * clock runs only once the sound is ready, and no loop is made meanwhile either (F2).
+   */
+  const pieceStartingRef = useRef(false);
+  const [pieceStarting, setPieceStarting] = useState(false);
   // The player's own settings from before the piece (or a jump to a scene) began. Scenes
   // change tempo, sound and band as the piece runs; when it is over they come back, so a
   // rehearsal never leaves the player's settings wherever the last scene put them. While
@@ -832,6 +838,7 @@ export default function BoardSequencerScreen() {
       muted,
       playing: running,
       ...(starting && !running ? { starting: true } : {}),
+      ...(pieceStarting && !running ? { pieceStarting: true } : {}),
       reach: config.remoteReach,
       ...(reachLearning ? { learning: true } : {}),
       loops: Array.from({ length: LAUNCH_SLOTS }, (_, i) => ({
@@ -855,7 +862,7 @@ export default function BoardSequencerScreen() {
     };
     remoteLink.send({ type: 'state', state });
   }, [remoteEnabled, remoteLink.others, config.bpm, config.velocity, config.fillAmount, config.evolveAmount,
-    config.fillKept, config.evolveHoldLap, muted, running, starting, config.remoteReach, reachLearning,
+    config.fillKept, config.evolveHoldLap, muted, running, starting, pieceStarting, config.remoteReach, reachLearning,
     config.loopSlots, config.loopNames, config.scenes, config.currentScene, wantedSlots, appliedSlots,
     config.remoteStrips, config.remotePads, config.remoteLoopsPage, config.remoteLocked, config.remoteStripMode, config.loopFadePasses, clock,
     config.remoteTouch, beatOn, helloAsk]);
@@ -2031,6 +2038,8 @@ export default function BoardSequencerScreen() {
     stoppedAtRef.current = performance.now();
     startingRef.current = null;
     setStarting(false);
+    pieceStartingRef.current = false;
+    setPieceStarting(false);
     runningRef.current = false;
     engineRef.current?.dispose();
     engineRef.current = null;
@@ -2307,6 +2316,8 @@ export default function BoardSequencerScreen() {
     startingRef.current = performance.now();
     const generation = startingRef.current;
     setStarting(true);
+    pieceStartingRef.current = piece !== null;
+    setPieceStarting(piece !== null);
     if (piece !== null) {
       // A new start of the piece takes the place of the one remembered across a reload.
       setResumeFrom(null);
@@ -2323,8 +2334,12 @@ export default function BoardSequencerScreen() {
       announce(`Could not start. ${text}`);
       stop();
     } finally {
-      if (startingRef.current === generation) startingRef.current = null;
+      if (startingRef.current === generation) {
+        startingRef.current = null;
+        pieceStartingRef.current = false;
+      }
       setStarting(startingRef.current !== null);
+      setPieceStarting(pieceStartingRef.current);
     }
   }, [startEngine, startingRef, stop, announce]);
 
@@ -3456,9 +3471,10 @@ export default function BoardSequencerScreen() {
       else if (msg.name === 'mute') toggleMuted();
       else if (msg.name === 'stopAll') stopAllLoops();
       else if (msg.name === 'endPiece') endPiece();
-      else if (clockStartRef.current !== null) {
-        // Capture makes a loop, and no loop is made while the piece plays (F2). Today's iPad
-        // greys its Capture out then; this is for one that is behind.
+      else if (clockStartRef.current !== null || pieceStartingRef.current) {
+        // Capture makes a loop, and no loop is made while the piece plays (F2), nor while a
+        // start of it is loading (the clock not set yet). Today's iPad greys its Capture out
+        // then; this is for one that is behind.
         setRemoteNote({ text: 'iPad: Capture not taken (stop the piece to make a loop)', at: performance.now() });
         return;
       } else captureLoop();

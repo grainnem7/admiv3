@@ -1426,3 +1426,45 @@ test('two reloads mid-piece, each carried on: silent by the first start + the le
   await expect(page.getByRole('button', { name: '▶ Play' }).first()).toBeVisible();
   expect(pageErrors(page)).toEqual([]);
 });
+
+test('while ▶ Start the piece loads, an iPad Capture is refused and the iPad shows Capture unavailable', async ({ page, context }) => {
+  await openLaptopBoard(page);
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1], [5, 3]]);
+  await makePlan(page);
+  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await page.getByRole('tab', { name: 'Connections' }).click();
+  await page.getByRole('switch', { name: 'iPad controls' }).click();
+  await page.getByRole('checkbox', { name: 'Loops & scenes page' }).check();
+  const code = await page.evaluate(() => localStorage.getItem('admi-remote-code'));
+  const ipad = await context.newPage();
+  await ipad.setViewportSize({ width: 1180, height: 820 });
+  await ipad.goto(`/?remote=${code}`);
+  await expect(ipad.getByText('Connected · press Play on the laptop')).toBeVisible();
+  await ipad.getByRole('tab', { name: 'Loops & scenes', exact: true }).dispatchEvent('pointerdown', { pointerType: 'touch', pointerId: 1, width: 30, height: 30 });
+  const capture = ipad.getByRole('button', { name: /^Capture: save what is on the board/ });
+  await expect(capture).toBeEnabled();
+  // The sounds are slow to arrive: the piece is starting, its clock not running yet.
+  let release = (): void => {};
+  const held = new Promise<void>((r) => { release = r; });
+  await page.route('**/samples/**', async (route) => { await held; await route.continue(); });
+  await startPiece(page); // Show → ▶ Start the piece → Leave Show, while the sound still loads
+  await expect(capture).toBeDisabled();
+  // An iPad page that still offers Capture then (one from before this rule).
+  await page.evaluate((code) => new Promise<void>((done) => {
+    const ws = new WebSocket(`ws://${location.host}/admi-remote?code=${code}&role=remote`);
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ type: 'trigger', name: 'capture' }));
+      setTimeout(() => { ws.close(); done(); }, 300);
+    };
+  }), code);
+  await expect(page.getByText('iPad: Capture not taken (stop the piece to make a loop)')).toBeVisible();
+  await expect(page.getByRole('timer')).toHaveCount(0); // still loading
+  release();
+  await pieceClockRunning(page);
+  await expect(capture).toBeDisabled();
+  await page.getByRole('button', { name: 'Make a piece', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Make a piece: steps' }).getByRole('button', { name: /· Loops/ }).click();
+  await expect(page.getByRole('listitem', { name: 'Loop 1: Loop 1, empty' })).toBeVisible();
+  expect(pageErrors(page)).toEqual([]);
+});

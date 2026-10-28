@@ -222,10 +222,11 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
     padTap(`loop${i}`, { type: 'loop', index: i });
   };
   // No new loop while the piece plays (F2): Capture is unavailable while its clock runs,
-  // shown only by the pad itself, never with a warning on the player's iPad.
-  const pieceClockRuns = clock !== null && clock.phase !== 'idle';
+  // and while the laptop is starting the piece (its sound still loading, the clock not yet
+  // running), shown only by the pad itself, never with a warning on the player's iPad.
+  const captureOff = (clock !== null && clock.phase !== 'idle') || state?.pieceStarting === true;
   const captureTap = (): void => {
-    if (!pieceClockRuns) padTap('capture', { type: 'trigger', name: 'capture' });
+    if (!captureOff) padTap('capture', { type: 'trigger', name: 'capture' });
   };
   const sceneTap = (i: number | 'next'): void => {
     // Not while Play is starting either: the laptop changes scenes only once it plays.
@@ -568,9 +569,9 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
             <button
               type="button"
               aria-label="Capture: save what is on the board as a loop and start it"
-              disabled={pieceClockRuns}
+              disabled={captureOff}
               {...padProps('capture', captureTap)}
-              style={{ borderRadius: 20, touchAction: 'none', color: '#eef1f7', fontSize: 22, fontWeight: 800, border: '4px solid #4fc3f7', background: '#1f3a4a', opacity: pieceClockRuns ? 0.35 : 1 }}
+              style={{ borderRadius: 20, touchAction: 'none', color: '#eef1f7', fontSize: 22, fontWeight: 800, border: '4px solid #4fc3f7', background: '#1f3a4a', opacity: captureOff ? 0.35 : 1 }}
             >
               ⏺ Capture
             </button>
@@ -720,8 +721,8 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
             }
             if (x === 'capture') {
               return (
-                <button key="x-capture" type="button" aria-label="Capture: save what is on the board as a loop and start it" disabled={pieceClockRuns} {...padProps('x-capture', captureTap)}
-                  style={{ borderRadius: 20, touchAction: 'none', color: '#eef1f7', fontSize: 22, fontWeight: 800, border: '4px solid #4fc3f7', background: '#1f3a4a', opacity: pieceClockRuns ? 0.35 : 1 }}>
+                <button key="x-capture" type="button" aria-label="Capture: save what is on the board as a loop and start it" disabled={captureOff} {...padProps('x-capture', captureTap)}
+                  style={{ borderRadius: 20, touchAction: 'none', color: '#eef1f7', fontSize: 22, fontWeight: 800, border: '4px solid #4fc3f7', background: '#1f3a4a', opacity: captureOff ? 0.35 : 1 }}>
                   ⏺ Capture
                 </button>
               );
