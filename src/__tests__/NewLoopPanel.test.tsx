@@ -14,7 +14,7 @@ afterEach(() => { act(() => root.unmount()); host.remove(); });
 function props(over: Partial<NewLoopPanelProps> = {}): NewLoopPanelProps {
   return {
     state: startNewLoop(0), loopNumber: 4, countersOnBoard: 0, kept: null,
-    otherLoops: [{ slot: 0, name: 'Bed' }, { slot: 1, name: '' }],
+    otherLoops: [{ slot: 0, name: 'Bed' }, { slot: 1, name: '' }], takenNames: [],
     onStartWithThese: vi.fn(), onHearWith: vi.fn(), onKeep: vi.fn(), onRename: vi.fn(), onLeave: vi.fn(),
     ...over,
   };
@@ -71,3 +71,63 @@ describe('New loop', () => {
     for (const quick of ['Bed', 'Pulse', 'Beat', 'Shine']) expect(button(quick)).toBeDefined();
   });
 });
+
+describe('New loop: never "Lift the 0 counters" (T1-05, T2-03)', () => {
+  it('waiting with the board already clear says it is ready, with no number', () => {
+    render(props({ state: startNewLoop(3), countersOnBoard: 0 }));
+    expect(text()).not.toMatch(/Lift the 0/);
+    expect(text()).not.toMatch(/0 counters?/);
+    expect(text()).toContain('Ready: the board is clear.');
+  });
+
+  it('one counter left is "the 1 counter"', () => {
+    render(props({ state: startNewLoop(1), countersOnBoard: 1 }));
+    expect(text()).toContain('Lift the 1 counter to start from silence.');
+  });
+});
+
+describe('New loop: the name box takes focus once, after Keep (T4-03)', () => {
+  it('a later render (a new name, a new frame) never pulls focus back', () => {
+    const p = props({ kept: { slot: 3, name: '' } });
+    render(p);
+    const name = host.querySelector('input[aria-label="Name of the new loop"]') as HTMLInputElement;
+    expect(document.activeElement).toBe(name);
+    const done = button('Done') as HTMLButtonElement;
+    act(() => done.focus());
+    expect(document.activeElement).toBe(done);
+    // The screen passes a new object every render; the name changing is a new render too.
+    render({ ...p, kept: { slot: 3, name: 'R' } });
+    render({ ...p, kept: { slot: 3, name: 'R' } });
+    expect(document.activeElement).toBe(done);
+  });
+
+  it('keeping another loop focuses the name box again', () => {
+    const p = props({ kept: { slot: 3, name: 'Bed' } });
+    render(p);
+    act(() => (button('Done') as HTMLButtonElement).focus());
+    render({ ...p, kept: { slot: 4, name: '' } });
+    expect(document.activeElement).toBe(host.querySelector('input[aria-label="Name of the new loop"]'));
+  });
+});
+
+describe('New loop: every loop full (T4-04)', () => {
+  it('the heading has no number, Keep is off, and the reason is on screen', () => {
+    render(props({ loopNumber: null, countersOnBoard: 2 }));
+    const h = host.querySelector('h3');
+    expect(h?.textContent).toBe('New loop · silent');
+    expect(button('Keep')?.disabled).toBe(true);
+    expect(text()).toContain('Every loop is full: clear one first');
+    expect(text()).not.toContain('Nothing to keep yet');
+  });
+});
+
+describe('New loop: quick names (T1-08)', () => {
+  it('a quick name already used by another loop gets a number', () => {
+    const p = props({ kept: { slot: 3, name: '' }, takenNames: ['Bed'] });
+    render(p);
+    expect(button('Bed')).toBeUndefined();
+    act(() => button('Bed 2')?.click());
+    expect(p.onRename).toHaveBeenCalledWith(3, 'Bed 2');
+  });
+});
+

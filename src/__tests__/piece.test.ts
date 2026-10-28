@@ -150,3 +150,15 @@ describe('the piece — the scene on at a moment', () => {
     expect(sceneAt([scene('late', 30)], 10)).toBe(-1);
   });
 });
+
+describe('the piece — a cleared loop put back (Undo)', () => {
+  it('goes back into the scenes that had it, once, and nowhere else', async () => {
+    const { putLoopBack } = await import('../songs/performance/piece');
+    const before = [{ ...scene('a', 0), loops: [0, 2] }, { ...scene('b', 90), loops: [2] }, { ...scene('c', 210), loops: [1] }];
+    const cleared = takeLoopOut(before, 2);
+    const back = putLoopBack(cleared, 2, ['a', 'b']);
+    expect(back.map((s) => s.loops)).toEqual([[0, 2], [2], [1]]);
+    expect(back[2]).toBe(cleared[2]);
+    expect(putLoopBack(back, 2, ['a']).map((s) => s.loops)).toEqual([[0, 2], [2], [1]]);
+  });
+});

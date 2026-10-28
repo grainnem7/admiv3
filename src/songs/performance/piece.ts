@@ -158,3 +158,14 @@ export function editedScene(scene: Scene, patch: Partial<Scene>): Scene {
 export function takeLoopOut(scenes: readonly Scene[], slot: number): Scene[] {
   return scenes.map((s) => (s.loops.includes(slot) ? { ...s, loops: s.loops.filter((x) => x !== slot) } : s));
 }
+
+/**
+ * Undo of a clear: the loop goes back into the scenes that had it (by id), once each. A
+ * scene marked to play alone since then has a loop again, so it no longer is.
+ */
+export function putLoopBack(scenes: readonly Scene[], slot: number, sceneIds: readonly string[]): Scene[] {
+  return scenes.map((s) => (sceneIds.includes(s.id) && !s.loops.includes(slot)
+    ? editedScene(s, { loops: [...s.loops, slot].sort((a, b) => a - b) })
+    : s));
+}
+

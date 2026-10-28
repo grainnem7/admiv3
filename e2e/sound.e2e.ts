@@ -285,6 +285,7 @@ test('Stop silences a launched loop; it does not come back on Play', async ({ pa
   await expect(page.getByRole('listitem', { name: /^Loop 1:/ })).not.toHaveAttribute('aria-label', /ready/);
   await expect(page.getByRole('listitem', { name: /^Loop 1: .*2 notes/ })).toBeVisible();
   // Play again with the board still empty: the loop stays stopped, so nothing plays.
+  await page.waitForTimeout(600); // ▶ Play ignores a press straight after Stop (a bounce)
   await page.getByRole('button', { name: '▶ Play' }).first().click();
   await page.waitForTimeout(3000);
   expect(await notesPlayed(page)).toBe(0);

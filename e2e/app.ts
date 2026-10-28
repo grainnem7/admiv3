@@ -70,3 +70,45 @@ export async function startPiece(page: Page): Promise<void> {
   await page.getByRole('button', { name: '▶ Start the piece' }).click();
   await page.getByRole('button', { name: 'Leave Show' }).click();
 }
+
+/**
+ * Listen to what the page sends to the speakers: an analyser on everything connected to
+ * the audio output. Call before the page loads (it patches AudioNode.connect).
+ */
+export async function listenToOutput(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const orig = AudioNode.prototype.connect as (...a: unknown[]) => unknown;
+    (AudioNode.prototype as unknown as { connect: unknown }).connect = function (this: AudioNode, ...args: unknown[]) {
+      const dest = args[0];
+      if (dest instanceof AudioDestinationNode && dest.context === this.context && this.context instanceof AudioContext) {
+        const w = window as unknown as { __admiMeter?: AnalyserNode };
+        if (!w.__admiMeter) { w.__admiMeter = this.context.createAnalyser(); w.__admiMeter.fftSize = 2048; }
+        orig.call(this, w.__admiMeter);
+      }
+      return orig.apply(this, args);
+    };
+  });
+}
+
+/** The loudest level (RMS) heard in each of `bins` stretches of `binMs`, measured in the page. */
+export async function outputLevels(page: Page, bins: number, binMs = 250): Promise<number[]> {
+  return page.evaluate(async ({ bins, binMs }) => {
+    const an = (window as unknown as { __admiMeter?: AnalyserNode }).__admiMeter;
+    if (!an) return [];
+    const buf = new Float32Array(an.fftSize);
+    const out: number[] = [];
+    for (let b = 0; b < bins; b++) {
+      let peak = 0;
+      const end = performance.now() + binMs;
+      while (performance.now() < end) {
+        an.getFloatTimeDomainData(buf);
+        let sum = 0;
+        for (const v of buf) sum += v * v;
+        peak = Math.max(peak, Math.sqrt(sum / buf.length));
+        await new Promise((r) => setTimeout(r, 15));
+      }
+      out.push(peak);
+    }
+    return out;
+  }, { bins, binMs });
+}

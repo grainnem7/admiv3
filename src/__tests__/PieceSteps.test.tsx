@@ -180,3 +180,32 @@ describe('Ending & check: fixing from the check', () => {
     expect(text()).toContain('1 thing needs fixing before the piece.');
   });
 });
+
+describe('Loops: one way to make a loop (F1, T1-01, T2-14)', () => {
+  const rows = (): string[] => ['Save the board here', 'Overwrite with board', '✎ Edit notes'];
+
+  it('outside New loop and the show, the old ways are still there for now', () => {
+    render(props({ step: 'loops', canSaveBoard: true }));
+    for (const r of rows()) expect(button(r), r).toBeDefined();
+  });
+
+  it('inside New loop: no Save the board here, Overwrite or Edit notes, and no ▶ Play on a loop (T1-10)', () => {
+    render(props({ step: 'loops', canSaveBoard: true, newLoop: <p>making</p> }));
+    for (const r of rows()) expect(button(r), r).toBeUndefined();
+    expect(button('▶ Play')).toBeUndefined();
+    expect(text()).not.toContain('put counters on it to save a loop');
+    // A loop can still be cleared from inside New loop (to make room for Keep).
+    expect(host.querySelector('button[aria-label="Clear loop 1"]')).not.toBeNull();
+  });
+
+  it('while the piece clock runs: no old ways, and New loop is off, saying why (F2)', () => {
+    const p = props({ step: 'loops', canSaveBoard: true, running: true, clock: { phase: 'running', text: '6:30', remainingSec: 390, elapsedSec: 30 } });
+    render(p);
+    for (const r of rows()) expect(button(r), r).toBeUndefined();
+    const nl = button('New loop');
+    expect(nl?.disabled).toBe(true);
+    expect(text()).toContain('Stop the piece to make a loop');
+    act(() => nl?.click());
+    expect(p.onNewLoop).not.toHaveBeenCalled();
+  });
+});

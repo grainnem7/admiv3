@@ -197,17 +197,24 @@ function LoopsStep(p: PieceStepsProps): JSX.Element {
   const [replaceArmed, setReplaceArmed] = useState<number | null>(null);
   const nameRefs = useRef(new Map<number, HTMLInputElement>());
   const [more, setMore] = useState(false);
+  // While the piece clock runs, the piece is playing: no loop is made then (F2).
+  const pieceOn = p.clock !== null && p.clock.phase !== 'idle';
+  const making = p.newLoop !== null && p.newLoop !== undefined;
+  // The old ways to make a loop (Save the board here, Overwrite, Edit notes) stay for now,
+  // but never inside New loop or during the piece, where they made a second, different
+  // loop under the New loop heading (F1).
+  const oldWays = !making && !pieceOn;
   return (
     <section aria-labelledby="piece-loops" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <h3 id="piece-loops" style={heading}>1 · Loops</h3>
       {p.newLoop ?? (
         <div style={card}>
           <p style={{ margin: 0 }}>A loop is something the player makes with counters, from silence, that then plays by itself.</p>
-          <div><Button tone="primary" onClick={p.onNewLoop}>New loop</Button></div>
+          <div><Button tone="primary" onClick={p.onNewLoop} reason={pieceOn ? 'Stop the piece to make a loop' : null}>New loop</Button></div>
           <p style={note}>Everything stops; only the counters sound. Keep makes the loop.</p>
         </div>
       )}
-      {!p.canSaveBoard && <p role="status" style={{ ...note, color: 'var(--bs-warn)' }}>The board is empty: put counters on it to save a loop.</p>}
+      {!p.canSaveBoard && oldWays && <p role="status" style={{ ...note, color: 'var(--bs-warn)' }}>The board is empty: put counters on it to save a loop.</p>}
       <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
         {p.loops.map((l) => {
           const empty = l.state === 'empty';
@@ -232,7 +239,7 @@ function LoopsStep(p: PieceStepsProps): JSX.Element {
               />
               <span style={{ fontSize: 12, color: on ? 'var(--bs-ok)' : 'var(--bs-fg2)', minWidth: 60 }}>{loopStateText(l, p.running, p.loopFadePasses > 0)}</span>
               <span style={{ flex: 1 }} />
-              {empty ? (
+              {empty ? (oldWays && (
                 <Button
                   tone="primary"
                   onClick={() => {
@@ -244,10 +251,11 @@ function LoopsStep(p: PieceStepsProps): JSX.Element {
                 >
                   Save the board here
                 </Button>
-              ) : (
+              )) : (
                 <>
-                  <Button tone={on ? 'primary' : 'secondary'} aria-pressed={on} onClick={() => p.onToggleLoop(l.slot)}>{on ? '■ Stop' : '▶ Play'}</Button>
-                  <Button
+                  {/* Inside New loop a loop is heard with "Hear it with…"; this did nothing there (T1-10). */}
+                  {!making && <Button tone={on ? 'primary' : 'secondary'} aria-pressed={on} onClick={() => p.onToggleLoop(l.slot)}>{on ? '■ Stop' : '▶ Play'}</Button>}
+                  {oldWays && <Button
                     tone="secondary"
                     disabled={!p.canSaveBoard}
                     title={p.canSaveBoard ? 'Overwrite this loop with the counters on the board now' : 'Put counters on the board first.'}
@@ -259,10 +267,10 @@ function LoopsStep(p: PieceStepsProps): JSX.Element {
                     onBlur={() => setReplaceArmed((r) => (r === l.slot ? null : r))}
                   >
                     {replaceArmed === l.slot ? 'Press again to overwrite' : 'Overwrite with board'}
-                  </Button>
+                  </Button>}
                 </>
               )}
-              <Button tone="quiet" onClick={() => p.onDrawLoop(l.slot)} aria-label={`Edit the notes of loop ${l.slot + 1}`} title="See and change this loop's notes">✎ Edit notes</Button>
+              {oldWays && <Button tone="quiet" onClick={() => p.onDrawLoop(l.slot)} aria-label={`Edit the notes of loop ${l.slot + 1}`} title="See and change this loop's notes">✎ Edit notes</Button>}
               {!empty && <Button tone="quiet" onClick={() => p.onClearLoop(l.slot)} aria-label={`Clear loop ${l.slot + 1}`} title="Clear this loop">✕</Button>}
             </li>
           );

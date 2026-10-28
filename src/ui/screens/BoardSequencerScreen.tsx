@@ -49,7 +49,7 @@ import { cellMap, LiveBoardView } from './boardSequencer/components/BoardView';
 import { createSessionArchive, indexedDbTakeStore, MAX_TAKES, type SessionArchive, type TakeSummary } from '../../storage/sessionArchive';
 import { forgetPieceRunning, readPieceRunning, rememberPieceRunning, rememberScene, rememberShowing, type PieceRunning } from '../../songs/performance/pieceRunning';
 import { drawCells, keepCells, loopChannelsFor, loopColourLabel, loopSwatch } from '../../songs/performance/loopSounds';
-import { boardSeen, engineSettingsFor, hearWith, loopsToPlay, startNewLoop, startWithThese, type NewLoopState } from '../../songs/performance/newLoop';
+import { boardSeen, engineSettingsFor, hearWith, loopsToPlay, playerCellsFor, slotForKeep, startNewLoop, startWithThese, stopHearing, type NewLoopState } from '../../songs/performance/newLoop';
 import { NewLoopPanel } from './boardSequencer/play/NewLoopPanel';
 import { LinkQr } from './boardSequencer/components/LinkQr';
 import { createPopStore, soundingKey, type PopStore } from './boardSequencer/popStore';
@@ -133,7 +133,7 @@ import {
   clockView, cueText, describeEnding, formatClock, CLOCK_NOT_STARTED,
   type ClockView,
 } from '../../songs/performance/clock';
-import { decideClockTick, editedScene, nowNext, planScenes, sceneAt, sortScenes, takeLoopOut } from '../../songs/performance/piece';
+import { decideClockTick, editedScene, nowNext, planScenes, putLoopBack, sceneAt, sortScenes, takeLoopOut } from '../../songs/performance/piece';
 import { DEFAULT_LOOP_COLOUR_OPTIONS, initialLoopColourState, stepLoopColours } from '../../songs/performance/loopColours';
 import { SessionLog, sessionFileName, type LogActor } from '../../songs/sessionLog';
 import { diskState, onDiskState, restoreFromFile, scheduleDiskSave } from '../../storage/diskSync';
@@ -261,6 +261,13 @@ const CUE_SHOWN_MS = 5000;
 const SAVE_GATHER_MS = 400;
 /** How long the first press of Stop during a piece waits for the second. */
 const STOP_CONFIRM_MS = 4000;
+/** While New loop waits for an empty board, how often it looks again. */
+const EMPTY_CHECK_MS = 100;
+/**
+ * ▶ Play takes the place of ■ Stop: a press this soon after a stop is the same press
+ * bouncing, not a wish to play again (T4-16: "press twice" restarted the board).
+ */
+const PLAY_AFTER_STOP_MS = 400;
 /** Where Play / Make a piece is remembered. */
 const WORKSPACE_KEY = 'admi-board-workspace';
 /** How long Undo stays on offer after the board, a loop or the scenes are thrown away. */
@@ -683,6 +690,8 @@ export default function BoardSequencerScreen() {
   const autoEndedRef = useRef(false);
   /** The end-time backstop has fired this run. */
   const hardStoppedRef = useRef(false);
+  /** When the board last stopped, for ▶ Play's bounce guard. */
+  const stoppedAtRef = useRef(-Infinity);
   /** Where the next Play starts the clock, when rehearsing from a scene (seconds; null = the top). */
   const rehearseFromRef = useRef<number | null>(null);
   /** Carrying on after a reload: the scene that was playing, if later than the plan's. */
@@ -1948,6 +1957,7 @@ export default function BoardSequencerScreen() {
   }, [learnRequest]);
 
   const stop = useCallback(() => {
+    stoppedAtRef.current = performance.now();
     startingRef.current = null;
     runningRef.current = false;
     engineRef.current?.dispose();
@@ -1968,6 +1978,11 @@ export default function BoardSequencerScreen() {
     if (home) setConfig((prev) => ({ ...prev, ...home, currentScene: null }));
     // Stop means silence: no loop is left waiting to start with Play.
     stopAllLoopsRef.current();
+    setWantedSlots([]);
+    // A new loop's "Hear it with…" ends with Stop too, or Play brought that loop back
+    // while its row said "fading in…" (T4-07). Set now as well: Play reads the ref.
+    if (newLoopRef.current) newLoopRef.current = stopHearing(newLoopRef.current);
+    setNewLoop((n) => (n ? stopHearing(n) : n));
     setAppliedSlots([]);
     setRunning(false);
   }, []);
@@ -2177,6 +2192,8 @@ export default function BoardSequencerScreen() {
 
   const rehearseFrom = (sec: number): void => {
     if (runningRef.current) return;
+    // The piece and a new loop never run together (F2): starting the piece ends it.
+    if (newLoopRef.current) leaveNewLoop();
     rehearseFromRef.current = sec;
     announce(`Rehearsing from ${formatClock(sec)}.`);
     void start();
@@ -2727,11 +2744,23 @@ export default function BoardSequencerScreen() {
   const boardCellsNow = (): ActiveCell[] => {
     if (runningRef.current) return activeCellsRef.current;
     const c = configRef.current;
-    if (c.boardSource === 'laptop') {
-      const known = new Set(c.channels.map((ch) => ch.id));
-      return c.laptopBoard.filter((x) => x.row < c.rows && x.col < c.cols && known.has(x.colour)).map((x) => ({ ...x }));
-    }
+    if (c.boardSource === 'laptop') return laptopCellsNow(c);
     return active;
+  };
+  /** The laptop board's counters as placed: a click is certain. */
+  const laptopCellsNow = (c: BoardSequencerStored): ActiveCell[] => {
+    const known = new Set(c.channels.map((ch) => ch.id));
+    return c.laptopBoard.filter((x) => x.row < c.rows && x.col < c.cols && known.has(x.colour)).map((x) => ({ ...x }));
+  };
+  /**
+   * The counters on the board that would sound (not control counters), as New loop counts
+   * them. On the laptop board what is placed counts at once, and so does a counter just
+   * lifted until the playing board has let it go, so nothing lifted can still sound.
+   */
+  const soundingOnBoard = (): number => {
+    const c = configRef.current;
+    const seen = keepCells(boardCellsNow(), c.channels).length;
+    return c.boardSource === 'laptop' ? Math.max(seen, keepCells(laptopCellsNow(c), c.channels).length) : seen;
   };
 
   // ---- performing: loops launched without a pad, and scenes ----
@@ -2827,6 +2856,44 @@ export default function BoardSequencerScreen() {
     sessionLogRef.current.action(logActorRef.current, `take loop ${slot + 1} out of the scenes`);
     announce(text);
   };
+  /**
+   * Clear a loop: its notes, its name, and its place in every scene that used it. A scene
+   * left naming an empty loop got the next kept loop in its place, silently, under the old
+   * name (T2-01); now the check names any scene left with no loops instead. A loop playing
+   * stops. Undo puts all of it back, unless a new loop has been kept there since.
+   */
+  const clearLoopEverywhere = (slot: number): void => {
+    const c = configRef.current;
+    const before = { cells: c.loopSlots[slot] ?? null, name: c.loopNames[slot] ?? '' };
+    const label = loopLabel(c.loopNames, slot);
+    const using = c.scenes.filter((sc) => sc.loops.includes(slot));
+    clearLoopSlotAt(slot);
+    update({ loopNames: c.loopNames.map((n, i) => (i === slot ? '' : n)), scenes: takeLoopOut(c.scenes, slot) });
+    if (wantedRef.current.has(slot)) {
+      wantedRef.current = new Set([...wantedRef.current].filter((x) => x !== slot));
+      pushLaunch();
+    }
+    const text = using.length > 0 ? `${label} cleared, and taken out of ${listNames(using.map((sc) => sc.name))}.` : `${label} cleared.`;
+    sessionLogRef.current.action(logActorRef.current, `clear loop ${slot + 1}`);
+    announce(text);
+    if (!before.cells) return;
+    const cells = before.cells;
+    setUndoOffer({
+      text,
+      restore: () => {
+        const now = configRef.current;
+        if ((now.loopSlots[slot]?.length ?? 0) > 0) { announce(`Loop ${slot + 1} has a new loop in it now: the old one was not put back.`); return; }
+        const slots = now.loopSlots.map((sl, i) => (i === slot ? cells : sl));
+        setConfig((prev) => ({
+          ...prev,
+          loopSlots: prev.loopSlots.map((sl, i) => (i === slot ? cells : sl)),
+          loopNames: prev.loopNames.map((n, i) => (i === slot ? before.name : n)),
+          scenes: putLoopBack(prev.scenes, slot, using.map((sc) => sc.id)),
+        }));
+        loopBankRef.current = seedLoopBank(loopBankRef.current.saved.length, slots, loopBankRef.current);
+      },
+    });
+  };
   /** Replace a scene's loops and sound with what is playing now. */
   const updateSceneFromNow = (i: number): void => {
     const c = configRef.current;
@@ -2856,52 +2923,77 @@ export default function BoardSequencerScreen() {
   };
   const [pieceStep, setPieceStep] = useState<PieceStep>('loops');
   const countersNow = boardCellsNow().length;
-  // "Lift the counters to start from silence": the wait ends once the board has been seen
-  // empty for the settle window — never from one flickery frame, and never from the first
-  // render after Play, when the running board has not been read yet.
+  // "Lift the counters to start from silence": the wait ends once the board is empty. On
+  // the laptop board at once (a click is certain); a camera board must stay empty for the
+  // settle window, never ending on one flickery frame. Looked at again and again while it
+  // waits, so one look that still saw a counter can never leave it waiting for good, on
+  // "Lift the 0 counters" (T2-03, T1-05).
+  const waitingForEmpty = newLoop?.phase === 'waitEmpty';
   const emptySinceRef = useRef<number | null>(null);
   useEffect(() => {
-    if (newLoopRef.current?.phase !== 'waitEmpty') { emptySinceRef.current = null; return; }
-    if (countersNow > 0) { emptySinceRef.current = null; setNewLoop((n) => (n ? boardSeen(n, countersNow) : n)); return; }
-    if (runningRef.current && latestFrame === null) return; // nothing read yet
-    const settle = configRef.current.settleWindowMs;
-    emptySinceRef.current ??= performance.now();
-    const t = window.setTimeout(() => {
-      if (newLoopRef.current?.phase === 'waitEmpty' && boardCellsNow().length === 0) setNewLoop((n) => (n ? boardSeen(n, 0) : n));
-    }, Math.max(0, settle - (performance.now() - emptySinceRef.current)));
-    return () => window.clearTimeout(t);
-  }, [countersNow, latestFrame === null]); // eslint-disable-line react-hooks/exhaustive-deps
+    emptySinceRef.current = null;
+    if (!waitingForEmpty) return undefined;
+    const check = (): void => {
+      const n = soundingOnBoard();
+      if (n > 0) { emptySinceRef.current = null; setNewLoop((s) => (s ? boardSeen(s, n) : s)); return; }
+      const c = configRef.current;
+      if (c.boardSource !== 'laptop') {
+        emptySinceRef.current ??= performance.now();
+        if (performance.now() - emptySinceRef.current < c.settleWindowMs) return;
+      }
+      setNewLoop((s) => (s ? boardSeen(s, 0) : s));
+    };
+    check();
+    const id = window.setInterval(check, EMPTY_CHECK_MS);
+    return () => window.clearInterval(id);
+  }, [waitingForEmpty]); // eslint-disable-line react-hooks/exhaustive-deps
   /**
    * New loop: composing from silence. While it is set the engine plays only what
    * engineSettingsFor allows (never the player's band, Extra notes or Sounds change), and
    * the loop being heard alongside goes through pushLaunch. Never saved.
    */
   const [keptLoop, setKeptLoop] = useState<{ slot: number; name: string } | null>(null);
-  const firstFreeSlot = (c: BoardSequencerStored): number | undefined =>
-    Array.from({ length: LAUNCH_SLOTS }, (_, i) => i).find((i) => (c.loopSlots[i] ?? null) === null);
   const beginNewLoop = (): void => {
-    const count = boardCellsNow().length;
-    setNewLoop(startNewLoop(count));
+    // New loop silences everything, so never while the piece plays (F2).
+    if (clockStartRef.current !== null) { announce('Stop the piece to make a loop.'); return; }
+    const count = soundingOnBoard();
+    const nl = startNewLoop(count);
+    newLoopRef.current = nl;
+    setNewLoop(nl);
     setKeptLoop(null);
-    // Silence first: every loop stops along with the band and Extra notes (the effect on
-    // newLoop pushes the empty set to the engine).
+    // Silence first: every loop stops along with the band and Extra notes.
     wantedRef.current = new Set();
+    // And at once, as Stop does (T1-02): the engine hears it now rather than after the next
+    // render and frame, then cuts what is still ringing or already queued.
+    const engine = engineRef.current;
+    if (engine && runningRef.current) {
+      applyEngineSettings(engine, forEngine(configRef.current, nl), midiPortRef.current);
+      pushLaunch(undefined, nl);
+      engine.setActiveCells(playerCellsFor(nl, activeCellsRef.current));
+      engine.silenceNow();
+    }
     sessionLogRef.current.action(logActorRef.current, 'new loop');
-    announce(count > 0 ? `New loop. Lift the ${count} counters to start from silence.` : 'New loop: silent until a counter goes down.');
+    announce(count > 0 ? `New loop. Lift the ${count} ${count === 1 ? 'counter' : 'counters'} to start from silence.` : 'New loop: silent until a counter goes down.');
   };
   const leaveNewLoop = (): void => {
+    newLoopRef.current = null;
     setNewLoop(null);
     setKeptLoop(null);
     wantedRef.current = new Set();
   };
   const keepNewLoop = (): void => {
-    const slot = firstFreeSlot(configRef.current);
-    if (slot === undefined) { announce('Every loop is full: clear one first.'); return; }
+    const c = configRef.current;
+    // Never a loop a scene still uses, even an empty one: the new loop would play there
+    // in its place, unasked (T2-01).
+    const slot = slotForKeep(c.loopSlots, c.scenes);
+    if (slot === null) { announce('Every loop is full: clear one first.'); return; }
     // Control counters are not a loop: nothing is kept, and nothing is said to be.
-    if (keepCells(boardCellsNow(), configRef.current.channels).length === 0) { announce('Nothing to keep yet: only control counters are down.'); return; }
+    if (keepCells(boardCellsNow(), c.channels).length === 0) { announce('Nothing to keep yet: only control counters are down.'); return; }
     saveBoardToSlot(slot);
-    setKeptLoop({ slot, name: configRef.current.loopNames[slot] ?? '' });
-    announce(`Kept: ${loopLabel(configRef.current.loopNames, slot)}. Give it a name.`);
+    // A new loop starts with no name: a name left on an empty loop was a loop that is gone.
+    if ((c.loopNames[slot] ?? '') !== '') renameLoop(slot, '');
+    setKeptLoop({ slot, name: '' });
+    announce(`Kept: Loop ${slot + 1}. Give it a name.`);
   };
   /** "Make my plan": the four-scene plan across the piece's length, from the saved loops. */
   const makePlan = (): void => {
@@ -2950,6 +3042,7 @@ export default function BoardSequencerScreen() {
   /** Start the countdown by hand (when it is not set to start with Play). */
   const startClock = (): void => {
     if (!runningRef.current) return;
+    if (newLoopRef.current) leaveNewLoop(); // the piece and a new loop never run together (F2)
     clockStartRef.current = performance.now();
     rememberPieceRunning(Date.now(), configRef.current.performance.lengthSec);
     homeSettingsRef.current = sceneSettingsNow(configRef.current);
@@ -2996,8 +3089,9 @@ export default function BoardSequencerScreen() {
   /** Capture: what is on the board now into the first free slot, and start it. */
   const captureLoop = (): void => {
     const cfg = configRef.current;
-    const slot = Array.from({ length: LAUNCH_SLOTS }, (_, i) => i).find((i) => (cfg.loopSlots[i] ?? null) === null);
-    if (slot === undefined) { announce('All eight loops are full. Clear one first.'); return; }
+    // The same place Keep would use: never a loop a scene still uses (T2-01).
+    const slot = slotForKeep(cfg.loopSlots, cfg.scenes);
+    if (slot === null) { announce('Every loop is full: clear one first.'); return; }
     const sequenced = new Set(cfg.channels.filter((c) => isSequencedRole(c.role)).map((c) => c.id));
     const source = boardCellsNow();
     const cells = source.filter((c) => sequenced.has(c.colour))
@@ -3872,6 +3966,7 @@ export default function BoardSequencerScreen() {
     return items;
   };
 
+  const keepSlotNow = slotForKeep(config.loopSlots, config.scenes);
   const pieceTab = (
     <PieceSteps
       rows={config.rows}
@@ -3900,10 +3995,12 @@ export default function BoardSequencerScreen() {
       newLoop={newLoop ? (
         <NewLoopPanel
           state={newLoop}
-          loopNumber={(keptLoop?.slot ?? firstFreeSlot(config) ?? LAUNCH_SLOTS - 1) + 1}
-          countersOnBoard={keepCells(boardCellsNow(), config.channels).length}
+          loopNumber={keptLoop ? keptLoop.slot + 1 : (keepSlotNow === null ? null : keepSlotNow + 1)}
+          // Waiting: what is still to lift. Composing: what Keep would keep.
+          countersOnBoard={newLoop.phase === 'waitEmpty' ? soundingOnBoard() : keepCells(boardCellsNow(), config.channels).length}
           kept={keptLoop ? { slot: keptLoop.slot, name: config.loopNames[keptLoop.slot] ?? '' } : null}
-          otherLoops={config.loopSlots.flatMap((s, i) => (s === null || i === keptLoop?.slot ? [] : [{ slot: i, name: config.loopNames[i] ?? '' }]))}
+          otherLoops={config.loopSlots.flatMap((s, i) => ((s?.length ?? 0) === 0 || i === keptLoop?.slot ? [] : [{ slot: i, name: config.loopNames[i] ?? '' }]))}
+          takenNames={config.loopNames.filter((n, i) => i !== keptLoop?.slot && (config.loopSlots[i]?.length ?? 0) > 0 && n.trim() !== '')}
           onStartWithThese={() => setNewLoop((s) => (s ? startWithThese(s) : s))}
           onHearWith={(what) => { setNewLoop((s) => (s ? hearWith(s, what) : s)); }}
           onKeep={keepNewLoop}
@@ -4519,7 +4616,7 @@ export default function BoardSequencerScreen() {
     onNext: nextScene,
     onEnd: endPiece,
     onCancelEnding: cancelEnding,
-    onCapture: captureLoop,
+    // No Capture here: a loop is made in New loop, never during the show (F1).
   };
   const nowNextStrip = <NowNextStrip {...nowNextProps} />;
   const bigNowNextStrip = <NowNextStrip {...nowNextProps} big />;
@@ -4850,14 +4947,22 @@ export default function BoardSequencerScreen() {
       {view === 'play' && remoteNote && (
         <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--bs-accent)' }}>{remoteNote.text}</p>
       )}
-      {view === 'play' && running && config.band !== 'off' && (
+      {view === 'play' && newLoop && (
+        // New loop holds the band, Extra notes and the loops off: say so here too, so this
+        // view never looks as if they should be playing (T1-09).
+        <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--bs-accent)' }}>
+          Making a new loop: only the counters sound. Keep it or leave in Make a piece, 1 · Loops.
+        </p>
+      )}
+      {/* The band as the engine has it: in a new loop it is off unless asked for (T1-09). */}
+      {view === 'play' && running && bandStatus.level !== 'off' && (
         <p style={{ margin: 0, fontSize: 12, color: 'var(--bs-fg2)' }}>
           {bandStatus.playing
-            ? `Band (${config.band}): ${bandStatus.parts.length > 0 ? bandStatus.parts.join(' · ') : 'you have taken every part'}`
+            ? `Band (${bandStatus.level}): ${bandStatus.parts.length > 0 ? bandStatus.parts.join(' · ') : 'you have taken every part'}`
             : active.length > 0 ? 'Band: joining on the next pass…' : 'Band: waiting for your first counter.'}
         </p>
       )}
-      {view === 'play' && running && config.evolveAmount > 0 && evolveLabels.size > 0 && (
+      {view === 'play' && running && !newLoop && config.evolveAmount > 0 && evolveLabels.size > 0 && (
         <p style={{ margin: 0, fontSize: 12, color: 'var(--bs-fg2)' }}>
           {`Sounds${config.evolveHoldLap !== null ? ' (held)' : ''}: ${config.channels
             .filter((c) => evolveLabels.has(c.id))
@@ -5117,30 +5222,23 @@ export default function BoardSequencerScreen() {
             <div style={{ marginTop: 10 }}><Button tone="primary" onClick={() => { setEditSlot(null); setCopyArmed(false); }}>Done</Button></div>
           </Modal>
         )}
-        {clearSlotTarget !== null && (
-          <ConfirmDialog
-            title={`Clear loop ${clearSlotTarget + 1}?`}
-            body="The loop saved on this pad is deleted for this player. You can undo it for a few seconds afterwards."
-            confirmLabel="Clear it"
-            onConfirm={() => {
-              const slot = clearSlotTarget;
-              const before = configRef.current.loopSlots[slot] ?? null;
-              clearLoopSlotAt(slot);
-              setClearSlotTarget(null);
-              if (before) {
-                setUndoOffer({
-                  text: `Loop ${slot + 1} cleared.`,
-                  restore: () => {
-                    const slots = configRef.current.loopSlots.map((sl, i) => (i === slot ? before : sl));
-                    setConfig((prev) => ({ ...prev, loopSlots: slots }));
-                    loopBankRef.current = seedLoopBank(loopBankRef.current.saved.length, slots, loopBankRef.current);
-                  },
-                });
-              }
-            }}
-            onCancel={() => setClearSlotTarget(null)}
-          />
-        )}
+        {clearSlotTarget !== null && (() => {
+          // Clearing a loop the piece uses asks first, naming the scenes it comes out of.
+          const slot = clearSlotTarget;
+          const label = loopLabel(config.loopNames, slot);
+          const using = config.scenes.filter((sc) => sc.loops.includes(slot)).map((sc) => sc.name);
+          return (
+            <ConfirmDialog
+              title={`Clear ${label}?`}
+              body={`${using.length > 0
+                ? `${label} is used in ${listNames(using)}. Clear it and take it out of ${using.length === 1 ? 'that scene' : 'those scenes'}?`
+                : `${label} is deleted for this player.`} You can undo it for a few seconds afterwards.`}
+              confirmLabel="Clear it"
+              onConfirm={() => { setClearSlotTarget(null); clearLoopEverywhere(slot); }}
+              onCancel={() => setClearSlotTarget(null)}
+            />
+          );
+        })()}
 
         {/* The file picker behind "Restore from a file" (Perform). */}
         <input
@@ -5195,7 +5293,7 @@ export default function BoardSequencerScreen() {
               <PlayPanel
                 running={running}
                 muted={muted}
-                onStart={() => void start()}
+                onStart={() => { if (performance.now() - stoppedAtRef.current >= PLAY_AFTER_STOP_MS) void start(); }}
                 onStop={requestStop}
                 stopArmed={stopArmed}
                 onToggleMute={toggleMuted}

@@ -222,8 +222,8 @@ const HELP: HelpEntry[] = [
       + 'plays from it. A scene with no loops is silent unless the player plays: tick "alone" in it '
       + 'only if that is the plan. 3 Ending & check: the length (at most 7:00), how it ends, '
       + 'and a check of everything. Each step is optional. Show: the board full screen with '
-      + 'the clock and Now / Next, for the performance — Start the piece, Next, End, '
-      + 'Capture; Stop needs two presses.',
+      + 'the clock and Now / Next, for the performance — Start the piece, Next, End; Stop '
+      + 'needs two presses. While the piece plays no loop is made: stop it first.',
   },
   {
     title: 'Loops and scenes while playing',

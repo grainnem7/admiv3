@@ -67,3 +67,45 @@ describe('which loops play', () => {
     expect(loopsToPlay(hearWith(startNewLoop(0), { loop: 2 }), [3, 1], own)).toEqual([2]);
   });
 });
+
+describe('Stop ends what New loop was heard with (T4-07)', () => {
+  it('the band, Extra notes and the loop heard alongside all end; the phase stays as it was', async () => {
+    const { stopHearing } = await import('../songs/performance/newLoop');
+    const heard = hearWith(startNewLoop(0), { band: true, fill: true, loop: 2 });
+    const s = stopHearing(heard);
+    expect(s.with).toEqual({ band: false, fill: false, loop: null });
+    expect(s.phase).toBe('composing');
+    expect(engineSettingsFor(s, own).loops).toEqual([]);
+    const waiting = startNewLoop(3);
+    expect(stopHearing(waiting)).toBe(waiting);
+  });
+});
+
+describe('the loop Keep fills (T2-01, T4-04)', () => {
+  it('the first empty loop that no scene uses; a cleared loop a scene still names is never refilled', async () => {
+    const { slotForKeep } = await import('../songs/performance/newLoop');
+    const cells = [{ row: 1, col: 1, colour: 'red' }];
+    expect(slotForKeep([cells, null, null], [])).toBe(1);
+    // Slot 1 was cleared but the scene Arrival still uses it: Keep goes past it.
+    expect(slotForKeep([cells, null, null], [{ loops: [1] }])).toBe(2);
+    // An empty list of notes is as empty as none.
+    expect(slotForKeep([cells, [], null], [])).toBe(1);
+  });
+
+  it('none when every loop is taken', async () => {
+    const { slotForKeep } = await import('../songs/performance/newLoop');
+    const cells = [{ row: 1, col: 1, colour: 'red' }];
+    expect(slotForKeep(Array.from({ length: 8 }, () => cells), [])).toBeNull();
+    expect(slotForKeep([...Array.from({ length: 7 }, () => cells), null], [{ loops: [7] }])).toBeNull();
+  });
+});
+
+describe('quick names never give two loops the same name (T1-08)', () => {
+  it('a name already used gets the next free number', async () => {
+    const { quickName } = await import('../songs/performance/newLoop');
+    expect(quickName('Bed', [])).toBe('Bed');
+    expect(quickName('Bed', ['Pulse'])).toBe('Bed');
+    expect(quickName('Bed', ['Bed'])).toBe('Bed 2');
+    expect(quickName('Bed', ['bed ', 'Bed 2'])).toBe('Bed 3');
+  });
+});

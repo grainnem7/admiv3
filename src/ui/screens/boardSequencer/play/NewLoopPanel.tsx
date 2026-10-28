@@ -1,19 +1,22 @@
 import { useEffect, useRef } from 'react';
 import { Button } from '../ui/Button';
-import type { NewLoopState } from '../../../../songs/performance/newLoop';
+import { quickName, type NewLoopState } from '../../../../songs/performance/newLoop';
 
 /** The names a loop most often gets, one tap each; typing is still there. */
 const QUICK_NAMES = ['Bed', 'Pulse', 'Beat', 'Shine'];
 
 export interface NewLoopPanelProps {
   state: NewLoopState;
-  /** Which loop this will be (counting from 1), for the header. */
-  loopNumber: number;
+  /** Which loop this will be (counting from 1), for the header; null when every loop is full. */
+  loopNumber: number | null;
+  /** The counters on the board that would sound (control counters are not counted). */
   countersOnBoard: number;
   /** Set once Keep has made the loop: its slot and name so far. */
   kept: { slot: number; name: string } | null;
   /** The kept loops that can be heard alongside this one. */
   otherLoops: { slot: number; name: string }[];
+  /** The names the other loops already have, so a quick name never makes a second "Bed". */
+  takenNames: string[];
   onStartWithThese(): void;
   onHearWith(what: Partial<NewLoopState['with']>): void;
   onKeep(): void;
@@ -30,18 +33,28 @@ const card = { padding: 12, borderRadius: 'var(--bs-radius-md)', background: 'va
  */
 export function NewLoopPanel(p: NewLoopPanelProps): JSX.Element {
   const nameRef = useRef<HTMLInputElement>(null);
-  // Next comes the name: focus goes there, so the owner can type or tap a quick name.
-  useEffect(() => { if (p.kept) nameRef.current?.focus(); }, [p.kept]);
+  // Next comes the name: focus goes there once, when a loop is kept. Keyed on the slot, not
+  // on `kept` (a new object every render): following every render pulled focus back to
+  // this box while the board played, so Done could never be reached and typing in another
+  // loop's name went into this one (T4-03).
+  const keptSlot = p.kept?.slot ?? null;
+  useEffect(() => { if (keptSlot !== null) nameRef.current?.focus(); }, [keptSlot]);
 
   const waiting = p.state.phase === 'waitEmpty';
   const hearing = p.state.with;
+  const full = p.loopNumber === null && !p.kept;
+  const keepReason = full ? 'Every loop is full: clear one first' : p.countersOnBoard > 0 ? null : 'Nothing to keep yet';
   return (
     <section aria-labelledby="new-loop" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <h3 id="new-loop" style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>{`New loop ${p.loopNumber} · silent`}</h3>
+      <h3 id="new-loop" style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>{`New loop${p.loopNumber === null ? '' : ` ${p.loopNumber}`} · silent`}</h3>
       {waiting ? (
         <div style={card}>
           <p role="status" style={{ margin: 0 }}>
-            {`Lift the ${p.countersOnBoard} ${p.countersOnBoard === 1 ? 'counter' : 'counters'} to start from silence.`}
+            {/* The board can be clear a moment before the wait ends (a camera board settles
+                first): never "Lift the 0 counters". */}
+            {p.countersOnBoard > 0
+              ? `Lift the ${p.countersOnBoard} ${p.countersOnBoard === 1 ? 'counter' : 'counters'} to start from silence.`
+              : 'Ready: the board is clear.'}
           </p>
           <p style={NOTE}>Nothing sounds until the board is empty. Or keep what is down and start with it:</p>
           <div><Button tone="secondary" onClick={p.onStartWithThese}>Start with these</Button></div>
@@ -78,13 +91,15 @@ export function NewLoopPanel(p: NewLoopPanelProps): JSX.Element {
             />
           </label>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {QUICK_NAMES.map((n) => <Button key={n} tone="secondary" onClick={() => p.onRename(p.kept?.slot ?? 0, n)}>{n}</Button>)}
+            {QUICK_NAMES.map((n) => quickName(n, p.takenNames)).map((n) => (
+              <Button key={n} tone="secondary" onClick={() => p.onRename(p.kept?.slot ?? 0, n)}>{n}</Button>
+            ))}
           </div>
         </div>
       ) : null}
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         {!waiting && !p.kept && (
-          <Button tone="primary" onClick={p.onKeep} reason={p.countersOnBoard > 0 ? null : 'Nothing to keep yet'}>Keep</Button>
+          <Button tone="primary" onClick={p.onKeep} reason={keepReason}>Keep</Button>
         )}
         <Button tone="quiet" onClick={p.onLeave}>{p.kept ? 'Done' : 'Leave'}</Button>
       </div>
