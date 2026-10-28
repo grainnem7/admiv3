@@ -18,6 +18,8 @@ export interface NowNextStripProps {
   big?: boolean;
   /** A cue just given ("1 minute left"), shown large for a few seconds. */
   cue?: string | null;
+  /** The colours still waiting for their time: "Waiting: Red at 1:30, Blue at 2:30". */
+  waiting?: string | null;
 }
 
 /**
@@ -54,6 +56,10 @@ export function NowNextStrip(p: NowNextStripProps): JSX.Element {
         <span style={{ fontSize: 14 * size, color: 'var(--bs-fg2)' }}>
           {p.next ? `Next: ${p.next.name} in ${formatClock(p.next.inSec)}` : phase !== 'idle' ? 'No more scenes on the clock' : 'Scenes come in once the clock starts'}
         </span>
+        {p.waiting && (
+          // Said once as each colour comes in (the board's notice); here it is only seen.
+          <span style={{ fontSize: 14 * size, fontWeight: 600 }}>{`⏱ ${p.waiting}`}</span>
+        )}
         {p.loops.length > 0 && (
           <span style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 2 }} aria-label={`Loops playing: ${p.loops.join(', ')}`}>
             {p.loops.map((l) => (

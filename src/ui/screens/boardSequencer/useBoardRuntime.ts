@@ -7,6 +7,7 @@
 import { orientedSize } from '../../../tracking/frameOrientation';
 import { useCallback, useEffect, useRef, type MutableRefObject, type RefObject } from 'react';
 import { playerCellsFor, type NewLoopState } from '../../../songs/performance/newLoop';
+import { cellsSoundingAt } from '../../../songs/performance/colourEntries';
 import { loopColourChannels } from '../../../songs/performance/loopSounds';
 import { CameraManager, type CameraTrackInfo } from '../../../tracking/CameraManager';
 import { BoardReader } from '../../../tracking/BoardReader';
@@ -43,7 +44,7 @@ import {
 import { homographyForCorners } from './homographyForCorners';
 import { laptopReadings } from '../../../tracking/laptopBoard';
 import { detectionSetup, type DetectionSetup } from '../../../tracking/boardReference/detectionSetup';
-import type { BoardActivity } from '../../../tracking/cap/capTracker';
+import { withCounterValues, type BoardActivity } from '../../../tracking/cap/capTracker';
 
 export interface RuntimeFrame {
   readings: CellReading[];
@@ -61,6 +62,11 @@ export interface RuntimeFrame {
   atMs: number;
   /** Per loop slot with a loop colour: whether such a counter is on the board this frame. */
   loopColours: ReadonlyMap<number, boolean>;
+  /**
+   * The player's counters the engine hears this frame: the pattern without a colour still
+   * waiting for its time in the piece (and none while a new loop waits for an empty board).
+   */
+  sounding: ActiveCell[];
 }
 
 export interface BoardRuntimeCallbacks {
@@ -202,6 +208,11 @@ export function useBoardRuntime(opts: {
   boardActivityRef?: MutableRefObject<BoardActivity>;
   /** New loop in progress: while it waits for an empty board the player's counters stay silent. */
   newLoopRef?: MutableRefObject<NewLoopState | null>;
+  /**
+   * When the piece's clock started (performance.now()), or null while it isn't running: a
+   * colour that comes in later stays silent until its time, and only then.
+   */
+  pieceClockRef?: MutableRefObject<number | null>;
 }): BoardRuntimeRefs {
   const { cameraDeviceId, cameraRetry, calibrated, laptop, configRef, callbacksRef, capValuesRef, boardActivityRef } = opts;
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -568,11 +579,19 @@ export function useBoardRuntime(opts: {
       const engine = engineRef.current;
       // The cap's values, then the board's control counters on top: a counter put down on
       // purpose is the more deliberate choice.
-      engine?.setControlValues({ ...(capValuesRef?.current ?? {}), ...ctl.values }, ctl.toggles);
+      engine?.setControlValues(withCounterValues(capValuesRef?.current ?? {}, ctl.values), ctl.toggles);
+      // A colour still waiting for its time in the piece is left out here, before the engine:
+      // so the sound, Ableton, the band and the log only ever hear colours that are in. It
+      // comes in on the first frame at or after its time, from the next step that reaches it.
+      const clockStart = opts.pieceClockRef?.current ?? null;
+      const pieceSec = clockStart === null ? null : (performance.now() - clockStart) / 1000;
+      const sounding = playerCellsFor(
+        opts.newLoopRef?.current ?? null, cellsSoundingAt(frame.patternCells, cfg.channels, cfg.colourComesInAt, pieceSec),
+      );
       if (running && engine) {
         loopBankRef.current = frame.loopBank;
         if (frame.captured.length > 0) callbacksRef.current.onLoopSlotsCaptured(frame.loopBank.saved);
-        engine.setActiveCells(playerCellsFor(opts.newLoopRef?.current ?? null, frame.patternCells));
+        engine.setActiveCells(sounding);
         engine.setActiveLoops(frame.activeLoops);
         activeCellsRef.current = frame.patternCells;
         if (frame.fireTick) engine.fireTick();
@@ -601,7 +620,7 @@ export function useBoardRuntime(opts: {
       }
       const rf: RuntimeFrame = {
         readings: visible, frame, controls: ctl, nudge: nudge.signal,
-        held, ghosts: knockRef.current.ghosts, handGuardReady, atMs: nowMs, loopColours,
+        held, ghosts: knockRef.current.ghosts, handGuardReady, atMs: nowMs, loopColours, sounding,
       };
       latestFrameRef.current = rf;
       lastFrameAtRef.current = performance.now();

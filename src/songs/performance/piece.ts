@@ -144,6 +144,25 @@ export function pieceEndingLeadSec(performance: PerformanceSettings, beatsPerPas
   return endingLeadSec(performance, (beatsPerPass * 60) / slowest);
 }
 
+/** What a piece's speeds come from: the player's own, the scenes', and the hat. */
+export interface PieceSpeedSource {
+  bpm: number;
+  scenes: readonly Scene[];
+  cap: { enabled: boolean; xRole: string; yRole: string };
+  controlRanges: { tempo: { min: number; max: number } };
+}
+
+/**
+ * Every speed the piece can be at, for pieceEndingLeadSec: the player's own, every scene's,
+ * and, with the hat on Speed, its Slowest (it moves the speed around the scene's, down to
+ * there). A glide only ever passes between two of these.
+ */
+export function pieceSpeeds(c: PieceSpeedSource): number[] {
+  const hatOnSpeed = c.cap.enabled && (c.cap.xRole === 'tempo' || c.cap.yRole === 'tempo');
+  const range = c.controlRanges.tempo;
+  return [c.bpm, ...c.scenes.map((s) => s.settings.bpm), ...(hatOnSpeed ? [Math.min(range.min, range.max)] : [])];
+}
+
 /** The plan's four sections, in proportion to the piece: 0:00, 1:30, 3:30, 6:00 of 7:00. */
 const PLAN: { name: string; at: number; band: BandLevel; fill: number; evolve: number; loops: 1 | 2 | 3 }[] = [
   { name: 'Arrival', at: 0, band: 'gentle', fill: 0, evolve: 0, loops: 1 },
@@ -177,14 +196,16 @@ export function planScenes(
 /**
  * A scene with a change made to it. An emptied time makes it "by hand" only. Marking it
  * to play alone takes its loops out; giving it a loop again, or unticking it, ends that.
+ * A glide of 0 (or none) is "at once", stored as no glide, as before glides existed.
  */
 export function editedScene(scene: Scene, patch: Partial<Scene>): Scene {
-  const { at, alone, ...rest } = { ...scene, ...patch };
+  const { at, alone, glideSec, ...rest } = { ...scene, ...patch };
   const isAlone = patch.alone === true || (alone === true && patch.alone !== false && rest.loops.length === 0);
   return {
     ...rest,
     ...(typeof at === 'number' ? { at } : {}),
     ...(isAlone ? { alone: true, loops: [] } : {}),
+    ...(typeof glideSec === 'number' && glideSec > 0 ? { glideSec } : {}),
   };
 }
 

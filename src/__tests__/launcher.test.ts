@@ -57,6 +57,18 @@ describe('scenes', () => {
     expect('alone' in sanitizeScenes([{ ...old, alone: false }], settings)[0]).toBe(false);
   });
 
+  it('a scene that reaches its speed gradually keeps its glide time; one out of range, or 0, is at once', () => {
+    const old = { id: 'o', name: 'Open', loops: [], settings, at: 210 };
+    expect(sanitizeScenes([old], settings)).toEqual([old]);
+    expect(sanitizeScenes([{ ...old, glideSec: 8 }], settings)[0]).toEqual({ ...old, glideSec: 8 });
+    expect(sanitizeScenes([{ ...old, glideSec: 2 }], settings)[0].glideSec).toBe(2);
+    expect(sanitizeScenes([{ ...old, glideSec: 120 }], settings)[0].glideSec).toBe(120);
+    expect(sanitizeScenes([{ ...old, glideSec: 7.6 }], settings)[0].glideSec).toBe(8);
+    for (const bad of [0, 1, 121, -4, 'slow', NaN, null]) {
+      expect('glideSec' in sanitizeScenes([{ ...old, glideSec: bad }], settings)[0]).toBe(false);
+    }
+  });
+
   it('names loops by number unless the player named them', () => {
     const names = sanitizeLoopNames(['Bass line', 42, '   ']);
     expect(names).toHaveLength(LAUNCH_SLOTS);
@@ -236,10 +248,13 @@ describe('engine — the ending', () => {
     expect(e.drainFiredNotes().some((f) => f.audioTime === 12)).toBe(false); // nothing played on the beat it ended
   });
 
-  it('once the ending has begun, a tempo change from a scene or the iPad is ignored', () => {
+  it('once the ending is asked for, a tempo change from a scene, its glide, the hat or the iPad is ignored', () => {
     const { e, p } = endEngine();
+    e.setBpm(90);
     e.finish(8, vi.fn(), 'fade');
-    e.setBpm(90);                                // before the boundary: still allowed
+    // Before the boundary too: the ending was timed at this speed, and slowed while it waited
+    // for the pass it no longer fitted the time left (2026-10-28).
+    e.setBpm(45);
     expect(e.getBpm()).toBe(90);
     p.fireStep(0, 0, 1, null);                   // the ending begins
     e.setBpm(120);

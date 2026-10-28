@@ -82,6 +82,19 @@ function hatVideo(): string {
   });
 }
 
+/**
+ * For the hat on Speed: the red disc in the middle of the picture for 3 s, then at its
+ * right-hand edge for 3 s, and round again.
+ */
+function middleThenEdgeVideo(): string {
+  const W = 160; const H = 120; const fps = 15; const half = fps * 3;
+  const red: RGB = [200, 30, 40];
+  return y4m('middle-edge.y4m', W, H, fps, 2 * half, (f, x, y) => {
+    const cx = f < half ? 0.5 : 0.97;
+    return Math.hypot(x / W - cx, (y / H - 0.4) * (H / W)) < 0.08 ? red : WALL;
+  });
+}
+
 const video = capVideo();
 const fakeCamera = (file: string): string[] =>
   ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream', `--use-file-for-fake-video-capture=${file}`];
@@ -156,6 +169,53 @@ test('the cap holds still while a counter is put down, then carries on', async (
   // …and once the board has been quiet for a second, it follows the player again.
   await expect(hud).toContainText('cap found', { timeout: 5_000 });
   expect(pageErrors(page)).toEqual([]);
+});
+
+test('the hat on Speed moves the speed around the player’s own: in the middle of the range it is 90, moved fully one way it is near Fastest (240)', async ({ playwright }, testInfo) => {
+  // A video of its own, so a browser of its own (a browser's fake camera is chosen when it
+  // starts). The video, in a folder of its own, is removed afterwards.
+  const file = middleThenEdgeVideo();
+  const browser = await playwright.chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required', ...fakeCamera(file)] });
+  try {
+    const context = await browser.newContext({ baseURL: testInfo.project.use.baseURL, viewport: { width: 1440, height: 900 }, permissions: ['camera'] });
+    const page = await context.newPage();
+    await openLaptopBoard(page);
+    await pickColour(page, 'Red');
+    await place(page, [[3, 1]]);
+    await page.getByRole('button', { name: '▶ Play' }).first().click();
+    await page.getByRole('tab', { name: 'Cap' }).click();
+    await page.getByRole('switch', { name: 'Control with the red cap' }).click();
+    await page.getByRole('switch', { name: /Check it is on the head/ }).click();
+    await page.getByRole('switch', { name: 'Picture like a mirror' }).click();
+    // In 5 steps: the middle of the picture is the middle of the range, the edge its end.
+    await page.getByRole('radiogroup', { name: 'Moves' }).getByRole('radio', { name: 'In 5 steps' }).click();
+    // Fastest and Slowest are here, in the Cap tab, with the cap on Speed.
+    await expect(page.getByRole('spinbutton', { name: /^Fastest/ })).toHaveValue('240');
+    await expect(page.getByRole('spinbutton', { name: /^Slowest/ })).toHaveValue('60');
+    await expect(page.getByRole('status', { name: 'Red cap' })).toContainText('cap found', { timeout: 15_000 });
+    // The speed as shown, read in the page every 100 ms for 8 s: the video goes round more than once.
+    const seen = await page.evaluate(async () => {
+      const out: number[] = [];
+      const end = performance.now() + 8000;
+      while (performance.now() < end) {
+        const pill = [...document.querySelectorAll('span[aria-hidden="true"]')]
+          .map((el) => /· (\d+) BPM · step/.exec(el.textContent ?? '')).find((m) => m !== null);
+        if (pill) out.push(Number(pill[1]));
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      return out;
+    });
+    // A busy page reads less often than asked: enough to see both places twice.
+    expect(seen.length).toBeGreaterThan(15);
+    // In the middle: the player's own speed. Fully one way: near Fastest, never past it.
+    expect(seen.some((b) => Math.abs(b - 90) <= 2)).toBe(true);
+    expect(Math.max(...seen)).toBeGreaterThanOrEqual(230);
+    expect(Math.max(...seen)).toBeLessThanOrEqual(240);
+    expect(pageErrors(page)).toEqual([]);
+  } finally {
+    await browser.close();
+    rmSync(dirname(file), { recursive: true, force: true });
+  }
 });
 
 // ---- Learn the hat, all the way through ---------------------------------------------------

@@ -142,8 +142,12 @@ import {
   type ClockView,
 } from '../../songs/performance/clock';
 import {
-  decideClockTick, editedScene, nowNext, openingScene, pieceEndingLeadSec, planScenes, putLoopBack, sortScenes, takeLoopOut, withSceneAdded,
+  decideClockTick, editedScene, nowNext, openingScene, pieceEndingLeadSec, pieceSpeeds, planScenes, putLoopBack, sortScenes, takeLoopOut, withSceneAdded,
 } from '../../songs/performance/piece';
+import {
+  cellsSoundingAt, comesInLine, holdsBack, waitingColours, waitingLine, withColourEntry,
+} from '../../songs/performance/colourEntries';
+import { glideBpmAt, glideDone, startGlide, GLIDE_STEP_MS, type SpeedGlide } from '../../songs/performance/speedGlide';
 import { DEFAULT_LOOP_COLOUR_OPTIONS, initialLoopColourState, stepLoopColours } from '../../songs/performance/loopColours';
 import { SessionLog, sessionFileName, type LogActor } from '../../songs/sessionLog';
 import { diskState, onDiskState, restoreFromFile, scheduleDiskSave } from '../../storage/diskSync';
@@ -279,9 +283,12 @@ const STOP_CONFIRM_MS = 4000;
  * after a reload, when the piece first started (Date.now()) and the scene that was on.
  */
 interface PieceStart { fromSec: number; startedAt?: number; scene?: number | null }
-/** How long before its end this piece's ending begins, at the slowest tempo it can be at. */
+/**
+ * How long before its end this piece's ending begins, at the slowest tempo it can be at: the
+ * player's own, any scene's, and the hat's Slowest when the hat is on Speed.
+ */
 const endingLeadOf = (c: BoardSequencerStored): number => pieceEndingLeadSec(
-  c.performance, c.cols * Math.max(1, c.numPages), [c.bpm, ...c.scenes.map((s) => s.settings.bpm)],
+  c.performance, c.cols * Math.max(1, c.numPages), pieceSpeeds(c),
 );
 /** Where Play / Make a piece is remembered. */
 const WORKSPACE_KEY = 'admi-board-workspace';
@@ -341,6 +348,22 @@ export default function BoardSequencerScreen() {
   const boardActivityRef = useRef<BoardActivity>({ lastChangeMs: null, handSinceMs: null });
   /** New loop in progress (state further down); the runtime reads it every frame to silence leftover counters. */
   const newLoopRef = useRef<NewLoopState | null>(null);
+  /**
+   * The performance clock: when it started (performance.now(); null = not running). Here, as
+   * the runtime reads it every frame: a colour that comes in later is silent until its time.
+   */
+  const clockStartRef = useRef<number | null>(null);
+  /**
+   * The speed a scene (or the start of the piece, or the player) set lately, maybe still
+   * gliding to it; null = the config's. What the hat on Speed moves around.
+   */
+  const speedGlideRef = useRef<SpeedGlide | null>(null);
+  /** The glide's last step has been sent (or there is nothing to step). */
+  const glideLandedRef = useRef(true);
+  /** The speed in force without the hat, now: a glide's, or the config's (the scene's in a run, else the player's own). */
+  const tempoCentreRef = useRef<() => number>(() => DEFAULT_BOARD_SEQUENCER_CONFIG.bpm);
+  /** The colours waiting for their time at the last clock tick (null = not looked yet this run). */
+  const waitingIdsRef = useRef<Set<string> | null>(null);
   // The board camera actually in use: the cap must never take it.
   const [camInfo, setCamInfo] = useState<CameraTrackInfo | null>(null);
   const [capMouse, setCapMouse] = useState(false);
@@ -364,6 +387,10 @@ export default function BoardSequencerScreen() {
   configRef.current = trackedCornersRef.current
     ? { ...config, corners: trackedCornersRef.current }
     : config;
+  tempoCentreRef.current = () => {
+    const g = speedGlideRef.current;
+    return g ? glideBpmAt(g, performance.now()) : configRef.current.bpm;
+  };
 
   // One place writes the config to storage. Doing it inside the state updaters made them
   // impure — React may run an updater twice, or discard its result, and the write would
@@ -464,7 +491,32 @@ export default function BoardSequencerScreen() {
   const {
     videoRef, cameraRef, homographyRef, modeRef, engineRef, runningRef, loopBankRef, activeCellsRef,
     dismiss, letGoGhosts, knockRef, latestFrameRef, lastFrameAtRef,
-  } = useBoardRuntime({ cameraDeviceId: config.cameraDeviceId, cameraRetry, calibrated, laptop, configRef, callbacksRef, capValuesRef, boardActivityRef, newLoopRef });
+  } = useBoardRuntime({
+    cameraDeviceId: config.cameraDeviceId, cameraRetry, calibrated, laptop, configRef, callbacksRef, capValuesRef, boardActivityRef, newLoopRef,
+    pieceClockRef: clockStartRef,
+  });
+  /** Something else sets the speed now: a Speed counter on the board, or the hat on Speed. */
+  const speedOwnedElsewhere = (): boolean =>
+    capValuesRef.current.tempo !== undefined || latestFrameRef.current?.controls.values.tempo !== undefined;
+  /**
+   * A scene's speed (or the opening's): at once, or gradually over `glideSec` while the board
+   * plays, from the speed in force now. The hat on Speed moves around the gliding speed; a
+   * Speed counter on the board still wins. So the engine is set here only when neither does.
+   */
+  const setSceneSpeed = (to: number, glideSec: number | undefined): void => {
+    const now = performance.now();
+    const engine = engineRef.current;
+    const owned = speedOwnedElsewhere();
+    const from = owned || !engine ? tempoCentreRef.current() : engine.getBpm();
+    speedGlideRef.current = startGlide(from, to, runningRef.current ? glideSec : 0, now);
+    glideLandedRef.current = false;
+    if (!owned) engine?.setBpm(glideBpmAt(speedGlideRef.current, now));
+  };
+  /** The player's own speed, set on the laptop or the iPad: it holds from now, and a glide under way ends. */
+  const holdSpeed = (bpm: number): void => {
+    speedGlideRef.current = startGlide(bpm, bpm, 0, performance.now());
+    glideLandedRef.current = true;
+  };
   const cap = useCapTracker({
     settings: config.cap,
     ranges: config.controlRanges,
@@ -478,6 +530,7 @@ export default function BoardSequencerScreen() {
     },
     boardCameraId: (!laptop && camInfo?.deviceId) || config.cameraDeviceId,
     activityRef: boardActivityRef,
+    tempoCentreRef,
     onSideLearnt: (sideArc) => {
       if (sideArc) update({ cap: { ...configRef.current.cap, sideArc } });
       announce(sideArc ? 'Your side to side is learnt.' : 'The cap didn\u2019t move far enough sideways to learn it. Try again, a little further each way.');
@@ -583,6 +636,10 @@ export default function BoardSequencerScreen() {
   const [latestFrame, setLatestFrame] = useState<RuntimeFrame | null>(null);
   const shownKeysRef = useRef({ frame: '', controls: '', active: '', stats: '' });
   const [liveBpm, setLiveBpm] = useState(0);
+  /** A scene gliding to its speed: the speed it is on its way to, for the status line. */
+  const [glideTo, setGlideTo] = useState<number | null>(null);
+  /** The colours waiting for their time in the piece now, earliest first (from the clock's tick). */
+  const [waitingNow, setWaitingNow] = useState<string[]>([]);
   const [beatOn, setBeatOn] = useState(false);
   const [isVarLap, setIsVarLap] = useState(false);
   const [pingDir, setPingDir] = useState(0);
@@ -744,9 +801,8 @@ export default function BoardSequencerScreen() {
   const restoreInputRef = useRef<HTMLInputElement | null>(null);
   // The iPad strips the player has moved since the last scene: theirs until then.
   const stripsTouchedRef = useRef<Set<PlayerStrip>>(new Set());
-  // The performance clock: when it started (null = not running), what it shows, and what
-  // it has already done (cues given, scenes brought in, the ending triggered).
-  const clockStartRef = useRef<number | null>(null);
+  // The performance clock: what it shows, and what it has already done (cues given, scenes
+  // brought in, the ending triggered). When it started is clockStartRef, near the top.
   const [clock, setClock] = useState<ClockView | null>(null);
   const clockPrevRef = useRef<{ remaining: number; elapsed: number }>({ remaining: Infinity, elapsed: 0 });
   const endingRef = useRef(false);
@@ -1758,7 +1814,8 @@ export default function BoardSequencerScreen() {
       const ak = cellsKey(nextActive);
       if (ak !== shownKeysRef.current.active) { shownKeysRef.current.active = ak; setActive(nextActive); }
       if (runningRef.current) {
-        sessionLogRef.current.board(frame.patternCells);
+        // What the engine hears: a colour still waiting for its time is not on the log's board.
+        sessionLogRef.current.board(rf.sounding);
         const counts = sessionLogRef.current.counts();
         setLogCounts((prev) => (prev.notes === counts.notes && prev.events === counts.events ? prev : counts));
       }
@@ -1768,6 +1825,10 @@ export default function BoardSequencerScreen() {
       if (sk !== shownKeysRef.current.stats) { shownKeysRef.current.stats = sk; setStats({ byColour: frame.byColour, settled: frame.activeMap.size }); }
       if (engine) {
         setLiveBpm(engine.getBpm());
+        // A scene gliding to its speed, heard as it is (nothing else setting the speed): where it is going.
+        const g = speedGlideRef.current;
+        const to = g && !glideLandedRef.current && !glideDone(g, performance.now()) && !speedOwnedElsewhere() ? Math.round(g.to) : null;
+        setGlideTo((prev) => (prev === to ? prev : to));
         setIsVarLap(cfg.numPages <= 1 ? engine.isVariationLap() : false);
         setPingDir(cfg.pingPong ? engine.getPlayheadDirection() : 0);
         // A beat dot that flips with the beat: every audio event has a visual cue.
@@ -2092,6 +2153,13 @@ export default function BoardSequencerScreen() {
     endingRef.current = false;
     setEnding(false);
     forgetPieceRunning();
+    // Stop ends a glide (the player's own speed comes back with their settings), and no
+    // colour waits any more: ▶ Play plays every colour.
+    speedGlideRef.current = null;
+    glideLandedRef.current = true;
+    setGlideTo(null);
+    waitingIdsRef.current = null;
+    setWaitingNow([]);
     // The piece is over (or stopped): the player's own settings come back, and no scene is
     // on now, whatever put one there (R2-T2-01).
     const home = homeSettingsRef.current;
@@ -2272,6 +2340,12 @@ export default function BoardSequencerScreen() {
       return;
     }
     startSecRef.current = Tone.now();
+    // The speed starts where the engine is built: the opening scene's, at once (there is
+    // nothing to glide from). Which colours wait is looked at afresh on the first tick, so
+    // one already in at the start (Rehearse from here) is never said to come in.
+    speedGlideRef.current = startGlide(cfg.bpm, cfg.bpm, 0, performance.now());
+    glideLandedRef.current = true;
+    waitingIdsRef.current = null;
     runningRef.current = true;
     // Carrying on keeps the piece's first start, so its end never moves: started again once
     // the sound was ready, every Carry on ran the piece over by the time that took.
@@ -2663,7 +2737,9 @@ export default function BoardSequencerScreen() {
       return t;
     });
     setConfig((prev) => {
-      const next = { ...prev, channels: prev.channels.filter((c) => c.id !== id) };
+      const next = {
+        ...prev, channels: prev.channels.filter((c) => c.id !== id), colourComesInAt: withColourEntry(prev.colourComesInAt, id, null),
+      };
       return next;
     });
   }, []);
@@ -2672,7 +2748,7 @@ export default function BoardSequencerScreen() {
     setPendingColour(null);
     setSquarePicker(null);
     setConfig((prev) => {
-      const next = { ...prev, channels: [] };
+      const next = { ...prev, channels: [], colourComesInAt: {} };
       return next;
     });
   }, []);
@@ -2760,7 +2836,7 @@ export default function BoardSequencerScreen() {
       <LabeledSlider
         label="Tempo" min={50} max={300} value={config.bpm} display={`${config.bpm} BPM`}
         reason={tempoReason}
-        onChange={(v) => { update({ bpm: v }); engineRef.current?.setBpm(v); /* live, not only on the next start */ }}
+        onChange={(v) => { update({ bpm: v }); holdSpeed(v); engineRef.current?.setBpm(v); /* live, not only on the next start */ }}
       />
       <LabeledSlider
         label="Swing" min={0} max={60} value={Math.round(config.swing * 100)} display={`${Math.round(config.swing * 100)}%`}
@@ -3220,14 +3296,35 @@ export default function BoardSequencerScreen() {
     const kept = [...stripsTouchedRef.current].filter(() => c.sceneRespectsPlayer);
     stripsTouchedRef.current = new Set();
     update({ ...apply, currentScene: i });
-    if (apply.bpm !== undefined) engineRef.current?.setBpm(apply.bpm);
+    if (apply.bpm !== undefined) setSceneSpeed(apply.bpm, scene.glideSec);
+    const glide = apply.bpm !== undefined ? speedGlideRef.current : null;
+    const glideWords = glide && glide.durMs > 0 && Math.round(glide.from) !== Math.round(glide.to)
+      ? ` ${glide.to > glide.from ? 'Speeding up' : 'Slowing down'} to ${Math.round(glide.to)} BPM over ${Math.round(glide.durMs / 1000)} seconds.`
+      : '';
     if (kept.length > 0) sessionLogRef.current.action(logActorRef.current, `scene ${scene.name} left the player's ${kept.join(', ')}`);
     wantedRef.current = new Set(scene.loops.filter((s) => (c.loopSlots[s] ?? null) !== null));
     pushLaunch();
     setBoardNotice(`Scene: ${scene.name}`);
     sessionLogRef.current.action(logActorRef.current, `scene ${scene.name}`);
-    announce(`Scene ${scene.name}: ${scene.loops.length} ${scene.loops.length === 1 ? 'loop' : 'loops'}, from the next pass.`);
+    announce(`Scene ${scene.name}: ${scene.loops.length} ${scene.loops.length === 1 ? 'loop' : 'loops'}, from the next pass.${glideWords}`);
   };
+  // A scene gliding to its speed: a step every GLIDE_STEP_MS, each through setBpm, which keeps
+  // the beat continuous. Never while a Speed counter or the hat sets the speed: the hat moves
+  // around the gliding speed itself (tempoCentreRef), and a counter wins as it always has.
+  const glideTickRef = useRef<() => void>(() => {});
+  glideTickRef.current = () => {
+    const g = speedGlideRef.current;
+    const engine = engineRef.current;
+    if (!g || glideLandedRef.current || !engine) return;
+    const now = performance.now();
+    if (!speedOwnedElsewhere()) engine.setBpm(glideBpmAt(g, now));
+    if (glideDone(g, now)) glideLandedRef.current = true;
+  };
+  useEffect(() => {
+    if (!running) return undefined;
+    const id = window.setInterval(() => glideTickRef.current(), GLIDE_STEP_MS);
+    return () => window.clearInterval(id);
+  }, [running]);
   const nextScene = (): void => {
     const c = configRef.current;
     const i = nextSceneIndex(c.currentScene, c.scenes.length);
@@ -3265,10 +3362,19 @@ export default function BoardSequencerScreen() {
     const settings = opening ? { ...own, ...opening.settings } : own;
     stripsTouchedRef.current = new Set();
     update({ ...settings, currentScene: openingIndex });
-    engineRef.current?.setBpm(settings.bpm);
+    setSceneSpeed(settings.bpm, 0);
     wantedRef.current = new Set((opening?.loops ?? []).filter((sl) => (c.loopSlots[sl] ?? null) !== null));
     pushLaunch();
     clockStartRef.current = performance.now();
+    // A colour that waits for its time goes silent now, not on the next frame: what it still
+    // had ringing or queued from the warm-up is cut too, so it is never heard in the piece early.
+    const waiting = waitingColours(c.channels, c.colourComesInAt, 0).map((ch) => ch.id);
+    const playing = engineRef.current;
+    if (playing && waiting.length > 0) {
+      playing.setActiveCells(cellsSoundingAt(activeCellsRef.current, c.channels, c.colourComesInAt, 0));
+      playing.silenceColours(waiting);
+    }
+    waitingIdsRef.current = null;
     rememberPieceRunning(Date.now(), c.performance.lengthSec, view === 'bigBoard', openingIndex ?? undefined);
     // The opening scene is in: the clock must not bring it in again.
     clockPrevRef.current = { remaining: Infinity, elapsed: opening ? 0 : CLOCK_NOT_STARTED };
@@ -3371,6 +3477,23 @@ export default function BoardSequencerScreen() {
       announce(cueText(cue));
     }
     if (d.scene !== null) goScene(d.scene);
+    // A colour comes in: on the board and said, as otherwise it is only heard. (The runtime
+    // has already let it through, on the first frame at or after its time.)
+    const waitingChs = waitingColours(c.channels, c.colourComesInAt, view.elapsedSec);
+    const waitingIds = waitingChs.map((ch) => ch.id);
+    const waitedBefore = waitingIdsRef.current;
+    const waitingSet = new Set(waitingIds);
+    waitingIdsRef.current = waitingSet;
+    if (waitedBefore !== null) {
+      const came = c.channels.filter((ch) => holdsBack(ch) && waitedBefore.has(ch.id) && !waitingSet.has(ch.id));
+      if (came.length > 0) {
+        const line = comesInLine(came.map(describeChannel));
+        setBoardNotice(line);
+        announce(`${line}.`);
+        sessionLogRef.current.action('laptop', line);
+      }
+    }
+    setWaitingNow((prev) => (prev.join('|') === waitingIds.join('|') ? prev : waitingIds));
     if (d.end) {
       autoEndedRef.current = true;
       endPiece();
@@ -3501,6 +3624,7 @@ export default function BoardSequencerScreen() {
       if (msg.name === 'tempo') {
         const bpm = tempoFromValue(msg.value);
         update({ bpm });
+        holdSpeed(bpm);
         engineRef.current?.setBpm(bpm);
         // The cap would put its own value straight back: it takes the iPad's instead.
         cap.handOver('tempo', bpm);
@@ -4202,6 +4326,10 @@ export default function BoardSequencerScreen() {
     items.push(...pieceCheckItems({
       scenes: c.scenes, loopSlots: c.loopSlots, loopNames: c.loopNames, performance: c.performance, passSec: passSecNow,
       playerName: activePlayer?.name ?? null, onTakeOut: takeEmptyLoopOut,
+      colourTimes: c.channels.filter(holdsBack).flatMap((ch) => {
+        const at = c.colourComesInAt[ch.id];
+        return typeof at === 'number' ? [{ name: describeChannel(ch), at }] : [];
+      }),
     }));
     items.push(...ipadCheckItems({
       enabled: remoteEnabled, connected: remoteLink.others > 0, safeLayout: isSafeShowLayout(c), pageOutOfDate: ipadOutOfDate,
@@ -4263,6 +4391,10 @@ export default function BoardSequencerScreen() {
       worldOptions={worldOptions}
       readyItems={pieceStep === 'ending' ? readyItems() : []}
       playerName={activePlayer?.name ?? null}
+      colours={config.channels.filter(holdsBack).map((ch) => ({
+        id: ch.id, name: describeChannel(ch), swatch: ch.swatch, job: ROLE_LABELS[ch.role], at: config.colourComesInAt[ch.id] ?? null,
+      }))}
+      onColourEntry={(id, at) => update({ colourComesInAt: withColourEntry(configRef.current.colourComesInAt, id, at) })}
       onNewLoop={beginNewLoop}
       newLoop={newLoop ? (
         <NewLoopPanel
@@ -4754,7 +4886,8 @@ export default function BoardSequencerScreen() {
     const c = config.laptopBoard.find((x) => x.row === row && x.col === col);
     const ch = c ? channelById.get(c.colour) : undefined;
     if (!ch) return 'empty';
-    return `${describeChannel(ch)}, ${ROLE_LABELS[ch.role]}${silentSquares.has(`${row},${col}`) ? ', past its loop: doesn’t play' : ''}`;
+    const waits = running && waitingNow.includes(ch.id) ? `, waiting: comes in at ${formatClock(config.colourComesInAt[ch.id] ?? 0)}` : '';
+    return `${describeChannel(ch)}, ${ROLE_LABELS[ch.role]}${silentSquares.has(`${row},${col}`) ? ', past its loop: doesn’t play' : ''}${waits}`;
   };
   const laptopBar = (
     <LaptopBoardBar
@@ -4836,6 +4969,7 @@ export default function BoardSequencerScreen() {
       onCellTap={laptop && view === 'play' ? tapLaptopCell : undefined}
       describeCell={laptop ? describeLaptopCell : undefined}
       silent={silentSquares}
+      waiting={running && waitingNow.length > 0 ? new Set(waitingNow) : undefined}
     />
   );
 
@@ -4857,6 +4991,7 @@ export default function BoardSequencerScreen() {
       boardCameraId={(!laptop && camInfo?.deviceId) || config.cameraDeviceId}
       colourAt={cap.colourAt}
       ranges={config.controlRanges}
+      onRange={(role, range) => update({ controlRanges: { ...configRef.current.controlRanges, [role]: range } })}
       announce={announce}
     />
   );
@@ -4901,6 +5036,9 @@ export default function BoardSequencerScreen() {
     next: nn.next ? { name: nn.next.scene.name, inSec: nn.next.inSec } : null,
     loops: performLoops.filter((l) => l.state === 'playing' || l.state === 'starting').map((l) => (l.name.length > 0 ? l.name : `Loop ${l.slot + 1}`)),
     ending,
+    waiting: running ? waitingLine(
+      waitingNow.flatMap((id) => { const ch = channelById.get(id); return ch ? [ch] : []; }), config.colourComesInAt,
+    ) : null,
     onStartPiece: startThePiece,
     onNext: nextScene,
     onEnd: endPiece,
@@ -5620,6 +5758,7 @@ export default function BoardSequencerScreen() {
                 stopArmed={stopArmed}
                 onToggleMute={toggleMuted}
                 bpm={liveBpm}
+                bpmTo={glideTo}
                 step={playheadCol}
                 cols={config.cols}
                 variationLap={config.variationEnabled && config.numPages <= 1 ? isVarLap : null}

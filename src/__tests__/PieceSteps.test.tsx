@@ -26,6 +26,11 @@ function props(over: Partial<PieceStepsProps> = {}): PieceStepsProps {
     loopFadePasses: 1, performance: { ...DEFAULT_PERFORMANCE }, respectPlayer: true, canSaveBoard: false, loopsFull: false,
     deletedSceneName: null, diskLine: '', restoreError: null, worldOptions: [{ value: 'warm', label: 'Warm' }],
     readyItems: [], rows: 8, cols: 8, swatchFor: () => '#000', newLoop: null, playerName: 'Tim',
+    colours: [
+      { id: 'c1', name: 'Red', swatch: '#e03030', job: 'Melody', at: null },
+      { id: 'c2', name: 'Blue', swatch: '#3050e0', job: 'Bass', at: 150 },
+    ],
+    onColourEntry: vi.fn(),
     onNewLoop: vi.fn(), onToggleLoop: vi.fn(), onSaveBoardToLoop: vi.fn(), onDrawLoop: vi.fn(), onClearLoop: vi.fn(),
     onRenameLoop: vi.fn(), onLoopFade: vi.fn(), onGoScene: vi.fn(), onRehearseFrom: vi.fn(), onSaveSceneFromNow: vi.fn(),
     onUpdateSceneFromNow: vi.fn(), onEditScene: vi.fn(), onDeleteScene: vi.fn(), onUndoDelete: vi.fn(), onMakePlan: vi.fn(),
@@ -384,5 +389,84 @@ describe('focus never drops to the page (T1-04, T4-09)', () => {
       await frames();
       expect(document.activeElement).toBe(transport);
     } finally { transport.remove(); }
+  });
+});
+
+describe('Scenes: when each colour comes in', () => {
+  const field = (name: string): HTMLInputElement | undefined => input(new RegExp(`^When ${name} comes in, in the piece`));
+  const card = (): HTMLElement | null => host.querySelector('[aria-labelledby="piece-colours"]');
+
+  it('a card lists each sound colour with its time (blank = from the start), and says the times count only while the piece plays', () => {
+    render(props());
+    expect(card()?.textContent).toContain('When each colour comes in');
+    expect(card()?.textContent).toContain('Red');
+    expect(card()?.textContent).toContain('Melody');
+    expect(field('Red')?.value).toBe('');
+    expect(field('Red')?.placeholder).toBe('from the start');
+    expect(field('Blue')?.value).toBe('2:30');
+    expect(card()?.textContent).toMatch(/only while the piece plays/);
+    // Without scenes too: the colours are for the whole piece.
+    render(props({ scenes: [] }));
+    expect(field('Red')).toBeDefined();
+  });
+
+  it('a time typed as a scene’s is saved; emptied, the colour plays from the start', () => {
+    const p = props();
+    render(p);
+    typeAndLeave(field('Red')!, '1.30');
+    expect(p.onColourEntry).toHaveBeenLastCalledWith('c1', 90);
+    expect(field('Red')?.value).toBe('1:30');
+    typeAndLeave(field('Blue')!, '');
+    expect(p.onColourEntry).toHaveBeenLastCalledWith('c2', null);
+  });
+
+  it('a time it cannot read is refused beside the field, and not saved; one after the end is said', () => {
+    const p = props({ lengthSec: 300 });
+    render(p);
+    typeAndLeave(field('Red')!, 'soon');
+    expect(p.onColourEntry).not.toHaveBeenCalled();
+    expect(text()).toContain('Type a time as minutes:seconds, like 1:30.');
+    typeAndLeave(field('Red')!, '6:00');
+    expect(p.onColourEntry).toHaveBeenLastCalledWith('c1', 360);
+    expect(text()).toContain('After the end of the piece (5:00)');
+  });
+
+  it('no card when no colour plays notes', () => {
+    render(props({ colours: [] }));
+    expect(card()).toBeNull();
+  });
+});
+
+describe('Scenes: reach this speed at once, or gradually', () => {
+  /** A slider, by the words of its label (LabeledSlider's label points at it). */
+  const slider = (name: RegExp): HTMLInputElement | undefined => {
+    const l = [...host.querySelectorAll('label')].find((x) => name.test(x.textContent ?? ''));
+    return l?.htmlFor ? (document.getElementById(l.htmlFor) as HTMLInputElement | null) ?? undefined : undefined;
+  };
+  const radio = (name: string): HTMLButtonElement | undefined =>
+    [...host.querySelectorAll<HTMLButtonElement>('[role="radiogroup"][aria-label="Reach this speed"] [role="radio"]')].find((b) => b.textContent === name);
+
+  it('at once by default; Gradually asks for a glide, shown in seconds with a slider', () => {
+    const p = props();
+    render(p);
+    act(() => button(/^1:30 · Build/)?.click());
+    expect(radio('At once')?.getAttribute('aria-checked')).toBe('true');
+    expect(slider(/^Over/)).toBeUndefined();
+    act(() => radio('Gradually')?.click());
+    expect(p.onEditScene).toHaveBeenLastCalledWith(1, { glideSec: 8 });
+  });
+
+  it('a gliding scene shows its time, says so in its line, and goes back to at once', () => {
+    const p = props({ scenes: [scene('Arrival', 0), scene('Build', 90, [0], { glideSec: 12 }), scene('Open', 210)] });
+    render(p);
+    expect(button(/^1:30 · Build/)?.textContent).toContain('90 BPM, reached over 12 s');
+    act(() => button(/^1:30 · Build/)?.click());
+    expect(radio('Gradually')?.getAttribute('aria-checked')).toBe('true');
+    const over = slider(/^Over/);
+    expect(over?.min).toBe('2');
+    expect(over?.max).toBe('120');
+    expect(text()).toContain('12 seconds');
+    act(() => radio('At once')?.click());
+    expect(p.onEditScene).toHaveBeenLastCalledWith(1, { glideSec: 0 });
   });
 });

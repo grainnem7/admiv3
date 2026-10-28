@@ -130,6 +130,15 @@ describe('the piece — changing a scene', () => {
     expect('alone' in editedScene(alone, { alone: false })).toBe(false);
     expect(editedScene(alone, { name: 'Solo', at: 30 })).toMatchObject({ alone: true, loops: [], name: 'Solo', at: 30 });
   });
+
+  it('"Reach this speed": gradually keeps the time; at once (0 or none) leaves the scene as before', () => {
+    const gliding = editedScene(scene('a', 90), { glideSec: 8 });
+    expect(gliding.glideSec).toBe(8);
+    expect(editedScene(gliding, { name: 'Build' }).glideSec).toBe(8);
+    const atOnce = editedScene(gliding, { glideSec: 0 });
+    expect(atOnce).toEqual(scene('a', 90));
+    expect('glideSec' in editedScene(gliding, { glideSec: undefined })).toBe(false);
+  });
 });
 
 describe('the piece — taking an empty loop out of the scenes', () => {
@@ -225,5 +234,27 @@ describe('the piece — how long before its end the ending begins, for a reload 
     expect(pieceEndingLeadSec(perf, 8, [60])).toBeGreaterThan(pieceEndingLeadSec(perf, 8, [90]));
     // A tempo the engine would never play (below 20 BPM) counts as 20.
     expect(pieceEndingLeadSec(perf, 8, [5])).toBeCloseTo(pieceEndingLeadSec(perf, 8, [20]), 6);
+  });
+});
+
+describe('the piece — the ending fits with the hat on Speed', () => {
+  const perf = { ...DEFAULT_PERFORMANCE, style: 'fade' as const, fadePasses: 2 };
+  const cap = { enabled: true, xRole: 'tempo', yRole: 'volume' };
+  const base = { bpm: 90, scenes: [scene('a', 0)], cap, controlRanges: { tempo: { min: 40, max: 240 } } };
+
+  it('the speeds the piece can be at include the hat’s Slowest when the hat is on Speed', async () => {
+    const { pieceSpeeds } = await import('../songs/performance/piece');
+    expect(pieceSpeeds(base)).toEqual([90, 96, 40]);
+    expect(pieceSpeeds({ ...base, cap: { ...cap, xRole: 'volume', yRole: 'tempo' } })).toEqual([90, 96, 40]);
+    expect(pieceSpeeds({ ...base, cap: { ...cap, xRole: 'volume', yRole: 'off' } })).toEqual([90, 96]);
+    expect(pieceSpeeds({ ...base, cap: { ...cap, enabled: false } })).toEqual([90, 96]);
+    // Typed the wrong way round, the lower of the two is the slowest.
+    expect(pieceSpeeds({ ...base, controlRanges: { tempo: { min: 200, max: 50 } } })).toEqual([90, 96, 50]);
+  });
+
+  it('so the ending is timed for the hat at its slowest: a slowed piece still ends inside its length', async () => {
+    const { pieceEndingLeadSec, pieceSpeeds } = await import('../songs/performance/piece');
+    expect(pieceEndingLeadSec(perf, 8, pieceSpeeds(base))).toBeCloseTo(pieceEndingLeadSec(perf, 8, [40]), 6);
+    expect(pieceEndingLeadSec(perf, 8, pieceSpeeds(base))).toBeGreaterThan(pieceEndingLeadSec(perf, 8, [90, 96]));
   });
 });

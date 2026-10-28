@@ -7,11 +7,13 @@ import { Switch } from '../ui/Switch';
 import type { BandLevel } from '../../../../songs/band/band';
 import type { SoundWorldChoice } from '../../../../audio/worlds/soundWorlds';
 import {
-  describeEnding, endingTooLong, formatClock, parseClock, pieceLengthProblem, plainNumberProblem,
+  describeEnding, endingTooLong, formatClock, MAX_PIECE_SEC, parseClock, pieceLengthProblem, plainNumberProblem,
   type ClockView, type EndingMode, type EndingStyle, type PerformanceSettings,
 } from '../../../../songs/performance/clock';
 import { MAX_SCENES, type LoopSlotState, type Scene } from '../../../../songs/performance/launcher';
 import { sceneTimeProblem } from '../../../../songs/performance/piece';
+import { colourEntryProblem } from '../../../../songs/performance/colourEntries';
+import { GLIDE_DEFAULT_SEC, GLIDE_MAX_SEC, GLIDE_MIN_SEC } from '../../../../songs/performance/speedGlide';
 import { BAND_WORDS, listNames, playerWords } from '../pieceCheck';
 import { ReadyList, type ReadyItem } from './ReadyCheck';
 
@@ -26,6 +28,16 @@ export interface PieceLoop {
 }
 
 export type PieceStep = 'loops' | 'scenes' | 'ending';
+
+/** A colour that plays notes, and when it comes in during the piece (null = from the start). */
+export interface PieceColourTime {
+  id: string;
+  name: string;
+  swatch: string;
+  /** Its job, in words ("Melody"). */
+  job: string;
+  at: number | null;
+}
 
 export interface PieceStepsProps {
   step: PieceStep;
@@ -58,6 +70,10 @@ export interface PieceStepsProps {
   swatchFor(colour: string): string;
   /** New loop: composing from silence. Shown in place of the list while it is on. */
   newLoop: ReactNode;
+  /** The colours that play notes, each with when it comes in (Scenes: When each colour comes in). */
+  colours: PieceColourTime[];
+  /** A colour's time set, or cleared (null = from the start). */
+  onColourEntry(id: string, at: number | null): void;
   onNewLoop(): void;
   onToggleLoop(slot: number): void;
   onSaveBoardToLoop(slot: number): void;
@@ -425,8 +441,64 @@ function ScenesStep(p: PieceStepsProps): JSX.Element {
           />
         </>
       )}
+      {p.colours.length > 0 && <ColourTimes colours={p.colours} lengthSec={p.lengthSec} onChange={p.onColourEntry} />}
       <StepFooter back={{ label: 'Loops', onClick: () => p.onStep('loops') }} next={{ label: 'Next: Ending & check', onClick: () => p.onStep('ending'), primary: true }} />
     </section>
+  );
+}
+
+/**
+ * When each colour comes in: a colour's counters stay silent until its time in the piece,
+ * then play. All the counters go on the board before the piece (Tim can't place them), so
+ * this is how the opening is the loops alone. For the whole piece, not per scene.
+ */
+function ColourTimes({ colours, lengthSec, onChange }: { colours: PieceColourTime[]; lengthSec: number; onChange(id: string, at: number | null): void }): JSX.Element {
+  return (
+    <div style={card} role="group" aria-labelledby="piece-colours">
+      <span id="piece-colours" style={{ fontWeight: 800 }}>When each colour comes in</span>
+      <p style={note}>
+        A colour&rsquo;s counters stay silent until its time, then play. The times count only while the
+        piece plays: ▶ Play on its own plays every colour. Blank: from the start. Loops always play.
+      </p>
+      {colours.map((c) => <ColourTimeRow key={c.id} colour={c} lengthSec={lengthSec} onChange={(at) => onChange(c.id, at)} />)}
+    </div>
+  );
+}
+
+function ColourTimeRow({ colour: c, lengthSec, onChange }: { colour: PieceColourTime; lengthSec: number; onChange(at: number | null): void }): JSX.Element {
+  const [text, setText] = useState(c.at === null ? '' : formatClock(c.at));
+  const parsed = text.trim() === '' ? null : parseClock(text);
+  const typo = text.trim() !== '' && parsed === null;
+  // Past the longest piece is refused too: it could never be kept.
+  const refused = typo || (parsed !== null && parsed > MAX_PIECE_SEC);
+  const problem = typo
+    ? (plainNumberProblem(text) ?? 'Type a time as minutes:seconds, like 1:30.')
+    : colourEntryProblem(parsed, lengthSec);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <span aria-hidden="true" style={{ width: 16, height: 16, borderRadius: '50%', background: c.swatch, border: '1px solid var(--bs-border-control)', flexShrink: 0 }} />
+        <span style={{ fontWeight: 700, minWidth: 64 }}>{c.name}</span>
+        <span style={{ fontSize: 12, color: 'var(--bs-fg2)', minWidth: 60 }}>{c.job}</span>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+          Comes in at
+          <input
+            type="text" value={text} placeholder="from the start" aria-invalid={problem !== null}
+            aria-label={`When ${c.name} comes in, in the piece (minutes:seconds; blank: from the start)`}
+            onChange={(e) => setText(e.target.value)}
+            onBlur={() => {
+              // Unreadable: refused beside the field, and not saved.
+              if (refused) return;
+              // Shown back as it was read ("1.30" → 1:30), so a misreading is seen.
+              setText(parsed === null ? '' : formatClock(parsed));
+              if (parsed !== c.at) onChange(parsed);
+            }}
+            style={{ width: 110, minHeight: 'var(--bs-target)' }}
+          />
+        </label>
+      </div>
+      {problem && <span role="alert" style={{ fontSize: 12, color: 'var(--bs-warn)' }}>{problem}</span>}
+    </div>
   );
 }
 
@@ -582,6 +654,8 @@ function SceneRow(r: SceneRowProps): JSX.Element {
   const loopNames = s.loops.map((slot) => r.loops.find((l) => l.slot === slot)).filter((l): l is PieceLoop => l !== undefined)
     .map((l) => (l.state === 'empty' ? `${loopName(l)} (empty)` : loopName(l)));
   const world = r.worldOptions.find((w) => w.value === s.settings.soundWorld)?.label ?? s.settings.soundWorld;
+  // How it reaches its speed: 0 = at once.
+  const glide = typeof s.glideSec === 'number' && s.glideSec > 0 ? s.glideSec : 0;
   const fill = FILL_STEPS[nearestStep(FILL_STEPS, s.settings.fillAmount)].label.toLowerCase();
   const evolve = EVOLVE_STEPS[nearestStep(EVOLVE_STEPS, s.settings.evolveAmount)].label.toLowerCase();
   const summary = [
@@ -590,7 +664,7 @@ function SceneRow(r: SceneRowProps): JSX.Element {
     BAND_WORDS[s.settings.band],
     fill === 'off' ? 'no extra notes' : `${fill} extra notes`,
     evolve === 'off' ? 'sounds stay' : `sounds change ${evolve === 'more' ? 'a lot' : 'slowly'}`,
-    `${s.settings.bpm} BPM`,
+    `${s.settings.bpm} BPM${glide > 0 ? `, reached over ${glide} s` : ''}`,
   ].join(' · ');
   const set = (patch: Partial<Scene['settings']>): void => r.onEdit({ settings: { ...s.settings, ...patch } });
 
@@ -713,6 +787,22 @@ function SceneRow(r: SceneRowProps): JSX.Element {
             options={EVOLVE_STEPS.map((x, k) => ({ value: k, label: x.label }))}
           />
           <LabeledSlider label="Tempo" min={40} max={160} value={s.settings.bpm} display={`${s.settings.bpm} BPM`} onChange={(v) => set({ bpm: Math.round(v) })} />
+          {/* Gradually: when it comes in while the board plays, from the speed then to this one. */}
+          <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>Reach this speed</span>
+          <SegmentedControl<'once' | 'gradually'>
+            label="Reach this speed" value={glide > 0 ? 'gradually' : 'once'}
+            onChange={(v) => {
+              if (v === (glide > 0 ? 'gradually' : 'once')) return;
+              r.onEdit({ glideSec: v === 'once' ? 0 : GLIDE_DEFAULT_SEC });
+            }}
+            options={[{ value: 'once', label: 'At once' }, { value: 'gradually', label: 'Gradually' }]}
+          />
+          {glide > 0 && (
+            <LabeledSlider
+              label="Over" min={GLIDE_MIN_SEC} max={GLIDE_MAX_SEC} step={1} value={glide} display={`${glide} seconds`}
+              onChange={(v) => r.onEdit({ glideSec: Math.round(v) })}
+            />
+          )}
           {!r.onUpdateFromNow && <p style={note}>While the board plays, Update from now copies what is playing into this scene.</p>}
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {r.onUpdateFromNow && (

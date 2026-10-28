@@ -13,6 +13,8 @@ export interface PlayPanelProps {
   onToggleMute(): void;
   /** The tempo actually in effect: the engine's while playing, the saved one when stopped. */
   bpm: number;
+  /** A scene is reaching its speed gradually: the speed it is on its way to (null = none). */
+  bpmTo?: number | null;
   step: number;
   cols: number;
   /** True on a variation (B) lap, when Variation is on with a single page. */
@@ -45,7 +47,7 @@ export interface PlayPanelProps {
  * room for it, so a focused control is never hidden behind the bar.
  */
 export function PlayPanel({
-  running, muted, onStart, onStop, stopArmed = false, onToggleMute, bpm, step, cols, variationLap, beatOn, clock = null,
+  running, muted, onStart, onStop, stopArmed = false, onToggleMute, bpm, bpmTo = null, step, cols, variationLap, beatOn, clock = null,
   heldCount, handGuardWaiting, piece, connections, cap, groove, sound, loops, stacked, transportAlign,
 }: PlayPanelProps): JSX.Element {
   const [tab, setTab] = useState('sound');
@@ -100,6 +102,7 @@ export function PlayPanel({
         <span role="status">{running ? 'Playing' : 'Stopped'}</span>
         <span aria-hidden="true">
           {running ? ` · ${Math.round(bpm)} BPM · step ${step + 1} of ${cols}` : ` · ${Math.round(bpm)} BPM`}
+          {running && bpmTo !== null && Math.round(bpm) !== bpmTo && ` · ${bpmTo > bpm ? 'speeding up' : 'slowing down'} to ${bpmTo} BPM`}
           {variationLap !== null && running && ` · lap ${variationLap ? 'B' : 'A'}`}
           {heldCount > 0 && ` · ✋ holding ${heldCount}`}
         </span>

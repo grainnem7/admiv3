@@ -13,7 +13,7 @@ import {
 } from '../../../../tracking/cap/capTracker';
 import { HAT_SURE_MAX, HAT_SURE_MIN } from '../../../../tracking/cap/hatColour';
 import type { HatBox } from '../../../../tracking/cap/learnHat';
-import type { ControlRange, FaderRole } from '../../../../profiles/BoardSequencerConfig';
+import { CONTROL_RANGE_LIMITS, type ControlRange, type FaderRole } from '../../../../profiles/BoardSequencerConfig';
 import type { CapPause, CapPreview, CapView, HatLearningView, HatResult, HatStep } from '../useCapTracker';
 
 export const CAP_ROLE_LABELS: Record<CapRole, string> = {
@@ -107,6 +107,8 @@ export interface CapPanelProps {
   clearHatResult(): void;
   colourAt(x: number, y: number): CapColour | null;
   ranges: Record<FaderRole, ControlRange>;
+  /** A control's range changed (the speed's: Slowest and Fastest). */
+  onRange(role: FaderRole, range: ControlRange): void;
   announce(text: string): void;
   /** The board's camera, marked in the list. */
   boardCameraId: string;
@@ -346,6 +348,44 @@ function LearnHat(p: CapPanelProps & { showHat: boolean; onShowHat(on: boolean):
   );
 }
 
+/**
+ * Slowest and Fastest, for the hat on Speed: it moves the speed around the scene's, up to
+ * one and down to the other. The same setting as the Speed counter's range (Sound →
+ * Advanced). Typed digit by digit ("1", "12", "120"), so held to its limits only when the
+ * box is left.
+ */
+function SpeedRange({ range, onChange }: { range: ControlRange; onChange(r: ControlRange): void }): JSX.Element {
+  const limits = CONTROL_RANGE_LIMITS.tempo;
+  const hold = (v: number): number => Math.max(limits.min, Math.min(limits.max, Math.round(v)));
+  const box = (key: 'min' | 'max', label: string): JSX.Element => (
+    <label style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 13, flex: 1 }}>
+      {label}
+      <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        <input
+          type="number" step={5} min={limits.min} max={limits.max} value={range[key]}
+          onChange={(e) => onChange({ ...range, [key]: Number(e.target.value) || 0 })}
+          onBlur={() => { if (hold(range[key]) !== range[key]) onChange({ ...range, [key]: hold(range[key]) }); }}
+          style={{ width: 80, minHeight: 'var(--bs-target)' }}
+        />
+        BPM
+      </span>
+    </label>
+  );
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <p style={NOTE}>
+        In the middle of your range, the speed is the scene&rsquo;s (or your own Speed when no scene is
+        on). One way it goes up to Fastest, the other way down to Slowest.
+      </p>
+      <div style={{ display: 'flex', gap: 8 }}>
+        {box('min', 'Slowest')}
+        {box('max', 'Fastest')}
+      </div>
+      <p style={NOTE}>Slowest and Fastest are the same setting as Sound → Advanced → the Speed counter&rsquo;s lowest and highest.</p>
+    </div>
+  );
+}
+
 function Bar({ label, role, pos, value }: { label: string; role: CapRole; pos: number | null; value: number | undefined }): JSX.Element {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -484,6 +524,9 @@ export function CapPanel(p: CapPanelProps): JSX.Element {
                 </select>
               </label>
             ))}
+            {(s.xRole === 'tempo' || s.yRole === 'tempo') && (
+              <SpeedRange range={p.ranges.tempo} onChange={(range) => p.onRange('tempo', range)} />
+            )}
             {s.yRole !== 'off' && (
               <p style={NOTE}>Tip: nodding along to the music moves up–down too. If that changes {CAP_ROLE_LABELS[s.yRole].toLowerCase()} too much, choose Steps or set up–down to Nothing.</p>
             )}

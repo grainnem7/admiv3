@@ -12,6 +12,7 @@
 
 import type { BandLevel } from '../band/band';
 import type { SoundWorldChoice } from '../../audio/worlds/soundWorlds';
+import { GLIDE_MAX_SEC, GLIDE_MIN_SEC } from './speedGlide';
 
 /** How many loops the iPad and the scenes can launch. */
 export const LAUNCH_SLOTS = 8;
@@ -92,6 +93,12 @@ export interface Scene {
    * marked so. Absent on scenes saved before it existed; "Make my plan" never sets it.
    */
   alone?: boolean;
+  /**
+   * Reach this speed gradually, over this many seconds, when the scene comes in while the
+   * board plays (see performance/speedGlide). Absent = at once, as every scene saved before
+   * it existed.
+   */
+  glideSec?: number;
 }
 
 export const MAX_SCENES = 12;
@@ -174,6 +181,8 @@ export function sanitizeScenes(v: unknown, defaults: SceneSettings): Scene[] {
       id, name: cleanName(o.name) || `Scene ${out.length + 1}`, loops, settings: sanitizeSceneSettings(o.settings, defaults),
       ...(isNum(o.at) && o.at >= 0 ? { at: Math.round(o.at) } : {}),
       ...(o.alone === true ? { alone: true } : {}),
+      ...(isNum(o.glideSec) && Math.round(o.glideSec) >= GLIDE_MIN_SEC && Math.round(o.glideSec) <= GLIDE_MAX_SEC
+        ? { glideSec: Math.round(o.glideSec) } : {}),
     });
   }
   return out;

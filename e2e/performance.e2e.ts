@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { readFileSync } from 'node:fs';
 import { listenToOutput, makePlan, notesPlayed, openAnotherTab, openLaptopBoard, outputLevels, pageErrors, pickColour, pieceStep, place, startPiece } from './app';
 
 /** Make a piece → Loops: two loops, "Bed" (two yellow counters) and an unnamed one (one blue). */
@@ -1695,5 +1696,108 @@ test('decision F2\'s path: after Stop ×2, New loop starts the board and the cou
   await expect(page.getByRole('status').filter({ hasText: 'Playing' }).first()).toBeVisible({ timeout: 20_000 });
   await expect(page.getByText(stopped)).toHaveCount(0);
   await expect.poll(async () => Math.max(0, ...await outputLevels(page, 4)), { timeout: 20_000 }).toBeGreaterThan(0.01);
+  expect(pageErrors(page)).toEqual([]);
+});
+
+/** This take's notes, from the session log saved as JSON: each with its colour and when it was heard (s). */
+async function sessionNotes(page: Page): Promise<{ t: number; colour: string }[]> {
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('button', { name: /^Save the session log as JSON/ }).click(),
+  ]);
+  const data = JSON.parse(readFileSync(await download.path(), 'utf-8')) as { notes: { t: number; colour: string }[] };
+  return data.notes;
+}
+
+test('a colour that comes in at 0:05: on the board but silent in the piece until then, said when it comes in, then heard; with ▶ Play it plays at once', async ({ page }) => {
+  await openLaptopBoard(page);
+  await ownSoundIsPlain(page);
+  // Every counter is down before the piece: Red (melody) and Blue (bass).
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1], [5, 3], [4, 5], [6, 7]]);
+  await pickColour(page, 'Blue');
+  await place(page, [[1, 1], [2, 5]]);
+  await pieceStep(page, 'Scenes');
+  const card = page.getByRole('group', { name: 'When each colour comes in' });
+  await expect(card).toContainText('The times count only while the piece plays');
+  const red = card.getByRole('textbox', { name: /^When Red comes in, in the piece/ });
+  await red.fill('0:05');
+  await red.blur();
+  await expect(red).toHaveValue('0:05');
+  await pause(page, 1200); // saves are gathered for a moment
+  const redId = await page.evaluate(() => {
+    const id = localStorage.getItem('admi-board-active-player');
+    const players = JSON.parse(localStorage.getItem('admi-board-players') ?? '[]') as { id: string; settings: Record<string, unknown> }[];
+    const s = (players.find((p) => p.id === id) ?? players[0])?.settings ?? {};
+    return Object.keys((s.colourComesInAt ?? {}) as Record<string, number>)[0] ?? '';
+  });
+  expect(redId).not.toBe('');
+
+  await startPiece(page);
+  await pieceClockRunning(page);
+  const strip = page.getByRole('region', { name: 'Now and next' });
+  await expect(strip).toContainText('Waiting: Red at 0:05');
+  // On the board its counters are marked as waiting (and said so on the laptop board).
+  await expect(page.getByRole('grid', { name: /Laptop board/ })
+    .getByRole('button', { name: 'Row 3 from the bottom, step 1: Red, Melody, waiting: comes in at 0:05' })).toBeVisible();
+  await expect(page.getByText('Red comes in', { exact: true })).toBeVisible({ timeout: 15_000 });
+  await expect(strip).not.toContainText('Waiting');
+  await pause(page, 3000);
+  const notes = await sessionNotes(page);
+  const redNotes = notes.filter((n) => n.colour === redId);
+  // The board played from the start (Blue), and Red not a note before 0:05, then it did.
+  expect(notes.some((n) => n.colour !== redId && n.t < 4.5)).toBe(true);
+  expect(redNotes.length).toBeGreaterThan(0);
+  expect(Math.min(...redNotes.map((n) => n.t))).toBeGreaterThanOrEqual(4.9);
+
+  // Stopped, then plain ▶ Play: no piece clock, so Red plays from the start.
+  await page.getByRole('button', { name: '■ Stop', exact: true }).first().click();
+  await page.getByRole('button', { name: '■ Press again to stop' }).first().click();
+  await expect(page.getByRole('status').filter({ hasText: 'Stopped' }).first()).toBeVisible();
+  await pause(page, 600); // ▶ Play ignores a press straight after Stop (a bounce): this is a new press
+  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await expect(page.getByRole('status').filter({ hasText: 'Playing' }).first()).toBeVisible({ timeout: 20_000 });
+  await expect(strip).toHaveCount(0);
+  await expect.poll(async () => (await sessionNotes(page)).some((n) => n.colour === redId && n.t < 3), { timeout: 20_000 }).toBe(true);
+  expect(pageErrors(page)).toEqual([]);
+});
+
+test('a scene at 0:05 that reaches its faster speed over 4 s: the speed read during the glide lies between the two, rising', async ({ page }) => {
+  await openLaptopBoard(page);
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1]]);
+  // The plan's scenes are all at the player's own speed, 90. Build: at 0:05, 150, over 4 s.
+  await makePlan(page);
+  await page.getByRole('button', { name: /^1:30 · Build/ }).click();
+  const time = page.getByRole('textbox', { name: /When Build comes in/ });
+  await time.fill('0:05');
+  await time.blur();
+  await page.getByRole('slider', { name: /^Tempo/ }).fill('150');
+  await page.getByRole('radiogroup', { name: 'Reach this speed' }).getByRole('radio', { name: 'Gradually' }).click();
+  await page.getByRole('slider', { name: /^Over/ }).fill('4');
+  await expect(page.getByRole('button', { name: /^0:05 · Build/ })).toContainText('150 BPM, reached over 4 s');
+
+  await startPiece(page);
+  await pieceClockRunning(page);
+  // The speed as shown, read in the page every 100 ms from about 0:01 to past 0:11.
+  const log = await page.evaluate(async () => {
+    const out: { bpm: number; rising: boolean }[] = [];
+    const end = performance.now() + 11_000;
+    while (performance.now() < end) {
+      const pill = [...document.querySelectorAll('span[aria-hidden="true"]')]
+        .map((el) => /· (\d+) BPM · step/.exec(el.textContent ?? '')).find((m) => m !== null);
+      if (pill) out.push({ bpm: Number(pill[1]), rising: /speeding up to 150 BPM/.test(pill.input) });
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    return out;
+  });
+  expect(log.some((x) => x.bpm === 90)).toBe(true);
+  const between = log.filter((x) => x.bpm > 90 && x.bpm < 150);
+  expect(between.length).toBeGreaterThanOrEqual(2);
+  for (let i = 1; i < between.length; i++) expect(between[i].bpm).toBeGreaterThanOrEqual(between[i - 1].bpm);
+  expect(between[between.length - 1].bpm).toBeGreaterThan(between[0].bpm);
+  // Shown as it goes, and at the scene's speed in the end.
+  expect(log.some((x) => x.rising)).toBe(true);
+  expect(log[log.length - 1].bpm).toBe(150);
   expect(pageErrors(page)).toEqual([]);
 });

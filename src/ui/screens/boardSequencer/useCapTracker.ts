@@ -10,7 +10,7 @@
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 'react';
 import {
   capColourAt, capMask, capPatches, capPauseReason, faceBoxFromLandmarks, findLearntHat, handOverAxis, fitSideArc, fuseWithFace,
-  initialCapState, lookAlikes, MIN_REACH, pickCap, stepCap, widenReach,
+  hatPosition, initialCapState, lookAlikes, MIN_REACH, pickCap, stepCap, widenReach,
   type BoardActivity, type CapColour, type CapOffset, type CapPatch, type CapSettings, type CapSighting, type FaceBox, type Frame,
   type SideArc,
 } from '../../../tracking/cap/capTracker';
@@ -127,6 +127,11 @@ export function useCapTracker(opts: {
   boardCameraId: string;
   /** What the board is doing: the cap holds still while counters are being moved. */
   activityRef: MutableRefObject<BoardActivity>;
+  /**
+   * The speed in force without the cap, now (a scene's, a glide's, or the player's own): on
+   * Speed the cap moves the speed around it (hatTempo). Without it, across the whole range.
+   */
+  tempoCentreRef?: MutableRefObject<() => number>;
 }): {
   view: CapView;
   previewRef: MutableRefObject<CapPreview>;
@@ -141,7 +146,15 @@ export function useCapTracker(opts: {
   /** Another control (the iPad) set this role: the cap takes its value until the head moves. */
   handOver(role: FaderRole, value: number): void;
 } {
-  const { settings, ranges, mouse, pointerRef, valuesRef, activityRef } = opts;
+  const { settings, ranges, mouse, pointerRef, valuesRef, activityRef, tempoCentreRef } = opts;
+  /** Where on its axis (0..1) the cap would be for this value of a control. */
+  const positionFor = (role: FaderRole, v: number): number => {
+    const r = rangesRef.current[role];
+    if (role === 'tempo' && tempoCentreRef) return hatPosition(tempoCentreRef.current(), v, r.min, r.max);
+    return r.max > r.min ? (v - r.min) / (r.max - r.min) : 0;
+  };
+  const positionForRef = useRef(positionFor);
+  positionForRef.current = positionFor;
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   const rangesRef = useRef(ranges);
@@ -215,7 +228,7 @@ export function useCapTracker(opts: {
         const v = startValuesRef.current?.[role];
         const r = rangesRef.current[role];
         if (v === undefined || !(r.max > r.min)) continue;
-        state = handOverAxis(state, axis, (v - r.min) / (r.max - r.min));
+        state = handOverAxis(state, axis, positionForRef.current(role, v));
       }
     }
     let offset: CapOffset | null = null;
@@ -322,13 +335,12 @@ export function useCapTracker(opts: {
       const learning = learnRef.current !== null || sideRef.current !== null || hatRef.current !== null;
       const paused: CapPause | null = learning ? 'learning' : capPauseReason(activityRef.current, now, s);
       for (const [role, v] of handOverRef.current) {
-        const r = rangesRef.current[role];
-        const p = r.max > r.min ? (v - r.min) / (r.max - r.min) : 0;
+        const p = positionForRef.current(role, v);
         if (s.xRole === role) state = handOverAxis(state, 'x', p);
         if (s.yRole === role) state = handOverAxis(state, 'y', p);
       }
       handOverRef.current.clear();
-      const reading = stepCap(state, fused.sighting, s, rangesRef.current, dt, paused !== null);
+      const reading = stepCap(state, fused.sighting, s, rangesRef.current, dt, paused !== null, tempoCentreRef?.current());
       state = reading.state;
       valuesRef.current = reading.values;
       // What it follows is the cap's patch, unless the face check turned it down.

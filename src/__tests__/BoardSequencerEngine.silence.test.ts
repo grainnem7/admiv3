@@ -103,3 +103,23 @@ describe('engine — silence now, as Stop gives it (T1-02)', () => {
     expect(cc(11).some((d) => d[2] === 127)).toBe(true);
   });
 });
+
+/**
+ * The piece started while Tim warms up: a colour that waits for its time goes silent at once,
+ * its notes still ringing or already queued cut, and nothing else is touched.
+ */
+describe('engine — a waiting colour cut as the piece starts', () => {
+  it('cuts only that colour’s voice (one still loading too): not the band, the kit or any other colour', () => {
+    const { e, p, entry } = engine();
+    const other = fakeVoiceEntry();
+    p.voiceByChannel.set('b', other as Entry);
+    e.silenceColours(['m', 'gone']);
+    expect(entry.voice.cut).toHaveBeenCalledTimes(1);
+    expect(entry.pending?.voice.cut).toHaveBeenCalledTimes(1);
+    expect(other.voice.cut).not.toHaveBeenCalled();
+    expect(p.bandVoices?.pad.cut).not.toHaveBeenCalled();
+    expect(p.drumKit?.stopAll).not.toHaveBeenCalled();
+    e.silenceColours([]);
+    expect(entry.voice.cut).toHaveBeenCalledTimes(1);
+  });
+});

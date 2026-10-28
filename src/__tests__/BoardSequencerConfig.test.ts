@@ -241,7 +241,7 @@ describe('BoardSequencerConfig — control counter settings', () => {
       reverb: { min: 0, max: 0.6 },
       delay: { min: 0, max: 0.6 },
       tone: { min: 0, max: 1 },
-      tempo: { min: 60, max: 160 },
+      tempo: { min: 60, max: 240 },
       fill: { min: 0, max: 1 },
       evolve: { min: 0, max: 1 },
     });
@@ -276,7 +276,7 @@ describe('BoardSequencerConfig — control counter settings', () => {
     expect(c.toggleAmount).toBe(1);
     expect(c.captureQuietMs).toBe(5000);
     expect(c.controlRanges.volume).toEqual({ min: 0.2, max: 0.8 });
-    expect(c.controlRanges.tempo).toEqual({ min: 60, max: 160 });
+    expect(c.controlRanges.tempo).toEqual({ min: 60, max: 240 });
     expect(c.controlRemoval.volume).toBe('hold');
     expect(c.controlRemoval.tone).toBe('default');
   });
@@ -539,5 +539,65 @@ describe("the safe show layout for Tim's iPad", () => {
     expect(older.remotePads).toEqual(['newIdea', 'newSound', 'keep', 'mute']);
     expect(older.remoteLoopsPage).toBe(true);
     expect(isSafeShowLayout(older)).toBe(false);
+  });
+});
+
+describe('BoardSequencerConfig — Fastest 240 for the hat', () => {
+  beforeEach(() => localStorage.clear());
+
+  it('a new player gets Speed from 60 to 240', () => {
+    expect(DEFAULT_BOARD_SEQUENCER_CONFIG.controlRanges.tempo).toEqual({ min: 60, max: 240 });
+    localStorage.setItem('admi-board-sequencer', JSON.stringify({ bpm: 90 }));
+    expect(loadBoardSequencerConfig()!.controlRanges.tempo).toEqual({ min: 60, max: 240 });
+  });
+
+  it('a saved Fastest of exactly the old default 160 is raised to 240, once; any other is the player’s own and kept', () => {
+    localStorage.setItem('admi-board-sequencer', JSON.stringify({ controlRanges: { tempo: { min: 60, max: 160 } } }));
+    const raised = loadBoardSequencerConfig()!;
+    expect(raised.controlRanges.tempo).toEqual({ min: 60, max: 240 });
+    localStorage.setItem('admi-board-sequencer', JSON.stringify({ controlRanges: { tempo: { min: 55, max: 150 } } }));
+    expect(loadBoardSequencerConfig()!.controlRanges.tempo).toEqual({ min: 55, max: 150 });
+    // Once only: a player who sets 160 again afterwards keeps it.
+    saveBoardSequencerConfig({ ...raised, controlRanges: { ...raised.controlRanges, tempo: { min: 60, max: 160 } } });
+    expect(loadBoardSequencerConfig()!.controlRanges.tempo).toEqual({ min: 60, max: 160 });
+  });
+});
+
+describe('BoardSequencerConfig — when each colour comes in, and scenes that glide', () => {
+  beforeEach(() => localStorage.clear());
+  const melody = { id: 'c1', kind: 'hue', role: 'melody', swatch: '#e03030' };
+  const bass = { id: 'c2', kind: 'hue', role: 'bass', swatch: '#3050e0' };
+
+  it('none by default: every colour plays from the start', () => {
+    expect(DEFAULT_BOARD_SEQUENCER_CONFIG.colourComesInAt).toEqual({});
+    localStorage.setItem('admi-board-sequencer', JSON.stringify({ version: 2, channels: [melody] }));
+    expect(loadBoardSequencerConfig()!.colourComesInAt).toEqual({});
+  });
+
+  it('keeps each colour’s time; drops a colour that is gone and anything malformed', () => {
+    localStorage.setItem('admi-board-sequencer', JSON.stringify({
+      version: 2, channels: [melody, bass], colourComesInAt: { c1: 90, c2: 'soon', gone: 30 },
+    }));
+    expect(loadBoardSequencerConfig()!.colourComesInAt).toEqual({ c1: 90 });
+    localStorage.setItem('admi-board-sequencer', JSON.stringify({ version: 2, channels: [melody], colourComesInAt: [5] }));
+    expect(loadBoardSequencerConfig()!.colourComesInAt).toEqual({});
+  });
+
+  it('round-trips the times', () => {
+    saveBoardSequencerConfig({
+      ...DEFAULT_BOARD_SEQUENCER_CONFIG, channels: [melody, bass] as BoardSequencerStored['channels'], colourComesInAt: { c1: 90, c2: 150 },
+    });
+    expect(loadBoardSequencerConfig()!.colourComesInAt).toEqual({ c1: 90, c2: 150 });
+  });
+
+  it('a scene saved before glides loads as at once; a glide time in range is kept', () => {
+    const scene = { id: 's1', name: 'Build', loops: [], settings: { bpm: 120 }, at: 90 };
+    localStorage.setItem('admi-board-sequencer', JSON.stringify({
+      scenes: [scene, { ...scene, id: 's2', glideSec: 8 }, { ...scene, id: 's3', glideSec: 600 }],
+    }));
+    const scenes = loadBoardSequencerConfig()!.scenes;
+    expect('glideSec' in scenes[0]).toBe(false);
+    expect(scenes[1].glideSec).toBe(8);
+    expect('glideSec' in scenes[2]).toBe(false);
   });
 });

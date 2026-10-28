@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   capColourAt, DEFAULT_CAP_COLOUR, DEFAULT_CAP_SETTINGS, findCap, fitSideArc, fuseWithFace, initialCapState, quantise,
-  sanitizeCapSettings, stepCap, capPauseReason, handOverAxis, CAP_RESUME_MAX_MS, type CapSettings, type Frame,
+  sanitizeCapSettings, stepCap, capPauseReason, handOverAxis, hatPosition, hatTempo, withCounterValues, CAP_RESUME_MAX_MS,
+  type CapSettings, type Frame,
 } from '../tracking/cap/capTracker';
 import type { ControlRange, FaderRole } from '../profiles/BoardSequencerConfig';
 
@@ -288,5 +289,65 @@ describe('handing a control over to the iPad', () => {
     expect(r.values.tempo!).toBeGreaterThan(110);
     r = settle(s, at(0.6), r.state);
     expect(r.values.tempo!).toBeCloseTo(70 + 0.6 * 60, 0);
+  });
+});
+
+/**
+ * The hat on Speed moves the speed around the speed in force without it (the scene's, the
+ * glide's, or the player's own): the middle of Tim's range is that speed, one end Fastest,
+ * the other Slowest, linear on each side. So from any scene he can still reach both ends.
+ */
+describe('the hat moves the speed around the scene’s speed', () => {
+  it('the middle is the centre, the ends are Slowest and Fastest, linear on each side', () => {
+    expect(hatTempo(120, 0.5, 60, 240)).toBe(120);
+    expect(hatTempo(120, 1, 60, 240)).toBe(240);
+    expect(hatTempo(120, 0, 60, 240)).toBe(60);
+    expect(hatTempo(120, 0.75, 60, 240)).toBe(180);
+    expect(hatTempo(120, 0.25, 60, 240)).toBe(90);
+    expect(hatTempo(90, 0.6, 60, 240)).toBe(120);
+  });
+
+  it('the centre is held between Slowest and Fastest', () => {
+    expect(hatTempo(300, 0.5, 60, 240)).toBe(240);
+    expect(hatTempo(300, 0, 60, 240)).toBe(60);
+    expect(hatTempo(40, 0.5, 60, 240)).toBe(60);
+    expect(hatTempo(40, 1, 60, 240)).toBe(240);
+  });
+
+  it('a range typed the wrong way round still works; one speed only gives that speed', () => {
+    expect(hatTempo(120, 1, 240, 60)).toBe(240);
+    expect(hatTempo(120, 0, 240, 60)).toBe(60);
+    expect(hatTempo(120, 0.3, 100, 100)).toBe(100);
+  });
+
+  it('where the hat is for a speed: the way back, for the iPad and the start', () => {
+    expect(hatPosition(120, 120, 60, 240)).toBe(0.5);
+    expect(hatPosition(120, 240, 60, 240)).toBe(1);
+    expect(hatPosition(120, 60, 60, 240)).toBe(0);
+    expect(hatPosition(120, 180, 60, 240)).toBeCloseTo(0.75, 6);
+    expect(hatPosition(120, 999, 60, 240)).toBe(1);
+    for (const p of [0, 0.1, 0.37, 0.5, 0.8, 1]) expect(hatTempo(96, hatPosition(96, hatTempo(96, p, 60, 240), 60, 240), 60, 240)).toBe(hatTempo(96, p, 60, 240));
+  });
+
+  it('through the tracker: given the centre, the head in the middle gives it, and each end its own end', () => {
+    const s = settings({ xRole: 'tempo', yRole: 'off', oneAtATime: false });
+    const wide = { ...ranges, tempo: { min: 60, max: 240 } };
+    const run = (x: number, centre: number) => {
+      let r = stepCap(initialCapState(), { x, y: 0.5, area: 0.01 }, s, wide, 33, false, centre);
+      for (let i = 0; i < 120; i++) r = stepCap(r.state, { x, y: 0.5, area: 0.01 }, s, wide, 33, false, centre);
+      return r.values.tempo;
+    };
+    expect(run(0.5, 120)).toBe(120);
+    expect(run(0.5, 75)).toBe(75);
+    expect(run(1, 75)).toBe(240);
+    expect(run(0, 150)).toBe(60);
+    // A hat holding its place follows the centre as it glides.
+    expect(run(0.75, 100)).toBe(170);
+    expect(run(0.75, 110)).toBe(175);
+  });
+
+  it('a Speed counter on the board still wins over the hat', () => {
+    expect(withCounterValues({ tempo: 200, volume: 0.5 }, { tempo: 95 })).toEqual({ tempo: 95, volume: 0.5 });
+    expect(withCounterValues({ tempo: 200 }, {})).toEqual({ tempo: 200 });
   });
 });

@@ -64,6 +64,19 @@ describe('BoardSequencerEngine tempo + tick', () => {
     expect(fired).toEqual(Array.from({ length: fired.length }, (_, i) => i));
   });
 
+  it('once the ending is asked for, nothing moves the speed until it is cancelled: a slowed piece can never outrun its ending', () => {
+    // The ending is timed at the speed it was asked at. Slowed while it waited for its pass
+    // (the hat, a scene's glide, the iPad), the pass grew longer than the time left.
+    const e = new BoardSequencerEngine(cfg());
+    (e as unknown as Priv).startSec = 0;
+    e.finish(8, () => {});
+    e.setBpm(30);
+    expect(e.getBpm()).toBe(60);
+    e.cancelFinish();
+    e.setBpm(30);
+    expect(e.getBpm()).toBe(30);
+  });
+
   it('setBpm is a no-op while synced to a song with beats; getBpm reports the song tempo', () => {
     const e = new BoardSequencerEngine(cfg());
     e.setSyncSource({ getTime: () => 0, beats: [0, 0.5, 1, 1.5], chordAt: () => null });

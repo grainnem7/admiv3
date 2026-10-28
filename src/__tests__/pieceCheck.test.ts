@@ -214,3 +214,22 @@ describe('the lines shown with Undo after a scene changes', () => {
     expect(aloneLine('Home', null, ['Bed'])).toBe('Home is now the player alone: Bed taken out.');
   });
 });
+
+describe('the check — when each colour comes in', () => {
+  it('a colour that comes in at or after the end of the piece is warned of, in plain words', () => {
+    const p = input({ performance: { ...DEFAULT_PERFORMANCE, lengthSec: 300, style: 'fade', fadePasses: 2 }, colourTimes: [
+      { name: 'Red', at: 90 }, { name: 'Blue', at: 300 }, { name: 'Green', at: 330 },
+    ] });
+    const items = pieceCheckItems(p);
+    const blue = items.find((i) => i.label === 'Blue comes in at 5:00, after the piece ends.');
+    expect(blue?.state).toBe('warn');
+    expect(blue?.fix).toMatch(/earlier time/);
+    expect(items.some((i) => i.label === 'Green comes in at 5:30, after the piece ends.')).toBe(true);
+    expect(items.some((i) => i.label.startsWith('Red comes in'))).toBe(false);
+  });
+
+  it('says nothing when every colour comes in inside the piece, or none has a time', () => {
+    expect(pieceCheckItems(input({ colourTimes: [{ name: 'Red', at: 90 }] })).some((i) => /after the piece ends/.test(i.label))).toBe(false);
+    expect(pieceCheckItems(input()).some((i) => /after the piece ends/.test(i.label))).toBe(false);
+  });
+});

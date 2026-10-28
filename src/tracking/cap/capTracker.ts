@@ -477,13 +477,51 @@ export interface CapReading {
 }
 
 /**
+ * The hat on Speed: the speed for a position `p` (0..1) of Tim's range, around `centre`, the
+ * speed in force without the hat (the scene's, a glide's, or the player's own). The middle
+ * is the centre, one end Fastest and the other Slowest, linear on each side, so from any
+ * scene both ends can still be reached. The centre is held between Slowest and Fastest.
+ */
+export function hatTempo(centre: number, p: number, slowest: number, fastest: number): number {
+  const lo = Math.min(slowest, fastest);
+  const hi = Math.max(slowest, fastest);
+  const c = Math.max(lo, Math.min(hi, centre));
+  const k = Math.max(0, Math.min(1, p));
+  return Math.round(k >= 0.5 ? c + (k - 0.5) * 2 * (hi - c) : c - (0.5 - k) * 2 * (c - lo));
+}
+
+/**
+ * The way back: where the hat would be for a speed, around `centre`. For a speed set by
+ * another control (the iPad), and where the cap starts from, so it changes nothing until
+ * the head moves.
+ */
+export function hatPosition(centre: number, bpm: number, slowest: number, fastest: number): number {
+  const lo = Math.min(slowest, fastest);
+  const hi = Math.max(slowest, fastest);
+  const c = Math.max(lo, Math.min(hi, centre));
+  if (bpm >= c) return hi > c ? Math.min(1, 0.5 + (0.5 * (bpm - c)) / (hi - c)) : 0.5;
+  return c > lo ? Math.max(0, 0.5 - (0.5 * (c - bpm)) / (c - lo)) : 0.5;
+}
+
+/**
+ * The cap's values, then the board's control counters on top: a counter put down on purpose
+ * is the more deliberate choice, so a Speed counter wins over the hat.
+ */
+export function withCounterValues(
+  cap: Partial<Record<FaderRole, number>>, counters: Partial<Record<FaderRole, number>>,
+): Partial<Record<FaderRole, number>> {
+  return { ...cap, ...counters };
+}
+
+/**
  * One frame: the cap's sighting (or none) → the control values. Positions are stretched
  * from the player's learnt reach to the whole control; up the picture is up the control.
- * While `paused`, the controls hold (after sliding back to before the reach began).
+ * While `paused`, the controls hold (after sliding back to before the reach began). With a
+ * `tempoCentre`, Speed moves around it (hatTempo); without one, across its whole range.
  */
 export function stepCap(
   st: CapState, sighting: CapSighting | null, s: CapSettings, ranges: Record<FaderRole, ControlRange>, dtMs: number,
-  paused = false,
+  paused = false, tempoCentre?: number,
 ): CapReading {
   let rawX: number | null = null;
   let rawY: number | null = null;
@@ -536,6 +574,7 @@ export function stepCap(
   const put = (role: CapRole, p: number | null): void => {
     if (role === 'off' || p === null) return;
     const r = ranges[role];
+    if (role === 'tempo' && tempoCentre !== undefined) { values.tempo = hatTempo(tempoCentre, p, r.min, r.max); return; }
     const v = r.min + p * (r.max - r.min);
     values[role] = role === 'tempo' ? Math.round(v) : v;
   };

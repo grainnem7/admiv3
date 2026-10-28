@@ -37,7 +37,7 @@ function props(settings: Partial<CapSettings> = {}, v: Partial<CapView> = {}): C
     previewRef: { current: { frame: null, sighting: null, face: null, mask: null, others: [] } },
     pointerRef: { current: null }, mouse: false, onMouse: vi.fn(), cameras: [],
     learnReach: vi.fn(), learnSide: vi.fn(), learnHatStep: vi.fn(), clearHatResult: vi.fn(), colourAt: vi.fn(() => null),
-    ranges: DEFAULT_BOARD_SEQUENCER_CONFIG.controlRanges, announce: vi.fn(), boardCameraId: '',
+    ranges: DEFAULT_BOARD_SEQUENCER_CONFIG.controlRanges, onRange: vi.fn(), announce: vi.fn(), boardCameraId: '',
   };
 }
 const render = (p: CapPanelProps): void => { act(() => root.render(<CapPanel {...p} />)); };
@@ -180,5 +180,50 @@ describe('what each step came to, in words', () => {
     expect(hatStep('not-seen')).toContain('Couldn’t see the hat. Check it is in the picture and learn the hat again.');
     expect(hatStep('not-seen')).toContain('Nothing was changed.');
     expect(hatStep('no-room')).toBe('Learn the room first, with the hat off.');
+  });
+});
+
+/**
+ * The hat on Speed moves the speed around the scene's: Slowest and Fastest are set here, in
+ * the Cap tab, where the hat is set up (they were only under Sound → Advanced, and only for
+ * a Speed counter, so with the hat alone they could not be changed at all).
+ */
+describe('Slowest and Fastest, in the Cap tab', () => {
+  const input = (name: string): HTMLInputElement | undefined =>
+    [...host.querySelectorAll('label')].find((l) => l.textContent?.startsWith(name))?.querySelector('input') ?? undefined;
+  /** Type into a number box as a person does: React hears the input event. */
+  const type = (el: HTMLInputElement, value: string): void => {
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(el, value);
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  };
+
+  it('are shown when a direction of the cap is on Speed, with what the middle and the ends do', () => {
+    render(props({ xRole: 'tempo', yRole: 'volume' }));
+    expect(input('Slowest')?.value).toBe('60');
+    expect(input('Fastest')?.value).toBe('240');
+    expect(host.textContent).toContain('In the middle of your range, the speed is the scene’s');
+    expect(host.textContent).toContain('the same setting as Sound → Advanced');
+    render(props({ xRole: 'volume', yRole: 'tempo' }));
+    expect(input('Fastest')).toBeDefined();
+  });
+
+  it('are not shown when no direction is on Speed', () => {
+    render(props({ xRole: 'volume', yRole: 'off' }));
+    expect(input('Slowest')).toBeUndefined();
+    expect(input('Fastest')).toBeUndefined();
+  });
+
+  it('change the speed’s range: typed as it is typed, held to 20–400 when the box is left', () => {
+    const p = props({ xRole: 'tempo', yRole: 'off' });
+    render(p);
+    const fastest = input('Fastest');
+    if (!fastest) throw new Error('no Fastest');
+    type(fastest, '200');
+    expect(p.onRange).toHaveBeenLastCalledWith('tempo', { min: 60, max: 200 });
+    render({ ...p, ranges: { ...p.ranges, tempo: { min: 60, max: 900 } } });
+    act(() => { input('Fastest')?.focus(); input('Fastest')?.blur(); });
+    expect(p.onRange).toHaveBeenLastCalledWith('tempo', { min: 60, max: 400 });
   });
 });

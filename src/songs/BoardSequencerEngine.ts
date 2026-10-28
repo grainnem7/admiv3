@@ -1374,6 +1374,20 @@ export class BoardSequencerEngine {
   }
 
   /**
+   * These colours go silent now: every note of theirs still ringing or already queued falls
+   * away (their voices are cut), and nothing else is touched. For the piece starting while
+   * the board plays (Tim warming up): a colour that waits for its time must not ring on into
+   * it. Its counters have already left the active cells; this only clears what was sent.
+   */
+  silenceColours(ids: readonly ColourId[]): void {
+    for (const id of ids) {
+      const e = this.voiceByChannel.get(id);
+      e?.voice.cut();
+      e?.pending?.voice.cut();
+    }
+  }
+
+  /**
    * The shared reverb and echo start empty: what was ringing in them falls away within a
    * few milliseconds and the old ones are freed after. A tail is sound too.
    */
@@ -1584,9 +1598,11 @@ export class BoardSequencerEngine {
    * beats (the song owns tempo).
    */
   setBpm(bpm: number): void {
-    // Once an ending has begun its timing is fixed — the fade is scheduled in seconds and
-    // the ritardando owns the tempo — so a scene or the iPad cannot pull it out of shape.
-    if (this.finishing && this.finishing.startBeat !== null) return;
+    // Once an ending is asked for its timing is fixed — it was timed at this speed, the fade
+    // is scheduled in seconds and the ritardando owns the tempo — so a scene, its glide, the
+    // hat or the iPad cannot pull it out of shape. Slowed while it waited for the pass, the
+    // pass outgrew the time left before the end. Cancel the ending and they move it again.
+    if (this.finishing) return;
     this.applyBpm(bpm);
   }
 

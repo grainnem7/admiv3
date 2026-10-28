@@ -16,6 +16,7 @@ import {
   DEFAULT_REMOTE_TOUCH, sanitizeRemoteTouch, type RemoteTouch,
 } from '../remote/protocol';
 import { sanitizeLoopNames, sanitizeScenes, type Scene } from '../songs/performance/launcher';
+import { sanitizeColourEntries } from '../songs/performance/colourEntries';
 import { DEFAULT_PERFORMANCE, sanitizePerformance, type PerformanceSettings } from '../songs/performance/clock';
 import { isSoundWorldChoice, type SoundWorldChoice } from '../audio/worlds/soundWorlds';
 import { quarterTurns, type QuarterTurns } from '../tracking/frameOrientation';
@@ -160,6 +161,12 @@ export interface BoardSequencerStored {
   scenes: Scene[];
   /** The scene recalled last, for "Next scene"; null = none yet. Never kept past a run. */
   currentScene: number | null;
+  /**
+   * When each sound colour comes in during the piece, in seconds from its start, by colour id
+   * (see performance/colourEntries): its counters are silent until then while the piece's
+   * clock runs. No time = from the start. A colour that goes takes its time with it.
+   */
+  colourComesInAt: Record<ColourId, number>;
   /** How many passes a launched loop takes to come in and go out (0 = at once). */
   loopFadePasses: number;
   /** Scenes leave alone an iPad strip the player has moved since the last scene. */
@@ -253,8 +260,17 @@ export interface BoardSequencerStored {
   controlGlideSec: number;
   /** How long 'default' removal waits before returning a control to its default (ms). */
   controlReturnMs: number;
-  /** Usable range per fader control, so a counter can't reach silence or a runaway tempo. */
+  /**
+   * Usable range per fader control, so a counter can't reach silence or a runaway tempo. The
+   * speed's is also the hat's Slowest and Fastest (Cap tab).
+   */
   controlRanges: Record<FaderRole, ControlRange>;
+  /**
+   * Which generation of the control ranges these are. Saved ranges are the player's own and
+   * are never re-suggested, so without this the new Fastest could never reach a player who
+   * had already saved: rev 2 raised a Fastest left at the old default (160) to 240, once.
+   */
+  controlRangesRev: number;
   /** What happens to each fader when its counter leaves the board. */
   controlRemoval: Record<FaderRole, ControlRemoval>;
   /** Effect amount a toggle colour switches in (was hard-coded 0.35). */
@@ -379,10 +395,16 @@ const DEFAULT_CONTROL_RANGES: Record<FaderRole, ControlRange> = {
   reverb: { min: 0, max: 0.6 },
   delay: { min: 0, max: 0.6 },
   tone: { min: 0, max: 1 },
-  tempo: { min: 60, max: 160 },
+  // Fastest 240: the hat moves the speed around the scene's, and has to reach well above it.
+  tempo: { min: 60, max: 240 },
   fill: { min: 0, max: 1 },
   evolve: { min: 0, max: 1 },
 };
+
+/** The current generation of the control ranges (see `controlRangesRev`). */
+export const CONTROL_RANGES_REV = 2;
+/** Fastest as it was by default before rev 2. */
+const OLD_DEFAULT_FASTEST = 160;
 
 const DEFAULT_CONTROL_REMOVAL: Record<FaderRole, ControlRemoval> = {
   volume: 'hold', reverb: 'hold', delay: 'hold', tone: 'hold', tempo: 'hold', fill: 'hold', evolve: 'hold',
@@ -502,6 +524,7 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   currentScene: null,
   loopFadePasses: 1,
   sceneRespectsPlayer: true,
+  colourComesInAt: {},
   performance: DEFAULT_PERFORMANCE,
   boardSource: 'camera',
   laptopBoard: [],
@@ -538,6 +561,7 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   controlGlideSec: 0.3,
   controlReturnMs: 3000,
   controlRanges: DEFAULT_CONTROL_RANGES,
+  controlRangesRev: CONTROL_RANGES_REV,
   controlRemoval: DEFAULT_CONTROL_REMOVAL,
   toggleAmount: 0.35,
   captureQuietMs: 500,
@@ -597,6 +621,16 @@ function sanitizeControlRanges(v: unknown): Record<FaderRole, ControlRange> {
     out[role] = { min: clampToControl(role, num(r.min, d.min)), max: clampToControl(role, num(r.max, d.max)) };
   }
   return out;
+}
+
+/**
+ * The ranges, moved on to this generation once (rev 2: a Fastest left at the old default 160
+ * becomes 240). Any other saved value is the player's own, and is kept.
+ */
+function migratedControlRanges(o: Record<string, unknown>): Record<FaderRole, ControlRange> {
+  const ranges = sanitizeControlRanges(o.controlRanges);
+  if (num(o.controlRangesRev, 1) >= CONTROL_RANGES_REV || ranges.tempo.max !== OLD_DEFAULT_FASTEST) return ranges;
+  return { ...ranges, tempo: { ...ranges.tempo, max: DEFAULT_CONTROL_RANGES.tempo.max } };
 }
 
 function sanitizeControlRemoval(v: unknown): Record<FaderRole, ControlRemoval> {
@@ -802,6 +836,9 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     samplesPerAxis = s.samplesPerAxis;
     minFilledFraction = s.minFilledFraction;
   }
+  // Pre-v2 colour data (the old fixed palette + its migration) is discarded so the board
+  // starts with no predefined colours.
+  const channels = num(o.version, 1) >= CONFIG_VERSION ? sanitizeChannels(o.channels) : [];
   // Never coarser than suggested. Nothing on screen sets the sampling — "custom" is the
   // player's coverage — yet a player who had moved that slider kept 5 x 5 for good. On the
   // real board, at an angle, 5 x 5 lost counters that 9 x 9 read in every frame.
@@ -823,9 +860,7 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     velocitySmoothing: num(o.velocitySmoothing, d.velocitySmoothing),
     occupancyGraceMs: num(o.occupancyGraceMs, d.occupancyGraceMs),
     motionConfirmMs: num(o.motionConfirmMs, d.motionConfirmMs),
-    // Pre-v2 colour data (the old fixed palette + its migration) is discarded so
-    // the board starts with no predefined colours.
-    channels: num(o.version, 1) >= CONFIG_VERSION ? sanitizeChannels(o.channels) : [],
+    channels,
     faderAxis: o.faderAxis === 'col' ? 'col' : 'row',
     minFilledFraction,
     variationEnabled: o.variationEnabled === true,
@@ -865,6 +900,8 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     currentScene: null,
     loopFadePasses: [0, 0.5, 1, 2].includes(num(o.loopFadePasses, 1)) ? num(o.loopFadePasses, 1) : 1,
     sceneRespectsPlayer: o.sceneRespectsPlayer !== false,
+    // Only for colours that still exist: a time left behind would land on a new colour.
+    colourComesInAt: sanitizeColourEntries(o.colourComesInAt, new Set(channels.map((c) => c.id))),
     performance: sanitizePerformance(o.performance),
     boardSource: o.boardSource === 'laptop' ? 'laptop' : 'camera',
     laptopBoard: Array.isArray(o.laptopBoard) ? (sanitizeLoopSlots([o.laptopBoard])[0] ?? []) : [],
@@ -908,7 +945,8 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     controlStillMs: clampNum(o.controlStillMs, 0, 2000, d.controlStillMs),
     controlGlideSec: clampNum(o.controlGlideSec, 0, 2, d.controlGlideSec),
     controlReturnMs: clampNum(o.controlReturnMs, 0, 30000, d.controlReturnMs),
-    controlRanges: sanitizeControlRanges(o.controlRanges),
+    controlRanges: migratedControlRanges(o),
+    controlRangesRev: CONTROL_RANGES_REV,
     controlRemoval: sanitizeControlRemoval(o.controlRemoval),
     toggleAmount: clampNum(o.toggleAmount, 0, 1, d.toggleAmount),
     captureQuietMs: clampNum(o.captureQuietMs, 0, 5000, d.captureQuietMs),

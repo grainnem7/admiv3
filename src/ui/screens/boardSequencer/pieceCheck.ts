@@ -23,6 +23,8 @@ export interface PieceCheckInput {
   playerName: string | null;
   /** Take an empty loop out of every scene that uses it. */
   onTakeOut(slot: number): void;
+  /** The sound colours that come in at a time ("When each colour comes in"), by name. */
+  colourTimes?: readonly { name: string; at: number }[];
 }
 
 /** "Open", "Arrival and Open", "Arrival, Build and Open". */
@@ -137,6 +139,17 @@ export function pieceCheckItems(p: PieceCheckInput): ReadyItem[] {
         fix: `The piece is ending by then, so ${one ? 'it is' : 'they are'} not heard: give ${one ? 'it' : 'each'} an earlier time, or choose a shorter ending.`,
       });
     }
+  }
+
+  // A colour held back until after the end is never heard in the piece: said, as a warning
+  // (it may be meant for a longer piece).
+  for (const c of p.colourTimes ?? []) {
+    if (c.at < len) continue;
+    items.push({
+      label: `${c.name} comes in at ${formatClock(c.at)}, after the piece ends.`,
+      state: 'warn',
+      fix: `${c.name}'s counters stay silent for the whole piece: in Scenes → When each colour comes in, give it an earlier time, or clear it to play from the start.`,
+    });
   }
 
   // Not possible from the screen (the length is refused over 7:00 and loads as 7:00), but

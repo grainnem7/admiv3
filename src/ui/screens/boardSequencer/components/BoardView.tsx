@@ -61,6 +61,11 @@ export interface BoardViewProps {
    * songs/beyondLoop). Drawn faded, so a silent counter doesn't look like a playing one.
    */
   silent?: ReadonlySet<string>;
+  /**
+   * Colours waiting for their time in the piece: their counters are drawn faded with a small
+   * clock on them, so a counter that is down but not yet heard never looks like one playing.
+   */
+  waiting?: ReadonlySet<ColourId>;
   /** The laptop board: squares are buttons, and a click places or lifts a counter. */
   onCellTap?(row: number, col: number): void;
   /** What a square is called for a screen reader on the laptop board ("Red, melody"). */
@@ -89,7 +94,7 @@ const CLEAR_CELL = (): CSSProperties => ({ background: 'transparent', border: 'n
 
 export function BoardView({
   rows, cols, frame, pops, playheadCol, playing, pingPongDirection, swatchFor, palette,
-  pageLabel, reducedMotion = false, fillMarks, band, spans, notice, onCellTap, describeCell, loopCells, silent,
+  pageLabel, reducedMotion = false, fillMarks, band, spans, notice, onCellTap, describeCell, loopCells, silent, waiting,
 }: BoardViewProps): JSX.Element {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -203,7 +208,9 @@ export function BoardView({
         const colour = settledColour ?? detectedColour ?? ghost?.colour;
         if (!colour) continue;
         // Past its part's loop: it never plays, so it must not look like a counter that does.
-        if (silent?.has(key)) ctx.globalAlpha = 0.3;
+        // Nor a colour waiting for its time in the piece.
+        const isWaiting = waiting?.has(colour) === true;
+        if (silent?.has(key) || isWaiting) ctx.globalAlpha = 0.3;
 
         const swatch = swatchFor(colour);
         const { inner, outer } = swatchRingFor(swatch, palette.raised, palette);
@@ -264,6 +271,25 @@ export function BoardView({
           ctx.strokeStyle = palette.warn;
           ctx.stroke();
           ctx.setLineDash([]);
+        }
+
+        if (isWaiting) {
+          // A small clock: this one waits for its time.
+          ctx.globalAlpha = 1;
+          const cr = Math.max(4, rr * 0.45);
+          ctx.beginPath();
+          ctx.arc(cx, cy, cr, 0, Math.PI * 2);
+          ctx.fillStyle = palette.raised;
+          ctx.fill();
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = palette.fg;
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(cx, cy);
+          ctx.lineTo(cx, cy - cr * 0.7);
+          ctx.moveTo(cx, cy);
+          ctx.lineTo(cx + cr * 0.55, cy);
+          ctx.stroke();
         }
 
         if (pop) {
@@ -360,7 +386,7 @@ export function BoardView({
       ctx.textBaseline = 'top';
       ctx.fillText(pingPongDirection > 0 ? '→' : '←', playheadCol * cw + cw / 2, 2);
     }
-  }, [dims, rows, cols, frame, pops, playheadCol, playing, pingPongDirection, swatchFor, palette, reducedMotion, fillMarks, band, spans, notice, loopCells, silent]);
+  }, [dims, rows, cols, frame, pops, playheadCol, playing, pingPongDirection, swatchFor, palette, reducedMotion, fillMarks, band, spans, notice, loopCells, silent, waiting]);
 
   // The squares to click: rebuilt only when what they say changes. The board redraws for
   // every frame of a sounding note, and rebuilding 64+ buttons with it cost more than the
