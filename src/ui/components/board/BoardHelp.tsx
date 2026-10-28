@@ -14,8 +14,9 @@ const HELP: HelpEntry[] = [
     title: 'Words used here',
     body: 'Pass: one time round the loop, left to right — scenes, loops and the ending all '
       + 'land on a pass. Phrase: the idea one counter plays until the next counter of its '
-      + 'colour. Scene: a set of loops and a sound, brought in by the clock or with Go. '
-      + 'Loop: a saved board that plays on its own (the loop pads). Band: a pad, '
+      + 'colour. Scene: a set of loops and a sound, brought in by the clock, or by hand with Next '
+      + 'or Jump here now. '
+      + 'Loop: counters kept with New loop and Keep, that then play on their own. Band: a pad, '
       + 'bass and groove that answer the player. Extra notes: notes the instrument adds around '
       + 'yours. Sounds change: the sound of each colour slowly changing. Lane: a row or step kept '
       + 'for controls or loop pads, never notes. Hold / Toggle: a loop pad plays while its '
@@ -91,7 +92,7 @@ const HELP: HelpEntry[] = [
   },
   {
     title: 'Playing',
-    body: 'A playhead sweeps left to right; a piece sounds when the playhead reaches its '
+    body: 'A playhead sweeps left to right; a counter sounds when the playhead reaches its '
       + 'column. Higher rows are higher notes. A cell only lights up when its note is '
       + 'actually heard, so the picture and the sound always agree.',
   },
@@ -108,7 +109,7 @@ const HELP: HelpEntry[] = [
   },
   {
     title: 'Variation',
-    body: 'Shove a piece firmly off the centre of its square and it plays every OTHER time '
+    body: 'Shove a counter firmly off the centre of its square and it plays every OTHER time '
       + 'round (long-dash ring). The A/B letter in the status pill shows the current lap.',
   },
   {
@@ -158,16 +159,18 @@ const HELP: HelpEntry[] = [
     body: 'Turn Extra notes up and the instrument adds in-key notes around yours: passing notes, '
       + 'echoes, softer drum hits. It never plays where you already play, never louder than '
       + 'you, and nothing on a part you have not used. Ideas come from Magenta (Google’s '
-      + 'music AI, downloaded the first time) or from simple rules. New idea rerolls, Back '
-      + 'returns, Keep freezes, Clear turns it off. Added notes are dotted rings on the board. '
+      + 'music AI, downloaded the first time) or from simple rules. ↻ Try another gives other '
+      + 'notes (New idea on the iPad), ↶ Previous goes back, 📌 Freeze holds them as they are '
+      + '(Keep on the iPad), and Off turns them off. Added notes are dotted rings on the board. '
       + 'A colour can be given the Extra notes control job, so a counter sets how much.',
   },
   {
     title: 'Sounds change — the sound keeps moving',
     body: 'Turn Sounds change up and each colour’s sound drifts every loop — brighter, darker, more '
       + 'space, echoes — and every 4, 8 or 16 loops moves to another instrument, another '
-      + 'pattern, another kick and snare. Your notes stay yours. New sound takes another '
-      + 'path, Back returns, Hold freezes the sound of this loop. The Play screen says what '
+      + 'pattern, another kick and snare. Your notes stay yours. ↻ Try another takes another '
+      + 'path (New sound on the iPad), ↶ Previous goes back, 📌 Freeze holds the sound of this '
+      + 'loop. The Play screen says what '
       + 'each colour sounds like now, and "New sounds" appears on the board at each change. '
       + 'A colour can be given the Sounds change control job.',
   },
@@ -177,7 +180,8 @@ const HELP: HelpEntry[] = [
       + 'iPad on the same Wi-Fi point the Camera at the QR code it shows (or type the link into Safari). Four strips (Speed, '
       + 'Dynamics, Extra notes, Sounds change) slide like ThumbJam — the whole strip is the target, the '
       + 'ends are generous, values move in steps — and four pads (New idea, New sound, Keep, '
-      + 'Mute) act on touch. Learn reach makes a player’s comfortable slide the whole range.',
+      + 'Mute) act on a tap; Mute needs two. Learn reach makes a player’s comfortable slide the '
+      + 'whole range.',
   },
   {
     title: 'Sound from: ADMI, Ableton or Both',
@@ -216,14 +220,15 @@ const HELP: HelpEntry[] = [
     title: 'Play, Make a piece, Show',
     body: 'Three buttons at the top. Play: just play the board, with the Sound, Groove, Board '
       + 'and Connections tabs — no loops or scenes needed. Make a piece: three steps. '
-      + '1 Loops: put counters down and press "Save the board here" on an empty loop, then '
-      + 'name it. 2 Scenes: "Make my plan" gives four scenes across the piece, each with your '
+      + '1 Loops: press New loop, put counters down, then Keep, and give the loop a name. '
+      + '2 Scenes: "Make my plan" gives four scenes across the piece, each with your '
       + 'loops; tap one to change it (a time can be typed 2:30 or 2.30); ▶ Rehearse from here '
       + 'plays from it. A scene with no loops is silent unless the player plays: tick "alone" in it '
       + 'only if that is the plan. 3 Ending & check: the length (at most 7:00), how it ends, '
       + 'and a check of everything. Each step is optional. Show: the board full screen with '
-      + 'the clock and Now / Next, for the performance — Start the piece, Next, End; Stop '
-      + 'needs two presses. While the piece plays no loop is made: stop it first.',
+      + 'the clock and Now / Next, for the performance — Start the piece, Next, End; while '
+      + 'the piece plays, Stop needs two presses. While the piece plays no loop is made: stop '
+      + 'it first.',
   },
   {
     title: 'Loops and scenes while playing',
@@ -248,8 +253,9 @@ const HELP: HelpEntry[] = [
     body: 'Give each scene a time ("at 2:30") and the clock brings it in by itself; the '
       + 'player plays over the top and can still take any part. To make a loop, press New '
       + 'loop (Make a piece → Loops): everything stops, only the counters sound, and Keep '
-      + 'saves them as a loop with a name. Hear it with… lets you try the band, Extra notes '
-      + 'or another loop first.',
+      + 'saves them as a loop with a name. Counters already down stay silent until they are '
+      + 'lifted, or Start with these keeps them. Hear it with… lets you try the band, Extra '
+      + 'notes or another loop first. Not while the piece plays: stop it first.',
   },
   {
     title: 'The iPad for a player without fine control',
@@ -274,7 +280,8 @@ const HELP: HelpEntry[] = [
     title: 'Keyboard',
     body: 'Space starts and stops while playing (never during Set up, and never when a button '
       + 'or slider has focus). Tabs move with the arrow keys. ▶ Show fills the screen; '
-      + 'Leave Show (or Esc) goes back.',
+      + 'Leave Show (or Esc) goes back. When a button goes away, focus moves to what takes '
+      + 'its place: Start the piece and Stop to each other, Done and Leave back to New loop.',
   },
 ];
 
