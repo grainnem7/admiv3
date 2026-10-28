@@ -380,3 +380,82 @@ describe('two taps, safe from a bounce (End piece, Stop all, Mute)', () => {
     expect(steps([1000, 4100], slow)).toEqual(['arm', 'arm']);
   });
 });
+
+// ---- which build each page is: an iPad page kept open from before an update ----
+import { ipadPages, shouldReloadFor } from '../remote/protocol';
+
+describe('the build each side runs', () => {
+  const base = { values: { tempo: 0, dynamics: 0, fill: 0, evolve: 0 }, labels: { tempo: '', dynamics: '', fill: '', evolve: '' } };
+  const stateOf = (extra: Record<string, unknown>) => {
+    const m = parseRemoteMessage({ type: 'state', state: { ...base, ...extra } });
+    return m && m.type === 'state' ? m.state : null;
+  };
+
+  it("the laptop's state carries its build and its question to the iPad pages", () => {
+    expect(stateOf({ build: 'lq3x9a-k2', ask: 3 })).toMatchObject({ build: 'lq3x9a-k2', ask: 3 });
+  });
+
+  it('a missing or odd build or question is left out, never guessed (missing means older)', () => {
+    for (const build of [42, '', 'x'.repeat(41), 'has space', '<b>', null]) expect(stateOf({ build })).not.toHaveProperty('build');
+    for (const ask of [-1, 1.5, '3', null]) expect(stateOf({ ask })).not.toHaveProperty('ask');
+    expect(stateOf({})).not.toHaveProperty('build');
+  });
+
+  it("the iPad's answer says its build and which question it answers; an older one says nothing", () => {
+    expect(parseRemoteMessage({ type: 'hello', build: 'lq3x9a-k2', ask: 3 })).toEqual({ type: 'hello', build: 'lq3x9a-k2', ask: 3 });
+    // Tolerant: whatever is missing or odd is "not known", and the message still counts.
+    expect(parseRemoteMessage({ type: 'hello' })).toEqual({ type: 'hello', build: null, ask: null });
+    expect(parseRemoteMessage({ type: 'hello', build: 7, ask: 'x' })).toEqual({ type: 'hello', build: null, ask: null });
+  });
+
+  it('only the iPad may say hello', () => {
+    expect(allowedFrom('remote', 'hello')).toBe(true);
+    expect(allowedFrom('host', 'hello')).toBe(false);
+  });
+
+  it("the relay passes the iPad's hello to the laptop", async () => {
+    const port = await relay();
+    const host = await join(port, '4821', 'host');
+    const ipad = await join(port, '4821', 'remote');
+    await settle();
+    ipad.ws.send(JSON.stringify({ type: 'hello', build: 'lq3x9a-k2', ask: 1 }));
+    await settle();
+    expect(host.got).toContainEqual({ type: 'hello', build: 'lq3x9a-k2', ask: 1 });
+  });
+
+  describe('the laptop: are the iPad pages this build?', () => {
+    it('every page connected has answered with this build: up to date', () => {
+      expect(ipadPages(1, ['b1'], 'b1', false)).toBe('current');
+      expect(ipadPages(2, ['b1', 'b1'], 'b1', false)).toBe('current');
+    });
+
+    it('a page that answers with another build, or none, is out of date at once', () => {
+      expect(ipadPages(1, ['b0'], 'b1', false)).toBe('outdated');
+      expect(ipadPages(2, ['b1', null], 'b1', false)).toBe('outdated');
+    });
+
+    it('a page that has not answered yet is waited for; after the wait it is out of date (a page too old to answer)', () => {
+      expect(ipadPages(1, [], 'b1', false)).toBe('waiting');
+      expect(ipadPages(2, ['b1'], 'b1', false)).toBe('waiting');
+      expect(ipadPages(1, [], 'b1', true)).toBe('outdated');
+      expect(ipadPages(2, ['b1'], 'b1', true)).toBe('outdated');
+    });
+
+    it('no iPad, nothing to say', () => {
+      expect(ipadPages(0, [], 'b1', true)).toBe('waiting');
+    });
+  });
+
+  describe('the iPad: reload itself to match the laptop, at most once for each laptop build', () => {
+    it('a different laptop build reloads it, unless it has already reloaded for that one', () => {
+      expect(shouldReloadFor('ipad-old', 'laptop-new', null)).toBe(true);
+      expect(shouldReloadFor('ipad-old', 'laptop-new', 'laptop-new')).toBe(false);
+      expect(shouldReloadFor('ipad-old', 'laptop-newer', 'laptop-new')).toBe(true);
+    });
+
+    it('the same build, or a laptop too old to say, never reloads it', () => {
+      expect(shouldReloadFor('b1', 'b1', null)).toBe(false);
+      expect(shouldReloadFor('b1', undefined, null)).toBe(false);
+    });
+  });
+});

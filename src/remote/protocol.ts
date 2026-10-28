@@ -141,6 +141,13 @@ export interface RemoteState {
   piece?: { now: string | null; next: string | null; nextIn: string | null };
   /** Flips each beat while playing: the iPad shows the pulse, so the beat is seen as well as heard. */
   beat?: boolean;
+  /**
+   * The laptop page's build (see buildId.ts). An iPad page of another build reloads itself
+   * to match, once. Missing = a laptop page from before builds were compared.
+   */
+  build?: string;
+  /** Changes whenever the laptop wants every iPad page to say which build it is (a hello). */
+  ask?: number;
 }
 
 export type RemoteMessage =
@@ -153,11 +160,19 @@ export type RemoteMessage =
   /** Recall a scene, or the next one in the set list. */
   | { type: 'scene'; index: number | 'next' }
   | { type: 'state'; state: RemoteState }
+  /**
+   * The iPad page's build, in answer to the laptop's `ask`. A page too old to know about
+   * builds sends none, and silence counts as "older"; whatever is missing is null.
+   */
+  | { type: 'hello'; build: string | null; ask: number | null }
   /** From the relay: how many of each side are in this room. */
   | { type: 'peers'; hosts: number; remotes: number };
 
 const isUnit = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 1;
 const isIndex = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0 && v < 64;
+/** A build id as Vite makes it: short, letters, digits and dashes only. */
+const isBuildId = (v: unknown): v is string => typeof v === 'string' && /^[\w.-]{1,40}$/.test(v);
+const isAsk = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0 && v < 2 ** 31;
 
 function sanitizeLoops(v: unknown[]): RemoteLoop[] {
   return v.slice(0, 64).map((x) => {
@@ -221,6 +236,7 @@ export function parseRemoteMessage(raw: unknown): RemoteMessage | null {
   if (o.type === 'peers' && typeof o.hosts === 'number' && typeof o.remotes === 'number') {
     return { type: 'peers', hosts: o.hosts, remotes: o.remotes };
   }
+  if (o.type === 'hello') return { type: 'hello', build: isBuildId(o.build) ? o.build : null, ask: isAsk(o.ask) ? o.ask : null };
   if (o.type === 'state' && typeof o.state === 'object' && o.state !== null) {
     const s = o.state as Record<string, unknown>;
     const values = s.values as Record<string, unknown> | undefined;
@@ -248,10 +264,37 @@ export function parseRemoteMessage(raw: unknown): RemoteMessage | null {
         ...(typeof s.touch === 'object' && s.touch !== null ? { touch: sanitizeRemoteTouch(s.touch) } : {}),
         ...(typeof s.piece === 'object' && s.piece !== null ? { piece: sanitizePiece(s.piece as Record<string, unknown>) } : {}),
         ...(typeof s.beat === 'boolean' ? { beat: s.beat } : {}),
+        ...(isBuildId(s.build) ? { build: s.build } : {}),
+        ...(isAsk(s.ask) ? { ask: s.ask } : {}),
       },
     };
   }
   return null;
+}
+
+// ---- builds: an iPad page kept open from before an update ---------------------------
+
+/**
+ * The laptop: are the iPad pages connected now of its build? Each answers the laptop's
+ * latest ask with its build (`answers`). Any other build, or none, is out of date at once;
+ * a page that has not answered once `waited` is too old to answer, so out of date too.
+ */
+export function ipadPages(
+  connected: number, answers: readonly (string | null)[], mine: string, waited: boolean,
+): 'current' | 'outdated' | 'waiting' {
+  if (connected === 0) return 'waiting';
+  if (answers.some((b) => b !== mine)) return 'outdated';
+  if (answers.length >= connected) return 'current';
+  return waited ? 'outdated' : 'waiting';
+}
+
+/**
+ * The iPad: reload to get the laptop's build? Only when the laptop says a different one,
+ * and at most once for each (`reloadedFor`, kept for the tab): a laptop page that is
+ * itself out of date can then never set the iPad reloading over and over.
+ */
+export function shouldReloadFor(mine: string, laptop: string | undefined, reloadedFor: string | null): boolean {
+  return laptop !== undefined && laptop !== mine && laptop !== reloadedFor;
 }
 
 /** A 4-digit code that pairs one iPad with one laptop screen. */

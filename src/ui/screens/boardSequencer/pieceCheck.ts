@@ -140,3 +140,48 @@ export function pieceCheckItems(p: PieceCheckInput): ReadyItem[] {
     : { label: `Ending: ${describeEnding(perf)}, ${perf.ending === 'cue' ? 'when you press End' : 'at the time'}`, state: 'ok' });
   return items;
 }
+
+export interface IpadCheckInput {
+  /** iPad controls are on. */
+  enabled: boolean;
+  connected: boolean;
+  /** The iPad is set out as the safe show layout (show decision F3). */
+  safeLayout: boolean;
+  /** The iPad's page is from another build than this laptop's, or too old to say. */
+  pageOutOfDate: boolean;
+  /** Who plays ("Tim"); null = "the player". */
+  playerName: string | null;
+  /** "Use the safe show layout", from the check itself. */
+  onUseSafeLayout(): void;
+}
+
+/**
+ * The check's lines about the iPad: whether it is connected; whether its page is from
+ * before an update (a Safari tab left open from a rehearsal has none of today's
+ * protections); and whether it is in the safe show layout. The safe layout is the default
+ * only for new players, so a saved player keeps a fuller iPad until it is chosen: only a
+ * warning, as the fuller layout may be on purpose.
+ */
+export function ipadCheckItems(p: IpadCheckInput): ReadyItem[] {
+  if (!p.enabled) return [{ label: 'iPad not in use', state: 'ok' }];
+  const who = playerWords(p.playerName);
+  const items: ReadyItem[] = [p.connected
+    ? { label: 'iPad connected', state: 'ok' }
+    : { label: 'iPad not connected', state: 'warn', fix: 'Open the link from the Connections tab in Safari on the iPad.' }];
+  if (p.connected && p.pageOutOfDate) {
+    items.push({
+      label: `${who.Name}'s iPad page is out of date: reload it on the iPad.`,
+      state: 'problem',
+      fix: "An old page may not have today's protections, such as the bounce guard on End piece. If this stays after the reload, reload ADMI on this laptop too.",
+    });
+  }
+  if (!p.safeLayout) {
+    items.push({
+      label: `${who.Name}'s iPad is not in the safe show layout`,
+      state: 'warn',
+      fix: 'More on the iPad means one stray touch can do more, such as skip a scene or stop a loop. Fine if you chose it on purpose.',
+      action: { label: 'Use the safe show layout', name: `Use the safe show layout on ${who.name}'s iPad`, onClick: p.onUseSafeLayout },
+    });
+  }
+  return items;
+}

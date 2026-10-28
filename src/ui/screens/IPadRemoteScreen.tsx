@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import {
-  DEFAULT_REMOTE_TOUCH, FULL_REACH, mapReach, REMOTE_CONTROLS, secondTap, stripValue, STRIP_STEP, TAP_REPEAT_MS, TWO_TAP_IDLE, unmapReach,
+  DEFAULT_REMOTE_TOUCH, FULL_REACH, mapReach, REMOTE_CONTROLS, secondTap, shouldReloadFor, stripValue, STRIP_STEP, TAP_REPEAT_MS,
+  TWO_TAP_IDLE, unmapReach,
   type RemoteControlName, type RemoteLoopState, type RemoteMessage, type RemoteState, type RemoteTriggerName, type TwoTapPad,
 } from '../../remote/protocol';
+import { BUILD_ID, reloadedFor, reloadFor } from '../../remote/buildId';
 import { useRemoteLink } from '../../remote/useRemoteLink';
 
 /**
@@ -230,6 +232,22 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
   }, []);
   const link = useRemoteLink('remote', code, true, onMessage);
   const connected = link.status === 'open' && link.others > 0;
+  // Which build this page is: said whenever the laptop asks (once per question, and again
+  // after a reconnect), so the laptop can tell an iPad page left open from before an update.
+  const ask = state?.ask;
+  const answered = useRef<number | null>(null);
+  useEffect(() => {
+    if (!connected) { answered.current = null; return; }
+    if (ask === undefined || answered.current === ask) return;
+    answered.current = ask;
+    link.send({ type: 'hello', build: BUILD_ID, ask });
+  }, [connected, ask, link.send]);
+  // A laptop of another build: reload to get it, at most once for that build. Nothing is
+  // shown on the iPad; the laptop says so if the page is still out of date.
+  const laptopBuild = state?.build;
+  useEffect(() => {
+    if (laptopBuild !== undefined && shouldReloadFor(BUILD_ID, laptopBuild, reloadedFor())) reloadFor(laptopBuild);
+  }, [laptopBuild]);
   // This player's reach on each strip (from the laptop); while learning, strips only report.
   const reachOf = (name: RemoteControlName) => state?.reach?.[name] ?? FULL_REACH;
   const learning = state?.learning === true;

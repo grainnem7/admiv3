@@ -36,8 +36,16 @@ function admiRemote(): Plugin {
   }
 }
 
+/**
+ * This build's id: the laptop and the iPad compare theirs, so an iPad page left open from
+ * before an update is found (src/remote/buildId.ts). Made when the app is built; the
+ * development server makes one each time it starts.
+ */
+const BUILD_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
+
 export default defineConfig({
   plugins: [react(), admiRemote()],
+  define: { __ADMI_BUILD_ID__: JSON.stringify(BUILD_ID) },
   // The Magenta worker loads its models piece by piece, which needs module workers.
   worker: { format: 'es' },
   // Prepared when the dev server starts, not discovered the first time the worker asks

@@ -120,7 +120,7 @@ import { BoardMidiPanel } from './boardSequencer/components/BoardMidiPanel';
 import { planFromConfig } from './boardSequencer/components/AbletonSoundsPanel';
 import { useBoardMidiPort } from './boardSequencer/useBoardMidiPort';
 import { abletonReadyItem, abletonTracksItem } from './boardSequencer/abletonReady';
-import { listNames, pieceCheckItems } from './boardSequencer/pieceCheck';
+import { ipadCheckItems, listNames, pieceCheckItems, playerWords } from './boardSequencer/pieceCheck';
 import { colourUses, type ColourUses } from './boardSequencer/colourRemoval';
 import { aiOffLine } from './boardSequencer/aiStatus';
 import { BoardMidiSender, channelFor, colourChannelMap, configToSoundFrom, effectiveSound } from '../../midi/boardMidi';
@@ -144,10 +144,11 @@ import { TABS_CHANNEL } from '../components/OtherTabNotice';
 import { backupFileName, parseBoardBackup, snapshotStorage, summariseBackup, type BoardBackup } from '../../storage/boardBackup';
 import { useRemoteLink } from '../../remote/useRemoteLink';
 import {
-  dynamicsFromValue, fullReachMap, makeRemoteCode, reachFromSamples, REMOTE_CONTROLS, REMOTE_INFO_PATH,
+  dynamicsFromValue, fullReachMap, ipadPages, makeRemoteCode, reachFromSamples, REMOTE_CONTROLS, REMOTE_INFO_PATH,
   SECOND_TAP_MIN_MS, tempoFromValue, valueFromTempo, valueFromVelocity,
   type RemoteControlName, type RemoteMessage, type RemoteState, type RemoteTriggerName,
 } from '../../remote/protocol';
+import { BUILD_ID } from '../../remote/buildId';
 import { rotateCorners } from '../../tracking/boardDetect/orientation';
 import { alikePairs, applyDetectedColours } from './boardSequencer/applyDetectedColours';
 import type { BoardSquares } from '../../tracking/boardGrid';
@@ -292,6 +293,11 @@ const REMOTE_TRIGGER_WORDS: Record<RemoteTriggerName, string> = {
 const CLOCK_TICK_MS = 250;
 /** How long "iPad: Speed 96 BPM" stays on screen. */
 const REMOTE_NOTE_MS = 2500;
+/**
+ * How long an iPad page has to say which build it is. One that says nothing by then is too
+ * old to know about builds (from before they were compared), so it is out of date.
+ */
+const HELLO_WAIT_MS = 4000;
 /** How long "New sounds" / "Band joins" stays on the board. */
 const BOARD_NOTICE_MS = 2500;
 
@@ -749,6 +755,25 @@ export default function BoardSequencerScreen() {
   // so the hook always calls the current one.
   const remoteMsgRef = useRef<(msg: RemoteMessage) => void>(() => {});
   const remoteLink = useRemoteLink('host', remoteCode, remoteEnabled, (msg) => remoteMsgRef.current(msg));
+  // Is each iPad page this build? Whenever the number of iPad pages changes, the laptop
+  // asks again (a new `ask` in its state) and waits for every page's hello. A page left
+  // open in Safari from before an update reloads itself if it can; if it is still out of
+  // date (or too old to answer), the laptop says so, never the iPad.
+  const helloAskRef = useRef(0);
+  const [helloAsk, setHelloAsk] = useState(0);
+  const helloAnswersRef = useRef<(string | null)[]>([]);
+  const [ipadPagesNow, setIpadPagesNow] = useState<'current' | 'outdated' | 'waiting'>('waiting');
+  useEffect(() => {
+    helloAnswersRef.current = [];
+    setIpadPagesNow('waiting');
+    if (!remoteEnabled || remoteLink.others === 0) return undefined;
+    helloAskRef.current += 1;
+    setHelloAsk(helloAskRef.current);
+    const others = remoteLink.others;
+    const t = window.setTimeout(() => setIpadPagesNow(ipadPages(others, helloAnswersRef.current, BUILD_ID, true)), HELLO_WAIT_MS);
+    return () => window.clearTimeout(t);
+  }, [remoteEnabled, remoteLink.others]);
+  const ipadOutOfDate = remoteEnabled && remoteLink.others > 0 && ipadPagesNow === 'outdated';
   useEffect(() => {
     if (!remoteEnabled) { setRemoteInfo(null); return; }
     let live = true;
@@ -806,13 +831,15 @@ export default function BoardSequencerScreen() {
         return { now: nn.now?.name ?? null, next: nn.next?.scene.name ?? null, nextIn: nn.next ? formatClock(nn.next.inSec) : null };
       })(),
       beat: running ? beatOn : false,
+      build: BUILD_ID,
+      ask: helloAsk,
     };
     remoteLink.send({ type: 'state', state });
   }, [remoteEnabled, remoteLink.others, config.bpm, config.velocity, config.fillAmount, config.evolveAmount,
     config.fillKept, config.evolveHoldLap, muted, running, starting, config.remoteReach, reachLearning,
     config.loopSlots, config.loopNames, config.scenes, config.currentScene, wantedSlots, appliedSlots,
     config.remoteStrips, config.remotePads, config.remoteLoopsPage, config.remoteLocked, config.remoteStripMode, config.loopFadePasses, clock,
-    config.remoteTouch, beatOn]);
+    config.remoteTouch, beatOn, helloAsk]);
   const fillSigRef = useRef('');
   const [prevFillSeed, setPrevFillSeed] = useState<number | null>(null);
 
@@ -3267,6 +3294,14 @@ export default function BoardSequencerScreen() {
     evolve: c.evolveAmount <= 0 ? 'Off' : `${Math.round(c.evolveAmount * 100)}%`,
   });
 
+  /** One press sets the iPad out for the show (decision F3), from the iPad settings or the check. */
+  const applySafeShowLayout = (): void => {
+    update(safeShowLayout(configRef.current.remoteTouch));
+    setSafeLayoutSet(true);
+  };
+  /** An iPad page from before an update, in the player's name: said on the laptop only. */
+  const ipadOutOfDateText = `${playerWords(activePlayer?.name ?? null).Name}'s iPad page is out of date: reload it on the iPad.`;
+
   const onRemoteMessage = (msg: RemoteMessage): void => {
     const c = configRef.current;
     logActorRef.current = 'ipad';
@@ -3277,6 +3312,14 @@ export default function BoardSequencerScreen() {
     }
   };
   const onRemoteMessageInner = (msg: RemoteMessage, c: BoardSequencerStored): void => {
+    if (msg.type === 'hello') {
+      // An answer to an older question is from before the last page came or went.
+      if (msg.ask !== helloAskRef.current) return;
+      helloAnswersRef.current = [...helloAnswersRef.current, msg.build];
+      const pages = ipadPages(remoteLink.others, helloAnswersRef.current, BUILD_ID, false);
+      if (pages !== 'waiting') setIpadPagesNow(pages);
+      return;
+    }
     if (msg.type === 'control' && c.remoteLocked.includes(msg.name)) return;
     if (msg.type === 'control') {
       if (msg.name !== 'dynamics') stripsTouchedRef.current.add(msg.name as PlayerStrip);
@@ -3356,6 +3399,7 @@ export default function BoardSequencerScreen() {
               : remoteLink.status === 'open' ? 'Waiting for the iPad…'
                 : remoteLink.status === 'lost' ? 'Link lost — reconnecting…' : 'Starting…'}
           </span>
+          {ipadOutOfDate && <span role="alert" style={{ fontSize: 13, fontWeight: 600, color: 'var(--bs-warn)' }}>{ipadOutOfDateText}</span>}
           {remoteLink.others > 0 ? null : remoteInfo && !remoteInfo.lan ? (
             <span style={{ fontSize: 12, color: 'var(--bs-warn)' }}>
               The iPad can&apos;t reach this laptop yet: ADMI was started without the local
@@ -3446,13 +3490,7 @@ export default function BoardSequencerScreen() {
               Mute, the loop and scene pads, Next scene, Capture and Stop all are hidden, and Speed is locked.
             </span>
             <div>
-              <Button
-                tone="secondary"
-                onClick={() => {
-                  update(safeShowLayout(configRef.current.remoteTouch));
-                  setSafeLayoutSet(true);
-                }}
-              >
+              <Button tone="secondary" onClick={applySafeShowLayout}>
                 Use the safe show layout
               </Button>
             </div>
@@ -3981,11 +4019,15 @@ export default function BoardSequencerScreen() {
       scenes: c.scenes, loopSlots: c.loopSlots, loopNames: c.loopNames, performance: c.performance, passSec: passSecNow,
       playerName: activePlayer?.name ?? null, onTakeOut: takeEmptyLoopOut,
     }));
-    items.push(!remoteEnabled
-      ? { label: 'iPad not in use', state: 'ok' }
-      : remoteLink.others > 0
-        ? { label: 'iPad connected', state: 'ok' }
-        : { label: 'iPad not connected', state: 'warn', fix: 'Open the link from the Connections tab in Safari on the iPad.' });
+    items.push(...ipadCheckItems({
+      enabled: remoteEnabled, connected: remoteLink.others > 0, safeLayout: isSafeShowLayout(c), pageOutOfDate: ipadOutOfDate,
+      playerName: activePlayer?.name ?? null,
+      onUseSafeLayout: () => {
+        applySafeShowLayout();
+        // The line goes from the check; the iPad settings, which say it, are not on screen.
+        announce('Done: the iPad now shows only the Extra notes strip, New idea and End piece.');
+      },
+    }));
     if (c.fillEngine === 'magenta' && typeof navigator !== 'undefined' && navigator.onLine === false) {
       items.push({ label: 'Offline: the AI fill uses simple rules', state: 'warn', fix: 'Fine for the piece; connect once beforehand to load Magenta.' });
     }
@@ -4985,6 +5027,10 @@ export default function BoardSequencerScreen() {
       )}
       {view === 'play' && remoteNote && (
         <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--bs-accent)' }}>{remoteNote.text}</p>
+      )}
+      {view === 'play' && ipadOutOfDate && (
+        // Stays while it is true, unlike the moment-long notes of what the iPad did.
+        <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--bs-warn)' }}>{ipadOutOfDateText}</p>
       )}
       {view === 'play' && newLoop && (
         // New loop holds the band, Extra notes and the loops off: say so here too, so this

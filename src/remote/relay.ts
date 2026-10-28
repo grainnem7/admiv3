@@ -28,10 +28,10 @@ export const MAX_MESSAGE_BYTES = 64 * 1024;
 /** A connection that answers no ping for this long is gone (a sleeping iPad, lost Wi-Fi). */
 const HEARTBEAT_MS = 5000;
 
-/** Who may send what: the iPad sends controls and taps, the laptop sends state. */
+/** Who may send what: the iPad sends controls, taps and which build it is; the laptop sends state. */
 export function allowedFrom(role: Role, type: string): boolean {
   return role === 'remote'
-    ? type === 'control' || type === 'trigger' || type === 'reach' || type === 'loop' || type === 'scene'
+    ? type === 'control' || type === 'trigger' || type === 'reach' || type === 'loop' || type === 'scene' || type === 'hello'
     : type === 'state';
 }
 

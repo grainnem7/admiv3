@@ -489,6 +489,46 @@ test('"Use the safe show layout" sets out the iPad for the show and says what it
   expect(pageErrors(page)).toEqual([]);
 });
 
+test("an iPad page from before an update is named on the laptop, never on the iPad; the check offers the safe show layout", async ({ page, context }) => {
+  await openLaptopBoard(page);
+  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await page.getByRole('tab', { name: 'Connections' }).click();
+  await page.getByRole('switch', { name: 'iPad controls' }).click();
+  const code = await page.evaluate(() => localStorage.getItem('admi-remote-code'));
+  const outOfDate = "Test's iPad page is out of date: reload it on the iPad.";
+  // An iPad page from before builds were compared: it joins, and never says which it is.
+  await page.evaluate((code) => {
+    (window as unknown as { oldIpad?: WebSocket }).oldIpad = new WebSocket(`ws://${location.host}/admi-remote?code=${code}&role=remote`);
+  }, code);
+  await expect(page.getByRole('alert').filter({ hasText: outOfDate })).toBeVisible({ timeout: 15_000 });
+  await pieceStep(page, 'Ending & check');
+  await expect(page.getByRole('listitem').filter({ hasText: outOfDate })).toBeVisible();
+  await expect(checkSummary(page)).toContainText('needs fixing before the piece');
+  // That page is closed, and today's page is opened: it answers, and the laptop is content.
+  await page.evaluate(() => (window as unknown as { oldIpad?: WebSocket }).oldIpad?.close());
+  const ipad = await context.newPage();
+  await ipad.setViewportSize({ width: 1180, height: 820 });
+  await ipad.goto(`/?remote=${code}`);
+  await expect(ipad.getByText('Connected · press Play on the laptop')).toBeVisible();
+  await expect(page.getByText('iPad connected')).toBeVisible();
+  await pause(page, 5000); // longer than the laptop waits for an answer
+  await expect(page.getByText(outOfDate)).toHaveCount(0);
+  await expect(ipad.getByText(/out of date|reload/i)).toHaveCount(0);
+
+  // A fuller iPad than the safe show layout: a warning in the check, with the button.
+  const notSafe = page.getByText("Test's iPad is not in the safe show layout");
+  await expect(notSafe).toHaveCount(0);
+  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await page.getByRole('tab', { name: 'Connections' }).click();
+  await page.getByRole('checkbox', { name: 'Loops & scenes page' }).check();
+  await pieceStep(page, 'Ending & check');
+  await expect(notSafe).toBeVisible();
+  await page.getByRole('button', { name: "Use the safe show layout on Test's iPad" }).click();
+  await expect(notSafe).toHaveCount(0);
+  await expect(ipad.getByRole('tab')).toHaveCount(0); // the iPad lost its Loops pages
+  expect(pageErrors(page)).toEqual([]);
+});
+
 test('rehearse from a scene: the clock starts there, in that scene', async ({ page }) => {
   await openLaptopBoard(page);
   await pickColour(page, 'Red');

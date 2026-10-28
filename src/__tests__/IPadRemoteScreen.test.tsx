@@ -27,6 +27,7 @@ vi.mock('../remote/useRemoteLink', () => ({
 
 import IPadRemoteScreen from '../ui/screens/IPadRemoteScreen';
 import { DEFAULT_REMOTE_TOUCH } from '../remote/protocol';
+import { BUILD_ID, reloadPage } from '../remote/buildId';
 import { safeShowLayout } from '../profiles/BoardSequencerConfig';
 
 const STATE = {
@@ -66,7 +67,10 @@ beforeEach(async () => {
   root = createRoot(el);
   await act(async () => { root.render(<IPadRemoteScreen code="4821" />); });
   await act(async () => { onMsg?.(STATE); });
+  // What the page sent on its own (its hello), apart from what each test does.
+  sentOnJoining = sent.splice(0);
 });
+let sentOnJoining: unknown[] = [];
 
 // Each test's page is taken down after it. A page left mounted kept its timers (the
 // touch mark), re-rendered during the next test and took over the fake link's message
@@ -443,5 +447,52 @@ describe('a loop pad while the laptop is stopped', () => {
     await act(async () => { pointer('pointerdown', loop, 100); });
     expect(sent).toContainEqual({ type: 'loop', index: 0 });
     expect(el.textContent).not.toContain(PRESS_PLAY);
+  });
+});
+
+describe('an iPad page of another build than the laptop', () => {
+  const reload = vi.fn();
+  beforeEach(() => {
+    reload.mockClear();
+    reloadPage.current = reload;
+    sessionStorage.clear();
+  });
+  const fromLaptop = (extra: Record<string, unknown>) => ({ ...STATE, state: { ...STATE.state, ...extra } });
+
+  it("answers the laptop's question with its own build, once per question", async () => {
+    await act(async () => { onMsg?.(fromLaptop({ ask: 4 })); });
+    await act(async () => { onMsg?.(fromLaptop({ ask: 4, beat: true })); });
+    expect(sent.filter((m) => (m as { type: string }).type === 'hello')).toEqual([{ type: 'hello', build: BUILD_ID, ask: 4 }]);
+    await act(async () => { onMsg?.(fromLaptop({ ask: 5 })); });
+    expect(sent).toContainEqual({ type: 'hello', build: BUILD_ID, ask: 5 });
+    // A laptop that never asks (one from before builds were compared) gets no hello.
+    expect(sentOnJoining.filter((m) => (m as { type: string }).type === 'hello')).toEqual([]);
+  });
+
+  it("reloads itself when the laptop's build is different, but only once for that build", async () => {
+    await act(async () => { onMsg?.(fromLaptop({ build: 'laptop-2' })); });
+    expect(reload).toHaveBeenCalledTimes(1);
+    // The page after the reload (the same tab): still different, say the laptop is the old
+    // one. It must not reload again, or it would never stop.
+    await act(async () => { root.unmount(); });
+    root = createRoot(el);
+    await act(async () => { root.render(<IPadRemoteScreen code="4821" />); });
+    await act(async () => { onMsg?.(fromLaptop({ build: 'laptop-2' })); });
+    await act(async () => { onMsg?.(fromLaptop({ build: 'laptop-2', beat: true })); });
+    expect(reload).toHaveBeenCalledTimes(1);
+    // A laptop updated again: once more.
+    await act(async () => { onMsg?.(fromLaptop({ build: 'laptop-3' })); });
+    expect(reload).toHaveBeenCalledTimes(2);
+  });
+
+  it('the same build, or a laptop that does not say, never reloads it', async () => {
+    await act(async () => { onMsg?.(fromLaptop({ build: BUILD_ID })); });
+    await act(async () => { onMsg?.(fromLaptop({})); });
+    expect(reload).not.toHaveBeenCalled();
+  });
+
+  it('nothing about it is shown on the iPad', async () => {
+    await act(async () => { onMsg?.(fromLaptop({ build: 'laptop-2', ask: 1 })); });
+    expect(el.textContent).not.toMatch(/out of date|reload|build/i);
   });
 });
