@@ -5,7 +5,7 @@
  * Pro-audio inspired interface with DAW-like layout.
  */
 
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { useAppStore, useCurrentScreen, useShowDebugPanel, useIsMuted, useUISize } from '../state/store';
 import { getAudioEngine } from '../sound/AudioEngine';
 
@@ -28,12 +28,18 @@ import InfoScreen from './screens/InfoScreen';
 
 // Components
 import MuteButton from './components/MuteButton';
-import { globalSpaceTogglesMute, showGlobalMuteButton } from './globalShortcuts';
-import DebugPanel from './facilitator/DebugPanel';
+import { debugPanelAllowed, globalSpaceTogglesMute, isDebugKey, showGlobalMuteButton } from './globalShortcuts';
 import GuidedOverlay from './components/performance/GuidedOverlay';
 import CalibrationModal from './components/performance/CalibrationModal';
 import AriaLiveAnnouncer from './components/AriaLiveAnnouncer';
 import ScreenTransition from './components/ScreenTransition';
+
+// The Debug Panel is a programmer's tool. import.meta.env.DEV is false in the production
+// build, so the panel's code is left out of it entirely; in development it opens only with
+// ?debug in the address (T4-11).
+const DebugPanel = import.meta.env.DEV ? lazy(() => import('./facilitator/DebugPanel')) : null;
+const debugAllowed = DebugPanel !== null
+  && debugPanelAllowed({ dev: import.meta.env.DEV, search: typeof window === 'undefined' ? '' : window.location.search });
 
 function App() {
   const screen = useCurrentScreen();
@@ -67,25 +73,19 @@ function App() {
   // Global keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = async (e: KeyboardEvent) => {
+      if (debugAllowed && isDebugKey(e, document.activeElement)) {
+        toggleDebugPanel();
+        return;
+      }
       // Don't trigger if typing in an input
       if (document.activeElement?.tagName === 'INPUT' ||
           document.activeElement?.tagName === 'TEXTAREA') {
         return;
       }
-
-      switch (e.key) {
-        case ' ':
-          if (!globalSpaceTogglesMute(useAppStore.getState().currentScreen)) break;
-          e.preventDefault();
-          await getAudioEngine().resume();
-          toggleMute();
-          break;
-        case 'd':
-        case 'D':
-          if (!e.ctrlKey && !e.metaKey && !e.altKey) {
-            toggleDebugPanel();
-          }
-          break;
+      if (e.key === ' ' && globalSpaceTogglesMute(useAppStore.getState().currentScreen)) {
+        e.preventDefault();
+        await getAudioEngine().resume();
+        toggleMute();
       }
     };
 
@@ -147,8 +147,10 @@ function App() {
       {/* Always visible mute button (not on the board, which has its own) */}
       {showGlobalMuteButton(screen) && <MuteButton />}
 
-      {/* Debug panel for facilitators */}
-      {showDebug && <DebugPanel />}
+      {/* Debug panel for facilitators: development only, with ?debug in the address */}
+      {DebugPanel && debugAllowed && showDebug && (
+        <Suspense fallback={null}><DebugPanel /></Suspense>
+      )}
 
       {/* Screen reader announcements */}
       <AriaLiveAnnouncer />

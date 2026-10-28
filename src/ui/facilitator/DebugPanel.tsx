@@ -2,7 +2,7 @@
  * Debug Panel - Real-time data visualization for facilitators
  */
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import {
   useAppStore,
   useIsTracking,
@@ -52,22 +52,7 @@ function DebugPanel() {
   });
   const trackedColorCount = getColorTracker().getTrackedColors().length;
 
-  // Keyboard shortcut to toggle
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'd' || e.key === 'D') {
-        if (!e.ctrlKey && !e.metaKey && !e.altKey) {
-          // Don't toggle if typing in an input
-          if (document.activeElement?.tagName !== 'INPUT') {
-            toggleDebugPanel();
-          }
-        }
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [toggleDebugPanel]);
+  // The "d" key is App's (one listener: a second one here toggled the panel straight back).
 
   const audioState = getAudioEngine().getState();
 

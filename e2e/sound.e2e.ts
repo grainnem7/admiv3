@@ -333,3 +333,18 @@ test('New loop starts from silence, Keep names it, Leave restores the player’s
   await expect(page.getByRole('group', { name: 'Band' }).getByRole('radio', { name: 'Quiet' })).toHaveAttribute('aria-checked', 'true');
   expect(pageErrors(page)).toEqual([]);
 });
+
+test('a "d" typed on a button or in a list never opens a Debug Panel (only ?debug in development does)', async ({ page }) => {
+  await openLaptopBoard(page);
+  await page.getByRole('button', { name: '▶ Play' }).first().focus();
+  await page.keyboard.press('d');
+  await page.getByRole('tab', { name: 'Sound' }).click();
+  // A keyboard user types a letter in a list to jump through it.
+  await page.getByRole('row', { name: /^Red: Melody/ }).getByRole('combobox', { name: 'Sound' }).focus();
+  await page.keyboard.press('d');
+  await page.locator('body').focus();
+  await page.keyboard.press('d');
+  await expect(page.getByText('Debug Panel')).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Debug information' })).toHaveCount(0);
+  expect(pageErrors(page)).toEqual([]);
+});
