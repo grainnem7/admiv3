@@ -204,11 +204,25 @@ interface LaunchedLoop {
 
 /** How long a replaced voice is kept so its last notes ring out. */
 const VOICE_RETIRE_MS = 4000;
+/** silenceNow: how fast what is ringing falls away (time constant, s), quick but without a click. */
+const CUT_FADE_TC = 0.006;
+/** silenceNow: when the emptied reverb and echo are freed, well after their fade. */
+const CUT_FREE_MS = 250;
+/**
+ * silenceNow over MIDI: Expression stays at 0 this long, past the look-ahead and the
+ * second release (RELEASE_REPEAT_MS), so a note already queued at the port never sounds.
+ */
+const CUT_MIDI_HOLD_SEC = 0.25;
+/** silenceNow: the kit dips first and stops this much later, so its hits end without a click. */
+const CUT_KIT_SEC = 0.03;
 /** How often a loading instrument is checked, and how long it is waited for at most. */
 const VOICE_READY_POLL_MS = 100;
 const VOICE_READY_MAX_MS = 15000;
 
 const LOOKAHEAD_SEC = 0.1;
+/** The shared echo: its time and how much of it comes round again. */
+const DELAY_TIME_SEC = 0.25;
+const DELAY_FEEDBACK = 0.32;
 /** How long Play waits for the instruments' samples before starting without them. */
 const START_READY_MAX_MS = 4000;
 const TICK_INTERVAL_MS = 25;
@@ -371,6 +385,8 @@ export class BoardSequencerEngine {
   /** CC 11: the last value sent, and the audio time it has been sent up to. */
   private exprLast = new Map<number, number>();
   private exprUntil = 0;
+  /** Until this audio time Expression stays at 0: notes queued before silenceNow stay silent. */
+  private cutUntil = 0;
   /** Phase 2: every chain and macro value last sent to Ableton, by channel and CC. */
   private abletonSent = new Map<string, number>();
   /** The plan last worked out, for the screen. */
@@ -450,7 +466,7 @@ export class BoardSequencerEngine {
     Tone.connect(reverbBus, reverb);
     reverb.connect(mix);
 
-    const delay = new Tone.FeedbackDelay({ delayTime: 0.25, feedback: 0.32, wet: 1 });
+    const delay = new Tone.FeedbackDelay({ delayTime: DELAY_TIME_SEC, feedback: DELAY_FEEDBACK, wet: 1 });
     const delayBus = ctx.createGain();
     Tone.connect(delayBus, delay);
     delay.connect(mix);
@@ -1131,7 +1147,7 @@ export class BoardSequencerEngine {
    * gain, and on a loop's own channel also where that loop's fade has got to.
    */
   private expressionFor(channel: number, audioTime: number): number {
-    if (this.muted) return 0;
+    if (this.muted || audioTime < this.cutUntil) return 0;
     return gainToCc(this.endTrack.valueAt(audioTime) * this.loopGain(channel, audioTime));
   }
 
@@ -1296,6 +1312,86 @@ export class BoardSequencerEngine {
     const end = this.endAuto();
     end.cancel(t);
     end.target(0, t, Math.max(0.02, sec / 4));
+  }
+
+  /**
+   * Silence now, as Stop gives it, while the step, the board and the clock carry on (New
+   * loop: "everything stops at once"). Stop throws the engine away; this keeps it, so it
+   * cuts everything itself: every note still ringing or already queued (each voice starts
+   * afresh, the kit stops, the reverb and echo empty), every loop leaves at once rather
+   * than fading over a pass, and over MIDI every note is released with Expression held at
+   * 0 until the notes queued ahead have gone. What sounds next is what the board and the
+   * settings ask for, from the next note on.
+   */
+  silenceNow(): void {
+    const t = Tone.immediate();
+    for (const e of this.voiceByChannel.values()) {
+      e.voice.cut();
+      e.pending?.voice.cut();
+    }
+    this.bandVoices?.pad.cut();
+    this.bandVoices?.bass.cut();
+    if (this.drumKit) {
+      const level = this.drumLevel?.gain;
+      level?.cancelScheduledValues(t);
+      level?.setTargetAtTime(0, t, CUT_FADE_TC);
+      this.drumKit.stopAll(t + CUT_KIT_SEC);
+      level?.setTargetAtTime(worldOf(this.cfg.soundWorld ?? 'none')?.drums.level ?? 1, t + CUT_KIT_SEC, CUT_FADE_TC);
+    }
+    this.freshTails();
+    if (this.timer) {
+      // Loops: gone now. One still wanted (none, in a new loop) comes in at the next pass.
+      const on = this.launched.filter((l) => l.fade?.dir !== 'out');
+      const next = this.pendingLaunch ?? {
+        slots: on.map((l) => l.slot),
+        loops: on.map((l) => l.cells),
+        colours: [...new Map(on.flatMap((l) => l.colours ?? []).map((c) => [c.id, c])).values()],
+      };
+      this.launched = [];
+      this.launchedSlots = [];
+      this.loopFades.clear();
+      this.pendingLaunch = next.slots.length > 0 ? next : null;
+      this.rebuildChannelIndex();
+    }
+    if (this.midiOpts.enabled && this.midi) {
+      this.cutUntil = t + CUT_MIDI_HOLD_SEC;
+      this.exprUntil = 0;
+      this.sendExpressionNow();
+      this.midi.releaseAll(this.midiChannels);
+    }
+  }
+
+  /**
+   * The shared reverb and echo start empty: what was ringing in them falls away within a
+   * few milliseconds and the old ones are freed after. A tail is sound too.
+   */
+  private freshTails(): void {
+    const { mix, reverbBus, delayBus } = this;
+    if (!mix) return;
+    const t = Tone.immediate();
+    if (this.reverb && reverbBus) {
+      const old = this.reverb;
+      const world = worldOf(this.cfg.soundWorld ?? 'none');
+      const fresh = new Tone.Reverb({ decay: world?.reverbDecay ?? 2.5, preDelay: world?.reverbPreDelay ?? 0.01, wet: 1 });
+      reverbBus.disconnect();
+      Tone.connect(reverbBus, fresh);
+      fresh.connect(mix);
+      old.wet.cancelScheduledValues(t);
+      old.wet.setTargetAtTime(0, t, CUT_FADE_TC);
+      this.reverb = fresh;
+      setTimeout(() => old.dispose(), CUT_FREE_MS);
+    }
+    if (this.delay && delayBus) {
+      const old = this.delay;
+      const fresh = new Tone.FeedbackDelay({ delayTime: DELAY_TIME_SEC, feedback: DELAY_FEEDBACK, wet: 1 });
+      delayBus.disconnect();
+      Tone.connect(delayBus, fresh);
+      fresh.connect(mix);
+      old.wet.cancelScheduledValues(t);
+      old.wet.setTargetAtTime(0, t, CUT_FADE_TC);
+      this.delay = fresh;
+      setTimeout(() => old.dispose(), CUT_FREE_MS);
+    }
   }
 
   /** Change of mind: the ending is cancelled and the sound comes back. */

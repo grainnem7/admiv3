@@ -29,10 +29,21 @@ function sampleConfigFor(instrumentKey: string) {
         : SAMPLE_CONFIGS[getInstrumentEntry(instrumentKey).sampleKey];
 }
 
+/** How fast a cut voice's notes fall away (time constant, s): quick, without a click. */
+const CUT_FADE_TC = 0.006;
+/** When the players of a cut voice are freed: well after their fade is over. */
+const CUT_FREE_MS = 250;
+
 export class BoardSequencerVoice extends ToneVoiceBase {
   private player: Player | null = null;
   private synth: SynthLayer | null = null;
   private sampleGain: GainNode | null = null;
+  /** What the voice plays, so cut() can start it afresh. */
+  private readonly sound: string | LayeredVoiceSpec;
+  /** Where the players' notes go now: cut() fades this one out and makes a new one. */
+  private lane: GainNode;
+  /** Players cut but not yet freed: dispose() frees them at once. */
+  private retiring = new Set<() => void>();
 
   constructor(ctx: AudioContext, sound: string | LayeredVoiceSpec) {
     super(ctx);
@@ -40,20 +51,57 @@ export class BoardSequencerVoice extends ToneVoiceBase {
     this.bypassFade = true;
     this.active = true;
     this.outputGain.gain.value = 1;
+    this.sound = sound;
+    this.lane = this.build();
+  }
+
+  /** The players for this voice's sound, into a lane of their own. */
+  private build(): GainNode {
+    const lane = this.ctx.createGain();
+    lane.connect(this.filterNode);
+    this.player = null;
+    this.synth = null;
+    this.sampleGain = null;
+    const sound = this.sound;
     if (typeof sound === 'string') {
-      this.player = new SamplerPlayer(sampleConfigFor(sound), this.filterNode);
-      return;
+      this.player = new SamplerPlayer(sampleConfigFor(sound), lane);
+      return lane;
     }
     if (sound.sample) {
-      this.sampleGain = ctx.createGain();
+      this.sampleGain = this.ctx.createGain();
       this.sampleGain.gain.value = sound.sampleLevel ?? 1;
-      this.sampleGain.connect(this.filterNode);
+      this.sampleGain.connect(lane);
       this.player = new SamplerPlayer(SAMPLE_CONFIGS[sound.sample], this.sampleGain);
     }
     if (sound.synth) {
       this.synth = createSynthLayer(sound.synth, sound.synthLevel ?? 1);
-      this.synth.connect(this.filterNode);
+      this.synth.connect(lane);
     }
+    return lane;
+  }
+
+  /**
+   * Silence at once: every note this voice is sounding or has queued falls away within a
+   * few milliseconds (a held bass note, a note scheduled for the next beat), and the voice
+   * plays on from its next note with fresh players of the same sound. A sampler's own
+   * release can't cut a note it has already been told when to end, hence fresh players.
+   * The samples are cached, so the fresh sampler is ready almost at once.
+   */
+  cut(): void {
+    const old = { lane: this.lane, player: this.player, synth: this.synth, sampleGain: this.sampleGain };
+    const now = this.ctx.currentTime;
+    old.lane.gain.cancelScheduledValues(now);
+    old.lane.gain.setTargetAtTime(0, now, CUT_FADE_TC);
+    this.lane = this.build();
+    const free = (): void => {
+      this.retiring.delete(free);
+      old.player?.dispose();
+      old.synth?.dispose();
+      old.sampleGain?.disconnect();
+      old.lane.disconnect();
+    };
+    this.retiring.add(free);
+    setTimeout(() => { if (this.retiring.has(free)) free(); }, CUT_FREE_MS);
   }
 
   /** Set tone/brightness: the voice's low-pass cutoff, t in 0..1 (dark→bright). */
@@ -92,9 +140,11 @@ export class BoardSequencerVoice extends ToneVoiceBase {
   }
 
   dispose(): void {
+    for (const free of [...this.retiring]) free();
     this.player?.dispose();
     this.synth?.dispose();
     this.sampleGain?.disconnect();
+    this.lane.disconnect();
     this.disposeBase();
   }
 }

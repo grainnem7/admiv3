@@ -113,6 +113,18 @@ export class RoundRobinDrumKit {
     this.fire(drum, gainDb, time);
   }
 
+  /**
+   * Silence from `time` (an audio time): every hit still ringing stops, and every hit
+   * already queued is cancelled. The next hit plays when it is asked for, not after the
+   * cancelled ones it would otherwise have had to wait behind.
+   */
+  stopAll(time: number): void {
+    for (const players of this.samples.values()) {
+      for (const p of players) p.stop(time);
+    }
+    this.lastStart.clear();
+  }
+
   dispose(): void {
     this.disposed = true;
     for (const players of this.samples.values()) {

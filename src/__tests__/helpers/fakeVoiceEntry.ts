@@ -9,7 +9,7 @@ import { vi } from 'vitest';
 export function fakeVoiceEntry(play: ReturnType<typeof vi.fn> = vi.fn()) {
   const gain = () => ({ gain: { value: 1, setTargetAtTime: vi.fn(), setValueAtTime: vi.fn(), cancelScheduledValues: vi.fn(), linearRampToValueAtTime: vi.fn() }, connect: vi.fn(), disconnect: vi.fn() });
   return {
-    voice: { play, setBrightness: vi.fn(), connect: vi.fn(), dispose: vi.fn(), isReady: () => true },
+    voice: { play, setBrightness: vi.fn(), connect: vi.fn(), dispose: vi.fn(), cut: vi.fn(), isReady: () => true },
     gain: gain(), rev: gain(), del: gain(), revBase: 0.2, delBase: 0, toneBase: 1,
   };
 }

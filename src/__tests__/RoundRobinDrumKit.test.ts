@@ -4,8 +4,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // Each Tone.Player records its url + a shared start spy tagged with the
 // sample's basename (the kit loads via the full `samples/drums/<kit>/<file>`
 // path, but tests assert on the bare filename), so we can see WHICH sample fired.
-const { startSpy, players } = vi.hoisted(() => ({
+const { startSpy, stopSpy, players } = vi.hoisted(() => ({
   startSpy: vi.fn(),
+  stopSpy: vi.fn(),
   players: [] as { url: string }[],
 }));
 
@@ -23,8 +24,9 @@ vi.mock('tone', () => {
         loaded: !bad,
         connect: vi.fn(),
         start: (t?: number) => startSpy(opts.url.split('/').pop(), t),
+        stop: (t?: number) => stopSpy(opts.url.split('/').pop(), t),
         dispose: vi.fn(),
-        volume: { value: 0 },
+        volume: { value: 0, setValueAtTime: vi.fn() },
       };
     });
   return { Player };
@@ -168,3 +170,29 @@ describe('RoundRobinDrumKit', () => {
     expect(startSpy.mock.calls.map((c) => c[0] as string)).toEqual(['kick-01.wav']);
   });
 });
+
+describe('RoundRobinDrumKit — stopped at once (T1-02)', () => {
+  it('stops every hit ringing or queued, and the next hit is played when asked, not after the cancelled ones', async () => {
+    mockFetchOk();
+    const kit = new RoundRobinDrumKit(fakeCtx(), 'studio-kit');
+    await kit.whenReady();
+    // Both kicks queued for t = 5 (a look-ahead's worth of hits).
+    kit.play('kick', 0.8, 5);
+    kit.play('kick', 0.8, 5);
+    kit.stopAll(1);
+    expect(stopSpy.mock.calls.map((c) => c[0] as string).sort()).toEqual(
+      ['crash-01.wav', 'hat-closed-01.wav', 'kick-01.wav', 'kick-02.wav', 'snare-01.wav'],
+    );
+    expect(stopSpy.mock.calls.every((c) => c[1] === 1)).toBe(true);
+    startSpy.mockClear();
+    kit.play('kick', 0.8, 2);
+    expect(startSpy).toHaveBeenCalledWith('kick-01.wav', 2);
+  });
+
+  it('before it is ready, stopping does nothing and does not throw', () => {
+    mockFetchOk();
+    const kit = new RoundRobinDrumKit(fakeCtx(), 'studio-kit');
+    expect(() => kit.stopAll(0)).not.toThrow();
+  });
+});
+
