@@ -11,6 +11,8 @@ export interface PlayPanelProps {
   /** Stop was pressed once while the clock runs: the next press stops the piece. */
   stopArmed?: boolean;
   onToggleMute(): void;
+  /** The owner's Simplify button, beside Mute while playing (laptop only). */
+  simplify?: ReactNode;
   /** The tempo actually in effect: the engine's while playing, the saved one when stopped. */
   bpm: number;
   /** A scene is reaching its speed gradually: the speed it is on its way to (null = none). */
@@ -47,7 +49,7 @@ export interface PlayPanelProps {
  * room for it, so a focused control is never hidden behind the bar.
  */
 export function PlayPanel({
-  running, muted, onStart, onStop, stopArmed = false, onToggleMute, bpm, bpmTo = null, step, cols, variationLap, beatOn, clock = null,
+  running, muted, onStart, onStop, stopArmed = false, onToggleMute, simplify = null, bpm, bpmTo = null, step, cols, variationLap, beatOn, clock = null,
   heldCount, handGuardWaiting, piece, connections, cap, groove, sound, loops, stacked, transportAlign,
 }: PlayPanelProps): JSX.Element {
   const [tab, setTab] = useState('sound');
@@ -82,6 +84,7 @@ export function PlayPanel({
         <Button tone="secondary" aria-pressed={muted} onClick={onToggleMute} disabled={!running} title={running ? undefined : 'Mute works while playing.'}>
           {muted ? 'Muted' : 'Mute'}
         </Button>
+        {running && simplify}
       </div>
       <span
         style={{

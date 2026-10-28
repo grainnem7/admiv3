@@ -366,6 +366,7 @@ button.primary { background: var(--accent); color: var(--surface); border-color:
       <li><input type="checkbox" id="k14"><label for="k14">Scenes: Arrival 0:00, Build 1:30, Open 3:30, Home 6:00.</label></li>
       <li><input type="checkbox" id="k20"><label for="k20">Make a piece → 3: it says there's a copy on this laptop. Press <b>⤓ Back up to a file</b> and put the file on a USB stick too.</label></li>
       <li><input type="checkbox" id="k15"><label for="k15">The performance: 7:00, With Play, Final chord, 2 passes, When I press End.</label></li>
+      <li><input type="checkbox" id="k21"><label for="k21">One full run with everything on (Show → <b>▶ Start the piece</b>, all 7:00). Make a piece → <b>3 · Ending &amp; check</b> should then say <b>Keeping time: fine</b>. If it says the sound fell behind, close other programs, plug the laptop in, and run it again.</label></li>
       <li><input type="checkbox" id="k16"><label for="k16">Sound check through the PA: ▶ Play, Tim places counters, set the level, then ■ Stop. Stopping resets the clock, so the check doesn't count.</label></li>
     </ul></div></div>
     <div class="phase"><span class="when">−2 min</span><div><ul class="check">
@@ -413,6 +414,8 @@ button.primary { background: var(--accent); color: var(--surface); border-color:
       <tr><td class="k">Red banner: "The camera has stopped"</td><td>The music carries on with the last pattern. Press <b>Try the camera again</b>; check the USB cable.</td></tr>
       <tr><td class="k">Stop pressed by accident</td><td>While the clock runs, the first press only says "Press again to stop" — just don't press again.</td></tr>
       <tr><td class="k">End pressed too early</td><td><b>Cancel the ending</b> on the laptop.</td></tr>
+      <tr><td class="k">Too much going on, or something sounds wrong</td><td><b>Simplify</b> on the laptop (or Shift+S): only Tim and the bed loop. The band, Extra notes and Sounds change go; the clock carries on. <b>Back to full</b> brings the scene back from the next pass.</td></tr>
+      <tr><td class="k">The laptop says "The sound is falling behind"</td><td>Carry on: ADMI pauses the extras by itself (Magenta, then Extra notes, then Sounds change) and says each one. Afterwards: close other programs and plug the laptop in.</td></tr>
       <tr><td class="k">Something awful</td><td><b>Mute</b> on the laptop, which stops the sound without losing anything. Unmute when ready.</td></tr>
       <tr><td class="k">Loops or scenes missing</td><td>Check the address is <code>localhost:3001</code> and Tim is picked on Who's playing. Still missing: Make a piece → 3 → <b>⤒ Restore from a file</b> with your backup, or a file from <code>.admi-data/backups</code> in the ADMIv3 folder.</td></tr>
       <tr><td class="k">Magenta not responding</td><td>Fill falls back to Simple rules by itself. Carry on.</td></tr>

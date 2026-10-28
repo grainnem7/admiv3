@@ -601,3 +601,22 @@ describe('BoardSequencerConfig — when each colour comes in, and scenes that gl
     expect('glideSec' in scenes[2]).toBe(false);
   });
 });
+
+describe('BoardSequencerConfig — keeping time (Sound → Advanced)', () => {
+  beforeEach(() => localStorage.clear());
+
+  it('a profile saved before it has the safe defaults: falling behind after 1 s lost, the clock after 1 s, the valve on', () => {
+    localStorage.setItem('admi-board-sequencer', JSON.stringify({ bpm: 90 }));
+    const c = loadBoardSequencerConfig()!;
+    expect(c.keepTimeBehindSec).toBe(1);
+    expect(c.keepTimeDriftSec).toBe(1);
+    expect(c.keepTimeValve).toBe(true);
+  });
+
+  it('round-trips the thresholds and the switch, and holds them inside their ranges', () => {
+    saveBoardSequencerConfig({ ...DEFAULT_BOARD_SEQUENCER_CONFIG, keepTimeBehindSec: 2.5, keepTimeDriftSec: 4, keepTimeValve: false });
+    expect(loadBoardSequencerConfig()).toMatchObject({ keepTimeBehindSec: 2.5, keepTimeDriftSec: 4, keepTimeValve: false });
+    localStorage.setItem('admi-board-sequencer', JSON.stringify({ keepTimeBehindSec: 0, keepTimeDriftSec: 99, keepTimeValve: 'yes' }));
+    expect(loadBoardSequencerConfig()).toMatchObject({ keepTimeBehindSec: 0.3, keepTimeDriftSec: 10, keepTimeValve: true });
+  });
+});

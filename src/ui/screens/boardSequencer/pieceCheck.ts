@@ -10,6 +10,7 @@ import {
 import { loopLabel, type Scene } from '../../../songs/performance/launcher';
 import type { BandLevel } from '../../../songs/band/band';
 import type { ReadyItem } from './play/ReadyCheck';
+import { VALVE_NAMES, type KeepingTimeReport, type ValveStep } from '../../../songs/keepingTime';
 
 export interface PieceCheckInput {
   scenes: readonly Scene[];
@@ -211,4 +212,36 @@ export function ipadCheckItems(p: IpadCheckInput): ReadyItem[] {
     });
   }
   return items;
+}
+
+/**
+ * Keeping time (spec 2026-10-28): did the sound keep up with the clock in the last run?
+ * One full run with everything on, on the show laptop, should say "Keeping time: fine".
+ */
+export function keepingTimeCheckItems(p: { report: KeepingTimeReport | null; running: boolean; valve: readonly ValveStep[] }): ReadyItem[] {
+  const r = p.report;
+  if (r === null) {
+    return [{
+      label: 'Keeping time: not measured yet', state: 'warn',
+      fix: 'Play the piece once all the way through, with everything on. This line then says whether the sound kept time.',
+    }];
+  }
+  const when = p.running ? 'so far in this run' : 'in the last run';
+  const items: ReadyItem[] = [];
+  if (r.everBehind) {
+    const beats = [`${r.lateBeats} ${r.lateBeats === 1 ? 'beat' : 'beats'} late`, ...(r.skippedBeats > 0 ? [`${r.skippedBeats} dropped`] : [])].join(', ');
+    const paused = p.valve.length > 0 ? ` To keep up, ADMI paused ${listNames(p.valve.map((s) => VALVE_NAMES[s]))}.` : '';
+    items.push({
+      label: `Keeping time: the sound fell ${r.lostSec.toFixed(1)} s behind ${when} (${beats})`, state: 'warn',
+      fix: `Close other programs, plug the laptop in, and turn Extra notes off (Sound tab). Then run the piece again.${paused}`,
+    });
+  }
+  if (r.drifting) {
+    items.push({
+      label: `Keeping time: the sound’s clock ran ${r.driftSec.toFixed(1)} s slow ${when}`, state: 'warn',
+      fix: 'Dropping extras can’t fix this: check the sound output (plug the laptop in, or choose another output), then run the piece again.',
+    });
+  }
+  if (items.length > 0) return items;
+  return [{ label: p.running ? 'Keeping time: fine so far' : `Keeping time: fine in the last run (${formatClock(r.runSec)})`, state: 'ok' }];
 }

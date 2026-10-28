@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { PLAY_AFTER_STOP_MS, START_AFTER_PIECE_MS, spaceAction, spaceTogglesPlay, startTooSoon } from '../ui/screens/boardSequencer/spaceKey';
+import { PLAY_AFTER_STOP_MS, START_AFTER_PIECE_MS, simplifyKey, spaceAction, spaceTogglesPlay, startTooSoon } from '../ui/screens/boardSequencer/spaceKey';
 
 afterEach(() => { document.body.innerHTML = ''; });
 
@@ -103,5 +103,32 @@ describe('spaceAction: what one Space press does (R2-T4-01, ledger M7)', () => {
     expect(spaceAction('bigBoard', el('<button>■ Stop</button>'), playing)).toBe('none');
     expect(spaceAction('setup', document.body, stopped)).toBe('none');
     expect(spaceAction('setup', document.body, playing)).toBe('none');
+  });
+});
+
+describe('simplifyKey: Shift+S, the owner\'s Simplify (spec 2026-10-28)', () => {
+  const key = (over: Partial<{ key: string; shiftKey: boolean; ctrlKey: boolean; altKey: boolean; metaKey: boolean; repeat: boolean }> = {}) =>
+    ({ key: 'S', shiftKey: true, ctrlKey: false, altKey: false, metaKey: false, repeat: false, ...over });
+
+  it('Shift+S simplifies in Play and in Show while the board plays', () => {
+    expect(simplifyKey(key(), 'play', document.body, true)).toBe(true);
+    expect(simplifyKey(key(), 'bigBoard', document.body, true)).toBe(true);
+    expect(simplifyKey(key(), 'bigBoard', el('<button>■ Stop</button>'), true)).toBe(true);
+  });
+
+  it('never by accident: not a plain s, not with Ctrl, Alt or Cmd, not held down', () => {
+    expect(simplifyKey(key({ key: 's', shiftKey: false }), 'play', document.body, true)).toBe(false);
+    expect(simplifyKey(key({ ctrlKey: true }), 'play', document.body, true)).toBe(false);
+    expect(simplifyKey(key({ altKey: true }), 'play', document.body, true)).toBe(false);
+    expect(simplifyKey(key({ metaKey: true }), 'play', document.body, true)).toBe(false);
+    expect(simplifyKey(key({ repeat: true }), 'play', document.body, true)).toBe(false);
+  });
+
+  it('never while typing, never in Set up, never stopped', () => {
+    expect(simplifyKey(key(), 'play', el('<input type="text" />'), true)).toBe(false);
+    expect(simplifyKey(key(), 'play', el('<textarea></textarea>'), true)).toBe(false);
+    expect(simplifyKey(key(), 'play', el('<div contenteditable="true">x</div>'), true)).toBe(false);
+    expect(simplifyKey(key(), 'setup', document.body, true)).toBe(false);
+    expect(simplifyKey(key(), 'play', document.body, false)).toBe(false);
   });
 });

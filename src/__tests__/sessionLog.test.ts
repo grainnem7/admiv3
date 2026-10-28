@@ -79,3 +79,20 @@ describe('the session log', () => {
     expect(sessionFileName('', new Date('2026-10-06T14:05:00Z'), 'json')).toMatch(/^admi-board-player-/);
   });
 });
+
+describe('the session log: keeping time', () => {
+  it('writes a keeping-time sample, rounded, so a rehearsal can be checked afterwards', () => {
+    const { l, tick } = log();
+    l.start('Tim', {}, 0);
+    tick(30_000);
+    l.timing({ driftSec: 0.01234, lateBeats: 3, skippedBeats: 1, lostSec: 1.23456, worstLateSec: 0.98765 });
+    const ev = l.toJSON().events[1];
+    expect(ev).toEqual({ t: 30, kind: 'timing', driftSec: 0.012, lateBeats: 3, skippedBeats: 1, lostSec: 1.235, worstLateSec: 0.988 });
+  });
+
+  it('writes nothing when not running', () => {
+    const { l } = log();
+    l.timing({ driftSec: 0, lateBeats: 0, skippedBeats: 0, lostSec: 0, worstLateSec: 0 });
+    expect(l.toJSON().events).toEqual([]);
+  });
+});

@@ -1801,3 +1801,147 @@ test('a scene at 0:05 that reaches its faster speed over 4 s: the speed read dur
   expect(log[log.length - 1].bpm).toBe(150);
   expect(pageErrors(page)).toEqual([]);
 });
+
+// ---- Keeping time, and Simplify (spec 2026-10-28) ----
+
+interface LogFile {
+  notes: { t: number; origin: string; role: string; source: string }[];
+  events: { t: number; kind: string; action?: string }[];
+}
+
+/** The whole session log, saved as JSON: notes (with who made them) and events. */
+async function sessionLogFile(page: Page): Promise<LogFile> {
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('button', { name: /^Save the session log as JSON/ }).click(),
+  ]);
+  return JSON.parse(readFileSync(await download.path(), 'utf-8')) as LogFile;
+}
+
+/** Sound tab: some Extra notes from the simple rules (Magenta is never loaded in the tests). */
+async function extrasFromTheRules(page: Page): Promise<void> {
+  await page.getByRole('tab', { name: 'Sound' }).click();
+  await page.getByRole('group', { name: 'Extra notes' }).getByRole('radio', { name: 'Some', exact: true }).click();
+  await page.getByRole('button', { name: /^Advanced: key, scale/ }).click();
+  await page.getByRole('radiogroup', { name: 'Extra notes come from' }).getByRole('radio', { name: 'Simple rules' }).click();
+}
+
+const keepingTime = (page: Page) => page.getByRole('status', { name: 'Keeping time' });
+
+test('keeping time: a normal run shows nothing while it plays, and the Ready check then says "Keeping time: fine"', async ({ page }) => {
+  await openLaptopBoard(page);
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1], [5, 3], [4, 5]]);
+  await pieceStep(page, 'Ending & check');
+  await expect(page.getByText('Keeping time: not measured yet', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await expect(page.getByRole('status').filter({ hasText: 'Playing' }).first()).toBeVisible({ timeout: 20_000 });
+  await expect.poll(() => notesPlayed(page), { timeout: 15_000 }).toBeGreaterThan(0);
+  await expect(page.getByText('Keeping time: fine so far', { exact: true })).toBeVisible();
+  await pause(page, 8000);
+  await expect(keepingTime(page)).toHaveCount(0);
+  await expect(page.getByText('Keeping time: fine so far', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '■ Stop', exact: true }).first().click();
+  await expect(page.getByRole('status').filter({ hasText: 'Stopped' }).first()).toBeVisible();
+  await expect(page.getByText(/^Keeping time: fine in the last run \(0:\d\d\)$/)).toBeVisible();
+  expect(pageErrors(page)).toEqual([]);
+});
+
+test('keeping time: a page that stalls mid-piece reports late beats, and the valve pauses Extra notes, said on the laptop', async ({ page }) => {
+  await openLaptopBoard(page);
+  await extrasFromTheRules(page);
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1], [5, 3], [4, 5], [6, 7]]);
+  await startPiece(page);
+  await pieceClockRunning(page);
+  await expect.poll(() => notesPlayed(page), { timeout: 15_000 }).toBeGreaterThan(0);
+  await pause(page, 6000);
+  await expect(keepingTime(page)).toHaveCount(0);
+  // The page is too busy to send beats for 2.5 s.
+  await page.evaluate(() => { const end = performance.now() + 2500; while (performance.now() < end) { /* busy */ } });
+  await expect(keepingTime(page)).toContainText('The sound is falling behind.');
+  await expect(keepingTime(page)).toContainText('Paused to keep the sound in time: Extra notes.');
+  await expect(keepingTime(page).getByRole('button', { name: 'Switch the extras back on' })).toBeVisible();
+  await pause(page, 4000);
+  const log = await sessionLogFile(page);
+  const paused = log.events.find((e) => e.kind === 'action' && e.action === 'Extra notes paused to keep the sound in time.');
+  expect(paused).toBeDefined();
+  // Extra notes played before, and not after the valve paused them.
+  expect(log.notes.some((n) => n.origin === 'fill' && n.t < paused!.t - 1)).toBe(true);
+  expect(log.notes.filter((n) => n.origin === 'fill' && n.t > paused!.t + 1)).toEqual([]);
+  // The player's own notes carry on.
+  expect(log.notes.some((n) => n.origin !== 'fill' && n.origin !== 'band' && n.t > paused!.t + 1)).toBe(true);
+  await page.getByRole('button', { name: '■ Stop', exact: true }).first().click();
+  await page.getByRole('button', { name: '■ Press again to stop' }).first().click();
+  await expect(page.getByRole('status').filter({ hasText: 'Stopped' }).first()).toBeVisible();
+  await pieceStep(page, 'Ending & check');
+  await expect(page.getByText(/^Keeping time: the sound fell \d+\.\d s behind in the last run \(\d+ beats? late/)).toBeVisible();
+  await expect(page.getByText(/To keep up, ADMI paused Extra notes\.$/)).toBeVisible();
+  expect(pageErrors(page)).toEqual([]);
+});
+
+test('Simplify, by mouse and by Shift+S: the band, Extra notes and the second loop go silent, the bed and the player play on; Back to full brings them back', async ({ page }) => {
+  test.setTimeout(180_000);
+  await openLaptopBoard(page);
+  await extrasFromTheRules(page);
+  await page.getByRole('group', { name: 'Band' }).getByRole('radio', { name: 'Quiet' }).click();
+  // Two loops: the Bed (yellow, chords) and another (blue, bass); both play.
+  await saveTwoLoops(page);
+  await page.getByRole('listitem', { name: /^Loop 1:/ }).getByRole('button', { name: '▶ Play' }).click();
+  await page.getByRole('listitem', { name: /^Loop 2:/ }).getByRole('button', { name: '▶ Play' }).click();
+  // The player's own counters (red, melody).
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1], [5, 3], [4, 5], [6, 7]]);
+  await expect(page.getByRole('button', { name: /^Simplify/ })).toHaveCount(0); // only while playing
+  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await expect(page.getByRole('status').filter({ hasText: 'Playing' }).first()).toBeVisible({ timeout: 20_000 });
+  await pause(page, 8000); // the band joins on the pass after the first counter
+
+  const banner = page.getByRole('status', { name: 'Simplify' });
+  // By mouse.
+  await page.getByRole('button', { name: /^Simplify/ }).click();
+  await expect(banner).toHaveText('Simplified: Test and the bed');
+  await expect(page.getByRole('button', { name: /^Back to full/ })).toHaveAttribute('aria-pressed', 'true');
+  await pause(page, 6000);
+  await page.getByRole('button', { name: /^Back to full/ }).click();
+  await expect(banner).toHaveText('Back to full from the next pass');
+  await expect(banner).toHaveCount(0, { timeout: 15_000 });
+  await pause(page, 7000);
+  // By keyboard, in Show.
+  await page.getByRole('button', { name: /^Show: the board, the clock/ }).click();
+  await page.keyboard.press('Shift+S');
+  await expect(banner).toHaveText('Simplified: Test and the bed');
+  await pause(page, 6000);
+  await page.keyboard.press('Shift+S');
+  await expect(banner).toHaveText('Back to full from the next pass');
+  await page.getByRole('button', { name: 'Leave Show' }).click();
+  await expect(banner).toHaveCount(0, { timeout: 15_000 });
+  await pause(page, 2000);
+
+  const log = await sessionLogFile(page);
+  const at = (action: string): number[] => log.events.filter((e) => e.kind === 'action' && e.action === action).map((e) => e.t);
+  const [s1, s2] = at('simplify');
+  const [b1, b2] = at('back to full');
+  expect([s1, b1, s2, b2].every((t) => typeof t === 'number')).toBe(true);
+  const between = (from: number, to: number) => log.notes.filter((n) => n.t > from && n.t < to);
+  const extras = (ns: LogFile['notes']) => ns.filter((n) => n.origin === 'band' || n.origin === 'fill');
+  const loop = (ns: LogFile['notes'], role: string) => ns.filter((n) => n.source === 'loop' && n.role === role);
+  const player = (ns: LogFile['notes']) => ns.filter((n) => n.source === 'live' && n.origin !== 'band' && n.origin !== 'fill');
+  // Full before: the band, Extra notes, both loops and the player.
+  expect(log.notes.some((n) => n.origin === 'band' && n.t < s1)).toBe(true);
+  expect(log.notes.some((n) => n.origin === 'fill' && n.t < s1)).toBe(true);
+  expect(loop(between(0, s1), 'bass').length).toBeGreaterThan(0);
+  // Simplified (mouse, then keyboard): only the bed and the player.
+  for (const [from, to] of [[s1, b1], [s2, b2]]) {
+    const ns = between(from + 0.5, to);
+    expect(extras(ns)).toEqual([]);
+    expect(loop(ns, 'bass')).toEqual([]);
+    expect(loop(ns, 'chord').length).toBeGreaterThan(0);
+    expect(player(ns).length).toBeGreaterThan(0);
+  }
+  // Back to full: from the next pass, everything is back.
+  const full = between(b1 + 6, s2);
+  expect(loop(full, 'bass').length).toBeGreaterThan(0);
+  expect(full.some((n) => n.origin === 'band')).toBe(true);
+  expect(pageErrors(page)).toEqual([]);
+});

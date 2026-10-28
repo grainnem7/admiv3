@@ -36,7 +36,17 @@ export type LogEvent =
   | { t: number; kind: 'stop' }
   | { t: number; kind: 'board'; cells: { row: number; col: number; colour: string }[] }
   | { t: number; kind: 'setting'; by: LogActor; change: Record<string, unknown> }
-  | { t: number; kind: 'action'; by: LogActor; action: string };
+  | { t: number; kind: 'action'; by: LogActor; action: string }
+  | ({ t: number; kind: 'timing' } & TimingSample);
+
+/** Keeping time (keepingTime.ts), sampled while the board plays: drift and late beats so far. */
+export interface TimingSample {
+  driftSec: number;
+  lateBeats: number;
+  skippedBeats: number;
+  lostSec: number;
+  worstLateSec: number;
+}
 
 export interface SessionLogData {
   version: 1;
@@ -147,6 +157,16 @@ export class SessionLog {
   action(by: LogActor, action: string): void {
     if (!this.running) return;
     this.events.push({ t: this.t(), kind: 'action', by, action });
+  }
+
+  /** A keeping-time sample: how the sound has kept time so far this run. */
+  timing(sample: TimingSample): void {
+    if (!this.running) return;
+    const ms = (v: number): number => Math.round(v * 1000) / 1000;
+    this.events.push({
+      t: this.t(), kind: 'timing', driftSec: ms(sample.driftSec), lateBeats: sample.lateBeats,
+      skippedBeats: sample.skippedBeats, lostSec: ms(sample.lostSec), worstLateSec: ms(sample.worstLateSec),
+    });
   }
 
   counts(): { notes: number; placed: number; added: number; events: number } {

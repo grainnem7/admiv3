@@ -45,6 +45,9 @@ import type { NamedVoice } from '../audio/evolve/evolve';
 import { GainTrack } from './gainTrack';
 import type { EndingStyle } from './performance/clock';
 import { bassNote, chordOnDegree, degreeOfNote, voiceNear } from './harmony/harmony';
+import {
+  LATE_TOLERANCE_SEC, nextValveStep, TimeKeeper, type KeepingTimeLimits, type KeepingTimeReport, type ValveStep,
+} from './keepingTime';
 
 /** A note the engine actually scheduled (drives note pops / "Now:" — never inferred from the playhead). */
 export interface FiredNote {
@@ -180,6 +183,12 @@ const MIX_SWITCH_TC = 0.03;
 /** A cell from a saved loop (a launched slot or a pad's bank), not the player's board. */
 function isLoopLayer(layer: string | undefined): boolean {
   return layer !== undefined && (layer.startsWith('slot') || layer.startsWith('bank'));
+}
+
+/** Simplify's bed: the first loop still playing (not one fading out), or none. */
+function bedOf(launched: readonly LaunchedLoop[]): LaunchedLoop[] {
+  const bed = launched.find((l) => l.fade?.dir !== 'out');
+  return bed ? [bed] : [];
 }
 
 /** A well-mixed number from a seed, a pass, a square and a name: the same inputs, the same number. */
@@ -409,6 +418,19 @@ export class BoardSequencerEngine {
   private volumeSent = -1;
   /** False when the player wants MIDI only: the built-in sound is silenced, the log and the lights carry on. */
   private internalSound = true;
+  /** The band level the settings ask for; `band` is what plays (off while simplified). */
+  private bandSetting: BandLevel = 'off';
+  // Keeping time (keepingTime.ts): the meter, the wall clock it reads against, and what
+  // the safety valve has dropped this run, from when.
+  private keeper = new TimeKeeper();
+  private wallNow: () => number = () => performance.now();
+  private valveTaken: ValveStep[] = [];
+  private valveFromMs = 0;
+  /**
+   * Simplify (the owner's button): the player and the scene's first loop only, no band,
+   * no Extra notes, no Sounds change. 'leaving' = Back to full, waiting for the next pass.
+   */
+  private simplify: 'off' | 'on' | 'leaving' = 'off';
 
   constructor(cfg: BoardEngineConfig) {
     this.cfg = cfg;
@@ -488,7 +510,8 @@ export class BoardSequencerEngine {
     this.rebuildChannelIndex();
     const needsDrums = this.cfg.channels.some((c) => c.role === 'drums') || (this.cfg.band ?? 'off') !== 'off';
     if (needsDrums) await this.buildDrumKit();
-    this.band = this.cfg.band ?? 'off';
+    this.bandSetting = this.cfg.band ?? 'off';
+    this.band = this.simplify === 'off' ? this.bandSetting : 'off';
     if (this.band !== 'off') this.buildBandVoices();
     // One sampled voice per melody/chord/bass channel → its own gain + FX sends.
     for (const ch of this.cfg.channels) this.buildVoice(ch);
@@ -600,9 +623,16 @@ export class BoardSequencerEngine {
 
   /** The band's level, live. Off is silent at once; a level change glides. */
   setBand(level: BandLevel): void {
+    this.bandSetting = level;
+    this.cfg.band = level;
+    this.applyBand();
+  }
+
+  /** The band that plays: the setting, or none while simplified. */
+  private applyBand(): void {
+    const level: BandLevel = this.simplify === 'off' ? this.bandSetting : 'off';
     if (this.band === level) return;
     this.band = level;
-    this.cfg.band = level;
     if (level !== 'off') {
       if (!this.drumKit) void this.buildDrumKit();
       if (!this.bandVoices) this.buildBandVoices();
@@ -677,9 +707,20 @@ export class BoardSequencerEngine {
    */
   setFill(amount: number, seed: number, kept: FillNote[] | null): void {
     this.fillSetting = amount;
-    this.fillAmount = Math.max(0, Math.min(1, this.fillOverride ?? amount));
     this.fillSeed = seed;
     this.fillKept = kept;
+    this.applyAmounts();
+  }
+
+  /**
+   * The fill and Evolve amounts that play: a counter's value, else the setting — or none
+   * while simplified or dropped by the safety valve.
+   */
+  private applyAmounts(): void {
+    const fillOff = this.simplify !== 'off' || this.valveTaken.includes('fill');
+    const evolveOff = this.simplify !== 'off' || this.valveTaken.includes('evolve');
+    this.fillAmount = fillOff ? 0 : Math.max(0, Math.min(1, this.fillOverride ?? this.fillSetting));
+    this.evolve = { ...this.evolve, amount: evolveOff ? 0 : Math.max(0, Math.min(1, this.evolveOverride ?? this.evolveSetting)) };
   }
 
   /** Where fill ideas come from (switchable while playing). */
@@ -689,9 +730,14 @@ export class BoardSequencerEngine {
     this.fillKey = ''; // rebuild from the new source on the next beat
   }
 
+  /** Where fill ideas come from now: the simple rules once the safety valve has paused Magenta. */
+  private fillEngineNow(): 'magenta' | 'rules' {
+    return this.valveTaken.includes('magenta') ? 'rules' : (this.cfg.fillEngine ?? 'magenta');
+  }
+
   /** What the player is told about where the fill is coming from. */
   getFillStatus(): FillSourceStatus {
-    if ((this.cfg.fillEngine ?? 'magenta') === 'rules') return 'rules';
+    if (this.fillEngineNow() === 'rules') return 'rules';
     const st = magentaStatus();
     if (st === 'failed') return 'offline';
     if (st !== 'ready') return 'loading';
@@ -707,7 +753,8 @@ export class BoardSequencerEngine {
   /** Evolve settings (safe while playing). Applied from the next beat. */
   setEvolve(settings: EvolveSettings): void {
     this.evolveSetting = settings.amount;
-    this.evolve = { ...settings, amount: Math.max(0, Math.min(1, this.evolveOverride ?? settings.amount)) };
+    this.evolve = { ...settings };
+    this.applyAmounts();
   }
 
   /** The loop Evolve is on now (for Hold). */
@@ -1573,8 +1620,7 @@ export class BoardSequencerEngine {
     this.evolveOverride = values.evolve ?? null;
     // At once, from the saved setting underneath: the settings are applied only when they
     // change, so waiting for that left a fill or evolve counter doing nothing while playing.
-    this.fillAmount = Math.max(0, Math.min(1, this.fillOverride ?? this.fillSetting));
-    this.evolve = { ...this.evolve, amount: Math.max(0, Math.min(1, this.evolveOverride ?? this.evolveSetting)) };
+    this.applyAmounts();
     // In Ableton: Tone, Reverb and Delay counters as CC 25, 26 and 27 on every sounding
     // channel, sent on change; while one is on the board it owns that macro.
     this.counterOwns = { tone: values.tone !== undefined, reverb: reverb !== undefined, delay: delay !== undefined };
@@ -1843,6 +1889,11 @@ export class BoardSequencerEngine {
     this.lastBeatIndex = -1;
     this.lastTickTime = 0;
     this.fired = [];
+    // A new run: the meter starts again, and nothing is dropped.
+    this.keeper.start(this.startSec, this.wallNow());
+    this.valveTaken = [];
+    this.valveFromMs = this.wallNow();
+    this.applyAmounts();
     // Play: nothing is fading, and the receiving end hears full Expression again.
     this.backstop = false;
     this.endTrack.reset(1);
@@ -1889,15 +1940,52 @@ export class BoardSequencerEngine {
       // slowed down. (setBpm keeps the beat continuous, so it steps back by one at most.)
       return;
     }
-    const first = Math.max(this.lastInternalBeat + 1, target - MAX_CATCHUP_BEATS);
+    const owed = this.lastInternalBeat + 1;
+    const first = Math.max(owed, target - MAX_CATCHUP_BEATS);
+    // Keeping time: how late the oldest beat owed is (swing included: a pushed off-beat
+    // is on time). A few sums per pass, nothing per note.
+    const dueAt = this.startSec + owed * secPerBeat + (owed % 2 === 1 ? this.cfg.swing * secPerBeat * 0.5 : 0);
+    let late = 0;
     for (let beatIdx = first; beatIdx <= target; beatIdx++) {
       let stepTime = this.startSec + beatIdx * secPerBeat;
       if (beatIdx % 2 === 1) stepTime += this.cfg.swing * secPerBeat * 0.5; // groove off-beats
+      if (stepTime < now - LATE_TOLERANCE_SEC) late++;
       // A stall can leave a beat's time already behind us; Tone would clamp it anyway, but
       // saying so here keeps the fired-note log honest about when it really sounds.
       this.fireStep(beatIdx, Math.max(now, stepTime), secPerBeat, null);
     }
     this.lastInternalBeat = target;
+    if (now - dueAt > LATE_TOLERANCE_SEC) this.noteLate(now - dueAt, late, first - owed);
+  }
+
+  /** A scheduler pass was late: the meter counts it, and the safety valve may step. */
+  private noteLate(lagSec: number, late: number, skipped: number): void {
+    const wall = this.wallNow();
+    this.keeper.late(wall, lagSec, late, skipped);
+    // A hidden tab has its timers slowed by the browser: dropping extras can't help that.
+    if (typeof document !== 'undefined' && document.hidden) return;
+    const step = nextValveStep({
+      behind: this.keeper.behindSince(wall, this.valveFromMs),
+      enabled: this.keeper.getLimits().valve,
+      taken: this.valveTaken,
+      inUse: this.extrasInUse(),
+    });
+    if (step === null) return;
+    this.valveTaken = [...this.valveTaken, step];
+    this.valveFromMs = wall;
+    if (step === 'magenta') this.fillKey = ''; // the rules take over from the next beat
+    this.applyAmounts();
+  }
+
+  /** What the valve could drop now (what the settings and counters ask for). */
+  private extrasInUse(): Record<ValveStep, boolean> {
+    const fill = this.simplify === 'off' && (this.fillOverride ?? this.fillSetting) > 0;
+    const evolve = this.simplify === 'off' && (this.evolveOverride ?? this.evolveSetting) > 0;
+    return {
+      magenta: fill && (this.cfg.fillEngine ?? 'magenta') === 'magenta' && magentaStatus() !== 'failed',
+      fill,
+      evolve,
+    };
   }
 
   /** Locked to a song: fire a step on each of the song's beats, chord-locked. */
@@ -1915,8 +2003,11 @@ export class BoardSequencerEngine {
 
     const horizon = t + LOOKAHEAD_SEC;
     let i = this.lastBeatIndex + 1;
+    let lag = 0;
+    let late = 0;
     while (i < beats.length && beats[i] <= horizon) {
       const beatTime = beats[i];
+      if (t - beatTime > LATE_TOLERANCE_SEC) { late++; lag = Math.max(lag, t - beatTime); }
       const spacing = i + 1 < beats.length
         ? Math.max(0.05, beats[i + 1] - beatTime)
         : (i > 0 ? Math.max(0.05, beatTime - beats[i - 1]) : 0.5);
@@ -1929,6 +2020,7 @@ export class BoardSequencerEngine {
       this.lastBeatIndex = i;
       i++;
     }
+    if (late > 0) this.noteLate(lag, late, 0);
   }
 
   /** The role a cell plays, from its colour channel. */
@@ -2034,6 +2126,11 @@ export class BoardSequencerEngine {
         }
       }
     }
+    // Back to full lands on the pass boundary too: the scene comes back whole.
+    if (this.simplify === 'leaving') {
+      const cycle = Math.max(1, this.cfg.cols * Math.max(1, this.cfg.numPages));
+      if (((beat % cycle) + cycle) % cycle === 0) this.endSimplify();
+    }
     // A launch lands on the pass boundary — the first beat of the whole cycle.
     if (this.pendingLaunch) {
       const cycle = Math.max(1, this.cfg.cols * Math.max(1, this.cfg.numPages));
@@ -2076,7 +2173,7 @@ export class BoardSequencerEngine {
     const tagged: { cell: LayeredCell; source: FiredNote['source'] }[] = [
       ...cells.filter(onGrid).map((c) => ({ cell: c, source: liveSource })),
       ...this.activeLoops.flatMap((loopCells, i) => loopCells.filter(onGrid).map((c) => ({ cell: { ...c, layer: `bank${i}` }, source: 'loop' as const }))),
-      ...this.launched.flatMap((l) => {
+      ...(this.simplify === 'off' ? this.launched : bedOf(this.launched)).flatMap((l) => {
         // A fade is in the loudness of each note, so it works for every part alike.
         const f = this.launchFactor(l, beat);
         return l.cells.filter(onGrid).map((c) => ({
@@ -2334,7 +2431,7 @@ export class BoardSequencerEngine {
         this.cfg.phrases, this.cfg.channels.map((ch) => `${ch.id}:${this.playsTune(ch.id) ? 't' : 'n'}`).join(), this.cfg.soundWorld, this.cfg.scaleRootMidi, this.cfg.scaleSemitones,
         this.cfg.rows, this.cfg.cols, chord?.notes ?? null,
       ]);
-      const useAi = (this.cfg.fillEngine ?? 'magenta') === 'magenta';
+      const useAi = this.fillEngineNow() === 'magenta';
       const fullKey = `${key}|${useAi ? 'ai' : 'rules'}`;
       if (fullKey !== this.fillKey) {
         this.fillKey = fullKey;
@@ -2610,10 +2707,66 @@ export class BoardSequencerEngine {
     }
   }
 
+  /** Keeping time so far this run: drift against the wall clock, late and skipped beats. */
+  getKeepingTime(): KeepingTimeReport {
+    return this.keeper.report(Tone.now(), this.wallNow());
+  }
+
+  /** The thresholds and the valve switch (Sound → Advanced). */
+  setKeepingTimeLimits(limits: KeepingTimeLimits): void {
+    this.keeper.setLimits(limits);
+  }
+
+  /** What the safety valve has dropped this run, in order. */
+  getValveSteps(): readonly ValveStep[] {
+    return this.valveTaken;
+  }
+
+  /** The owner switches the extras back on: the valve starts afresh from now. */
+  resetValve(): void {
+    if (this.valveTaken.includes('magenta')) this.fillKey = '';
+    this.valveTaken = [];
+    this.valveFromMs = this.wallNow();
+    this.applyAmounts();
+  }
+
+  /**
+   * Simplify: on at once (the band, Extra notes and Sounds change off; only the first loop
+   * plays under the player). Off = Back to full, from the next pass while playing.
+   */
+  setSimplified(on: boolean): void {
+    if (on) {
+      this.simplify = 'on';
+      this.applyBand();
+      this.applyAmounts();
+      return;
+    }
+    if (this.simplify === 'off') return;
+    if (this.timer) this.simplify = 'leaving';
+    else this.endSimplify();
+  }
+
+  getSimplify(): 'off' | 'on' | 'leaving' {
+    return this.simplify;
+  }
+
+  private endSimplify(): void {
+    this.simplify = 'off';
+    this.applyBand();
+    this.applyAmounts();
+  }
+
   stop(): void {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
     this.fired = [];
+    // Stop ends Simplify, and whatever the safety valve dropped. Nothing is built here
+    // (dispose() comes through stop()): the band's own voices only glide back up.
+    this.valveTaken = [];
+    this.simplify = 'off';
+    this.band = this.bandSetting;
+    this.bandVoices?.gain.gain.setTargetAtTime(BAND_GAIN[this.band], Tone.immediate(), MIX_SWITCH_TC);
+    this.applyAmounts();
     this.loopFades.clear();
     // Over MIDI, notes are already queued at the port up to ~200 ms (and a phrase's
     // offsets) ahead, and a queued message can't be taken back. Expression to 0 first, so

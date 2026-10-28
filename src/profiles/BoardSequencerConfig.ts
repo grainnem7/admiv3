@@ -18,6 +18,7 @@ import {
 import { sanitizeLoopNames, sanitizeScenes, type Scene } from '../songs/performance/launcher';
 import { sanitizeColourEntries } from '../songs/performance/colourEntries';
 import { DEFAULT_PERFORMANCE, sanitizePerformance, type PerformanceSettings } from '../songs/performance/clock';
+import { DEFAULT_KEEPING_TIME_LIMITS, KEEPING_TIME_RANGE } from '../songs/keepingTime';
 import { isSoundWorldChoice, type SoundWorldChoice } from '../audio/worlds/soundWorlds';
 import { quarterTurns, type QuarterTurns } from '../tracking/frameOrientation';
 import type { TrackedColor } from '../tracking/ColorTracker';
@@ -260,6 +261,14 @@ export interface BoardSequencerStored {
   controlGlideSec: number;
   /** How long 'default' removal waits before returning a control to its default (ms). */
   controlReturnMs: number;
+  /**
+   * Keeping time (Sound → Advanced): seconds of sound lost to late beats in 20 s before the
+   * sound counts as falling behind; how far the sound's clock may drift before it is
+   * reported (s); and whether the safety valve drops extras when it falls behind.
+   */
+  keepTimeBehindSec: number;
+  keepTimeDriftSec: number;
+  keepTimeValve: boolean;
   /**
    * Usable range per fader control, so a counter can't reach silence or a runaway tempo. The
    * speed's is also the hat's Slowest and Fastest (Cap tab).
@@ -560,6 +569,9 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   controlStillMs: 150,
   controlGlideSec: 0.3,
   controlReturnMs: 3000,
+  keepTimeBehindSec: DEFAULT_KEEPING_TIME_LIMITS.behindSec,
+  keepTimeDriftSec: DEFAULT_KEEPING_TIME_LIMITS.driftSec,
+  keepTimeValve: DEFAULT_KEEPING_TIME_LIMITS.valve,
   controlRanges: DEFAULT_CONTROL_RANGES,
   controlRangesRev: CONTROL_RANGES_REV,
   controlRemoval: DEFAULT_CONTROL_REMOVAL,
@@ -945,6 +957,9 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     controlStillMs: clampNum(o.controlStillMs, 0, 2000, d.controlStillMs),
     controlGlideSec: clampNum(o.controlGlideSec, 0, 2, d.controlGlideSec),
     controlReturnMs: clampNum(o.controlReturnMs, 0, 30000, d.controlReturnMs),
+    keepTimeBehindSec: clampNum(o.keepTimeBehindSec, KEEPING_TIME_RANGE.behindSec.min, KEEPING_TIME_RANGE.behindSec.max, d.keepTimeBehindSec),
+    keepTimeDriftSec: clampNum(o.keepTimeDriftSec, KEEPING_TIME_RANGE.driftSec.min, KEEPING_TIME_RANGE.driftSec.max, d.keepTimeDriftSec),
+    keepTimeValve: o.keepTimeValve !== false,
     controlRanges: migratedControlRanges(o),
     controlRangesRev: CONTROL_RANGES_REV,
     controlRemoval: sanitizeControlRemoval(o.controlRemoval),

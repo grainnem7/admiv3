@@ -63,3 +63,20 @@ export function spaceAction(
   if (startTooSoon(s.msSinceStop, s.msSincePieceEnded)) return 'none';
   return view === 'bigBoard' ? 'startPiece' : 'play';
 }
+
+/** Where a key press is typing, not a command. */
+const TYPING_SELECTOR = 'input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="button"]), textarea, select, [contenteditable="true"]';
+
+/**
+ * Shift+S: the owner's Simplify (and Back to full), in Play and Show while the board plays.
+ * Two keys together so it is never hit by accident; never while typing, never held down,
+ * and never with Ctrl, Alt or Cmd (those are the browser's).
+ */
+export function simplifyKey(
+  e: { key: string; shiftKey: boolean; ctrlKey: boolean; altKey: boolean; metaKey: boolean; repeat: boolean },
+  view: BoardScreenView, target: EventTarget | null, running: boolean,
+): boolean {
+  if (!running || view === 'setup' || e.repeat) return false;
+  if (!e.shiftKey || e.ctrlKey || e.altKey || e.metaKey || e.key !== 'S') return false;
+  return !(target instanceof Element && target.closest(TYPING_SELECTOR) !== null);
+}

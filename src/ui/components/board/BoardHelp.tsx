@@ -277,13 +277,27 @@ const HELP: HelpEntry[] = [
       + 'ignored on every pad, and from the iPad Keep only keeps.',
   },
   {
+    title: 'Simplify, and keeping time',
+    body: 'Simplify (on the laptop, in Play and Show, never on the iPad) strips the sound back '
+      + 'in one press: the band, Extra notes and Sounds change go, and only the first loop of '
+      + 'the scene keeps playing under the player. The sound world, the speed and the clock '
+      + 'carry on, and scenes still come in, with just their first loop. Back to full brings '
+      + 'the scene back from the next pass; Stop ends it. ADMI also watches whether the sound '
+      + 'keeps time. If the laptop is too busy and the sound falls behind, it says so on the '
+      + 'laptop and pauses the extras, heaviest first (Magenta, then Extra notes, then Sounds '
+      + 'change); "Switch the extras back on" undoes it. The Ready check says how the last run '
+      + 'kept time. Sound → Advanced → Keeping time sets how much counts as falling behind.',
+  },
+  {
     title: 'Keyboard',
     body: 'Space: ▶ Play on the board, and Stop while it plays. In Show: ▶ Start the piece, also '
       + 'while the board plays; once the piece plays, Stop (press twice). Never during Set up, and '
       + 'never when a button or slider '
       + 'has focus. Tabs move with the arrow keys. ▶ Show fills the screen; '
       + 'Leave Show (or Esc) goes back. When a button goes away, focus moves to what takes '
-      + 'its place: Start the piece and Stop to each other, Done and Leave back to New loop.',
+      + 'its place: Start the piece and Stop to each other, Done and Leave back to New loop. '
+      + 'Shift+S: Simplify (the player and the first loop only), and Back to full, in Play and Show '
+      + 'while the board plays.',
   },
 ];
 

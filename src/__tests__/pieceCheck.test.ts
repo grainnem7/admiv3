@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { aloneLine, ipadCheckItems, pieceCheckItems, updatedFromNowLine, type IpadCheckInput, type PieceCheckInput } from '../ui/screens/boardSequencer/pieceCheck';
+import { aloneLine, ipadCheckItems, keepingTimeCheckItems, pieceCheckItems, updatedFromNowLine, type IpadCheckInput, type PieceCheckInput } from '../ui/screens/boardSequencer/pieceCheck';
+import type { KeepingTimeReport } from '../songs/keepingTime';
 import { DEFAULT_PERFORMANCE } from '../songs/performance/clock';
 import type { Scene, SceneSettings } from '../songs/performance/launcher';
 
@@ -231,5 +232,48 @@ describe('the check — when each colour comes in', () => {
   it('says nothing when every colour comes in inside the piece, or none has a time', () => {
     expect(pieceCheckItems(input({ colourTimes: [{ name: 'Red', at: 90 }] })).some((i) => /after the piece ends/.test(i.label))).toBe(false);
     expect(pieceCheckItems(input()).some((i) => /after the piece ends/.test(i.label))).toBe(false);
+  });
+});
+
+describe('the check — keeping time (spec 2026-10-28)', () => {
+  const fine: KeepingTimeReport = {
+    runSec: 420, driftSec: 0.004, driftRate: 0.00001, lateBeats: 0, skippedBeats: 0, worstLateSec: 0,
+    lostSec: 0, recentLostSec: 0, behind: false, everBehind: false, drifting: false,
+  };
+
+  it('before any run: not measured yet, and it says how to measure it', () => {
+    const [item] = keepingTimeCheckItems({ report: null, running: false, valve: [] });
+    expect(item).toMatchObject({ label: 'Keeping time: not measured yet', state: 'warn' });
+    expect(item.fix).toBe('Play the piece once all the way through, with everything on. This line then says whether the sound kept time.');
+  });
+
+  it('after a healthy run: fine, with how long the run was', () => {
+    expect(keepingTimeCheckItems({ report: fine, running: false, valve: [] })).toEqual([
+      { label: 'Keeping time: fine in the last run (7:00)', state: 'ok' },
+    ]);
+  });
+
+  it('while it plays: fine so far', () => {
+    expect(keepingTimeCheckItems({ report: { ...fine, runSec: 30 }, running: true, valve: [] })[0])
+      .toEqual({ label: 'Keeping time: fine so far', state: 'ok' });
+  });
+
+  it('a run that fell behind: how far, the late beats, and what to try', () => {
+    const r = { ...fine, lateBeats: 7, skippedBeats: 2, lostSec: 2.43, everBehind: true };
+    const [item] = keepingTimeCheckItems({ report: r, running: false, valve: ['fill'] });
+    expect(item.label).toBe('Keeping time: the sound fell 2.4 s behind in the last run (7 beats late, 2 dropped)');
+    expect(item.state).toBe('warn');
+    expect(item.fix).toBe('Close other programs, plug the laptop in, and turn Extra notes off (Sound tab). Then run the piece again. To keep up, ADMI paused Extra notes.');
+  });
+
+  it('a clock that drifted: reported, with the advice to check the sound output', () => {
+    const r = { ...fine, driftSec: 3.21, drifting: true };
+    const [item] = keepingTimeCheckItems({ report: r, running: false, valve: [] });
+    expect(item.label).toBe('Keeping time: the sound’s clock ran 3.2 s slow in the last run');
+    expect(item.fix).toBe('Dropping extras can’t fix this: check the sound output (plug the laptop in, or choose another output), then run the piece again.');
+  });
+
+  it('a stall or two that stayed under the threshold is still fine', () => {
+    expect(keepingTimeCheckItems({ report: { ...fine, lateBeats: 1, lostSec: 0.2 }, running: false, valve: [] })[0].state).toBe('ok');
   });
 });

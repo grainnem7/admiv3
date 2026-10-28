@@ -91,7 +91,7 @@ import { loadCameraChoice, saveCameraChoice } from '../../tracking/cameraChoice'
 import { CameraDebugPanel } from '../components/camera/CameraDebugPanel';
 import { ConfirmDialog } from './boardSequencer/ui/ConfirmDialog';
 import { colourMatchesBoardRaw, type NudgeSignal } from './boardSequencer/playNudge';
-import { START_AFTER_PIECE_MS, spaceAction, spaceTogglesPlay, startTooSoon, type BoardScreenView } from './boardSequencer/spaceKey';
+import { START_AFTER_PIECE_MS, simplifyKey, spaceAction, spaceTogglesPlay, startTooSoon, type BoardScreenView } from './boardSequencer/spaceKey';
 import { ghostsForSave } from '../../tracking/handGuard/knockGuard';
 import { TRACK_SAVE_MS } from '../../tracking/handGuard/boardTrack';
 import { detectBoard, type BoardDetection } from '../../tracking/boardDetect/detectBoard';
@@ -124,7 +124,10 @@ import { BoardMidiPanel } from './boardSequencer/components/BoardMidiPanel';
 import { planFromConfig } from './boardSequencer/components/AbletonSoundsPanel';
 import { useBoardMidiPort } from './boardSequencer/useBoardMidiPort';
 import { abletonReadyItem, abletonTracksItem } from './boardSequencer/abletonReady';
-import { aloneLine, ipadCheckItems, listNames, pieceCheckItems, playerWords, updatedFromNowLine } from './boardSequencer/pieceCheck';
+import { aloneLine, ipadCheckItems, keepingTimeCheckItems, listNames, pieceCheckItems, playerWords, updatedFromNowLine } from './boardSequencer/pieceCheck';
+import {
+  keepingTimeIndicator, keepingTimeNews, KEEPING_TIME_RANGE, TIME_SEEN_NONE, type KeepingTimeReport, type TimeSeen, type ValveStep,
+} from '../../songs/keepingTime';
 import { colourUses, type ColourUses } from './boardSequencer/colourRemoval';
 import { aiOffLine } from './boardSequencer/aiStatus';
 import { bandLine } from './boardSequencer/bandLine';
@@ -329,6 +332,22 @@ const FILL_STATUS_TEXT: Record<FillSourceStatus, string> = {
 
 /** Radius, in camera pixels, of the disc around a tap taken as "the counter's pixels". */
 const TAP_PIXEL_RADIUS = 6;
+
+/** Keeping time: how often the laptop looks at the meter, and how often the log gets a sample. */
+const KEEPING_TIME_POLL_MS = 500;
+const TIMING_SAMPLE_MS = 30_000;
+/** A run shorter than this says nothing about keeping time: the Ready check keeps the last longer one. */
+const KEEPING_TIME_MIN_RUN_SEC = 5;
+
+/** Keeping time as the screen shows it: the meter, and what the safety valve has paused. */
+interface TimeView { report: KeepingTimeReport; valve: readonly ValveStep[] }
+
+/** Only what the screen shows: a healthy run never re-renders the screen for this. */
+function timeViewKey(v: TimeView | null): string {
+  if (v === null) return '';
+  const r = v.report;
+  return `${r.behind}|${r.everBehind}|${r.drifting}|${r.lateBeats}|${r.skippedBeats}|${r.lostSec.toFixed(1)}|${r.driftSec.toFixed(1)}|${v.valve.join()}`;
+}
 
 /** A camera message: the saved camera is missing, or the camera was just changed. */
 interface CameraNotice {
@@ -747,6 +766,13 @@ export default function BoardSequencerScreen() {
   // A change that was only heard, shown on the board for a moment (deaf and HoH players).
   const [boardNotice, setBoardNotice] = useState<string | null>(null);
   const bandPlayingRef = useRef(false);
+  // Keeping time (spec 2026-10-28): the meter while the board plays, the last run's result
+  // for the Ready check, what has been said this run, and the owner's Simplify.
+  const [timeNow, setTimeNow] = useState<TimeView | null>(null);
+  const [lastRunTime, setLastRunTime] = useState<TimeView | null>(null);
+  const timeSeenRef = useRef<TimeSeen>(TIME_SEEN_NONE);
+  const timingLoggedAtRef = useRef(0);
+  const [simplify, setSimplify] = useState<'off' | 'on' | 'leaving'>('off');
   // Launched loops (no pad needed): what is wanted, and what the engine has applied so far.
   const wantedRef = useRef<Set<number>>(new Set());
   const [wantedSlots, setWantedSlots] = useState<number[]>([]);
@@ -2141,6 +2167,16 @@ export default function BoardSequencerScreen() {
     pieceStartingRef.current = false;
     setPieceStarting(false);
     runningRef.current = false;
+    // How the sound kept time in this run, for the log and the Ready check, before the
+    // engine goes. Stop also ends Simplify (a new engine starts full).
+    const finished = engineRef.current;
+    if (finished) {
+      const report = finished.getKeepingTime();
+      sessionLogRef.current.timing(report);
+      if (report.runSec >= KEEPING_TIME_MIN_RUN_SEC) setLastRunTime({ report, valve: finished.getValveSteps() });
+    }
+    setTimeNow(null);
+    setSimplify('off');
     engineRef.current?.dispose();
     engineRef.current = null;
     modeRef.current = null;
@@ -2190,6 +2226,58 @@ export default function BoardSequencerScreen() {
       return next;
     });
   }, []);
+
+  /**
+   * Simplify, the owner's safety net: one press strips the sound to the player and the
+   * scene's first loop (no band, no Extra notes, no Sounds change); again, Back to full
+   * from the next pass. Laptop only, never the iPad.
+   */
+  const playerNameRef = useRef<string | null>(null);
+  playerNameRef.current = activePlayer?.name ?? null;
+  const toggleSimplify = useCallback(() => {
+    const engine = engineRef.current;
+    if (!engine || !runningRef.current) return;
+    const on = engine.getSimplify() !== 'on';
+    engine.setSimplified(on);
+    const now = engine.getSimplify();
+    setSimplify(now);
+    const line = on
+      ? `Simplified: ${playerWords(playerNameRef.current).name} and the bed.`
+      : now === 'off' ? 'Back to full.' : 'Back to full from the next pass.';
+    announce(line);
+    setBoardNotice(on ? 'Simplified' : 'Back to full');
+    sessionLogRef.current.action(logActorRef.current, on ? 'simplify' : 'back to full');
+  }, [announce, engineRef, runningRef]);
+  const toggleSimplifyRef = useRef(toggleSimplify);
+  toggleSimplifyRef.current = toggleSimplify;
+
+  // Keeping time, looked at twice a second while the board plays: a problem is said once
+  // and shown quietly on the laptop; nothing is shown while all is well. The log gets a
+  // sample every 30 s.
+  useEffect(() => {
+    if (!running) return undefined;
+    timeSeenRef.current = TIME_SEEN_NONE;
+    timingLoggedAtRef.current = performance.now();
+    const id = window.setInterval(() => {
+      const engine = engineRef.current;
+      if (!engine) return;
+      const view: TimeView = { report: engine.getKeepingTime(), valve: engine.getValveSteps() };
+      const news = keepingTimeNews(timeSeenRef.current, view.report, view.valve);
+      timeSeenRef.current = news.seen;
+      if (news.say.length > 0) {
+        announce(news.say.join(' '));
+        for (const line of news.say) sessionLogRef.current.action('laptop', line);
+      }
+      if (performance.now() - timingLoggedAtRef.current >= TIMING_SAMPLE_MS) {
+        timingLoggedAtRef.current = performance.now();
+        sessionLogRef.current.timing(view.report);
+      }
+      setTimeNow((prev) => (timeViewKey(prev) === timeViewKey(view) ? prev : view));
+      const sim = engine.getSimplify();
+      setSimplify((prev) => (prev === sim ? prev : sim));
+    }, KEEPING_TIME_POLL_MS);
+    return () => window.clearInterval(id);
+  }, [running, announce, engineRef]);
 
   const handleSelectSong = useCallback(async (id: string) => {
     setSelectedSongId(id);
@@ -2508,6 +2596,16 @@ export default function BoardSequencerScreen() {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [view, start, requestStop, runningRef]);
+  // Shift+S: Simplify and Back to full, in Play and Show (never by accident, never while typing).
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent): void => {
+      if (!simplifyKey(e, view, e.target, runningRef.current)) return;
+      e.preventDefault();
+      toggleSimplifyRef.current();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [view, runningRef]);
 
   // Changing orientation or camera invalidates calibration (it was captured in the
   // old view), so force a fresh corner click in the new space.
@@ -3980,6 +4078,37 @@ export default function BoardSequencerScreen() {
         options={[{ value: 4, label: '4 loops' }, { value: 8, label: '8 loops' }, { value: 16, label: '16 loops' }]}
       />
     </div>
+    <fieldset style={{ border: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+      <legend style={{ fontWeight: 600, padding: 0 }}>Keeping time</legend>
+      <label>
+        <input
+          type="checkbox" checked={config.keepTimeValve}
+          onChange={(e) => update({ keepTimeValve: e.target.checked })}
+        />
+        Pause the extras when the sound falls behind
+      </label>
+      <label>
+        {`Falling behind means ${config.keepTimeBehindSec.toFixed(1)} s lost in 20 s`}
+        <input
+          type="range"
+          min={Math.round(KEEPING_TIME_RANGE.behindSec.min * 10)} max={Math.round(KEEPING_TIME_RANGE.behindSec.max * 10)} step={1}
+          value={Math.round(config.keepTimeBehindSec * 10)}
+          onChange={(e) => update({ keepTimeBehindSec: Number(e.target.value) / 10 })}
+        />
+      </label>
+      <label>
+        {`Warn when the sound's clock is ${config.keepTimeDriftSec.toFixed(1)} s slow`}
+        <input
+          type="range"
+          min={Math.round(KEEPING_TIME_RANGE.driftSec.min * 10)} max={Math.round(KEEPING_TIME_RANGE.driftSec.max * 10)} step={1}
+          value={Math.round(config.keepTimeDriftSec * 10)}
+          onChange={(e) => update({ keepTimeDriftSec: Number(e.target.value) / 10 })}
+        />
+      </label>
+      <span style={REASON_STYLE}>
+        Lower numbers warn sooner. The extras are paused heaviest first: Magenta, then Extra notes, then Sounds change.
+      </span>
+    </fieldset>
               <label>
                 Key
                 <select
@@ -4331,6 +4460,10 @@ export default function BoardSequencerScreen() {
         return typeof at === 'number' ? [{ name: describeChannel(ch), at }] : [];
       }),
     }));
+    // Keeping time: the run now, else the last run long enough to say (spec 2026-10-28).
+    items.push(...keepingTimeCheckItems(running && timeNow
+      ? { report: timeNow.report, running: true, valve: timeNow.valve }
+      : { report: lastRunTime?.report ?? null, running: false, valve: lastRunTime?.valve ?? [] }));
     items.push(...ipadCheckItems({
       enabled: remoteEnabled, connected: remoteLink.others > 0, safeLayout: isSafeShowLayout(c), pageOutOfDate: ipadOutOfDate,
       playerName: activePlayer?.name ?? null,
@@ -5093,6 +5226,45 @@ export default function BoardSequencerScreen() {
     </div>
   ) : null;
 
+  /** The owner switches back on what the safety valve paused; it may pause them again if needed. */
+  const restoreExtras = (): void => {
+    engineRef.current?.resetValve();
+    timeSeenRef.current = { ...timeSeenRef.current, steps: 0 };
+    setTimeNow((prev) => (prev ? { ...prev, valve: [] } : prev));
+    announce('The extras are back on.');
+    sessionLogRef.current.action(logActorRef.current, 'extras back on');
+  };
+  // Simplify and keeping time, on the laptop only (Play and Show): quiet, and only there
+  // when Simplify is on or there is a problem.
+  const timeIndicator = running && timeNow ? keepingTimeIndicator(timeNow.report, timeNow.valve) : null;
+  const simplifyButton = (
+    <Button
+      tone="secondary"
+      aria-pressed={simplify === 'on'}
+      disabled={!running}
+      onClick={toggleSimplify}
+      aria-label={simplify === 'on' ? 'Back to full (Shift+S)' : 'Simplify: only the player and the first loop (Shift+S)'}
+      title={running ? undefined : 'Simplify works while playing.'}
+    >
+      {simplify === 'on' ? 'Back to full' : 'Simplify'}
+    </Button>
+  );
+  const keepingTimeView = running && (timeIndicator !== null || simplify !== 'off') ? (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      {simplify !== 'off' && (
+        <div role="status" aria-label="Simplify" style={{ padding: '4px 12px', borderRadius: 'var(--bs-radius-md)', border: '2px solid var(--bs-accent)', fontWeight: 700 }}>
+          {simplify === 'on' ? `Simplified: ${playerWords(activePlayer?.name ?? null).name} and the bed` : 'Back to full from the next pass'}
+        </div>
+      )}
+      {timeIndicator && (
+        <div role="status" aria-label="Keeping time" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', padding: '4px 10px', borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-warn-tint)', border: '1px solid var(--bs-border-control)', fontSize: 13 }}>
+          <span style={{ flex: '1 1 240px' }}>{timeIndicator.lines.join(' ')}</span>
+          {timeIndicator.canRestore && <Button tone="quiet" onClick={restoreExtras}>Switch the extras back on</Button>}
+        </div>
+      )}
+    </div>
+  ) : null;
+
   const stage = (
     <div style={{ flex: layout.mode === 'stacked' ? 'none' : '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
       {view !== 'bigBoard' && reloadNoticeView}
@@ -5109,6 +5281,7 @@ export default function BoardSequencerScreen() {
         </div>
       )}
       {view !== 'bigBoard' && midiBannerView}
+      {view !== 'bigBoard' && keepingTimeView}
       {cameraStalled && running && !laptop && (
         <div role="alert" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', padding: '8px 12px', borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-danger)', color: 'var(--bs-danger-fg)', fontWeight: 600 }}>
           <span style={{ flex: '1 1 240px' }}>The camera has stopped — the board isn&apos;t being read. The music carries on with the last pattern.</span>
@@ -5446,6 +5619,7 @@ export default function BoardSequencerScreen() {
     >
       {midiBannerView}
       {reloadNoticeView}
+      {keepingTimeView}
       {running ? bigNowNextStrip : (
         <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap', padding: '10px 14px', borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-elev)' }}>
           <Button
@@ -5475,6 +5649,7 @@ export default function BoardSequencerScreen() {
         <Button tone="secondary" aria-pressed={muted} disabled={!running} onClick={toggleMuted}>
           {muted ? 'Muted' : 'Mute'}
         </Button>
+        {running && simplifyButton}
         {soundFrom !== 'admi' && (
           <Button tone="secondary" onClick={midiPanic} aria-label="Panic: stop every note Ableton is holding">
             Panic
@@ -5757,6 +5932,7 @@ export default function BoardSequencerScreen() {
                 onStop={requestStop}
                 stopArmed={stopArmed}
                 onToggleMute={toggleMuted}
+                simplify={simplifyButton}
                 bpm={liveBpm}
                 bpmTo={glideTo}
                 step={playheadCol}

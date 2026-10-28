@@ -192,6 +192,7 @@ export function applyEngineSettings(
   engine.setEnergy(cfg.energy);
   engine.setSpace(cfg.space);
   engine.setLoopVary(cfg.loopVary);
+  engine.setKeepingTimeLimits({ behindSec: cfg.keepTimeBehindSec, driftSec: cfg.keepTimeDriftSec, valve: cfg.keepTimeValve });
 }
 
 export function useBoardRuntime(opts: {
