@@ -72,6 +72,8 @@ import type { ReadyItem } from './boardSequencer/play/ReadyCheck';
 import { PlayPanel } from './boardSequencer/play/PlayPanel';
 import { CapPanel, CAP_ROLE_LABELS, CAP_PAUSE_TEXT, capValueText, hatResultText } from './boardSequencer/play/CapPanel';
 import { useCapTracker } from './boardSequencer/useCapTracker';
+import { audienceNoticeText, useAudienceWindow } from '../../audience/useAudienceWindow';
+import { audienceHat, audienceNotes, audienceState, dueNotes } from '../../audience/feed';
 import { useEmptyBoardWait } from './boardSequencer/useEmptyBoardWait';
 import type { BoardActivity, CapSettings } from '../../tracking/cap/capTracker';
 import { BoardLegend } from './boardSequencer/components/BoardLegend';
@@ -665,6 +667,10 @@ export default function BoardSequencerScreen() {
   const [pingDir, setPingDir] = useState(0);
   const [nudge, setNudge] = useState<NudgeSignal | null>(null);
   const firedRef = useRef<FiredNote[]>([]);
+  // The audience screen (src/audience): a window of its own for the projector. Notes wait
+  // here until they are heard, then bloom there.
+  const audience = useAudienceWindow();
+  const audiencePendingRef = useRef<FiredNote[]>([]);
   const reducedMotion = typeof window !== 'undefined'
     && typeof window.matchMedia === 'function'
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -1794,9 +1800,11 @@ export default function BoardSequencerScreen() {
       );
       // Note pops come from what the engine actually scheduled, matched against audible
       // time, so a cell never lights before its sound.
+      let drainedForAudience: FiredNote[] = [];
       if (engine) {
         const audible = engine.audibleNow();
         const drained = engine.drainFiredNotes();
+        drainedForAudience = drained;
         sessionLogRef.current.addNotes(drained);
         firedRef.current = pruneFired([...firedRef.current, ...drained], audible);
         // Only when something is sounding (or just stopped): an empty list every frame
@@ -1809,6 +1817,28 @@ export default function BoardSequencerScreen() {
         firedRef.current = [];
         popStore.set([]);
         setPops((prev) => (prev.length === 0 ? prev : []));
+      }
+      // The audience screen, only while one is open: notes as they are heard (none while
+      // muted: nothing sounds), and how the board looks, a few times a second at most.
+      const feed = audience.feedRef.current;
+      const nowMs = performance.now();
+      if (feed?.alive(nowMs)) {
+        if (playing && engine) {
+          const r = dueNotes([...audiencePendingRef.current, ...drainedForAudience], engine.audibleNow());
+          audiencePendingRef.current = r.rest;
+          if (!mutedRef.current) feed.notes(audienceNotes(r.due, (id) => loopSwatch(id, cfg.channels)));
+        } else audiencePendingRef.current = [];
+      } else if (audiencePendingRef.current.length > 0) audiencePendingRef.current = [];
+      if (feed?.wantsState(nowMs)) {
+        const live = cap.liveRef.current;
+        const hat = audienceHat({
+          capEnabled: cfg.cap.enabled, laptop: cfg.boardSource === 'laptop', mouse: capMouse, camera: live.camera,
+          seen: live.seen, paused: live.paused, locked: cfg.cap.locked, learning: cap.view.learning !== null || cap.view.hatLearning !== null,
+          axes: live.axes, xRole: cfg.cap.xRole, yRole: cfg.cap.yRole,
+        });
+        // Counters settle only while playing; stopped, the board is what the camera sees (as on the laptop).
+        const cells = runningRef.current ? frame.patternCells : cellsFromOccupied(frame.occupied);
+        feed.state(audienceState(cfg, cells, playing, playing && engine ? engine.getBpm() : cfg.bpm, hat), nowMs);
       }
       setNudge((prev) => (prev === signal || (prev !== null && signal !== null && JSON.stringify(prev) === JSON.stringify(signal)) ? prev : signal));
     },
@@ -5321,6 +5351,19 @@ export default function BoardSequencerScreen() {
     </div>
   ) : null;
 
+  // The audience screen: a window of its own for the projector (src/audience). Open in
+  // Show and on Play; the laptop keeps everything else.
+  const audienceButton = (
+    <Button tone="secondary" onClick={audience.open ? audience.closeWindow : audience.openWindow}>
+      {audience.open ? 'Close the audience screen' : 'Open the audience screen'}
+    </Button>
+  );
+  const audienceNoticeView = audience.notice ? (
+    <p role="status" aria-label="Audience screen" style={{ margin: 0, fontSize: 14, padding: '4px 10px', borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-raised)', border: '1px solid var(--bs-border)' }}>
+      {audienceNoticeText(audience.notice)}
+    </p>
+  ) : null;
+
   const stage = (
     <div style={{ flex: layout.mode === 'stacked' ? 'none' : '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
       {view !== 'bigBoard' && reloadNoticeView}
@@ -5338,6 +5381,7 @@ export default function BoardSequencerScreen() {
       )}
       {view !== 'bigBoard' && midiBannerView}
       {view !== 'bigBoard' && keepingTimeView}
+      {view !== 'bigBoard' && audienceNoticeView}
       {cameraStalled && running && !laptop && (
         <div role="alert" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', padding: '8px 12px', borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-danger)', color: 'var(--bs-danger-fg)', fontWeight: 600 }}>
           <span style={{ flex: '1 1 240px' }}>The camera has stopped — the board isn&apos;t being read. The music carries on with the last pattern.</span>
@@ -5711,8 +5755,10 @@ export default function BoardSequencerScreen() {
             Panic
           </Button>
         )}
+        {audienceButton}
         <Button tone="secondary" onClick={() => setView('play')}>Leave Show</Button>
       </div>
+      {audienceNoticeView}
     </div>
   ) : null;
 
@@ -5842,6 +5888,7 @@ export default function BoardSequencerScreen() {
               <Button ref={bigBoardButtonRef} tone="secondary" onClick={() => setView('bigBoard')} aria-label="Show: the board, the clock and Now / Next, full screen, for the performance">
                 ▶ Show
               </Button>
+              {view !== 'bigBoard' && audienceButton}
               <Button
                 tone="quiet"
                 onClick={() => confirmThen('setup', () => { if (running) stop(); setView('setup'); if (laptop) setStep('colours'); })}

@@ -93,6 +93,21 @@ export interface CapView {
   roomLearnt: boolean;
 }
 
+/**
+ * The hat now, every frame (about 25 a second), for the audience screen's light: read
+ * from a ref, so following it never re-renders the screen.
+ */
+export interface CapLive {
+  camera: CapCameraStatus;
+  seen: boolean;
+  /** Where each direction is, 0..1 of the learnt range (y up). */
+  axes: { x: number | null; y: number | null };
+  /** Holding still (hands on the board, a counter moved, learning). */
+  paused: boolean;
+}
+
+const CAP_LIVE_OFF: CapLive = { camera: 'off', seen: false, axes: { x: null, y: null }, paused: false };
+
 /** What the preview draws: the picture, where the cap is, the face. */
 export interface CapPreview {
   frame: Frame | null;
@@ -135,6 +150,8 @@ export function useCapTracker(opts: {
 }): {
   view: CapView;
   previewRef: MutableRefObject<CapPreview>;
+  /** The hat now, every frame. */
+  liveRef: MutableRefObject<CapLive>;
   learnReach(seconds: number): void;
   learnSide(seconds: number): void;
   /** Start a step of Learn the hat (ignored while one is under way). */
@@ -171,6 +188,7 @@ export function useCapTracker(opts: {
   onHatRef.current = opts.onHatLearnt;
   const sideRef = useRef<{ until: number; points: { x: number; y: number }[] } | null>(null);
   const previewRef = useRef<CapPreview>({ frame: null, sighting: null, face: null, mask: null, others: [] });
+  const liveRef = useRef<CapLive>(CAP_LIVE_OFF);
   // Learn the hat: the step under way, the room from step 1, and what the last step came to.
   const hatRef = useRef<{
     step: HatStep; readyUntil: number; watchUntil: number; lastPicture: number; pictures: number; longer: boolean;
@@ -205,6 +223,7 @@ export function useCapTracker(opts: {
   useEffect(() => {
     if (!settings.enabled) {
       valuesRef.current = {};
+      liveRef.current = CAP_LIVE_OFF;
       setView((v) => ({ ...v, camera: 'off', face: 'off', seen: false, source: 'none', hatLearning: null }));
       return;
     }
@@ -343,6 +362,7 @@ export function useCapTracker(opts: {
       const reading = stepCap(state, fused.sighting, s, rangesRef.current, dt, paused !== null, tempoCentreRef?.current());
       state = reading.state;
       valuesRef.current = reading.values;
+      liveRef.current = { camera, seen: reading.seen, axes: reading.axes, paused: paused !== null };
       // What it follows is the cap's patch, unless the face check turned it down.
       const others = lookAlikes(patches, fused.source === 'cap' ? cap : null);
       previewRef.current = { frame, sighting: fused.sighting, face: faceBox, mask, others };
@@ -437,6 +457,7 @@ export function useCapTracker(opts: {
       stream?.getTracks().forEach((t) => t.stop());
       face?.dispose();
       valuesRef.current = {};
+      liveRef.current = CAP_LIVE_OFF;
     };
   // The camera restarts only when it must: switched on, another camera, mouse test.
   // The board's camera too, once it is known: the cap may have taken it while it wasn't.
@@ -487,5 +508,5 @@ export function useCapTracker(opts: {
     if (settingsRef.current.enabled) handOverRef.current.set(role, value);
   }, []);
 
-  return { view, previewRef, learnReach, learnSide, learnHatStep, clearHatResult, colourAt, cameras, handOver };
+  return { view, previewRef, liveRef, learnReach, learnSide, learnHatStep, clearHatResult, colourAt, cameras, handOver };
 }

@@ -48,6 +48,13 @@ export default defineConfig({
   define: { __ADMI_BUILD_ID__: JSON.stringify(BUILD_ID) },
   // The Magenta worker loads its models piece by piece, which needs module workers.
   worker: { format: 'es' },
+  // Two pages: ADMI itself, and the audience screen for the projector (src/audience), which
+  // loads none of ADMI.
+  build: {
+    rollupOptions: {
+      input: { main: resolve(__dirname, 'index.html'), audience: resolve(__dirname, 'audience.html') },
+    },
+  },
   // Prepared when the dev server starts, not discovered the first time the worker asks
   // for them — a discovery reloads the open page.
   optimizeDeps: { include: ['@magenta/music/esm/music_rnn', '@magenta/music/esm/music_vae'] },
