@@ -386,3 +386,30 @@ test('▶ Play and ▶ Start the piece on an empty board send nothing to the spe
   await expect.poll(async () => Math.max(0, ...await outputLevels(page, 4)), { timeout: 20_000 }).toBeGreaterThan(0.02);
   expect(pageErrors(page)).toEqual([]);
 });
+
+test('Sound → Chords: a new player has the world’s own chords, two bars each, and melody and bass fit the chord; both can be changed and are kept', async ({ page }) => {
+  await openLaptopBoard(page);
+  await page.getByRole('tab', { name: 'Sound' }).click();
+  const card = page.getByRole('group', { name: 'Chords' });
+  await expect(card.getByRole('radio', { name: 'The world’s own', exact: true })).toHaveAttribute('aria-checked', 'true');
+  await expect(card.getByRole('radio', { name: '2 bars', exact: true })).toHaveAttribute('aria-checked', 'true');
+  const fit = card.getByRole('switch', { name: 'Melody and bass fit the chord' });
+  await expect(fit).toHaveAttribute('aria-checked', 'true');
+  await card.getByRole('radio', { name: 'Calm', exact: true }).click();
+  await expect(card).toContainText('Two chords, home and the fourth: I–IV.');
+  await card.getByRole('radio', { name: '4 bars', exact: true }).click();
+  await fit.click();
+  await expect(fit).toHaveAttribute('aria-checked', 'false');
+  // "As before" has no length to choose: four chords to a loop, as it was.
+  await card.getByRole('radio', { name: 'As before', exact: true }).click();
+  await expect(card.getByRole('radiogroup', { name: 'Each chord lasts' })).toHaveCount(0);
+  await card.getByRole('radio', { name: 'Calm', exact: true }).click();
+  await page.evaluate(() => new Promise((r) => { window.setTimeout(r, 1200); })); // saves are gathered for a moment
+  await page.reload();
+  await page.getByRole('button', { name: /Board Sequencer/ }).click();
+  await page.getByRole('tab', { name: 'Sound' }).click();
+  await expect(card.getByRole('radio', { name: 'Calm', exact: true })).toHaveAttribute('aria-checked', 'true');
+  await expect(card.getByRole('radio', { name: '4 bars', exact: true })).toHaveAttribute('aria-checked', 'true');
+  await expect(fit).toHaveAttribute('aria-checked', 'false');
+  expect(pageErrors(page)).toEqual([]);
+});

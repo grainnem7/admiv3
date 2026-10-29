@@ -354,9 +354,29 @@ function settled(log: readonly HatSample[], inShot: boolean, settleMs = 700): Ha
   });
 }
 
+/**
+ * The status line and the preview are drawn separately: the preview on each animation frame,
+ * the status line when React next renders (up to 125 ms after the cap's loop, and longer on a
+ * busy page). So just as the hat comes into shot, the status can say "cap found" while the
+ * preview still shows the picture before. What the status says is judged only on samples at
+ * least this far from any picture with the hat in it; what is TAKEN for the hat (the blue
+ * tint) is judged on every sample.
+ */
+const STATUS_LAG_MS = 300;
+
+/** The settled samples with the hat out of shot, away from any picture with it in (see STATUS_LAG_MS). */
+function wellOut(log: readonly HatSample[]): HatSample[] {
+  const inAt = log.filter((s) => s.showing && s.hatIn).map((s) => s.t);
+  return settled(log, false).filter((s) => !inAt.some((t) => Math.abs(t - s.t) < STATUS_LAG_MS));
+}
+
+/** The samples with the hat out of shot where anything at all was taken for the hat (the chair would be). */
+const takenWithHatOut = (log: readonly HatSample[]): HatSample[] =>
+  log.filter((s) => s.showing && !s.hatIn && (s.tinted > 0 || s.tintedBelow > 0));
+
 /** The settled samples with the hat out of shot, in their separate stretches (the hat in shot between them). */
 function outStretches(log: readonly HatSample[]): HatSample[][] {
-  const out = new Set(settled(log, false));
+  const out = new Set(wellOut(log));
   const runs: HatSample[][] = [];
   let open = false;
   for (const s of log) {
@@ -464,7 +484,9 @@ async function learnTheHatThroughout(page: Page): Promise<void> {
   // Each half of the loop well covered, however busy the page is (it is: the board is playing).
   expect(inShot.length).toBeGreaterThan(Math.max(10, 0.25 * loop.length));
   expect(out.flat().length).toBeGreaterThan(Math.max(10, 0.25 * loop.length));
-  // Hat out of shot: the chair is never taken; the cap is lost, and the speed holds.
+  // Hat out of shot: the chair is never taken (nothing at all is tinted as the hat); the cap
+  // is lost, and the speed holds.
+  expect(takenWithHatOut(loop)).toEqual([]);
   expect(out.flat().filter((s) => s.hud.includes('cap found'))).toEqual([]);
   expect(out.flat().every((s) => s.hud.includes('cap not in sight (holding)'))).toBe(true);
   expect(out.some((run) => run.length >= 5)).toBe(true);
@@ -506,7 +528,8 @@ async function learnTheHatThroughout(page: Page): Promise<void> {
     expect(tintedIn(log).length).toBeGreaterThan(Math.max(10, 0.25 * log.length));
     expect(median(tintedIn(log))).toBeGreaterThan(75);
     expect(log.filter((s) => s.tintedBelow > 0)).toEqual([]);
-    expect(settled(log, false).filter((s) => s.hud.includes('cap found'))).toEqual([]);
+    expect(takenWithHatOut(log)).toEqual([]);
+    expect(wellOut(log).filter((s) => s.hud.includes('cap found'))).toEqual([]);
     expect(settled(log, true).filter((s) => s.hud.includes('cap found')).length).toBeGreaterThan(0.8 * settled(log, true).length);
   }
   expect(median(tintedIn(loosest))).toBeGreaterThan(median(tintedIn(surest)));
@@ -524,7 +547,8 @@ async function learnTheHatThroughout(page: Page): Promise<void> {
   await startProbe(page);
   const again = await recordFor(page, loopMs);
   expect(settled(again, false).length).toBeGreaterThan(Math.max(10, 0.25 * again.length));
-  expect(settled(again, false).filter((s) => s.hud.includes('cap found'))).toEqual([]);
+  expect(takenWithHatOut(again)).toEqual([]);
+  expect(wellOut(again).filter((s) => s.hud.includes('cap found'))).toEqual([]);
   expect(settled(again, true).length).toBeGreaterThan(5);
   expect(settled(again, true).filter((s) => s.hud.includes('cap found')).length).toBeGreaterThan(0.8 * settled(again, true).length);
 
@@ -539,6 +563,6 @@ async function learnTheHatThroughout(page: Page): Promise<void> {
   await expect(page.getByText('Looking for the cap’s colour.')).toBeVisible();
   const byColour = await recordFor(page, loopMs);
   expect(settled(byColour, false).length).toBeGreaterThan(Math.max(10, 0.25 * byColour.length));
-  expect(settled(byColour, false).every((s) => s.hud.includes('cap found'))).toBe(true);
+  expect(wellOut(byColour).every((s) => s.hud.includes('cap found'))).toBe(true);
   expect(pageErrors(page)).toEqual([]);
 }

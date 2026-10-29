@@ -10,7 +10,7 @@ import type { Scene, SceneSettings } from '../songs/performance/launcher';
  * T2-11).
  */
 
-const settings: SceneSettings = { soundWorld: 'warm', band: 'gentle', phrases: true, fillAmount: 0.3, evolveAmount: 0, bpm: 90 };
+const settings: SceneSettings = { soundWorld: 'warm', band: 'gentle', phrases: true, fillAmount: 0.3, evolveAmount: 0, bpm: 90, chords: { sequence: 'asBefore', bars: 2 } };
 const scene = (name: string, at: number | null, loops: number[], extra: Partial<Scene> = {}): Scene =>
   ({ id: name, name, loops, settings, ...(at === null ? {} : { at }), ...extra });
 const NOTE = [{ row: 0, col: 0 }];

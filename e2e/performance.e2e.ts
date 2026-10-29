@@ -1578,7 +1578,7 @@ async function savedSoundNow(page: Page): Promise<Record<string, unknown>> {
     const id = localStorage.getItem('admi-board-active-player');
     const players = JSON.parse(localStorage.getItem('admi-board-players') ?? '[]') as { id: string; settings: Record<string, unknown> }[];
     const s = (players.find((p) => p.id === id) ?? players[0])?.settings ?? {};
-    return { soundWorld: s.soundWorld, band: s.band, phrases: s.phrases, fillAmount: s.fillAmount, evolveAmount: s.evolveAmount, bpm: s.bpm };
+    return { soundWorld: s.soundWorld, band: s.band, phrases: s.phrases, fillAmount: s.fillAmount, evolveAmount: s.evolveAmount, bpm: s.bpm, chords: s.chords };
   });
 }
 
@@ -1943,5 +1943,77 @@ test('Simplify, by mouse and by Shift+S: the band, Extra notes and the second lo
   const full = between(b1 + 6, s2);
   expect(loop(full, 'bass').length).toBeGreaterThan(0);
   expect(full.some((n) => n.origin === 'band')).toBe(true);
+  expect(pageErrors(page)).toEqual([]);
+});
+
+// ---- One shared harmony (spec 2026-10-28-harmony-and-band, stage 1) ----
+
+test('one shared harmony: the band follows each scene’s chords, Tim’s chord counter changes one chord, and the next scene’s chords land on the pass', async ({ page }) => {
+  test.setTimeout(180_000);
+  await openLaptopBoard(page);
+  // Red melody at steps 1 and 5; Tim's Yellow chord counter at step 7, two rows up: D,
+  // so D minor for the last two beats of each pass. Three counters: the band's bass plays.
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1], [5, 5]]);
+  await pickColour(page, 'Yellow');
+  await place(page, [[2, 7]]);
+  await makePlan(page);
+  // Arrival: Rising, a bar each (C G7 Am F), the band Full.
+  await page.getByRole('button', { name: /^0:00 · Arrival/ }).click();
+  await page.getByRole('radiogroup', { name: 'Chords' }).getByRole('radio', { name: 'Rising', exact: true }).click();
+  await page.getByRole('radiogroup', { name: 'Each chord lasts' }).getByRole('radio', { name: '1 bar', exact: true }).click();
+  await page.getByRole('radiogroup', { name: 'Band' }).getByRole('radio', { name: 'Full', exact: true }).click();
+  await expect(page.getByRole('button', { name: /^0:00 · Arrival/ })).toContainText('Rising chords, 1 bar each');
+  await page.getByRole('button', { name: /^0:00 · Arrival/ }).click();
+  // Build at 0:12, in the middle of a pass (8 steps at 90 BPM is 5.3 s): Still, the band Full.
+  await page.getByRole('button', { name: /^1:30 · Build/ }).click();
+  const time = page.getByRole('textbox', { name: /When Build comes in/ });
+  await time.fill('0:12');
+  await time.blur();
+  await page.getByRole('radiogroup', { name: 'Chords' }).getByRole('radio', { name: 'Still', exact: true }).click();
+  await page.getByRole('radiogroup', { name: 'Band' }).getByRole('radio', { name: 'Full', exact: true }).click();
+  await expect(page.getByRole('button', { name: /^0:12 · Build/ })).toContainText('Still chords');
+
+  await startPiece(page);
+  await pieceClockRunning(page);
+  await pause(page, 24_000);
+  const log = await sessionLogFile(page) as unknown as {
+    notes: { t: number; colour: string; origin: string; midi?: number }[];
+    events: { t: number; kind: string; action?: string }[];
+  };
+  // The band's bass, on the beat: it lands on each chord's root as the chord changes.
+  const spb = 60 / 90;
+  const bass = log.notes.filter((n) => n.colour === 'band:bass' && n.midi !== undefined);
+  expect(bass.length).toBeGreaterThan(10);
+  // The band comes in on the second pass (beat 8), on the first beat of it.
+  const t8 = Math.min(...bass.map((n) => n.t));
+  const beatOf = (t: number): number => 8 + Math.round((t - t8) / spb);
+  const rootAt = new Map<number, number>();
+  for (const n of bass) {
+    const b = beatOf(n.t);
+    // On the beat (a stalled page can send one a little late); the walk's off-beat notes
+    // are half a beat (0.33 s) away.
+    if (Math.abs(n.t - (t8 + (b - 8) * spb)) < 0.15 && !rootAt.has(b)) rootAt.set(b, n.midi! % 12);
+  }
+  // Build came in by the clock, mid-pass; its chords wait for the next pass.
+  const sceneAt = log.events.find((e) => e.kind === 'action' && e.action === 'scene Build')!.t;
+  const arrived = beatOf(sceneAt);
+  const pass = Math.ceil(arrived / 8) * 8;
+  expect(pass - arrived).toBeGreaterThanOrEqual(2);
+  const rising = [0, 7, 9, 5]; // C G A F, a bar each, from the start of the piece
+  for (let bar = 8; bar < pass; bar += 4) expect(rootAt.get(bar), `bar at beat ${bar}`).toBe(rising[(bar / 4) % 4]);
+  // Tim's D minor: only the last two beats of each pass, then the sequence again.
+  for (let p = 8; p < pass; p += 8) {
+    expect(rootAt.get(p + 6), `Tim's chord at beat ${p + 6}`).toBe(2);
+    expect(rootAt.get(p + 8)).not.toBe(2);
+  }
+  // From the pass on: Still, a drone on C and G (the bass lands on C, then walks to G);
+  // Rising would have been A and F here. Tim's chord still changes its own two beats.
+  expect(rootAt.get(pass), `bar at beat ${pass}`).toBe(0);
+  // (Its walking notes, where read on the beat: on a busy machine one can come out late.)
+  const walk = [pass + 2, pass + 4, pass + 8].filter((b) => rootAt.has(b));
+  expect(walk.length).toBeGreaterThanOrEqual(2);
+  for (const b of walk) expect([0, 7], `beat ${b}`).toContain(rootAt.get(b));
+  expect(rootAt.get(pass + 6)).toBe(2);
   expect(pageErrors(page)).toEqual([]);
 });

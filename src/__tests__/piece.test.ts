@@ -3,7 +3,7 @@ import { decideClockTick, editedScene, nowNext, openingScene, planScenes, sceneA
 import { CLOCK_NOT_STARTED, DEFAULT_PERFORMANCE } from '../songs/performance/clock';
 import type { Scene, SceneSettings } from '../songs/performance/launcher';
 
-const settings: SceneSettings = { soundWorld: 'warm', band: 'gentle', phrases: true, fillAmount: 0.3, evolveAmount: 0.4, bpm: 96 };
+const settings: SceneSettings = { soundWorld: 'warm', band: 'gentle', phrases: true, fillAmount: 0.3, evolveAmount: 0.4, bpm: 96, chords: { sequence: 'asBefore', bars: 2 } };
 const scene = (id: string, at: number | null): Scene => ({ id, name: id, loops: [], settings, ...(at === null ? {} : { at }) });
 
 describe('the piece — scenes in time order', () => {

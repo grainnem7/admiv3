@@ -21,7 +21,8 @@
 import type { KitDrum } from '../../audio/instruments/RoundRobinDrumKit';
 import type { SoundWorldId } from '../../audio/worlds/soundWorlds';
 import { degreeMidi } from '../boardSequencerScale';
-import { bassNote, chordOnDegree, degreeOfNote, voiceNear, type Chord } from '../harmony/harmony';
+import { chordOnDegree, degreeOfNote, voiceNear, type Harmony } from '../harmony/harmony';
+import { currentChord } from '../harmony/currentChord';
 
 export type PhraseRole = 'melody' | 'bass' | 'drums' | 'chord';
 
@@ -132,22 +133,17 @@ export interface PhraseInput {
    * no harmony: pitches come from the rows alone.
    */
   defaultHarmony?(step: number): Harmony | null;
+  /**
+   * The instrument's one current chord on this beat, worked out once per step by the engine
+   * (see harmony/currentChord): when given, every part plays to it as it is.
+   */
+  chord?: Harmony | null;
   /** Which time round the loop this is (0 = the first): fills land on every fourth. */
   lap?: number;
 }
 
 /** A chord as the phrases use it: its root and tones as MIDI, and its symbol when known. */
-export interface Harmony {
-  root: number;
-  tones: number[];
-  symbol?: string;
-}
-
-/** A Harmony from a chord of the key, voiced in the middle of the keyboard. */
-export function harmonyFromChord(chord: Chord): Harmony {
-  const tones = voiceNear(chord, 62);
-  return { root: bassNote(chord, 48), tones, symbol: chord.symbol };
-}
+export { harmonyFromChord, type Harmony } from '../harmony/harmony';
 
 // ---------------------------------------------------------------------------------------
 // Pattern banks. Times are in beats within a 4-beat bar (drums in sixteenths 0–15).
@@ -325,24 +321,31 @@ function nearestTone(midi: number, tones: readonly number[]): number {
   return best;
 }
 
-/** The chord sounding at the chord role's current step, or null for "no chord set". */
+/**
+ * The chord sounding at the chord role's current step, or null for "no chord set": the
+ * engine's current chord when it gives one, else worked out the same way from these cells
+ * (see harmony/currentChord): a chord counter sets the chord from its column to the next,
+ * or until the world's own chords move on; the player's counters win over a loop's.
+ */
 export function harmonyAt(input: PhraseInput): Harmony | null {
-  if (input.songChord && input.songChord.length > 0) {
-    const tones = [...input.songChord].sort((x, y) => x - y);
-    return { root: tones[0], tones };
-  }
+  if (input.chord !== undefined) return input.chord;
   const loop = input.loopFor('chord');
-  const allChords = input.cells.filter((c) => c.role === 'chord' && c.col < loop);
-  // The player's chord counters name the chord; a loop's only when the player has none.
-  const liveChords = allChords.filter(isLive);
-  const chords = liveChords.length > 0 ? liveChords : allChords;
-  const owner = ownerCol(chords.map((c) => c.col), input.stepFor('chord'));
-  if (owner === null) return input.defaultHarmony?.(input.stepFor('chord')) ?? null;
-  // Two chord counters in one column: the lower one names the chord. The row is a note
-  // of the board's scale; the chord is built on the nearest degree of the key.
-  const rowDegree = Math.min(...chords.filter((c) => c.col === owner).map((c) => input.rows - 1 - c.row));
-  const note = degreeMidi(rowDegree, input.rootMidi, [...input.semitones]);
-  return harmonyFromChord(chordOnDegree(degreeOfNote(note, input.rootMidi, input.semitones), input.rootMidi, input.semitones, input.style));
+  const step = input.stepFor('chord');
+  const counters = input.cells
+    .filter((c) => c.role === 'chord' && c.col < loop)
+    .map((c) => ({ row: c.row, col: c.col, live: isLive(c) }));
+  const keyAt = (s: number): string => input.defaultHarmony?.(s)?.tones.join() ?? '';
+  return currentChord({
+    step, counters, rows: input.rows, rootMidi: input.rootMidi, semitones: input.semitones, style: input.style,
+    songChord: input.songChord,
+    sequence: (back) => {
+      // Which chord of the world's own this is: how many times it has changed so far.
+      const at = step - back;
+      let n = 0;
+      for (let s = 1; s <= at; s++) if (keyAt(s) !== keyAt(s - 1)) n++;
+      return { harmony: input.defaultHarmony?.(at) ?? null, n };
+    },
+  }).harmony;
 }
 
 /** Every note the phrases play on this beat. */
@@ -415,8 +418,9 @@ export function phraseEventsAtStep(input: PhraseInput): PhraseEvent[] {
         // The chord this counter names (or the song's), voiced near the middle of the keyboard.
         const voiced = input.songChord && input.songChord.length > 0
           ? [...input.songChord].map((t) => intoOctave(t, 55)).sort((x, y) => x - y)
-          // A loop's chords under the player's play the player's chord, so the two never clash.
-          : under < 1 && harmony ? [...harmony.tones]
+          // The one current chord (the counter's own where it names it), so a loop's chords
+          // under the player's, and the comp before the first counter, never clash.
+          : harmony ? [...harmony.tones]
           : voiceNear(chordOnDegree(
             degreeOfNote(degreeMidi(degree, input.rootMidi, [...input.semitones]), input.rootMidi, input.semitones),
             input.rootMidi, input.semitones, input.style,

@@ -10,6 +10,7 @@
 import type { PingPongPages } from '../songs/boardSequencerScale';
 import type { FillNote } from '../songs/generative/rulesFill';
 import type { BandLevel } from '../songs/band/band';
+import { DEFAULT_CHORDS, sanitizeChords, type ChordSetting } from '../songs/harmony/currentChord';
 import { clampLeadMs, type MidiChannelMode, type MidiSends } from '../midi/boardMidi';
 import {
   fullReachMap, REMOTE_CONTROLS, sanitizeReachMap, type Reach, type RemoteControlName, type RemoteTriggerName,
@@ -154,6 +155,16 @@ export interface BoardSequencerStored {
    * before it existed; Gentle for new ones.
    */
   band: BandLevel;
+  /**
+   * The chord sequence every pitched part plays to, and how long each chord lasts (see
+   * harmony/currentChord). "As before" for players set up before it existed.
+   */
+  chords: ChordSetting;
+  /**
+   * One-note melody and bass: on a strong beat a note rubbing against the chord moves to
+   * the nearest chord note. Off for players set up before it existed.
+   */
+  clashNudge: boolean;
   /** How far along each iPad strip this player can comfortably reach (see remote/protocol). */
   remoteReach: Record<RemoteControlName, Reach>;
   /** Names for the launchable loop slots ('' = "Loop n"). */
@@ -527,6 +538,8 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   evolveSeed: 1,
   evolveHoldLap: null,
   band: 'gentle',
+  chords: { ...DEFAULT_CHORDS },
+  clashNudge: true,
   remoteReach: fullReachMap(),
   loopNames: sanitizeLoopNames([]),
   scenes: [],
@@ -901,10 +914,13 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     evolveSeed: Math.round(num(o.evolveSeed, 1)),
     evolveHoldLap: isNum(o.evolveHoldLap) && o.evolveHoldLap >= 0 ? Math.round(o.evolveHoldLap) : null,
     band: o.band === 'gentle' || o.band === 'full' ? o.band : 'off',
+    chords: sanitizeChords(o.chords),
+    clashNudge: o.clashNudge === true,
     remoteReach: sanitizeReachMap(o.remoteReach),
     loopNames: sanitizeLoopNames(o.loopNames),
     scenes: sanitizeScenes(o.scenes, {
       soundWorld: d.soundWorld, band: d.band, phrases: d.phrases, fillAmount: d.fillAmount, evolveAmount: d.evolveAmount, bpm: d.bpm,
+      chords: d.chords,
     }),
     // A saved board is a stopped board, and a stopped board has no scene on now: one left
     // marked (a scene added while stopped, a save from before) made the next piece open in

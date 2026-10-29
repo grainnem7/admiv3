@@ -2362,6 +2362,7 @@ export default function BoardSequencerScreen() {
       noteLengthBeats: cfg.noteLengthBeats, velocity: cfg.velocity,
       tickEnabled: cfg.tickEnabled, studioMix: cfg.studioMix,
       soundWorld: cfg.soundWorld, phrases: cfg.phrases, fillEngine: cfg.fillEngine, band: cfg.band,
+      chords: cfg.chords, clashNudge: cfg.clashNudge,
       channels: cfg.channels, faderAxis: cfg.faderAxis, variationEnabled: cfg.variationEnabled,
       loopStepsRed: cfg.loopStepsRed, loopStepsBlack: cfg.loopStepsBlack,
       loopStepsBlue: cfg.loopStepsBlue, numPages: cfg.numPages,
@@ -3164,7 +3165,7 @@ export default function BoardSequencerScreen() {
     update({ loopNames: configRef.current.loopNames.map((n, i) => (i === slot ? name.slice(0, 24) : n)) });
   };
   const sceneSettingsNow = (c: BoardSequencerStored): SceneSettings => ({
-    soundWorld: c.soundWorld, band: c.band, phrases: c.phrases, fillAmount: c.fillAmount, evolveAmount: c.evolveAmount, bpm: c.bpm,
+    soundWorld: c.soundWorld, band: c.band, phrases: c.phrases, fillAmount: c.fillAmount, evolveAmount: c.evolveAmount, bpm: c.bpm, chords: c.chords,
   });
   const saveScene = (name: string): void => {
     const c = configRef.current;
@@ -3393,6 +3394,11 @@ export default function BoardSequencerScreen() {
     const apply = sceneSettingsToApply(scene.settings, stripsTouchedRef.current, c.sceneRespectsPlayer);
     const kept = [...stripsTouchedRef.current].filter(() => c.sceneRespectsPlayer);
     stripsTouchedRef.current = new Set();
+    // The scene's sound lands on the pass, with its loops (the speed glides as before).
+    engineRef.current?.landOnNextPass({
+      soundWorld: apply.soundWorld, band: apply.band, phrases: apply.phrases,
+      fillAmount: apply.fillAmount, evolveAmount: apply.evolveAmount, chords: apply.chords,
+    });
     update({ ...apply, currentScene: i });
     if (apply.bpm !== undefined) setSceneSpeed(apply.bpm, scene.glideSec);
     const glide = apply.bpm !== undefined ? speedGlideRef.current : null;
@@ -3404,7 +3410,7 @@ export default function BoardSequencerScreen() {
     pushLaunch();
     setBoardNotice(`Scene: ${scene.name}`);
     sessionLogRef.current.action(logActorRef.current, `scene ${scene.name}`);
-    announce(`Scene ${scene.name}: ${scene.loops.length} ${scene.loops.length === 1 ? 'loop' : 'loops'}, from the next pass.${glideWords}`);
+    announce(`Scene ${scene.name}: ${scene.loops.length} ${scene.loops.length === 1 ? 'loop' : 'loops'} and its sound, from the next pass.${glideWords}`);
   };
   // A scene gliding to its speed: a step every GLIDE_STEP_MS, each through setBpm, which keeps
   // the beat continuous. Never while a Speed counter or the hat sets the speed: the hat moves

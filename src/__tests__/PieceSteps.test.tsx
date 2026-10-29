@@ -12,7 +12,7 @@ let root: Root;
 beforeEach(() => { host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host); });
 afterEach(() => { act(() => root.unmount()); host.remove(); });
 
-const settings: SceneSettings = { soundWorld: 'warm', band: 'gentle', phrases: true, fillAmount: 0, evolveAmount: 0, bpm: 90 };
+const settings: SceneSettings = { soundWorld: 'warm', band: 'gentle', phrases: true, fillAmount: 0, evolveAmount: 0, bpm: 90, chords: { sequence: 'asBefore', bars: 2 } };
 const scene = (id: string, at: number | null, loops: number[] = [0], extra: Partial<Scene> = {}): Scene =>
   ({ id, name: id, loops, settings, ...(at === null ? {} : { at }), ...extra });
 const loop = (slot: number, name: string, empty = false): PieceLoop =>
@@ -474,5 +474,28 @@ describe('Scenes: reach this speed at once, or gradually', () => {
     expect(text()).toContain('12 seconds');
     act(() => radio('At once')?.click());
     expect(p.onEditScene).toHaveBeenLastCalledWith(1, { glideSec: 0 });
+  });
+});
+
+describe('Scenes: chords (harmony spec stage 1)', () => {
+  const radio = (group: string, name: string): HTMLButtonElement | undefined =>
+    [...host.querySelectorAll(`[role="radiogroup"][aria-label="${group}"] [role="radio"]`)]
+      .find((b) => b.childNodes[0]?.textContent === name) as HTMLButtonElement | undefined;
+
+  it('a scene chooses its chords and how long each lasts; its line says so', () => {
+    const p = props();
+    render(p);
+    expect(button(/^3:30 · Open/)?.textContent).toContain('chords as before');
+    act(() => button(/^3:30 · Open/)?.click());
+    // As before: four chords to a loop, so no length to choose.
+    expect(host.querySelector('[role="radiogroup"][aria-label="Each chord lasts"]')).toBeNull();
+    act(() => radio('Chords', 'Rising')?.click());
+    expect(p.onEditScene).toHaveBeenLastCalledWith(2, { settings: { ...settings, chords: { sequence: 'rising', bars: 2 } } });
+    const rising = scene('Open', 210, [0], { settings: { ...settings, chords: { sequence: 'rising', bars: 2 } } });
+    render({ ...p, scenes: [scene('Arrival', 0), scene('Build', 90), rising] });
+    expect(button(/^3:30 · Open/)?.textContent).toContain('Rising chords, 2 bars each');
+    act(() => radio('Each chord lasts', '4 bars')?.click());
+    expect(p.onEditScene).toHaveBeenLastCalledWith(2, { settings: { ...settings, chords: { sequence: 'rising', bars: 4 } } });
+    expect(text()).toContain('Four chords that lift: I–V–vi–IV.');
   });
 });

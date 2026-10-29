@@ -19,6 +19,7 @@
 
 import { grooveFor, harmonyFromChord, type DrumHit, type Harmony as PhraseHarmony } from '../phrases/phrases';
 import { bassNote, chordOnDegree, voiceLead } from '../harmony/harmony';
+import { WORLD_PROGRESSION } from '../harmony/currentChord';
 import type { SoundWorldId } from '../../audio/worlds/soundWorlds';
 import type { KitDrum } from '../../audio/instruments/RoundRobinDrumKit';
 
@@ -88,28 +89,27 @@ export function bandParts(level: BandLevel, playerRoles: ReadonlySet<string>, pl
   return BAND_PARTS.filter((p) => !taken.has(p));
 }
 
-/**
- * Each world's own progression when nobody has set a chord, as positions along the scale
- * (0 = the key note, 1 = an octave up), so it is in key whatever the scale's size. Four
- * chords, one per quarter of the loop.
- */
-const PROGRESSION: Record<SoundWorldId, number[]> = {
-  warm: [0, 5 / 7, 3 / 7, 4 / 7],        // I  vi  IV  V
-  lofi: [1 / 7, 4 / 7, 0, 0],            // ii V  I   I
-  ambient: [0, 3 / 7, 0, 5 / 7],         // I  IV  I   vi
-  electronic: [0, 5 / 7, 3 / 7, 6 / 7],  // I  vi  IV  VII
-};
-
 /** The chord of the world's own progression on `step`. */
 export function defaultHarmonyAt(
   style: SoundWorldId, step: number, loop: number, rootMidi: number, semitones: readonly number[],
 ): Harmony {
-  const prog = PROGRESSION[style];
+  const prog = WORLD_PROGRESSION[style];
   const span = Math.max(1, Math.floor(loop / prog.length));
   const i = Math.min(prog.length - 1, Math.floor((((step % loop) + loop) % loop) / span));
   // The progression is written in sevenths of the key, whatever the board's scale.
   const degree = Math.round(prog[i] * 7) % 7;
   return harmonyFromChord(chordOnDegree(degree, rootMidi, semitones, style));
+}
+
+/** The chord's fifth above `root` (its tone nearest a perfect fifth), or the perfect fifth. */
+function fifthAbove(root: number, tones: readonly number[]): number {
+  let best = root + 7;
+  let gap = Infinity;
+  for (const t of tones) {
+    const iv = (((t - root) % 12) + 12) % 12;
+    if (iv >= 6 && iv <= 8 && Math.abs(iv - 7) < gap) { gap = Math.abs(iv - 7); best = root + iv; }
+  }
+  return best;
 }
 
 /** The band's notes on one step. */
@@ -136,7 +136,8 @@ export function bandEventsAtStep(input: BandInput): BandEvent[] {
       const into = (input.step % input.loop);
       const changeIn = span; // steps until the next change, counted from this step when chordChange
       if (!input.chordChange && changeIn === 1) out.push({ part: 'bass', offset: 0.5, dur: 0.45, accent: 0.6, midi: root + 12 });
-      else if (!input.chordChange && into % 2 === 0) out.push({ part: 'bass', offset: 0, dur: 0.9, accent: 0.65, midi: root + 7 });
+      // The chord's own fifth: a diminished chord's is a semitone below a perfect one.
+      else if (!input.chordChange && into % 2 === 0) out.push({ part: 'bass', offset: 0, dur: 0.9, accent: 0.65, midi: fifthAbove(root, h.tones) });
     }
   }
 

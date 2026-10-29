@@ -87,6 +87,29 @@ describe('phrases — chord counters write the progression', () => {
     }
   });
 
+  // Harmony spec stage 1: a chord counter changes its own part, never the beats before it.
+  it('a chord counter sets the chord from its column on, not round the loop before it', () => {
+    const cells = [cell('chord', 4, 4)];
+    expect(harmonyAt(input(cells, 1))).toBeNull();
+    expect(harmonyAt(input(cells, 5))).not.toBeNull();
+    // With the world's own chords under it, those play before the counter.
+    const F = { root: 53, tones: [60, 65, 69], symbol: 'F' };
+    expect(harmonyAt(input(cells, 1, { defaultHarmony: () => F }))).toEqual(F);
+  });
+
+  it('the one current chord, when the engine gives it, is what every part plays to', () => {
+    const F = { root: 53, tones: [60, 65, 69], symbol: 'F' };
+    const cells = [cell('chord', 7, 0), cell('bass', 7, 0), cell('melody', 2, 0)];
+    expect(harmonyAt(input(cells, 0, { chord: F }))).toEqual(F);
+    for (const events of loopEvents(cells, { chord: F })) {
+      for (const e of events) {
+        if (e.role === 'bass' && e.midi !== undefined) expect([5, 9, 0]).toContain(e.midi % 12);
+        if (e.role === 'chord') expect([0, 5, 9]).toContain(e.midi! % 12);
+        if (e.role === 'melody' && e.offset === 0) expect([0, 5, 9]).toContain(e.midi! % 12);
+      }
+    }
+  });
+
   it("a backing song's chord wins over chord counters", () => {
     const h = harmonyAt(input([cell('chord', 7, 0)], 0, { songChord: [65, 69, 72] }))!;
     expect(h.tones).toEqual([65, 69, 72]);

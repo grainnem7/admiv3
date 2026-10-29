@@ -16,6 +16,7 @@ import { colourEntryProblem } from '../../../../songs/performance/colourEntries'
 import { GLIDE_DEFAULT_SEC, GLIDE_MAX_SEC, GLIDE_MIN_SEC } from '../../../../songs/performance/speedGlide';
 import { BAND_WORDS, listNames, playerWords } from '../pieceCheck';
 import { ReadyList, type ReadyItem } from './ReadyCheck';
+import { ChordChoice, chordWords } from './ChordChoice';
 
 export interface PieceLoop {
   slot: number;
@@ -665,6 +666,7 @@ function SceneRow(r: SceneRowProps): JSX.Element {
     fill === 'off' ? 'no extra notes' : `${fill} extra notes`,
     evolve === 'off' ? 'sounds stay' : `sounds change ${evolve === 'more' ? 'a lot' : 'slowly'}`,
     `${s.settings.bpm} BPM${glide > 0 ? `, reached over ${glide} s` : ''}`,
+    chordWords(s.settings.chords),
   ].join(' · ');
   const set = (patch: Partial<Scene['settings']>): void => r.onEdit({ settings: { ...s.settings, ...patch } });
 
@@ -774,6 +776,7 @@ function SceneRow(r: SceneRowProps): JSX.Element {
             label="Band" value={s.settings.band} onChange={(band) => set({ band })}
             options={[{ value: 'off', label: 'Off' }, { value: 'gentle', label: 'Quiet' }, { value: 'full', label: 'Full' }]}
           />
+          <ChordChoice value={s.settings.chords} onChange={(chords) => set({ chords })} />
           <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>Extra notes</span>
           <SegmentedControl<number>
             label="Extra notes" value={nearestStep(FILL_STEPS, s.settings.fillAmount)}

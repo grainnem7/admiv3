@@ -392,6 +392,29 @@ function loadWith(raw: Record<string, unknown>) {
   return loadBoardSequencerConfig()!;
 }
 
+describe('BoardSequencerConfig — one shared harmony (stage 1)', () => {
+  beforeEach(() => localStorage.clear());
+
+  it('a new player gets the world’s own chords, two bars each, and the clash nudge on', () => {
+    expect(DEFAULT_BOARD_SEQUENCER_CONFIG.chords).toEqual({ sequence: 'world', bars: 2 });
+    expect(DEFAULT_BOARD_SEQUENCER_CONFIG.clashNudge).toBe(true);
+  });
+
+  it('a player saved before chords existed plays as before: chords "As before", no nudge', () => {
+    localStorage.setItem('admi-board-sequencer', JSON.stringify({ rows: 8, cols: 8 }));
+    const c = loadBoardSequencerConfig()!;
+    expect(c.chords).toEqual({ sequence: 'asBefore', bars: 2 });
+    expect(c.clashNudge).toBe(false);
+  });
+
+  it('keeps what was chosen, and makes nonsense safe', () => {
+    localStorage.setItem('admi-board-sequencer', JSON.stringify({ rows: 8, cols: 8, chords: { sequence: 'tense', bars: 4 }, clashNudge: true }));
+    expect(loadBoardSequencerConfig()).toMatchObject({ chords: { sequence: 'tense', bars: 4 }, clashNudge: true });
+    localStorage.setItem('admi-board-sequencer', JSON.stringify({ rows: 8, cols: 8, chords: { sequence: 7, bars: 'long' } }));
+    expect(loadBoardSequencerConfig()!.chords).toEqual({ sequence: 'asBefore', bars: 2 });
+  });
+});
+
 describe('counts that must be whole numbers', () => {
   it('rounds a fraction instead of storing one', () => {
     // Array.from({ length: numPages }) throws on a fraction, and the page picker showed
@@ -458,7 +481,8 @@ describe('a piece saved before the 7:00 limit and "alone" scenes', () => {
     const cfg = loadWith({ scenes: [scene], performance: { lengthSec: 480, ending: 'cue', style: 'fade', fadePasses: 2, startOn: 'play' } });
     expect(cfg.performance.lengthSec).toBe(420);
     expect(cfg.performance).toMatchObject({ ending: 'cue', style: 'fade', fadePasses: 2 });
-    expect(cfg.scenes).toEqual([scene]);
+    // As they were: a scene saved before chord sequences plays its chords as before.
+    expect(cfg.scenes).toEqual([{ ...scene, settings: { ...scene.settings, chords: { sequence: 'asBefore', bars: 2 } } }]);
   });
 });
 

@@ -27,13 +27,17 @@ import { MasterChain } from '../audio/MasterChain';
 import { DEFAULT_BOARD_MIX } from '../audio/audioConfig';
 import { channelPan, ducksForKick, legatoBeats } from '../audio/boardMix';
 import { voiceSpecFor, worldOf, type SoundWorldChoice } from '../audio/worlds/soundWorlds';
-import { harmonyAt, layerPhraseCells, LIVE_LAYER, melodyLeader, phraseEventsAtStep, ANSWER_LEVEL, type PhraseCell, type PhraseInput, type PhraseRole } from './phrases/phrases';
+import { layerPhraseCells, LIVE_LAYER, melodyLeader, phraseEventsAtStep, ANSWER_LEVEL, type PhraseCell, type PhraseInput, type PhraseRole } from './phrases/phrases';
 import { generateFill, type FillContext, type FillNote, type SoundingNote } from './generative/rulesFill';
 import { loadMagenta, magentaFill, magentaStatus } from './generative/magentaFill';
 import { describeEvolve, evolveState, NEUTRAL, type EvolveState } from '../audio/evolve/evolve';
 import {
-  BAND_GAIN, bandEventsAtStep, bandParts, defaultHarmonyAt, type BandLevel, type BandPart, type Harmony,
+  BAND_GAIN, bandEventsAtStep, bandParts, type BandLevel, type BandPart, type Harmony,
 } from './band/band';
+import {
+  AS_BEFORE_CHORDS, currentChord, fitToChord, isStrongBeat, sequenceAt,
+  type ChordCounter, type ChordSetting, type CurrentChord,
+} from './harmony/currentChord';
 import {
   BoardMidiSender, channelsInUse, EXPRESSION_STEP_SEC, gainToCc, loopChannel, loopSlotOf, LOOP_CHANNELS, type BoardMidiOptions,
 } from '../midi/boardMidi';
@@ -163,6 +167,20 @@ export interface BoardEngineConfig {
   fillEngine?: 'magenta' | 'rules';
   /** The band: pad, bass and groove that join once the first counter is down. */
   band?: BandLevel;
+  /** The chord sequence every pitched part plays to (absent = "As before"). */
+  chords?: ChordSetting;
+  /** One-note melody and bass: a note rubbing against the chord on a strong beat moves to it. */
+  clashNudge?: boolean;
+}
+
+/** A scene's sound settings that wait for the pass, as its loops do (see landOnNextPass). */
+export interface PassSettings {
+  soundWorld?: SoundWorldChoice;
+  band?: BandLevel;
+  phrases?: boolean;
+  fillAmount?: number;
+  evolveAmount?: number;
+  chords?: ChordSetting;
 }
 
 /** Evolve: how each colour's sound keeps changing as it plays (see audio/evolve). */
@@ -181,6 +199,16 @@ const EVOLVE_GLIDE_SEC = 0.8;
 const MIX_SWITCH_TC = 0.03;
 
 /** A cell from a saved loop (a launched slot or a pad's bank), not the player's board. */
+function sameChords(a: ChordSetting, b: ChordSetting): boolean {
+  return a.sequence === b.sequence && a.bars === b.bars;
+}
+
+/** Two values of one scene setting are the same (chords compared by what they are). */
+function passValueEqual(a: unknown, b: unknown): boolean {
+  if (typeof a === 'object' && a !== null && typeof b === 'object' && b !== null) return sameChords(a as ChordSetting, b as ChordSetting);
+  return a === b;
+}
+
 function isLoopLayer(layer: string | undefined): boolean {
   return layer !== undefined && (layer.startsWith('slot') || layer.startsWith('bank'));
 }
@@ -387,6 +415,13 @@ export class BoardSequencerEngine {
   private bandPrevHarmonyKey = '';
   /** The band pad's last voicing, so each chord is led from the one before. */
   private bandPadVoicing: number[] | null = null;
+  // One shared harmony (harmony/currentChord): the beat the chord sequence started on (its
+  // scene's first pass), the chord counters on this beat, and the chord they make.
+  private chordOrigin = 0;
+  private chordCounters: ChordCounter[] = [];
+  private chordNow: CurrentChord = { harmony: null, from: 'none' };
+  /** A scene's sound settings waiting for the next pass, as its loops do. */
+  private passPending: PassSettings | null = null;
   // MIDI out: every logged note is also sent, when the player has switched it on.
   private midi: BoardMidiSender | null = null;
   private midiOpts: BoardMidiOptions = { enabled: false, sends: 'player' };
@@ -623,6 +658,7 @@ export class BoardSequencerEngine {
 
   /** The band's level, live. Off is silent at once; a level change glides. */
   setBand(level: BandLevel): void {
+    if (this.heldForPass('band', level, this.bandSetting)) return;
     this.bandSetting = level;
     this.cfg.band = level;
     this.applyBand();
@@ -659,6 +695,7 @@ export class BoardSequencerEngine {
    * out, then freed). Sends follow the world unless the part has its own.
    */
   setSoundWorld(choice: SoundWorldChoice): void {
+    if (this.heldForPass('soundWorld', choice, this.cfg.soundWorld ?? 'none')) return;
     if ((this.cfg.soundWorld ?? 'none') === choice) return;
     this.cfg.soundWorld = choice;
     this.syncAbleton();
@@ -706,7 +743,7 @@ export class BoardSequencerEngine {
    * freezes a fill: those notes play whatever the board does, until it is let go.
    */
   setFill(amount: number, seed: number, kept: FillNote[] | null): void {
-    this.fillSetting = amount;
+    if (!this.heldForPass('fillAmount', amount, this.fillSetting)) this.fillSetting = amount;
     this.fillSeed = seed;
     this.fillKept = kept;
     this.applyAmounts();
@@ -752,8 +789,9 @@ export class BoardSequencerEngine {
 
   /** Evolve settings (safe while playing). Applied from the next beat. */
   setEvolve(settings: EvolveSettings): void {
-    this.evolveSetting = settings.amount;
-    this.evolve = { ...settings };
+    const held = this.heldForPass('evolveAmount', settings.amount, this.evolveSetting);
+    if (!held) this.evolveSetting = settings.amount;
+    this.evolve = { ...settings, amount: this.evolve.amount };
     this.applyAmounts();
   }
 
@@ -1037,7 +1075,86 @@ export class BoardSequencerEngine {
 
   /** Counters play phrases (on) or one note each (off), from the next beat. */
   setPhrases(on: boolean): void {
+    if (this.heldForPass('phrases', on, this.cfg.phrases ?? false)) return;
     this.cfg.phrases = on;
+  }
+
+  /**
+   * The chord sequence. While playing, a new one starts at the next pass (its first chord
+   * on the pass), as a scene's loops do; stopped, at once.
+   */
+  setChords(chords: ChordSetting): void {
+    const now = this.cfg.chords ?? AS_BEFORE_CHORDS;
+    if (this.heldForPass('chords', chords, now)) return;
+    if (sameChords(now, chords)) return;
+    if (this.timer === null) {
+      this.cfg.chords = { ...chords };
+      this.chordOrigin = 0;
+      return;
+    }
+    this.passPending = { ...(this.passPending ?? {}), chords: { ...chords } };
+  }
+
+  /** The clash nudge for one-note melody and bass, from the next note. */
+  setClashNudge(on: boolean): void {
+    this.cfg.clashNudge = on;
+  }
+
+  /** The chord every pitched part is playing to now (null = none set). */
+  getCurrentChord(): Harmony | null {
+    return this.chordNow.harmony;
+  }
+
+  /**
+   * A scene's sound lands on the pass, with its loops: these settings wait for the next
+   * pass boundary while the board plays (stopped, they are set at once). Meanwhile the
+   * screen may push the same values again (they keep waiting) or the player may pick
+   * something else (that wins, at once). The speed is not here: it glides as it always has.
+   */
+  landOnNextPass(p: PassSettings): void {
+    if (this.timer === null) {
+      this.applyPassSettings(p, 0);
+      return;
+    }
+    const cur: PassSettings = {
+      soundWorld: this.cfg.soundWorld ?? 'none', band: this.bandSetting, phrases: this.cfg.phrases ?? false,
+      fillAmount: this.fillSetting, evolveAmount: this.evolveSetting, chords: this.cfg.chords ?? AS_BEFORE_CHORDS,
+    };
+    const next: PassSettings = { ...(this.passPending ?? {}) };
+    for (const k of Object.keys(p) as (keyof PassSettings)[]) {
+      const v = p[k];
+      if (v === undefined) continue;
+      if (passValueEqual(v, cur[k])) delete next[k];
+      else (next as Record<string, unknown>)[k] = v;
+    }
+    this.passPending = Object.keys(next).length > 0 ? next : null;
+  }
+
+  /**
+   * A setter called while a scene's value waits for the pass: the same value as waiting, or
+   * the one playing now (the screen catching up), changes nothing yet; anything else is the
+   * player's own choice, which wins at once.
+   */
+  private heldForPass<K extends keyof PassSettings>(key: K, value: NonNullable<PassSettings[K]>, current: NonNullable<PassSettings[K]>): boolean {
+    const waiting = this.passPending?.[key];
+    if (waiting === undefined || !this.passPending) return false;
+    if (passValueEqual(value, waiting) || passValueEqual(value, current)) return true;
+    delete this.passPending[key];
+    if (Object.keys(this.passPending).length === 0) this.passPending = null;
+    return false;
+  }
+
+  /** Put a scene's settings in now: on the pass boundary at `beat` (or at once, stopped). */
+  private applyPassSettings(p: PassSettings, beat: number): void {
+    if (p.soundWorld !== undefined) this.setSoundWorld(p.soundWorld);
+    if (p.band !== undefined) this.setBand(p.band);
+    if (p.phrases !== undefined) this.setPhrases(p.phrases);
+    if (p.fillAmount !== undefined) { this.fillSetting = p.fillAmount; this.applyAmounts(); }
+    if (p.evolveAmount !== undefined) { this.evolveSetting = p.evolveAmount; this.applyAmounts(); }
+    if (p.chords !== undefined) {
+      this.cfg.chords = { ...p.chords };
+      this.chordOrigin = beat;
+    }
   }
 
   private studioOn(): boolean {
@@ -1883,6 +2000,8 @@ export class BoardSequencerEngine {
    */
   start(opts: { waitForBoard?: boolean } = {}): void {
     this.startSec = Tone.now();
+    // Beats count from 0 again: the chord sequence starts with them.
+    this.chordOrigin = 0;
     this.boardArrived = false;
     this.boardWaitUntil = opts.waitForBoard ? this.startSec + BOARD_WAIT_MAX_SEC : null;
     this.lastInternalBeat = -1;
@@ -2035,14 +2154,19 @@ export class BoardSequencerEngine {
     return 'melodic';
   }
 
-  /** Notes for a chord-stab cell: the song chord (when locked) or a scale triad. */
+  /**
+   * Notes for a chord-stab cell: the song chord (when locked), else the one current chord —
+   * its own where it names it, the player's over a loop's — voiced near where the row sits.
+   */
   private chordStack(cell: ActiveCell, chord: BoardChord | null, axis: 'row' | 'col'): number[] {
     if (chord && chord.notes.length > 0) return chord.notes;
     const degree = axis === 'row' ? this.cfg.rows - 1 - cell.row : cell.col;
     const root = this.cfg.scaleRootMidi;
     const semis = this.cfg.scaleSemitones;
-    // A real chord of the key on the row's note, voiced near where the row sits.
     const note = degreeMidi(degree, root, semis);
+    const now = this.chordNow.harmony;
+    if (now) return voiceNear({ pcs: [...new Set(now.tones.map((t) => ((t % 12) + 12) % 12))] }, note);
+    // A real chord of the key on the row's note.
     const style = worldOf(this.cfg.soundWorld ?? 'none')?.id ?? 'warm';
     return voiceNear(chordOnDegree(degreeOfNote(note, root, semis), root, semis, style), note);
   }
@@ -2131,6 +2255,15 @@ export class BoardSequencerEngine {
       const cycle = Math.max(1, this.cfg.cols * Math.max(1, this.cfg.numPages));
       if (((beat % cycle) + cycle) % cycle === 0) this.endSimplify();
     }
+    // A scene's sound lands on the pass boundary too, with its loops.
+    if (this.passPending) {
+      const cycle = Math.max(1, this.cfg.cols * Math.max(1, this.cfg.numPages));
+      if (((beat % cycle) + cycle) % cycle === 0) {
+        const p = this.passPending;
+        this.passPending = null;
+        this.applyPassSettings(p, beat);
+      }
+    }
     // A launch lands on the pass boundary — the first beat of the whole cycle.
     if (this.pendingLaunch) {
       const cycle = Math.max(1, this.cfg.cols * Math.max(1, this.cfg.numPages));
@@ -2183,6 +2316,9 @@ export class BoardSequencerEngine {
       }),
     ];
     const playCells = tagged.map((t) => t.cell);
+    // The one current chord, worked out once for this beat: every pitched part plays to it.
+    this.chordCounters = this.chordCountersOf(playCells);
+    this.chordNow = this.chordAt(beat, chord);
     // The band answers the PLAYER: it comes in after their first counter and hands them
     // a part when they take it. Loops don't count — with loops covering every part the
     // band fell silent for a whole section, and a loop alone brought it in before the
@@ -2284,26 +2420,57 @@ export class BoardSequencerEngine {
         const lv = this.loopVariation(colour, layer, beat, drums);
         return { variant: evo.variant + lv.variant, busy: evo.busy + lv.busy + (drums ? this.energyBusy() : 0) };
       },
-      defaultHarmony: this.band !== 'off'
-        ? (step: number) => defaultHarmonyAt(
-          worldOf(this.cfg.soundWorld ?? 'none')?.id ?? 'warm', step,
-          loopLen(this.rawLoop('melodic'), this.cfg.cols), this.cfg.scaleRootMidi, this.cfg.scaleSemitones,
-        )
-        : undefined,
     };
   }
 
-  /** The chord the band plays on `step`: the song's, the chord counters' (phrases), else its own. */
-  private harmonyForBand(step: number, cells: readonly ActiveCell[], chord: BoardChord | null): Harmony | null {
-    if (chord && chord.notes.length > 0) {
-      const tones = [...chord.notes].sort((a, b) => a - b);
-      return { root: tones[0], tones };
+  /** The chord counters among these cells (one note or tunes, the player's and the loops'). */
+  private chordCountersOf(cells: readonly LayeredCell[]): ChordCounter[] {
+    const loop = loopLen(this.rawLoop('melodic'), this.cfg.cols);
+    const out: ChordCounter[] = [];
+    for (const c of cells) {
+      if (c.col >= loop || this.roleFor(c.colour) !== 'chord') continue;
+      if (!this.voiceByChannel.has(c.colour)) continue;
+      out.push({ row: c.row, col: c.col, live: !c.layer });
     }
-    if (this.cfg.phrases) return harmonyAt(this.phraseInput(this.phraseCells(cells), step, null, false));
-    return defaultHarmonyAt(
-      worldOf(this.cfg.soundWorld ?? 'none')?.id ?? 'warm', step,
-      loopLen(this.rawLoop('melodic'), this.cfg.cols), this.cfg.scaleRootMidi, this.cfg.scaleSemitones,
-    );
+    return out;
+  }
+
+  /**
+   * The one current chord on `beat` (see harmony/currentChord), from this beat's chord
+   * counters: the song's when locked to one, a chord counter's for its own part of the loop,
+   * else the scene's sequence. A few sums: cheap enough to look ahead with.
+   */
+  private chordAt(beat: number, chord: BoardChord | null): CurrentChord {
+    const style = worldOf(this.cfg.soundWorld ?? 'none')?.id ?? 'warm';
+    const loop = loopLen(this.rawLoop('melodic'), this.cfg.cols);
+    const step = sweepAt(beat, this.rawLoop('melodic'), this.cfg.cols, { ...this.sweep(), pingPong: false }).col;
+    const setting = this.cfg.chords ?? AS_BEFORE_CHORDS;
+    const bandOn = this.band !== 'off';
+    return currentChord({
+      step, counters: this.chordCounters, rows: this.cfg.rows, rootMidi: this.cfg.scaleRootMidi,
+      semitones: this.cfg.scaleSemitones, style, songChord: chord && chord.notes.length > 0 ? chord.notes : null,
+      sequence: (back) => sequenceAt({
+        setting, style, rootMidi: this.cfg.scaleRootMidi, semitones: this.cfg.scaleSemitones,
+        beatsIn: beat - back - this.chordOrigin, step: step - back, loop, bandOn,
+      }),
+    });
+  }
+
+  /** The step's place in the pass is a strong beat (the first or third of a bar). */
+  private strongBeat(beat: number): boolean {
+    const cycle = Math.max(1, this.cfg.cols * Math.max(1, this.cfg.numPages));
+    return isStrongBeat(((beat % cycle) + cycle) % cycle);
+  }
+
+  /**
+   * A one-note melody or bass note on this beat, fitted to the chord: on a strong beat a
+   * note rubbing against the chord moves to the nearest chord note, when the nudge is on,
+   * or always when Evolve moved it (then it isn't the player's note).
+   */
+  private fitted(midi: number, beat: number, drifted: boolean): number {
+    const h = this.chordNow.harmony;
+    if (!h || !(drifted || this.cfg.clashNudge === true) || !this.strongBeat(beat)) return midi;
+    return fitToChord(midi, h.tones);
   }
 
   /**
@@ -2336,12 +2503,12 @@ export class BoardSequencerEngine {
     const loop = loopLen(this.rawLoop('melodic'), this.cfg.cols);
     const step = ((beat % loop) + loop) % loop;
     const keyOf = (h: Harmony | null): string => (h ? h.tones.join(',') : '');
-    const harmony = this.harmonyForBand(step, cells, chord);
+    const harmony = this.chordNow.harmony;
     const key = keyOf(harmony);
     const chordChange = step === 0 || key !== this.bandPrevHarmonyKey;
     this.bandPrevHarmonyKey = key;
     let chordSpan = 1;
-    while (step + chordSpan < loop && keyOf(this.harmonyForBand(step + chordSpan, cells, chord)) === key) chordSpan++;
+    while (step + chordSpan < loop && keyOf(this.chordAt(beat + chordSpan, chord).harmony) === key) chordSpan++;
     const events = bandEventsAtStep({
       level: this.band, step, loop, style: worldOf(this.cfg.soundWorld ?? 'none')?.id ?? 'warm',
       harmony, chordChange, chordSpan, playerRoles: roles, playerCounters: counters, previousPad: this.bandPadVoicing,
@@ -2389,13 +2556,14 @@ export class BoardSequencerEngine {
    * Everything the board plays over one time round the loop, for the fill to fit around.
    * Uses exactly the rules that play it — phrases or one note per counter.
    */
-  private soundingOverLoop(cells: readonly ActiveCell[], chord: BoardChord | null): SoundingNote[] {
+  private soundingOverLoop(cells: readonly ActiveCell[], chord: BoardChord | null, passStart = 0): SoundingNote[] {
     const out: SoundingNote[] = [];
     const cols = this.cfg.cols;
     const pc = this.phraseCells(cells);
     if (pc.length > 0) {
       for (let b = 0; b < cols; b++) {
-        for (const ev of phraseEventsAtStep(this.phraseInput(pc, b, chord, false))) {
+        const input = { ...this.phraseInput(pc, passStart + b, chord, false), chord: this.chordAt(passStart + b, chord).harmony };
+        for (const ev of phraseEventsAtStep(input)) {
           out.push({ step: b, offset: ev.offset, role: ev.role, colour: ev.colour, midi: ev.midi, drum: ev.drum });
         }
       }
@@ -2436,20 +2604,18 @@ export class BoardSequencerEngine {
       if (fullKey !== this.fillKey) {
         this.fillKey = fullKey;
         this.fillChangedAt = cellTime;
-        const pc = this.cfg.phrases ? this.phraseCells(cells) : [];
+        // The chords of this time round the loop; on later passes the sequence may have moved
+        // on, and each note is fitted to the chord as it plays (below).
+        const passStart = beat - (((beat % this.cfg.cols) + this.cfg.cols) % this.cfg.cols);
         const ctx: FillContext = {
-          sounding: this.soundingOverLoop(cells, chord),
+          sounding: this.soundingOverLoop(cells, chord, passStart),
           loop: this.cfg.cols,
           rows: this.cfg.rows,
           rootMidi: this.cfg.scaleRootMidi,
           semitones: this.cfg.scaleSemitones,
-          harmonyAt: this.cfg.phrases
-            ? (step) => harmonyAt(this.phraseInput(pc, step, chord, false))?.tones ?? null
-            : undefined,
+          harmonyAt: (step) => this.chordAt(passStart + step, chord).harmony?.tones ?? null,
           // The chord's name, for Magenta's chord-conditioned model.
-          chordSymbolAt: this.cfg.phrases
-            ? (step) => harmonyAt(this.phraseInput(pc, step, chord, false))?.symbol ?? null
-            : undefined,
+          chordSymbolAt: (step) => this.chordAt(passStart + step, chord).harmony?.symbol ?? null,
           amount: this.fillAmount,
           // Each Evolve scene brings a fresh idea, so the fill moves on with the sound.
           seed: this.fillSeed + this.evolveScene * 7919,
@@ -2515,7 +2681,10 @@ export class BoardSequencerEngine {
           const voice = this.voiceByChannel.get(n.colour)?.voice;
           if (!voice) continue;
           const evo = this.evoFor(n.colour);
-          midi = n.midi + oct + 12 * evo.octave;
+          // On a strong beat an extra note never rubs against the chord sounding now.
+          const h = this.chordNow.harmony;
+          const fit = h && n.offset === 0 && this.strongBeat(beat) ? fitToChord(n.midi, h.tones) : n.midi;
+          midi = fit + oct + 12 * evo.octave;
           dur *= evo.length;
           if (this.internalSound) voice.play(midi, vel, dur, time);
         } else continue;
@@ -2542,7 +2711,7 @@ export class BoardSequencerEngine {
     if (cells.length === 0) return;
     const byKey = new Map<string, { cell: LayeredCell; source: FiredNote['source'] }>();
     for (const t of tagged) byKey.set(`${t.cell.layer ?? ''}|${t.cell.row},${t.cell.col},${t.cell.colour}`, t);
-    const events = phraseEventsAtStep(this.phraseInput(cells, beat, chord, this.cfg.pingPong ?? false));
+    const events = phraseEventsAtStep({ ...this.phraseInput(cells, beat, chord, this.cfg.pingPong ?? false), chord: this.chordNow.harmony });
     const oct = this.cfg.octaveShift * 12;
     const h = this.cfg.humanize;
     // Swing on the off-beats inside the beat: the player's own plus the world's feel.
@@ -2660,10 +2829,11 @@ export class BoardSequencerEngine {
       };
       if (role === 'bass') {
         // Bass pitch follows the row like melody (bottom = low), an octave down.
-        const degree = Math.max(0, this.cfg.rows - 1 - cell.row + this.noteDrift(cell, beat));
-        const base = chord && chord.notes.length > 0
+        const drift = this.noteDrift(cell, beat);
+        const degree = Math.max(0, this.cfg.rows - 1 - cell.row + drift);
+        const base = this.fitted(chord && chord.notes.length > 0
           ? chordDegreeMidi(degree, chord.notes)
-          : degreeMidi(degree, this.cfg.scaleRootMidi, this.cfg.scaleSemitones);
+          : degreeMidi(degree, this.cfg.scaleRootMidi, this.cfg.scaleSemitones), beat, drift !== 0);
         const dur = ringSec(loopLen(this.rawLoop('bass'), this.cfg.cols)) * this.evoFor(ch.id).length;
         if (this.internalSound) voice.play(base - 12 + oct, vel, dur, stepTime);
         this.recordFired({
@@ -2681,7 +2851,8 @@ export class BoardSequencerEngine {
         });
       } else {
         const placed = voicing.get(`${cell.row},${cell.col}`);
-        const midi = placed === undefined ? undefined : this.scaleStep(placed, this.noteDrift(cell, beat));
+        const drift = placed === undefined ? 0 : this.noteDrift(cell, beat);
+        const midi = placed === undefined ? undefined : this.fitted(this.scaleStep(placed, drift), beat, drift !== 0);
         if (midi !== undefined) {
           // A 'pad' instrument sustains a whole loop (re-triggered each pass) as a
           // held harmonic bed; others play the short note length.
@@ -2759,6 +2930,13 @@ export class BoardSequencerEngine {
   stop(): void {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+    // A scene's sound still waiting for its pass is the sound now: never left behind.
+    if (this.passPending) {
+      const p = this.passPending;
+      this.passPending = null;
+      this.applyPassSettings(p, 0);
+    }
+    this.chordOrigin = 0;
     this.fired = [];
     // Stop ends Simplify, and whatever the safety valve dropped. Nothing is built here
     // (dispose() comes through stop()): the band's own voices only glide back up.

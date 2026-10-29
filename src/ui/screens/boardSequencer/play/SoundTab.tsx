@@ -14,6 +14,8 @@ import { ColourTable } from './ColourTable';
 import type { BoardSequencerStored } from '../../../../profiles/BoardSequencerConfig';
 import { ENERGY, nearest, SPACE_ALL, type Step } from '../../../../audio/soundSteps';
 import { StepRow } from './StepRow';
+import { ChordChoice } from './ChordChoice';
+import { Switch } from '../ui/Switch';
 import { configToSoundFrom } from '../../../../midi/boardMidi';
 
 /** Said wherever a control only changes ADMI's own sound, while Ableton makes it. */
@@ -224,6 +226,18 @@ export function SoundTab(p: SoundTabProps): JSX.Element {
                 : 'Waiting for your first counter.'}
             </span>
           )}
+        </div>
+
+        <div role="group" aria-label="Chords" style={CARD}>
+          <span style={{ fontWeight: 600 }}>Chords</span>
+          <ChordChoice value={config.chords} onChange={(chords) => update({ chords })} />
+          <span style={NOTE}>
+            {`Everything with notes plays to these chords: your counters, your loops, the band and the extra notes. A chord counter changes one chord, from its column until the next chord.${p.running ? ' New chords start at the next pass.' : ''}`}
+          </span>
+          <Switch
+            label="Melody and bass fit the chord" checked={config.clashNudge} onChange={(clashNudge) => update({ clashNudge })}
+            hint="On the main beats, a melody or bass note that rubs against the chord moves to the nearest chord note. Off: every note plays as placed."
+          />
         </div>
 
         <div role="group" aria-label="Extra notes" style={CARD}>

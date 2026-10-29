@@ -4,8 +4,11 @@ import {
   LAUNCH_SLOTS, loopLabel, nextSceneIndex, sanitizeLoopNames, sanitizeScenes, sceneFromNow, sceneSettingsOf, sceneSettingsToApply,
   SCENE_SETTING_KEYS, slotState, stoppedConfig, toggleSlot, withOwnSettings, type SceneSettings,
 } from '../songs/performance/launcher';
+import { AS_BEFORE_CHORDS } from '../songs/harmony/currentChord';
 
-const settings: SceneSettings = { soundWorld: 'warm', band: 'gentle', phrases: true, fillAmount: 0.3, evolveAmount: 0.4, bpm: 96 };
+const settings: SceneSettings = {
+  soundWorld: 'warm', band: 'gentle', phrases: true, fillAmount: 0.3, evolveAmount: 0.4, bpm: 96, chords: { sequence: 'rising', bars: 2 },
+};
 
 describe('launching loops', () => {
   it('a slot is starting or stopping until the engine has caught up', () => {
@@ -44,9 +47,22 @@ describe('scenes', () => {
       { name: '', loops: 'no' },
     ], settings);
     expect(scenes).toHaveLength(2);
-    expect(scenes[0]).toEqual({ id: 'a', name: 'Intro', loops: [0, 3], settings: { ...settings, bpm: 400, fillAmount: 1 } });
+    expect(scenes[0]).toEqual({ id: 'a', name: 'Intro', loops: [0, 3], settings: { ...settings, bpm: 400, fillAmount: 1, chords: AS_BEFORE_CHORDS } });
     expect(scenes[1].name).toBe('Scene 2');
     expect(sanitizeScenes('nope', settings)).toEqual([]);
+  });
+
+  // Harmony spec stage 1: a scene chooses its chord sequence and how long each chord lasts.
+  it('a scene keeps its chords; one saved before chords existed loads "As before"; nonsense is "As before"', () => {
+    const scene = (chords: unknown) => sanitizeScenes([{ id: 'c', name: 'C', loops: [], settings: { ...settings, chords } }], settings)[0].settings.chords;
+    expect(scene({ sequence: 'dreamy', bars: 4 })).toEqual({ sequence: 'dreamy', bars: 4 });
+    expect(scene({ sequence: 'still', bars: 1 })).toEqual({ sequence: 'still', bars: 1 });
+    expect(scene(undefined)).toEqual(AS_BEFORE_CHORDS);
+    expect(scene({ sequence: 'jazz', bars: 2 })).toEqual(AS_BEFORE_CHORDS);
+    // A length that isn't 1, 2 or 4 bars: two.
+    expect(scene({ sequence: 'calm', bars: 3 })).toEqual({ sequence: 'calm', bars: 2 });
+    expect(SCENE_SETTING_KEYS).toContain('chords');
+    expect(sceneSettingsOf({ ...settings, chords: { sequence: 'home', bars: 1 } }).chords).toEqual({ sequence: 'home', bars: 1 });
   });
 
   it('a scene marked to play alone keeps the mark; a scene saved before it existed loads as it was', () => {
@@ -407,8 +423,8 @@ describe('scenes and the player', () => {
 });
 
 describe("a scene's settings are for the run only (T2-05, T3-17)", () => {
-  const own: SceneSettings = { soundWorld: 'lofi', band: 'off', phrases: false, fillAmount: 0, evolveAmount: 0, bpm: 100 };
-  const open: SceneSettings = { soundWorld: 'warm', band: 'full', phrases: true, fillAmount: 0.4, evolveAmount: 0.5, bpm: 90 };
+  const own: SceneSettings = { soundWorld: 'lofi', band: 'off', phrases: false, fillAmount: 0, evolveAmount: 0, bpm: 100, chords: { sequence: 'asBefore', bars: 2 } };
+  const open: SceneSettings = { soundWorld: 'warm', band: 'full', phrases: true, fillAmount: 0.4, evolveAmount: 0.5, bpm: 90, chords: { sequence: 'rising', bars: 2 } };
 
   it("the player's own settings are read from the config as it is", () => {
     const config = { ...own, rows: 8, currentScene: null };

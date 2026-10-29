@@ -172,6 +172,8 @@ export function applyEngineSettings(
   engine.setFill(cfg.fillAmount, cfg.fillSeed, cfg.fillKept);
   engine.setFillEngine(cfg.fillEngine);
   engine.setBand(cfg.band);
+  engine.setChords(cfg.chords);
+  engine.setClashNudge(cfg.clashNudge);
   engine.setLaunchFade(Math.round(cfg.loopFadePasses * cfg.cols * Math.max(1, cfg.numPages)));
   const route = effectiveSound(cfg, port.portConnected, port.holdOnAdmi);
   engine.setMidiOut({

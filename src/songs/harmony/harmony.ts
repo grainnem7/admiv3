@@ -43,7 +43,7 @@ export function parentScale(semitones: readonly number[]): number[] {
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
 /** The chord's name from its intervals above the root. */
-function symbolFor(rootPc: number, intervals: readonly number[]): string {
+export function symbolFor(rootPc: number, intervals: readonly number[]): string {
   const name = NOTE_NAMES[((rootPc % 12) + 12) % 12];
   const has = (...ivs: number[]) => ivs.every((i) => intervals.includes(i));
   const third = intervals.includes(4) ? 'maj' : intervals.includes(3) ? 'min' : intervals.includes(2) ? 'sus2' : intervals.includes(5) ? 'sus4' : 'maj';
@@ -151,4 +151,17 @@ export function bassNote(chord: Pick<Chord, 'rootPc'>, lo = 36): number {
   let n = lo + ((chord.rootPc - lo) % 12 + 12) % 12;
   if (n >= lo + 12) n -= 12;
   return n;
+}
+
+/** A chord as the parts play it: a bass root, its notes in the middle of the keyboard, its name. */
+export interface Harmony {
+  root: number;
+  tones: number[];
+  symbol?: string;
+}
+
+/** A Harmony from a chord of the key, voiced in the middle of the keyboard. */
+export function harmonyFromChord(chord: Chord): Harmony {
+  const tones = voiceNear(chord, 62);
+  return { root: bassNote(chord, 48), tones, symbol: chord.symbol };
 }

@@ -13,6 +13,7 @@
 import type { BandLevel } from '../band/band';
 import type { SoundWorldChoice } from '../../audio/worlds/soundWorlds';
 import { GLIDE_MAX_SEC, GLIDE_MIN_SEC } from './speedGlide';
+import { sanitizeChords, type ChordSetting } from '../harmony/currentChord';
 
 /** How many loops the iPad and the scenes can launch. */
 export const LAUNCH_SLOTS = 8;
@@ -52,12 +53,17 @@ export interface SceneSettings {
   fillAmount: number;
   evolveAmount: number;
   bpm: number;
+  /** The chord sequence and how long each chord lasts (see harmony/currentChord). */
+  chords: ChordSetting;
 }
-export const SCENE_SETTING_KEYS: (keyof SceneSettings)[] = ['soundWorld', 'band', 'phrases', 'fillAmount', 'evolveAmount', 'bpm'];
+export const SCENE_SETTING_KEYS: (keyof SceneSettings)[] = ['soundWorld', 'band', 'phrases', 'fillAmount', 'evolveAmount', 'bpm', 'chords'];
 
 /** The scene settings as they are in a config now: the player's own, when no run is on. */
 export function sceneSettingsOf(c: SceneSettings): SceneSettings {
-  return { soundWorld: c.soundWorld, band: c.band, phrases: c.phrases, fillAmount: c.fillAmount, evolveAmount: c.evolveAmount, bpm: c.bpm };
+  return {
+    soundWorld: c.soundWorld, band: c.band, phrases: c.phrases, fillAmount: c.fillAmount, evolveAmount: c.evolveAmount, bpm: c.bpm,
+    chords: { ...c.chords },
+  };
 }
 
 /**
@@ -160,6 +166,8 @@ export function sanitizeSceneSettings(v: unknown, d: SceneSettings): SceneSettin
     fillAmount: unit(o.fillAmount, d.fillAmount),
     evolveAmount: unit(o.evolveAmount, d.evolveAmount),
     bpm: isNum(o.bpm) ? Math.max(20, Math.min(400, Math.round(o.bpm))) : d.bpm,
+    // A scene saved before chord sequences existed plays as it did.
+    chords: sanitizeChords(o.chords),
   };
 }
 
