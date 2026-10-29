@@ -8,6 +8,7 @@ import type { BandLevel } from '../band/band';
 import { PLAN_JOBS, type LeadIn } from '../band/bandJobs';
 import { cuesCrossed, endingDue, endingLeadSec, scenesDue, type PerformanceSettings } from './clock';
 import { LAUNCH_SLOTS, type Scene, type SceneSettings } from './launcher';
+import type { SceneEnergy } from './energy';
 
 /** Scenes that come in at a time first, in time order; untimed ones after, as they were. */
 export function sortScenes(scenes: readonly Scene[], current: number | null): { scenes: Scene[]; current: number | null } {
@@ -167,13 +168,13 @@ export function pieceSpeeds(c: PieceSpeedSource): number[] {
 /**
  * The plan's four sections, in proportion to the piece: 0:00, 1:30, 3:30, 6:00 of 7:00.
  * The band builds with them (PLAN_JOBS): Arrival pads; Build pads and bass; Open all four,
- * at Full; Home pads, quietly.
+ * at Full; Home pads, quietly. Energy draws the build: 2, 3, 5, 2.
  */
-const PLAN: { name: string; at: number; band: BandLevel; fill: number; evolve: number; loops: 1 | 2 | 3 }[] = [
-  { name: 'Arrival', at: 0, band: 'gentle', fill: 0, evolve: 0, loops: 1 },
-  { name: 'Build', at: 90 / 420, band: 'gentle', fill: 0.3, evolve: 0, loops: 3 },
-  { name: 'Open', at: 210 / 420, band: 'full', fill: 0.4, evolve: 0.5, loops: 2 },
-  { name: 'Home', at: 360 / 420, band: 'gentle', fill: 0, evolve: 0, loops: 1 },
+const PLAN: { name: string; at: number; band: BandLevel; fill: number; evolve: number; loops: 1 | 2 | 3; energy: SceneEnergy }[] = [
+  { name: 'Arrival', at: 0, band: 'gentle', fill: 0, evolve: 0, loops: 1, energy: 2 },
+  { name: 'Build', at: 90 / 420, band: 'gentle', fill: 0.3, evolve: 0, loops: 3, energy: 3 },
+  { name: 'Open', at: 210 / 420, band: 'full', fill: 0.4, evolve: 0.5, loops: 2, energy: 5 },
+  { name: 'Home', at: 360 / 420, band: 'gentle', fill: 0, evolve: 0, loops: 1, energy: 2 },
 ];
 
 /**
@@ -194,7 +195,7 @@ export function planScenes(
     name: p.name,
     at: Math.round(p.at * lengthSec),
     loops: pick(p.loops),
-    settings: { ...base, band: p.band, fillAmount: p.fill, evolveAmount: p.evolve, bandJobs: { ...PLAN_JOBS[i] } },
+    settings: { ...base, band: p.band, fillAmount: p.fill, evolveAmount: p.evolve, bandJobs: { ...PLAN_JOBS[i] }, sceneEnergy: p.energy },
   }));
 }
 

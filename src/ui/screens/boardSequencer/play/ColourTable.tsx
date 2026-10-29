@@ -218,6 +218,7 @@ function ColourRow({ c, n, p, onSound, canGoBack, onBack }: {
               </select>
             ) : <span aria-label="No sound of its own" style={{ alignSelf: 'center' }}>—</span>}
           </div>
+          {hasSound && <TuneChoice c={c} phrases={p.config.phrases} set={(patch) => p.setChannelSound(c.id, patch)} />}
           {note && <div role="status" style={{ ...NOTE, marginTop: 4, color: 'var(--bs-accent)', fontWeight: 600 }}>{note}</div>}
         </td>
       </tr>
@@ -229,6 +230,29 @@ function ColourRow({ c, n, p, onSound, canGoBack, onBack }: {
         </tr>
       )}
     </>
+  );
+}
+
+/**
+ * One note or a tune, beside the colour (tunes made easy): what one counter of this colour
+ * plays. With tunes switched off for everything (Advanced), it is shown but can't change.
+ */
+function TuneChoice({ c, phrases, set }: { c: ColourChannel; phrases: boolean; set(patch: ChannelSoundPatch): void }): JSX.Element {
+  const tune = playsTune(c, true);
+  const name = c.role === 'drums' ? 'A groove' : c.role === 'bass' ? 'A bassline' : c.role === 'chord' ? 'The chords' : 'A phrase';
+  return (
+    <div style={{ marginTop: 4 }}>
+      <StepRow
+        label="Each counter plays"
+        steps={[{ label: 'One note', value: 0 }, { label: `Tune: ${name.toLowerCase()}`, value: 1 }]}
+        value={tune ? 1 : 0}
+        disabled={!phrases}
+        onPick={(v) => set({ plays: v === 1 ? 'tune' : 'note' })}
+        hint={!phrases
+          ? 'Every counter plays one note for now: Advanced → Counters play tunes.'
+          : tune ? 'One counter plays a whole tune until the next counter of its colour.' : 'One note where each counter sits.'}
+      />
+    </div>
   );
 }
 
@@ -259,15 +283,6 @@ function ColourMore({ c, p }: { c: ColourChannel; p: ColourTableProps }): JSX.El
         </span>
       )}
       {live && <span style={NOTE}>{live}</span>}
-      {config.phrases && (melodic || c.role === 'drums') && (
-        <StepRow
-          label="Each counter plays"
-          steps={[{ label: 'One note', value: 0 }, { label: c.role === 'drums' ? 'A groove' : c.role === 'bass' ? 'A bassline' : c.role === 'chord' ? 'The chords' : 'A phrase', value: 1 }]}
-          value={plays === 'tune' ? 1 : 0}
-          onPick={(v) => set({ plays: v === 1 ? 'tune' : 'note' })}
-          hint={plays === 'note' ? 'One note where each counter sits.' : 'One counter plays a whole phrase until the next counter of its colour.'}
-        />
-      )}
       {melodic && (
         <>
           <StepRow label="Loud" steps={LOUD} value={c.volume ?? 1} onPick={(v) => set({ volume: v })} />

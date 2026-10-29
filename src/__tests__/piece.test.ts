@@ -5,7 +5,7 @@ import type { Scene, SceneSettings } from '../songs/performance/launcher';
 import { AS_BEFORE_JOBS } from '../songs/band/bandJobs';
 
 const settings: SceneSettings = {
-  soundWorld: 'warm', band: 'gentle', phrases: true, fillAmount: 0.3, evolveAmount: 0.4, bpm: 96, chords: { sequence: 'asBefore', bars: 2 }, bandJobs: AS_BEFORE_JOBS,
+  soundWorld: 'warm', band: 'gentle', phrases: true, fillAmount: 0.3, evolveAmount: 0.4, bpm: 96, chords: { sequence: 'asBefore', bars: 2 }, bandJobs: AS_BEFORE_JOBS, sceneEnergy: 0,
 };
 const scene = (id: string, at: number | null): Scene => ({ id, name: id, loops: [], settings, ...(at === null ? {} : { at }) });
 
@@ -109,6 +109,12 @@ describe('the piece — make my plan', () => {
 
   // Harmony spec stage 2: a band that builds. Arrival pads; Build pads and bass; Open all
   // four, at Full; Home pads, quietly. No lead-ins (the default is None).
+  // Harmony spec stage 3: Energy draws a build, 2, 3, 5, 2.
+  it('draws Energy as a build: 2, 3, 5, 2', () => {
+    const plan = planScenes(420, [[{}]], settings, 't');
+    expect(plan.map((p) => p.settings.sceneEnergy)).toEqual([2, 3, 5, 2]);
+  });
+
   it('sets band jobs that build, and no lead-ins', () => {
     const plan = planScenes(420, [[{}]], settings, 't');
     const jobsOf = (i: number) => {

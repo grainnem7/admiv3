@@ -26,7 +26,7 @@ import type { KitDrum } from '../audio/instruments/RoundRobinDrumKit';
 import { MasterChain } from '../audio/MasterChain';
 import { DEFAULT_BOARD_MIX } from '../audio/audioConfig';
 import { channelPan, ducksForKick, legatoBeats } from '../audio/boardMix';
-import { voiceSpecFor, worldOf, type SoundWorldChoice } from '../audio/worlds/soundWorlds';
+import { voiceSpecFor, worldLevelGain, worldOf, type SoundWorldChoice } from '../audio/worlds/soundWorlds';
 import { layerPhraseCells, LIVE_LAYER, melodyLeader, phraseEventsAtStep, ANSWER_LEVEL, type PhraseCell, type PhraseInput, type PhraseRole } from './phrases/phrases';
 import { generateFill, type FillContext, type FillNote, type SoundingNote } from './generative/rulesFill';
 import { loadMagenta, magentaFill, magentaStatus } from './generative/magentaFill';
@@ -56,6 +56,8 @@ import { bassNote, chordOnDegree, degreeOfNote, voiceNear } from './harmony/harm
 import {
   LATE_TOLERANCE_SEC, nextValveStep, TimeKeeper, type KeepingTimeLimits, type KeepingTimeReport, type ValveStep,
 } from './keepingTime';
+import { energyBandGain, energyBrightHz, energyExtras, energyMixGain, energyShape } from './performance/energy';
+import { freshIdeas, hashChance, ideaKey, keepIdea, mixHash, mixSeeds, withIdeas, type KeptIdea } from './performance/ideas';
 
 /** A note the engine actually scheduled (drives note pops / "Now:" — never inferred from the playhead). */
 export interface FiredNote {
@@ -181,6 +183,17 @@ export interface BoardEngineConfig {
   keepOnTop?: boolean;
   /** How far the rest dips, in dB. */
   keepOnTopDb?: number;
+  /** A scene's Energy, 1 to 5 (absent or 0 = off, as before): see performance/energy. */
+  sceneEnergy?: number;
+}
+
+/**
+ * The ideas the AI plays with (see performance/ideas): the seed of every random choice, and
+ * whose they are (a scene's id, for keeping Magenta's ideas; null = plain Play, none kept).
+ */
+export interface IdeasSetting {
+  seed: number;
+  owner: string | null;
 }
 
 /** A scene's sound settings that wait for the pass, as its loops do (see landOnNextPass). */
@@ -192,6 +205,8 @@ export interface PassSettings {
   evolveAmount?: number;
   chords?: ChordSetting;
   bandJobs?: BandJobs;
+  sceneEnergy?: number;
+  ideas?: IdeasSetting;
 }
 
 /** Evolve: how each colour's sound keeps changing as it plays (see audio/evolve). */
@@ -208,6 +223,8 @@ const EVOLVE_GLIDE_SEC = 0.8;
 
 /** How quickly the mix switch crossfades, so flipping it mid-loop never clicks. */
 const MIX_SWITCH_TC = 0.03;
+/** How quickly a scene's Energy moves the band's level and the brightness: a short glide, no jump. */
+const ENERGY_GLIDE_TC = 0.12;
 
 /** A cell from a saved loop (a launched slot or a pad's bank), not the player's board. */
 function sameChords(a: ChordSetting, b: ChordSetting): boolean {
@@ -233,14 +250,6 @@ function isLoopLayer(layer: string | undefined): boolean {
 function bedOf(launched: readonly LaunchedLoop[]): LaunchedLoop[] {
   const bed = launched.find((l) => l.fade?.dir !== 'out');
   return bed ? [bed] : [];
-}
-
-/** A well-mixed number from a seed, a pass, a square and a name: the same inputs, the same number. */
-function mixHash(seed: number, lap: number, row: number, col: number, name: string): number {
-  let x = (seed ^ Math.imul(lap + 1, 0x9e3779b1) ^ Math.imul(row + 1, 0x85ebca6b) ^ Math.imul(col + 7, 0xc2b2ae35)) >>> 0;
-  for (let i = 0; i < name.length; i++) x = Math.imul(x ^ name.charCodeAt(i), 0x27d4eb2d) >>> 0;
-  x ^= x >>> 15; x = Math.imul(x, 0x2c1b3c6d) >>> 0; x ^= x >>> 12;
-  return x >>> 0;
 }
 
 /** A loop launched without a pad, and the fade it is in, if any. */
@@ -511,12 +520,28 @@ export class BoardSequencerEngine {
    * no Extra notes, no Sounds change. 'leaving' = Back to full, waiting for the next pass.
    */
   private simplify: 'off' | 'on' | 'leaving' = 'off';
+  /** The whole board's level: the world's (see soundWorlds levelDb), and a scene's Energy. */
+  private worldGain: GainNode | null = null;
+  /** A scene's Energy, 1 to 5 (0 = off): the band's level and busyness, the extras, the brightness. */
+  private sceneEnergy = 0;
+  // The same AI each rehearsal (performance/ideas): the ideas playing now, the beat (a pass
+  // boundary) they began on, so a scene plays the same however it was reached, and a run's
+  // own salt under "Surprise me each time" (0 otherwise).
+  private ideas: IdeasSetting = { seed: 0, owner: null };
+  private ideasFromBeat = 0;
+  private surprise = false;
+  private runSalt = 0;
+  /** Magenta's ideas kept per scene (by owner, then by the board they were made for). */
+  private keptIdeas = new Map<string, readonly KeptIdea[]>();
+  private keptIdeasSource: unknown = null;
+  private onIdeaKept: ((owner: string, idea: KeptIdea) => void) | null = null;
 
   constructor(cfg: BoardEngineConfig) {
     this.cfg = cfg;
     this.bandJobs = cfg.bandJobs ?? AS_BEFORE_JOBS;
     this.keepOnTop = cfg.keepOnTop !== false;
     this.keepOnTopDb = cfg.keepOnTopDb ?? KEEP_ON_TOP_DEFAULT_DB;
+    this.sceneEnergy = cfg.sceneEnergy ?? 0;
     // Matches the codebase's standard AudioContext acquisition
     // (see SongPresetEngine.loadSong). BoardSequencerVoice / ToneVoiceBase
     // construct their raw Web Audio nodes against this same context.
@@ -541,12 +566,17 @@ export class BoardSequencerEngine {
     const world = worldOf(this.cfg.soundWorld ?? 'none');
     const mixTone = ctx.createBiquadFilter();
     mixTone.type = 'lowpass';
-    mixTone.frequency.value = world?.mixToneHz ?? 20000;
+    mixTone.frequency.value = energyBrightHz(this.sceneEnergy, world?.mixToneHz ?? 20000);
     mixTone.Q.value = 0.5;
+    // The world's level, so no world is louder than another.
+    const worldGain = ctx.createGain();
+    worldGain.gain.value = this.levelGain();
+    mix.connect(worldGain);
+    this.worldGain = worldGain;
     // The ending's fade sits after the mix, so Mute and volume keep working underneath it.
     const endGain = ctx.createGain();
     endGain.gain.value = 1;
-    mix.connect(endGain);
+    worldGain.connect(endGain);
     endGain.connect(mixTone);
     this.endGain = endGain;
     this.mixTone = mixTone;
@@ -694,7 +724,7 @@ export class BoardSequencerEngine {
     top.gain.value = 1;
     top.connect(this.duckBus ?? this.mix);
     const gain = ctx.createGain();
-    gain.gain.value = BAND_GAIN[this.band];
+    gain.gain.value = this.bandLevel();
     gain.connect(top);
     const pad = new BoardSequencerVoice(ctx, world?.voices.chord ?? { synth: 'pad', synthLevel: 0.8 });
     const bass = new BoardSequencerVoice(ctx, world?.voices.bass ?? { synth: 'sub', synthLevel: 0.8 });
@@ -797,7 +827,12 @@ export class BoardSequencerEngine {
       if (!this.drumKit) void this.buildDrumKit();
       if (!this.bandVoices) this.buildBandVoices();
     }
-    this.bandVoices?.gain.gain.setTargetAtTime(BAND_GAIN[level], Tone.immediate(), MIX_SWITCH_TC);
+    this.bandVoices?.gain.gain.setTargetAtTime(this.bandLevel(), Tone.immediate(), MIX_SWITCH_TC);
+  }
+
+  /** The band's level as it plays: its own (Quiet, Full), moved by a scene's Energy. */
+  private bandLevel(): number {
+    return BAND_GAIN[this.band] * energyBandGain(this.sceneEnergy);
   }
 
   /** What the band is doing now, for the legend and the board's pulse. */
@@ -825,7 +860,8 @@ export class BoardSequencerEngine {
     this.syncAbleton();
     const world = worldOf(choice);
     const t = Tone.immediate();
-    this.mixTone?.frequency.setTargetAtTime(world?.mixToneHz ?? 20000, t, MIX_SWITCH_TC);
+    this.mixTone?.frequency.setTargetAtTime(energyBrightHz(this.sceneEnergy, world?.mixToneHz ?? 20000), t, MIX_SWITCH_TC);
+    this.worldGain?.gain.setTargetAtTime(this.levelGain(), t, MIX_SWITCH_TC);
     // The room changes with the world: a short plate for Lo-fi, a long hall for Ambient.
     if (this.reverb) {
       this.reverb.decay = world?.reverbDecay ?? 2.5;
@@ -880,7 +916,8 @@ export class BoardSequencerEngine {
   private applyAmounts(): void {
     const fillOff = this.simplify !== 'off' || this.valveTaken.includes('fill');
     const evolveOff = this.simplify !== 'off' || this.valveTaken.includes('evolve');
-    this.fillAmount = fillOff ? 0 : Math.max(0, Math.min(1, this.fillOverride ?? this.fillSetting));
+    // A scene's Energy makes the extra notes sparser or busier; a counter's amount is its own.
+    this.fillAmount = fillOff ? 0 : Math.max(0, Math.min(1, this.fillOverride ?? energyExtras(this.fillSetting, this.sceneEnergy)));
     this.evolve = { ...this.evolve, amount: evolveOff ? 0 : Math.max(0, Math.min(1, this.evolveOverride ?? this.evolveSetting)) };
   }
 
@@ -1005,10 +1042,9 @@ export class BoardSequencerEngine {
     const own = isLoopLayer(cell.layer) ? this.loopVaryChance() : (ch.noteVary ?? DEFAULT_NOTE_VARY);
     const amount = Math.max(this.evolve.amount, own);
     if (amount <= 0) return 0;
-    const cycle = Math.max(1, this.cfg.cols * Math.max(1, this.cfg.numPages));
-    const lap = this.evolve.holdLap ?? lapIndex(beat, cycle);
+    const lap = this.evolve.holdLap ?? this.ideaLap(beat);
     if (lap % 4 === 0) return 0;
-    const x = mixHash(this.evolve.seed, lap, cell.row, cell.col, `${cell.layer ?? ''}|${cell.colour}`);
+    const x = mixHash(this.evolveSeed(), lap, cell.row, cell.col, `${cell.layer ?? ''}|${cell.colour}`);
     if ((x % 1000) / 1000 >= amount) return 0;
     // Mostly a step away, sometimes two; up and down equally.
     const pick = (x >>> 10) % 6;
@@ -1032,10 +1068,9 @@ export class BoardSequencerEngine {
   private loopOrnament(cell: { row: number; col: number; colour: string; layer?: string }, beat: number): number | null {
     if (!isLoopLayer(cell.layer) || this.loopVary <= 0) return null;
     if (this.channelById.get(cell.colour)?.changes === false) return null;
-    const cycle = Math.max(1, this.cfg.cols * Math.max(1, this.cfg.numPages));
-    const lap = this.evolve.holdLap ?? lapIndex(beat, cycle);
+    const lap = this.evolve.holdLap ?? this.ideaLap(beat);
     if (lap % 4 === 0) return null;
-    const x = mixHash(this.evolve.seed + 101, lap, cell.row, cell.col, `${cell.layer}|${cell.colour}`);
+    const x = mixHash(this.evolveSeed() + 101, lap, cell.row, cell.col, `${cell.layer}|${cell.colour}`);
     if ((x % 1000) / 1000 >= this.loopVaryChance() * 0.5) return null;
     return (x >>> 10) % 2 === 0 ? 1 : -1;
   }
@@ -1048,10 +1083,9 @@ export class BoardSequencerEngine {
   private loopVariation(colour: string, layer: string | undefined, beat: number, drums: boolean): { variant: number; busy: number } {
     if (!isLoopLayer(layer) || this.loopVary <= 0) return { variant: 0, busy: 0 };
     if (this.channelById.get(colour)?.changes === false) return { variant: 0, busy: 0 };
-    const cycle = Math.max(1, this.cfg.cols * Math.max(1, this.cfg.numPages));
-    const lap = this.evolve.holdLap ?? lapIndex(beat, cycle);
+    const lap = this.evolve.holdLap ?? this.ideaLap(beat);
     if (lap % 4 === 0) return { variant: 0, busy: 0 };
-    const x = mixHash(this.evolve.seed + 17, lap, 0, 0, `${layer}|${colour}`);
+    const x = mixHash(this.evolveSeed() + 17, lap, 0, 0, `${layer}|${colour}`);
     if ((x % 1000) / 1000 >= this.loopVaryChance()) return { variant: 0, busy: 0 };
     if (drums) return { variant: 0, busy: (x >>> 11) % 2 === 0 ? 1 : -1 };
     return { variant: 1 + ((x >>> 11) % 5), busy: 0 };
@@ -1080,10 +1114,10 @@ export class BoardSequencerEngine {
    * the instrument at a scene change. Runs once per loop (or when the settings change).
    */
   private applyEvolve(beat: number): void {
-    const cycle = Math.max(1, this.cfg.cols * Math.max(1, this.cfg.numPages));
-    const lap = lapIndex(beat, cycle);
+    const lap = this.ideaLap(beat);
     const ev = this.evolve;
-    const key = `${ev.amount}|${ev.sceneLoops}|${ev.seed}|${ev.holdLap}|${this.cfg.soundWorld}|${this.cfg.channels.map((c) => (c.changes === false ? 0 : 1)).join('')}`;
+    const seed = this.evolveSeed();
+    const key = `${ev.amount}|${ev.sceneLoops}|${seed}|${ev.holdLap}|${this.cfg.soundWorld}|${this.cfg.channels.map((c) => (c.changes === false ? 0 : 1)).join('')}`;
     if (lap === this.evolveLap && key === this.evolveKey) return;
     this.evolveLap = lap;
     this.evolveKey = key;
@@ -1097,7 +1131,7 @@ export class BoardSequencerEngine {
       // A colour can opt out: it keeps its own sound while the others change.
       const amount = ch.changes === false ? 0 : ev.amount;
       if (role === 'drums') {
-        this.drumEvo = evolveState({ colour: ch.id, role, lap: at, seed: ev.seed, amount, sceneLoops: ev.sceneLoops, world, ownInstrument: true });
+        this.drumEvo = evolveState({ colour: ch.id, role, lap: at, seed, amount, sceneLoops: ev.sceneLoops, world, ownInstrument: true });
         const w = worldOf(world);
         const on = amount > 0;
         // Without a world the kit is wide open, so a drift brighter could never be heard:
@@ -1113,7 +1147,7 @@ export class BoardSequencerEngine {
       const e = this.voiceByChannel.get(ch.id);
       if (!e || (role !== 'melody' && role !== 'chord' && role !== 'bass')) continue;
       const own = !!(ch.instrument && ch.instrument.length > 0);
-      const state = evolveState({ colour: ch.id, role, lap: at, seed: ev.seed, amount, sceneLoops: ev.sceneLoops, world, ownInstrument: own });
+      const state = evolveState({ colour: ch.id, role, lap: at, seed, amount, sceneLoops: ev.sceneLoops, world, ownInstrument: own });
       // A scene's instrument: swap the voice, letting the old one ring out.
       const wanted = state.voice?.name ?? null;
       if (wanted !== (e.voiceName ?? null)) {
@@ -1204,6 +1238,111 @@ export class BoardSequencerEngine {
   }
 
   /**
+   * A scene's Energy (see performance/energy), 0 = off. While playing, a scene's waits for
+   * the pass (landOnNextPass); then the band's level, its drums, the extra notes and the
+   * brightness all move together, gliding so nothing jumps.
+   */
+  setSceneEnergy(e: number): void {
+    const v = Math.max(0, Math.min(5, Math.round(e)));
+    if (this.heldForPass('sceneEnergy', v, this.sceneEnergy)) return;
+    if (v === this.sceneEnergy) return;
+    this.sceneEnergy = v;
+    this.cfg.sceneEnergy = v;
+    const t = Tone.immediate();
+    this.bandVoices?.gain.gain.setTargetAtTime(this.bandLevel(), t, ENERGY_GLIDE_TC);
+    this.worldGain?.gain.setTargetAtTime(this.levelGain(), t, ENERGY_GLIDE_TC);
+    this.mixTone?.frequency.setTargetAtTime(energyBrightHz(v, worldOf(this.cfg.soundWorld ?? 'none')?.mixToneHz ?? 20000), t, ENERGY_GLIDE_TC);
+    this.applyAmounts();
+  }
+
+  /** The whole board's level: the world's (every world as loud), moved by a scene's Energy. */
+  private levelGain(): number {
+    return worldLevelGain(this.cfg.soundWorld ?? 'none') * energyMixGain(this.sceneEnergy);
+  }
+
+  /** The Energy playing now (0 = off). */
+  getSceneEnergy(): number {
+    return this.sceneEnergy;
+  }
+
+  /**
+   * The ideas the AI plays with (see performance/ideas). A scene's wait for its pass; from
+   * that pass on, every random choice is counted from it, so the scene plays the same
+   * however it was reached. Set while stopped, they start with the run.
+   */
+  setIdeas(ideas: IdeasSetting): void {
+    if (this.heldForPass('ideas', ideas, this.ideas)) return;
+    if (passValueEqual(ideas, this.ideas)) return;
+    const cycle = Math.max(1, this.cfg.cols * Math.max(1, this.cfg.numPages));
+    this.applyIdeas(ideas, this.timer === null ? 0 : Math.floor((this.lastInternalBeat + 1) / cycle) * cycle);
+  }
+
+  private applyIdeas(ideas: IdeasSetting, fromBeat: number): void {
+    this.ideas = { ...ideas };
+    this.ideasFromBeat = Math.max(0, fromBeat);
+    this.fillKey = ''; // the extra notes from the new ideas, from the next beat
+  }
+
+  /** "Surprise me each time": fresh ideas every run and Magenta's ideas not kept (as before). */
+  setSurprise(on: boolean): void {
+    if (on === this.surprise) return;
+    this.surprise = on;
+    this.runSalt = on ? freshIdeas() : 0;
+    this.fillKey = '';
+  }
+
+  /**
+   * Magenta's ideas kept with the piece, by scene id (the screen's copy; read, never kept
+   * by reference past the next call). Called with the same object again, nothing is done.
+   */
+  setKeptIdeas(source: unknown, byOwner: ReadonlyMap<string, readonly KeptIdea[]>): void {
+    if (source === this.keptIdeasSource) return;
+    this.keptIdeasSource = source;
+    this.keptIdeas = new Map(byOwner);
+  }
+
+  /** Told each time Magenta makes an idea worth keeping: for which scene, and the idea. */
+  setOnIdeaKept(cb: ((owner: string, idea: KeptIdea) => void) | null): void {
+    this.onIdeaKept = cb;
+  }
+
+  /** The seed every random choice starts from now: the ideas, and the run's own under Surprise me. */
+  private ideaSeed(): number {
+    return mixSeeds(this.ideas.seed, this.runSalt);
+  }
+
+  /** Which time round the loop `beat` is, counted from when the ideas began (as before with none). */
+  private ideaLap(beat: number): number {
+    const cycle = Math.max(1, this.cfg.cols * Math.max(1, this.cfg.numPages));
+    return lapIndex(Math.max(0, beat - this.ideasFromBeat), cycle);
+  }
+
+  /** Sounds change's seed with the ideas in it. */
+  private evolveSeed(): number {
+    return withIdeas(this.evolve.seed, this.ideaSeed());
+  }
+
+  /** The band's variation on this bar, from the ideas (0 = none, as before ideas existed). */
+  private bandVary(beat: number, step: number): number {
+    const seed = this.ideaSeed();
+    return seed === 0 ? 0 : (mixHash(seed, this.ideaLap(beat), Math.floor(step / 4), 0, 'band') | 1) >>> 0;
+  }
+
+  /** The extra notes' seed with the ideas in it. */
+  private fillSeedNow(): number {
+    return withIdeas(this.fillSeed, this.ideaSeed());
+  }
+
+  /**
+   * A number in [0, 1) for one of the groove's loose choices (a note rested, how hard it
+   * plays): seeded, so a rehearsal plays back the same, or fresh under Surprise me.
+   */
+  private looseChance(beat: number, row: number, col: number, what: string): number {
+    if (this.surprise) return Math.random();
+    return hashChance(withIdeas(0x5eed, this.ideaSeed()), beat - this.ideasFromBeat, row, col, what);
+  }
+
+  /**
    * The chord sequence. While playing, a new one starts at the next pass (its first chord
    * on the pass), as a scene's loops do; stopped, at once.
    */
@@ -1243,7 +1382,7 @@ export class BoardSequencerEngine {
     const cur: PassSettings = {
       soundWorld: this.cfg.soundWorld ?? 'none', band: this.bandSetting, phrases: this.cfg.phrases ?? false,
       fillAmount: this.fillSetting, evolveAmount: this.evolveSetting, chords: this.cfg.chords ?? AS_BEFORE_CHORDS,
-      bandJobs: this.bandJobs,
+      bandJobs: this.bandJobs, sceneEnergy: this.sceneEnergy, ideas: this.ideas,
     };
     const next: PassSettings = { ...(this.passPending ?? {}) };
     for (const k of Object.keys(p) as (keyof PassSettings)[]) {
@@ -1281,6 +1420,8 @@ export class BoardSequencerEngine {
       this.cfg.chords = { ...p.chords };
       this.chordOrigin = beat;
     }
+    if (p.sceneEnergy !== undefined) this.setSceneEnergy(p.sceneEnergy);
+    if (p.ideas !== undefined) this.applyIdeas(p.ideas, beat);
   }
 
   private studioOn(): boolean {
@@ -2222,6 +2363,11 @@ export class BoardSequencerEngine {
     this.valveTaken = [];
     this.valveFromMs = this.wallNow();
     this.applyAmounts();
+    // Surprise me: this run's own ideas. Otherwise every run plays the same, the ideas
+    // counted from the run's first beat.
+    this.runSalt = this.surprise ? freshIdeas() : 0;
+    this.ideasFromBeat = 0;
+    this.fillKey = '';
     // Play: nothing is fading, and the receiving end hears full Expression again.
     this.backstop = false;
     this.endTrack.reset(1);
@@ -2750,6 +2896,8 @@ export class BoardSequencerEngine {
       jobs, bassTaken, drumsHere: this.heardDrums, chordRegister: this.registerOf('chord'),
       melodyHere: this.heardMelody, melodyRegister: this.registerOf('melody'), avoidPcs,
       strong: this.strongBeat(beat), previousCounter: this.bandCounterLast,
+      busy: energyShape(this.sceneEnergy)?.drumsBusy ?? 0,
+      vary: this.bandVary(beat, step),
     });
     const padEvent = events.find((ev) => ev.part === 'pad' && ev.voicing);
     if (padEvent?.voicing) this.bandPadVoicing = padEvent.voicing;
@@ -2774,7 +2922,13 @@ export class BoardSequencerEngine {
       // the velocity, as is the dip under the player (the voices' is in their `top` node).
       // A lead-in plays at the Full band's level whatever the band's.
       const bandGain = ev.part === 'leadIn' ? BAND_GAIN.full : BAND_GAIN[this.band];
-      const vel = Math.min(1, ev.accent * level * bandGain * 1.6) * this.topFactor(time);
+      // A scene's Energy moves the band's level: in the voices' gain node, and here for the
+      // counter-melody's notes (its voice has its own level), the kit (in dB, as the kit
+      // reads velocity) and MIDI. A lead-in plays at the Full band's level whatever it is.
+      const energyDb = ev.part === 'leadIn' ? 0 : (energyShape(this.sceneEnergy)?.bandDb ?? 0);
+      const energyGain = 10 ** (energyDb / 20);
+      const base = Math.min(1, ev.accent * level * bandGain * 1.6);
+      const vel = (ev.drum ? Math.max(0, Math.min(1, base + energyDb / 24)) : Math.min(1, base * energyGain)) * this.topFactor(time);
       let role: ColourRole;
       let midi: number | undefined;
       if (ev.drum) {
@@ -2789,7 +2943,9 @@ export class BoardSequencerEngine {
       } else if (ev.midi !== undefined) {
         midi = ev.midi + this.cfg.octaveShift * 12;
         const voice = ev.part === 'pad' ? this.bandVoices.pad : ev.part === 'bass' ? this.bandVoices.bass : this.bandVoices.lead;
-        if (this.internalSound) voice?.play(midi, ev.accent * level, durSec, time);
+        // The pads' and the bass's level is in the band's gain node; the counter's is here.
+        const own = ev.part === 'counter' ? energyGain : 1;
+        if (this.internalSound) voice?.play(midi, ev.accent * level * own, durSec, time);
         role = ev.part === 'pad' ? 'chord' : ev.part === 'bass' ? 'bass' : 'melody';
       } else return;
       // Logged for the session, never drawn: a band note has no counter.
@@ -2861,7 +3017,7 @@ export class BoardSequencerEngine {
     if (this.fillAmount <= 0 || this.thinning) return;
     if (!this.fillKept) {
       const key = JSON.stringify([
-        cells.map((c) => `${c.row},${c.col},${c.colour}`).sort(), this.fillAmount, this.fillSeed, this.evolveScene,
+        cells.map((c) => `${c.row},${c.col},${c.colour}`).sort(), this.fillAmount, this.fillSeedNow(), this.evolveScene,
         this.cfg.phrases, this.cfg.channels.map((ch) => `${ch.id}:${this.playsTune(ch.id) ? 't' : 'n'}`).join(), this.cfg.soundWorld, this.cfg.scaleRootMidi, this.cfg.scaleSemitones,
         this.cfg.rows, this.cfg.cols, chord?.notes ?? null,
       ]);
@@ -2870,6 +3026,15 @@ export class BoardSequencerEngine {
       if (fullKey !== this.fillKey) {
         this.fillKey = fullKey;
         this.fillChangedAt = cellTime;
+        // A scene's Magenta idea for this very board, kept from an earlier run: played again,
+        // and not asked for afresh (so the rehearsal is the piece). Not under Surprise me.
+        const owner = this.surprise ? null : this.ideas.owner;
+        const kept = useAi && owner !== null ? this.keptIdeas.get(owner)?.find((k) => k.key === ideaKey(fullKey)) : undefined;
+        if (kept) {
+          this.fillNotes = kept.notes;
+          this.aiAskedKey = fullKey;
+          this.aiAnsweredKey = fullKey;
+        }
         // The chords of this time round the loop; on later passes the sequence may have moved
         // on, and each note is fitted to the chord as it plays (below).
         const passStart = beat - (((beat % this.cfg.cols) + this.cfg.cols) % this.cfg.cols);
@@ -2884,14 +3049,16 @@ export class BoardSequencerEngine {
           chordSymbolAt: (step) => this.chordAt(passStart + step, chord).harmony?.symbol ?? null,
           amount: this.fillAmount,
           // Each Evolve scene brings a fresh idea, so the fill moves on with the sound.
-          seed: this.fillSeed + this.evolveScene * 7919,
+          seed: this.fillSeedNow() + this.evolveScene * 7919,
         };
-        this.fillCtx = ctx;
+        this.fillCtx = kept ? null : ctx;
         this.fillTaken = { melody: new Set(), bass: new Set(), drums: new Set() };
         for (const n of ctx.sounding) {
           if (n.role !== 'chord') this.fillTaken[n.role].add(n.step * 4 + Math.round(n.offset * 4));
         }
-        if (!useAi || magentaStatus() === 'failed') {
+        if (kept) {
+          // Kept: nothing to work out.
+        } else if (!useAi || magentaStatus() === 'failed') {
           this.fillNotes = generateFill(ctx);
         } else {
           void loadMagenta();
@@ -2906,8 +3073,15 @@ export class BoardSequencerEngine {
         && magentaStatus() !== 'failed' && cellTime - this.fillChangedAt >= AI_SETTLE_SEC) {
         const askedKey = this.fillKey;
         const ctx = this.fillCtx;
+        // Whose idea it will be: kept for that scene, for the next run (not under Surprise me).
+        const owner = this.surprise ? null : this.ideas.owner;
         this.aiAskedKey = askedKey;
         magentaFill(ctx, askedKey).then((notes) => {
+          if (owner !== null && notes.length > 0) {
+            const idea: KeptIdea = { key: ideaKey(askedKey), notes };
+            this.keptIdeas.set(owner, keepIdea(this.keptIdeas.get(owner) ?? [], idea));
+            this.onIdeaKept?.(owner, idea);
+          }
           if (this.fillKey !== askedKey) return;
           this.fillNotes = notes;
           this.aiAnsweredKey = askedKey;
@@ -2919,7 +3093,8 @@ export class BoardSequencerEngine {
     const notes = this.fillKept ?? this.fillNotes;
     if (notes.length === 0) return;
     const step = ((beat % this.cfg.cols) + this.cfg.cols) % this.cfg.cols;
-    const lap = lapIndex(beat, this.cfg.cols);
+    // Counted from when the ideas began (a pass boundary), so a scene's pattern is its own.
+    const lap = lapIndex(Math.max(0, beat - this.ideasFromBeat), this.cfg.cols);
     const world = worldOf(this.cfg.soundWorld ?? 'none');
     const swing = Math.min(0.9, this.cfg.swing + (world?.phraseSwing ?? 0));
     const oct = this.cfg.octaveShift * 12;
@@ -2997,7 +3172,8 @@ export class BoardSequencerEngine {
         const time = Math.max(Tone.now(), cellTime + (shifted + (tag?.cell.timingBeats ?? 0)) * secPerBeat);
         // A loop's note dips while the player's own sound (keep him on top).
         const top = tag?.source === 'loop' ? this.topFactor(time) : 1;
-        const vel = Math.max(0, Math.min(1, base * ev.accent * top * (h > 0 ? 1 - Math.random() * h * 0.3 : 1)));
+        const loose = h > 0 ? this.looseChance(beat, ev.owner.row, ev.owner.col, `p|${ev.layer ?? ''}|${ev.colour}|${ev.offset}`) : 0;
+        const vel = Math.max(0, Math.min(1, base * ev.accent * top * (h > 0 ? 1 - loose * h * 0.3 : 1)));
         let durSec = ev.dur * secPerBeat;
         let midi: number | undefined;
         if (ev.drum) {
@@ -3064,7 +3240,8 @@ export class BoardSequencerEngine {
       const varies = (cell.conditional ?? false) && this.cfg.variationEnabled !== false;
       if (!firesThisLapPaged(varies, beat, this.cfg.cols, this.cfg.numPages, this.cfg.pingPong ?? false)) return;
       // Humanize: occasionally skip a step + vary velocity, so loops breathe.
-      if (h > 0 && Math.random() < h * 0.5) return;
+      const looseName = `${(cell as LayeredCell).layer ?? ''}|${cell.colour}`;
+      if (h > 0 && this.looseChance(beat, cell.row, cell.col, `rest|${looseName}`) < h * 0.5) return;
       // Box detail: where the counter sits gives it its own loudness and timing. The
       // shift can never reach into the past — a late note is fine, a missed one is not.
       const base = Math.min(1, (cell.velocity ?? this.cfg.velocity) * this.energyGain());
@@ -3073,7 +3250,7 @@ export class BoardSequencerEngine {
         : cellTime;
       // A loop's note dips while the player's own sound (keep him on top).
       const top = source === 'loop' ? this.topFactor(stepTime) : 1;
-      const vel = (h > 0 ? base * (1 - Math.random() * h * 0.4) : base) * top;
+      const vel = (h > 0 ? base * (1 - this.looseChance(beat, cell.row, cell.col, `vel|${looseName}`) * h * 0.4) : base) * top;
       if (role === 'drums') {
         // The drum varies by row (kick→…→crash bottom→top), unless the channel
         // pins a specific kit piece.
@@ -3222,7 +3399,7 @@ export class BoardSequencerEngine {
     this.valveTaken = [];
     this.simplify = 'off';
     this.band = this.bandSetting;
-    this.bandVoices?.gain.gain.setTargetAtTime(BAND_GAIN[this.band], Tone.immediate(), MIX_SWITCH_TC);
+    this.bandVoices?.gain.gain.setTargetAtTime(this.bandLevel(), Tone.immediate(), MIX_SWITCH_TC);
     this.applyAmounts();
     this.loopFades.clear();
     // Over MIDI, notes are already queued at the port up to ~200 ms (and a phrase's

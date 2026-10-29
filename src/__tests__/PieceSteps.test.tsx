@@ -12,7 +12,7 @@ let root: Root;
 beforeEach(() => { host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host); });
 afterEach(() => { act(() => root.unmount()); host.remove(); });
 
-const settings: SceneSettings = { soundWorld: 'warm', band: 'gentle', phrases: true, fillAmount: 0, evolveAmount: 0, bpm: 90, chords: { sequence: 'asBefore', bars: 2 }, bandJobs: { asBefore: true, pads: true, bass: true, drums: true, counter: false } };
+const settings: SceneSettings = { soundWorld: 'warm', band: 'gentle', phrases: true, fillAmount: 0, evolveAmount: 0, bpm: 90, chords: { sequence: 'asBefore', bars: 2 }, bandJobs: { asBefore: true, pads: true, bass: true, drums: true, counter: false }, sceneEnergy: 0 };
 const scene = (id: string, at: number | null, loops: number[] = [0], extra: Partial<Scene> = {}): Scene =>
   ({ id, name: id, loops, settings, ...(at === null ? {} : { at }), ...extra });
 const loop = (slot: number, name: string, empty = false): PieceLoop =>
@@ -34,7 +34,7 @@ function props(over: Partial<PieceStepsProps> = {}): PieceStepsProps {
     onNewLoop: vi.fn(), onToggleLoop: vi.fn(), onSaveBoardToLoop: vi.fn(), onDrawLoop: vi.fn(), onClearLoop: vi.fn(),
     onRenameLoop: vi.fn(), onLoopFade: vi.fn(), onGoScene: vi.fn(), onRehearseFrom: vi.fn(), onSaveSceneFromNow: vi.fn(),
     onUpdateSceneFromNow: vi.fn(), onEditScene: vi.fn(), onDeleteScene: vi.fn(), onUndoDelete: vi.fn(), onMakePlan: vi.fn(),
-    onRespectPlayer: vi.fn(), onPerformance: vi.fn(), onBackup: vi.fn(), onRestore: vi.fn(), onShow: vi.fn(),
+    onRespectPlayer: vi.fn(), onNewIdeasScene: vi.fn(), onNewIdeasPiece: vi.fn(), surpriseMe: false, onSurpriseMe: vi.fn(), onPerformance: vi.fn(), onBackup: vi.fn(), onRestore: vi.fn(), onShow: vi.fn(),
     ...over,
   };
 }
@@ -497,6 +497,43 @@ describe('Scenes: chords (harmony spec stage 1)', () => {
     act(() => radio('Each chord lasts', '4 bars')?.click());
     expect(p.onEditScene).toHaveBeenLastCalledWith(2, { settings: { ...settings, chords: { sequence: 'rising', bars: 4 } } });
     expect(text()).toContain('Four chords that lift: I–V–vi–IV.');
+  });
+});
+
+describe('Scenes: Energy and the same ideas each rehearsal (harmony spec stage 3)', () => {
+  const radio = (group: string, name: string): HTMLButtonElement | undefined =>
+    [...host.querySelectorAll(`[role="radiogroup"][aria-label="${group}"] [role="radio"]`)]
+      .find((b) => b.childNodes[0]?.textContent === name) as HTMLButtonElement | undefined;
+  const withEnergy = (e: 0 | 1 | 2 | 3 | 4 | 5) => ({ ...settings, sceneEnergy: e });
+
+  it('a scene chooses its Energy, 1 to 5 or Off; its line and the graph say so', () => {
+    const p = props({ scenes: [scene('Arrival', 0, [0], { settings: withEnergy(2) }), scene('Build', 90, [0], { settings: withEnergy(3) }), scene('Open', 210)] });
+    render(p);
+    const graph = host.querySelector('svg[role="img"]');
+    expect(graph?.getAttribute('aria-label')).toBe('Energy across the piece: Arrival 2, Build 3, Open off');
+    expect(text()).toContain('Energy: Arrival 2 · Build 3 · Open off');
+    expect(button(/^0:00 · Arrival/)?.textContent).toContain('energy 2');
+    expect(button(/^3:30 · Open/)?.textContent).not.toContain('energy');
+    act(() => button(/^3:30 · Open/)?.click());
+    expect(radio('Energy of this scene', 'Off')?.getAttribute('aria-checked')).toBe('true');
+    expect(text()).toContain('Off: the level, the band, the extra notes and the brightness as set, as before.');
+    act(() => radio('Energy of this scene', '5')?.click());
+    expect(p.onEditScene).toHaveBeenLastCalledWith(2, { settings: withEnergy(5) });
+  });
+
+  it('New ideas for a scene, and for the whole piece; Surprise me each time', () => {
+    const p = props({ scenes: [scene('Arrival', 0), scene('Build', 90), scene('Open', 210, [0], { aiIdeas: [{ key: 'k', notes: [] }] })] });
+    render(p);
+    act(() => button(/^3:30 · Open/)?.click());
+    expect(text()).toContain('This scene plays the same ideas every rehearsal. 1 AI idea is kept for it. New ideas gives it different ones.');
+    act(() => button('↻ New ideas')?.click());
+    expect(p.onNewIdeasScene).toHaveBeenCalledWith(2);
+    act(() => button('↻ New ideas for the whole piece')?.click());
+    expect(p.onNewIdeasPiece).toHaveBeenCalledTimes(1);
+    const surprise = [...host.querySelectorAll('[role="switch"]')].find((b) => b.textContent?.startsWith('Surprise me each time')) as HTMLButtonElement;
+    expect(surprise.getAttribute('aria-checked')).toBe('false');
+    act(() => surprise.click());
+    expect(p.onSurpriseMe).toHaveBeenCalledWith(true);
   });
 });
 

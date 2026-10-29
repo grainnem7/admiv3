@@ -57,6 +57,12 @@ export interface SoundWorld {
   duck: number;
   /** Extra swing on phrase off-beats, on top of the player's own. The funk. */
   phraseSwing: number;
+  /**
+   * The world's level over the whole board, in dB, so that every world is about as loud as
+   * the others and a world no longer decides how loud a scene is. Measured, not guessed:
+   * see e2e/loudness.e2e.ts for the method and the numbers.
+   */
+  levelDb: number;
 }
 
 export const SOUND_WORLDS: Record<SoundWorldId, SoundWorld> = {
@@ -77,6 +83,7 @@ export const SOUND_WORLDS: Record<SoundWorldId, SoundWorld> = {
     delaySend: 0,
     duck: 0.2,
     phraseSwing: 0.08,
+    levelDb: 0, // measured -19.4 LUFS: the reference
   },
   lofi: {
     id: 'lofi',
@@ -95,6 +102,7 @@ export const SOUND_WORLDS: Record<SoundWorldId, SoundWorld> = {
     delaySend: 0.1,
     duck: 0.35,
     phraseSwing: 0.3,
+    levelDb: -9, // measured -10.5 LUFS
   },
   ambient: {
     id: 'ambient',
@@ -113,6 +121,7 @@ export const SOUND_WORLDS: Record<SoundWorldId, SoundWorld> = {
     delaySend: 0.25,
     duck: 0.15,
     phraseSwing: 0,
+    levelDb: -4.5, // measured -14.7 LUFS
   },
   electronic: {
     id: 'electronic',
@@ -131,6 +140,7 @@ export const SOUND_WORLDS: Record<SoundWorldId, SoundWorld> = {
     delaySend: 0.14,
     duck: 0.5,
     phraseSwing: 0,
+    levelDb: 5, // measured -24.6 LUFS
   },
 };
 
@@ -142,6 +152,11 @@ export function isSoundWorldChoice(v: unknown): v is SoundWorldChoice {
 
 export function worldOf(choice: SoundWorldChoice): SoundWorld | null {
   return choice === 'none' ? null : SOUND_WORLDS[choice];
+}
+
+/** The world's level as a gain over the whole board (1 for the player's own picks). */
+export function worldLevelGain(choice: SoundWorldChoice): number {
+  return 10 ** ((worldOf(choice)?.levelDb ?? 0) / 20);
 }
 
 /**

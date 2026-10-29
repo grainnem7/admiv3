@@ -66,6 +66,7 @@ const LOGGED_SETTINGS = [
   'fillEngine', 'evolveAmount', 'evolveSceneLoops', 'evolveSeed', 'evolveHoldLap', 'studioMix',
   'midiEnabled', 'midiSends', 'midiKeepSound', 'midiChannelMode', 'midiLeadMs', 'midiLoopChannels', 'loopStepsRed', 'loopStepsBlack', 'loopStepsBlue', 'variationEnabled',
   'loopFadePasses', 'currentScene', 'performance', 'chords', 'clashNudge', 'bandJobs', 'keepOnTop', 'keepOnTopDb',
+  'sceneEnergy', 'pieceIdeas', 'surpriseMe',
 ] as const;
 
 /** The part of a settings object the log keeps. */

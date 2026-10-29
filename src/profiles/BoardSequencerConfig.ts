@@ -8,7 +8,7 @@
  */
 
 import type { PingPongPages } from '../songs/boardSequencerScale';
-import type { FillNote } from '../songs/generative/rulesFill';
+import { sanitizeFillNotes, type FillNote } from '../songs/generative/rulesFill';
 import type { BandLevel } from '../songs/band/band';
 import { DEFAULT_CHORDS, sanitizeChords, type ChordSetting } from '../songs/harmony/currentChord';
 import { DEFAULT_JOBS, sanitizeBandJobs, type BandJobs } from '../songs/band/bandJobs';
@@ -20,6 +20,8 @@ import {
 } from '../remote/protocol';
 import { sanitizeLoopNames, sanitizeScenes, type Scene } from '../songs/performance/launcher';
 import { sanitizeColourEntries } from '../songs/performance/colourEntries';
+import { sanitizeSceneEnergy, type SceneEnergy } from '../songs/performance/energy';
+import { sanitizeIdeas } from '../songs/performance/ideas';
 import { DEFAULT_PERFORMANCE, sanitizePerformance, type PerformanceSettings } from '../songs/performance/clock';
 import { DEFAULT_KEEPING_TIME_LIMITS, KEEPING_TIME_RANGE } from '../songs/keepingTime';
 import { isSoundWorldChoice, type SoundWorldChoice } from '../audio/worlds/soundWorlds';
@@ -176,6 +178,24 @@ export interface BoardSequencerStored {
   keepOnTop: boolean;
   /** How far they dip, in dB. */
   keepOnTopDb: number;
+  /**
+   * Energy, 1 to 5 (0 = off): a scene's, while it plays (see performance/energy). The
+   * player's own is off: Energy belongs to the scenes of a piece.
+   */
+  sceneEnergy: SceneEnergy;
+  /**
+   * The piece's ideas (see performance/ideas): with each scene's own, it seeds the band,
+   * the extra notes and Sounds change, so every rehearsal plays the same. 0 = the player's
+   * own seeds, as before. "New ideas for the whole piece" picks another.
+   */
+  pieceIdeas: number;
+  /** Surprise me each time: fresh ideas every run, and Magenta's ideas not kept, as before. */
+  surpriseMe: boolean;
+  /**
+   * A colour added for melody, bass or chords starts playing a tune (a phrase) rather than
+   * one note per counter. On for new players; off for players set up before it existed.
+   */
+  tunesForNewColours: boolean;
   /** How far along each iPad strip this player can comfortably reach (see remote/protocol). */
   remoteReach: Record<RemoteControlName, Reach>;
   /** Names for the launchable loop slots ('' = "Loop n"). */
@@ -554,6 +574,10 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   bandJobs: { ...DEFAULT_JOBS },
   keepOnTop: true,
   keepOnTopDb: KEEP_ON_TOP_DEFAULT_DB,
+  sceneEnergy: 0,
+  pieceIdeas: 0,
+  surpriseMe: false,
+  tunesForNewColours: true,
   remoteReach: fullReachMap(),
   loopNames: sanitizeLoopNames([]),
   scenes: [],
@@ -689,23 +713,6 @@ function isNum(v: unknown): v is number {
 /** Sensible ceilings, so a corrupt file can't ask for a million pages. */
 export const MAX_PAGES = 8;
 export const MAX_LOOP_STEPS = 64;
-
-const FILL_ROLES = new Set(['melody', 'bass', 'drums']);
-
-/** A kept fill from storage: only well-formed notes survive; anything else is no fill. */
-function sanitizeFillNotes(v: unknown): FillNote[] | null {
-  if (!Array.isArray(v)) return null;
-  const notes = v.filter((n): n is FillNote => {
-    if (typeof n !== 'object' || n === null) return false;
-    const o = n as Record<string, unknown>;
-    const cell = o.cell as Record<string, unknown> | undefined;
-    return isNum(o.step) && isNum(o.offset) && isNum(o.dur) && isNum(o.accent)
-      && typeof o.role === 'string' && FILL_ROLES.has(o.role) && typeof o.colour === 'string'
-      && (isNum(o.midi) || typeof o.drum === 'string')
-      && !!cell && isNum(cell.row) && isNum(cell.col);
-  });
-  return notes.length > 0 ? notes : null;
-}
 
 function num(v: unknown, fallback: number): number {
   return isNum(v) ? v : fallback;
@@ -934,11 +941,16 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     // On by default (owner), for every player: a dip of a few dB, and a switch to turn it off.
     keepOnTop: o.keepOnTop !== false,
     keepOnTopDb: sanitizeKeepOnTopDb(o.keepOnTopDb),
+    sceneEnergy: sanitizeSceneEnergy(o.sceneEnergy),
+    pieceIdeas: sanitizeIdeas(o.pieceIdeas),
+    surpriseMe: o.surpriseMe === true,
+    // Players set up before it existed keep one note for every colour they add.
+    tunesForNewColours: o.tunesForNewColours === true,
     remoteReach: sanitizeReachMap(o.remoteReach),
     loopNames: sanitizeLoopNames(o.loopNames),
     scenes: sanitizeScenes(o.scenes, {
       soundWorld: d.soundWorld, band: d.band, phrases: d.phrases, fillAmount: d.fillAmount, evolveAmount: d.evolveAmount, bpm: d.bpm,
-      chords: d.chords, bandJobs: d.bandJobs,
+      chords: d.chords, bandJobs: d.bandJobs, sceneEnergy: 0,
     }),
     // A saved board is a stopped board, and a stopped board has no scene on now: one left
     // marked (a scene added while stopped, a save from before) made the next piece open in

@@ -415,6 +415,43 @@ describe('BoardSequencerConfig — one shared harmony (stage 1)', () => {
   });
 });
 
+describe('BoardSequencerConfig — a shape and an AI that repeats (stage 3)', () => {
+  beforeEach(() => localStorage.clear());
+
+  it('a new player: Energy off for their own sound, no ideas of the piece yet, the same ideas each time, tunes for new colours', () => {
+    expect(DEFAULT_BOARD_SEQUENCER_CONFIG).toMatchObject({ sceneEnergy: 0, pieceIdeas: 0, surpriseMe: false, tunesForNewColours: true });
+  });
+
+  it('a player saved before: Energy off, seeds as they were, colours as they were, and new colours one note', () => {
+    const c = loadWith({
+      rows: 8, cols: 8, version: 2,
+      channels: [{ id: 'red', kind: 'hue', role: 'melody', swatch: '#f00', band: { hMin: 0, hMax: 10, sMin: 40, vMin: 30 } }],
+      scenes: [{ id: 's', name: 'Open', loops: [], at: 0, settings: { soundWorld: 'warm', band: 'full', phrases: true, fillAmount: 0.4, evolveAmount: 0.5, bpm: 90 } }],
+    });
+    expect(c).toMatchObject({ sceneEnergy: 0, pieceIdeas: 0, surpriseMe: false, tunesForNewColours: false });
+    expect(c.scenes[0].settings.sceneEnergy).toBe(0);
+    expect(c.scenes[0].ideas).toBeUndefined();
+    expect(c.scenes[0].aiIdeas).toBeUndefined();
+    expect(c.channels[0]?.plays).toBeUndefined();
+  });
+
+  it('keeps a scene’s Energy, its ideas and Magenta’s kept ideas; nonsense is made safe', () => {
+    const note = { step: 1, offset: 0, role: 'melody', colour: 'm', midi: 72, dur: 0.5, accent: 0.6, cell: { row: 1, col: 1 }, rule: 'ai' };
+    const c = loadWith({
+      rows: 8, cols: 8, pieceIdeas: 99, surpriseMe: true,
+      scenes: [
+        { id: 'a', name: 'A', loops: [], at: 0, ideas: 5, aiIdeas: [{ key: 'k1', notes: [note] }, { key: 'bad' }], settings: { sceneEnergy: 4 } },
+        { id: 'b', name: 'B', loops: [], at: 60, ideas: -1, aiIdeas: 'x', settings: { sceneEnergy: 9 } },
+      ],
+    });
+    expect(c).toMatchObject({ pieceIdeas: 99, surpriseMe: true });
+    expect(c.scenes[0]).toMatchObject({ ideas: 5, aiIdeas: [{ key: 'k1', notes: [note] }], settings: { sceneEnergy: 4 } });
+    expect(c.scenes[1].ideas).toBeUndefined();
+    expect(c.scenes[1].aiIdeas).toBeUndefined();
+    expect(c.scenes[1].settings.sceneEnergy).toBe(0);
+  });
+});
+
 describe('counts that must be whole numbers', () => {
   it('rounds a fraction instead of storing one', () => {
     // Array.from({ length: numPages }) throws on a fraction, and the page picker showed
@@ -481,8 +518,9 @@ describe('a piece saved before the 7:00 limit and "alone" scenes', () => {
     const cfg = loadWith({ scenes: [scene], performance: { lengthSec: 480, ending: 'cue', style: 'fade', fadePasses: 2, startOn: 'play' } });
     expect(cfg.performance.lengthSec).toBe(420);
     expect(cfg.performance).toMatchObject({ ending: 'cue', style: 'fade', fadePasses: 2 });
-    // As they were: a scene saved before chord sequences and band jobs plays both as before.
-    expect(cfg.scenes).toEqual([{ ...scene, settings: { ...scene.settings, chords: { sequence: 'asBefore', bars: 2 }, bandJobs: { asBefore: true, pads: true, bass: true, drums: true, counter: false } } }]);
+    // As they were: a scene saved before chord sequences, band jobs and Energy plays all three
+    // as before (Energy off).
+    expect(cfg.scenes).toEqual([{ ...scene, settings: { ...scene.settings, chords: { sequence: 'asBefore', bars: 2 }, bandJobs: { asBefore: true, pads: true, bass: true, drums: true, counter: false }, sceneEnergy: 0 } }]);
   });
 });
 

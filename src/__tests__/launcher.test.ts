@@ -7,7 +7,7 @@ import {
 import { AS_BEFORE_CHORDS } from '../songs/harmony/currentChord';
 
 const settings: SceneSettings = {
-  soundWorld: 'warm', band: 'gentle', phrases: true, fillAmount: 0.3, evolveAmount: 0.4, bpm: 96, chords: { sequence: 'rising', bars: 2 }, bandJobs: { asBefore: true, pads: true, bass: true, drums: true, counter: false },
+  soundWorld: 'warm', band: 'gentle', phrases: true, fillAmount: 0.3, evolveAmount: 0.4, bpm: 96, chords: { sequence: 'rising', bars: 2 }, bandJobs: { asBefore: true, pads: true, bass: true, drums: true, counter: false }, sceneEnergy: 0,
 };
 
 describe('launching loops', () => {
@@ -423,8 +423,8 @@ describe('scenes and the player', () => {
 });
 
 describe("a scene's settings are for the run only (T2-05, T3-17)", () => {
-  const own: SceneSettings = { soundWorld: 'lofi', band: 'off', phrases: false, fillAmount: 0, evolveAmount: 0, bpm: 100, chords: { sequence: 'asBefore', bars: 2 }, bandJobs: { asBefore: true, pads: true, bass: true, drums: true, counter: false } };
-  const open: SceneSettings = { soundWorld: 'warm', band: 'full', phrases: true, fillAmount: 0.4, evolveAmount: 0.5, bpm: 90, chords: { sequence: 'rising', bars: 2 }, bandJobs: { asBefore: true, pads: true, bass: true, drums: true, counter: false } };
+  const own: SceneSettings = { soundWorld: 'lofi', band: 'off', phrases: false, fillAmount: 0, evolveAmount: 0, bpm: 100, chords: { sequence: 'asBefore', bars: 2 }, bandJobs: { asBefore: true, pads: true, bass: true, drums: true, counter: false }, sceneEnergy: 0 };
+  const open: SceneSettings = { soundWorld: 'warm', band: 'full', phrases: true, fillAmount: 0.4, evolveAmount: 0.5, bpm: 90, chords: { sequence: 'rising', bars: 2 }, bandJobs: { asBefore: true, pads: true, bass: true, drums: true, counter: false }, sceneEnergy: 0 };
 
   it("the player's own settings are read from the config as it is", () => {
     const config = { ...own, rows: 8, currentScene: null };

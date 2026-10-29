@@ -85,6 +85,24 @@ export function fillDensity(amount: number): number {
   return 1 - (1 - a) * (1 - a);
 }
 
+const FILL_ROLES = new Set(['melody', 'bass', 'drums']);
+const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+
+/** Fill notes from storage: only well-formed notes survive; anything else is no fill. */
+export function sanitizeFillNotes(v: unknown): FillNote[] | null {
+  if (!Array.isArray(v)) return null;
+  const notes = v.filter((n): n is FillNote => {
+    if (typeof n !== 'object' || n === null) return false;
+    const o = n as Record<string, unknown>;
+    const cell = o.cell as Record<string, unknown> | undefined;
+    return isNum(o.step) && isNum(o.offset) && isNum(o.dur) && isNum(o.accent)
+      && typeof o.role === 'string' && FILL_ROLES.has(o.role) && typeof o.colour === 'string'
+      && (isNum(o.midi) || typeof o.drum === 'string')
+      && !!cell && isNum(cell.row) && isNum(cell.col);
+  });
+  return notes.length > 0 ? notes : null;
+}
+
 /** A small, fast, seeded random number generator (mulberry32). */
 export function seededRandom(seed: number): () => number {
   let a = seed >>> 0;

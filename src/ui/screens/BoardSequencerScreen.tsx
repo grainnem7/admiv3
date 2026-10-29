@@ -56,7 +56,7 @@ import { boardSeen, engineSettingsFor, hearWith, loopsToPlay, playerCellsFor, sl
 import { NewLoopPanel, newLoopStatusLine, type NewLoopStopped } from './boardSequencer/play/NewLoopPanel';
 import { LinkQr } from './boardSequencer/components/LinkQr';
 import { createPopStore, soundingKey, type PopStore } from './boardSequencer/popStore';
-import { beyondLoopNote, beyondLoopSquares, playsTune } from '../../songs/beyondLoop';
+import { beyondLoopNote, beyondLoopSquares, playsTune, withTuneDefault } from '../../songs/beyondLoop';
 import { cellsKey, controlsKey, frameKey } from './boardSequencer/runtimeKeys';
 import { describeBoard, phraseSpans, popsAt, pruneFired, type Pop } from './boardSequencer/components/boardViewModel';
 import { isSequencedRole, isControlRole, isLoopRole } from '../../tracking/boardColours';
@@ -138,8 +138,9 @@ import { previewChainCc, previewNotesFor, previewRoute, SoundAuditioner } from '
 import { LoopEditor } from './boardSequencer/components/LoopEditor';
 import {
   LAUNCH_SLOTS, MAX_SCENES, loopLabel, nextSceneIndex, sceneFromNow, sceneSettingsOf, sceneSettingsToApply, slotState, stoppedConfig, toggleSlot, withOwnSettings,
-  type PlayerStrip, type SceneSettings,
+  type PlayerStrip, type Scene, type SceneSettings,
 } from '../../songs/performance/launcher';
+import { freshIdeas, ideasFor, keepIdea } from '../../songs/performance/ideas';
 import {
   clockView, cueText, describeEnding, formatClock, CLOCK_NOT_STARTED,
   type ClockView,
@@ -1666,7 +1667,7 @@ export default function BoardSequencerScreen() {
     if (!found || found.length === 0) return;
     setConfig((prev) => ({
       ...prev,
-      channels: applyDetectedColours(prev.channels, found, allReferencedChannelIds()),
+      channels: applyDetectedColours(prev.channels, found, allReferencedChannelIds()).map((c) => withTuneDefault(c, prev.tunesForNewColours)),
     }));
     setColourProposal(null);
   }, [colourProposal]);
@@ -2363,6 +2364,7 @@ export default function BoardSequencerScreen() {
       tickEnabled: cfg.tickEnabled, studioMix: cfg.studioMix,
       soundWorld: cfg.soundWorld, phrases: cfg.phrases, fillEngine: cfg.fillEngine, band: cfg.band,
       chords: cfg.chords, clashNudge: cfg.clashNudge, bandJobs: cfg.bandJobs, keepOnTop: cfg.keepOnTop, keepOnTopDb: cfg.keepOnTopDb,
+      sceneEnergy: cfg.sceneEnergy,
       channels: cfg.channels, faderAxis: cfg.faderAxis, variationEnabled: cfg.variationEnabled,
       loopStepsRed: cfg.loopStepsRed, loopStepsBlack: cfg.loopStepsBlack,
       loopStepsBlue: cfg.loopStepsBlue, numPages: cfg.numPages,
@@ -2374,6 +2376,13 @@ export default function BoardSequencerScreen() {
     // a moment after Play (that let a blip of it through).
     const port = midiPortRef.current;
     engine.setInternalSound(effectiveSound(cfg, port.portConnected, port.holdOnAdmi).internal);
+    // Magenta's ideas, kept with the scene they were made in, for the next run.
+    engine.setOnIdeaKept((owner, idea) => {
+      setConfig((prev) => {
+        if (!prev.scenes.some((sc) => sc.id === owner)) return prev;
+        return { ...prev, scenes: prev.scenes.map((sc) => (sc.id === owner ? { ...sc, aiIdeas: keepIdea(sc.aiIdeas ?? [], idea) } : sc)) };
+      });
+    });
     await engine.init();
     // Stop — or Stop then Play again — may have been pressed while the samples loaded. This
     // start is then no longer wanted: drop its engine before it is started or put where
@@ -2784,7 +2793,8 @@ export default function BoardSequencerScreen() {
       } else {
         channels = prev.channels.map((c) => (c.id === target.id ? recalibratedChannel(c, cal, sample.hex) : c));
       }
-      const next = { ...prev, channels };
+      // A new player's new melody, bass or chords colour plays a tune.
+      const next = { ...prev, channels: channels.map((c) => withTuneDefault(c, prev.tunesForNewColours)) };
       return next;
     });
     setPendingColour(null);
@@ -2809,7 +2819,8 @@ export default function BoardSequencerScreen() {
   }, [armPicker]);
   const setChannelRole = useCallback((id: ColourId, role: ColourRole) => {
     setConfig((prev) => {
-      const next = { ...prev, channels: prev.channels.map((c) => (c.id === id ? { ...c, role } : c)) };
+      // Given melody, bass or chords by a player who starts with tunes: a tune, unless chosen.
+      const next = { ...prev, channels: prev.channels.map((c) => (c.id === id ? withTuneDefault({ ...c, role }, prev.tunesForNewColours) : c)) };
       return next;
     });
   }, []);
@@ -3166,7 +3177,7 @@ export default function BoardSequencerScreen() {
   };
   const sceneSettingsNow = (c: BoardSequencerStored): SceneSettings => ({
     soundWorld: c.soundWorld, band: c.band, phrases: c.phrases, fillAmount: c.fillAmount, evolveAmount: c.evolveAmount, bpm: c.bpm, chords: c.chords,
-    bandJobs: c.bandJobs,
+    bandJobs: c.bandJobs, sceneEnergy: c.sceneEnergy,
   });
   const saveScene = (name: string): void => {
     const c = configRef.current;
@@ -3191,6 +3202,27 @@ export default function BoardSequencerScreen() {
     update(scenesInOrder(c.scenes.map((x) => (x.id === old.id ? old : x)), c.currentScene));
   };
   /** A change to one scene, made where it is listed. The list stays in time order. */
+  /** New ideas for one scene: its own ideas number, and Magenta's kept ideas let go. */
+  const newIdeasForScene = (i: number): void => {
+    const c = configRef.current;
+    const old = c.scenes[i];
+    if (!old) return;
+    const fresh: Scene = { ...old, ideas: freshIdeas() };
+    delete fresh.aiIdeas;
+    update({ scenes: c.scenes.map((x, k) => (k === i ? fresh : x)) });
+    sessionLogRef.current.action(logActorRef.current, `new ideas for scene ${old.name}`);
+    announce(`New ideas for ${old.name}: its band, extra notes and sound changes will play differently${runningRef.current && c.currentScene === i ? ', from the next pass' : ''}.`);
+  };
+  /** New ideas for the whole piece: every scene plays differently, and no AI idea is kept. */
+  const newIdeasForPiece = (): void => {
+    const c = configRef.current;
+    update({
+      pieceIdeas: freshIdeas(),
+      scenes: c.scenes.map((x) => { const n: Scene = { ...x }; delete n.aiIdeas; return n; }),
+    });
+    sessionLogRef.current.action(logActorRef.current, 'new ideas for the whole piece');
+    announce('New ideas for the whole piece: every scene will play its band, extra notes and sound changes differently.');
+  };
   const editScene = (i: number, patch: ScenePatch): void => {
     const c = configRef.current;
     const old = c.scenes[i];
@@ -3399,6 +3431,7 @@ export default function BoardSequencerScreen() {
     engineRef.current?.landOnNextPass({
       soundWorld: apply.soundWorld, band: apply.band, phrases: apply.phrases,
       fillAmount: apply.fillAmount, evolveAmount: apply.evolveAmount, chords: apply.chords, bandJobs: apply.bandJobs,
+      sceneEnergy: apply.sceneEnergy, ideas: ideasFor({ ...c, currentScene: i }),
     });
     // Its lead-in, into that same pass (a scene with none clears one waiting).
     engineRef.current?.cueLeadIn(scene.leadIn ?? 'none');
@@ -4578,6 +4611,13 @@ export default function BoardSequencerScreen() {
       onUndoDelete={undoDeleteScene}
       onMakePlan={() => { if (configRef.current.scenes.length > 0) setPlanConfirm(true); else makePlan(); }}
       onRespectPlayer={(on) => update({ sceneRespectsPlayer: on })}
+      onNewIdeasScene={newIdeasForScene}
+      onNewIdeasPiece={newIdeasForPiece}
+      surpriseMe={config.surpriseMe}
+      onSurpriseMe={(on) => {
+        update({ surpriseMe: on });
+        announce(on ? 'Surprise me: different ideas every time the piece plays.' : 'Every rehearsal now plays the same ideas.');
+      }}
       onPerformance={(patch) => update({ performance: { ...configRef.current.performance, ...patch } })}
       onBackup={backupToFile}
       onRestore={() => restoreInputRef.current?.click()}
@@ -4800,7 +4840,7 @@ export default function BoardSequencerScreen() {
       const id = freshChannelId(prev.channels.map((c) => c.id), allReferencedChannelIds());
       const used = new Set(prev.channels.filter((c) => c.role === 'loop').map((c) => c.loopSlot ?? 0));
       const loopSlot = role === 'loop' ? Array.from({ length: LAUNCH_SLOTS }, (_, i) => i).find((i) => !used.has(i)) ?? 0 : undefined;
-      const added: ColourChannel = { id, kind: cal.kind, role, swatch: p.swatch, band: cal.band, blackBand: cal.blackBand, whiteBand: cal.whiteBand, ...(loopSlot !== undefined ? { loopSlot } : {}) };
+      const added: ColourChannel = withTuneDefault({ id, kind: cal.kind, role, swatch: p.swatch, band: cal.band, blackBand: cal.blackBand, whiteBand: cal.whiteBand, ...(loopSlot !== undefined ? { loopSlot } : {}) }, prev.tunesForNewColours);
       return { ...prev, channels: [...prev.channels, added] };
     });
     setLaptopColour('');
@@ -4820,7 +4860,7 @@ export default function BoardSequencerScreen() {
       for (const p of presets) {
         const id = freshChannelId(channels.map((c) => c.id), allReferencedChannelIds());
         const cal = calibrationFromHsv(p.hsv);
-        channels.push({ id, kind: cal.kind, role: p.role, swatch: p.swatch, band: cal.band, blackBand: cal.blackBand, whiteBand: cal.whiteBand });
+        channels.push(withTuneDefault({ id, kind: cal.kind, role: p.role, swatch: p.swatch, band: cal.band, blackBand: cal.blackBand, whiteBand: cal.whiteBand }, prev.tunesForNewColours));
       }
       return { ...prev, channels };
     });

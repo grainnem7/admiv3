@@ -15,6 +15,8 @@ import type { SoundWorldChoice } from '../../audio/worlds/soundWorlds';
 import { GLIDE_MAX_SEC, GLIDE_MIN_SEC } from './speedGlide';
 import { sanitizeChords, type ChordSetting } from '../harmony/currentChord';
 import { sanitizeBandJobs, sanitizeLeadIn, type BandJobs, type LeadIn } from '../band/bandJobs';
+import { sanitizeSceneEnergy, type SceneEnergy } from './energy';
+import { sanitizeIdeas, sanitizeKeptIdeas, type KeptIdea } from './ideas';
 
 /** How many loops the iPad and the scenes can launch. */
 export const LAUNCH_SLOTS = 8;
@@ -58,14 +60,16 @@ export interface SceneSettings {
   chords: ChordSetting;
   /** The band's jobs, kept whatever the player plays (see band/bandJobs). */
   bandJobs: BandJobs;
+  /** Energy, 1 to 5 (0 = off, as before): the band's level, busyness and brightness (see energy). */
+  sceneEnergy: SceneEnergy;
 }
-export const SCENE_SETTING_KEYS: (keyof SceneSettings)[] = ['soundWorld', 'band', 'phrases', 'fillAmount', 'evolveAmount', 'bpm', 'chords', 'bandJobs'];
+export const SCENE_SETTING_KEYS: (keyof SceneSettings)[] = ['soundWorld', 'band', 'phrases', 'fillAmount', 'evolveAmount', 'bpm', 'chords', 'bandJobs', 'sceneEnergy'];
 
 /** The scene settings as they are in a config now: the player's own, when no run is on. */
 export function sceneSettingsOf(c: SceneSettings): SceneSettings {
   return {
     soundWorld: c.soundWorld, band: c.band, phrases: c.phrases, fillAmount: c.fillAmount, evolveAmount: c.evolveAmount, bpm: c.bpm,
-    chords: { ...c.chords }, bandJobs: { ...c.bandJobs },
+    chords: { ...c.chords }, bandJobs: { ...c.bandJobs }, sceneEnergy: c.sceneEnergy,
   };
 }
 
@@ -113,6 +117,13 @@ export interface Scene {
    * Absent = none, as every scene saved before it existed.
    */
   leadIn?: Exclude<LeadIn, 'none'>;
+  /**
+   * This scene's own ideas (see performance/ideas): mixed with the piece's, it seeds every
+   * random choice, so the scene plays the same each rehearsal. Absent = none of its own.
+   */
+  ideas?: number;
+  /** Magenta's ideas, kept once made and played again on the next run (the newest few). */
+  aiIdeas?: KeptIdea[];
 }
 
 export const MAX_SCENES = 12;
@@ -177,6 +188,8 @@ export function sanitizeSceneSettings(v: unknown, d: SceneSettings): SceneSettin
     // A scene saved before chord sequences (or band jobs) existed plays as it did.
     chords: sanitizeChords(o.chords),
     bandJobs: sanitizeBandJobs(o.bandJobs),
+    // Saved before Energy existed: off, as it played.
+    sceneEnergy: sanitizeSceneEnergy(o.sceneEnergy),
   };
 }
 
@@ -195,6 +208,8 @@ export function sanitizeScenes(v: unknown, defaults: SceneSettings): Scene[] {
       ? [...new Set(o.loops.filter((s): s is number => isNum(s) && Number.isInteger(s) && s >= 0 && s < LAUNCH_SLOTS))].sort((a, b) => a - b)
       : [];
     const leadIn = sanitizeLeadIn(o.leadIn);
+    const ideas = sanitizeIdeas(o.ideas);
+    const aiIdeas = sanitizeKeptIdeas(o.aiIdeas);
     out.push({
       id, name: cleanName(o.name) || `Scene ${out.length + 1}`, loops, settings: sanitizeSceneSettings(o.settings, defaults),
       ...(isNum(o.at) && o.at >= 0 ? { at: Math.round(o.at) } : {}),
@@ -202,6 +217,8 @@ export function sanitizeScenes(v: unknown, defaults: SceneSettings): Scene[] {
       ...(isNum(o.glideSec) && Math.round(o.glideSec) >= GLIDE_MIN_SEC && Math.round(o.glideSec) <= GLIDE_MAX_SEC
         ? { glideSec: Math.round(o.glideSec) } : {}),
       ...(leadIn !== 'none' ? { leadIn } : {}),
+      ...(ideas !== 0 ? { ideas } : {}),
+      ...(aiIdeas.length > 0 ? { aiIdeas } : {}),
     });
   }
   return out;

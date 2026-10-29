@@ -45,6 +45,7 @@ import { homographyForCorners } from './homographyForCorners';
 import { laptopReadings } from '../../../tracking/laptopBoard';
 import { detectionSetup, type DetectionSetup } from '../../../tracking/boardReference/detectionSetup';
 import { withCounterValues, type BoardActivity } from '../../../tracking/cap/capTracker';
+import { ideasFor } from '../../../songs/performance/ideas';
 
 export interface RuntimeFrame {
   readings: CellReading[];
@@ -194,6 +195,12 @@ export function applyEngineSettings(
   });
   engine.setVariationEnabled(cfg.variationEnabled);
   engine.setEnergy(cfg.energy);
+  // A scene's Energy, and the ideas the AI plays with (the scene's, or the piece's on plain
+  // Play), with Magenta's ideas kept for each scene.
+  engine.setSceneEnergy(cfg.sceneEnergy);
+  engine.setSurprise(cfg.surpriseMe);
+  engine.setIdeas(ideasFor(cfg));
+  engine.setKeptIdeas(cfg.scenes, new Map(cfg.scenes.map((sc) => [sc.id, sc.aiIdeas ?? []])));
   engine.setSpace(cfg.space);
   engine.setLoopVary(cfg.loopVary);
   engine.setKeepingTimeLimits({ behindSec: cfg.keepTimeBehindSec, driftSec: cfg.keepTimeDriftSec, valve: cfg.keepTimeValve });

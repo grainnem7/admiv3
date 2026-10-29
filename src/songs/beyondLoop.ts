@@ -70,3 +70,12 @@ export function beyondLoopNote(
     return `${steps} past ${PART_NAME[p]}’s ${len}-step loop: ${PART_NAME[p].toLowerCase()} counters there don’t play.`;
   }).join(' ');
 }
+
+/**
+ * A colour given melody, bass or chords by a player who starts with tunes on (new players):
+ * it plays a tune, unless a choice has been made for it. Anything else is left as it is.
+ */
+export function withTuneDefault<T extends Pick<ColourChannel, 'role' | 'plays'>>(ch: T, tunesForNewColours: boolean): T {
+  if (!tunesForNewColours || ch.plays !== undefined) return ch;
+  return ch.role === 'melody' || ch.role === 'bass' || ch.role === 'chord' ? { ...ch, plays: 'tune' } : ch;
+}

@@ -75,6 +75,8 @@ describe('fired-note log', () => {
 
   it('does not record humanize-skipped notes', () => {
     const { e, p } = engine({ humanize: 1 });
+    // Surprise me: the loose choices come from Math.random, as before seeds (forced to rest here).
+    e.setSurprise(true);
     vi.spyOn(Math, 'random').mockReturnValue(0);
     e.setActiveCells([cell(0, 0, 'm')]);
     p.fireStep(0, 1, 1, null);

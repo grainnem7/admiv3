@@ -65,6 +65,17 @@ export async function pickColour(page: Page, colour: string): Promise<void> {
   await page.getByRole('radiogroup', { name: 'Counter to put down' }).getByRole('radio', { name: new RegExp(colour) }).click();
 }
 
+/**
+ * A colour's counters play one note each (Sound tab, beside the colour): a new player's
+ * melody, bass and chords colours start on a tune. `row` is its line in the colour table
+ * ("Red: Melody").
+ */
+export async function oneNote(page: Page, row: RegExp): Promise<void> {
+  await page.getByRole('tab', { name: 'Sound' }).click();
+  await page.getByRole('row', { name: row }).getByRole('radiogroup', { name: 'Each counter plays' })
+    .getByRole('radio', { name: 'One note' }).click();
+}
+
 /** Click squares on the laptop board: row counted from the bottom, step from the left (both from 1). */
 export async function place(page: Page, squares: [row: number, step: number][]): Promise<void> {
   const grid = page.getByRole('grid', { name: /Laptop board/ });

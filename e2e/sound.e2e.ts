@@ -1,12 +1,12 @@
 import { test, expect } from '@playwright/test';
-import { listenToOutput, makePlan, notesPlayed, openLaptopBoard, outputLevels, pageErrors, pickColour, pieceStep, place, pressAndListen } from './app';
+import { listenToOutput, makePlan, notesPlayed, oneNote, openLaptopBoard, outputLevels, pageErrors, pickColour, pieceStep, place, pressAndListen } from './app';
 
 /**
  * The Sound tab and the loop edit window, as a musician uses them: each colour's own
  * sound, the overall feel, and a loop compared with the board before it is changed.
  */
 
-test('the colour table changes a colour, Hear plays it, and the choice is kept after a reload', async ({ page }) => {
+test('the colour table changes a colour, Hear plays it, one note or a tune beside it, and the choices are kept after a reload', async ({ page }) => {
   await openLaptopBoard(page);
   await page.getByRole('tab', { name: 'Sound' }).click();
   const red = page.getByRole('row', { name: /^Red: Melody/ });
@@ -16,11 +16,17 @@ test('the colour table changes a colour, Hear plays it, and the choice is kept a
   await red.getByRole('button', { name: /^Back to Red/ }).click();
   await expect(red.getByRole('combobox', { name: 'Sound' })).toHaveValue('');
   await red.getByRole('combobox', { name: 'Sound' }).selectOption('violin');
-  // One note or a phrase is in the row's More.
-  await page.getByRole('button', { name: 'More for Red' }).click();
-  const plays = page.getByRole('radiogroup', { name: 'Each counter plays' }).first();
-  await expect(plays.getByRole('radio', { name: 'One note' })).toHaveAttribute('aria-checked', 'true');
-  await plays.getByRole('radio', { name: 'A phrase' }).click();
+  // One note or a tune, beside each colour: a new player's melody, bass and chords start
+  // on a tune, the drums on one note.
+  const plays = red.getByRole('radiogroup', { name: 'Each counter plays' });
+  await expect(plays.getByRole('radio', { name: 'Tune: a phrase' })).toHaveAttribute('aria-checked', 'true');
+  for (const [row, tune] of [[/^Blue: Bass/, 'Tune: a bassline'], [/^Yellow: Chords/, 'Tune: the chords']] as const) {
+    await expect(page.getByRole('row', { name: row }).getByRole('radiogroup', { name: 'Each counter plays' })
+      .getByRole('radio', { name: tune })).toHaveAttribute('aria-checked', 'true');
+  }
+  await expect(page.getByRole('row', { name: /^Green: Drums/ }).getByRole('radiogroup', { name: 'Each counter plays' })
+    .getByRole('radio', { name: 'One note' })).toHaveAttribute('aria-checked', 'true');
+  await plays.getByRole('radio', { name: 'One note' }).click();
   await page.getByRole('radiogroup', { name: 'Energy' }).getByRole('radio', { name: 'Lively' }).click();
 
   await page.waitForTimeout(800); // saves are gathered for a moment
@@ -29,8 +35,7 @@ test('the colour table changes a colour, Hear plays it, and the choice is kept a
   await page.getByRole('tab', { name: 'Sound' }).click();
   const after = page.getByRole('row', { name: /^Red: Melody/ });
   await expect(after.getByRole('combobox', { name: 'Sound' })).toHaveValue('violin');
-  await page.getByRole('button', { name: 'More for Red' }).click();
-  await expect(page.getByRole('radiogroup', { name: 'Each counter plays' }).first().getByRole('radio', { name: 'A phrase' })).toHaveAttribute('aria-checked', 'true');
+  await expect(after.getByRole('radiogroup', { name: 'Each counter plays' }).getByRole('radio', { name: 'One note' })).toHaveAttribute('aria-checked', 'true');
   await expect(page.getByRole('radiogroup', { name: 'Energy' }).getByRole('radio', { name: 'Lively' })).toHaveAttribute('aria-checked', 'true');
 
   // Back to the world's sounds, every colour at once.
@@ -124,6 +129,8 @@ test('the red cap (tried with the mouse) moves the speed left–right and shows 
 
 test('a counter past its part’s loop shows that it doesn’t play', async ({ page }) => {
   await openLaptopBoard(page);
+  // One note per counter (a tune owns a whole stretch of the loop, so this doesn't apply to it).
+  await oneNote(page, /^Red: Melody/);
   await page.getByRole('tab', { name: 'Groove' }).click();
   await page.getByRole('radiogroup', { name: 'Melody loop length' }).getByRole('radio', { name: '6', exact: true }).click();
   await pickColour(page, 'Red');

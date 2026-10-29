@@ -1578,7 +1578,7 @@ async function savedSoundNow(page: Page): Promise<Record<string, unknown>> {
     const id = localStorage.getItem('admi-board-active-player');
     const players = JSON.parse(localStorage.getItem('admi-board-players') ?? '[]') as { id: string; settings: Record<string, unknown> }[];
     const s = (players.find((p) => p.id === id) ?? players[0])?.settings ?? {};
-    return { soundWorld: s.soundWorld, band: s.band, phrases: s.phrases, fillAmount: s.fillAmount, evolveAmount: s.evolveAmount, bpm: s.bpm, chords: s.chords, bandJobs: s.bandJobs };
+    return { soundWorld: s.soundWorld, band: s.band, phrases: s.phrases, fillAmount: s.fillAmount, evolveAmount: s.evolveAmount, bpm: s.bpm, chords: s.chords, bandJobs: s.bandJobs, sceneEnergy: s.sceneEnergy };
   });
 }
 
@@ -2098,5 +2098,122 @@ test('a scene’s band parts and lead-in are kept after a reload', async ({ page
   await pieceStep(page, 'Scenes');
   await expect(open).toContainText('pads, bass, counter-melody');
   await expect(open).toContainText('drum fill before it');
+  expect(pageErrors(page)).toEqual([]);
+});
+
+// ---- Harmony spec stage 3: the same AI each rehearsal, and Energy ----
+
+/** One take of the piece from its start, about `sec` seconds, then stopped: its notes, as heard. */
+async function takeOfThePiece(page: Page, sec: number): Promise<LogFile['notes']> {
+  await startPiece(page);
+  await pieceClockRunning(page);
+  await expect.poll(() => notesPlayed(page), { timeout: 15_000 }).toBeGreaterThan(0);
+  await pause(page, sec * 1000);
+  // Stop, pressed twice inside the page: the runner can lag past the second press's window.
+  await page.evaluate(async () => {
+    const press = (text: string): void => [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === text)?.click();
+    press('■ Stop');
+    await new Promise((r) => setTimeout(r, 150));
+    press('■ Press again to stop');
+  });
+  await expect(page.getByRole('status').filter({ hasText: 'Stopped' }).first()).toBeVisible();
+  const notes = (await sessionLogFile(page)).notes;
+  await pause(page, 600); // a start straight after Stop is taken for a bounce: this is a new press
+  return notes;
+}
+
+type LoggedNote = LogFile['notes'][number] & { midi?: number; midis?: number[]; drum?: string; velocity?: number; colour?: string };
+
+/**
+ * A take's notes as music, not clock times: who made each, what it was, and (for the
+ * player's own) how hard, with when it came after the take's first note. Late beats on a
+ * busy machine move notes in time, never change them, so takes are compared by what
+ * played, not to the millisecond.
+ */
+function asMusic(notes: LoggedNote[]): { t: number; what: string }[] {
+  const t0 = Math.min(...notes.map((n) => n.t));
+  return notes.map((n) => {
+    const own = n.origin === 'placed' || n.origin === 'phrase';
+    return { t: n.t - t0, what: `${n.origin}|${n.colour ?? ''}|${n.midi ?? n.midis?.join('+') ?? n.drum ?? ''}${own ? `|${(n.velocity ?? 0).toFixed(2)}` : ''}` };
+  });
+}
+
+/**
+ * What one take played in its first `sec` seconds that the other did not play in a little
+ * longer (so a note on the edge of the window, a little late in one take, is not counted).
+ */
+function notIn(a: { t: number; what: string }[], b: { t: number; what: string }[], sec: number): string[] {
+  const left = new Map<string, number>();
+  for (const n of b) if (n.t < sec + 0.4) left.set(n.what, (left.get(n.what) ?? 0) + 1);
+  const out: string[] = [];
+  for (const n of a) {
+    if (n.t >= sec) continue;
+    const k = left.get(n.what) ?? 0;
+    if (k > 0) left.set(n.what, k - 1);
+    else out.push(`${n.t.toFixed(2)} s ${n.what}`);
+  }
+  return out;
+}
+
+test('the same ideas each rehearsal: a second run of the piece plays the notes of the first, and New ideas changes them', async ({ page }) => {
+  test.setTimeout(240_000);
+  await openLaptopBoard(page);
+  await extrasFromTheRules(page);
+  // On a busy machine the safety valve may pause the extras in one take and not the other:
+  // that is a different take for a reason of its own, so it is off here.
+  await page.getByRole('checkbox', { name: 'Pause the extras when the sound falls behind' }).uncheck();
+  // A loose groove: before seeds, its rests and loudness were new every run.
+  await page.getByRole('radiogroup', { name: 'Groove' }).getByRole('radio', { name: 'Lazy' }).click();
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1], [5, 3], [4, 5], [6, 7]]);
+  await pickColour(page, 'Green');
+  await place(page, [[1, 1], [2, 3], [1, 5], [3, 7]]);
+  // The plan's opening, with extra notes and its sounds changing (the plan has neither there).
+  await makePlan(page);
+  await page.getByRole('button', { name: /^0:00 · Arrival/ }).click();
+  await page.getByRole('radiogroup', { name: 'Extra notes' }).getByRole('radio', { name: 'Lots', exact: true }).click();
+  await page.getByRole('radiogroup', { name: 'Sounds change' }).getByRole('radio', { name: 'More', exact: true }).click();
+  await pause(page, 1200); // saves are gathered for a moment
+
+  const first = await takeOfThePiece(page, 9);
+  const second = await takeOfThePiece(page, 9);
+  // It plays the band and the extra notes, and the loose groove rests some of Green's notes.
+  expect(first.some((n) => n.origin === 'band')).toBe(true);
+  expect(first.some((n) => n.origin === 'fill')).toBe(true);
+  const a = asMusic(first);
+  const b = asMusic(second);
+  expect(a.filter((n) => n.t < 7).length).toBeGreaterThan(20);
+  // Every note of the first take in the second, and every note of the second in the first.
+  expect(notIn(a, b, 7)).toEqual([]);
+  expect(notIn(b, a, 7)).toEqual([]);
+
+  // New ideas for the whole piece: the same board plays differently.
+  await page.getByRole('button', { name: '↻ New ideas for the whole piece' }).click();
+  await pause(page, 1200);
+  const third = asMusic(await takeOfThePiece(page, 9));
+  expect(notIn(third, a, 7).length + notIn(a, third, 7).length).toBeGreaterThan(5);
+  // ... the instrument's own ideas: the player's counters still play.
+  expect(third.some((n) => n.what.startsWith('placed|'))).toBe(true);
+  expect(pageErrors(page)).toEqual([]);
+});
+
+test('Energy: the plan draws 2, 3, 5, 2; a scene’s Energy, the graph and Surprise me are kept after a reload', async ({ page }) => {
+  await openLaptopBoard(page);
+  await makePlan(page);
+  const graph = page.getByRole('img', { name: /^Energy across the piece/ });
+  await expect(graph).toHaveAttribute('aria-label', 'Energy across the piece: Arrival 2, Build 3, Open 5, Home 2');
+  await page.getByRole('button', { name: /^3:30 · Open/ }).click();
+  const energy = page.getByRole('radiogroup', { name: 'Energy of this scene' });
+  await expect(energy.getByRole('radio', { name: '5', exact: true })).toHaveAttribute('aria-checked', 'true');
+  await energy.getByRole('radio', { name: '4', exact: true }).click();
+  await expect(page.getByText('Lively: a little louder and brighter, the band busier, more extra notes.')).toBeVisible();
+  await expect(page.getByRole('button', { name: /^3:30 · Open/ })).toContainText('energy 4');
+  await page.getByRole('switch', { name: /^Surprise me each time/ }).click();
+  await pause(page, 1200); // saves are gathered for a moment
+  await page.reload();
+  await page.getByRole('button', { name: /Board Sequencer/ }).click();
+  await pieceStep(page, 'Scenes');
+  await expect(graph).toHaveAttribute('aria-label', 'Energy across the piece: Arrival 2, Build 3, Open 4, Home 2');
+  await expect(page.getByRole('switch', { name: /^Surprise me each time/ })).toHaveAttribute('aria-checked', 'true');
   expect(pageErrors(page)).toEqual([]);
 });

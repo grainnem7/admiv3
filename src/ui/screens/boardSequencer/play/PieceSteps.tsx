@@ -19,6 +19,7 @@ import { BAND_WORDS, listNames, playerWords } from '../pieceCheck';
 import { ReadyList, type ReadyItem } from './ReadyCheck';
 import { ChordChoice, chordWords } from './ChordChoice';
 import { BandJobsChoice } from './BandJobsChoice';
+import { ENERGY_LEVELS, ENERGY_WORDS, energyLine, type SceneEnergy } from '../../../../songs/performance/energy';
 
 export interface PieceLoop {
   slot: number;
@@ -93,6 +94,13 @@ export interface PieceStepsProps {
   onUndoDelete(): void;
   onMakePlan(): void;
   onRespectPlayer(on: boolean): void;
+  /** New ideas for one scene: the band, the extra notes and Sounds change play differently. */
+  onNewIdeasScene(i: number): void;
+  /** New ideas for every scene of the piece (Magenta's kept ideas let go). */
+  onNewIdeasPiece(): void;
+  /** Surprise me each time: fresh ideas every run, as before. */
+  surpriseMe: boolean;
+  onSurpriseMe(on: boolean): void;
   onPerformance(patch: Partial<PerformanceSettings>): void;
   onBackup(): void;
   onRestore(): void;
@@ -337,6 +345,42 @@ function LoopsStep(p: PieceStepsProps): JSX.Element {
   );
 }
 
+/**
+ * The line of Energy across the piece: each scene's level held until the next scene, drawn
+ * under the timeline (higher = more energy; a dashed floor where a scene has it off).
+ */
+function EnergyGraph({ scenes, lengthSec }: { scenes: readonly Scene[]; lengthSec: number }): JSX.Element | null {
+  const line = energyLine(scenes).filter((x) => x.at < lengthSec);
+  if (line.length === 0) return null;
+  const words = line.map((x) => `${x.name} ${x.energy === 0 ? 'off' : x.energy}`);
+  const y = (e: SceneEnergy): number => 46 - e * 8;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <svg
+        role="img" aria-label={`Energy across the piece: ${words.join(', ')}`} viewBox="0 0 100 50" preserveAspectRatio="none"
+        style={{ width: '100%', height: 48, borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-elev)' }}
+      >
+        {ENERGY_LEVELS.map((e) => <line key={e} x1={0} x2={100} y1={y(e)} y2={y(e)} stroke="var(--bs-border)" strokeWidth={0.5} vectorEffect="non-scaling-stroke" />)}
+        {line.map((x, k) => {
+          const x1 = (x.at / lengthSec) * 100;
+          const x2 = ((k + 1 < line.length ? line[k + 1].at : lengthSec) / lengthSec) * 100;
+          const next = k + 1 < line.length ? line[k + 1].energy : null;
+          return (
+            <g key={k}>
+              <line
+                x1={x1} x2={x2} y1={y(x.energy)} y2={y(x.energy)} stroke={x.energy === 0 ? 'var(--bs-fg2)' : 'var(--bs-accent)'}
+                strokeWidth={3} strokeDasharray={x.energy === 0 ? '4 3' : undefined} vectorEffect="non-scaling-stroke"
+              />
+              {next !== null && <line x1={x2} x2={x2} y1={y(x.energy)} y2={y(next)} stroke="var(--bs-accent)" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />}
+            </g>
+          );
+        })}
+      </svg>
+      <span aria-hidden="true" style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>{`Energy: ${words.join(' · ')}`}</span>
+    </div>
+  );
+}
+
 /** Step 2: the scenes — the loops and the sound, changing at set times. */
 function ScenesStep(p: PieceStepsProps): JSX.Element {
   // The open scene, by its id: a new time re-sorts the list, and the panel must stay on
@@ -393,6 +437,7 @@ function ScenesStep(p: PieceStepsProps): JSX.Element {
             })}
             {elapsed !== null && <span aria-hidden="true" style={{ position: 'absolute', top: 0, bottom: 0, width: 3, left: `${Math.min(100, (elapsed / p.lengthSec) * 100)}%`, background: 'var(--bs-fg)' }} />}
           </div>
+          <EnergyGraph scenes={p.scenes} lengthSec={p.lengthSec} />
           <p style={note}>{`Tap a scene to change it. ▶ Rehearse from here plays the piece from that moment. While the board plays, Jump here now switches to a scene straight away; Stop gives ${who.name} their own sound back. 1 pass = ${p.passSec.toFixed(1)} s.`}</p>
           {p.scenes.map((s, i) => (
             <SceneRow
@@ -404,6 +449,7 @@ function ScenesStep(p: PieceStepsProps): JSX.Element {
               onRehearse={!p.running && typeof s.at === 'number' ? () => p.onRehearseFrom(s.at as number) : undefined}
               onUpdateFromNow={p.running ? () => p.onUpdateSceneFromNow(i) : undefined}
               onEdit={(patch) => p.onEditScene(i, patch)}
+              onNewIdeas={() => p.onNewIdeasScene(i)}
               onDelete={(pressed) => {
                 setSelected(null);
                 p.onDeleteScene(i);
@@ -435,6 +481,21 @@ function ScenesStep(p: PieceStepsProps): JSX.Element {
               + Add a scene from what&rsquo;s playing
             </Button>
             <Button tone="quiet" onClick={p.onMakePlan}>✦ Start again from the plan</Button>
+          </div>
+          <div role="group" aria-label="The same ideas each rehearsal" style={card}>
+            <span style={{ fontWeight: 800 }}>The same ideas each rehearsal</span>
+            <p style={note}>
+              {p.surpriseMe
+                ? 'Surprise me is on: the band, the extra notes and Sounds change come out differently every time the piece plays, and the AI\u2019s ideas are not kept.'
+                : 'The band, the extra notes and Sounds change play the same every time the piece plays, so a rehearsal is the piece. The AI\u2019s ideas are kept with each scene once made. ▶ Play on its own also repeats, but keeps no AI ideas.'}
+            </p>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <Button tone="secondary" onClick={p.onNewIdeasPiece} reason={p.surpriseMe ? 'Surprise me already gives new ideas every time.' : null}>↻ New ideas for the whole piece</Button>
+            </div>
+            <Switch
+              label="Surprise me each time" checked={p.surpriseMe} onChange={p.onSurpriseMe}
+              hint="On: different ideas every time, as before. Off: every rehearsal plays the same."
+            />
           </div>
           <Switch
             label="Scenes leave the player's strips alone"
@@ -637,6 +698,8 @@ interface SceneRowProps {
    */
   onUpdateFromNow?(): void;
   onEdit(patch: ScenePatch): void;
+  /** New ideas for this scene. */
+  onNewIdeas(): void;
   /** Delete it; `pressed` is the Delete button, for where focus goes next. */
   onDelete(pressed: HTMLElement): void;
 }
@@ -670,9 +733,11 @@ function SceneRow(r: SceneRowProps): JSX.Element {
     evolve === 'off' ? 'sounds stay' : `sounds change ${evolve === 'more' ? 'a lot' : 'slowly'}`,
     `${s.settings.bpm} BPM${glide > 0 ? `, reached over ${glide} s` : ''}`,
     chordWords(s.settings.chords),
+    ...(s.settings.sceneEnergy > 0 ? [`energy ${s.settings.sceneEnergy}`] : []),
     ...(s.leadIn ? [`${LEAD_IN_WORDS[s.leadIn].label.toLowerCase()} before it`] : []),
   ].join(' · ');
   const set = (patch: Partial<Scene['settings']>): void => r.onEdit({ settings: { ...s.settings, ...patch } });
+  const kept = s.aiIdeas?.length ?? 0;
 
   return (
     <div
@@ -781,6 +846,12 @@ function SceneRow(r: SceneRowProps): JSX.Element {
             options={[{ value: 'off', label: 'Off' }, { value: 'gentle', label: 'Quiet' }, { value: 'full', label: 'Full' }]}
           />
           {s.settings.band !== 'off' && <BandJobsChoice value={s.settings.bandJobs} onChange={(bandJobs) => set({ bandJobs })} />}
+          <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>Energy</span>
+          <SegmentedControl<number>
+            label="Energy of this scene" value={s.settings.sceneEnergy} onChange={(e) => set({ sceneEnergy: e as SceneEnergy })}
+            options={[{ value: 0, label: 'Off' }, ...ENERGY_LEVELS.map((e) => ({ value: e, label: String(e) }))]}
+          />
+          <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>{ENERGY_WORDS[s.settings.sceneEnergy]}</span>
           <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>Lead-in</span>
           <SegmentedControl<LeadIn>
             label="Lead-in" value={s.leadIn ?? 'none'} onChange={(leadIn) => r.onEdit({ leadIn })}
@@ -817,6 +888,12 @@ function SceneRow(r: SceneRowProps): JSX.Element {
               onChange={(v) => r.onEdit({ glideSec: Math.round(v) })}
             />
           )}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <Button tone="secondary" onClick={r.onNewIdeas} aria-label={`New ideas for ${s.name}`}>↻ New ideas</Button>
+            <span style={{ fontSize: 12, color: 'var(--bs-fg2)', flex: '1 1 200px' }}>
+              {`This scene plays the same ideas every rehearsal.${kept > 0 ? ` ${kept} AI ${kept === 1 ? 'idea is' : 'ideas are'} kept for it.` : ''} New ideas gives it different ones.`}
+            </span>
+          </div>
           {!r.onUpdateFromNow && <p style={note}>While the board plays, Update from now copies what is playing into this scene.</p>}
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {r.onUpdateFromNow && (

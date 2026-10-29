@@ -68,6 +68,18 @@ export interface BandInput {
   strong?: boolean;
   /** The counter-melody's last note, so it moves by small steps. */
   previousCounter?: number | null;
+  /**
+   * A scene's Energy on the band's drums (see performance/energy): grooves busier (+1) or
+   * sparser (-1, -2) than its level's usual. 0 or absent = as usual. At -1 or below the
+   * counter-melody keeps to the main beats, even at Full.
+   */
+  busy?: number;
+  /**
+   * The band's own variation on this bar, from the piece's and the scene's ideas (see
+   * performance/ideas): which way the counter-melody goes, and whether the walking bass
+   * goes to the fifth or the octave. 0 or absent = as before (no variation).
+   */
+  vary?: number;
 }
 
 export interface BandEvent {
@@ -173,33 +185,48 @@ export function bandEventsAtStep(input: BandInput): BandEvent[] {
       const changeIn = span; // steps until the next change, counted from this step when chordChange
       if (!input.chordChange && changeIn === 1) out.push({ part: 'bass', offset: 0.5, dur: 0.45, accent: 0.6, midi: root + 12 });
       // The chord's own fifth: a diminished chord's is a semitone below a perfect one.
-      else if (!input.chordChange && into % 2 === 0) out.push({ part: 'bass', offset: 0, dur: 0.9, accent: 0.65, midi: fifthAbove(root, h.tones) });
+      else if (!input.chordChange && into % 2 === 0) {
+        // A varied bar may walk to the octave instead: a chord note either way.
+        const octave = (input.vary ?? 0) !== 0 && ((input.vary ?? 0) >>> 5) % 3 === 0;
+        out.push({ part: 'bass', offset: 0, dur: 0.9, accent: 0.65, midi: octave ? root + 12 : fifthAbove(root, h.tones) });
+      }
     }
   }
 
+  const busy = Math.round(input.busy ?? 0);
   if (parts.includes('groove') && !(withJobs && input.drumsHere)) {
     const beat = input.step % 4;
-    const hits: DrumHit[] = full
-      ? grooveFor(input.style, 2)
-      : [
-        // Gentle: a soft pulse, hats on the eighths and a quiet kick on the one.
-        { at: 0, drum: 'kick', accent: 0.5 },
-        ...[0, 2, 4, 6, 8, 10, 12, 14].map((at): DrumHit => ({ at, drum: 'hat', accent: at % 4 === 0 ? 0.35 : 0.25 })),
-      ];
-    for (const hit of hits) {
+    for (const hit of grooveHits(input.style, full, busy)) {
       if (Math.floor(hit.at / 4) !== beat) continue;
       out.push({ part: 'groove', offset: (hit.at % 4) / 4, dur: 0.25, accent: hit.accent * (full ? 0.85 : 1), drum: hit.drum });
     }
   }
 
   // The counter-melody: in the gaps of the melody (every gap at Full, the strong beats at
-  // Quiet), on a note of the chord, never one the melody is sounding.
+  // Quiet, or at a low Energy), on a note of the chord, never one the melody is sounding.
   const strong = input.strong ?? isStrongBeat(input.step);
-  if (h && parts.includes('counter') && !input.melodyHere && (full || strong)) {
-    const midi = counterNote(h, counterRange(input.melodyRegister ?? null), input.avoidPcs ?? [], input.previousCounter ?? null, input.step);
+  if (h && parts.includes('counter') && !input.melodyHere && ((full && busy >= 0) || strong)) {
+    const midi = counterNote(h, counterRange(input.melodyRegister ?? null), input.avoidPcs ?? [], input.previousCounter ?? null, input.step, input.vary ?? 0);
     if (midi !== null) out.push({ part: 'counter', offset: 0, dur: 0.9, accent: full ? 0.55 : 0.45, midi });
   }
   return out;
+}
+
+/**
+ * The band's drums over a bar (16 sixteenths), at its level and how busy a scene's Energy
+ * makes them: Full plays the world's groove (busier or sparser by `busy`); Quiet a soft
+ * pulse, sparser below, a soft groove above.
+ */
+export function grooveHits(style: SoundWorldId, full: boolean, busy = 0): DrumHit[] {
+  if (full) return grooveFor(style, 2 + busy);
+  if (busy >= 1) return grooveFor(style, 1).map((x) => ({ ...x, accent: x.accent * 0.75 }));
+  // Quiet: a soft pulse, hats on the eighths (on the beats only, a little sparser; on the
+  // first and third, sparser still) and a quiet kick on the one.
+  const hats = busy <= -2 ? [0, 8] : busy === -1 ? [0, 4, 8, 12] : [0, 2, 4, 6, 8, 10, 12, 14];
+  return [
+    { at: 0, drum: 'kick', accent: 0.5 },
+    ...hats.map((at): DrumHit => ({ at, drum: 'hat', accent: at % 4 === 0 ? 0.35 : 0.25 })),
+  ];
 }
 
 /** Each note moved by octaves into [lo, hi] (a voicing led from another register). */
@@ -217,7 +244,7 @@ function intoRange(notes: readonly number[], lo: number, hi: number): number[] {
  * a step along from its last note (up for a bar, then down), so it makes a line.
  */
 export function counterNote(
-  h: Harmony, range: readonly [number, number], avoidPcs: readonly number[], previous: number | null, step: number,
+  h: Harmony, range: readonly [number, number], avoidPcs: readonly number[], previous: number | null, step: number, vary = 0,
 ): number | null {
   const avoid = new Set(avoidPcs.map((p) => ((p % 12) + 12) % 12));
   const ladder = notesIn(h.tones.filter((t) => !avoid.has(((t % 12) + 12) % 12)), range[0], range[1]);
@@ -225,7 +252,8 @@ export function counterNote(
   if (previous === null) return ladder[Math.floor(ladder.length / 2)];
   let near = 0;
   for (let i = 1; i < ladder.length; i++) if (Math.abs(ladder[i] - previous) < Math.abs(ladder[near] - previous)) near = i;
-  const dir = Math.floor(step / 4) % 2 === 0 ? 1 : -1;
+  // Up for a bar, then down; a varied bar picks its own way.
+  const dir = vary !== 0 ? ((vary >>> 3) % 2 === 0 ? 1 : -1) : Math.floor(step / 4) % 2 === 0 ? 1 : -1;
   const next = near + dir >= 0 && near + dir < ladder.length ? near + dir : near - dir;
   return ladder[Math.max(0, Math.min(ladder.length - 1, next))];
 }
