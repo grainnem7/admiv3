@@ -14,6 +14,7 @@ import type { BandLevel } from '../band/band';
 import type { SoundWorldChoice } from '../../audio/worlds/soundWorlds';
 import { GLIDE_MAX_SEC, GLIDE_MIN_SEC } from './speedGlide';
 import { sanitizeChords, type ChordSetting } from '../harmony/currentChord';
+import { sanitizeBandJobs, sanitizeLeadIn, type BandJobs, type LeadIn } from '../band/bandJobs';
 
 /** How many loops the iPad and the scenes can launch. */
 export const LAUNCH_SLOTS = 8;
@@ -55,14 +56,16 @@ export interface SceneSettings {
   bpm: number;
   /** The chord sequence and how long each chord lasts (see harmony/currentChord). */
   chords: ChordSetting;
+  /** The band's jobs, kept whatever the player plays (see band/bandJobs). */
+  bandJobs: BandJobs;
 }
-export const SCENE_SETTING_KEYS: (keyof SceneSettings)[] = ['soundWorld', 'band', 'phrases', 'fillAmount', 'evolveAmount', 'bpm', 'chords'];
+export const SCENE_SETTING_KEYS: (keyof SceneSettings)[] = ['soundWorld', 'band', 'phrases', 'fillAmount', 'evolveAmount', 'bpm', 'chords', 'bandJobs'];
 
 /** The scene settings as they are in a config now: the player's own, when no run is on. */
 export function sceneSettingsOf(c: SceneSettings): SceneSettings {
   return {
     soundWorld: c.soundWorld, band: c.band, phrases: c.phrases, fillAmount: c.fillAmount, evolveAmount: c.evolveAmount, bpm: c.bpm,
-    chords: { ...c.chords },
+    chords: { ...c.chords }, bandJobs: { ...c.bandJobs },
   };
 }
 
@@ -105,6 +108,11 @@ export interface Scene {
    * it existed.
    */
   glideSec?: number;
+  /**
+   * What plays in the last pass before this scene comes in: a drum fill, or rising notes.
+   * Absent = none, as every scene saved before it existed.
+   */
+  leadIn?: Exclude<LeadIn, 'none'>;
 }
 
 export const MAX_SCENES = 12;
@@ -166,8 +174,9 @@ export function sanitizeSceneSettings(v: unknown, d: SceneSettings): SceneSettin
     fillAmount: unit(o.fillAmount, d.fillAmount),
     evolveAmount: unit(o.evolveAmount, d.evolveAmount),
     bpm: isNum(o.bpm) ? Math.max(20, Math.min(400, Math.round(o.bpm))) : d.bpm,
-    // A scene saved before chord sequences existed plays as it did.
+    // A scene saved before chord sequences (or band jobs) existed plays as it did.
     chords: sanitizeChords(o.chords),
+    bandJobs: sanitizeBandJobs(o.bandJobs),
   };
 }
 
@@ -185,12 +194,14 @@ export function sanitizeScenes(v: unknown, defaults: SceneSettings): Scene[] {
     const loops = Array.isArray(o.loops)
       ? [...new Set(o.loops.filter((s): s is number => isNum(s) && Number.isInteger(s) && s >= 0 && s < LAUNCH_SLOTS))].sort((a, b) => a - b)
       : [];
+    const leadIn = sanitizeLeadIn(o.leadIn);
     out.push({
       id, name: cleanName(o.name) || `Scene ${out.length + 1}`, loops, settings: sanitizeSceneSettings(o.settings, defaults),
       ...(isNum(o.at) && o.at >= 0 ? { at: Math.round(o.at) } : {}),
       ...(o.alone === true ? { alone: true } : {}),
       ...(isNum(o.glideSec) && Math.round(o.glideSec) >= GLIDE_MIN_SEC && Math.round(o.glideSec) <= GLIDE_MAX_SEC
         ? { glideSec: Math.round(o.glideSec) } : {}),
+      ...(leadIn !== 'none' ? { leadIn } : {}),
     });
   }
   return out;

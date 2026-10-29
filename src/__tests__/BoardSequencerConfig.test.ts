@@ -481,8 +481,8 @@ describe('a piece saved before the 7:00 limit and "alone" scenes', () => {
     const cfg = loadWith({ scenes: [scene], performance: { lengthSec: 480, ending: 'cue', style: 'fade', fadePasses: 2, startOn: 'play' } });
     expect(cfg.performance.lengthSec).toBe(420);
     expect(cfg.performance).toMatchObject({ ending: 'cue', style: 'fade', fadePasses: 2 });
-    // As they were: a scene saved before chord sequences plays its chords as before.
-    expect(cfg.scenes).toEqual([{ ...scene, settings: { ...scene.settings, chords: { sequence: 'asBefore', bars: 2 } } }]);
+    // As they were: a scene saved before chord sequences and band jobs plays both as before.
+    expect(cfg.scenes).toEqual([{ ...scene, settings: { ...scene.settings, chords: { sequence: 'asBefore', bars: 2 }, bandJobs: { asBefore: true, pads: true, bass: true, drums: true, counter: false } } }]);
   });
 });
 
@@ -642,5 +642,31 @@ describe('BoardSequencerConfig — keeping time (Sound → Advanced)', () => {
     expect(loadBoardSequencerConfig()).toMatchObject({ keepTimeBehindSec: 2.5, keepTimeDriftSec: 4, keepTimeValve: false });
     localStorage.setItem('admi-board-sequencer', JSON.stringify({ keepTimeBehindSec: 0, keepTimeDriftSec: 99, keepTimeValve: 'yes' }));
     expect(loadBoardSequencerConfig()).toMatchObject({ keepTimeBehindSec: 0.3, keepTimeDriftSec: 10, keepTimeValve: true });
+  });
+});
+
+describe('BoardSequencerConfig — a band with jobs (stage 2)', () => {
+  beforeEach(() => localStorage.clear());
+
+  it('a new player: pads, bass and drums kept as jobs; keep my notes on top, 3 dB', () => {
+    expect(DEFAULT_BOARD_SEQUENCER_CONFIG.bandJobs).toEqual({ asBefore: false, pads: true, bass: true, drums: true, counter: false });
+    expect(DEFAULT_BOARD_SEQUENCER_CONFIG.keepOnTop).toBe(true);
+    expect(DEFAULT_BOARD_SEQUENCER_CONFIG.keepOnTopDb).toBe(3);
+  });
+
+  it('a player saved before jobs existed: the band as before; keep on top on (owner: on by default)', () => {
+    localStorage.setItem('admi-board-sequencer', JSON.stringify({ rows: 8, cols: 8, band: 'full' }));
+    const c = loadBoardSequencerConfig()!;
+    expect(c.bandJobs).toEqual({ asBefore: true, pads: true, bass: true, drums: true, counter: false });
+    expect(c.keepOnTop).toBe(true);
+    expect(c.keepOnTopDb).toBe(3);
+  });
+
+  it('keeps what was chosen, and makes nonsense safe', () => {
+    const jobs = { asBefore: false, pads: false, bass: true, drums: false, counter: true };
+    localStorage.setItem('admi-board-sequencer', JSON.stringify({ rows: 8, cols: 8, bandJobs: jobs, keepOnTop: false, keepOnTopDb: 6 }));
+    expect(loadBoardSequencerConfig()).toMatchObject({ bandJobs: jobs, keepOnTop: false, keepOnTopDb: 6 });
+    localStorage.setItem('admi-board-sequencer', JSON.stringify({ rows: 8, cols: 8, bandJobs: 'all', keepOnTopDb: 'loud' }));
+    expect(loadBoardSequencerConfig()).toMatchObject({ bandJobs: { asBefore: true }, keepOnTop: true, keepOnTopDb: 3 });
   });
 });

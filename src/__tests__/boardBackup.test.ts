@@ -78,7 +78,7 @@ describe('saved loops, scenes and names survive a reload', () => {
         [{ row: 5, col: 1, colour: 'c2' }],
       ],
       loopNames: ['Bed', '', 'Beat', '', '', '', '', 'Last'],
-      scenes: [{ id: 's1', name: 'Arrival', loops: [0], settings: { soundWorld: 'warm', band: 'gentle', phrases: true, fillAmount: 0, evolveAmount: 0, bpm: 90, chords: { sequence: 'asBefore', bars: 2 } }, at: 0 }],
+      scenes: [{ id: 's1', name: 'Arrival', loops: [0], settings: { soundWorld: 'warm', band: 'gentle', phrases: true, fillAmount: 0, evolveAmount: 0, bpm: 90, chords: { sequence: 'asBefore', bars: 2 }, bandJobs: { asBefore: true, pads: true, bass: true, drums: true, counter: false } }, at: 0 }],
       loopFadePasses: 2,
       performance: { ...DEFAULT_BOARD_SEQUENCER_CONFIG.performance, style: 'chord', lengthSec: 420 },
     };

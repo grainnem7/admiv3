@@ -7,7 +7,7 @@ import {
 import { AS_BEFORE_CHORDS } from '../songs/harmony/currentChord';
 
 const settings: SceneSettings = {
-  soundWorld: 'warm', band: 'gentle', phrases: true, fillAmount: 0.3, evolveAmount: 0.4, bpm: 96, chords: { sequence: 'rising', bars: 2 },
+  soundWorld: 'warm', band: 'gentle', phrases: true, fillAmount: 0.3, evolveAmount: 0.4, bpm: 96, chords: { sequence: 'rising', bars: 2 }, bandJobs: { asBefore: true, pads: true, bass: true, drums: true, counter: false },
 };
 
 describe('launching loops', () => {
@@ -423,8 +423,8 @@ describe('scenes and the player', () => {
 });
 
 describe("a scene's settings are for the run only (T2-05, T3-17)", () => {
-  const own: SceneSettings = { soundWorld: 'lofi', band: 'off', phrases: false, fillAmount: 0, evolveAmount: 0, bpm: 100, chords: { sequence: 'asBefore', bars: 2 } };
-  const open: SceneSettings = { soundWorld: 'warm', band: 'full', phrases: true, fillAmount: 0.4, evolveAmount: 0.5, bpm: 90, chords: { sequence: 'rising', bars: 2 } };
+  const own: SceneSettings = { soundWorld: 'lofi', band: 'off', phrases: false, fillAmount: 0, evolveAmount: 0, bpm: 100, chords: { sequence: 'asBefore', bars: 2 }, bandJobs: { asBefore: true, pads: true, bass: true, drums: true, counter: false } };
+  const open: SceneSettings = { soundWorld: 'warm', band: 'full', phrases: true, fillAmount: 0.4, evolveAmount: 0.5, bpm: 90, chords: { sequence: 'rising', bars: 2 }, bandJobs: { asBefore: true, pads: true, bass: true, drums: true, counter: false } };
 
   it("the player's own settings are read from the config as it is", () => {
     const config = { ...own, rows: 8, currentScene: null };
@@ -455,5 +455,26 @@ describe("a scene's settings are for the run only (T2-05, T3-17)", () => {
     // while playing, an older save): Stop still clears it, and changes nothing else.
     const plain = stoppedConfig({ ...own, rows: 8, currentScene: 1 }, null);
     expect(plain).toEqual({ ...own, rows: 8, currentScene: null });
+  });
+});
+
+// Harmony spec stage 2: a scene's band jobs and lead-in.
+describe('scenes: band jobs and a lead-in', () => {
+  const one = (extra: Record<string, unknown>, s: Record<string, unknown> = {}) =>
+    sanitizeScenes([{ id: 'j', name: 'J', loops: [], settings: { ...settings, ...s }, ...extra }], settings)[0];
+  it('keeps its jobs; a scene saved before jobs existed loads "As before"', () => {
+    const jobs = { asBefore: false, pads: true, bass: false, drums: true, counter: true };
+    expect(one({}, { bandJobs: jobs }).settings.bandJobs).toEqual(jobs);
+    expect(one({}, { bandJobs: undefined }).settings.bandJobs).toEqual({ asBefore: true, pads: true, bass: true, drums: true, counter: false });
+    expect(SCENE_SETTING_KEYS).toContain('bandJobs');
+    expect(sceneSettingsOf({ ...settings, bandJobs: jobs }).bandJobs).toEqual(jobs);
+  });
+
+  it('keeps a lead-in; none, or nonsense, is no lead-in (as before)', () => {
+    expect(one({ leadIn: 'drumFill' }).leadIn).toBe('drumFill');
+    expect(one({ leadIn: 'rising' }).leadIn).toBe('rising');
+    expect('leadIn' in one({ leadIn: 'none' })).toBe(false);
+    expect('leadIn' in one({ leadIn: 'gong' })).toBe(false);
+    expect('leadIn' in one({})).toBe(false);
   });
 });

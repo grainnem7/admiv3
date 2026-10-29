@@ -1578,7 +1578,7 @@ async function savedSoundNow(page: Page): Promise<Record<string, unknown>> {
     const id = localStorage.getItem('admi-board-active-player');
     const players = JSON.parse(localStorage.getItem('admi-board-players') ?? '[]') as { id: string; settings: Record<string, unknown> }[];
     const s = (players.find((p) => p.id === id) ?? players[0])?.settings ?? {};
-    return { soundWorld: s.soundWorld, band: s.band, phrases: s.phrases, fillAmount: s.fillAmount, evolveAmount: s.evolveAmount, bpm: s.bpm, chords: s.chords };
+    return { soundWorld: s.soundWorld, band: s.band, phrases: s.phrases, fillAmount: s.fillAmount, evolveAmount: s.evolveAmount, bpm: s.bpm, chords: s.chords, bandJobs: s.bandJobs };
   });
 }
 
@@ -1609,7 +1609,7 @@ test('Update from now: not there while stopped; while playing it copies the loop
   await page.getByRole('button', { name: 'Update from now' }).click();
   const line = page.getByRole('status').filter({ hasText: 'Open now has what is playing: Bed · full band.' }).filter({ has: page.getByRole('button', { name: 'Undo' }) });
   await expect(line).toBeVisible();
-  await expect(page.getByRole('button', { name: /^3:30 · Open/ })).toContainText(/Bed · .+ · full band · some extra notes/);
+  await expect(page.getByRole('button', { name: /^3:30 · Open/ })).toContainText(/Bed · .+ · full band · pads, bass, drums · some extra notes/);
   await expect.poll(async () => (await savedScene(page, 'Open'))?.loops).toEqual([0]);
   const sound = await savedSoundNow(page);
   expect(sound.band).toBe('full');
@@ -1963,6 +1963,8 @@ test('one shared harmony: the band follows each scene’s chords, Tim’s chord 
   await page.getByRole('radiogroup', { name: 'Chords' }).getByRole('radio', { name: 'Rising', exact: true }).click();
   await page.getByRole('radiogroup', { name: 'Each chord lasts' }).getByRole('radio', { name: '1 bar', exact: true }).click();
   await page.getByRole('radiogroup', { name: 'Band' }).getByRole('radio', { name: 'Full', exact: true }).click();
+  // Make my plan gives Arrival the band's pads only (stage 2): its bass too, for this test.
+  await page.getByRole('group', { name: 'Band parts' }).getByRole('switch', { name: 'Bass', exact: true }).click();
   await expect(page.getByRole('button', { name: /^0:00 · Arrival/ })).toContainText('Rising chords, 1 bar each');
   await page.getByRole('button', { name: /^0:00 · Arrival/ }).click();
   // Build at 0:12, in the middle of a pass (8 steps at 90 BPM is 5.3 s): Still, the band Full.
@@ -2015,5 +2017,86 @@ test('one shared harmony: the band follows each scene’s chords, Tim’s chord 
   expect(walk.length).toBeGreaterThanOrEqual(2);
   for (const b of walk) expect([0, 7], `beat ${b}`).toContain(rootAt.get(b));
   expect(rootAt.get(pass + 6)).toBe(2);
+  expect(pageErrors(page)).toEqual([]);
+});
+
+// ---- A band with jobs (spec 2026-10-28-harmony-and-band, stage 2) ----
+
+test('a band with jobs: at Full with Tim on bass, chords and drums, the band’s pads, drums and counter-melody play around him; its bass steps aside while his plays, and comes back when he lifts it', async ({ page }) => {
+  test.setTimeout(180_000);
+  await openLaptopBoard(page);
+  // Tim: Blue bass at step 1, Yellow chord at step 3, Green kicks at steps 5 and 7.
+  await pickColour(page, 'Blue');
+  await place(page, [[1, 1]]);
+  await pickColour(page, 'Yellow');
+  await place(page, [[4, 3]]);
+  await pickColour(page, 'Green');
+  await place(page, [[1, 5], [1, 7]]);
+  await makePlan(page);
+  // Arrival (the plan gives it pads only): the band Full, with all four parts.
+  await page.getByRole('button', { name: /^0:00 · Arrival/ }).click();
+  await page.getByRole('radiogroup', { name: 'Band' }).getByRole('radio', { name: 'Full', exact: true }).click();
+  const parts = page.getByRole('group', { name: 'Band parts' });
+  await expect(parts.getByRole('radio', { name: 'Choose parts', exact: true })).toHaveAttribute('aria-checked', 'true');
+  for (const job of ['Bass', 'Drums', 'Counter-melody']) {
+    const sw = parts.getByRole('switch', { name: job, exact: true });
+    await expect(sw).toHaveAttribute('aria-checked', 'false');
+    await sw.click();
+  }
+  await expect(page.getByRole('button', { name: /^0:00 · Arrival/ })).toContainText('full band · pads, bass, drums, counter-melody');
+  await page.getByRole('button', { name: /^0:00 · Arrival/ }).click();
+
+  await startPiece(page);
+  await pieceClockRunning(page);
+  await pause(page, 14_000);
+  // Tim lifts his bass.
+  await pickColour(page, 'Blue');
+  await place(page, [[1, 1]]);
+  await pause(page, 12_000);
+  const log = await sessionLogFile(page) as unknown as {
+    notes: { t: number; colour: string; origin: string; role: string; source: string }[];
+  };
+  const band = (part: string) => log.notes.filter((n) => n.colour === `band:${part}`);
+  const tim = (role: string) => log.notes.filter((n) => n.role === role && n.origin !== 'band' && n.origin !== 'fill');
+  const lastTimBass = Math.max(...tim('bass').map((n) => n.t));
+  // While his bass was down: the band's pads, drums and counter-melody, and no bass of its own.
+  for (const part of ['pad', 'groove', 'counter']) {
+    expect(band(part).filter((n) => n.t < lastTimBass).length, part).toBeGreaterThan(0);
+  }
+  expect(band('bass').filter((n) => n.t <= lastTimBass)).toEqual([]);
+  // Once he lifted it, the band's bass came back.
+  expect(band('bass').filter((n) => n.t > lastTimBass).length).toBeGreaterThan(0);
+  // The band's drums only on beats his drums leave empty.
+  const spb = 60 / 90;
+  const drums = tim('drums');
+  // The grid from his last drum: the first beats of a piece can be sent a little late.
+  const t0 = Math.max(...drums.map((n) => n.t));
+  const beatOf = (t: number): number => Math.floor((t - t0) / spb + 0.02);
+  const his = new Set(drums.map((n) => beatOf(n.t)));
+  expect(band('groove').length).toBeGreaterThan(0);
+  for (const n of band('groove')) expect(his.has(beatOf(n.t)), `band drum at ${n.t.toFixed(2)} s`).toBe(false);
+  expect(pageErrors(page)).toEqual([]);
+});
+
+test('a scene’s band parts and lead-in are kept after a reload', async ({ page }) => {
+  await openLaptopBoard(page);
+  await makePlan(page);
+  await page.getByRole('button', { name: /^3:30 · Open/ }).click();
+  const parts = page.getByRole('group', { name: 'Band parts' });
+  // Make my plan: Open has all four.
+  for (const job of ['Pads', 'Bass', 'Drums', 'Counter-melody']) {
+    await expect(parts.getByRole('switch', { name: job, exact: true })).toHaveAttribute('aria-checked', 'true');
+  }
+  await parts.getByRole('switch', { name: 'Drums', exact: true }).click();
+  await page.getByRole('radiogroup', { name: 'Lead-in' }).getByRole('radio', { name: 'Drum fill', exact: true }).click();
+  const open = page.getByRole('button', { name: /^3:30 · Open/ });
+  await expect(open).toContainText('pads, bass, counter-melody');
+  await expect(open).toContainText('drum fill before it');
+  await page.evaluate(() => new Promise((r) => { window.setTimeout(r, 1200); })); // saves are gathered for a moment
+  await page.reload();
+  await page.getByRole('button', { name: /Board Sequencer/ }).click();
+  await pieceStep(page, 'Scenes');
+  await expect(open).toContainText('pads, bass, counter-melody');
+  await expect(open).toContainText('drum fill before it');
   expect(pageErrors(page)).toEqual([]);
 });

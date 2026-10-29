@@ -2,8 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { decideClockTick, editedScene, nowNext, openingScene, planScenes, sceneAt, sceneTimeProblem, sortScenes, takeLoopOut, withSceneAdded } from '../songs/performance/piece';
 import { CLOCK_NOT_STARTED, DEFAULT_PERFORMANCE } from '../songs/performance/clock';
 import type { Scene, SceneSettings } from '../songs/performance/launcher';
+import { AS_BEFORE_JOBS } from '../songs/band/bandJobs';
 
-const settings: SceneSettings = { soundWorld: 'warm', band: 'gentle', phrases: true, fillAmount: 0.3, evolveAmount: 0.4, bpm: 96, chords: { sequence: 'asBefore', bars: 2 } };
+const settings: SceneSettings = {
+  soundWorld: 'warm', band: 'gentle', phrases: true, fillAmount: 0.3, evolveAmount: 0.4, bpm: 96, chords: { sequence: 'asBefore', bars: 2 }, bandJobs: AS_BEFORE_JOBS,
+};
 const scene = (id: string, at: number | null): Scene => ({ id, name: id, loops: [], settings, ...(at === null ? {} : { at }) });
 
 describe('the piece — scenes in time order', () => {
@@ -104,6 +107,22 @@ describe('the piece — make my plan', () => {
     expect(new Set(plan.map((p) => p.id)).size).toBe(4);
   });
 
+  // Harmony spec stage 2: a band that builds. Arrival pads; Build pads and bass; Open all
+  // four, at Full; Home pads, quietly. No lead-ins (the default is None).
+  it('sets band jobs that build, and no lead-ins', () => {
+    const plan = planScenes(420, [[{}]], settings, 't');
+    const jobsOf = (i: number) => {
+      const j = plan[i].settings.bandJobs;
+      return [j.asBefore, j.pads, j.bass, j.drums, j.counter];
+    };
+    expect(jobsOf(0)).toEqual([false, true, false, false, false]);
+    expect(jobsOf(1)).toEqual([false, true, true, false, false]);
+    expect(jobsOf(2)).toEqual([false, true, true, true, true]);
+    expect(jobsOf(3)).toEqual([false, true, false, false, false]);
+    expect(plan.map((p) => p.settings.band)).toEqual(['gentle', 'gentle', 'full', 'gentle']);
+    expect(plan.some((p) => 'leadIn' in p)).toBe(false);
+  });
+
   it('with one saved loop, every scene has it; none is ever marked to play alone', () => {
     const plan = planScenes(420, [null, [{}], null], settings, 't');
     expect(plan.map((p) => p.loops)).toEqual([[1], [1], [1], [1]]);
@@ -138,6 +157,14 @@ describe('the piece — changing a scene', () => {
     const atOnce = editedScene(gliding, { glideSec: 0 });
     expect(atOnce).toEqual(scene('a', 90));
     expect('glideSec' in editedScene(gliding, { glideSec: undefined })).toBe(false);
+  });
+
+  it('a lead-in is kept; None leaves the scene as it was', () => {
+    const fill = editedScene(scene('a', 90), { leadIn: 'drumFill' });
+    expect(fill.leadIn).toBe('drumFill');
+    expect(editedScene(fill, { name: 'Build' }).leadIn).toBe('drumFill');
+    expect(editedScene(fill, { leadIn: 'rising' }).leadIn).toBe('rising');
+    expect(editedScene(fill, { leadIn: 'none' })).toEqual(scene('a', 90));
   });
 });
 

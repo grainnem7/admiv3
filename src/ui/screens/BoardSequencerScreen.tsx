@@ -145,7 +145,7 @@ import {
   type ClockView,
 } from '../../songs/performance/clock';
 import {
-  decideClockTick, editedScene, nowNext, openingScene, pieceEndingLeadSec, pieceSpeeds, planScenes, putLoopBack, sortScenes, takeLoopOut, withSceneAdded,
+  decideClockTick, editedScene, nowNext, type ScenePatch, openingScene, pieceEndingLeadSec, pieceSpeeds, planScenes, putLoopBack, sortScenes, takeLoopOut, withSceneAdded,
 } from '../../songs/performance/piece';
 import {
   cellsSoundingAt, comesInLine, holdsBack, waitingColours, waitingLine, withColourEntry,
@@ -2362,7 +2362,7 @@ export default function BoardSequencerScreen() {
       noteLengthBeats: cfg.noteLengthBeats, velocity: cfg.velocity,
       tickEnabled: cfg.tickEnabled, studioMix: cfg.studioMix,
       soundWorld: cfg.soundWorld, phrases: cfg.phrases, fillEngine: cfg.fillEngine, band: cfg.band,
-      chords: cfg.chords, clashNudge: cfg.clashNudge,
+      chords: cfg.chords, clashNudge: cfg.clashNudge, bandJobs: cfg.bandJobs, keepOnTop: cfg.keepOnTop, keepOnTopDb: cfg.keepOnTopDb,
       channels: cfg.channels, faderAxis: cfg.faderAxis, variationEnabled: cfg.variationEnabled,
       loopStepsRed: cfg.loopStepsRed, loopStepsBlack: cfg.loopStepsBlack,
       loopStepsBlue: cfg.loopStepsBlue, numPages: cfg.numPages,
@@ -3166,6 +3166,7 @@ export default function BoardSequencerScreen() {
   };
   const sceneSettingsNow = (c: BoardSequencerStored): SceneSettings => ({
     soundWorld: c.soundWorld, band: c.band, phrases: c.phrases, fillAmount: c.fillAmount, evolveAmount: c.evolveAmount, bpm: c.bpm, chords: c.chords,
+    bandJobs: c.bandJobs,
   });
   const saveScene = (name: string): void => {
     const c = configRef.current;
@@ -3190,7 +3191,7 @@ export default function BoardSequencerScreen() {
     update(scenesInOrder(c.scenes.map((x) => (x.id === old.id ? old : x)), c.currentScene));
   };
   /** A change to one scene, made where it is listed. The list stays in time order. */
-  const editScene = (i: number, patch: Partial<BoardSequencerStored['scenes'][number]>): void => {
+  const editScene = (i: number, patch: ScenePatch): void => {
     const c = configRef.current;
     const old = c.scenes[i];
     if (!old) return;
@@ -3397,8 +3398,10 @@ export default function BoardSequencerScreen() {
     // The scene's sound lands on the pass, with its loops (the speed glides as before).
     engineRef.current?.landOnNextPass({
       soundWorld: apply.soundWorld, band: apply.band, phrases: apply.phrases,
-      fillAmount: apply.fillAmount, evolveAmount: apply.evolveAmount, chords: apply.chords,
+      fillAmount: apply.fillAmount, evolveAmount: apply.evolveAmount, chords: apply.chords, bandJobs: apply.bandJobs,
     });
+    // Its lead-in, into that same pass (a scene with none clears one waiting).
+    engineRef.current?.cueLeadIn(scene.leadIn ?? 'none');
     update({ ...apply, currentScene: i });
     if (apply.bpm !== undefined) setSceneSpeed(apply.bpm, scene.glideSec);
     const glide = apply.bpm !== undefined ? speedGlideRef.current : null;
@@ -3579,6 +3582,13 @@ export default function BoardSequencerScreen() {
       setBoardNotice(cueText(cue));
       setCueShown(cueText(cue));
       announce(cueText(cue));
+    }
+    // A lead-in plays in the last pass before its scene: told ahead, once the scene is less
+    // than a pass away, so it can start at the beginning of that pass.
+    if (!endingRef.current) {
+      const coming = nowNext(c.scenes, c.currentScene, view.elapsedSec).next;
+      const passSec = (c.cols * Math.max(1, c.numPages)) * 60 / Math.max(20, engine.getBpm());
+      if (coming?.scene.leadIn && coming.inSec <= passSec * 1.5) engine.cueLeadIn(coming.scene.leadIn, coming.inSec);
     }
     if (d.scene !== null) goScene(d.scene);
     // A colour comes in: on the board and said, as otherwise it is only heard. (The runtime

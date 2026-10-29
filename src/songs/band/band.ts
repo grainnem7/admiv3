@@ -19,12 +19,14 @@
 
 import { grooveFor, harmonyFromChord, type DrumHit, type Harmony as PhraseHarmony } from '../phrases/phrases';
 import { bassNote, chordOnDegree, voiceLead } from '../harmony/harmony';
-import { WORLD_PROGRESSION } from '../harmony/currentChord';
+import { WORLD_PROGRESSION, isStrongBeat } from '../harmony/currentChord';
+import { counterRange, notesIn, padRangeAway, PAD_RANGE, type BandJobs, type Register } from './bandJobs';
 import type { SoundWorldId } from '../../audio/worlds/soundWorlds';
 import type { KitDrum } from '../../audio/instruments/RoundRobinDrumKit';
 
 export type BandLevel = 'off' | 'gentle' | 'full';
-export type BandPart = 'pad' | 'bass' | 'groove';
+/** The band's parts; 'counter' only with jobs, 'leadIn' only into a scene. */
+export type BandPart = 'pad' | 'bass' | 'groove' | 'counter' | 'leadIn';
 export const BAND_PARTS: BandPart[] = ['pad', 'bass', 'groove'];
 
 export type Harmony = PhraseHarmony;
@@ -47,6 +49,25 @@ export interface BandInput {
   playerCounters?: number;
   /** The pad's last voicing, so this chord moves to it by small steps. */
   previousPad?: readonly number[] | null;
+  // ---- with jobs (absent, or "As before": the band as it was) ----
+  /** Which parts the band keeps, whatever the player plays. */
+  jobs?: BandJobs;
+  /** A bass counter (the player's or a loop's) is down: the band's bass steps aside. */
+  bassTaken?: boolean;
+  /** The board or a loop has a drum on this step: the band's drums leave it to them. */
+  drumsHere?: boolean;
+  /** Where the player's and the loops' chord parts have been sounding: the pads keep away. */
+  chordRegister?: Register | null;
+  /** A melody note (the player's or a loop's) starts on this step: the counter-melody rests. */
+  melodyHere?: boolean;
+  /** Where the melody has been sounding: the counter-melody plays in another register. */
+  melodyRegister?: Register | null;
+  /** Pitch classes of melody notes sounding now: the counter-melody never plays them. */
+  avoidPcs?: readonly number[];
+  /** A strong beat (first or third of the bar); unknown = from the step. */
+  strong?: boolean;
+  /** The counter-melody's last note, so it moves by small steps. */
+  previousCounter?: number | null;
 }
 
 export interface BandEvent {
@@ -80,8 +101,19 @@ export const GROOVE_FROM = 5;
  * Which of the band's parts play, given what the player has taken over and how many
  * counters they have down (unknown = all of them, as before).
  */
-export function bandParts(level: BandLevel, playerRoles: ReadonlySet<string>, playerCounters = Infinity): BandPart[] {
+export function bandParts(
+  level: BandLevel, playerRoles: ReadonlySet<string>, playerCounters = Infinity, jobs?: BandJobs, bassTaken = false,
+): BandPart[] {
   if (level === 'off') return [];
+  if (jobs && !jobs.asBefore) {
+    // Jobs: the band keeps them whatever the player plays; only the bass steps aside.
+    const out: BandPart[] = [];
+    if (jobs.pads) out.push('pad');
+    if (jobs.bass && !bassTaken) out.push('bass');
+    if (jobs.drums) out.push('groove');
+    if (jobs.counter) out.push('counter');
+    return out;
+  }
   const taken = new Set<BandPart>();
   for (const [role, part] of Object.entries(PART_OF_ROLE)) if (part && playerRoles.has(role)) taken.add(part);
   if (playerCounters < BASS_FROM) taken.add('bass');
@@ -114,7 +146,8 @@ function fifthAbove(root: number, tones: readonly number[]): number {
 
 /** The band's notes on one step. */
 export function bandEventsAtStep(input: BandInput): BandEvent[] {
-  const parts = bandParts(input.level, input.playerRoles, input.playerCounters);
+  const withJobs = input.jobs !== undefined && !input.jobs.asBefore;
+  const parts = bandParts(input.level, input.playerRoles, input.playerCounters, input.jobs, input.bassTaken ?? false);
   if (parts.length === 0 || input.loop <= 0) return [];
   const out: BandEvent[] = [];
   const h = input.harmony;
@@ -122,9 +155,12 @@ export function bandEventsAtStep(input: BandInput): BandEvent[] {
   const full = input.level === 'full';
 
   if (h && parts.includes('pad') && input.chordChange) {
-    // Led from the last voicing, so the pad moves by small steps and never jumps.
+    // Led from the last voicing, so the pad moves by small steps and never jumps; with
+    // jobs, away from where the chord parts sit.
     const pcs = [...new Set(h.tones.map((t) => ((t % 12) + 12) % 12))];
-    const voiced = voiceLead({ pcs }, input.previousPad ?? null, 52, 72);
+    const [lo, hi] = withJobs ? padRangeAway(input.chordRegister ?? null) : PAD_RANGE;
+    const led = voiceLead({ pcs }, input.previousPad ?? null, lo, hi);
+    const voiced = withJobs ? intoRange(led, lo, hi) : led;
     for (const midi of voiced) out.push({ part: 'pad', offset: 0, dur: span - 0.05, accent: full ? 0.7 : 0.55, midi, voicing: voiced });
   }
 
@@ -141,7 +177,7 @@ export function bandEventsAtStep(input: BandInput): BandEvent[] {
     }
   }
 
-  if (parts.includes('groove')) {
+  if (parts.includes('groove') && !(withJobs && input.drumsHere)) {
     const beat = input.step % 4;
     const hits: DrumHit[] = full
       ? grooveFor(input.style, 2)
@@ -155,5 +191,41 @@ export function bandEventsAtStep(input: BandInput): BandEvent[] {
       out.push({ part: 'groove', offset: (hit.at % 4) / 4, dur: 0.25, accent: hit.accent * (full ? 0.85 : 1), drum: hit.drum });
     }
   }
+
+  // The counter-melody: in the gaps of the melody (every gap at Full, the strong beats at
+  // Quiet), on a note of the chord, never one the melody is sounding.
+  const strong = input.strong ?? isStrongBeat(input.step);
+  if (h && parts.includes('counter') && !input.melodyHere && (full || strong)) {
+    const midi = counterNote(h, counterRange(input.melodyRegister ?? null), input.avoidPcs ?? [], input.previousCounter ?? null, input.step);
+    if (midi !== null) out.push({ part: 'counter', offset: 0, dur: 0.9, accent: full ? 0.55 : 0.45, midi });
+  }
   return out;
+}
+
+/** Each note moved by octaves into [lo, hi] (a voicing led from another register). */
+function intoRange(notes: readonly number[], lo: number, hi: number): number[] {
+  return notes.map((n) => {
+    let m = n;
+    while (m < lo) m += 12;
+    while (m > hi && m - 12 >= lo) m -= 12;
+    return m;
+  }).sort((a, b) => a - b);
+}
+
+/**
+ * The counter-melody's note: a chord note in its range, not one the melody is sounding,
+ * a step along from its last note (up for a bar, then down), so it makes a line.
+ */
+export function counterNote(
+  h: Harmony, range: readonly [number, number], avoidPcs: readonly number[], previous: number | null, step: number,
+): number | null {
+  const avoid = new Set(avoidPcs.map((p) => ((p % 12) + 12) % 12));
+  const ladder = notesIn(h.tones.filter((t) => !avoid.has(((t % 12) + 12) % 12)), range[0], range[1]);
+  if (ladder.length === 0) return null;
+  if (previous === null) return ladder[Math.floor(ladder.length / 2)];
+  let near = 0;
+  for (let i = 1; i < ladder.length; i++) if (Math.abs(ladder[i] - previous) < Math.abs(ladder[near] - previous)) near = i;
+  const dir = Math.floor(step / 4) % 2 === 0 ? 1 : -1;
+  const next = near + dir >= 0 && near + dir < ladder.length ? near + dir : near - dir;
+  return ladder[Math.max(0, Math.min(ladder.length - 1, next))];
 }

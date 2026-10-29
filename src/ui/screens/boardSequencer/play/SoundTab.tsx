@@ -15,6 +15,9 @@ import type { BoardSequencerStored } from '../../../../profiles/BoardSequencerCo
 import { ENERGY, nearest, SPACE_ALL, type Step } from '../../../../audio/soundSteps';
 import { StepRow } from './StepRow';
 import { ChordChoice } from './ChordChoice';
+import { BandJobsChoice } from './BandJobsChoice';
+import { LabeledSlider } from '../ui/LabeledSlider';
+import { KEEP_ON_TOP_MAX_DB, KEEP_ON_TOP_MIN_DB } from '../../../../songs/band/keepOnTop';
 import { Switch } from '../ui/Switch';
 import { configToSoundFrom } from '../../../../midi/boardMidi';
 
@@ -109,7 +112,7 @@ function HelperButtons({ a, tryLabel }: { a: HelperActions; tryLabel: string }):
   );
 }
 
-const BAND_PART_NAMES: Record<BandPart, string> = { pad: 'chords', bass: 'bass', groove: 'drums' };
+const BAND_PART_NAMES: Record<BandPart, string> = { pad: 'chords', bass: 'bass', groove: 'drums', counter: 'counter-melody', leadIn: 'lead-in' };
 
 export function SoundTab(p: SoundTabProps): JSX.Element {
   const { config, update } = p;
@@ -216,15 +219,35 @@ export function SoundTab(p: SoundTabProps): JSX.Element {
           />
           <span style={NOTE}>
             {config.band === 'off'
-              ? 'Chords, a bass and drums that build up under you as you put counters down.'
-              : `${config.band === 'gentle' ? 'A held chord, a root bass and a soft pulse.' : 'Chords, a walking bass and the full kit.'} Chords under your first counters, the bass from three, the drums from five. Put down a bass, chord or drum counter and the band hands that part to you.`}
+              ? (config.bandJobs.asBefore
+                ? 'Chords, a bass and drums that build up under you as you put counters down.'
+                : 'Pads, a bass, drums and a counter-melody that play along with you once a counter is down.')
+              : config.bandJobs.asBefore
+                ? `${config.band === 'gentle' ? 'A held chord, a root bass and a soft pulse.' : 'Chords, a walking bass and the full kit.'} Chords under your first counters, the bass from three, the drums from five. Put down a bass, chord or drum counter and the band hands that part to you.`
+                : `${config.band === 'gentle' ? 'Quiet: soft and simple (held chords, a root bass, a gentle pulse, the counter-melody on the main beats only).' : 'Full: louder and busier (a walking bass, the whole kit, the counter-melody in every gap).'} It comes in on the pass after your first counter.`}
           </span>
+          {config.band !== 'off' && <BandJobsChoice value={config.bandJobs} onChange={(bandJobs) => update({ bandJobs })} />}
           {config.band !== 'off' && p.running && (
             <span role="status" style={NOTE}>
               {p.band.playing && p.band.parts.length > 0
                 ? `Playing now: ${p.band.parts.map((x) => BAND_PART_NAMES[x]).join(', ')}.`
                 : 'Waiting for your first counter.'}
             </span>
+          )}
+        </div>
+
+        <div role="group" aria-label="Keep my notes on top" style={CARD}>
+          <span style={{ fontWeight: 600 }}>Keep my notes on top</span>
+          <Switch
+            label="Keep my notes on top" checked={config.keepOnTop} onChange={(keepOnTop) => update({ keepOnTop })}
+            hint="While your own notes sound, the band, your loops and the extra notes go a little quieter, so you are always heard. Off: everything plays at its own level."
+          />
+          {config.keepOnTop && (
+            <LabeledSlider
+              label="How much quieter" min={KEEP_ON_TOP_MIN_DB} max={KEEP_ON_TOP_MAX_DB} step={0.5} value={config.keepOnTopDb}
+              display={`${config.keepOnTopDb} dB${config.keepOnTopDb === 3 ? ' (usual)' : ''}`}
+              onChange={(v) => update({ keepOnTopDb: Math.round(v * 2) / 2 })}
+            />
           )}
         </div>
 

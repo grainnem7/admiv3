@@ -32,8 +32,12 @@ import { generateFill, type FillContext, type FillNote, type SoundingNote } from
 import { loadMagenta, magentaFill, magentaStatus } from './generative/magentaFill';
 import { describeEvolve, evolveState, NEUTRAL, type EvolveState } from '../audio/evolve/evolve';
 import {
-  BAND_GAIN, bandEventsAtStep, bandParts, type BandLevel, type BandPart, type Harmony,
+  BAND_GAIN, bandEventsAtStep, bandParts, type BandEvent, type BandLevel, type BandPart, type Harmony,
 } from './band/band';
+import { AS_BEFORE_JOBS, leadInEvents, type BandJobs, type LeadIn, type Register } from './band/bandJobs';
+import {
+  KEEP_ON_TOP_ATTACK_TC, KEEP_ON_TOP_DEFAULT_DB, KEEP_ON_TOP_RELEASE_TC, dipGain, noteDip, pruneWindows, type SoundingWindow,
+} from './band/keepOnTop';
 import {
   AS_BEFORE_CHORDS, currentChord, fitToChord, isStrongBeat, sequenceAt,
   type ChordCounter, type ChordSetting, type CurrentChord,
@@ -171,6 +175,12 @@ export interface BoardEngineConfig {
   chords?: ChordSetting;
   /** One-note melody and bass: a note rubbing against the chord on a strong beat moves to it. */
   clashNudge?: boolean;
+  /** The band's jobs (absent = "As before"). */
+  bandJobs?: BandJobs;
+  /** Keep the player on top: the rest dips while his own notes sound (absent = on). */
+  keepOnTop?: boolean;
+  /** How far the rest dips, in dB. */
+  keepOnTopDb?: number;
 }
 
 /** A scene's sound settings that wait for the pass, as its loops do (see landOnNextPass). */
@@ -181,6 +191,7 @@ export interface PassSettings {
   fillAmount?: number;
   evolveAmount?: number;
   chords?: ChordSetting;
+  bandJobs?: BandJobs;
 }
 
 /** Evolve: how each colour's sound keeps changing as it plays (see audio/evolve). */
@@ -203,9 +214,14 @@ function sameChords(a: ChordSetting, b: ChordSetting): boolean {
   return a.sequence === b.sequence && a.bars === b.bars;
 }
 
-/** Two values of one scene setting are the same (chords compared by what they are). */
+/** Two values of one scene setting are the same (chords and jobs compared by what they are). */
 function passValueEqual(a: unknown, b: unknown): boolean {
-  if (typeof a === 'object' && a !== null && typeof b === 'object' && b !== null) return sameChords(a as ChordSetting, b as ChordSetting);
+  if (typeof a === 'object' && a !== null && typeof b === 'object' && b !== null) {
+    const x = a as Record<string, unknown>;
+    const y = b as Record<string, unknown>;
+    for (const k of new Set([...Object.keys(x), ...Object.keys(y)])) if (x[k] !== y[k]) return false;
+    return true;
+  }
   return a === b;
 }
 
@@ -407,7 +423,15 @@ export class BoardSequencerEngine {
   // The band (see band.ts): its level, its own voices, and the clock that makes it wait
   // for the player — the lap it may play from, and the last lap a counter was seen in.
   private band: BandLevel = 'off';
-  private bandVoices: { pad: BoardSequencerVoice; bass: BoardSequencerVoice; gain: GainNode; rev: GainNode } | null = null;
+  /**
+   * The band's voices. `gain` is its level; `lead` (the counter-melody and a Rising
+   * lead-in) has its own fixed level, as a lead-in plays with the band off. Both go
+   * through `top`, which dips while the player's notes sound (keep him on top).
+   */
+  private bandVoices: {
+    pad: BoardSequencerVoice; bass: BoardSequencerVoice; gain: GainNode; rev: GainNode;
+    lead?: BoardSequencerVoice; leadGain?: GainNode; top?: GainNode;
+  } | null = null;
   private bandFromLap: number | null = null;
   private bandLastCounterLap = -1;
   private bandPlaying = false;
@@ -415,6 +439,27 @@ export class BoardSequencerEngine {
   private bandPrevHarmonyKey = '';
   /** The band pad's last voicing, so each chord is led from the one before. */
   private bandPadVoicing: number[] | null = null;
+  // Band jobs (band/bandJobs): what it keeps, its counter-melody's last note, and a
+  // scene's lead-in, waiting for the beat its scene lands on.
+  private bandJobs: BandJobs = AS_BEFORE_JOBS;
+  private bandCounterLast: number | null = null;
+  private leadIn: { kind: LeadIn; landBeat: number } | null = null;
+  // What the band hears on this beat, from the notes the board and the loops have just
+  // played (they fire first): a drum, a melody note, and the drum hits themselves.
+  private heardDrums = false;
+  private heardMelody = false;
+  private heardDrumHits = new Set<string>();
+  private firingBeat = 0;
+  /** Melody notes sounding lately (the player's and the loops'): the counter-melody avoids them. */
+  private melodyWindows: (SoundingWindow & { pcs: number[] })[] = [];
+  /** Where the chord parts and the melody have sounded, until a pass goes by without them. */
+  private heardRegister: Record<'chord' | 'melody', (Register & { beat: number }) | null> = { chord: null, melody: null };
+  // Keep the player on top (band/keepOnTop): on, how far, and when his notes sound.
+  private keepOnTop = true;
+  private keepOnTopDb = KEEP_ON_TOP_DEFAULT_DB;
+  private timWindows: SoundingWindow[] = [];
+  /** The player's notes that started on this beat: the band's dip is scheduled from them. */
+  private timThisBeat: SoundingWindow[] = [];
   // One shared harmony (harmony/currentChord): the beat the chord sequence started on (its
   // scene's first pass), the chord counters on this beat, and the chord they make.
   private chordOrigin = 0;
@@ -469,6 +514,9 @@ export class BoardSequencerEngine {
 
   constructor(cfg: BoardEngineConfig) {
     this.cfg = cfg;
+    this.bandJobs = cfg.bandJobs ?? AS_BEFORE_JOBS;
+    this.keepOnTop = cfg.keepOnTop !== false;
+    this.keepOnTopDb = cfg.keepOnTopDb ?? KEEP_ON_TOP_DEFAULT_DB;
     // Matches the codebase's standard AudioContext acquisition
     // (see SongPresetEngine.loadSong). BoardSequencerVoice / ToneVoiceBase
     // construct their raw Web Audio nodes against this same context.
@@ -640,20 +688,96 @@ export class BoardSequencerEngine {
     if (!this.mix || !this.reverbBus) return;
     const ctx = this.ctx;
     const world = worldOf(this.cfg.soundWorld ?? 'none');
+    // Keep the player on top: everything the band plays goes through `top`, which dips
+    // while his notes sound.
+    const top = ctx.createGain();
+    top.gain.value = 1;
+    top.connect(this.duckBus ?? this.mix);
     const gain = ctx.createGain();
     gain.gain.value = BAND_GAIN[this.band];
-    gain.connect(this.duckBus ?? this.mix);
+    gain.connect(top);
     const pad = new BoardSequencerVoice(ctx, world?.voices.chord ?? { synth: 'pad', synthLevel: 0.8 });
     const bass = new BoardSequencerVoice(ctx, world?.voices.bass ?? { synth: 'sub', synthLevel: 0.8 });
     pad.setBrightness(0.6);
     pad.connect(gain);
     bass.connect(gain);
+    // The counter-melody and a Rising lead-in: the world's melody sound, at the Full
+    // band's level (its notes carry the band's level themselves, as a lead-in can play
+    // with the band off).
+    const leadGain = ctx.createGain();
+    leadGain.gain.value = BAND_GAIN.full;
+    leadGain.connect(top);
+    const lead = new BoardSequencerVoice(ctx, world?.voices.melody ?? { synth: 'pluck', synthLevel: 0.8 });
+    lead.connect(leadGain);
     // The band sits a little further back than the player: a touch more room.
     const rev = ctx.createGain();
     rev.gain.value = (world?.reverbSend ?? 0.18) * 1.3;
-    gain.connect(rev);
+    top.connect(rev);
     rev.connect(this.reverbBus);
-    this.bandVoices = { pad, bass, gain, rev };
+    this.bandVoices = { pad, bass, gain, rev, lead, leadGain, top };
+  }
+
+  /** Every node and voice of a band, let go. */
+  private static releaseBand(v: NonNullable<BoardSequencerEngine['bandVoices']>): void {
+    v.pad.dispose();
+    v.bass.dispose();
+    v.lead?.dispose();
+    v.gain.disconnect();
+    v.rev.disconnect();
+    v.leadGain?.disconnect();
+    v.top?.disconnect();
+  }
+
+  /** The band's jobs, live; a scene's wait for the pass (landOnNextPass). */
+  setBandJobs(jobs: BandJobs): void {
+    if (this.heldForPass('bandJobs', jobs, this.bandJobs)) return;
+    this.bandJobs = { ...jobs };
+    this.cfg.bandJobs = { ...jobs };
+  }
+
+  /** Keep the player on top: on or off, and how far the rest dips (dB). */
+  setKeepOnTop(on: boolean, db: number): void {
+    this.keepOnTop = on;
+    this.keepOnTopDb = db;
+    this.cfg.keepOnTop = on;
+    this.cfg.keepOnTopDb = db;
+    if (!on) {
+      const g = this.bandVoices?.top?.gain;
+      if (g) {
+        g.cancelScheduledValues(Tone.immediate());
+        g.setTargetAtTime(1, Tone.immediate(), MIX_SWITCH_TC);
+      }
+    }
+  }
+
+  /**
+   * A scene's lead-in (None, Drum fill, Rising), into the pass its scene lands on. From the
+   * clock, `inSec` before the scene is due: it lands on the first pass after then, and a
+   * lead-in already waiting is kept. Without `inSec` (the scene has just been called): the
+   * next pass, whatever was waiting.
+   */
+  cueLeadIn(kind: LeadIn, inSec?: number): void {
+    if (this.timer === null || this.finishing) return;
+    if (kind === 'none') {
+      if (inSec === undefined) this.leadIn = null;
+      return;
+    }
+    const now = this.lastInternalBeat;
+    if (inSec !== undefined && this.leadIn && this.leadIn.landBeat > now) return;
+    const cycle = Math.max(1, this.cfg.cols * Math.max(1, this.cfg.numPages));
+    const from = now + Math.max(0, inSec ?? 0) / (60 / this.cfg.bpm);
+    const landBeat = (Math.floor(from / cycle) + 1) * cycle;
+    // A scene the piece opens with has no pass before it to lead in from.
+    if (landBeat <= 0) return;
+    this.leadIn = { kind, landBeat };
+    // Its sounds, ready: the kit and the band's lead (the band itself may be off).
+    if (!this.drumKit) void this.buildDrumKit();
+    if (!this.bandVoices) this.buildBandVoices();
+  }
+
+  /** The lead-in waiting, if any: what, and the beat its scene lands on. */
+  getLeadIn(): { kind: LeadIn; landBeat: number } | null {
+    return this.leadIn;
   }
 
   /** The band's level, live. Off is silent at once; a level change glides. */
@@ -734,7 +858,7 @@ export class BoardSequencerEngine {
       const old = this.bandVoices;
       this.bandVoices = null;
       this.buildBandVoices();
-      setTimeout(() => { old.pad.dispose(); old.bass.dispose(); old.gain.disconnect(); old.rev.disconnect(); }, VOICE_RETIRE_MS);
+      setTimeout(() => BoardSequencerEngine.releaseBand(old), VOICE_RETIRE_MS);
     }
   }
 
@@ -1119,6 +1243,7 @@ export class BoardSequencerEngine {
     const cur: PassSettings = {
       soundWorld: this.cfg.soundWorld ?? 'none', band: this.bandSetting, phrases: this.cfg.phrases ?? false,
       fillAmount: this.fillSetting, evolveAmount: this.evolveSetting, chords: this.cfg.chords ?? AS_BEFORE_CHORDS,
+      bandJobs: this.bandJobs,
     };
     const next: PassSettings = { ...(this.passPending ?? {}) };
     for (const k of Object.keys(p) as (keyof PassSettings)[]) {
@@ -1148,6 +1273,7 @@ export class BoardSequencerEngine {
   private applyPassSettings(p: PassSettings, beat: number): void {
     if (p.soundWorld !== undefined) this.setSoundWorld(p.soundWorld);
     if (p.band !== undefined) this.setBand(p.band);
+    if (p.bandJobs !== undefined) this.setBandJobs(p.bandJobs);
     if (p.phrases !== undefined) this.setPhrases(p.phrases);
     if (p.fillAmount !== undefined) { this.fillSetting = p.fillAmount; this.applyAmounts(); }
     if (p.evolveAmount !== undefined) { this.evolveSetting = p.evolveAmount; this.applyAmounts(); }
@@ -1413,6 +1539,7 @@ export class BoardSequencerEngine {
       const slot = loopSlotOf(this.firingLayer);
       if (slot !== null) n.loopSlot = slot;
     }
+    if (n.origin === 'placed' || n.origin === 'phrase') this.hear(n);
     // MIDI notes fade with the ending, by velocity, which every instrument hears with no
     // set-up. Read a moment after the note, so the final chord (which lifts the gain back
     // up over 30 ms) arrives at full strength.
@@ -1422,6 +1549,84 @@ export class BoardSequencerEngine {
     }
     this.fired.push(n);
     if (this.fired.length > FIRED_NOTE_CAP) this.fired.splice(0, this.fired.length - FIRED_NOTE_CAP);
+  }
+
+  /**
+   * A note of the board's or a loop's, as the band hears it: a drum on this beat, a melody
+   * note (and its pitch, while it sounds), where the chord parts and the melody sit, and,
+   * for the player's own notes, when they sound (keep him on top). A few sums per note.
+   */
+  private hear(n: FiredNote): void {
+    if (n.drum) {
+      this.heardDrums = true;
+      this.heardDrumHits.add(`${n.drum}@${n.audioTime}`);
+      return;
+    }
+    const midis = n.midis ?? (n.midi !== undefined ? [n.midi] : []);
+    if (midis.length === 0) return;
+    const end = n.audioTime + n.durSec;
+    if (n.role === 'chord' || n.role === 'melody') {
+      const cycle = Math.max(1, this.cfg.cols * Math.max(1, this.cfg.numPages));
+      const lo = Math.min(...midis) - this.cfg.octaveShift * 12;
+      const hi = Math.max(...midis) - this.cfg.octaveShift * 12;
+      const r = this.heardRegister[n.role];
+      this.heardRegister[n.role] = r && this.firingBeat - r.beat <= cycle
+        ? { lo: Math.min(r.lo, lo), hi: Math.max(r.hi, hi), beat: this.firingBeat }
+        : { lo, hi, beat: this.firingBeat };
+    }
+    if (n.role === 'melody') {
+      this.heardMelody = true;
+      this.melodyWindows.push({ start: n.audioTime, end, pcs: midis.map((m) => ((m % 12) + 12) % 12) });
+    }
+    if (n.source !== 'loop' && this.keepOnTop) {
+      const w = { start: n.audioTime, end };
+      this.timWindows.push(w);
+      this.timThisBeat.push(w);
+    }
+  }
+
+  /** A new beat: what the band heard on the last one is forgotten; old notes let go. */
+  private beginHearing(beat: number, cellTime: number): void {
+    this.firingBeat = beat;
+    this.heardDrums = false;
+    this.heardMelody = false;
+    this.heardDrumHits.clear();
+    this.timThisBeat = [];
+    if (this.timWindows.length > 0) this.timWindows = pruneWindows(this.timWindows, cellTime);
+    if (this.melodyWindows.length > 0) this.melodyWindows = this.melodyWindows.filter((w) => w.end > cellTime);
+  }
+
+  private resetHeard(): void {
+    this.beginHearing(0, Infinity);
+    this.heardRegister = { chord: null, melody: null };
+    this.bandCounterLast = null;
+    this.leadIn = null;
+  }
+
+  /** Where a part has sounded, unless a whole pass has gone by without it. */
+  private registerOf(part: 'chord' | 'melody'): Register | null {
+    const r = this.heardRegister[part];
+    const cycle = Math.max(1, this.cfg.cols * Math.max(1, this.cfg.numPages));
+    return r && this.firingBeat - r.beat <= cycle ? { lo: r.lo, hi: r.hi } : null;
+  }
+
+  /** How loud everything but the player is at `t` (1, or less while his notes sound). */
+  private topFactor(t: number): number {
+    return this.keepOnTop && this.timWindows.length > 0 ? noteDip(t, this.timWindows, this.keepOnTopDb) : 1;
+  }
+
+  /**
+   * The band's own gain dips under the player's notes that started on this beat, with the
+   * same curve as topFactor: down at the first, back up after the last still sounding.
+   */
+  private dipBandForPlayer(): void {
+    const g = this.bandVoices?.top?.gain;
+    if (!g || !this.keepOnTop || this.timThisBeat.length === 0) return;
+    const start = Math.min(...this.timThisBeat.map((w) => w.start));
+    const end = Math.max(...this.timWindows.map((w) => w.end));
+    g.cancelScheduledValues(start);
+    g.setTargetAtTime(dipGain(this.keepOnTopDb), start, KEEP_ON_TOP_ATTACK_TC);
+    g.setTargetAtTime(1, end, KEEP_ON_TOP_RELEASE_TC);
   }
 
   /** Take (and clear) the notes scheduled since the last call. Polled from rAF. */
@@ -1607,6 +1812,9 @@ export class BoardSequencerEngine {
     const midis = voiceNear(chord, 62).map((n) => n + oct);
     const root = bassNote(chord, 36) + oct;
     this.bandVoices?.gain.gain.setTargetAtTime(1, time, 0.01);
+    // The final chord is the band's own moment: no dip under it.
+    this.bandVoices?.top?.gain.cancelScheduledValues(time);
+    this.bandVoices?.top?.gain.setTargetAtTime(1, time, 0.01);
     if (this.internalSound) {
       for (const m of midis) this.bandVoices?.pad.play(m, 0.9, durSec, time);
       this.bandVoices?.bass.play(root, 0.9, durSec, time);
@@ -2008,6 +2216,7 @@ export class BoardSequencerEngine {
     this.lastBeatIndex = -1;
     this.lastTickTime = 0;
     this.fired = [];
+    this.resetHeard();
     // A new run: the meter starts again, and nothing is dropped.
     this.keeper.start(this.startSec, this.wallNow());
     this.valveTaken = [];
@@ -2319,15 +2528,13 @@ export class BoardSequencerEngine {
     // The one current chord, worked out once for this beat: every pitched part plays to it.
     this.chordCounters = this.chordCountersOf(playCells);
     this.chordNow = this.chordAt(beat, chord);
-    // The band answers the PLAYER: it comes in after their first counter and hands them
-    // a part when they take it. Loops don't count — with loops covering every part the
-    // band fell silent for a whole section, and a loop alone brought it in before the
-    // player had touched the board.
-    this.fireBand(beat, cellTime, secPerBeat, chord, playCells, playCells.filter((c) => !c.layer));
-    this.fireFill(beat, cellTime, secPerBeat, chord, playCells);
+    // The board and the loops play first, the player's own notes before the loops', so the
+    // band hears what they played on this beat (it fits around them) and the loops and
+    // extras know whether his notes sound (keep him on top).
+    this.beginHearing(beat, cellTime);
     // Each colour plays a tune (a phrase) or one note per counter — its own choice.
     const tuneTagged = tagged.filter((t) => this.playsTune(t.cell.colour));
-    if (tuneTagged.length > 0) this.firePhrases(beat, cellTime, secPerBeat, chord, tuneTagged);
+    const loopPhrases = tuneTagged.length > 0 ? this.firePhrases(beat, cellTime, secPerBeat, chord, tuneTagged) : null;
     let noteTagged = tuneTagged.length === 0 ? tagged : tagged.filter((t) => !this.playsTune(t.cell.colour));
     // Layered one-note melodies take turns too: the one leading this pass plays its note,
     // another melody's note on the same step rests, and answers softer where it's alone.
@@ -2346,48 +2553,64 @@ export class BoardSequencerEngine {
             : t));
       }
     }
-    if (noteTagged.length === 0) return;
-    const noteCells = noteTagged.map((t) => t.cell);
-    // Voice ALL active melodic cells together so pitch is a complementary
-    // spread that depends on the whole board (re-voices as pieces change /
-    // follows the chord when locked); then play only this column's cells. A
-    // "melodic" cell is one whose colour role is melody or chord.
-    const melodic = noteCells.filter((c) => {
-      const r = this.roleFor(c.colour);
-      return (r === 'melody' || r === 'chord') && this.voiceByChannel.has(c.colour);
-    });
-    // Pitch is always by ABSOLUTE row position (bottom = low, top = high);
-    // column = time. The instrument/role come from the cell's colour channel.
-    const voicing = voicingForCells(
-      melodic, this.cfg.scaleRootMidi, this.cfg.scaleSemitones,
-      chord && chord.notes.length > 0 ? chord.notes : null, 'row', this.cfg.rows,
-    );
-    const oct = this.cfg.octaveShift * 12;
-    const h = this.cfg.humanize;
-    // The same drum piece hit twice at the same instant. Three kit pieces (hat, crash,
-    // rim) have a single sample, so round robin reuses one Player, and Tone THROWS if a
-    // Player is restarted at a time it is already playing. The exception escaped the loop
-    // and every cell after it in this beat was silently dropped — which reads as "the
-    // board randomly forgets notes". Two identical hits at one instant are one hit anyway.
-    const drumHits = new Set<string>();
-    // Where each colour plays, for letting a note ring up to the next one.
-    const colsByColour = new Map<ColourId, number[]>();
-    for (const c of noteCells) {
-      const list = colsByColour.get(c.colour);
-      if (list) list.push(c.col);
-      else colsByColour.set(c.colour, [c.col]);
-    }
-    for (const { cell, source } of noteTagged) {
-      try {
-        this.firingLayer = cell.layer;
-        this.fireCell(cell, source, beat, cellTime, secPerBeat, chord, voicing, oct, h, melodicLoop, durSec, drumHits, colsByColour);
-      } catch (err) {
-        // One cell must never take the rest of the beat with it.
-        console.warn('[BoardSequencer] a cell failed to play:', err);
-      } finally {
-        this.firingLayer = undefined;
+    if (noteTagged.length > 0) {
+      const noteCells = noteTagged.map((t) => t.cell);
+      // Voice ALL active melodic cells together so pitch is a complementary
+      // spread that depends on the whole board (re-voices as pieces change /
+      // follows the chord when locked); then play only this column's cells. A
+      // "melodic" cell is one whose colour role is melody or chord.
+      const melodic = noteCells.filter((c) => {
+        const r = this.roleFor(c.colour);
+        return (r === 'melody' || r === 'chord') && this.voiceByChannel.has(c.colour);
+      });
+      // Pitch is always by ABSOLUTE row position (bottom = low, top = high);
+      // column = time. The instrument/role come from the cell's colour channel.
+      const voicing = voicingForCells(
+        melodic, this.cfg.scaleRootMidi, this.cfg.scaleSemitones,
+        chord && chord.notes.length > 0 ? chord.notes : null, 'row', this.cfg.rows,
+      );
+      const oct = this.cfg.octaveShift * 12;
+      const h = this.cfg.humanize;
+      // The same drum piece hit twice at the same instant. Three kit pieces (hat, crash,
+      // rim) have a single sample, so round robin reuses one Player, and Tone THROWS if a
+      // Player is restarted at a time it is already playing. The exception escaped the loop
+      // and every cell after it in this beat was silently dropped — which reads as "the
+      // board randomly forgets notes". Two identical hits at one instant are one hit anyway.
+      const drumHits = new Set<string>();
+      // Where each colour plays, for letting a note ring up to the next one.
+      const colsByColour = new Map<ColourId, number[]>();
+      for (const c of noteCells) {
+        const list = colsByColour.get(c.colour);
+        if (list) list.push(c.col);
+        else colsByColour.set(c.colour, [c.col]);
       }
+      const fireAll = (list: typeof noteTagged): void => {
+        for (const { cell, source } of list) {
+          try {
+            this.firingLayer = cell.layer;
+            this.fireCell(cell, source, beat, cellTime, secPerBeat, chord, voicing, oct, h, melodicLoop, durSec, drumHits, colsByColour);
+          } catch (err) {
+            // One cell must never take the rest of the beat with it.
+            console.warn('[BoardSequencer] a cell failed to play:', err);
+          } finally {
+            this.firingLayer = undefined;
+          }
+        }
+      };
+      fireAll(noteTagged.filter((t) => t.source !== 'loop'));
+      loopPhrases?.();
+      fireAll(noteTagged.filter((t) => t.source === 'loop'));
+    } else {
+      loopPhrases?.();
     }
+    this.dipBandForPlayer();
+    // The band answers the PLAYER: it comes in after their first counter (and, as before,
+    // hands them a part when they take it). Loops don't bring it in — with loops covering
+    // every part the band fell silent for a whole section, and a loop alone brought it in
+    // before the player had touched the board — but with jobs it fits around them too.
+    this.fireBand(beat, cellTime, secPerBeat, chord, playCells, playCells.filter((c) => !c.layer));
+    this.fireLeadIn(beat, cellTime, secPerBeat);
+    this.fireFill(beat, cellTime, secPerBeat, chord, playCells);
   }
 
   /** The phrase engine's view of the cells, for both playing and fitting a fill around. */
@@ -2476,7 +2699,11 @@ export class BoardSequencerEngine {
   /**
    * The band on this beat. It waits for the player: silent until the pass after the
    * first counter goes down, and silent again once the pass the last counter left in has
-   * finished. A part whose role the player has taken over is left out.
+   * finished. As before, a part whose role the player has taken over is left out; with
+   * jobs, it keeps its parts and fits around what the board and the loops have just
+   * played on this beat (they fire first): its drums leave their drum steps, its pads
+   * keep away from their chords, its counter-melody plays in the gaps of their melody,
+   * and its bass steps aside while a bass counter (his or a loop's) is down.
    */
   private fireBand(
     beat: number, cellTime: number, secPerBeat: number, chord: BoardChord | null, cells: readonly LayeredCell[],
@@ -2496,9 +2723,12 @@ export class BoardSequencerEngine {
     } else if (this.bandFromLap !== null && lap > this.bandLastCounterLap) {
       this.bandFromLap = null; // the pass the last counter left in has finished
     }
+    const jobs = this.bandJobs;
+    // One bass at a time: the player's or a loop's bass counter, while it is down.
+    const bassTaken = !jobs.asBefore && cells.some((c) => this.roleFor(c.colour) === 'bass');
     const playing = this.band !== 'off' && !this.thinning && this.bandFromLap !== null && lap >= this.bandFromLap;
     this.bandPlaying = playing;
-    this.bandPartsNow = playing ? bandParts(this.band, roles, counters) : [];
+    this.bandPartsNow = playing ? bandParts(this.band, roles, counters, jobs, bassTaken) : [];
     if (!playing || !this.bandVoices) return;
     const loop = loopLen(this.rawLoop('melodic'), this.cfg.cols);
     const step = ((beat % loop) + loop) % loop;
@@ -2509,47 +2739,83 @@ export class BoardSequencerEngine {
     this.bandPrevHarmonyKey = key;
     let chordSpan = 1;
     while (step + chordSpan < loop && keyOf(this.chordAt(beat + chordSpan, chord).harmony) === key) chordSpan++;
+    // The melody's notes still sounding while a counter-melody note would: never those.
+    const counterEnd = cellTime + 0.9 * secPerBeat;
+    const avoidPcs = jobs.counter && !jobs.asBefore
+      ? [...new Set(this.melodyWindows.filter((w) => w.start < counterEnd && w.end > cellTime).flatMap((w) => w.pcs))]
+      : [];
     const events = bandEventsAtStep({
       level: this.band, step, loop, style: worldOf(this.cfg.soundWorld ?? 'none')?.id ?? 'warm',
       harmony, chordChange, chordSpan, playerRoles: roles, playerCounters: counters, previousPad: this.bandPadVoicing,
+      jobs, bassTaken, drumsHere: this.heardDrums, chordRegister: this.registerOf('chord'),
+      melodyHere: this.heardMelody, melodyRegister: this.registerOf('melody'), avoidPcs,
+      strong: this.strongBeat(beat), previousCounter: this.bandCounterLast,
     });
     const padEvent = events.find((ev) => ev.part === 'pad' && ev.voicing);
     if (padEvent?.voicing) this.bandPadVoicing = padEvent.voicing;
-    const world = worldOf(this.cfg.soundWorld ?? 'none');
-    const swing = Math.min(0.9, this.cfg.swing + (world?.phraseSwing ?? 0));
-    const hits = new Set<string>();
-    for (const ev of events) {
-      try {
-        const shifted = ev.offset === 0.5 ? ev.offset + swing / 6
-          : (ev.offset === 0.25 || ev.offset === 0.75) ? ev.offset + swing / 12 : ev.offset;
-        const time = Math.max(Tone.now(), cellTime + shifted * secPerBeat);
-        const durSec = ev.dur * secPerBeat;
-        // The band's level is in its gain node; for the kit (shared) and for MIDI it is in the velocity.
-        const vel = Math.min(1, ev.accent * BAND_GAIN[this.band] * 1.6);
-        let role: ColourRole;
-        let midi: number | undefined;
-        if (ev.drum) {
-          if (!this.drumKit) continue;
-          const hit = `${ev.drum}@${time}`;
-          if (hits.has(hit)) continue;
-          hits.add(hit);
-          if (this.internalSound) this.drumKit.play(ev.drum, vel, time);
-          if (ev.drum === 'kick' && this.band === 'full') this.duckForKick(time);
-          role = 'drums';
-        } else if (ev.midi !== undefined) {
-          midi = ev.midi + this.cfg.octaveShift * 12;
-          if (this.internalSound) (ev.part === 'pad' ? this.bandVoices.pad : this.bandVoices.bass).play(midi, ev.accent, durSec, time);
-          role = ev.part === 'pad' ? 'chord' : 'bass';
-        } else continue;
-        // Logged for the session, never drawn: a band note has no counter.
-        this.recordFired({
-          row: -1, col: -1, colour: `band:${ev.part}`, role, audioTime: time, durSec, source: 'live', origin: 'band',
-          midi, drum: ev.drum, velocity: vel,
-        });
-      } catch (err) {
-        console.warn('[BoardSequencer] a band note failed to play:', err);
-      }
+    const counterEvent = events.find((ev) => ev.part === 'counter');
+    if (counterEvent?.midi !== undefined) this.bandCounterLast = counterEvent.midi;
+    // The counter-melody's voice has a level of its own: its notes carry the band's.
+    const levelOfLead = BAND_GAIN[this.band] / BAND_GAIN.full;
+    for (const ev of events) this.playBandEvent(ev, cellTime, secPerBeat, ev.part === 'counter' ? levelOfLead : 1);
+  }
+
+  /** One band note (or a lead-in's): played, dipped under the player, and logged. */
+  private playBandEvent(ev: BandEvent, cellTime: number, secPerBeat: number, level = 1): void {
+    if (!this.bandVoices) return;
+    try {
+      const world = worldOf(this.cfg.soundWorld ?? 'none');
+      const swing = Math.min(0.9, this.cfg.swing + (world?.phraseSwing ?? 0));
+      const shifted = ev.offset === 0.5 ? ev.offset + swing / 6
+        : (ev.offset === 0.25 || ev.offset === 0.75) ? ev.offset + swing / 12 : ev.offset;
+      const time = Math.max(Tone.now(), cellTime + shifted * secPerBeat);
+      const durSec = ev.dur * secPerBeat;
+      // The band's level is in its gain node; for the kit (shared) and for MIDI it is in
+      // the velocity, as is the dip under the player (the voices' is in their `top` node).
+      // A lead-in plays at the Full band's level whatever the band's.
+      const bandGain = ev.part === 'leadIn' ? BAND_GAIN.full : BAND_GAIN[this.band];
+      const vel = Math.min(1, ev.accent * level * bandGain * 1.6) * this.topFactor(time);
+      let role: ColourRole;
+      let midi: number | undefined;
+      if (ev.drum) {
+        if (!this.drumKit) return;
+        // Never the same drum at the same moment twice: one Player can't restart there.
+        const hit = `${ev.drum}@${time}`;
+        if (this.heardDrumHits.has(hit)) return;
+        this.heardDrumHits.add(hit);
+        if (this.internalSound) this.drumKit.play(ev.drum, vel, time);
+        if (ev.drum === 'kick' && this.band === 'full') this.duckForKick(time);
+        role = 'drums';
+      } else if (ev.midi !== undefined) {
+        midi = ev.midi + this.cfg.octaveShift * 12;
+        const voice = ev.part === 'pad' ? this.bandVoices.pad : ev.part === 'bass' ? this.bandVoices.bass : this.bandVoices.lead;
+        if (this.internalSound) voice?.play(midi, ev.accent * level, durSec, time);
+        role = ev.part === 'pad' ? 'chord' : ev.part === 'bass' ? 'bass' : 'melody';
+      } else return;
+      // Logged for the session, never drawn: a band note has no counter.
+      this.recordFired({
+        row: -1, col: -1, colour: `band:${ev.part}`, role, audioTime: time, durSec, source: 'live', origin: 'band',
+        midi, drum: ev.drum, velocity: vel,
+      });
+    } catch (err) {
+      console.warn('[BoardSequencer] a band note failed to play:', err);
     }
+  }
+
+  /**
+   * A scene's lead-in, in the beats before the pass its scene lands on (see cueLeadIn).
+   * Not while the piece is ending or simplified; gone once its scene has landed.
+   */
+  private fireLeadIn(beat: number, cellTime: number, secPerBeat: number): void {
+    const li = this.leadIn;
+    if (!li) return;
+    if (beat > li.landBeat || this.finishing || this.thinning) {
+      this.leadIn = null;
+      return;
+    }
+    if (this.simplify !== 'off') return;
+    const cycle = Math.max(1, this.cfg.cols * Math.max(1, this.cfg.numPages));
+    for (const ev of leadInEvents(li.kind, li.landBeat - beat, cycle, this.chordNow.harmony)) this.playBandEvent(ev, cellTime, secPerBeat);
   }
 
   /**
@@ -2668,7 +2934,8 @@ export class BoardSequencerEngine {
           : (n.offset === 0.25 || n.offset === 0.75) ? n.offset + swing / 12 : n.offset;
         const time = Math.max(Tone.now(), cellTime + shifted * secPerBeat);
         // The fill sits under the player's notes: FILL_LEVEL is applied once, here.
-        const vel = Math.max(0, Math.min(1, this.cfg.velocity * n.accent)) * FILL_LEVEL;
+        // ... and dips while the player's own notes sound (keep him on top).
+        const vel = Math.max(0, Math.min(1, this.cfg.velocity * n.accent)) * FILL_LEVEL * this.topFactor(time);
         let midi: number | undefined;
         let dur = n.dur * secPerBeat;
         if (n.drum) {
@@ -2705,10 +2972,10 @@ export class BoardSequencerEngine {
   private firePhrases(
     beat: number, cellTime: number, secPerBeat: number, chord: BoardChord | null,
     tagged: { cell: LayeredCell; source: FiredNote['source'] }[],
-  ): void {
+  ): (() => void) | null {
     const world = worldOf(this.cfg.soundWorld ?? 'none');
     const cells = this.phraseCells(tagged.map((t) => t.cell));
-    if (cells.length === 0) return;
+    if (cells.length === 0) return null;
     const byKey = new Map<string, { cell: LayeredCell; source: FiredNote['source'] }>();
     for (const t of tagged) byKey.set(`${t.cell.layer ?? ''}|${t.cell.row},${t.cell.col},${t.cell.colour}`, t);
     const events = phraseEventsAtStep({ ...this.phraseInput(cells, beat, chord, this.cfg.pingPong ?? false), chord: this.chordNow.harmony });
@@ -2718,16 +2985,19 @@ export class BoardSequencerEngine {
     const swing = Math.min(0.9, this.cfg.swing + (world?.phraseSwing ?? 0));
     const drumHits = new Set<string>();
     const notesHere = new Set<string>();
-    for (const ev of events) {
+    const tagOf = (ev: (typeof events)[number]) => byKey.get(`${ev.layer ?? ''}|${ev.owner.row},${ev.owner.col},${ev.colour}`);
+    const playAll = (list: typeof events): void => { for (const ev of list) {
       try {
         const varies = ev.owner.conditional && this.cfg.variationEnabled !== false;
         if (!firesThisLapPaged(varies, beat, this.cfg.cols, this.cfg.numPages, this.cfg.pingPong ?? false)) continue;
-        const tag = byKey.get(`${ev.layer ?? ''}|${ev.owner.row},${ev.owner.col},${ev.colour}`);
+        const tag = tagOf(ev);
         const base = (tag?.cell.velocity ?? this.cfg.velocity) * this.energyGain();
-        const vel = Math.max(0, Math.min(1, base * ev.accent * (h > 0 ? 1 - Math.random() * h * 0.3 : 1)));
         const shifted = ev.offset === 0.5 ? ev.offset + swing / 6
           : (ev.offset === 0.25 || ev.offset === 0.75) ? ev.offset + swing / 12 : ev.offset;
         const time = Math.max(Tone.now(), cellTime + (shifted + (tag?.cell.timingBeats ?? 0)) * secPerBeat);
+        // A loop's note dips while the player's own sound (keep him on top).
+        const top = tag?.source === 'loop' ? this.topFactor(time) : 1;
+        const vel = Math.max(0, Math.min(1, base * ev.accent * top * (h > 0 ? 1 - Math.random() * h * 0.3 : 1)));
         let durSec = ev.dur * secPerBeat;
         let midi: number | undefined;
         if (ev.drum) {
@@ -2760,7 +3030,13 @@ export class BoardSequencerEngine {
       } catch (err) {
         console.warn('[BoardSequencer] a phrase note failed to play:', err);
       }
-    }
+    } };
+    // The player's own now; the loops' once his one-note counters have played too.
+    const own: typeof events = [];
+    const loops: typeof events = [];
+    for (const ev of events) (tagOf(ev)?.source === 'loop' ? loops : own).push(ev);
+    playAll(own);
+    return loops.length > 0 ? () => playAll(loops) : null;
   }
 
   /* eslint-disable-next-line max-params */
@@ -2792,10 +3068,12 @@ export class BoardSequencerEngine {
       // Box detail: where the counter sits gives it its own loudness and timing. The
       // shift can never reach into the past — a late note is fine, a missed one is not.
       const base = Math.min(1, (cell.velocity ?? this.cfg.velocity) * this.energyGain());
-      const vel = h > 0 ? base * (1 - Math.random() * h * 0.4) : base;
       const stepTime = cell.timingBeats
         ? Math.max(Tone.now(), cellTime + cell.timingBeats * secPerBeat)
         : cellTime;
+      // A loop's note dips while the player's own sound (keep him on top).
+      const top = source === 'loop' ? this.topFactor(stepTime) : 1;
+      const vel = (h > 0 ? base * (1 - Math.random() * h * 0.4) : base) * top;
       if (role === 'drums') {
         // The drum varies by row (kick→…→crash bottom→top), unless the channel
         // pins a specific kit piece.
@@ -2938,6 +3216,7 @@ export class BoardSequencerEngine {
     }
     this.chordOrigin = 0;
     this.fired = [];
+    this.resetHeard();
     // Stop ends Simplify, and whatever the safety valve dropped. Nothing is built here
     // (dispose() comes through stop()): the band's own voices only glide back up.
     this.valveTaken = [];
@@ -2998,10 +3277,7 @@ export class BoardSequencerEngine {
     this.tick?.dispose();
     this.tick = null;
     if (this.bandVoices) {
-      this.bandVoices.pad.dispose();
-      this.bandVoices.bass.dispose();
-      this.bandVoices.gain.disconnect();
-      this.bandVoices.rev.disconnect();
+      BoardSequencerEngine.releaseBand(this.bandVoices);
       this.bandVoices = null;
     }
     this.drumRev?.disconnect();

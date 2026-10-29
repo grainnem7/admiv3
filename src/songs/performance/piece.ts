@@ -5,6 +5,7 @@
  */
 
 import type { BandLevel } from '../band/band';
+import { PLAN_JOBS, type LeadIn } from '../band/bandJobs';
 import { cuesCrossed, endingDue, endingLeadSec, scenesDue, type PerformanceSettings } from './clock';
 import { LAUNCH_SLOTS, type Scene, type SceneSettings } from './launcher';
 
@@ -163,12 +164,16 @@ export function pieceSpeeds(c: PieceSpeedSource): number[] {
   return [c.bpm, ...c.scenes.map((s) => s.settings.bpm), ...(hatOnSpeed ? [Math.min(range.min, range.max)] : [])];
 }
 
-/** The plan's four sections, in proportion to the piece: 0:00, 1:30, 3:30, 6:00 of 7:00. */
+/**
+ * The plan's four sections, in proportion to the piece: 0:00, 1:30, 3:30, 6:00 of 7:00.
+ * The band builds with them (PLAN_JOBS): Arrival pads; Build pads and bass; Open all four,
+ * at Full; Home pads, quietly.
+ */
 const PLAN: { name: string; at: number; band: BandLevel; fill: number; evolve: number; loops: 1 | 2 | 3 }[] = [
   { name: 'Arrival', at: 0, band: 'gentle', fill: 0, evolve: 0, loops: 1 },
   { name: 'Build', at: 90 / 420, band: 'gentle', fill: 0.3, evolve: 0, loops: 3 },
   { name: 'Open', at: 210 / 420, band: 'full', fill: 0.4, evolve: 0.5, loops: 2 },
-  { name: 'Home', at: 360 / 420, band: 'off', fill: 0, evolve: 0, loops: 1 },
+  { name: 'Home', at: 360 / 420, band: 'gentle', fill: 0, evolve: 0, loops: 1 },
 ];
 
 /**
@@ -189,23 +194,28 @@ export function planScenes(
     name: p.name,
     at: Math.round(p.at * lengthSec),
     loops: pick(p.loops),
-    settings: { ...base, band: p.band, fillAmount: p.fill, evolveAmount: p.evolve },
+    settings: { ...base, band: p.band, fillAmount: p.fill, evolveAmount: p.evolve, bandJobs: { ...PLAN_JOBS[i] } },
   }));
 }
+
+/** A change to a scene, as the scene editor makes it: a lead-in of None takes one away. */
+export type ScenePatch = Partial<Omit<Scene, 'leadIn'>> & { leadIn?: LeadIn };
 
 /**
  * A scene with a change made to it. An emptied time makes it "by hand" only. Marking it
  * to play alone takes its loops out; giving it a loop again, or unticking it, ends that.
  * A glide of 0 (or none) is "at once", stored as no glide, as before glides existed.
  */
-export function editedScene(scene: Scene, patch: Partial<Scene>): Scene {
-  const { at, alone, glideSec, ...rest } = { ...scene, ...patch };
+export function editedScene(scene: Scene, patch: ScenePatch): Scene {
+  const { at, alone, glideSec, leadIn, ...rest } = { ...scene, ...patch };
   const isAlone = patch.alone === true || (alone === true && patch.alone !== false && rest.loops.length === 0);
   return {
     ...rest,
     ...(typeof at === 'number' ? { at } : {}),
     ...(isAlone ? { alone: true, loops: [] } : {}),
     ...(typeof glideSec === 'number' && glideSec > 0 ? { glideSec } : {}),
+    // A lead-in of None is no lead-in, as every scene saved before they existed.
+    ...(leadIn !== undefined && leadIn !== 'none' ? { leadIn } : {}),
   };
 }
 

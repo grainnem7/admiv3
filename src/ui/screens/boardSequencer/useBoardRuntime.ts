@@ -174,6 +174,8 @@ export function applyEngineSettings(
   engine.setBand(cfg.band);
   engine.setChords(cfg.chords);
   engine.setClashNudge(cfg.clashNudge);
+  engine.setBandJobs(cfg.bandJobs);
+  engine.setKeepOnTop(cfg.keepOnTop, cfg.keepOnTopDb);
   engine.setLaunchFade(Math.round(cfg.loopFadePasses * cfg.cols * Math.max(1, cfg.numPages)));
   const route = effectiveSound(cfg, port.portConnected, port.holdOnAdmi);
   engine.setMidiOut({

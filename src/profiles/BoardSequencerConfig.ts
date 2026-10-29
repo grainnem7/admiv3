@@ -11,6 +11,8 @@ import type { PingPongPages } from '../songs/boardSequencerScale';
 import type { FillNote } from '../songs/generative/rulesFill';
 import type { BandLevel } from '../songs/band/band';
 import { DEFAULT_CHORDS, sanitizeChords, type ChordSetting } from '../songs/harmony/currentChord';
+import { DEFAULT_JOBS, sanitizeBandJobs, type BandJobs } from '../songs/band/bandJobs';
+import { KEEP_ON_TOP_DEFAULT_DB, sanitizeKeepOnTopDb } from '../songs/band/keepOnTop';
 import { clampLeadMs, type MidiChannelMode, type MidiSends } from '../midi/boardMidi';
 import {
   fullReachMap, REMOTE_CONTROLS, sanitizeReachMap, type Reach, type RemoteControlName, type RemoteTriggerName,
@@ -165,6 +167,15 @@ export interface BoardSequencerStored {
    * the nearest chord note. Off for players set up before it existed.
    */
   clashNudge: boolean;
+  /**
+   * The band's jobs: Pads, Bass, Drums and Counter-melody, kept whatever the player plays
+   * (see band/bandJobs). "As before" for players set up before jobs existed.
+   */
+  bandJobs: BandJobs;
+  /** Keep the player on top: the band, loops and extra notes dip while his notes sound. */
+  keepOnTop: boolean;
+  /** How far they dip, in dB. */
+  keepOnTopDb: number;
   /** How far along each iPad strip this player can comfortably reach (see remote/protocol). */
   remoteReach: Record<RemoteControlName, Reach>;
   /** Names for the launchable loop slots ('' = "Loop n"). */
@@ -540,6 +551,9 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   band: 'gentle',
   chords: { ...DEFAULT_CHORDS },
   clashNudge: true,
+  bandJobs: { ...DEFAULT_JOBS },
+  keepOnTop: true,
+  keepOnTopDb: KEEP_ON_TOP_DEFAULT_DB,
   remoteReach: fullReachMap(),
   loopNames: sanitizeLoopNames([]),
   scenes: [],
@@ -916,11 +930,15 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     band: o.band === 'gentle' || o.band === 'full' ? o.band : 'off',
     chords: sanitizeChords(o.chords),
     clashNudge: o.clashNudge === true,
+    bandJobs: sanitizeBandJobs(o.bandJobs),
+    // On by default (owner), for every player: a dip of a few dB, and a switch to turn it off.
+    keepOnTop: o.keepOnTop !== false,
+    keepOnTopDb: sanitizeKeepOnTopDb(o.keepOnTopDb),
     remoteReach: sanitizeReachMap(o.remoteReach),
     loopNames: sanitizeLoopNames(o.loopNames),
     scenes: sanitizeScenes(o.scenes, {
       soundWorld: d.soundWorld, band: d.band, phrases: d.phrases, fillAmount: d.fillAmount, evolveAmount: d.evolveAmount, bpm: d.bpm,
-      chords: d.chords,
+      chords: d.chords, bandJobs: d.bandJobs,
     }),
     // A saved board is a stopped board, and a stopped board has no scene on now: one left
     // marked (a scene added while stopped, a save from before) made the next piece open in

@@ -12,7 +12,7 @@ let root: Root;
 beforeEach(() => { host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host); });
 afterEach(() => { act(() => root.unmount()); host.remove(); });
 
-const settings: SceneSettings = { soundWorld: 'warm', band: 'gentle', phrases: true, fillAmount: 0, evolveAmount: 0, bpm: 90, chords: { sequence: 'asBefore', bars: 2 } };
+const settings: SceneSettings = { soundWorld: 'warm', band: 'gentle', phrases: true, fillAmount: 0, evolveAmount: 0, bpm: 90, chords: { sequence: 'asBefore', bars: 2 }, bandJobs: { asBefore: true, pads: true, bass: true, drums: true, counter: false } };
 const scene = (id: string, at: number | null, loops: number[] = [0], extra: Partial<Scene> = {}): Scene =>
   ({ id, name: id, loops, settings, ...(at === null ? {} : { at }), ...extra });
 const loop = (slot: number, name: string, empty = false): PieceLoop =>
@@ -497,5 +497,54 @@ describe('Scenes: chords (harmony spec stage 1)', () => {
     act(() => radio('Each chord lasts', '4 bars')?.click());
     expect(p.onEditScene).toHaveBeenLastCalledWith(2, { settings: { ...settings, chords: { sequence: 'rising', bars: 4 } } });
     expect(text()).toContain('Four chords that lift: I–V–vi–IV.');
+  });
+});
+
+describe('Scenes: band parts and a lead-in (harmony spec stage 2)', () => {
+  const radio = (group: string, name: string): HTMLButtonElement | undefined =>
+    [...host.querySelectorAll(`[role="radiogroup"][aria-label="${group}"] [role="radio"]`)]
+      .find((b) => b.childNodes[0]?.textContent === name) as HTMLButtonElement | undefined;
+  const switchFor = (name: string): HTMLButtonElement | undefined =>
+    [...host.querySelectorAll('[role="group"][aria-label="Band parts"] [role="switch"]')]
+      .find((b) => b.childNodes[0]?.textContent === name) as HTMLButtonElement | undefined;
+  const chosen = { asBefore: false, pads: true, bass: true, drums: true, counter: false };
+
+  it('a scene chooses the band’s parts; "As before" is kept as a choice; its line says so', () => {
+    const p = props();
+    render(p);
+    expect(button(/^3:30 · Open/)?.textContent).toContain('band parts as before');
+    act(() => button(/^3:30 · Open/)?.click());
+    // As before: no parts to switch.
+    expect(switchFor('Pads')).toBeUndefined();
+    act(() => radio('Band parts', 'Choose parts')?.click());
+    expect(p.onEditScene).toHaveBeenLastCalledWith(2, { settings: { ...settings, bandJobs: chosen } });
+    const withJobs = scene('Open', 210, [0], { settings: { ...settings, bandJobs: chosen } });
+    render({ ...p, scenes: [scene('Arrival', 0), scene('Build', 90), withJobs] });
+    expect(button(/^3:30 · Open/)?.textContent).toContain('pads, bass, drums');
+    expect(switchFor('Counter-melody')?.getAttribute('aria-checked')).toBe('false');
+    act(() => switchFor('Counter-melody')?.click());
+    expect(p.onEditScene).toHaveBeenLastCalledWith(2, { settings: { ...settings, bandJobs: { ...chosen, counter: true } } });
+    act(() => radio('Band parts', 'As before')?.click());
+    expect(p.onEditScene).toHaveBeenLastCalledWith(2, { settings: { ...settings, bandJobs: { asBefore: true, pads: true, bass: true, drums: true, counter: false } } });
+  });
+
+  it('a scene with the band off shows no parts', () => {
+    const off = scene('Open', 210, [0], { settings: { ...settings, band: 'off' } });
+    render(props({ scenes: [scene('Arrival', 0), scene('Build', 90), off] }));
+    expect(button(/^3:30 · Open/)?.textContent).not.toContain('band parts');
+    act(() => button(/^3:30 · Open/)?.click());
+    expect(host.querySelector('[role="group"][aria-label="Band parts"]')).toBeNull();
+  });
+
+  it('a lead-in: None by default; Drum fill or Rising; its line says so', () => {
+    const p = props();
+    render(p);
+    act(() => button(/^3:30 · Open/)?.click());
+    expect(radio('Lead-in', 'None')?.getAttribute('aria-checked')).toBe('true');
+    act(() => radio('Lead-in', 'Drum fill')?.click());
+    expect(p.onEditScene).toHaveBeenLastCalledWith(2, { leadIn: 'drumFill' });
+    render({ ...p, scenes: [scene('Arrival', 0), scene('Build', 90), scene('Open', 210, [0], { leadIn: 'rising' })] });
+    expect(button(/^3:30 · Open/)?.textContent).toContain('rising before it');
+    expect(text()).toContain('Notes that climb and grow through the last pass before the scene.');
   });
 });

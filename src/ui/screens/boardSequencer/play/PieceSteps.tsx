@@ -11,12 +11,14 @@ import {
   type ClockView, type EndingMode, type EndingStyle, type PerformanceSettings,
 } from '../../../../songs/performance/clock';
 import { MAX_SCENES, type LoopSlotState, type Scene } from '../../../../songs/performance/launcher';
-import { sceneTimeProblem } from '../../../../songs/performance/piece';
+import { sceneTimeProblem, type ScenePatch } from '../../../../songs/performance/piece';
+import { bandJobsWords, LEAD_INS, LEAD_IN_WORDS, type LeadIn } from '../../../../songs/band/bandJobs';
 import { colourEntryProblem } from '../../../../songs/performance/colourEntries';
 import { GLIDE_DEFAULT_SEC, GLIDE_MAX_SEC, GLIDE_MIN_SEC } from '../../../../songs/performance/speedGlide';
 import { BAND_WORDS, listNames, playerWords } from '../pieceCheck';
 import { ReadyList, type ReadyItem } from './ReadyCheck';
 import { ChordChoice, chordWords } from './ChordChoice';
+import { BandJobsChoice } from './BandJobsChoice';
 
 export interface PieceLoop {
   slot: number;
@@ -86,7 +88,7 @@ export interface PieceStepsProps {
   onRehearseFrom(sec: number): void;
   onSaveSceneFromNow(name: string): void;
   onUpdateSceneFromNow(i: number): void;
-  onEditScene(i: number, patch: Partial<Scene>): void;
+  onEditScene(i: number, patch: ScenePatch): void;
   onDeleteScene(i: number): void;
   onUndoDelete(): void;
   onMakePlan(): void;
@@ -634,7 +636,7 @@ interface SceneRowProps {
    * nothing into the scene's loops and the player's own sound into its settings (R2-T2-02).
    */
   onUpdateFromNow?(): void;
-  onEdit(patch: Partial<Scene>): void;
+  onEdit(patch: ScenePatch): void;
   /** Delete it; `pressed` is the Delete button, for where focus goes next. */
   onDelete(pressed: HTMLElement): void;
 }
@@ -663,10 +665,12 @@ function SceneRow(r: SceneRowProps): JSX.Element {
     loopNames.length > 0 ? loopNames.join(', ') : s.alone ? `${who.Name} alone` : 'no loops',
     world,
     BAND_WORDS[s.settings.band],
+    ...(s.settings.band !== 'off' ? [bandJobsWords(s.settings.bandJobs)] : []),
     fill === 'off' ? 'no extra notes' : `${fill} extra notes`,
     evolve === 'off' ? 'sounds stay' : `sounds change ${evolve === 'more' ? 'a lot' : 'slowly'}`,
     `${s.settings.bpm} BPM${glide > 0 ? `, reached over ${glide} s` : ''}`,
     chordWords(s.settings.chords),
+    ...(s.leadIn ? [`${LEAD_IN_WORDS[s.leadIn].label.toLowerCase()} before it`] : []),
   ].join(' · ');
   const set = (patch: Partial<Scene['settings']>): void => r.onEdit({ settings: { ...s.settings, ...patch } });
 
@@ -776,6 +780,13 @@ function SceneRow(r: SceneRowProps): JSX.Element {
             label="Band" value={s.settings.band} onChange={(band) => set({ band })}
             options={[{ value: 'off', label: 'Off' }, { value: 'gentle', label: 'Quiet' }, { value: 'full', label: 'Full' }]}
           />
+          {s.settings.band !== 'off' && <BandJobsChoice value={s.settings.bandJobs} onChange={(bandJobs) => set({ bandJobs })} />}
+          <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>Lead-in</span>
+          <SegmentedControl<LeadIn>
+            label="Lead-in" value={s.leadIn ?? 'none'} onChange={(leadIn) => r.onEdit({ leadIn })}
+            options={LEAD_INS.map((l) => ({ value: l, label: LEAD_IN_WORDS[l].label, hint: LEAD_IN_WORDS[l].what }))}
+          />
+          <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>{`${LEAD_IN_WORDS[s.leadIn ?? 'none'].what}${s.leadIn ? ' Brought in by hand, it plays in what is left of that pass.' : ''}`}</span>
           <ChordChoice value={s.settings.chords} onChange={(chords) => set({ chords })} />
           <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>Extra notes</span>
           <SegmentedControl<number>

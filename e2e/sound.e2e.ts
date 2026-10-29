@@ -413,3 +413,32 @@ test('Sound → Chords: a new player has the world’s own chords, two bars each
   await expect(fit).toHaveAttribute('aria-checked', 'false');
   expect(pageErrors(page)).toEqual([]);
 });
+
+test('Sound → Band parts and Keep my notes on top: a new player has pads, bass and drums kept as jobs and their notes on top; both can be changed and are kept', async ({ page }) => {
+  await openLaptopBoard(page);
+  await page.getByRole('tab', { name: 'Sound' }).click();
+  const parts = page.getByRole('group', { name: 'Band parts' });
+  await expect(parts.getByRole('radio', { name: 'Choose parts', exact: true })).toHaveAttribute('aria-checked', 'true');
+  for (const [job, on] of [['Pads', 'true'], ['Bass', 'true'], ['Drums', 'true'], ['Counter-melody', 'false']] as const) {
+    await expect(parts.getByRole('switch', { name: job, exact: true })).toHaveAttribute('aria-checked', on);
+  }
+  const top = page.getByRole('group', { name: 'Keep my notes on top' });
+  const onTop = top.getByRole('switch', { name: 'Keep my notes on top' });
+  await expect(onTop).toHaveAttribute('aria-checked', 'true');
+  await expect(top).toContainText('3 dB');
+  await parts.getByRole('switch', { name: 'Counter-melody', exact: true }).click();
+  await parts.getByRole('switch', { name: 'Drums', exact: true }).click();
+  await onTop.click();
+  await expect(top.getByRole('slider')).toHaveCount(0);
+  await page.evaluate(() => new Promise((r) => { window.setTimeout(r, 1200); })); // saves are gathered for a moment
+  await page.reload();
+  await page.getByRole('button', { name: /Board Sequencer/ }).click();
+  await page.getByRole('tab', { name: 'Sound' }).click();
+  await expect(parts.getByRole('switch', { name: 'Counter-melody', exact: true })).toHaveAttribute('aria-checked', 'true');
+  await expect(parts.getByRole('switch', { name: 'Drums', exact: true })).toHaveAttribute('aria-checked', 'false');
+  await expect(onTop).toHaveAttribute('aria-checked', 'false');
+  // "As before" is kept as a choice: the band as it was.
+  await parts.getByRole('radio', { name: 'As before', exact: true }).click();
+  await expect(parts.getByRole('switch')).toHaveCount(0);
+  expect(pageErrors(page)).toEqual([]);
+});
