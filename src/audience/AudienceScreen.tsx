@@ -12,14 +12,17 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import {
-  bandBump, BLOOM_SEC, bloomAt, boardLayout, DIM_PRESENCE, glideTint, INITIAL_LIGHT, isAwake, lightGlow, pulseHz,
-  pulseLevel, stepLight, stepPresence, stepPulse, worldTint, type LightState, type Rgb,
+  bandBump, BLOOM_SEC, bloomAt, bloomColour, bloomGlowScale, bloomShare, boardLayout, canRebloom, COUNTER_RADIUS,
+  counterNeedsRing, DIM_PRESENCE, glideTint, INITIAL_LIGHT, isAwake, lightGlow, pulseHz, pulseLevel, SCENE_NAME,
+  stepLight, stepPresence, stepPulse, worldTint, type LightState, type Rgb,
 } from './light';
 import { AUDIENCE_CHANNEL, readLaptopMessage, type AudienceHat, type AudienceMessage, type AudienceState } from './protocol';
 
 /** The laptop says how things are at least once a second: quiet longer than this, it has gone. */
 const CONNECTED_MS = 2500;
 const BACKGROUND = '#05060a';
+/** The thin ring round a counter too dark to see. */
+const RING: Rgb = [230, 232, 242];
 /**
  * The screen must never slow the music: it draws about 30 times a second (the light moves
  * slowly; more frames buy nothing), at the screen's own pixel size, and the big soft light on
@@ -78,6 +81,8 @@ export default function AudienceScreen(): JSX.Element {
     /** A note has been heard since the board started playing: the board wakes up. */
     let heard = false;
     let blooms: Bloom[] = [];
+    /** When each square last bloomed: a counter may not re-bloom too soon (flash limit, A6). */
+    const lastBloom = new Map<string, number>();
     let bandLevel = 0;
     let bandLastBump = -Infinity;
     let bandLastNote = -Infinity;
@@ -112,7 +117,12 @@ export default function AudienceScreen(): JSX.Element {
               if (n.band) {
                 bandLastNote = now;
                 if (bandBump(bandLastBump / 1000, now / 1000)) { bandLastBump = now; bandLevel = 1; }
-              } else blooms.push({ row: n.row, col: n.col, colour: n.colour, at: now });
+              } else {
+                const key = `${n.row},${n.col}`;
+                if (!canRebloom((lastBloom.get(key) ?? -Infinity) / 1000, now / 1000)) continue;
+                lastBloom.set(key, now);
+                blooms.push({ row: n.row, col: n.col, colour: n.colour, at: now });
+              }
             }
             if (blooms.length > 300) blooms = blooms.slice(-300);
             break;
@@ -176,6 +186,7 @@ export default function AudienceScreen(): JSX.Element {
       presence = stepPresence(presence, awake, dt);
       bandLevel *= Math.exp(-dt / 0.3);
       blooms = blooms.filter((b) => now - b.at <= BLOOM_SEC * 1000);
+      if (blooms.length === 0 && lastBloom.size > 0) lastBloom.clear();
       const wake = (presence - DIM_PRESENCE) / (1 - DIM_PRESENCE);
 
       // The canvas, the size of the window.
@@ -235,14 +246,18 @@ export default function AudienceScreen(): JSX.Element {
       const visible = new Set<string>();
       if (state) {
         const { x0, y0, cell } = boardLayout(W, H, state.rows, state.cols);
-        const r = cell * 0.34;
+        const r = cell * COUNTER_RADIUS;
         const latest = new Map<string, Bloom>();
         for (const b of blooms) latest.set(`${b.row},${b.col}`, b);
+        // However many bloom together, what they add to a third of the screen stays under the
+        // budget (flash limit, A6): the same factor for each.
+        const live = [...latest.values()].map((b) => ({ colour: colourOf(b.colour), shape: bloomAt((now - b.at) / 1000, reduced) }));
+        const scale = bloomGlowScale(live.map((l) => ({ glow: l.shape?.glow ?? 0, colour: l.colour })), bloomShare(cell, W, H));
         const at = (row: number, col: number): [number, number] => [x0 + (col + 0.5) * cell, y0 + (row + 0.5) * cell];
         const ripple = (cx: number, cy: number, rgb: Rgb, rr: number, alpha: number): void => {
           ctx.beginPath();
           ctx.arc(cx, cy, rr, 0, Math.PI * 2);
-          ctx.strokeStyle = rgba(rgb, alpha * (0.4 + 0.6 * wake));
+          ctx.strokeStyle = rgba(rgb, alpha * (0.4 + 0.6 * wake) * scale);
           ctx.lineWidth = Math.max(1.5, cell * 0.035);
           ctx.stroke();
         };
@@ -255,9 +270,10 @@ export default function AudienceScreen(): JSX.Element {
           const rgb = colourOf(c.colour);
           const [cx, cy] = at(c.row, c.col);
           const b = latest.get(key);
-          const shape = b ? bloomAt((now - b.at) / 1000, reduced) : null;
-          if (shape) visible.add(key);
-          const rr = r * (shape?.scale ?? 1);
+          const raw = b ? bloomAt((now - b.at) / 1000, reduced) : null;
+          const shape = raw ? { ...raw, glow: raw.glow * scale } : null;
+          if (raw) visible.add(key);
+          const rr = r * (raw?.scale ?? 1);
           if (shape) {
             const halo2 = ctx.createRadialGradient(cx, cy, rr * 0.5, cx, cy, rr * (1.6 + shape.glow));
             halo2.addColorStop(0, rgba(rgb, 0.6 * shape.glow));
@@ -269,38 +285,42 @@ export default function AudienceScreen(): JSX.Element {
           }
           ctx.beginPath();
           ctx.arc(cx, cy, rr, 0, Math.PI * 2);
-          ctx.fillStyle = rgba(rgb, Math.min(1, base + (shape ? 0.4 * shape.glow : 0)));
+          // Brighter as it blooms, in its own colour: never washed to white.
+          ctx.fillStyle = rgba(shape ? bloomColour(rgb, shape.glow) : rgb, Math.min(1, base + (shape ? 0.4 * shape.glow : 0)));
           ctx.fill();
-          if (shape && shape.glow > 0) {
-            ctx.fillStyle = rgba([255, 255, 255], 0.3 * shape.glow);
-            ctx.fill();
+          // A counter too dark to see against the screen gets a thin light ring.
+          if (counterNeedsRing(rgb)) {
+            ctx.strokeStyle = rgba(RING, 0.5 + 0.5 * wake);
+            ctx.lineWidth = Math.max(1.5, cell * 0.03);
+            ctx.stroke();
           }
-          if (shape?.ripple) ripple(cx, cy, rgb, r * shape.ripple.r, shape.ripple.alpha);
+          if (raw?.ripple) ripple(cx, cy, rgb, r * raw.ripple.r, raw.ripple.alpha);
         }
         // Notes where Tim has no counter (a loop, an extra note): they bloom the same way.
         for (const [key, b] of latest) {
           if (onBoard.has(key) || b.row < 0 || b.row >= state.rows || b.col < 0 || b.col >= state.cols) continue;
-          const shape = bloomAt((now - b.at) / 1000, reduced);
-          if (!shape) continue;
+          const raw = bloomAt((now - b.at) / 1000, reduced);
+          if (!raw) continue;
           visible.add(key);
-          const rgb = colourOf(b.colour);
+          const glow = raw.glow * scale;
+          const rgb = bloomColour(colourOf(b.colour), raw.glow);
           const [cx, cy] = at(b.row, b.col);
-          const rr = r * 0.85 * shape.scale;
+          const rr = r * 0.85 * raw.scale;
           const halo3 = ctx.createRadialGradient(cx, cy, 0, cx, cy, rr * 1.8);
-          halo3.addColorStop(0, rgba(rgb, 0.85 * shape.glow));
-          halo3.addColorStop(0.5, rgba(rgb, 0.5 * shape.glow));
+          halo3.addColorStop(0, rgba(rgb, 0.85 * glow));
+          halo3.addColorStop(0.5, rgba(rgb, 0.5 * glow));
           halo3.addColorStop(1, rgba(rgb, 0));
           ctx.fillStyle = halo3;
           ctx.beginPath();
           ctx.arc(cx, cy, rr * 1.8, 0, Math.PI * 2);
           ctx.fill();
-          if (shape.ripple) ripple(cx, cy, rgb, r * shape.ripple.r, shape.ripple.alpha);
+          if (raw.ripple) ripple(cx, cy, colourOf(b.colour), r * raw.ripple.r, raw.ripple.alpha);
         }
       }
 
       // The scene's name fades with the board.
       const so = Math.round(wake * 100) / 100;
-      if (so !== sceneOpacity && sceneRef.current) { sceneOpacity = so; sceneRef.current.style.opacity = String(0.55 * so); }
+      if (so !== sceneOpacity && sceneRef.current) { sceneOpacity = so; sceneRef.current.style.opacity = String(SCENE_NAME.opacity * so); }
 
       mark('presence', presence.toFixed(2));
       mark('awake', awake ? 'yes' : 'no');
@@ -331,8 +351,8 @@ export default function AudienceScreen(): JSX.Element {
       <div
         ref={sceneRef}
         style={{
-          position: 'absolute', right: '2.2vw', bottom: '2vh', opacity: 0, pointerEvents: 'none',
-          color: '#e6e8f2', font: '500 clamp(14px, 1.5vw, 30px)/1.2 system-ui, sans-serif', letterSpacing: '0.04em',
+          position: 'absolute', right: `${SCENE_NAME.inset * 100}%`, bottom: `${SCENE_NAME.inset * 100}%`, opacity: 0, pointerEvents: 'none',
+          color: '#e6e8f2', font: `500 max(14px, ${SCENE_NAME.widthShare * 100}vw)/1.2 system-ui, sans-serif`, letterSpacing: '0.04em',
         }}
       >
         {scene ?? ''}

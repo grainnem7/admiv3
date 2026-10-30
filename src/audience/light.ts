@@ -168,8 +168,8 @@ export function glideTint(cur: Rgb, target: Rgb, dt: number): Rgb {
 
 // ---- Before and after the piece ----
 
-/** How awake the board is before the piece and after it: dim, but there. */
-export const DIM_PRESENCE = 0.22;
+/** How awake the board is before the piece and after it: dim, but there (audit A5: 0.22 was lost on a projector). */
+export const DIM_PRESENCE = 0.4;
 /** After the piece, or Stop: the slow fade back to the dim board. */
 export const FADE_SEC = 8;
 /** The first note: how quickly the board wakes up. */
@@ -190,6 +190,97 @@ export function stepPresence(p: number, awake: boolean, dt: number): number {
 // ---- Blooms ----
 
 export const BLOOM_SEC = 1.2;
+
+/** A counter is this share of its square, as a radius (audit A5: 0.34 was small from the back). */
+export const COUNTER_RADIUS = 0.42;
+
+/** Where the scene's name sits (audit A5), as shares of the screen's width and of its own opacity. */
+export const SCENE_NAME = {
+  /** In from the right and bottom edges. */
+  inset: 0.05,
+  opacity: 0.8,
+  /** The letters' size, of the screen's width. */
+  widthShare: 0.022,
+} as const;
+
+/**
+ * A counter that blooms again too soon is left out (audit A6): about 3 times a second at
+ * most, so no spot flashes faster than WCAG 2.3.1 allows, however fast the board plays.
+ */
+export const REBLOOM_MIN_GAP_SEC = 0.35;
+
+/** Whether a counter last bloomed at `lastAt` (seconds) may bloom again at `now`. */
+export function canRebloom(lastAt: number, now: number): boolean {
+  return now - lastAt >= REBLOOM_MIN_GAP_SEC - 1e-9;
+}
+
+/**
+ * How much light all the blooms may add together to any third of the screen, as a share of
+ * the brightest it can be. WCAG 2.3.1 counts a flash only from a swing of 0.1 or more, so
+ * with this under it a third of the screen cannot flash at all, however many counters
+ * sound together; a few blooms glow as they always did.
+ */
+export const BLOOM_LIGHT_BUDGET = 0.06;
+
+/**
+ * The share of a third of the screen that one white counter's bloom lights at full glow,
+ * with the swell at its largest: the halo (0.6 at the counter's edge, fading over 2.1
+ * radii) and the brightened counter. An upper bound, so a bloom is never brighter than the
+ * budget allows. `cell` is a square's side, in pixels.
+ */
+export function bloomShare(cell: number, width: number, height: number): number {
+  const rr = Math.max(0, cell) * COUNTER_RADIUS * 1.32;
+  const r0 = rr * 0.5;
+  const d = rr * 2.1;
+  const halo = (0.6 * Math.PI * d * (r0 + d + r0)) / 3;
+  const disc = 0.4 * Math.PI * rr * rr;
+  return (halo + disc) / Math.max(1, (width * height) / 3);
+}
+
+/**
+ * The factor for every live bloom's glow (1 = leave it): the blooms are scaled down together
+ * when what they add (each one's glow, its colour's brightness and `share`) would pass
+ * BLOOM_LIGHT_BUDGET.
+ */
+export function bloomGlowScale(blooms: readonly { glow: number; colour: Rgb }[], share: number): number {
+  let light = 0;
+  for (const b of blooms) light += Math.max(0, b.glow) * luminance(bloomColour(b.colour, b.glow)) * share;
+  return light > BLOOM_LIGHT_BUDGET ? BLOOM_LIGHT_BUDGET / light : 1;
+}
+
+/**
+ * A counter's colour as it blooms: brighter, with the same hue and the same strength of
+ * colour (audit A5: the white wash turned red to salmon and green to mint). The brightest
+ * channel rises towards full, the others with it.
+ */
+export function bloomColour(rgb: Rgb, glow: number): Rgb {
+  const g = Math.max(0, Math.min(1, glow));
+  const top = Math.max(rgb[0], rgb[1], rgb[2]);
+  if (g === 0 || top <= 0) return [rgb[0], rgb[1], rgb[2]];
+  const gain = Math.min(1 + 0.45 * g, 255 / top);
+  return [Math.min(255, rgb[0] * gain), Math.min(255, rgb[1] * gain), Math.min(255, rgb[2] * gain)];
+}
+
+const lin = (v: number): number => {
+  const s = v / 255;
+  return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+};
+const luminance = (c: Rgb): number => 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]);
+
+/** WCAG's contrast of one colour against another (1 = the same, 21 = black on white). */
+export function contrastRatio(a: Rgb, b: Rgb): number {
+  const la = luminance(a);
+  const lb = luminance(b);
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+}
+
+/** The screen's own dark. */
+export const AUDIENCE_BACKGROUND: Rgb = [5, 6, 10];
+
+/** A counter this dark would vanish into the screen (audit A5), so it gets a thin light ring. */
+export function counterNeedsRing(rgb: Rgb): boolean {
+  return contrastRatio(rgb, AUDIENCE_BACKGROUND) < 3;
+}
 
 export interface BloomShape {
   /** How much the counter swells (1 = its own size). */
