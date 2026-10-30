@@ -84,17 +84,22 @@ export interface ModalProps {
   onClose(): void;
   children: ReactNode;
   maxWidth?: number;
+  /**
+   * Something that stays put under a scrolling body (Help's Close). With it, the body scrolls
+   * on its own and this is never inside the scroll.
+   */
+  footer?: ReactNode;
 }
 
 /** A plain modal panel over a dimmed page, with the focus behaviour above. */
-export function Modal({ label, onClose, children, maxWidth = 560 }: ModalProps): JSX.Element {
+export function Modal({ label, onClose, children, maxWidth = 560, footer }: ModalProps): JSX.Element {
   const panel = useRef<HTMLDivElement | null>(null);
   const onKeyDown = useModalFocus(panel, onClose);
   // Focus moves in on open, even when nothing inside asks for it: Help's only button is
   // at the end of a long text, focus stayed on "?", and Esc and Tab went nowhere.
   useLayoutEffect(() => {
     const p = panel.current;
-    if (p && !p.contains(document.activeElement)) p.focus();
+    if (p && !p.contains(document.activeElement)) (p.querySelector<HTMLElement>('[data-autofocus]') ?? p).focus();
   }, []);
 
   return (
@@ -113,11 +118,18 @@ export function Modal({ label, onClose, children, maxWidth = 560 }: ModalProps):
         tabIndex={-1}
         style={{
           background: 'var(--bs-raised)', color: 'var(--bs-fg)', padding: 20,
-          borderRadius: 'var(--bs-radius-lg)', maxWidth, maxHeight: '80vh', overflowY: 'auto',
+          borderRadius: 'var(--bs-radius-lg)', maxWidth, maxHeight: '80vh', overflowY: footer ? 'hidden' : 'auto',
           display: 'flex', flexDirection: 'column', gap: 12, boxShadow: 'var(--bs-shadow)',
         }}
       >
-        {children}
+        {footer ? (
+          <>
+            <div data-scroll="" style={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {children}
+            </div>
+            <div style={{ flex: '0 0 auto' }}>{footer}</div>
+          </>
+        ) : children}
       </div>
     </div>
   );

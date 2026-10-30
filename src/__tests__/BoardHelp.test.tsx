@@ -13,7 +13,7 @@ afterEach(() => { act(() => root.unmount()); host.remove(); });
 /** One entry of the Help: its words, found by its title. */
 function entry(title: string): string {
   act(() => root.render(<BoardHelp />));
-  const t = [...host.querySelectorAll('span')].find((s) => s.textContent === title);
+  const t = [...host.querySelectorAll('h3')].find((s) => s.textContent === title);
   return t?.nextElementSibling?.textContent ?? '';
 }
 const all = (): string => { act(() => root.render(<BoardHelp />)); return host.textContent ?? ''; };

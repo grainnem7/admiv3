@@ -4,12 +4,12 @@
  * Presentational only (no props, no state, no audio).
  */
 
-interface HelpEntry {
+export interface HelpEntry {
   title: string;
   body: string;
 }
 
-const HELP: HelpEntry[] = [
+export const HELP: HelpEntry[] = [
   {
     title: 'Words used here',
     body: 'Pass: one time round the loop, left to right — scenes, loops and the ending all '
@@ -329,14 +329,39 @@ const HELP: HelpEntry[] = [
   },
 ];
 
+const sectionId = (title: string): string => `help-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
+
+/** Go to a section: scrolled to its top, focus on its heading (the address bar is left alone). */
+function goTo(title: string, from: HTMLElement): void {
+  const target = from.closest('[data-help]')?.querySelector<HTMLElement>(`#${sectionId(title)}`);
+  if (!target) return;
+  target.scrollIntoView?.({ block: 'start' });
+  target.focus();
+}
+
 export default function BoardHelp(): React.JSX.Element {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <h2 style={{ margin: 0, fontSize: 18 }}>How to play</h2>
+    <div data-help="" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <h2 tabIndex={-1} data-autofocus="" style={{ margin: 0, fontSize: 18 }}>How to play</h2>
+      <nav aria-label="Help sections">
+        <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexWrap: 'wrap', gap: '4px 12px' }}>
+          {HELP.map((e) => (
+            <li key={e.title}>
+              <a
+                href={`#${sectionId(e.title)}`}
+                onClick={(ev) => { ev.preventDefault(); goTo(e.title, ev.currentTarget); }}
+                style={{ display: 'inline-block', minHeight: 'var(--bs-target)', lineHeight: 'var(--bs-target)', fontSize: 14 }}
+              >
+                {e.title}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </nav>
       {HELP.map((e) => (
         <div key={e.title} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <span style={{ fontSize: 13, fontWeight: 600 }}>{e.title}</span>
-          <span style={{ fontSize: 12, color: 'var(--bs-fg2)', lineHeight: 1.45 }}>{e.body}</span>
+          <h3 id={sectionId(e.title)} tabIndex={-1} style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>{e.title}</h3>
+          <span style={{ fontSize: 14, color: 'var(--bs-fg2)', lineHeight: 1.45 }}>{e.body}</span>
         </div>
       ))}
     </div>

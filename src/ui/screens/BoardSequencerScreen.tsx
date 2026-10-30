@@ -224,7 +224,7 @@ import {
   allReferencedChannelIds, savedPlayersWork,
 } from '../../profiles/BoardProfiles';
 import LoopBankView from '../components/board/LoopBankView';
-import BoardHelp from '../components/board/BoardHelp';
+import { HelpDialog } from '../components/board/HelpDialog';
 
 // Polyrhythm roles: each colour/role can loop at its own length (0 = full grid).
 const POLY_ROLES: {
@@ -4980,12 +4980,6 @@ export default function BoardSequencerScreen() {
     </div>
   );
 
-  const helpContent = (
-    <>
-              <BoardHelp />
-    </>
-  );
-
   // The Ready check uses the same rule as the Play nudge, so a colour that will cause
   // trouble is named before the player starts rather than after.
   const matchingBoardColour = latestFrame
@@ -6333,10 +6327,7 @@ export default function BoardSequencerScreen() {
         })()}
 
         {showHelp && (
-          <Modal label="How to play" onClose={() => setShowHelp(false)}>
-            {helpContent}
-            <Button tone="secondary" autoFocus onClick={() => setShowHelp(false)}>Close</Button>
-          </Modal>
+          <HelpDialog onClose={() => setShowHelp(false)} />
         )}
 
         <div
