@@ -168,8 +168,12 @@ export function glideTint(cur: Rgb, target: Rgb, dt: number): Rgb {
 
 // ---- Before and after the piece ----
 
-/** How awake the board is before the piece and after it: dim, but there. */
-export const DIM_PRESENCE = 0.22;
+/**
+ * How awake the board is before the piece and after it: dim, but there. Raised from 0.22
+ * (audit A5): on a typical projector 0.22 was invisible. A venue brightness setting is for
+ * later; the number is one place to change.
+ */
+export const DIM_PRESENCE = 0.4;
 /** After the piece, or Stop: the slow fade back to the dim board. */
 export const FADE_SEC = 8;
 /** The first note: how quickly the board wakes up. */
@@ -212,6 +216,47 @@ export function bloomAt(age: number, reduced: boolean): BloomShape | null {
   if (reduced) return { scale: 1, glow: env, ripple: null };
   const out = 1 - (1 - u) ** 3;
   return { scale: 1 + 0.32 * env, glow: env, ripple: { r: 1 + 2.2 * out, alpha: 0.55 * (1 - u) ** 1.5 } };
+}
+
+/** A counter's size, as a share of its square (audit A5: was 0.34). */
+export const COUNTER_RADIUS = 0.42;
+
+/** The same square may not bloom again sooner than this: 3 a second at most (audit A6). */
+export const MIN_REBLOOM_SEC = 1 / MAX_PULSE_HZ;
+
+/** Whether a note heard at `now` on a square whose last bloom began at `lastAt` blooms again. */
+export function canRebloom(lastAt: number, now: number): boolean {
+  return now - lastAt >= MIN_REBLOOM_SEC - 1e-9;
+}
+
+/** How many squares may glow at full strength together before the glow is shared out. */
+const FULL_GLOW_COUNT = 6;
+
+/**
+ * The glow of each of `n` squares blooming at once: full for a few, shared out for many, so a
+ * whole board sounding together lifts the screen about as much as a handful (never to nothing).
+ */
+export function bloomGlowScale(n: number): number {
+  return n <= FULL_GLOW_COUNT ? 1 : Math.sqrt(FULL_GLOW_COUNT / n);
+}
+
+/**
+ * A colour brightened by `glow` (0..1) keeping its hue and colourfulness: only its value rises
+ * (towards full), no white is mixed in, so red stays red and green stays green.
+ */
+export function brightenKeepingHue(c: Rgb, glow: number): Rgb {
+  const g = Math.max(0, Math.min(1, glow));
+  const mx = Math.max(c[0], c[1], c[2]);
+  if (g === 0 || mx === 0) return [c[0], c[1], c[2]];
+  const target = mx + (255 - mx) * 0.55 * g;
+  const k = target / mx;
+  return [Math.min(255, c[0] * k), Math.min(255, c[1] * k), Math.min(255, c[2] * k)];
+}
+
+/** Whether a counter is so dark it would vanish on the dark screen: it gets a thin light ring. */
+export function isDarkCounter(c: Rgb): boolean {
+  const lin = (v: number): number => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; };
+  return 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]) < 0.04;
 }
 
 // ---- The band ----

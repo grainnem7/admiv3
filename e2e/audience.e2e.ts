@@ -96,7 +96,7 @@ test('after Stop the audience screen fades slowly to the dim board, and stays op
   await pause(aud, 3000);
   expect(Number(await picture(aud).getAttribute('data-presence'))).toBeGreaterThan(0.4);
   // Then the same dim board as before the piece, counters and all.
-  await expect(picture(aud)).toHaveAttribute('data-presence', '0.22', { timeout: 15_000 });
+  await expect(picture(aud)).toHaveAttribute('data-presence', '0.40', { timeout: 15_000 });
   await expect(picture(aud)).toHaveAttribute('data-counters', '2');
   expect(aud.isClosed()).toBe(false);
   // Leave Show and back changes nothing for it either.
