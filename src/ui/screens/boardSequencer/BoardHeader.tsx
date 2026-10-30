@@ -50,7 +50,7 @@ export function BoardHeader({
         <Button tone="quiet" onClick={onExit} aria-label={exitArmed ? 'Press again to stop the piece and exit' : 'Exit the Board Sequencer'}>
           {exitArmed ? '← Press again to leave' : '← Exit'}
         </Button>
-        <h1 style={{ fontSize: 18, margin: 0, flex: '0 0 auto' }}>{title}</h1>
+        <h1 style={{ fontSize: 20, margin: 0, flex: '0 0 auto' }}>{title}</h1>
         {/* Grows to fill the row; on a phone-narrow window it takes a row of its own rather
             than spilling past the edge (A3: nothing scrolls sideways at 320 px). */}
         <div style={{ flex: '1 1 240px', minWidth: 0 }}>{right}</div>

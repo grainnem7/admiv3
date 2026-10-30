@@ -259,3 +259,10 @@
   .bs-help-body { grid-template-columns: 1fr; grid-template-rows: minmax(0, 30%) minmax(0, 1fr); }
   .bs-help-nav { border-right: none; border-bottom: 1px solid var(--bs-border); padding-left: 12px; }
 }
+
+/* Text fields: room for the words inside the edge (A10). Checkboxes, radios and sliders are not text. */
+.bs-root input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="button"]),
+.bs-root textarea {
+  padding-left: 10px;
+  padding-right: 10px;
+}

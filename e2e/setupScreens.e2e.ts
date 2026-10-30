@@ -122,9 +122,9 @@ test('the Sound tab: each helper one line until opened; the Timing tab; New idea
   await expect(page.getByRole('slider', { name: /^Loose timing/ })).toBeVisible();
   await expect(page.getByText(/Groove \(Straight, Swung, Lazy\) sets Swing and Loose timing in one step/)).toBeVisible();
   // The research tools: folded under Session log, closed by default.
-  await expect(page.getByRole('button', { name: /^Save the session log/ })).toBeHidden();
+  await expect(page.getByRole('button', { name: /^Save session/ })).toBeHidden();
   await page.locator('details[data-session-log] > summary').click();
-  await expect(page.getByRole('button', { name: /^Save the session log/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Save session/ })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Describe board' })).toBeVisible();
   // The hat's line says Hat, not a cap emoji.
   await page.getByRole('tab', { name: 'Cap' }).click();

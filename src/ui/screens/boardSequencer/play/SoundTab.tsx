@@ -93,8 +93,8 @@ function grooveOf(swing: number, humanize: number): GrooveName | null {
 }
 
 const SECTION: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 8 };
-const HEADING: CSSProperties = { margin: 0, fontSize: 15, fontWeight: 700 };
-const NOTE: CSSProperties = { fontSize: 12, color: 'var(--bs-fg2)' };
+const HEADING: CSSProperties = { margin: 0, fontSize: 16, fontWeight: 700 };
+const NOTE: CSSProperties = { fontSize: 14, color: 'var(--bs-fg2)' };
 const CARD: CSSProperties = {
   display: 'flex', flexDirection: 'column', gap: 8, padding: 10,
   borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-raised)', border: '1px solid var(--bs-border)',
@@ -120,7 +120,7 @@ function HelperFold({ id, title, summary, children }: { id: string; title: strin
       >
         <span aria-hidden="true">{open ? '▾' : '▸'}</span>
         <span style={{ fontWeight: 600 }}>{title}</span>
-        <span style={{ ...NOTE, flex: 1, minWidth: 0, fontSize: 13 }}>{summary}</span>
+        <span style={{ ...NOTE, flex: 1, minWidth: 0, fontSize: 14 }}>{summary}</span>
       </button>
       {open && children}
     </div>
@@ -158,7 +158,7 @@ export function SoundTab(p: SoundTabProps): JSX.Element {
       <section aria-labelledby="sound-feel" style={SECTION}>
         <h3 id="sound-feel" style={HEADING}>Overall feel</h3>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>World</span>
+          <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>World</span>
           <SegmentedControl<SoundWorldChoice>
             label="Sound world"
             value={config.soundWorld}
@@ -194,7 +194,7 @@ export function SoundTab(p: SoundTabProps): JSX.Element {
           hint={inAbleton ? '→ Ableton Return A level (CC 22 on channel 16).' : 'How much room and echo around everything. A reverb or echo counter on the board takes over.'}
         />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>Groove</span>
+          <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>Groove</span>
           <SegmentedControl<GrooveName | 'custom'>
             label="Groove"
             value={groove ?? 'custom'}

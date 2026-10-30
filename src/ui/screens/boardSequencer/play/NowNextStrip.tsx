@@ -60,7 +60,7 @@ export function NowNextStrip(p: NowNextStripProps): JSX.Element {
         <Button tone="primary" onClick={p.onStartPiece}>▶ Start the piece</Button>
       )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, flex: '1 1 200px' }}>
-        <span style={{ fontSize: 18 * size, fontWeight: 700 }}>{p.nowName ? `Now: ${p.nowName}` : 'Now: no scene'}</span>
+        <span style={{ fontSize: 20 * size, fontWeight: 700 }}>{p.nowName ? `Now: ${p.nowName}` : 'Now: no scene'}</span>
         <span style={{ fontSize: 14 * size, color: 'var(--bs-fg2)' }}>
           {p.next ? `Next: ${p.next.name} in ${formatClock(p.next.inSec)}` : phase !== 'idle' ? 'No more scenes on the clock' : 'Scenes come in once the clock starts'}
         </span>
@@ -71,7 +71,7 @@ export function NowNextStrip(p: NowNextStripProps): JSX.Element {
         {p.loops.length > 0 && (
           <span style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 2 }} aria-label={`Loops playing: ${p.loops.join(', ')}`}>
             {p.loops.map((l) => (
-              <span key={l} style={{ fontSize: 12 * size, padding: '1px 8px', borderRadius: 999, background: 'var(--bs-accent-muted)', border: '1px solid var(--bs-accent)' }}>{l}</span>
+              <span key={l} style={{ fontSize: 14 * size, padding: '1px 8px', borderRadius: 999, background: 'var(--bs-accent-muted)', border: '1px solid var(--bs-accent)' }}>{l}</span>
             ))}
           </span>
         )}

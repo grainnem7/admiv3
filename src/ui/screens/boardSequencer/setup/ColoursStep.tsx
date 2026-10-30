@@ -146,7 +146,7 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
           }}
         >
           <strong>First: let it see the empty board</strong>
-          <span style={{ fontSize: 13 }}>
+          <span style={{ fontSize: 14 }}>
             Take every counter off, then press the button. It learns what each square looks
             like on its own, so counters are found by being unlike the board &mdash; and the
             wood is never offered as a colour.
@@ -157,7 +157,7 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
             </Button>
           </div>
           {learnMessage && (
-            <span role="status" aria-live="polite" style={{ fontSize: 13, fontWeight: 600 }}>{learnMessage}</span>
+            <span role="status" aria-live="polite" style={{ fontSize: 14, fontWeight: 600 }}>{learnMessage}</span>
           )}
         </div>
       )}
@@ -208,7 +208,7 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
             {found.colours.map((c, i) => (
               <span key={`${c.swatch}-${i}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                 <SwatchChip swatch={c.swatch} palette={palette} number={i + 1} size={26} />
-                <span style={{ fontSize: 12 }}>
+                <span style={{ fontSize: 14 }}>
                   {`${c.counters} ${c.counters === 1 ? 'counter' : 'counters'}`}
                   <br />
                   <span style={{ color: c.unsafe ? 'var(--bs-warn)' : 'var(--bs-fg2)' }}>
@@ -266,7 +266,7 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
           <SwatchChip swatch={pending.hex} palette={palette} size={36} />
           <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 600 }}>{pending.kindLabel}</div>
-            <div style={{ fontSize: 12, color: pending.unsafe ? 'var(--bs-warn)' : 'var(--bs-fg2)' }}>
+            <div style={{ fontSize: 14, color: pending.unsafe ? 'var(--bs-warn)' : 'var(--bs-fg2)' }}>
               {pending.unsafe
                 ? 'This looks like the board itself, so it would light up bare squares. Try a counter that stands out more from the wood, or add it and switch its job Off.'
                 : 'Nothing is saved until you press Add.'}
@@ -275,13 +275,13 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
                 these say how STRONG the colour was, which is the difference between
                 "you tapped the wood" and "this camera sends washed-out colour". A vivid
                 counter should read well above 40 saturation on any camera worth using. */}
-            <div style={{ fontSize: 11, color: 'var(--bs-fg2)', fontFamily: 'ui-monospace, monospace' }}>
+            <div style={{ fontSize: 14, color: 'var(--bs-fg2)', fontFamily: 'ui-monospace, monospace' }}>
               {`${pending.hex}  ·  hue ${Math.round(pending.h)}°  ·  saturation ${Math.round(pending.s)}  ·  brightness ${Math.round(pending.v)}`}
             </div>
             {/* How much of the counter its band will recognise. Low here is the reason a
                 counter that was just tapped can be listed as "0 on board". */}
             {pending.keeps !== undefined && (
-              <div style={{ fontSize: 12, color: pending.keeps < 0.6 ? 'var(--bs-warn)' : 'var(--bs-fg2)' }}>
+              <div style={{ fontSize: 14, color: pending.keeps < 0.6 ? 'var(--bs-warn)' : 'var(--bs-fg2)' }}>
                 {pending.keeps < 0.6
                   ? `Only recognises ${Math.round(pending.keeps * 100)}% of this counter, so it may be missed. Tap nearer the middle of the counter, or try a stronger colour.`
                   : `Recognises ${Math.round(pending.keeps * 100)}% of this counter.`}
@@ -322,7 +322,7 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
           hearing={hearing}
           hearNote={hearNote}
           rowExtras={laptop ? undefined : (c) => (
-            <span style={{ fontSize: 12, color: 'var(--bs-fg2)', whiteSpace: 'nowrap' }}>{`${counts[c.id] ?? 0} down`}</span>
+            <span style={{ fontSize: 14, color: 'var(--bs-fg2)', whiteSpace: 'nowrap' }}>{`${counts[c.id] ?? 0} down`}</span>
           )}
           rowMore={(c) => (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -367,7 +367,7 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
           display={`${settleWindowMs} ms`}
           onChange={onSettleWindow}
         />
-        <p style={{ margin: 0, fontSize: 12, color: 'var(--bs-fg2)' }}>Settle time takes effect once you are playing.</p>
+        <p style={{ margin: 0, fontSize: 14, color: 'var(--bs-fg2)' }}>Settle time takes effect once you are playing.</p>
         <LabeledSlider
           label="Counter height"
           min={0}
@@ -377,7 +377,7 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
           display={counterHeight === 0 ? 'flat' : `${Math.round(counterHeight * 100)}% of a square`}
           onChange={(v) => onCounterHeight(v / 100)}
         />
-        <p style={{ margin: 0, fontSize: 12, color: 'var(--bs-fg2)' }}>
+        <p style={{ margin: 0, fontSize: 14, color: 'var(--bs-fg2)' }}>
           A camera at an angle sees the tops of counters shifted towards the far side. This
           allows for it. If a counter sitting in its square reads in the square behind,
           raise it; if it reads in the square in front, lower it.
@@ -406,7 +406,7 @@ export function ColoursStep(props: ColoursStepProps): JSX.Element {
           {hands.checking ? 'Hold your hand over the board…' : 'Check my hand'}
         </Button>
         {hands.checkResult && (
-          <p role="status" style={{ margin: 0, fontSize: 12, color: 'var(--bs-fg2)' }}>{hands.checkResult}</p>
+          <p role="status" style={{ margin: 0, fontSize: 14, color: 'var(--bs-fg2)' }}>{hands.checkResult}</p>
         )}
         <LabeledSlider
           label="Space around a hand"

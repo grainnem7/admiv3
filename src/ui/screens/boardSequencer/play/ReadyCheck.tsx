@@ -58,11 +58,11 @@ export function ReadyList({ items }: { items: ReadyItem[] }): JSX.Element {
       <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
         {items.map((i, k) => (
           <li key={`${k}:${i.label}`} style={{ display: 'grid', gridTemplateColumns: '28px 1fr', gap: 8, alignItems: 'start' }}>
-            <span aria-hidden="true" style={{ fontWeight: 800, color: COLOUR[i.state], fontSize: 18, textAlign: 'center' }}>{MARK[i.state]}</span>
+            <span aria-hidden="true" style={{ fontWeight: 800, color: COLOUR[i.state], fontSize: 20, textAlign: 'center' }}>{MARK[i.state]}</span>
             <span>
               <span style={{ fontWeight: 600 }}>{i.label}</span>
               <span style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' }}>{` — ${WORD[i.state]}`}</span>
-              {i.fix && i.state !== 'ok' && <span style={{ display: 'block', fontSize: 13, color: 'var(--bs-fg2)' }}>{i.fix}</span>}
+              {i.fix && i.state !== 'ok' && <span style={{ display: 'block', fontSize: 14, color: 'var(--bs-fg2)' }}>{i.fix}</span>}
               {i.action && i.state !== 'ok' && (
                 <span style={{ display: 'block', marginTop: 4 }}>
                   <Button

@@ -100,7 +100,7 @@ export function PlayPanel({
       <span
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 8, padding: '4px 10px',
-          borderRadius: 999, background: 'var(--bs-elev)', color: 'var(--bs-fg)', fontSize: 13,
+          borderRadius: 999, background: 'var(--bs-elev)', color: 'var(--bs-fg)', fontSize: 14,
         }}
       >
         <span
@@ -137,12 +137,12 @@ export function PlayPanel({
       </span>
       {/* What ▶ Play the board is, said beside it (B16): there is no clock. */}
       {!running && (
-        <span id={playHintId} style={{ fontSize: 13, color: 'var(--bs-fg2)' }}>
+        <span id={playHintId} style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>
           No clock, no scenes: the piece starts from Show.
         </span>
       )}
       {handGuardWaiting && (
-        <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
+        <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>
           Hand guard: waiting for a clear view of the board
         </span>
       )}

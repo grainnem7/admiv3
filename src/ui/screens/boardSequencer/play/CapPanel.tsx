@@ -99,14 +99,14 @@ function outlineLookAlike(ctx: CanvasRenderingContext2D, look: HatBox): void {
   ctx.strokeRect(x, y, w, h);
   ctx.setLineDash([]);
   const label = 'looks like the hat';
-  ctx.font = '12px sans-serif';
+  ctx.font = '14px sans-serif';
   const tw = ctx.measureText(label).width + 8;
-  const ly = y > 20 ? y - 18 : Math.min(PREVIEW_H - 18, y + h + 2);
+  const ly = y > 22 ? y - 20 : Math.min(PREVIEW_H - 20, y + h + 2);
   const lx = Math.max(0, Math.min(PREVIEW_W - tw, x));
   ctx.fillStyle = '#000000b0';
-  ctx.fillRect(lx, ly, tw, 16);
+  ctx.fillRect(lx, ly, tw, 18);
   ctx.fillStyle = LOOK_ALIKE;
-  ctx.fillText(label, lx + 4, ly + 12);
+  ctx.fillText(label, lx + 4, ly + 14);
 }
 
 /** A control's value in words: "96 BPM", "70%". */
@@ -139,7 +139,7 @@ export interface CapPanelProps {
   boardCameraId: string;
 }
 
-const NOTE: CSSProperties = { fontSize: 12, color: 'var(--bs-fg2)', margin: 0 };
+const NOTE: CSSProperties = { fontSize: 14, color: 'var(--bs-fg2)', margin: 0 };
 const CARD: CSSProperties = {
   display: 'flex', flexDirection: 'column', gap: 8, padding: 10,
   borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-raised)', border: '1px solid var(--bs-border)',
@@ -330,7 +330,7 @@ function LearnHat(p: CapPanelProps & { showHat: boolean; onShowHat(on: boolean):
       {noCamera && <span id={noteId} style={NOTE}>{noCamera}</span>}
       {/* Reserved: the countdown and progress come and go without moving what is below. */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <span style={{ fontSize: 13, minHeight: 18 }}>{h ? hatLearningText(h) : ''}</span>
+        <span style={{ fontSize: 14, minHeight: 18 }}>{h ? hatLearningText(h) : ''}</span>
         <div
           role={h ? 'progressbar' : undefined}
           aria-label={h ? `Learning ${h.step === 'room' ? 'the room' : 'the hat'}: how far it has got` : undefined}
@@ -347,7 +347,7 @@ function LearnHat(p: CapPanelProps & { showHat: boolean; onShowHat(on: boolean):
           />
         </div>
       </div>
-      <span style={{ fontSize: 13, fontWeight: 600, color: good ? 'var(--bs-ok)' : 'var(--bs-warn)' }}>{line}</span>
+      <span style={{ fontSize: 14, fontWeight: 600, color: good ? 'var(--bs-ok)' : 'var(--bs-warn)' }}>{line}</span>
       {learnt && (
         <>
           <LabeledSlider
@@ -383,7 +383,7 @@ function SpeedRange({ range, onChange }: { range: ControlRange; onChange(r: Cont
   const limits = CONTROL_RANGE_LIMITS.tempo;
   const hold = (v: number): number => Math.max(limits.min, Math.min(limits.max, Math.round(v)));
   const box = (key: 'min' | 'max', label: string): JSX.Element => (
-    <label style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 13, flex: 1 }}>
+    <label style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 14, flex: 1 }}>
       {label}
       <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
         <input
@@ -414,7 +414,7 @@ function SpeedRange({ range, onChange }: { range: ControlRange; onChange(r: Cont
 function Bar({ label, role, pos, value }: { label: string; role: CapRole; pos: number | null; value: number | undefined }): JSX.Element {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <span style={{ fontSize: 13 }}>
+      <span style={{ fontSize: 14 }}>
         <b>{label}</b>{` → ${CAP_ROLE_LABELS[role]}`}{role !== 'off' ? `: ${capValueText(role, value)}` : ''}
       </span>
       {role !== 'off' && (
@@ -458,7 +458,7 @@ export function CapPanel(p: CapPanelProps): JSX.Element {
           <div style={CARD}>
             <span style={{ fontWeight: 600 }}>What the hat&rsquo;s moves do</span>
             {(['xRole', 'yRole'] as const).map((k) => (
-              <label key={k} style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 13, minWidth: 0 }}>
+              <label key={k} style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 14, minWidth: 0 }}>
                 {MOVE_LABELS[k]}
                 <select value={s[k]} onChange={(e) => onChange({ [k]: e.target.value as CapRole })} style={{ minHeight: 'var(--bs-target)', maxWidth: '100%' }}>
                   {ROLES.map((r) => <option key={r} value={r}>{CAP_ROLE_LABELS[r]}</option>)}
@@ -485,7 +485,7 @@ export function CapPanel(p: CapPanelProps): JSX.Element {
 
           <div style={CARD}>
             <Preview {...p} showHat={showHat} lookAlike={lookAlike} />
-            <span role="status" aria-live="polite" style={{ fontSize: 13, fontWeight: 600, color: statusColour }}>{status}</span>
+            <span role="status" aria-live="polite" style={{ fontSize: 14, fontWeight: 600, color: statusColour }}>{status}</span>
             {!p.mouse && <span style={NOTE}>{s.learntHat ? 'Looking for the learnt hat.' : 'Looking for the cap’s colour.'}</span>}
             {s.faceAssist && !p.mouse && (
               <span style={NOTE}>
@@ -495,7 +495,7 @@ export function CapPanel(p: CapPanelProps): JSX.Element {
                       : ''}
               </span>
             )}
-            <label style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 13, minWidth: 0 }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 14, minWidth: 0 }}>
               Camera facing the player
               <select value={s.cameraId} onChange={(e) => onChange({ cameraId: e.target.value })} style={{ minHeight: 'var(--bs-target)', width: '100%', minWidth: 0 }}>
                 <option value="">Any camera that isn&rsquo;t the board&rsquo;s</option>
@@ -507,7 +507,7 @@ export function CapPanel(p: CapPanelProps): JSX.Element {
               </select>
             </label>
             {s.cameraId !== '' && s.cameraId === p.boardCameraId && (
-              <span role="alert" style={{ fontSize: 13, color: 'var(--bs-warn)' }}>
+              <span role="alert" style={{ fontSize: 14, color: 'var(--bs-warn)' }}>
                 This is the board&rsquo;s camera. It looks down at the board, so it can&rsquo;t see the
                 player&rsquo;s head &mdash; choose the camera facing the player.
               </span>

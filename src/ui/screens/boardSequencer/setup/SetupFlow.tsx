@@ -80,7 +80,7 @@ export function SetupFlow({
     >
       <div>
         <h2 ref={headingRef} tabIndex={-1} style={{ margin: 0, fontSize: 20 }}>{heading}</h2>
-        {hint && <p style={{ margin: '4px 0 0', color: 'var(--bs-fg2)', fontSize: 13 }}>{hint}</p>}
+        {hint && <p style={{ margin: '4px 0 0', color: 'var(--bs-fg2)', fontSize: 14 }}>{hint}</p>}
       </div>
 
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>

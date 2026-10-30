@@ -46,7 +46,7 @@ export interface ColourTableProps {
   abletonShares?: ReadonlyMap<string, { channel: number; withId: string }>;
 }
 
-const NOTE: CSSProperties = { fontSize: 12, color: 'var(--bs-fg2)' };
+const NOTE: CSSProperties = { fontSize: 14, color: 'var(--bs-fg2)' };
 const CELL: CSSProperties = { padding: '6px 3px', borderTop: '1px solid var(--bs-border)', verticalAlign: 'middle' };
 // The Play screen's side panel is narrow: the selects take their column's width, and
 // show as much of a long name as fits.

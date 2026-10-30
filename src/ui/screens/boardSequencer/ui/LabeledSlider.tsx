@@ -48,7 +48,7 @@ export function LabeledSlider({
         }}
       />
       {/* Reserved space so a reason appearing never shifts the layout under the pointer. */}
-      <span id={reasonId} style={{ minHeight: 16, fontSize: 12, color: 'var(--bs-fg2)' }}>
+      <span id={reasonId} style={{ minHeight: 16, fontSize: 14, color: 'var(--bs-fg2)' }}>
         {reason ?? ''}
       </span>
     </div>

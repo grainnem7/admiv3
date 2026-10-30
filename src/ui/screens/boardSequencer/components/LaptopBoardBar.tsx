@@ -43,7 +43,7 @@ export function LaptopBoardBar({
   if (channels.length === 0) {
     return (
       <div role="group" aria-label="Laptop board" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-        <span style={{ color: 'var(--bs-fg2)', fontSize: 13, flex: '1 1 240px' }}>
+        <span style={{ color: 'var(--bs-fg2)', fontSize: 14, flex: '1 1 240px' }}>
           {knownColours === 0
             ? 'No counter colours yet. Add four to play with now; the real counters can be added later in Set up → Colours.'
             : 'No colour has a job yet. Give one a job in Set up → Colours, or add four ready-made colours.'}
@@ -82,7 +82,7 @@ export function LaptopBoardBar({
           >
             <SwatchChip swatch={c.swatch} palette={palette} number={i + 1} size={20} />
             <span>{describeChannel(c)}</span>
-            <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>{ROLE_LABELS[c.role]}</span>
+            <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>{ROLE_LABELS[c.role]}</span>
           </button>
         ))}
       </div>
@@ -96,14 +96,14 @@ export function LaptopBoardBar({
       </Button>
       {adding && onAddColour && (
         <div role="group" aria-label="The new colour's job" style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center', flexBasis: '100%' }}>
-          <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>The new colour plays:</span>
+          <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>The new colour plays:</span>
           {NEW_JOBS.map((j) => (
             <Button key={j.role} onClick={() => { onAddColour(j.role); setAdding(false); }}>{j.label}</Button>
           ))}
           <Button tone="quiet" onClick={() => setAdding(false)}>Cancel</Button>
         </div>
       )}
-      <span style={{ fontSize: 12, color: 'var(--bs-fg2)', flex: '1 1 160px' }}>
+      <span style={{ fontSize: 14, color: 'var(--bs-fg2)', flex: '1 1 160px' }}>
         {`${count} on the board. Click a square to put a counter down, click it again to lift it.`}
       </span>
       <Button

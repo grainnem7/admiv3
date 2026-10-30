@@ -161,7 +161,7 @@ const sceneChipSurface = (i: number): string => (i % 2 === 0 ? 'var(--bs-raised)
 
 /** A chip's padding and edges, either side: what its words never get. */
 const CHIP_EDGES_PX = 18;
-const CHIP_FONT = "700 13px system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
+const CHIP_FONT = "700 14px system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
 let chipCanvas: CanvasRenderingContext2D | null | undefined;
 /** How wide the chip's words are drawn; without a canvas (tests), 8 px a character. */
 function chipTextWidth(text: string): number {
@@ -191,8 +191,8 @@ export function sceneChipLabel(
 /** "Other ways to make a loop" stays open for the rest of the session once opened. */
 let otherWaysOpen = false;
 
-const heading = { margin: 0, fontSize: 18, fontWeight: 800 } as const;
-const note = { fontSize: 13, color: 'var(--bs-fg2)', margin: 0 } as const;
+const heading = { margin: 0, fontSize: 20, fontWeight: 800 } as const;
+const note = { fontSize: 14, color: 'var(--bs-fg2)', margin: 0 } as const;
 const card = { padding: 12, borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-elev)', display: 'flex', flexDirection: 'column', gap: 6 } as const;
 
 const ENDINGS: { value: EndingStyle; label: string; what: string }[] = [
@@ -233,7 +233,7 @@ export function PieceSteps(p: PieceStepsProps): JSX.Element {
               }}
             >
               <span style={{ display: 'block', fontWeight: 800 }}>{`${s.n} · ${s.label}`}</span>
-              <span style={{ display: 'block', fontSize: 12, color: 'var(--bs-fg2)' }}>{s.status}</span>
+              <span style={{ display: 'block', fontSize: 14, color: 'var(--bs-fg2)' }}>{s.status}</span>
             </button>
           );
         })}
@@ -332,7 +332,7 @@ function LoopsStep(p: PieceStepsProps): JSX.Element {
                 onChange={(e) => p.onRenameLoop(l.slot, e.target.value)}
                 style={{ width: 120, minHeight: 'var(--bs-target)' }}
               />
-              <span style={{ fontSize: 12, color: on ? 'var(--bs-ok)' : 'var(--bs-fg2)', minWidth: 60 }}>{loopStateText(l, p.running, p.loopFadePasses > 0)}</span>
+              <span style={{ fontSize: 14, color: on ? 'var(--bs-ok)' : 'var(--bs-fg2)', minWidth: 60 }}>{loopStateText(l, p.running, p.loopFadePasses > 0)}</span>
               <span style={{ flex: 1 }} />
               {empty ? (oldWays && (
                 <Button
@@ -365,7 +365,7 @@ function LoopsStep(p: PieceStepsProps): JSX.Element {
                   </Button>}
                 </>
               )}
-              {oldWays && <Button tone="quiet" onClick={() => p.onDrawLoop(l.slot)} aria-label={`Edit the notes of loop ${l.slot + 1}`} title="See and change this loop's notes">✎ Edit notes</Button>}
+              {oldWays && <Button tone="quiet" onClick={() => p.onDrawLoop(l.slot)} aria-label={`Edit notes: loop ${l.slot + 1}`} title="See and change this loop's notes">✎ Edit notes</Button>}
               {!empty && <Button tone="quiet" onClick={() => p.onClearLoop(l.slot)} aria-label={`Clear loop ${l.slot + 1}`} title="Clear this loop">✕</Button>}
             </li>
           );
@@ -423,7 +423,7 @@ function EnergyGraph({ scenes, lengthSec }: { scenes: readonly Scene[]; lengthSe
           );
         })}
       </svg>
-      <span aria-hidden="true" style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>{`Energy: ${words.join(' · ')}`}</span>
+      <span aria-hidden="true" style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>{`Energy: ${words.join(' · ')}`}</span>
     </div>
   );
 }
@@ -532,7 +532,7 @@ function ScenesStep(p: PieceStepsProps): JSX.Element {
             />
           ))}
           {p.deletedSceneName && (
-            <div role="status" style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 }}>
+            <div role="status" style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 14 }}>
               <span>{`Deleted “${p.deletedSceneName}”.`}</span>
               <Button ref={undoRef} tone="secondary" onClick={p.onUndoDelete}>Undo</Button>
             </div>
@@ -613,8 +613,8 @@ function ColourTimeRow({ colour: c, lengthSec, palette, onChange }: { colour: Pi
         {/* The counters' own two-tone ring, as in the colour table (A16): a dark counter stays seen. */}
         <SwatchChip swatch={c.swatch} palette={palette} surface={palette.elev} size={18} />
         <span style={{ fontWeight: 700, minWidth: 64 }}>{c.name}</span>
-        <span style={{ fontSize: 12, color: 'var(--bs-fg2)', minWidth: 60 }}>{c.job}</span>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+        <span style={{ fontSize: 14, color: 'var(--bs-fg2)', minWidth: 60 }}>{c.job}</span>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14 }}>
           Comes in at
           <input
             type="text" value={text} placeholder="from the start" aria-invalid={problem !== null}
@@ -631,7 +631,7 @@ function ColourTimeRow({ colour: c, lengthSec, palette, onChange }: { colour: Pi
           />
         </label>
       </div>
-      {problem && <span role="alert" style={{ fontSize: 12, color: 'var(--bs-warn)' }}>{problem}</span>}
+      {problem && <span role="alert" style={{ fontSize: 14, color: 'var(--bs-warn)' }}>{problem}</span>}
     </div>
   );
 }
@@ -660,7 +660,7 @@ function EndingStep(p: PieceStepsProps): JSX.Element {
               }}
             >
               <span style={{ fontWeight: 700 }}>{`${on ? '● ' : '○ '}${e.label}`}</span>
-              <span style={{ display: 'block', fontSize: 12, color: 'var(--bs-fg2)' }}>{e.what}</span>
+              <span style={{ display: 'block', fontSize: 14, color: 'var(--bs-fg2)' }}>{e.what}</span>
             </button>
           );
         })}
@@ -683,7 +683,7 @@ function EndingStep(p: PieceStepsProps): JSX.Element {
         ]}
       />
       {endingTooLong(perf, p.passSec) && (
-        <span role="alert" style={{ fontSize: 12, color: 'var(--bs-warn)' }}>The ending takes as long as half the piece at this tempo. Choose fewer passes or a longer length.</span>
+        <span role="alert" style={{ fontSize: 14, color: 'var(--bs-warn)' }}>The ending takes as long as half the piece at this tempo. Choose fewer passes or a longer length.</span>
       )}
       <p style={note}>
         The piece starts from <b>Show → ▶ Start the piece</b>, or <b>Rehearse from here</b> on a
@@ -696,7 +696,7 @@ function EndingStep(p: PieceStepsProps): JSX.Element {
         <Button tone="quiet" onClick={p.onRestore}>⤒ Restore from a file</Button>
       </div>
       <p role="status" style={note}>{p.diskLine}</p>
-      {p.restoreError && <span role="alert" style={{ fontSize: 12, color: 'var(--bs-danger)' }}>{p.restoreError}</span>}
+      {p.restoreError && <span role="alert" style={{ fontSize: 14, color: 'var(--bs-danger)' }}>{p.restoreError}</span>}
       <StepFooter back={{ label: 'Scenes', onClick: () => p.onStep('scenes') }} next={{ label: 'Go to Show', onClick: p.onShow, primary: true }} />
     </section>
   );
@@ -714,7 +714,7 @@ function LengthField({ lengthSec, scenes, onChange }: { lengthSec: number; scene
   const late = scenes.filter((s) => typeof s.at === 'number' && s.at >= lengthSec).map((s) => s.name);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
-      <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4, fontSize: 13 }}>
+      <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4, fontSize: 14 }}>
         Length of the piece
         <input
           type="text" value={text} aria-invalid={problem !== null} aria-describedby="perform-length-problem"
@@ -728,7 +728,7 @@ function LengthField({ lengthSec, scenes, onChange }: { lengthSec: number; scene
           }}
           style={{ width: 90, minHeight: 'var(--bs-target)' }}
         />
-        <span id="perform-length-problem" style={{ fontSize: 12, color: problem ? 'var(--bs-warn)' : 'transparent' }}>{problem ?? ' '}</span>
+        <span id="perform-length-problem" style={{ fontSize: 14, color: problem ? 'var(--bs-warn)' : 'transparent' }}>{problem ?? ' '}</span>
       </label>
       {changed && scenes.length > 0 && (
         <p role="status" style={note}>
@@ -827,32 +827,32 @@ function SceneRow(r: SceneRowProps): JSX.Element {
       }}
     >
       <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-        <span aria-hidden="true" style={{ minWidth: 26, height: 26, borderRadius: 999, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, border: '1px solid var(--bs-border-control)', background: 'var(--bs-raised)' }}>{r.number}</span>
+        <span aria-hidden="true" style={{ minWidth: 26, height: 26, borderRadius: 999, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 14, border: '1px solid var(--bs-border-control)', background: 'var(--bs-raised)' }}>{r.number}</span>
         <button
           type="button" aria-expanded={r.open} onClick={r.onToggleOpen} data-scene-row={s.id}
           style={{ flex: '1 1 200px', minHeight: 'var(--bs-target)', textAlign: 'left', background: 'transparent', border: 'none', color: 'inherit', cursor: 'pointer' }}
         >
           <span style={{ fontWeight: 700 }}>{`${typeof s.at === 'number' ? formatClock(s.at) : 'by hand'} · ${s.name}${r.current ? ' · on now' : ''}`}</span>
-          <span style={{ display: 'block', fontSize: 12, color: 'var(--bs-fg2)' }}>{summary}</span>
+          <span style={{ display: 'block', fontSize: 14, color: 'var(--bs-fg2)' }}>{summary}</span>
         </button>
         {r.onRehearse && (
           <Button
             tone="secondary"
             // It goes once the rehearsal plays: focus goes to ■ Stop, one press from stopping it.
             onClick={(e) => { r.onRehearse?.(); void focusWhenGone(() => document.getElementById(PLAY_STOP_ID), e.currentTarget, 20_000); }}
-            aria-label={`Rehearse from ${s.name}: play the piece from ${typeof s.at === 'number' ? formatClock(s.at) : ''}`}
+            aria-label={`Rehearse from here: ${s.name}, play the piece from ${typeof s.at === 'number' ? formatClock(s.at) : ''}`}
           >
             ▶ Rehearse from here
           </Button>
         )}
         {r.onGo && (
-          <Button tone={r.current ? 'selected' : 'secondary'} aria-pressed={r.current} onClick={r.onGo} aria-label={`Jump to ${s.name} now`}>{r.current ? 'On now' : 'Jump here now'}</Button>
+          <Button tone={r.current ? 'selected' : 'secondary'} aria-pressed={r.current} onClick={r.onGo} aria-label={`${r.current ? 'On now' : 'Jump here now'}: ${s.name}`}>{r.current ? 'On now' : 'Jump here now'}</Button>
         )}
       </div>
       {r.open && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingLeft: 4 }}>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4, fontSize: 13 }}>
+            <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4, fontSize: 14 }}>
               Name
               <input
                 type="text" defaultValue={s.name} aria-label="Scene name"
@@ -860,7 +860,7 @@ function SceneRow(r: SceneRowProps): JSX.Element {
                 style={{ width: 140, minHeight: 'var(--bs-target)' }}
               />
             </label>
-            <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4, fontSize: 13 }}>
+            <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4, fontSize: 14 }}>
               Comes in at
               <input
                 type="text" value={timeText} placeholder="m:ss" aria-invalid={problem !== null} aria-label={`When ${s.name} comes in (minutes:seconds)`}
@@ -876,9 +876,9 @@ function SceneRow(r: SceneRowProps): JSX.Element {
               />
             </label>
           </div>
-          {problem && <span role="alert" style={{ fontSize: 12, color: 'var(--bs-warn)' }}>{problem}</span>}
+          {problem && <span role="alert" style={{ fontSize: 14, color: 'var(--bs-warn)' }}>{problem}</span>}
           <div role="group" aria-label="Loops in this scene" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {saved.length === 0 && <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>No loops saved yet.</span>}
+            {saved.length === 0 && <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>No loops saved yet.</span>}
             {emptyInScene.map((l) => (
               <button
                 key={`empty${l.slot}`} type="button"
@@ -909,7 +909,7 @@ function SceneRow(r: SceneRowProps): JSX.Element {
             })}
           </div>
           {/* A scene with no loops is silence unless the player plays: only on purpose (F4). */}
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, minHeight: 'var(--bs-target)', cursor: 'pointer' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, minHeight: 'var(--bs-target)', cursor: 'pointer' }}>
             <input
               type="checkbox" checked={s.alone === true}
               onChange={(e) => r.onEdit({ alone: e.target.checked })}
@@ -917,41 +917,41 @@ function SceneRow(r: SceneRowProps): JSX.Element {
             />
             <span>{`${who.Name} alone: no loops, only what ${who.name} plays`}</span>
           </label>
-          <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>Energy</span>
+          <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>Energy</span>
           <SegmentedControl<number>
             label="Energy of this scene" value={s.settings.sceneEnergy} onChange={(e) => set({ sceneEnergy: e as SceneEnergy })}
             options={[{ value: 0, label: ENERGY_NAMES[0] }, ...ENERGY_LEVELS.map((e) => ({ value: e, label: ENERGY_NAMES[e] }))]}
           />
-          <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>{ENERGY_WORDS[s.settings.sceneEnergy]}</span>
+          <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>{ENERGY_WORDS[s.settings.sceneEnergy]}</span>
           <button
             type="button" aria-expanded={more} onClick={toggleMore}
             style={{ alignSelf: 'stretch', textAlign: 'left', background: 'transparent', border: 'none', borderTop: '1px solid var(--bs-border)', color: 'inherit', minHeight: 'var(--bs-target)', cursor: 'pointer', padding: '6px 0' }}
           >
             <span style={{ fontWeight: 700 }}>{`${more ? '▾' : '▸'} More for this scene`}</span>
-            {!more && <span style={{ display: 'block', fontSize: 12, color: 'var(--bs-fg2)' }}>{moreSummary}</span>}
+            {!more && <span style={{ display: 'block', fontSize: 14, color: 'var(--bs-fg2)' }}>{moreSummary}</span>}
           </button>
           {more && (<>
           <SegmentedControl<SoundWorldChoice> label="Sound world" showLabel value={s.settings.soundWorld} onChange={(soundWorld) => set({ soundWorld })} options={r.worldOptions} />
-          <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>Band</span>
+          <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>Band</span>
           <SegmentedControl<BandLevel>
             label="Band" value={s.settings.band} onChange={(band) => set({ band })}
             options={[{ value: 'off', label: 'Off' }, { value: 'gentle', label: 'Quiet' }, { value: 'full', label: 'Full' }]}
           />
           {s.settings.band !== 'off' && <BandJobsChoice value={s.settings.bandJobs} onChange={(bandJobs) => set({ bandJobs })} />}
-          <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>Lead-in</span>
+          <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>Lead-in</span>
           <SegmentedControl<LeadIn>
             label="Lead-in" value={s.leadIn ?? 'none'} onChange={(leadIn) => r.onEdit({ leadIn })}
             options={LEAD_INS.map((l) => ({ value: l, label: LEAD_IN_WORDS[l].label, hint: LEAD_IN_WORDS[l].what }))}
           />
-          <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>{`${LEAD_IN_WORDS[s.leadIn ?? 'none'].what}${s.leadIn ? ' Brought in by hand, it plays in what is left of that pass.' : ''}`}</span>
+          <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>{`${LEAD_IN_WORDS[s.leadIn ?? 'none'].what}${s.leadIn ? ' Brought in by hand, it plays in what is left of that pass.' : ''}`}</span>
           <ChordChoice value={s.settings.chords} onChange={(chords) => set({ chords })} />
-          <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>Extra notes</span>
+          <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>Extra notes</span>
           <SegmentedControl<number>
             label="Extra notes" value={nearestStep(FILL_STEPS, s.settings.fillAmount)}
             onChange={(k) => set({ fillAmount: FILL_STEPS[k].value })}
             options={FILL_STEPS.map((x, k) => ({ value: k, label: x.label }))}
           />
-          <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>Sounds change</span>
+          <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>Sounds change</span>
           <SegmentedControl<number>
             label="Sounds change" value={nearestStep(EVOLVE_STEPS, s.settings.evolveAmount)}
             onChange={(k) => set({ evolveAmount: EVOLVE_STEPS[k].value })}
@@ -959,7 +959,7 @@ function SceneRow(r: SceneRowProps): JSX.Element {
           />
           <LabeledSlider label={WORDS.speed} min={40} max={240} value={s.settings.bpm} display={`${s.settings.bpm} BPM`} onChange={(v) => set({ bpm: Math.round(v) })} />
           {/* Gradually: when it comes in while the board plays, from the speed then to this one. */}
-          <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>Reach this speed</span>
+          <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>Reach this speed</span>
           <SegmentedControl<'once' | 'gradually'>
             label="Reach this speed" value={glide > 0 ? 'gradually' : 'once'}
             onChange={(v) => {
@@ -975,8 +975,8 @@ function SceneRow(r: SceneRowProps): JSX.Element {
             />
           )}
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <Button tone="secondary" onClick={r.onNewIdeas} aria-label={`New ideas for ${s.name}`}>↻ New ideas</Button>
-            <span style={{ fontSize: 12, color: 'var(--bs-fg2)', flex: '1 1 200px' }}>
+            <Button tone="secondary" onClick={r.onNewIdeas} aria-label={`New ideas: ${s.name}`}>↻ New ideas</Button>
+            <span style={{ fontSize: 14, color: 'var(--bs-fg2)', flex: '1 1 200px' }}>
               {`This scene plays the same ideas every rehearsal.${kept > 0 ? ` ${kept} AI ${kept === 1 ? 'idea is' : 'ideas are'} kept for it.` : ''} New ideas gives it different ones.`}
             </span>
           </div>

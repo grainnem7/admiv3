@@ -194,7 +194,7 @@ const orientationOf = (c: Pick<BoardSequencerStored, 'mirrorX' | 'mirrorY' | 'ca
   mirrorX: c.mirrorX, mirrorY: c.mirrorY, rotation: c.cameraRotation,
 });
 
-const REASON_STYLE = { display: 'block', minHeight: 14, fontSize: 11, opacity: 0.7 } as const;
+const REASON_STYLE = { display: 'block', minHeight: 14, fontSize: 14, opacity: 0.7 } as const;
 
 const REMOVAL_LABELS: { value: ControlRemoval; label: string }[] = [
   { value: 'hold', label: 'Hold the last value' },
@@ -3047,7 +3047,7 @@ export default function BoardSequencerScreen() {
         onChange={(v) => { update({ bpm: v }); holdSpeed(v); engineRef.current?.setBpm(v); /* live, not only on the next start */ }}
       />
       {/* One swing, said once (A2): Sound → Groove sets these two in one step, here they are fine. */}
-      <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
+      <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>
         Sound → Overall feel → Groove (Straight, Swung, Lazy) sets Swing and Loose timing in one step. Here they are set finely.
       </span>
       <LabeledSlider
@@ -3061,17 +3061,17 @@ export default function BoardSequencerScreen() {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         <span style={{ fontWeight: 600 }}>Loop length per part</span>
-        <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
+        <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>
           Off = all {config.cols} steps. A shorter loop drifts against the others.
         </span>
         {config.phrases && (
-          <span role="note" style={{ fontSize: 12, color: 'var(--bs-warn)' }}>
+          <span role="note" style={{ fontSize: 14, color: 'var(--bs-warn)' }}>
             Colours playing a tune (Sound tab) fill the whole loop: leave their part Off, or the parts fight each other.
           </span>
         )}
         {POLY_ROLES.map(({ role, field, label }) => (
           <div key={role} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <span style={{ fontSize: 13 }}>{label}</span>
+            <span style={{ fontSize: 14 }}>{label}</span>
             <SegmentedControl<number>
               label={`${label} loop length`}
               value={config[field]}
@@ -3093,7 +3093,7 @@ export default function BoardSequencerScreen() {
           { label: WORDS.pages, value: config.numPages, choices: [1, 2, 4], set: (n: number) => setPagesCount(n) },
         ]).map((g) => (
           <div key={g.label} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <span style={{ fontSize: 13 }}>{g.label}</span>
+            <span style={{ fontSize: 14 }}>{g.label}</span>
             <SegmentedControl<number>
               label={g.label} value={g.value} disabled={gridReason !== null}
               onChange={g.set}
@@ -3101,7 +3101,7 @@ export default function BoardSequencerScreen() {
             />
           </div>
         ))}
-        <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
+        <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>
           {`${WORDS.pages}: 1 is the board alone. 2 or 4 keeps the board as pages A, B…, played one after another.`}
         </span>
         <span style={REASON_STYLE}>{gridReason ?? ''}</span>
@@ -3109,7 +3109,7 @@ export default function BoardSequencerScreen() {
 
       {config.numPages > 1 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
+          <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>
             The selected page (●) plays live; Capture freezes it and moves on. The loop is {config.numPages * config.cols} steps.
           </span>
           <div role="group" aria-label="Pages" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -3152,7 +3152,7 @@ export default function BoardSequencerScreen() {
         <span style={REASON_STYLE}>{running ? 'Stop playing to change the song.' : ''}</span>
       </label>
       {selectedSongId && (
-        <p style={{ fontSize: 12, color: 'var(--bs-fg2)', margin: 0 }}>
+        <p style={{ fontSize: 14, color: 'var(--bs-fg2)', margin: 0 }}>
           {songStatus === 'loading' && 'Loading song…'}
           {songStatus === 'loaded' && 'Song ready: the board locks to its tempo and chords.'}
           {songStatus === 'error' && 'The song failed to load.'}
@@ -3991,20 +3991,20 @@ export default function BoardSequencerScreen() {
       />
       {remoteEnabled && (
         <>
-          <span role="status" style={{ fontSize: 13, fontWeight: 600, color: remoteLink.others > 0 ? (remoteLink.reaching ? 'var(--bs-ok)' : 'var(--bs-warn)') : 'var(--bs-fg2)' }}>
+          <span role="status" style={{ fontSize: 14, fontWeight: 600, color: remoteLink.others > 0 ? (remoteLink.reaching ? 'var(--bs-ok)' : 'var(--bs-warn)') : 'var(--bs-fg2)' }}>
             {remoteLink.others > 0 ? (remoteLink.reaching ? '✓ iPad connected' : '! iPad not reaching')
               : remoteLink.status === 'open' ? 'Waiting for the iPad…'
                 : remoteLink.status === 'lost' ? 'Link lost — reconnecting…' : 'Starting…'}
           </span>
-          {ipadOutOfDate && <span role="alert" style={{ fontSize: 13, fontWeight: 600, color: 'var(--bs-warn)' }}>{ipadOutOfDateText}</span>}
+          {ipadOutOfDate && <span role="alert" style={{ fontSize: 14, fontWeight: 600, color: 'var(--bs-warn)' }}>{ipadOutOfDateText}</span>}
           {remoteLink.others > 0 ? null : remoteInfo && !remoteInfo.lan ? (
-            <span style={{ fontSize: 12, color: 'var(--bs-warn)' }}>
+            <span style={{ fontSize: 14, color: 'var(--bs-warn)' }}>
               The iPad can&apos;t reach this laptop yet: ADMI was started without the local
               network. Close ADMI&apos;s server and start it with <code>npm run show</code> (for a
               performance) or <code>npm run dev:ipad</code> (for testing), then turn this on again.
             </span>
           ) : (
-            <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
+            <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>
               On the iPad (same Wi-Fi), open the Camera and point it at the code, then tap the
               link that appears. Or type the address into Safari.
             </span>
@@ -4031,8 +4031,8 @@ export default function BoardSequencerScreen() {
           </Button>
           {/* Reach: the player's comfortable slide becomes the whole range of each strip. */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
-            <span style={{ fontWeight: 600, fontSize: 13 }}>Reach</span>
-            <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
+            <span style={{ fontWeight: 600, fontSize: 14 }}>Reach</span>
+            <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>
               {REMOTE_CONTROLS.map((n) => `${REMOTE_CONTROL_WORDS[n]} ${Math.round(config.remoteReach[n].low * 100)}–${Math.round(config.remoteReach[n].high * 100)}%`).join(' · ')}
             </span>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -4050,7 +4050,7 @@ export default function BoardSequencerScreen() {
                 </Button>
               ) : (
                 <>
-                  <span role="status" style={{ fontSize: 12, fontWeight: 600 }}>
+                  <span role="status" style={{ fontSize: 14, fontWeight: 600 }}>
                     On the iPad: slide each strip as far as is comfortable, then press Done here.
                   </span>
                   <Button
@@ -4081,8 +4081,8 @@ export default function BoardSequencerScreen() {
           {/* For the show: one button sets out the iPad so a stray touch cannot stop, jump,
               silence or speed up the piece (show decision F3). New players start with it. */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
-            <span style={{ fontWeight: 600, fontSize: 13 }}>For the show</span>
-            <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
+            <span style={{ fontWeight: 600, fontSize: 14 }}>For the show</span>
+            <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>
               The safe show layout: the iPad shows only the Extra notes strip, New idea and End piece (two taps).
               {`Mute, the loop and scene pads, Next scene, Capture and ${WORDS.stopLoops} are hidden, and Speed is locked.`}
             </span>
@@ -4091,7 +4091,7 @@ export default function BoardSequencerScreen() {
                 Use the safe show layout
               </Button>
             </div>
-            <span role="status" style={{ fontSize: 12, fontWeight: 600, color: 'var(--bs-ok)' }}>
+            <span role="status" style={{ fontSize: 14, fontWeight: 600, color: 'var(--bs-ok)' }}>
               {!isSafeShowLayout(config) ? ''
                 : safeLayoutSet
                   ? `Done: the iPad now shows only the Extra notes strip, New idea and End piece. Speed is locked. Mute, the loops, the scenes, Next scene, Capture and ${WORDS.stopLoops} are hidden.`
@@ -4100,11 +4100,11 @@ export default function BoardSequencerScreen() {
           </div>
           {/* Fewer, bigger targets: the facilitator chooses what the iPad shows. */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
-            <span style={{ fontWeight: 600, fontSize: 13 }}>What the iPad shows</span>
-            <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>Fewer things means bigger things. Untick what this player will not use.</span>
+            <span style={{ fontWeight: 600, fontSize: 14 }}>What the iPad shows</span>
+            <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>Fewer things means bigger things. Untick what this player will not use.</span>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
               {REMOTE_CONTROLS.map((n) => (
-                <label key={`show-${n}`} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13 }}>
+                <label key={`show-${n}`} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 14 }}>
                   <input
                     type="checkbox" checked={config.remoteStrips.includes(n)}
                     onChange={(e) => update({ remoteStrips: REMOTE_CONTROLS.filter((x) => (x === n ? e.target.checked : config.remoteStrips.includes(x))) })}
@@ -4115,7 +4115,7 @@ export default function BoardSequencerScreen() {
             </div>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
               {(['newIdea', 'newSound', 'keep', 'mute'] as RemoteTriggerName[]).map((n) => (
-                <label key={`showpad-${n}`} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13 }}>
+                <label key={`showpad-${n}`} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 14 }}>
                   <input
                     type="checkbox" checked={config.remotePads.includes(n)}
                     onChange={(e) => update({ remotePads: (['newIdea', 'newSound', 'keep', 'mute'] as RemoteTriggerName[]).filter((x) => (x === n ? e.target.checked : config.remotePads.includes(x))) })}
@@ -4123,17 +4123,17 @@ export default function BoardSequencerScreen() {
                   {REMOTE_TRIGGER_WORDS[n]}
                 </label>
               ))}
-              <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 14 }}>
                 <input type="checkbox" checked={config.remoteLoopsPage} onChange={(e) => update({ remoteLoopsPage: e.target.checked })} />
                 {/* One tick brings back all of these: said, so it is never a surprise (R2-T3-06). */}
                 {`Loops & scenes page (also shows Capture, ${WORDS.stopLoops} and End piece)`}
               </label>
             </div>
-            <span style={{ fontWeight: 600, fontSize: 13, marginTop: 4 }}>Locked strips</span>
-            <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>A locked strip ignores touch — for a speed that must not change mid-piece.</span>
+            <span style={{ fontWeight: 600, fontSize: 14, marginTop: 4 }}>Locked strips</span>
+            <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>A locked strip ignores touch — for a speed that must not change mid-piece.</span>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
               {REMOTE_CONTROLS.map((n) => (
-                <label key={`lock-${n}`} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13 }}>
+                <label key={`lock-${n}`} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 14 }}>
                   <input
                     type="checkbox" checked={config.remoteLocked.includes(n)}
                     onChange={(e) => update({ remoteLocked: REMOTE_CONTROLS.filter((x) => (x === n ? e.target.checked : config.remoteLocked.includes(x))) })}
@@ -4142,55 +4142,55 @@ export default function BoardSequencerScreen() {
                 </label>
               ))}
             </div>
-            <span style={{ fontWeight: 600, fontSize: 13, marginTop: 4 }}>A touch on a strip</span>
+            <span style={{ fontWeight: 600, fontSize: 14, marginTop: 4 }}>A touch on a strip</span>
             <SegmentedControl<'jump' | 'follow'>
               label="A touch on a strip"
               value={config.remoteStripMode}
               onChange={(v) => update({ remoteStripMode: v })}
               options={[{ value: 'jump', label: 'Jumps to the finger' }, { value: 'follow', label: 'Follows the movement' }]}
             />
-            <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
+            <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>
               {config.remoteStripMode === 'jump'
                 ? 'Where the finger lands is the value.'
                 : 'Landing changes nothing; sliding moves the value from where it was. For a finger that lands roughly.'}
             </span>
-            <span style={{ fontWeight: 600, fontSize: 13, marginTop: 4 }}>A pad acts</span>
+            <span style={{ fontWeight: 600, fontSize: 14, marginTop: 4 }}>A pad acts</span>
             <SegmentedControl<'touch' | 'lift'>
               label="A pad acts"
               value={config.remoteTouch.actOn}
               onChange={(actOn) => update({ remoteTouch: { ...config.remoteTouch, actOn } })}
               options={[{ value: 'touch', label: 'When the finger lands' }, { value: 'lift', label: 'When the finger lifts' }]}
             />
-            <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
+            <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>
               {config.remoteTouch.actOn === 'touch'
                 ? 'Quickest. A resting palm is always ignored.'
                 : 'Nothing happens until the finger comes off the pad it started on, so sliding onto a pad by accident does nothing.'}
             </span>
-            <span style={{ fontWeight: 600, fontSize: 13, marginTop: 4 }}>{`Time for the second tap (End piece, ${WORDS.stopLoops}, Mute)`}</span>
+            <span style={{ fontWeight: 600, fontSize: 14, marginTop: 4 }}>{`Time for the second tap (End piece, ${WORDS.stopLoops}, Mute)`}</span>
             <SegmentedControl<number>
               label="Time for the second tap"
               value={config.remoteTouch.confirmSec}
               onChange={(confirmSec) => update({ remoteTouch: { ...config.remoteTouch, confirmSec } })}
               options={[{ value: 3, label: '3 seconds' }, { value: 6, label: '6 seconds' }, { value: 10, label: '10 seconds' }]}
             />
-            <span style={{ fontWeight: 600, fontSize: 13, marginTop: 4 }}>A second touch sooner than this is a bounce</span>
+            <span style={{ fontWeight: 600, fontSize: 14, marginTop: 4 }}>A second touch sooner than this is a bounce</span>
             <SegmentedControl<number>
               label="A second touch sooner than this is a bounce"
               value={config.remoteTouch.secondTapMinMs}
               onChange={(secondTapMinMs) => update({ remoteTouch: { ...config.remoteTouch, secondTapMinMs } })}
               options={SECOND_TAP_MIN_MS.map((ms) => ({ value: ms, label: `${ms / 1000} seconds` }))}
             />
-            <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
+            <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>
               A shaky press can land as several quick touches. A touch this soon after the one before it is ignored, so
               {`a press never counts as its own second tap: End piece, ${WORDS.stopLoops} and Mute wait for a real second tap.`}
             </span>
-            <span style={{ fontWeight: 600, fontSize: 13, marginTop: 4 }}>Also on the Play page</span>
-            <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
+            <span style={{ fontWeight: 600, fontSize: 14, marginTop: 4 }}>Also on the Play page</span>
+            <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>
               Put what the player needs during the piece on the page they play on, so they never have to switch page.
             </span>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
               {([['endPiece', 'End piece'], ['nextScene', 'Next scene'], ['capture', 'Capture'], ['stopAll', WORDS.stopLoops]] as const).map(([x, word]) => (
-                <label key={x} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+                <label key={x} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14 }}>
                   <input
                     type="checkbox"
                     checked={config.remoteTouch.playExtras.includes(x)}
@@ -4200,7 +4200,7 @@ export default function BoardSequencerScreen() {
                 </label>
               ))}
               {Array.from({ length: LAUNCH_SLOTS }, (_, slot) => slot).filter((slot) => (config.loopSlots[slot]?.length ?? 0) > 0).map((slot) => (
-                <label key={`pl${slot}`} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+                <label key={`pl${slot}`} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14 }}>
                   <input
                     type="checkbox"
                     checked={config.remoteTouch.playLoops.includes(slot)}
@@ -4210,7 +4210,7 @@ export default function BoardSequencerScreen() {
                 </label>
               ))}
             </div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14 }}>
               <input
                 type="checkbox"
                 checked={config.remoteTouch.showNext}
@@ -4248,7 +4248,7 @@ export default function BoardSequencerScreen() {
         onChange={(v) => update({ phrases: v === 'phrase' })}
         options={[{ value: 'phrase', label: 'Each colour chooses' }, { value: 'note', label: 'Always one note' }]}
       />
-      <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
+      <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>
         {config.phrases
           ? 'Each colour card says whether its counters play one note or a tune (a groove, a bassline, the chords).'
           : 'Every counter plays one note on its step, whatever the cards say.'}
@@ -4274,14 +4274,14 @@ export default function BoardSequencerScreen() {
     </div>
     <fieldset style={{ border: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
       <legend style={{ fontWeight: 600, padding: 0 }}>Pressing</legend>
-      <span style={{ fontSize: 13 }}>Time to press again</span>
+      <span style={{ fontSize: 14 }}>Time to press again</span>
       <SegmentedControl<number>
         label="Time to press again"
         value={config.pressAgainSec}
         onChange={(pressAgainSec) => update({ pressAgainSec })}
         options={PRESS_AGAIN_CHOICES.map((sec) => ({ value: sec, label: `${sec} seconds` }))}
       />
-      <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
+      <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>
         While the piece plays, Stop, Exit and Set up need a second press within this time. Undo and the notices stay up
         for longer to match.
       </span>
@@ -4292,7 +4292,7 @@ export default function BoardSequencerScreen() {
         />
         Space plays and stops
       </label>
-      <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
+      <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>
         Switch it off if a switch box sends Space. Shift+S still simplifies.
       </span>
     </fieldset>
@@ -4423,7 +4423,7 @@ export default function BoardSequencerScreen() {
                     { value: 'col', label: 'Left and right' },
                   ]}
                 />
-                <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--bs-fg2)' }}>
+                <p style={{ margin: '4px 0 0', fontSize: 14, color: 'var(--bs-fg2)' }}>
                   Which way a control counter is read when it isn&apos;t in a lane. A lane always
                   reads along itself.
                 </p>
@@ -4433,7 +4433,7 @@ export default function BoardSequencerScreen() {
                 const role = c.role as FaderRole;
                 const range = config.controlRanges[role];
                 return (
-                  <div key={`ctl-${c.id}`} style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11 }}>
+                  <div key={`ctl-${c.id}`} style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 14 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span
                         aria-hidden="true"
@@ -4491,10 +4491,10 @@ export default function BoardSequencerScreen() {
                 );
               })}
               {channels.filter((c) => c.role === 'melody' || c.role === 'chord' || c.role === 'bass').length === 0 ? (
-                <span style={{ fontSize: 11, opacity: 0.6 }}>Add a melody/chord/bass colour to mix it.</span>
+                <span style={{ fontSize: 14, opacity: 0.6 }}>Add a melody/chord/bass colour to mix it.</span>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <div style={{ display: 'flex', gap: 4, fontSize: 10, opacity: 0.7 }}>
+                  <div style={{ display: 'flex', gap: 4, fontSize: 14, opacity: 0.7 }}>
                     <span style={{ width: 20 }} />
                     <span style={{ width: 48, textAlign: 'center' }}>Vol</span>
                     <span style={{ width: 48, textAlign: 'center' }}>Tone</span>
@@ -4924,7 +4924,7 @@ export default function BoardSequencerScreen() {
               />
               {config.pingPong && config.numPages > 1 && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <span style={{ fontSize: 12 }}>{`${WORDS.thereAndBack} with ${config.numPages} pages`}</span>
+                  <span style={{ fontSize: 14 }}>{`${WORDS.thereAndBack} with ${config.numPages} pages`}</span>
                   <SegmentedControl<'each' | 'chain'>
                     label={`${WORDS.thereAndBack} with ${config.numPages} pages`}
                     value={config.pingPongPages}
@@ -4934,7 +4934,7 @@ export default function BoardSequencerScreen() {
                       { value: 'chain', label: 'All pages as one strip' },
                     ]}
                   />
-                  <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
+                  <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>
                     {config.pingPongPages === 'each'
                       ? 'A → then ←, then B → then ←: every page plays both ways.'
                       : 'A → B → to the end, then back B ← A ←: like one long board.'}
@@ -5372,7 +5372,7 @@ export default function BoardSequencerScreen() {
   );
   /** What the cap is doing, under the board: visible feedback for every change it makes. */
   const capHud = config.cap.enabled ? (
-    <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', fontSize: 13 }}>
+    <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', fontSize: 14 }}>
       {/* Only the state is announced: the numbers change several times a second. */}
       <span role="status" aria-label="Red cap" style={{
         fontWeight: 700,
@@ -5502,7 +5502,7 @@ export default function BoardSequencerScreen() {
     >
       <span>{simplify === 'on' ? 'Back to full' : 'Simplify'}</span>
       {/* What it does, seen and not only in the tooltip (B23). */}
-      <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--bs-fg2)', whiteSpace: 'nowrap' }}>
+      <span style={{ fontSize: 14, fontWeight: 400, color: 'var(--bs-fg2)', whiteSpace: 'nowrap' }}>
         {simplify === 'on' ? 'from the next pass' : `${simplifyWho} and one loop`}
       </span>
     </Button>
@@ -5515,7 +5515,7 @@ export default function BoardSequencerScreen() {
         </div>
       )}
       {timeIndicator && (
-        <div role="status" aria-label="Keeping time" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', padding: '4px 10px', borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-warn-tint)', border: '1px solid var(--bs-border-control)', fontSize: 13 }}>
+        <div role="status" aria-label="Keeping time" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', padding: '4px 10px', borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-warn-tint)', border: '1px solid var(--bs-border-control)', fontSize: 14 }}>
           <span style={{ flex: '1 1 240px' }}>{timeIndicator.lines.join(' ')}</span>
           {timeIndicator.canRestore && <Button tone="quiet" onClick={restoreExtras}>Switch the extras back on</Button>}
         </div>
@@ -5765,7 +5765,7 @@ export default function BoardSequencerScreen() {
                   display: 'grid', placeItems: 'center',
                   background: c.swatch, color: '#000',
                   border: '2px solid #fff', boxShadow: '0 0 0 2px #000',
-                  fontSize: 12, fontWeight: 700, fontFamily: 'ui-monospace, monospace',
+                  fontSize: 14, fontWeight: 700, fontFamily: 'ui-monospace, monospace',
                 }}
               >
                 {i + 1}
@@ -5822,7 +5822,7 @@ export default function BoardSequencerScreen() {
           {/* Camera check: which camera, what it delivers, whether the frames the
               app reads carry colour, and what the last colour click captured. Not on the
               laptop board, which has no camera to start (A16). */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginTop: 8, fontSize: 12, opacity: 0.9 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginTop: 8, fontSize: 14, opacity: 0.9 }}>
             <span>
               Camera: <strong>{camInfo ? (camInfo.label || 'Unnamed camera') : error ? 'not available' : 'starting…'}</strong>
               {camInfo && camInfo.width > 0 && ` · ${camInfo.width}×${camInfo.height}`}
@@ -5859,12 +5859,12 @@ export default function BoardSequencerScreen() {
         </>
       )}
       {view === 'play' && aiOffLine(config.fillAmount, config.evolveAmount) && (
-        <span role="status" style={{ fontSize: 13, color: 'var(--bs-fg2)' }}>{aiOffLine(config.fillAmount, config.evolveAmount)}</span>
+        <span role="status" style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>{aiOffLine(config.fillAmount, config.evolveAmount)}</span>
       )}
       {view === 'play' && (
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
           {config.channels.map((c, i) => (
-            <span key={c.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+            <span key={c.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 14 }}>
               <SwatchChip swatch={c.swatch} palette={palette} number={i + 1} size={20} />
               <span>{describeChannel(c)}</span>
               {chipSound(c) && <span style={{ color: 'var(--bs-fg2)' }}>{chipSound(c)}</span>}
@@ -5879,12 +5879,12 @@ export default function BoardSequencerScreen() {
             </span>
           ))}
           {config.controlZone.mode !== 'anywhere' && config.controlZone.mode !== 'off' && (
-            <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
+            <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>
               {`Controls: ${describeZone(config.controlZone)}`}
             </span>
           )}
           {(config.loopZone.mode === 'row' || config.loopZone.mode === 'col') && (
-            <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
+            <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>
               {`Loops: ${describeZone(config.loopZone)}`}
             </span>
           )}
@@ -5906,7 +5906,7 @@ export default function BoardSequencerScreen() {
       {/* The research tools, folded (A15): closed by default, they are not for the piece. */}
       {view === 'play' && (
         <details data-session-log="">
-          <summary style={{ cursor: 'pointer', fontSize: 13, color: 'var(--bs-fg2)', minHeight: 'var(--bs-target)', display: 'flex', alignItems: 'center' }}>Session log</summary>
+          <summary style={{ cursor: 'pointer', fontSize: 14, color: 'var(--bs-fg2)', minHeight: 'var(--bs-target)', display: 'flex', alignItems: 'center' }}>Session log</summary>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', paddingTop: 4 }}>
           <Button tone="quiet" onClick={() => announce(describeBoard(active, config.channels, config.rows, config.cols, config.velocity))}>
             Describe board
@@ -5916,23 +5916,23 @@ export default function BoardSequencerScreen() {
             tone="quiet"
             onClick={() => saveSession('json')}
             reason={logCounts.notes === 0 ? 'Nothing played yet this session.' : null}
-            aria-label={`Save the session log as JSON: ${logCounts.notes} notes, ${logCounts.placed} yours, ${logCounts.added} added`}
+            title={`Saves the session log as a JSON file: ${logCounts.notes} notes, ${logCounts.placed} yours, ${logCounts.added} added`}
           >
             {`Save session (${logCounts.notes} notes)`}
           </Button>
           {/* Its reason is Save session's, said once beside it. */}
-          <Button tone="quiet" onClick={() => saveSession('csv')} disabled={logCounts.notes === 0} aria-label="Session log as CSV">
+          <Button tone="quiet" onClick={() => saveSession('csv')} disabled={logCounts.notes === 0} aria-label="CSV: the session log as a spreadsheet file">
             CSV
           </Button>
           {takes.length > 1 && (
             <details>
-              <summary style={{ cursor: 'pointer', fontSize: 13 }}>{`Earlier takes (${takes.length - 1})`}</summary>
-              <p style={{ margin: '4px 0', fontSize: 12, color: 'var(--bs-fg2)' }}>
+              <summary style={{ cursor: 'pointer', fontSize: 14 }}>{`Earlier takes (${takes.length - 1})`}</summary>
+              <p style={{ margin: '4px 0', fontSize: 14, color: 'var(--bs-fg2)' }}>
                 Every take is kept on this laptop as it is played: the newest {MAX_TAKES}.
               </p>
               <ul style={{ margin: 0, paddingLeft: 16, display: 'flex', flexDirection: 'column', gap: 4 }}>
                 {takes.slice(1).map((t) => (
-                  <li key={t.key} style={{ fontSize: 13 }}>
+                  <li key={t.key} style={{ fontSize: 14 }}>
                     {`${new Date(t.startedAt).toLocaleString()} · ${t.player} · ${t.notes} notes `}
                     {(['json', 'csv'] as const).map((ext) => (
                       <Button
@@ -5951,7 +5951,7 @@ export default function BoardSequencerScreen() {
             </details>
           )}
           </div>
-          <p aria-live="off" style={{ margin: 0, fontSize: 12, color: 'var(--bs-fg2)', minHeight: 18 }}>
+          <p aria-live="off" style={{ margin: 0, fontSize: 14, color: 'var(--bs-fg2)', minHeight: 18 }}>
             {pops.length > 0
               ? `Now: ${[...new Map(pops.map((n) => [n.colour, n])).values()]
                 .map((n) => `${labelForId(n.colour)}${n.origin === 'phrase' ? ' (phrase)' : n.origin === 'fill' ? ' (extra note)' : ''}`)
@@ -5970,30 +5970,30 @@ export default function BoardSequencerScreen() {
           : { display: 'contents' }}
       >
       {view === 'play' && beyondNote && (
-        <p style={{ margin: 0, fontSize: 12, color: 'var(--bs-fg2)' }}>{beyondNote}</p>
+        <p style={{ margin: 0, fontSize: 14, color: 'var(--bs-fg2)' }}>{beyondNote}</p>
       )}
       {view === 'play' && remoteNote && (
-        <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--bs-accent)' }}>{remoteNote.text}</p>
+        <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'var(--bs-accent)' }}>{remoteNote.text}</p>
       )}
       {view === 'play' && ipadEndArmed && (
         // Until the second tap, or its window runs out (B20).
-        <p role="status" style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>iPad: End piece pressed once</p>
+        <p role="status" style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>iPad: End piece pressed once</p>
       )}
       {view === 'play' && ipadOutOfDate && (
         // Stays while it is true, unlike the moment-long notes of what the iPad did.
-        <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--bs-warn)' }}>{ipadOutOfDateText}</p>
+        <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'var(--bs-warn)' }}>{ipadOutOfDateText}</p>
       )}
       {view === 'play' && newLoop && (
         // New loop holds the band, Extra notes and the loops off: say so here too, so this
         // view never looks as if they should be playing (T1-09).
-        <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--bs-accent)' }}>{newLoopStatusLine(newLoopStopped)}</p>
+        <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'var(--bs-accent)' }}>{newLoopStatusLine(newLoopStopped)}</p>
       )}
       {/* The band as the engine has it: in a new loop it is off unless asked for (T1-09). */}
       {view === 'play' && running && bandStatus.level !== 'off' && (
-        <p style={{ margin: 0, fontSize: 12, color: 'var(--bs-fg2)' }}>{bandLine(bandStatus, active.length > 0)}</p>
+        <p style={{ margin: 0, fontSize: 14, color: 'var(--bs-fg2)' }}>{bandLine(bandStatus, active.length > 0)}</p>
       )}
       {view === 'play' && running && !newLoop && config.evolveAmount > 0 && evolveLabels.size > 0 && (
-        <p style={{ margin: 0, fontSize: 12, color: 'var(--bs-fg2)' }}>
+        <p style={{ margin: 0, fontSize: 14, color: 'var(--bs-fg2)' }}>
           {`Sounds${config.evolveHoldLap !== null ? ' (held)' : ''}: ${config.channels
             .filter((c) => evolveLabels.has(c.id))
             .map((c) => `${describeChannel(c)} — ${evolveLabels.get(c.id)!.label}`)
@@ -6189,7 +6189,7 @@ export default function BoardSequencerScreen() {
             // wrap as whole buttons; the status word keeps one width. Otherwise pressing Play
             // re-wrapped the header and moved everything under it, Stop included.
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', whiteSpace: 'nowrap' }}>
-              <span style={{ color: 'var(--bs-fg2)', fontSize: 13, minWidth: '4.5em' }}>
+              <span style={{ color: 'var(--bs-fg2)', fontSize: 14, minWidth: '4.5em' }}>
                 {running ? 'Playing' : 'Stopped'}
               </span>
               <div role="group" aria-label="What you are doing" style={{ display: 'flex' }}>
@@ -6223,7 +6223,7 @@ export default function BoardSequencerScreen() {
           <Modal label={`Edit the notes of ${loopLabel(config.loopNames, editSlot)}`} onClose={() => { setEditSlot(null); setCopyArmed(false); }}>
             {/* The board and the loop side by side, each named: a loop saved earlier, shown
                 alone, looked like the board showing counters that weren't there. */}
-            <h2 style={{ margin: '0 0 4px', fontSize: 18 }}>{`Loop ${editSlot + 1}${config.loopNames[editSlot] ? `: ${config.loopNames[editSlot]}` : ''}`}</h2>
+            <h2 style={{ margin: '0 0 4px', fontSize: 20 }}>{`Loop ${editSlot + 1}${config.loopNames[editSlot] ? `: ${config.loopNames[editSlot]}` : ''}`}</h2>
             <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', alignItems: 'flex-start' }}>
             {(() => {
               const sequenced = new Set(config.channels.filter((c) => isSequencedRole(c.role)).map((c) => c.id));
@@ -6250,7 +6250,7 @@ export default function BoardSequencerScreen() {
             })()}
             <section aria-labelledby="edit-loop-saved" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <h3 id="edit-loop-saved" style={{ margin: 0, fontSize: 14 }}>{`Loop ${editSlot + 1} as saved`}</h3>
-            <p style={{ margin: 0, fontSize: 13, color: 'var(--bs-fg2)', maxWidth: 380 }}>
+            <p style={{ margin: 0, fontSize: 14, color: 'var(--bs-fg2)', maxWidth: 380 }}>
               {(config.loopSlots[editSlot]?.length ?? 0) > 0
                 ? 'Click squares to change the loop; it saves as you click. The board is not changed.'
                 : 'This loop is empty. Click squares to draw one, or copy the board into it.'}

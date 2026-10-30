@@ -6,7 +6,7 @@ import {
   CHORD_BARS, CHORD_SEQUENCE_IDS, CHORD_SEQUENCE_WORDS, type ChordBars, type ChordSequenceId, type ChordSetting,
 } from '../../../../songs/harmony/currentChord';
 
-const SMALL = { fontSize: 12, color: 'var(--bs-fg2)' } as const;
+const SMALL = { fontSize: 14, color: 'var(--bs-fg2)' } as const;
 
 /** "Rising chords, 2 bars each", "chords as before": for a scene's one-line summary. */
 export function chordWords(c: ChordSetting): string {
