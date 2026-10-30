@@ -75,7 +75,7 @@ export function LoopEditor({ rows, cols, channels, cells, palette, onChange }: L
           const here = at.get(`${row},${col}`);
           return {
             width: size, height: size, flex: 'none', borderRadius: 6,
-            border: `1px solid ${here ? '#fff' : 'var(--bs-border)'}`,
+            border: `1px solid ${here ? '#fff' : 'var(--bs-border-control)'}`,
             background: here ? swatchOf(here.colour) : 'var(--bs-raised)',
           };
         }}

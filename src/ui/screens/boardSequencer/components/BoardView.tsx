@@ -152,8 +152,9 @@ export function BoardView({
         roundRect(ctx, c * cw + pad, r * ch + pad, cellW, cellH, Math.min(cellW, cellH) * 0.18);
         ctx.fillStyle = palette.raised;
         ctx.fill();
+        // An edge at least 3:1 against the page: the squares themselves are 1.1:1 (A4).
         ctx.lineWidth = 1;
-        ctx.strokeStyle = palette.border;
+        ctx.strokeStyle = palette.borderControl;
         ctx.stroke();
       }
     }
