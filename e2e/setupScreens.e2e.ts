@@ -67,9 +67,10 @@ test('the header: one row, the less-used buttons under More below 1400 px, and t
   }
   // At 320 px nothing scrolls sideways, on the Board view or in Make a piece.
   await page.setViewportSize({ width: 320, height: 640 });
-  expect(await sideways(page)).toBe(false);
+  // Once the board has resized to the narrow window (it follows the size a moment later).
+  await expect.poll(() => sideways(page), { timeout: 5000 }).toBe(false);
   await page.getByRole('button', { name: 'Make a piece', exact: true }).click();
-  expect(await sideways(page)).toBe(false);
+  await expect.poll(() => sideways(page), { timeout: 5000 }).toBe(false);
   expect(pageErrors(page)).toEqual([]);
 });
 
