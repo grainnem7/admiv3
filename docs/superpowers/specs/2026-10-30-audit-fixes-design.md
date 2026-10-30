@@ -2,7 +2,7 @@
 
 30 Oct 2026. Source: the six-reviewer audit of build ef8c2de. The merged report is at
 https://claude.ai/artifact/PegNNyCcW6QPDAjnxRMwKU. The reviewers' own reports and screenshots are in
-`.superpowers/audit/2026-10-30/<id>/report.md`; read the relevant one for the detail behind an item (file:line,
+`docs/superpowers/audits/2026-10-30/<id>.md` (screenshots stayed on the laptop, git-ignored); read the relevant one for the detail behind an item (file:line,
 measurements, screenshots). The owner said **"Fix everything"** (owner). Items keep the report's numbers: B1–B26
 (before the gig), A1–A18 (after the gig).
 
@@ -220,3 +220,20 @@ Each batch adds unit tests for its logic and e2e checks for what the owner sees.
 - the folded scene editor still editing everything it did
 
 Run the reviewers' own checks again where they measured something, e.g. contrast, flash and target sizes.
+
+## Status (30 Oct 2026)
+Batches 1–4 are built and committed:
+
+| Batch | Commit |
+|---|---|
+| 1 | 3c8f6b4 |
+| 2 | ac83d5a |
+| 3 | 2b8e97d |
+| 4 | 9d6c0be |
+
+Batch 5 is still to build.
+
+Notes for whoever builds batch 5:
+- Batch 4's word list is in `src/ui/screens/boardSequencer/words.ts`. Use it for any new wording.
+- Two e2e tests fail on a loaded machine and pass alone: performance "Simplify…" and sound "helpers: Freeze".
+- One more, performance "a Space 200 ms after a Stop…", failed under load at 2b8e97d as well. Check it.
