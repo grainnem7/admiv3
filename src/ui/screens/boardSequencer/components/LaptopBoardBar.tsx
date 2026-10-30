@@ -109,6 +109,8 @@ export function LaptopBoardBar({
       <Button
         tone="quiet"
         reason={count === 0 ? 'The board is already empty.' : null}
+        // The reason's line is kept either way, so clearing never moves the board (A3).
+        reserveReason
         onClick={() => {
           onClear();
           // It turns itself off: focus goes to the colour a click puts down, as Add four

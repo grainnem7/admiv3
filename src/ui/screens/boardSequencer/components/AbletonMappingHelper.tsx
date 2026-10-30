@@ -42,7 +42,7 @@ export function AbletonMappingHelper({ config, connected }: {
     <div role="group" aria-label="Map in Ableton" style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 8, borderRadius: 'var(--bs-radius-md)', border: '1px solid var(--bs-border)' }}>
       <span style={{ fontWeight: 600 }}>Map in Ableton (once, when setting up the template)</span>
       <SegmentedControl<MapGroup>
-        label="What to map"
+        label="What to map" showLabel
         value={group}
         onChange={setGroup}
         options={[{ value: 'fades', label: 'Fades and volume' }, { value: 'sounds', label: 'Sounds and macros' }]}

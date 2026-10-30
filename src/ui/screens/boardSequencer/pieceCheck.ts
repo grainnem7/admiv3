@@ -81,16 +81,16 @@ export function pieceCheckItems(p: PieceCheckInput): ReadyItem[] {
     items.push({
       label: `No loop plays in ${names(silent)}`,
       state: 'problem',
-      fix: `The room will be silent there unless ${who.name} plays: in Scenes, add a loop or tick “${who.Name} alone”.`,
+      fix: `The room will be silent there unless ${who.name} plays: in Scenes, add a loop or tick “${who.Name} alone”.`, place: 'scenes',
     });
   }
 
   const timed = scenes.filter((s) => typeof s.at === 'number');
   items.push(scenes.length === 0
-    ? { label: 'No scenes yet', state: 'warn', fix: 'Optional. Make a piece, step 2: Make my plan. Without scenes the piece does not change by itself.' }
+    ? { label: 'No scenes yet', state: 'warn', fix: 'Optional. Make a piece, step 2: Make my plan. Without scenes the piece does not change by itself.', place: 'scenes' }
     : timed.some((s) => s.at === 0)
       ? { label: `${timed.length} ${timed.length === 1 ? 'scene comes' : 'scenes come'} in on the clock, one at 0:00`, state: 'ok' }
-      : { label: 'No scene at 0:00', state: 'warn', fix: 'Give the opening scene the time 0:00, so the piece starts in it.' });
+      : { label: 'No scene at 0:00', state: 'warn', fix: 'Give the opening scene the time 0:00, so the piece starts in it.', place: 'scenes' });
 
   // A scene with no time only comes in by hand (T2-11).
   const byHand = scenes.filter((s) => typeof s.at !== 'number');
@@ -99,7 +99,7 @@ export function pieceCheckItems(p: PieceCheckInput): ReadyItem[] {
     items.push({
       label: `${names(byHand)} ${one ? 'has' : 'have'} no time`,
       state: 'problem',
-      fix: `${one ? 'It only comes' : 'They only come'} in if someone presses Next: give ${one ? 'it' : 'each'} a time in Scenes, or delete ${one ? 'it' : 'them'}.`,
+      fix: `${one ? 'It only comes' : 'They only come'} in if someone presses Next: give ${one ? 'it' : 'each'} a time in Scenes, or delete ${one ? 'it' : 'them'}.`, place: 'scenes',
     });
   }
 
@@ -110,7 +110,7 @@ export function pieceCheckItems(p: PieceCheckInput): ReadyItem[] {
     items.push({
       label: `${names(late)} ${one ? 'comes' : 'come'} in at or after the end (${formatClock(len)})`,
       state: 'problem',
-      fix: `${one ? 'It is' : 'They are'} never heard: give ${one ? 'it' : 'each'} an earlier time in Scenes${len < MAX_PIECE_SEC ? ', or make the piece longer' : ''}.`,
+      fix: `${one ? 'It is' : 'They are'} never heard: give ${one ? 'it' : 'each'} an earlier time in Scenes${len < MAX_PIECE_SEC ? ', or make the piece longer' : ''}.`, place: 'scenes',
     });
   }
 
@@ -122,7 +122,7 @@ export function pieceCheckItems(p: PieceCheckInput): ReadyItem[] {
       items.push({
         label: `${names(same)} come in at the same moment (${formatClock(moment)})`,
         state: 'problem',
-        fix: 'Only one of them is heard: give each its own time in Scenes.',
+        fix: 'Only one of them is heard: give each its own time in Scenes.', place: 'scenes',
       });
     }
   }
@@ -137,7 +137,7 @@ export function pieceCheckItems(p: PieceCheckInput): ReadyItem[] {
       items.push({
         label: `${names(afterEnding)} ${one ? 'comes' : 'come'} in after the ending has begun (about ${formatClock(endingFrom)})`,
         state: 'warn',
-        fix: `The piece is ending by then, so ${one ? 'it is' : 'they are'} not heard: give ${one ? 'it' : 'each'} an earlier time, or choose a shorter ending.`,
+        fix: `The piece is ending by then, so ${one ? 'it is' : 'they are'} not heard: give ${one ? 'it' : 'each'} an earlier time, or choose a shorter ending.`, place: 'scenes',
       });
     }
   }
@@ -149,7 +149,7 @@ export function pieceCheckItems(p: PieceCheckInput): ReadyItem[] {
     items.push({
       label: `${c.name} comes in at ${formatClock(c.at)}, after the piece ends.`,
       state: 'warn',
-      fix: `${c.name}'s counters stay silent for the whole piece: in Scenes → When each colour comes in, give it an earlier time, or clear it to play from the start.`,
+      fix: `${c.name}'s counters stay silent for the whole piece: in Scenes → When each colour comes in, give it an earlier time, or clear it to play from the start.`, place: 'scenes',
     });
   }
 
@@ -195,7 +195,7 @@ export function ipadCheckItems(p: IpadCheckInput): ReadyItem[] {
   const who = playerWords(p.playerName);
   const items: ReadyItem[] = [p.connected
     ? { label: 'iPad connected', state: 'ok' }
-    : { label: 'iPad not connected', state: 'warn', fix: 'Open the link from the Connections tab in Safari on the iPad.' }];
+    : { label: 'iPad not connected', state: 'warn', fix: 'Open the link from the Connections tab in Safari on the iPad.', place: 'connections' }];
   if (p.connected && p.pageOutOfDate) {
     items.push({
       label: `${who.Name}'s iPad page is out of date: reload it on the iPad.`,
@@ -233,7 +233,7 @@ export function keepingTimeCheckItems(p: { report: KeepingTimeReport | null; run
     const paused = p.valve.length > 0 ? ` To keep up, ADMI paused ${listNames(p.valve.map((s) => VALVE_NAMES[s]))}.` : '';
     items.push({
       label: `Keeping time: the sound fell ${r.lostSec.toFixed(1)} s behind ${when} (${beats})`, state: 'warn',
-      fix: `Close other programs, plug the laptop in, and turn Extra notes off (Sound tab). Then run the piece again.${paused}`,
+      fix: `Close other programs, plug the laptop in, and turn Extra notes off (Sound tab). Then run the piece again.${paused}`, place: 'sound',
     });
   }
   if (r.drifting) {
@@ -251,10 +251,10 @@ export function keepingTimeCheckItems(p: { report: KeepingTimeReport | null; run
  * not a warning (B21): the check can still reach Ready while planning at home.
  */
 export function boardItem({ laptop, cameraOk }: { laptop: boolean; cameraOk: boolean }): ReadyItem {
-  if (laptop) return { label: 'Board: the laptop board', state: 'note', fix: 'For the performance with the real board, press 📷 Camera at the top.' };
+  if (laptop) return { label: 'Board: the laptop board', state: 'note', fix: 'For the performance with the real board, use the camera board.', place: 'cameraBoard' };
   return cameraOk
     ? { label: 'Board: camera running and the board found', state: 'ok' }
-    : { label: 'Board: camera or board not ready', state: 'problem', fix: 'Set up: Camera and Board.' };
+    : { label: 'Board: camera or board not ready', state: 'problem', fix: 'Set up: Camera and Board.', place: 'setupCamera' };
 }
 
 /** A backup file is advice (B21): the work is already saved on the laptop. */

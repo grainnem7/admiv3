@@ -59,15 +59,17 @@ export const ROLE_LABELS: Record<ColourRole, string> = {
   bass: 'Bass',
   drums: 'Drums',
   chord: 'Chords',
-  volume: 'Volume (fader)',
-  reverb: 'Reverb amount (fader)',
-  delay: 'Delay amount (fader)',
-  tone: 'Tone/brightness (fader)',
-  tempo: 'Tempo (fader)',
-  fill: 'Fill amount (fader)',
-  evolve: 'Evolve amount (fader)',
+  // The one word list (ui/screens/boardSequencer/words.ts, A2): the same words as the hat
+  // and the iPad, and no "(fader)": the job list already groups these under Control.
+  volume: 'Volume',
+  reverb: 'Reverb',
+  delay: 'Echo',
+  tone: 'Brightness',
+  tempo: 'Speed',
+  fill: 'Extra notes',
+  evolve: 'Sounds change',
   reverbToggle: 'Reverb on/off',
-  delayToggle: 'Delay on/off',
+  delayToggle: 'Echo on/off',
   loop: 'Plays a loop',
 };
 

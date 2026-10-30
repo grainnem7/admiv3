@@ -1,5 +1,5 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { makePlan, openLaptopBoard, pageErrors, pickColour, place } from './app';
+import { makePlan, openLaptopBoard, pageErrors, pickColour, place, soundTab } from './app';
 
 /**
  * Show safety (audit 2026-10-30, batch 1): the status row in Show, the iPad link that
@@ -71,7 +71,7 @@ test('the iPad link: a heartbeat each second, a stall shown on both sides in 3â€
     // New idea while the laptop is stopped: refused, and Extra notes stays off (B18).
     await ipad.getByRole('button', { name: /New idea/ }).dispatchEvent('pointerdown', touch);
     await expect(ipad.getByText('Press Play on the laptop first')).toBeVisible();
-    await page.getByRole('tab', { name: 'Sound' }).click();
+    await soundTab(page);
     await expect(page.getByRole('group', { name: 'Extra notes' }).getByRole('radio', { name: 'Off' })).toBeChecked();
 
     // Show, then the piece: the row says the iPad is there, and no camera (the laptop board).

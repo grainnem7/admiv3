@@ -14,6 +14,11 @@ export interface SegmentedControlProps<T extends string | number> {
   onChange(value: T): void;
   disabled?: boolean;
   name?: string;
+  /**
+   * Show the question above the choices (A14). Off where the words just above already ask
+   * it ("Band" over Off / Quiet / Full), so it is never said twice.
+   */
+  showLabel?: boolean;
 }
 
 /**
@@ -22,7 +27,7 @@ export interface SegmentedControlProps<T extends string | number> {
  * steps through the form rather than through every option.
  */
 export function SegmentedControl<T extends string | number>({
-  label, value, options, onChange, disabled = false, name,
+  label, value, options, onChange, disabled = false, name, showLabel = false,
 }: SegmentedControlProps<T>): JSX.Element {
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
   // A generated id, because the label is prose: "How a loop pad works-hint-hold" parses as
@@ -38,7 +43,7 @@ export function SegmentedControl<T extends string | number>({
     refs.current[next]?.focus();
   };
 
-  return (
+  const group = (
     <div
       role="radiogroup"
       aria-label={label}
@@ -85,6 +90,13 @@ export function SegmentedControl<T extends string | number>({
           </button>
         );
       })}
+    </div>
+  );
+  if (!showLabel) return group;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <span aria-hidden="true" style={{ fontSize: 13, color: 'var(--bs-fg2)' }}>{label}</span>
+      {group}
     </div>
   );
 }

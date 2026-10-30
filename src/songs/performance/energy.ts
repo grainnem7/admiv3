@@ -73,14 +73,17 @@ export function sanitizeSceneEnergy(v: unknown): SceneEnergy {
   return typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 5 ? (v as SceneEnergy) : 0;
 }
 
-/** The scene editor's words for each level. */
+/**
+ * The scene editor's words for each level, each starting with its name: the same names as
+ * the Sound tab's Energy (Calm, Steady, Lively, Driving), and Big for 5 (audit A2).
+ */
 export const ENERGY_WORDS: Record<SceneEnergy, string> = {
   0: 'Off: the level, the band, the extra notes and the brightness as set, as before.',
-  1: 'Very calm: everything softer and darker, the band softest, its drums sparse, few extra notes.',
-  2: 'Calm: a little softer, the band lighter, fewer extra notes, a soft top.',
-  3: 'Steady: the sound, the band and the extra notes as set, a slightly softened top.',
-  4: 'Lively: a little louder and brighter, the band busier, more extra notes.',
-  5: 'Peak: the loudest and brightest, the band at its fullest, the most extra notes (kept clear of distortion).',
+  1: 'Calm: everything softer and darker, the band softest, its drums sparse, few extra notes.',
+  2: 'Steady: a little softer, the band lighter, fewer extra notes, a soft top.',
+  3: 'Lively: the sound, the band and the extra notes as set, a slightly softened top.',
+  4: 'Driving: a little louder and brighter, the band busier, more extra notes.',
+  5: 'Big: the loudest and brightest, the band at its fullest, the most extra notes (kept clear of distortion).',
 };
 
 /** The line of Energy across the piece, for the scene list's little graph and its words. */

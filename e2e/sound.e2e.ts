@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { listenToOutput, makePlan, notesPlayed, oneNote, openLaptopBoard, outputLevels, pageErrors, pickColour, pieceStep, place, pressAndListen, saveBoardHere } from './app';
+import { listenToOutput, makePlan, notesPlayed, oneNote, openLaptopBoard, outputLevels, pageErrors, pickColour, pieceStep, place, pressAndListen, saveBoardHere, soundTab } from './app';
 
 /**
  * The Sound tab and the loop edit window, as a musician uses them: each colour's own
@@ -8,7 +8,7 @@ import { listenToOutput, makePlan, notesPlayed, oneNote, openLaptopBoard, output
 
 test('the colour table changes a colour, Hear plays it, one note or a tune beside it, and the choices are kept after a reload', async ({ page }) => {
   await openLaptopBoard(page);
-  await page.getByRole('tab', { name: 'Sound' }).click();
+  await soundTab(page);
   const red = page.getByRole('row', { name: /^Red: Melody/ });
   await expect(red).toBeVisible();
   await red.getByRole('combobox', { name: 'Sound' }).selectOption('violin');
@@ -32,7 +32,7 @@ test('the colour table changes a colour, Hear plays it, one note or a tune besid
   await page.waitForTimeout(800); // saves are gathered for a moment
   await page.reload();
   await page.getByRole('button', { name: /Board Sequencer/ }).click();
-  await page.getByRole('tab', { name: 'Sound' }).click();
+  await soundTab(page);
   const after = page.getByRole('row', { name: /^Red: Melody/ });
   await expect(after.getByRole('combobox', { name: 'Sound' })).toHaveValue('violin');
   await expect(after.getByRole('radiogroup', { name: 'Each counter plays' }).getByRole('radio', { name: 'One note' })).toHaveAttribute('aria-checked', 'true');
@@ -48,7 +48,7 @@ test('the helpers play: extra notes on, then frozen', async ({ page }) => {
   await openLaptopBoard(page);
   await pickColour(page, 'Red');
   await place(page, [[3, 1], [5, 3], [4, 5]]);
-  await page.getByRole('tab', { name: 'Sound' }).click();
+  await soundTab(page);
   const extra = page.getByRole('group', { name: 'Extra notes' });
   await extra.getByRole('radio', { name: 'Some' }).click();
   await page.getByRole('button', { name: '▶ Play the board' }).first().click();
@@ -95,7 +95,7 @@ test('the laptop board can add more colours, each with a job, and they play', as
   await place(page, [[4, 1]]);
   await page.getByRole('button', { name: '▶ Play the board' }).first().click();
   await expect.poll(() => notesPlayed(page), { timeout: 15_000 }).toBeGreaterThan(0);
-  await page.getByRole('tab', { name: 'Sound' }).click();
+  await soundTab(page);
   await expect(page.getByRole('row', { name: /^Orange: Melody/ })).toBeVisible();
   expect(pageErrors(page)).toEqual([]);
 });
@@ -133,7 +133,7 @@ test('a counter past its part’s loop shows that it doesn’t play', async ({ p
   await openLaptopBoard(page);
   // One note per counter (a tune owns a whole stretch of the loop, so this doesn't apply to it).
   await oneNote(page, /^Red: Melody/);
-  await page.getByRole('tab', { name: 'Groove' }).click();
+  await page.getByRole('tab', { name: 'Timing' }).click();
   await page.getByRole('radiogroup', { name: 'Melody loop length' }).getByRole('radio', { name: '6', exact: true }).click();
   await pickColour(page, 'Red');
   await place(page, [[3, 8], [3, 2]]);
@@ -145,15 +145,15 @@ test('a counter past its part’s loop shows that it doesn’t play', async ({ p
   expect(pageErrors(page)).toEqual([]);
 });
 
-test('ping-pong with two pages: choose each page there and back, or one strip', async ({ page }) => {
+test('there and back (was ping-pong) with two pages: choose each page there and back, or one strip', async ({ page }) => {
   await openLaptopBoard(page);
   await pickColour(page, 'Red');
   await place(page, [[3, 1]]);
-  await page.getByRole('tab', { name: 'Groove' }).click();
-  await page.getByRole('radiogroup', { name: 'Pages' }).getByRole('radio', { name: '2', exact: true }).click();
+  await page.getByRole('tab', { name: 'Timing' }).click();
+  await page.getByRole('radiogroup', { name: 'Boards in turn' }).getByRole('radio', { name: '2', exact: true }).click();
   await page.getByRole('tab', { name: 'Board' }).click();
-  await page.getByRole('switch', { name: 'Ping-pong' }).click();
-  const choice = page.getByRole('radiogroup', { name: 'Ping-pong with 2 pages' });
+  await page.getByRole('switch', { name: 'There and back' }).click();
+  const choice = page.getByRole('radiogroup', { name: 'There and back with 2 pages' });
   await expect(choice.getByRole('radio', { name: 'Each page there and back' })).toBeChecked();
   await choice.getByRole('radio', { name: 'All pages as one strip' }).click();
   await expect(page.getByText('A → B → to the end, then back B ← A ←: like one long board.')).toBeVisible();
@@ -262,7 +262,7 @@ test('Play on the laptop from Welcome: the laptop board, and a two-step set-up w
 
 test('each new instrument loads and plays with ▶ Hear', async ({ page }) => {
   await openLaptopBoard(page);
-  await page.getByRole('tab', { name: 'Sound' }).click();
+  await soundTab(page);
   const hearEach = async (job: RegExp, keys: string[]): Promise<void> => {
     const red = page.getByRole('row', { name: job });
     for (const key of keys) {
@@ -304,7 +304,7 @@ test('Stop silences a launched loop; it does not come back on Play', async ({ pa
 test('New loop starts from silence, Keep names it, Leave restores the player’s settings', async ({ page }) => {
   await openLaptopBoard(page);
   // The player's own settings: a quiet band, and a loop already playing.
-  await page.getByRole('tab', { name: 'Sound' }).click();
+  await soundTab(page);
   await page.getByRole('group', { name: 'Band' }).getByRole('radio', { name: 'Quiet' }).click();
   await pieceStep(page, 'Loops');
   await pickColour(page, 'Red');
@@ -338,7 +338,7 @@ test('New loop starts from silence, Keep names it, Leave restores the player’s
 
   // Leaving gave the player's own settings back.
   await page.getByRole('button', { name: 'Board', exact: true }).click();
-  await page.getByRole('tab', { name: 'Sound' }).click();
+  await soundTab(page);
   await expect(page.getByRole('group', { name: 'Band' }).getByRole('radio', { name: 'Quiet' })).toHaveAttribute('aria-checked', 'true');
   expect(pageErrors(page)).toEqual([]);
 });
@@ -347,7 +347,7 @@ test('a "d" typed on a button or in a list never opens a Debug Panel (only ?debu
   await openLaptopBoard(page);
   await page.getByRole('button', { name: '▶ Play the board' }).first().focus();
   await page.keyboard.press('d');
-  await page.getByRole('tab', { name: 'Sound' }).click();
+  await soundTab(page);
   // A keyboard user types a letter in a list to jump through it.
   await page.getByRole('row', { name: /^Red: Melody/ }).getByRole('combobox', { name: 'Sound' }).focus();
   await page.keyboard.press('d');
@@ -399,7 +399,7 @@ test('▶ Play and ▶ Start the piece on an empty board send nothing to the spe
 
 test('Sound → Chords: a new player has the world’s own chords, two bars each, and melody and bass fit the chord; both can be changed and are kept', async ({ page }) => {
   await openLaptopBoard(page);
-  await page.getByRole('tab', { name: 'Sound' }).click();
+  await soundTab(page);
   const card = page.getByRole('group', { name: 'Chords' });
   await expect(card.getByRole('radio', { name: 'The world’s own', exact: true })).toHaveAttribute('aria-checked', 'true');
   await expect(card.getByRole('radio', { name: '2 bars', exact: true })).toHaveAttribute('aria-checked', 'true');
@@ -417,7 +417,7 @@ test('Sound → Chords: a new player has the world’s own chords, two bars each
   await page.evaluate(() => new Promise((r) => { window.setTimeout(r, 1200); })); // saves are gathered for a moment
   await page.reload();
   await page.getByRole('button', { name: /Board Sequencer/ }).click();
-  await page.getByRole('tab', { name: 'Sound' }).click();
+  await soundTab(page);
   await expect(card.getByRole('radio', { name: 'Calm', exact: true })).toHaveAttribute('aria-checked', 'true');
   await expect(card.getByRole('radio', { name: '4 bars', exact: true })).toHaveAttribute('aria-checked', 'true');
   await expect(fit).toHaveAttribute('aria-checked', 'false');
@@ -426,7 +426,7 @@ test('Sound → Chords: a new player has the world’s own chords, two bars each
 
 test('Sound → Band parts and Keep my notes on top: a new player has pads, bass and drums kept as jobs and their notes on top; both can be changed and are kept', async ({ page }) => {
   await openLaptopBoard(page);
-  await page.getByRole('tab', { name: 'Sound' }).click();
+  await soundTab(page);
   const parts = page.getByRole('group', { name: 'Band parts' });
   await expect(parts.getByRole('radio', { name: 'Choose parts', exact: true })).toHaveAttribute('aria-checked', 'true');
   for (const [job, on] of [['Pads', 'true'], ['Bass', 'true'], ['Drums', 'true'], ['Counter-melody', 'false']] as const) {
@@ -443,7 +443,7 @@ test('Sound → Band parts and Keep my notes on top: a new player has pads, bass
   await page.evaluate(() => new Promise((r) => { window.setTimeout(r, 1200); })); // saves are gathered for a moment
   await page.reload();
   await page.getByRole('button', { name: /Board Sequencer/ }).click();
-  await page.getByRole('tab', { name: 'Sound' }).click();
+  await soundTab(page);
   await expect(parts.getByRole('switch', { name: 'Counter-melody', exact: true })).toHaveAttribute('aria-checked', 'true');
   await expect(parts.getByRole('switch', { name: 'Drums', exact: true })).toHaveAttribute('aria-checked', 'false');
   await expect(onTop).toHaveAttribute('aria-checked', 'false');

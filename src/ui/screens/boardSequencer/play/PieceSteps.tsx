@@ -20,6 +20,10 @@ import { ReadyList, type ReadyItem } from './ReadyCheck';
 import { ChordChoice, chordWords } from './ChordChoice';
 import { BandJobsChoice } from './BandJobsChoice';
 import { ENERGY_LEVELS, ENERGY_WORDS, energyLine, type SceneEnergy } from '../../../../songs/performance/energy';
+import { ENERGY_NAMES, WORDS } from '../words';
+import { SwatchChip } from '../ui/SwatchChip';
+import type { BoardPalette } from '../theme/boardTokens';
+import { useSessionFold } from '../ui/useSessionFold';
 
 export interface PieceLoop {
   slot: number;
@@ -72,6 +76,8 @@ export interface PieceStepsProps {
   rows: number;
   cols: number;
   swatchFor(colour: string): string;
+  /** The board's colours, for the counters' two-tone ring beside each colour. */
+  palette: BoardPalette;
   /** New loop: composing from silence. Shown in place of the list while it is on. */
   newLoop: ReactNode;
   /** The colours that play notes, each with when it comes in (Scenes: When each colour comes in). */
@@ -192,8 +198,8 @@ const card = { padding: 12, borderRadius: 'var(--bs-radius-md)', background: 'va
 const ENDINGS: { value: EndingStyle; label: string; what: string }[] = [
   { value: 'chord', label: 'Final chord', what: 'The texture thins, then a held chord and a crash ring out. A clear end the audience hears.' },
   { value: 'fade', label: 'Fade out', what: 'Everything fades together.' },
-  { value: 'slow', label: 'Slow down', what: 'The tempo eases to about half, then stops on the one.' },
-  { value: 'thin', label: 'Thin out', what: 'The band and the fill leave first, so the player’s own notes end the piece.' },
+  { value: 'slow', label: 'Slow down', what: 'The speed eases to about half, then stops on the one.' },
+  { value: 'thin', label: 'Thin out', what: 'The band and the extra notes leave first, so the player’s own notes end the piece.' },
   { value: 'stop', label: 'Stop', what: 'A tidy stop at the end of the pass.' },
 ];
 
@@ -303,7 +309,7 @@ function LoopsStep(p: PieceStepsProps): JSX.Element {
           {otherWays ? '▾' : '▸'} Other ways to make a loop
         </button>
       )}
-      {oldWays && <p style={note}>Save the board here keeps the counters on the board as that loop. ✎ Edit notes changes a loop square by square.</p>}
+      {oldWays && <p style={note}>{`${WORDS.keepBoardAsLoop} keeps the counters on the board as that loop. ✎ Edit notes changes a loop square by square.`}</p>}
       <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
         {p.loops.map((l) => {
           const empty = l.state === 'empty';
@@ -338,7 +344,7 @@ function LoopsStep(p: PieceStepsProps): JSX.Element {
                   }}
                   reason={p.canSaveBoard ? null : 'Put counters on the board first.'}
                 >
-                  Save the board here
+                  {WORDS.keepBoardAsLoop}
                 </Button>
               )) : (
                 <>
@@ -347,7 +353,7 @@ function LoopsStep(p: PieceStepsProps): JSX.Element {
                   {oldWays && <Button
                     tone="secondary"
                     disabled={!p.canSaveBoard}
-                    title={p.canSaveBoard ? 'Overwrite this loop with the counters on the board now' : 'Put counters on the board first.'}
+                    title={p.canSaveBoard ? 'Replace this loop with the counters on the board now' : 'Put counters on the board first.'}
                     onClick={() => {
                       if (replaceArmed !== l.slot) { setReplaceArmed(l.slot); return; }
                       setReplaceArmed(null);
@@ -355,7 +361,7 @@ function LoopsStep(p: PieceStepsProps): JSX.Element {
                     }}
                     onBlur={() => setReplaceArmed((r) => (r === l.slot ? null : r))}
                   >
-                    {replaceArmed === l.slot ? 'Press again to overwrite' : 'Overwrite with board'}
+                    {replaceArmed === l.slot ? 'Press again to replace it' : WORDS.keepBoardAsLoop}
                   </Button>}
                 </>
               )}
@@ -374,7 +380,7 @@ function LoopsStep(p: PieceStepsProps): JSX.Element {
       {more && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <SegmentedControl<number>
-            label="Loops fade in and out over"
+            label="Loops fade in and out over" showLabel
             value={p.loopFadePasses}
             onChange={p.onLoopFade}
             options={[{ value: 0, label: 'At once' }, { value: 0.5, label: 'Half a pass' }, { value: 1, label: '1 pass' }, { value: 2, label: '2 passes' }]}
@@ -393,7 +399,7 @@ function LoopsStep(p: PieceStepsProps): JSX.Element {
 function EnergyGraph({ scenes, lengthSec }: { scenes: readonly Scene[]; lengthSec: number }): JSX.Element | null {
   const line = energyLine(scenes).filter((x) => x.at < lengthSec);
   if (line.length === 0) return null;
-  const words = line.map((x) => `${x.name} ${x.energy === 0 ? 'off' : x.energy}`);
+  const words = line.map((x) => `${x.name} ${ENERGY_NAMES[x.energy]}`);
   const y = (e: SceneEnergy): number => 46 - e * 8;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -564,11 +570,11 @@ function ScenesStep(p: PieceStepsProps): JSX.Element {
             label="Scenes leave the player's strips alone"
             checked={p.respectPlayer}
             onChange={p.onRespectPlayer}
-            hint="If the player moved Speed, Fill or Evolve on the iPad since the last scene, the next scene keeps their setting."
+            hint={`If the player moved ${WORDS.speed}, ${WORDS.extraNotes} or ${WORDS.soundsChange} on the iPad since the last scene, the next scene keeps their setting.`}
           />
         </>
       )}
-      {p.colours.length > 0 && <ColourTimes colours={p.colours} lengthSec={p.lengthSec} onChange={p.onColourEntry} />}
+      {p.colours.length > 0 && <ColourTimes colours={p.colours} lengthSec={p.lengthSec} palette={p.palette} onChange={p.onColourEntry} />}
       <StepFooter back={{ label: 'Loops', onClick: () => p.onStep('loops') }} next={{ label: 'Next: Ending & check', onClick: () => p.onStep('ending'), primary: true }} />
     </section>
   );
@@ -579,7 +585,7 @@ function ScenesStep(p: PieceStepsProps): JSX.Element {
  * then play. All the counters go on the board before the piece (Tim can't place them), so
  * this is how the opening is the loops alone. For the whole piece, not per scene.
  */
-function ColourTimes({ colours, lengthSec, onChange }: { colours: PieceColourTime[]; lengthSec: number; onChange(id: string, at: number | null): void }): JSX.Element {
+function ColourTimes({ colours, lengthSec, palette, onChange }: { colours: PieceColourTime[]; lengthSec: number; palette: BoardPalette; onChange(id: string, at: number | null): void }): JSX.Element {
   return (
     <div style={card} role="group" aria-labelledby="piece-colours">
       <span id="piece-colours" style={{ fontWeight: 800 }}>When each colour comes in</span>
@@ -587,12 +593,12 @@ function ColourTimes({ colours, lengthSec, onChange }: { colours: PieceColourTim
         A colour&rsquo;s counters stay silent until its time, then play. The times count only while the
         piece plays: ▶ Play the board on its own plays every colour. Blank: from the start. Loops always play.
       </p>
-      {colours.map((c) => <ColourTimeRow key={c.id} colour={c} lengthSec={lengthSec} onChange={(at) => onChange(c.id, at)} />)}
+      {colours.map((c) => <ColourTimeRow key={c.id} colour={c} lengthSec={lengthSec} palette={palette} onChange={(at) => onChange(c.id, at)} />)}
     </div>
   );
 }
 
-function ColourTimeRow({ colour: c, lengthSec, onChange }: { colour: PieceColourTime; lengthSec: number; onChange(at: number | null): void }): JSX.Element {
+function ColourTimeRow({ colour: c, lengthSec, palette, onChange }: { colour: PieceColourTime; lengthSec: number; palette: BoardPalette; onChange(at: number | null): void }): JSX.Element {
   const [text, setText] = useState(c.at === null ? '' : formatClock(c.at));
   const parsed = text.trim() === '' ? null : parseClock(text);
   const typo = text.trim() !== '' && parsed === null;
@@ -604,7 +610,8 @@ function ColourTimeRow({ colour: c, lengthSec, onChange }: { colour: PieceColour
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-        <span aria-hidden="true" style={{ width: 16, height: 16, borderRadius: '50%', background: c.swatch, border: '1px solid var(--bs-border-control)', flexShrink: 0 }} />
+        {/* The counters' own two-tone ring, as in the colour table (A16): a dark counter stays seen. */}
+        <SwatchChip swatch={c.swatch} palette={palette} surface={palette.elev} size={18} />
         <span style={{ fontWeight: 700, minWidth: 64 }}>{c.name}</span>
         <span style={{ fontSize: 12, color: 'var(--bs-fg2)', minWidth: 60 }}>{c.job}</span>
         <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
@@ -660,14 +667,14 @@ function EndingStep(p: PieceStepsProps): JSX.Element {
       </div>
       {perf.style !== 'stop' && (
         <SegmentedControl<number>
-          label="The ending takes"
+          label="The ending takes" showLabel
           value={perf.fadePasses}
           onChange={(fadePasses) => p.onPerformance({ fadePasses })}
           options={[{ value: 1, label: '1 pass' }, { value: 2, label: '2 passes' }, { value: 4, label: '4 passes' }]}
         />
       )}
       <SegmentedControl<EndingMode>
-        label="When it ends"
+        label="When it ends" showLabel
         value={perf.ending}
         onChange={(ending) => p.onPerformance({ ending })}
         options={[
@@ -787,8 +794,13 @@ function SceneRow(r: SceneRowProps): JSX.Element {
   const glide = typeof s.glideSec === 'number' && s.glideSec > 0 ? s.glideSec : 0;
   const fill = FILL_STEPS[nearestStep(FILL_STEPS, s.settings.fillAmount)].label.toLowerCase();
   const evolve = EVOLVE_STEPS[nearestStep(EVOLVE_STEPS, s.settings.evolveAmount)].label.toLowerCase();
+  // The line under the scene: what A1 keeps in view, its loops and its Energy.
   const summary = [
     loopNames.length > 0 ? loopNames.join(', ') : s.alone ? `${who.Name} alone` : 'no loops',
+    `Energy: ${ENERGY_NAMES[s.settings.sceneEnergy]}`,
+  ].join(' · ');
+  // The rest, said on "More for this scene" while it is folded, so nothing set is hidden.
+  const moreSummary = [
     world,
     BAND_WORDS[s.settings.band],
     ...(s.settings.band !== 'off' ? [bandJobsWords(s.settings.bandJobs)] : []),
@@ -796,11 +808,12 @@ function SceneRow(r: SceneRowProps): JSX.Element {
     evolve === 'off' ? 'sounds stay' : `sounds change ${evolve === 'more' ? 'a lot' : 'slowly'}`,
     `${s.settings.bpm} BPM${glide > 0 ? `, reached over ${glide} s` : ''}`,
     chordWords(s.settings.chords),
-    ...(s.settings.sceneEnergy > 0 ? [`energy ${s.settings.sceneEnergy}`] : []),
     ...(s.leadIn ? [`${LEAD_IN_WORDS[s.leadIn].label.toLowerCase()} before it`] : []),
   ].join(' · ');
   const set = (patch: Partial<Scene['settings']>): void => r.onEdit({ settings: { ...s.settings, ...patch } });
   const kept = s.aiIdeas?.length ?? 0;
+  // One fold for every scene, remembered for the session (A1).
+  const [more, toggleMore] = useSessionFold('scene-more');
 
   return (
     <div
@@ -904,19 +917,27 @@ function SceneRow(r: SceneRowProps): JSX.Element {
             />
             <span>{`${who.Name} alone: no loops, only what ${who.name} plays`}</span>
           </label>
-          <SegmentedControl<SoundWorldChoice> label="Sound world" value={s.settings.soundWorld} onChange={(soundWorld) => set({ soundWorld })} options={r.worldOptions} />
+          <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>Energy</span>
+          <SegmentedControl<number>
+            label="Energy of this scene" value={s.settings.sceneEnergy} onChange={(e) => set({ sceneEnergy: e as SceneEnergy })}
+            options={[{ value: 0, label: ENERGY_NAMES[0] }, ...ENERGY_LEVELS.map((e) => ({ value: e, label: ENERGY_NAMES[e] }))]}
+          />
+          <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>{ENERGY_WORDS[s.settings.sceneEnergy]}</span>
+          <button
+            type="button" aria-expanded={more} onClick={toggleMore}
+            style={{ alignSelf: 'stretch', textAlign: 'left', background: 'transparent', border: 'none', borderTop: '1px solid var(--bs-border)', color: 'inherit', minHeight: 'var(--bs-target)', cursor: 'pointer', padding: '6px 0' }}
+          >
+            <span style={{ fontWeight: 700 }}>{`${more ? '▾' : '▸'} More for this scene`}</span>
+            {!more && <span style={{ display: 'block', fontSize: 12, color: 'var(--bs-fg2)' }}>{moreSummary}</span>}
+          </button>
+          {more && (<>
+          <SegmentedControl<SoundWorldChoice> label="Sound world" showLabel value={s.settings.soundWorld} onChange={(soundWorld) => set({ soundWorld })} options={r.worldOptions} />
           <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>Band</span>
           <SegmentedControl<BandLevel>
             label="Band" value={s.settings.band} onChange={(band) => set({ band })}
             options={[{ value: 'off', label: 'Off' }, { value: 'gentle', label: 'Quiet' }, { value: 'full', label: 'Full' }]}
           />
           {s.settings.band !== 'off' && <BandJobsChoice value={s.settings.bandJobs} onChange={(bandJobs) => set({ bandJobs })} />}
-          <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>Energy</span>
-          <SegmentedControl<number>
-            label="Energy of this scene" value={s.settings.sceneEnergy} onChange={(e) => set({ sceneEnergy: e as SceneEnergy })}
-            options={[{ value: 0, label: 'Off' }, ...ENERGY_LEVELS.map((e) => ({ value: e, label: String(e) }))]}
-          />
-          <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>{ENERGY_WORDS[s.settings.sceneEnergy]}</span>
           <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>Lead-in</span>
           <SegmentedControl<LeadIn>
             label="Lead-in" value={s.leadIn ?? 'none'} onChange={(leadIn) => r.onEdit({ leadIn })}
@@ -936,7 +957,7 @@ function SceneRow(r: SceneRowProps): JSX.Element {
             onChange={(k) => set({ evolveAmount: EVOLVE_STEPS[k].value })}
             options={EVOLVE_STEPS.map((x, k) => ({ value: k, label: x.label }))}
           />
-          <LabeledSlider label="Tempo" min={40} max={240} value={s.settings.bpm} display={`${s.settings.bpm} BPM`} onChange={(v) => set({ bpm: Math.round(v) })} />
+          <LabeledSlider label={WORDS.speed} min={40} max={240} value={s.settings.bpm} display={`${s.settings.bpm} BPM`} onChange={(v) => set({ bpm: Math.round(v) })} />
           {/* Gradually: when it comes in while the board plays, from the speed then to this one. */}
           <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>Reach this speed</span>
           <SegmentedControl<'once' | 'gradually'>
@@ -960,12 +981,12 @@ function SceneRow(r: SceneRowProps): JSX.Element {
             </span>
           </div>
           {!r.onUpdateFromNow && <p style={note}>While the board plays, Update from now copies what is playing into this scene.</p>}
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {r.onUpdateFromNow && (
-              <Button tone="secondary" onClick={r.onUpdateFromNow} title="Replace this scene's loops and sound with what is playing now">Update from now</Button>
-            )}
-            <Button tone="quiet" onClick={(e) => r.onDelete(e.currentTarget)}>Delete scene</Button>
-          </div>
+          {r.onUpdateFromNow && (
+            <div><Button tone="secondary" onClick={r.onUpdateFromNow} title="Replace this scene's loops and sound with what is playing now">Update from now</Button></div>
+          )}
+          </>)}
+          {/* Not a setting: always in reach, folded or not. */}
+          <div><Button tone="quiet" onClick={(e) => r.onDelete(e.currentTarget)}>Delete scene</Button></div>
         </div>
       )}
     </div>

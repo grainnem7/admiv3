@@ -1,7 +1,7 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { makePlan, notesPlayed, openLaptopBoard, pageErrors, pickColour, place, startPiece } from './app';
+import { makePlan, notesPlayed, openLaptopBoard, pageErrors, pickColour, place, sessionLog, startPiece } from './app';
 
 /**
  * The audience screen (spec 2026-10-29): a window of its own for the projector, fed by the
@@ -136,6 +136,7 @@ interface Timing { lateBeats: number; skippedBeats: number; lostSec: number; wor
 
 /** The keeping-time reading of the last run, from the session log saved as JSON. */
 async function lastTiming(page: Page): Promise<Timing> {
+  await sessionLog(page); // folded under the board (A15)
   const [download] = await Promise.all([
     page.waitForEvent('download'),
     page.getByRole('button', { name: /^Save the session log as JSON/ }).click(),

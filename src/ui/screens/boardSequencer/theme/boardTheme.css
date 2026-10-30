@@ -181,6 +181,9 @@
 .bs-root label:has(> input[type="checkbox"]) {
   min-height: var(--bs-target);
   cursor: pointer;
+  /* Its words beside the box, not pushed to the far edge by the app-wide label style
+     (space-between): "Tim alone" sat a panel's width from its box. */
+  justify-content: flex-start;
 }
 
 /*

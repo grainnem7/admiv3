@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { notesPlayed, openLaptopBoard, pageErrors, pickColour, pieceStep, place, startPiece } from './app';
+import { notesPlayed, openLaptopBoard, pageErrors, pickColour, pieceStep, place, soundTab, startPiece } from './app';
 
 /**
  * Ableton as the Board Sequencer's sound, end to end with a stand-in MIDI port: Chrome's
@@ -168,7 +168,7 @@ test('picking Harp on a card switches that channel’s Ableton chain (CC 30 = 22
   await setUpAbleton(page);
   await page.getByRole('button', { name: '▶ Play the board' }).first().click();
   await expect.poll(async () => (await sentSince(page, 0)).filter(isOn).length, { timeout: 15_000 }).toBeGreaterThan(0);
-  await page.getByRole('tab', { name: 'Sound' }).click();
+  await soundTab(page);
   const t = await now(page);
   await page.getByRole('row', { name: /^Red: Melody/ }).getByRole('combobox', { name: 'Sound' }).selectOption('harp');
   await expect.poll(() => lastCc(page, t, 30, 1), { timeout: 5_000 }).toBe(22);
@@ -180,13 +180,14 @@ test('picking Harp on a card switches that channel’s Ableton chain (CC 30 = 22
 test('changing World switches every channel without its own sound', async ({ page }) => {
   await openLaptopBoard(page);
   // Sounds change off (a new player's default): a changing colour would keep its own sound.
+  await soundTab(page);
   await page.getByRole('group', { name: 'Sounds change' }).getByRole('radio', { name: 'Off' }).click();
   await pickColour(page, 'Red');
   await place(page, [[3, 1]]);
   await setUpAbleton(page);
   await page.getByRole('button', { name: '▶ Play the board' }).first().click();
   await expect.poll(async () => (await sentSince(page, 0)).filter(isOn).length, { timeout: 15_000 }).toBeGreaterThan(0);
-  await page.getByRole('tab', { name: 'Sound' }).click();
+  await soundTab(page);
   const t = await now(page);
   await page.getByRole('radiogroup', { name: 'Sound world' }).getByRole('radio', { name: 'Ambient' }).click();
   // Ambient is chain 3: the middle of its zone (6 to 8, so 7) on the sound tracks, × 8 (16) on the drums' kit rack.
@@ -199,6 +200,7 @@ test('the AI line says when Extra notes and Sounds change are both off', async (
   const line = page.getByText(/AI: Extra notes off · Sounds change off/);
   // A new player starts with both off: what they hear is their own counters.
   await expect(line.first()).toBeVisible();
+  await soundTab(page);
   await page.getByRole('group', { name: 'Extra notes' }).getByRole('radio', { name: 'A few' }).click();
   await expect(line).toHaveCount(0);
   await page.getByRole('group', { name: 'Extra notes' }).getByRole('radio', { name: 'Off' }).click();

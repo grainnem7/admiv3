@@ -1,4 +1,4 @@
-import { expect, type BrowserContext, type Page } from '@playwright/test';
+import { expect, type BrowserContext, type Locator, type Page } from '@playwright/test';
 
 /**
  * Open the Board Sequencer on the laptop board with four ready-made colours, cut off
@@ -71,7 +71,7 @@ export async function pickColour(page: Page, colour: string): Promise<void> {
  * ("Red: Melody").
  */
 export async function oneNote(page: Page, row: RegExp): Promise<void> {
-  await page.getByRole('tab', { name: 'Sound' }).click();
+  await soundTab(page);
   await page.getByRole('row', { name: row }).getByRole('radiogroup', { name: 'Each counter plays' })
     .getByRole('radio', { name: 'One note' }).click();
 }
@@ -84,8 +84,42 @@ export async function place(page: Page, squares: [row: number, step: number][]):
   }
 }
 
+/**
+ * The Sound tab, with every helper open: each folds to one line (A1) and stays as it was
+ * left for the session, so this opens the ones still folded.
+ */
+export async function soundTab(page: Page): Promise<void> {
+  await page.getByRole('tab', { name: 'Sound' }).click();
+  const folded = page.locator('button[data-helper-fold][aria-expanded="false"]');
+  while (await folded.count() > 0) await folded.first().click();
+}
+
+/** The open scene's "More for this scene" (A1), opened if folded. Remembered for the session. */
+export async function sceneMore(page: Page): Promise<void> {
+  const more = page.getByRole('button', { name: /More for this scene/ });
+  if ((await more.getAttribute('aria-expanded')) === 'false') await more.click();
+}
+
+/**
+ * What the open scene's More says folded: one line with all it holds (A1). Folds it first,
+ * so the line shows; sceneMore opens it again.
+ */
+export async function sceneMoreLine(page: Page): Promise<Locator> {
+  const more = page.getByRole('button', { name: /More for this scene/ });
+  if ((await more.getAttribute('aria-expanded')) === 'true') await more.click();
+  return more;
+}
+
+/** The research tools under the board, folded under "Session log" (A15): opened if shut. */
+export async function sessionLog(page: Page): Promise<void> {
+  const log = page.locator('details[data-session-log]');
+  // Its own summary: Earlier takes, inside it, has one too.
+  if ((await log.getAttribute('open')) === null) await log.locator(':scope > summary').click();
+}
+
 /** How many notes the session log has counted (the "Save session (N notes)" button). */
 export async function notesPlayed(page: Page): Promise<number> {
+  await sessionLog(page);
   const text = await page.getByRole('button', { name: /Save the session log/ }).textContent();
   return Number(/\((\d+) notes?\)/.exec(text ?? '')?.[1] ?? 0);
 }
@@ -190,10 +224,11 @@ export async function pressAndListen(page: Page, buttonText: string, bins = 40, 
 
 /**
  * The old way to make a loop: Make a piece → Loops → "Other ways to make a loop" (folded,
- * B17) → Save the board here, on the first empty loop. The fold stays open once opened.
+ * B17) → Keep the board as this loop (A2), on the first empty loop. The fold stays open once opened.
  */
 export async function saveBoardHere(page: Page): Promise<void> {
   const fold = page.getByRole('button', { name: /Other ways to make a loop/ });
   if ((await fold.getAttribute('aria-expanded')) === 'false') await fold.click();
-  await page.getByRole('button', { name: 'Save the board here' }).first().click();
+  // On an empty loop: a kept loop's button of the same name replaces it (after a second press).
+  await page.getByRole('listitem', { name: /, empty$/ }).first().getByRole('button', { name: 'Keep the board as this loop' }).click();
 }

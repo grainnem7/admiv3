@@ -17,7 +17,7 @@ export function abletonReadyItem(p: {
   if (p.soundFrom === 'admi') {
     return p.deviceId === ''
       ? null
-      : { label: 'A MIDI port is chosen but Sound from is ADMI', state: 'warn', fix: 'If Ableton should play, choose Ableton or Both under Sound from on the Connections tab.' };
+      : { label: 'A MIDI port is chosen but Sound from is ADMI', state: 'warn', fix: 'If Ableton should play, choose Ableton or Both under Sound from on the Connections tab.', place: 'connections' };
   }
   const who = p.soundFrom === 'both' ? 'Ableton and ADMI' : 'Ableton';
   if (p.deviceId === '' || !p.connected) {
@@ -25,10 +25,11 @@ export function abletonReadyItem(p: {
       label: `Sound from is ${who}, but the MIDI port is missing`,
       state: 'problem',
       fix: 'Open loopMIDI, check the ADMI port is there, then choose it on the Connections tab. Until then ADMI plays its own sound.',
+      place: 'connections',
     };
   }
   if (p.holdOnAdmi) {
-    return { label: 'ADMI is still playing its own sound', state: 'warn', fix: 'The port is back: press "Switch to Ableton" in the banner, or on the Connections tab.' };
+    return { label: 'ADMI is still playing its own sound', state: 'warn', fix: 'The port is back: press "Switch to Ableton" in the banner, or on the Connections tab.', place: 'connections' };
   }
   return { label: `MIDI port ${name} connected (play the test note on the Connections tab to hear Ableton)`, state: 'ok' };
 }
@@ -46,5 +47,6 @@ export function abletonTracksItem(soundFrom: SoundFrom): ReadyItem | null {
     label: 'Ableton has tracks for the band (11, 12) and Extra notes (13)?',
     state: 'warn',
     fix: `${ABLETON_TRACKS_NOTE} Play test note on the Connections tab plays each channel in turn: a gap is a missing track.`,
+    place: 'connections',
   };
 }

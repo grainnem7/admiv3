@@ -5,15 +5,15 @@
  */
 import type { ColourId, ColourRole } from '../../../tracking/boardColours';
 import type { FaderRole } from '../../../profiles/BoardSequencerConfig';
+import { FADER_WORDS } from './words';
 
 export interface ControlOwner {
   channelId: ColourId;
   role: FaderRole;
 }
 
-const FADER_LABELS: Record<FaderRole, string> = {
-  volume: 'Volume', reverb: 'Reverb', delay: 'Delay', tone: 'Tone', tempo: 'Tempo', fill: 'Fill', evolve: 'Evolve',
-};
+/** The one word list's words (A2). */
+const FADER_LABELS: Record<FaderRole, string> = FADER_WORDS;
 
 const isFader = (r: ColourRole): r is FaderRole => r in FADER_LABELS;
 
@@ -34,7 +34,7 @@ export function disabledReason(
   owners: Partial<Record<FaderRole, ControlOwner>>,
   syncedToSong = false,
 ): string | null {
-  if (role === 'tempo' && syncedToSong) return 'Tempo follows the backing song';
+  if (role === 'tempo' && syncedToSong) return `${FADER_WORDS.tempo} follows the backing song`;
   if (owners[role]) return `${FADER_LABELS[role]} is set by the ${FADER_LABELS[role].toLowerCase()} counter`;
   return null;
 }

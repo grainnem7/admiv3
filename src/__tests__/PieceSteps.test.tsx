@@ -4,12 +4,14 @@ import { act } from 'react';
 import { PieceSteps, sceneChipLabel, type PieceLoop, type PieceStepsProps } from '../ui/screens/boardSequencer/play/PieceSteps';
 import { DEFAULT_PERFORMANCE } from '../songs/performance/clock';
 import type { Scene, SceneSettings } from '../songs/performance/launcher';
+import { BOARD_TOKENS } from '../ui/screens/boardSequencer/theme/boardTokens';
+import { forgetFolds } from '../ui/screens/boardSequencer/ui/useSessionFold';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 let host: HTMLDivElement;
 let root: Root;
-beforeEach(() => { host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host); });
+beforeEach(() => { forgetFolds(); host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host); });
 afterEach(() => { act(() => root.unmount()); host.remove(); });
 
 const settings: SceneSettings = { soundWorld: 'warm', band: 'gentle', phrases: true, fillAmount: 0, evolveAmount: 0, bpm: 90, chords: { sequence: 'asBefore', bars: 2 }, bandJobs: { asBefore: true, pads: true, bass: true, drums: true, counter: false }, sceneEnergy: 0 };
@@ -25,7 +27,7 @@ function props(over: Partial<PieceStepsProps> = {}): PieceStepsProps {
     loops: [loop(0, 'Bed'), loop(1, 'Pulse'), ...[2, 3, 4, 5, 6, 7].map((s) => loop(s, '', true))],
     loopFadePasses: 1, performance: { ...DEFAULT_PERFORMANCE }, respectPlayer: true, canSaveBoard: false, loopsFull: false,
     deletedSceneName: null, diskLine: '', restoreError: null, worldOptions: [{ value: 'warm', label: 'Warm' }],
-    readyItems: [], rows: 8, cols: 8, swatchFor: () => '#000', newLoop: null, playerName: 'Tim',
+    readyItems: [], rows: 8, cols: 8, swatchFor: () => '#000', palette: BOARD_TOKENS.calm.dark, newLoop: null, playerName: 'Tim',
     colours: [
       { id: 'c1', name: 'Red', swatch: '#e03030', job: 'Melody', at: null },
       { id: 'c2', name: 'Blue', swatch: '#3050e0', job: 'Bass', at: 150 },
@@ -56,6 +58,16 @@ function typeAndLeave(el: HTMLInputElement, value: string): void {
   act(() => { el.dispatchEvent(new FocusEvent('focusout', { bubbles: true })); });
 }
 const openPanelName = (): string | undefined => (input('Scene name')?.defaultValue);
+/** "More for this scene", in the open scene (A1). */
+const moreButton = (): HTMLButtonElement | undefined => button(/More for this scene/);
+/** What the fold says while it is shut: everything it holds, in one line. */
+const moreLine = (): string => moreButton()?.textContent ?? '';
+const openMore = (): void => {
+  const m = moreButton();
+  if (m?.getAttribute('aria-expanded') === 'false') act(() => m.click());
+};
+/** Open a scene and its More (the controls the tests below change live there). */
+const openScene = (name: RegExp): void => { act(() => button(name)?.click()); openMore(); };
 
 describe('Scenes: the open panel follows its scene (T2-02)', () => {
   it('after a time edit re-sorts the list, the panel is still on the scene being edited', () => {
@@ -233,7 +245,7 @@ describe('Ending & check: fixing from the check', () => {
 });
 
 describe('Loops: one way to make a loop (F1, T1-01, T2-14)', () => {
-  const rows = (): string[] => ['Save the board here', 'Overwrite with board', '✎ Edit notes'];
+  const rows = (): string[] => ['Keep the board as this loop', '✎ Edit notes'];
 
   it('outside New loop and the show, the old ways are folded under "Other ways to make a loop" (B17)', () => {
     render(props({ step: 'loops', canSaveBoard: true }));
@@ -243,8 +255,8 @@ describe('Loops: one way to make a loop (F1, T1-01, T2-14)', () => {
     act(() => fold?.click());
     expect(fold?.getAttribute('aria-expanded')).toBe('true');
     for (const r of rows()) expect(button(r), r).toBeDefined();
-    // Filled mint is for the one main action, New loop: Save the board here is not it.
-    expect(button('Save the board here')?.style.background).not.toBe('var(--bs-accent)');
+    // Filled mint is for the one main action, New loop: Keep the board as this loop is not it.
+    expect(button('Keep the board as this loop')?.style.background).not.toBe('var(--bs-accent)');
     expect(button('New loop')?.style.background).toBe('var(--bs-accent)');
     act(() => fold?.click());
   });
@@ -319,7 +331,7 @@ describe('Scenes: Update from now copies only what is really playing (R2-T2-02)'
   it('stopped: no Update from now in an open scene, and its note says when it can be used', () => {
     const p = props({ running: false });
     render(p);
-    act(() => button(/^3:30 · Open/)?.click());
+    openScene(/^3:30 · Open/);
     expect(button('Update from now')).toBeUndefined();
     expect(text()).toContain('While the board plays, Update from now copies what is playing into this scene.');
   });
@@ -327,7 +339,7 @@ describe('Scenes: Update from now copies only what is really playing (R2-T2-02)'
   it('playing: Update from now is there, and asks for this scene', () => {
     const p = props({ running: true });
     render(p);
-    act(() => button(/^3:30 · Open/)?.click());
+    openScene(/^3:30 · Open/);
     expect(text()).not.toContain('While the board plays, Update from now');
     act(() => button('Update from now')?.click());
     expect(p.onUpdateSceneFromNow).toHaveBeenCalledWith(2);
@@ -474,7 +486,7 @@ describe('Scenes: reach this speed at once, or gradually', () => {
   it('at once by default; Gradually asks for a glide, shown in seconds with a slider', () => {
     const p = props();
     render(p);
-    act(() => button(/^1:30 · Build/)?.click());
+    openScene(/^1:30 · Build/);
     expect(radio('At once')?.getAttribute('aria-checked')).toBe('true');
     expect(slider(/^Over/)).toBeUndefined();
     act(() => radio('Gradually')?.click());
@@ -483,15 +495,17 @@ describe('Scenes: reach this speed at once, or gradually', () => {
 
   it("a scene's own speed reaches Fastest's default, 240, as the hat does", () => {
     render(props());
-    act(() => button(/^1:30 · Build/)?.click());
-    expect(slider(/^Tempo/)?.max).toBe('240');
+    openScene(/^1:30 · Build/);
+    expect(slider(/^Speed/)?.max).toBe('240');
   });
 
   it('a gliding scene shows its time, says so in its line, and goes back to at once', () => {
     const p = props({ scenes: [scene('Arrival', 0), scene('Build', 90, [0], { glideSec: 12 }), scene('Open', 210)] });
     render(p);
-    expect(button(/^1:30 · Build/)?.textContent).toContain('90 BPM, reached over 12 s');
     act(() => button(/^1:30 · Build/)?.click());
+    // Folded, the scene's More says it in one line (A1).
+    expect(moreLine()).toContain('90 BPM, reached over 12 s');
+    openMore();
     expect(radio('Gradually')?.getAttribute('aria-checked')).toBe('true');
     const over = slider(/^Over/);
     expect(over?.min).toBe('2');
@@ -510,15 +524,18 @@ describe('Scenes: chords (harmony spec stage 1)', () => {
   it('a scene chooses its chords and how long each lasts; its line says so', () => {
     const p = props();
     render(p);
-    expect(button(/^3:30 · Open/)?.textContent).toContain('chords as before');
     act(() => button(/^3:30 · Open/)?.click());
+    expect(moreLine()).toContain('chords as before');
+    openMore();
     // As before: four chords to a loop, so no length to choose.
     expect(host.querySelector('[role="radiogroup"][aria-label="Each chord lasts"]')).toBeNull();
     act(() => radio('Chords', 'Rising')?.click());
     expect(p.onEditScene).toHaveBeenLastCalledWith(2, { settings: { ...settings, chords: { sequence: 'rising', bars: 2 } } });
     const rising = scene('Open', 210, [0], { settings: { ...settings, chords: { sequence: 'rising', bars: 2 } } });
+    act(() => moreButton()?.click());
     render({ ...p, scenes: [scene('Arrival', 0), scene('Build', 90), rising] });
-    expect(button(/^3:30 · Open/)?.textContent).toContain('Rising chords, 2 bars each');
+    expect(moreLine()).toContain('Rising chords, 2 bars each');
+    openMore();
     act(() => radio('Each chord lasts', '4 bars')?.click());
     expect(p.onEditScene).toHaveBeenLastCalledWith(2, { settings: { ...settings, chords: { sequence: 'rising', bars: 4 } } });
     expect(text()).toContain('Four chords that lift: I–V–vi–IV.');
@@ -531,25 +548,29 @@ describe('Scenes: Energy and the same ideas each rehearsal (harmony spec stage 3
       .find((b) => b.childNodes[0]?.textContent === name) as HTMLButtonElement | undefined;
   const withEnergy = (e: 0 | 1 | 2 | 3 | 4 | 5) => ({ ...settings, sceneEnergy: e });
 
-  it('a scene chooses its Energy, 1 to 5 or Off; its line and the graph say so', () => {
+  it('a scene chooses its Energy by name, Calm to Big or Off, the Sound tab\'s names; its line and the graph say so (A2)', () => {
     const p = props({ scenes: [scene('Arrival', 0, [0], { settings: withEnergy(2) }), scene('Build', 90, [0], { settings: withEnergy(3) }), scene('Open', 210)] });
     render(p);
     const graph = host.querySelector('svg[role="img"]');
-    expect(graph?.getAttribute('aria-label')).toBe('Energy across the piece: Arrival 2, Build 3, Open off');
-    expect(text()).toContain('Energy: Arrival 2 · Build 3 · Open off');
-    expect(button(/^0:00 · Arrival/)?.textContent).toContain('energy 2');
-    expect(button(/^3:30 · Open/)?.textContent).not.toContain('energy');
+    expect(graph?.getAttribute('aria-label')).toBe('Energy across the piece: Arrival Steady, Build Lively, Open Off');
+    expect(text()).toContain('Energy: Arrival Steady · Build Lively · Open Off');
+    expect(button(/^0:00 · Arrival/)?.textContent).toContain('Energy: Steady');
+    expect(button(/^3:30 · Open/)?.textContent).toContain('Energy: Off');
     act(() => button(/^3:30 · Open/)?.click());
+    // Energy is in view without opening More (A1).
+    expect(moreButton()?.getAttribute('aria-expanded')).toBe('false');
+    expect([...host.querySelectorAll('[role="radiogroup"][aria-label="Energy of this scene"] [role="radio"]')].map((b) => b.childNodes[0]?.textContent))
+      .toEqual(['Off', 'Calm', 'Steady', 'Lively', 'Driving', 'Big']);
     expect(radio('Energy of this scene', 'Off')?.getAttribute('aria-checked')).toBe('true');
     expect(text()).toContain('Off: the level, the band, the extra notes and the brightness as set, as before.');
-    act(() => radio('Energy of this scene', '5')?.click());
+    act(() => radio('Energy of this scene', 'Big')?.click());
     expect(p.onEditScene).toHaveBeenLastCalledWith(2, { settings: withEnergy(5) });
   });
 
   it('New ideas for a scene, and for the whole piece; Surprise me each time', () => {
     const p = props({ scenes: [scene('Arrival', 0), scene('Build', 90), scene('Open', 210, [0], { aiIdeas: [{ key: 'k', notes: [] }] })] });
     render(p);
-    act(() => button(/^3:30 · Open/)?.click());
+    openScene(/^3:30 · Open/);
     expect(text()).toContain('This scene plays the same ideas every rehearsal. 1 AI idea is kept for it. New ideas gives it different ones.');
     act(() => button('↻ New ideas')?.click());
     expect(p.onNewIdeasScene).toHaveBeenCalledWith(2);
@@ -574,15 +595,18 @@ describe('Scenes: band parts and a lead-in (harmony spec stage 2)', () => {
   it('a scene chooses the band’s parts; "As before" is kept as a choice; its line says so', () => {
     const p = props();
     render(p);
-    expect(button(/^3:30 · Open/)?.textContent).toContain('band parts as before');
     act(() => button(/^3:30 · Open/)?.click());
+    expect(moreLine()).toContain('band parts as before');
+    openMore();
     // As before: no parts to switch.
     expect(switchFor('Pads')).toBeUndefined();
     act(() => radio('Band parts', 'Choose parts')?.click());
     expect(p.onEditScene).toHaveBeenLastCalledWith(2, { settings: { ...settings, bandJobs: chosen } });
     const withJobs = scene('Open', 210, [0], { settings: { ...settings, bandJobs: chosen } });
+    act(() => moreButton()?.click());
     render({ ...p, scenes: [scene('Arrival', 0), scene('Build', 90), withJobs] });
-    expect(button(/^3:30 · Open/)?.textContent).toContain('pads, bass, drums');
+    expect(moreLine()).toContain('pads, bass, drums');
+    openMore();
     expect(switchFor('Counter-melody')?.getAttribute('aria-checked')).toBe('false');
     act(() => switchFor('Counter-melody')?.click());
     expect(p.onEditScene).toHaveBeenLastCalledWith(2, { settings: { ...settings, bandJobs: { ...chosen, counter: true } } });
@@ -593,20 +617,23 @@ describe('Scenes: band parts and a lead-in (harmony spec stage 2)', () => {
   it('a scene with the band off shows no parts', () => {
     const off = scene('Open', 210, [0], { settings: { ...settings, band: 'off' } });
     render(props({ scenes: [scene('Arrival', 0), scene('Build', 90), off] }));
-    expect(button(/^3:30 · Open/)?.textContent).not.toContain('band parts');
     act(() => button(/^3:30 · Open/)?.click());
+    expect(moreLine()).not.toContain('band parts');
+    openMore();
     expect(host.querySelector('[role="group"][aria-label="Band parts"]')).toBeNull();
   });
 
   it('a lead-in: None by default; Drum fill or Rising; its line says so', () => {
     const p = props();
     render(p);
-    act(() => button(/^3:30 · Open/)?.click());
+    openScene(/^3:30 · Open/);
     expect(radio('Lead-in', 'None')?.getAttribute('aria-checked')).toBe('true');
     act(() => radio('Lead-in', 'Drum fill')?.click());
     expect(p.onEditScene).toHaveBeenLastCalledWith(2, { leadIn: 'drumFill' });
+    act(() => moreButton()?.click());
     render({ ...p, scenes: [scene('Arrival', 0), scene('Build', 90), scene('Open', 210, [0], { leadIn: 'rising' })] });
-    expect(button(/^3:30 · Open/)?.textContent).toContain('rising before it');
+    expect(moreLine()).toContain('rising before it');
+    openMore();
     expect(text()).toContain('Notes that climb and grow through the last pass before the scene.');
   });
 });

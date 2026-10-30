@@ -14,6 +14,11 @@ export interface NudgeBannerProps {
   /** Why Save as loop isn't available (no loop bank, or no empty slot). */
   saveReason?: string | null;
   align?: 'start' | 'end';
+  /**
+   * Keep its own room when there is no hint. Off inside the screen's notice strip (A3),
+   * which already has a fixed height, so the room isn't kept twice.
+   */
+  reserve?: boolean;
 }
 
 const MESSAGE: Record<NudgeSignal['kind'], string> = {
@@ -32,7 +37,7 @@ const MESSAGE: Record<NudgeSignal['kind'], string> = {
  */
 export function NudgeBanner({
   signal, nameFor, onFindBoard, onRecalibrate, onDismiss, onLetGo, onSaveAsLoop,
-  saveReason = null, align = 'end',
+  saveReason = null, align = 'end', reserve = true,
 }: NudgeBannerProps): JSX.Element {
   const name = signal && signal.kind === 'colour-matches-board' ? nameFor(signal.channelId) : '';
   return (
@@ -40,8 +45,8 @@ export function NudgeBanner({
       role="status"
       aria-hidden={signal === null || undefined}
       style={{
-        minHeight: 'calc(var(--bs-target) + 8px)',
-        display: 'flex',
+        minHeight: signal || reserve ? 'calc(var(--bs-target) + 8px)' : 0,
+        display: signal || reserve ? 'flex' : 'none',
         alignItems: 'center',
         gap: 10,
         padding: signal ? '4px 10px' : 0,

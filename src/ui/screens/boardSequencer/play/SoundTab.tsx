@@ -14,12 +14,14 @@ import { ColourTable } from './ColourTable';
 import type { BoardSequencerStored } from '../../../../profiles/BoardSequencerConfig';
 import { ENERGY, nearest, SPACE_ALL, type Step } from '../../../../audio/soundSteps';
 import { StepRow } from './StepRow';
-import { ChordChoice } from './ChordChoice';
+import { ChordChoice, chordWords } from './ChordChoice';
 import { BandJobsChoice } from './BandJobsChoice';
 import { LabeledSlider } from '../ui/LabeledSlider';
 import { KEEP_ON_TOP_MAX_DB, KEEP_ON_TOP_MIN_DB } from '../../../../songs/band/keepOnTop';
 import { Switch } from '../ui/Switch';
 import { configToSoundFrom } from '../../../../midi/boardMidi';
+import { useSessionFold } from '../ui/useSessionFold';
+import { WORDS } from '../words';
 
 /** Said wherever a control only changes ADMI's own sound, while Ableton makes it. */
 const IN_ABLETON = 'Sound set in Ableton';
@@ -100,10 +102,35 @@ const CARD: CSSProperties = {
 
 // ---- a helper: Band, Extra notes, Sounds change ----
 
-function HelperButtons({ a, tryLabel }: { a: HelperActions; tryLabel: string }): JSX.Element {
+/**
+ * A helper's card, folded to one line that says how it is set (A1): its name, then its
+ * setting ("Extra notes · Some"). Open, it shows everything it did before. The fold is
+ * remembered for the session. The card keeps its group name, open or folded.
+ */
+function HelperFold({ id, title, summary, children }: { id: string; title: string; summary: string; children: ReactNode }): JSX.Element {
+  const [open, toggle] = useSessionFold(`sound-${id}`);
+  return (
+    <div role="group" aria-label={title} style={{ ...CARD, paddingTop: 2, paddingBottom: open ? 10 : 2 }}>
+      <button
+        type="button" aria-expanded={open} onClick={toggle} data-helper-fold={id}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', padding: 0,
+          background: 'transparent', border: 'none', color: 'inherit', minHeight: 'var(--bs-target)', cursor: 'pointer',
+        }}
+      >
+        <span aria-hidden="true">{open ? '▾' : '▸'}</span>
+        <span style={{ fontWeight: 600 }}>{title}</span>
+        <span style={{ ...NOTE, flex: 1, minWidth: 0, fontSize: 13 }}>{summary}</span>
+      </button>
+      {open && children}
+    </div>
+  );
+}
+
+function HelperButtons({ a, tryWord, tryLabel }: { a: HelperActions; tryWord: string; tryLabel: string }): JSX.Element {
   return (
     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-      <Button tone="primary" onClick={a.onTry} aria-label={tryLabel}>↻ Try another</Button>
+      <Button tone="primary" onClick={a.onTry} aria-label={tryLabel}>{`↻ ${tryWord}`}</Button>
       <Button onClick={a.onPrevious} reason={a.canPrevious ? null : 'Nothing to go back to yet.'}>↶ Previous</Button>
       <Button aria-pressed={a.frozen} onClick={a.onFreeze} reason={a.frozen ? null : a.freezeReason}>
         {a.frozen ? '📌 Frozen ✓' : '📌 Freeze'}
@@ -111,6 +138,9 @@ function HelperButtons({ a, tryLabel }: { a: HelperActions; tryLabel: string }):
     </div>
   );
 }
+
+const BAND_LEVEL_WORDS: Record<BandLevel, string> = { off: 'Off', gentle: 'Quiet', full: 'Full' };
+const upperFirst = (t: string): string => t.charAt(0).toUpperCase() + t.slice(1);
 
 const BAND_PART_NAMES: Record<BandPart, string> = { pad: 'chords', bass: 'bass', groove: 'drums', counter: 'counter-melody', leadIn: 'lead-in' };
 
@@ -173,10 +203,11 @@ export function SoundTab(p: SoundTabProps): JSX.Element {
           />
           <span style={NOTE}>
             {groove === null
-              ? `Your own swing (${Math.round(config.swing * 100)}%) and humanize (${Math.round(config.humanize * 100)}%) from the Groove tab.`
+              ? `Your own swing (${Math.round(config.swing * 100)}%) and loose timing (${Math.round(config.humanize * 100)}%), set finely on the ${WORDS.timing} tab.`
               : groove === 'straight' ? 'Every note exactly on the beat.'
                 : groove === 'swung' ? 'Off-beats a little late, like jazz or hip-hop.'
                   : 'Swung and loose: a few notes rest, timing breathes.'}
+            {groove !== null && ` Sets the swing and loose timing on the ${WORDS.timing} tab in one step.`}
           </span>
         </div>
       </section>
@@ -209,8 +240,7 @@ export function SoundTab(p: SoundTabProps): JSX.Element {
         <h3 id="sound-helpers" style={HEADING}>Helpers</h3>
         <span style={NOTE}>Each adds to your music. On the board: ● your counters · ◌ extra notes · ▬ the band.</span>
 
-        <div role="group" aria-label="Band" style={CARD}>
-          <span style={{ fontWeight: 600 }}>Band</span>
+        <HelperFold id="band" title="Band" summary={BAND_LEVEL_WORDS[config.band]}>
           <SegmentedControl<BandLevel>
             label="Band"
             value={config.band}
@@ -234,10 +264,9 @@ export function SoundTab(p: SoundTabProps): JSX.Element {
                 : 'Waiting for your first counter.'}
             </span>
           )}
-        </div>
+        </HelperFold>
 
-        <div role="group" aria-label="Keep my notes on top" style={CARD}>
-          <span style={{ fontWeight: 600 }}>Keep my notes on top</span>
+        <HelperFold id="on-top" title="Keep my notes on top" summary={config.keepOnTop ? `On, the rest ${config.keepOnTopDb} dB quieter` : 'Off'}>
           <Switch
             label="Keep my notes on top" checked={config.keepOnTop} onChange={(keepOnTop) => update({ keepOnTop })}
             hint="While your own notes sound, the band, your loops and the extra notes go a little quieter, so you are always heard. Off: everything plays at its own level."
@@ -249,10 +278,9 @@ export function SoundTab(p: SoundTabProps): JSX.Element {
               onChange={(v) => update({ keepOnTopDb: Math.round(v * 2) / 2 })}
             />
           )}
-        </div>
+        </HelperFold>
 
-        <div role="group" aria-label="Chords" style={CARD}>
-          <span style={{ fontWeight: 600 }}>Chords</span>
+        <HelperFold id="chords" title="Chords" summary={upperFirst(chordWords(config.chords))}>
           <ChordChoice value={config.chords} onChange={(chords) => update({ chords })} />
           <span style={NOTE}>
             {`Everything with notes plays to these chords: your counters, your loops, the band and the extra notes. A chord counter changes one chord, from its column until the next chord.${p.running ? ' New chords start at the next pass.' : ''}`}
@@ -261,10 +289,9 @@ export function SoundTab(p: SoundTabProps): JSX.Element {
             label="Melody and bass fit the chord" checked={config.clashNudge} onChange={(clashNudge) => update({ clashNudge })}
             hint="On the main beats, a melody or bass note that rubs against the chord moves to the nearest chord note. Off: every note plays as placed."
           />
-        </div>
+        </HelperFold>
 
-        <div role="group" aria-label="Extra notes" style={CARD}>
-          <span style={{ fontWeight: 600 }}>Extra notes</span>
+        <HelperFold id="extra" title={WORDS.extraNotes} summary={`${FILL_STEPS[fillStep].label}${p.fill.frozen ? ' · frozen' : ''}`}>
           <StepRow
             label="How many"
             steps={FILL_STEPS}
@@ -279,11 +306,10 @@ export function SoundTab(p: SoundTabProps): JSX.Element {
               : `${p.fill.count} extra ${p.fill.count === 1 ? 'note' : 'notes'} now, shown on the board as dotted rings. ${p.fill.frozen ? 'Frozen: they stay as they are, whatever you move.' : 'They follow the board as you move counters.'}`}
           </span>
           {p.fill.status && <span role="status" aria-live="polite" style={NOTE}>{p.fill.status}</span>}
-          <HelperButtons a={p.fill} tryLabel="Try other extra notes" />
-        </div>
+          <HelperButtons a={p.fill} tryWord={WORDS.newIdea} tryLabel={`${WORDS.newIdea}: other extra notes`} />
+        </HelperFold>
 
-        <div role="group" aria-label="Sounds change" style={CARD}>
-          <span style={{ fontWeight: 600 }}>Sounds change</span>
+        <HelperFold id="evolve" title={WORDS.soundsChange} summary={`${EVOLVE_STEPS[evolveStep].label}${p.evolve.frozen ? ' · frozen' : ''}`}>
           <StepRow
             label="How much"
             steps={EVOLVE_STEPS}
@@ -300,13 +326,12 @@ export function SoundTab(p: SoundTabProps): JSX.Element {
                 : `Notes wander to their neighbours (home again every 4th loop), sounds drift every loop and change every ${config.evolveSceneLoops} loops, one colour at a time. The drums can change pattern too. Turn off "Changes over time" on a card to keep that colour exactly as placed.`}
           </span>
           {p.evolve.lastChange && <span role="status" style={NOTE}>{p.evolve.lastChange}</span>}
-          <HelperButtons a={p.evolve} tryLabel="Try other sounds" />
-        </div>
+          <HelperButtons a={p.evolve} tryWord={WORDS.newSound} tryLabel={`${WORDS.newSound}: other sounds`} />
+        </HelperFold>
       </section>
 
-      <section aria-labelledby="sound-loops" style={SECTION}>
-        <div role="group" aria-label="Loops vary" style={CARD}>
-          <span id="sound-loops" style={{ fontWeight: 600 }}>Loops vary</span>
+      <section aria-label="Loops vary" style={SECTION}>
+        <HelperFold id="loops-vary" title="Loops vary" summary={LOOP_VARY_STEPS[nearest(LOOP_VARY_STEPS, config.loopVary)].label}>
           <StepRow
             label="How much saved loops change"
             steps={LOOP_VARY_STEPS}
@@ -321,7 +346,7 @@ export function SoundTab(p: SoundTabProps): JSX.Element {
           <span style={NOTE}>
             Layered melodies take turns: one leads each pass and the others answer in its gaps, so loops talk to each other. Your counters always lead. For the AI to add its own notes around everything that is playing, turn up Extra notes.
           </span>
-        </div>
+        </HelperFold>
       </section>
 
       <Disclosure summary="Advanced: key, scale, note length, mix, AI">

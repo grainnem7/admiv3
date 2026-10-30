@@ -12,7 +12,27 @@ export interface ReadyItem {
   fix?: string;
   /** A button that fixes it right here ("Take it out"); `name` says what it does in full. */
   action?: { label: string; name: string; onClick(): void };
+  /**
+   * Where it is fixed (A14): the screen turns this into a button that goes straight there,
+   * so a fix never sends the owner looking for a place by its name.
+   */
+  place?: CheckPlace;
 }
+
+/** The places a fix can be made. */
+export type CheckPlace = 'scenes' | 'sound' | 'cap' | 'connections' | 'setupCamera' | 'setupBoard' | 'setupColours' | 'cameraBoard';
+
+/** What the button that goes to a place says. */
+export const PLACE_WORDS: Record<CheckPlace, string> = {
+  scenes: 'Go to Scenes',
+  sound: 'Go to the Sound tab',
+  cap: 'Go to the Cap tab',
+  connections: 'Go to the Connections tab',
+  setupCamera: 'Go to Set up: Camera',
+  setupBoard: 'Go to Set up: Board',
+  setupColours: 'Go to Set up: Colours',
+  cameraBoard: 'Use the camera board',
+};
 
 const MARK: Record<CheckState, string> = { ok: '✓', warn: '!', problem: '✕', note: 'i' };
 const COLOUR: Record<CheckState, string> = { ok: 'var(--bs-ok)', warn: 'var(--bs-warn)', problem: 'var(--bs-danger)', note: 'var(--bs-fg2)' };

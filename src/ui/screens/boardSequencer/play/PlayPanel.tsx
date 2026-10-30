@@ -2,6 +2,7 @@ import { useId, useState, type ReactNode } from 'react';
 import { Button } from '../ui/Button';
 import { PLAY_STOP_ID } from '../ui/focusNext';
 import { Tabs } from '../ui/Tabs';
+import { WORDS } from '../words';
 
 export interface PlayPanelProps {
   running: boolean;
@@ -41,7 +42,12 @@ export interface PlayPanelProps {
   /** Stacked layouts pin the transport to the bottom; the player's side comes first. */
   stacked: boolean;
   transportAlign: 'start' | 'end';
+  /** The open tab, when the screen opens one itself (a Ready-check fix going to its place). */
+  tab?: PlayTab;
+  onTab?(tab: PlayTab): void;
 }
+
+export type PlayTab = 'sound' | 'groove' | 'loops' | 'connections' | 'cap';
 
 /**
  * The Play panel: transport, the status pill, and the three tabs. In a stacked layout
@@ -50,9 +56,11 @@ export interface PlayPanelProps {
  */
 export function PlayPanel({
   running, muted, onStart, onStop, stopArmed = false, onToggleMute, simplify = null, bpm, bpmTo = null, step, cols, variationLap, beatOn, clock = null,
-  heldCount, handGuardWaiting, piece, connections, cap, groove, sound, loops, stacked, transportAlign,
+  heldCount, handGuardWaiting, piece, connections, cap, groove, sound, loops, stacked, transportAlign, tab: shownTab, onTab,
 }: PlayPanelProps): JSX.Element {
-  const [tab, setTab] = useState('sound');
+  const [ownTab, setOwnTab] = useState<PlayTab>('sound');
+  const tab = shownTab ?? ownTab;
+  const setTab = (t: string): void => { setOwnTab(t as PlayTab); onTab?.(t as PlayTab); };
   const playHintId = useId();
 
   const transport = (
@@ -159,7 +167,8 @@ export function PlayPanel({
           onChange={setTab}
           tabs={[
             { id: 'sound', label: 'Sound', content: sound },
-            { id: 'groove', label: 'Groove', content: groove },
+            // Timing, not Groove: Groove is also a setting on the Sound tab (A2).
+            { id: 'groove', label: WORDS.timing, content: groove },
             { id: 'loops', label: 'Board', content: loops },
             { id: 'connections', label: 'Connections', content: connections },
             { id: 'cap', label: 'Cap', content: cap },

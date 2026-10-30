@@ -73,8 +73,11 @@ import { ShowStatusRow } from './boardSequencer/play/ShowStatusRow';
 import {
   escLeavesShow, showStatusItems, simplifiedLine, stopGuarded, type ShowHatState, type ShowStatusAction, type ShowStatusInput,
 } from './boardSequencer/play/showStatus';
-import type { ReadyItem } from './boardSequencer/play/ReadyCheck';
-import { PlayPanel } from './boardSequencer/play/PlayPanel';
+import { PLACE_WORDS, type CheckPlace, type ReadyItem } from './boardSequencer/play/ReadyCheck';
+import { PlayPanel, type PlayTab } from './boardSequencer/play/PlayPanel';
+import { forgetSoundsBefore } from './boardSequencer/play/ColourTable';
+import { WORDS } from './boardSequencer/words';
+import { HeaderMore } from './boardSequencer/ui/HeaderMore';
 import { CapPanel, CAP_ROLE_LABELS, CAP_PAUSE_TEXT, capHudText, capValueText, hatJobsLine, hatResultText } from './boardSequencer/play/CapPanel';
 import { useCapTracker } from './boardSequencer/useCapTracker';
 import { audienceNoticeText, useAudienceWindow } from '../../audience/useAudienceWindow';
@@ -303,6 +306,14 @@ interface PieceStart { fromSec: number; startedAt?: number; scene?: number | nul
 const endingLeadOf = (c: BoardSequencerStored): number => pieceEndingLeadSec(
   c.performance, c.cols * Math.max(1, c.numPages), pieceSpeeds(c),
 );
+/** The side panel: 400 px, growing with the window to 480 px (A3). */
+const SIDE_PANEL_WIDTH = 'clamp(400px, 30vw, 480px)';
+/** The notices' fixed strip above the board: one notice with its button (A3). */
+const NOTICE_SLOT_HEIGHT = 'calc(var(--bs-target) + 14px)';
+/** The status lines' fixed strip under the board: three short lines (A3). */
+const STATUS_LINES_HEIGHT = 56;
+/** Below this width the less-used header buttons go into More (A3). */
+const HEADER_MORE_BELOW_PX = 1400;
 /** Where Play / Make a piece is remembered. */
 const WORKSPACE_KEY = 'admi-board-workspace';
 /** How long Undo stays on offer after the board, a loop or the scenes are thrown away. */
@@ -316,7 +327,7 @@ const REMOTE_CONTROL_WORDS: Record<RemoteControlName, string> = {
   tempo: 'Speed', dynamics: 'Dynamics', fill: 'Extra notes', evolve: 'Sounds change',
 };
 const REMOTE_TRIGGER_WORDS: Record<RemoteTriggerName, string> = {
-  newIdea: 'New idea', newSound: 'New sound', keep: 'Keep', mute: 'Mute', stopAll: 'Stop all loops',
+  newIdea: WORDS.newIdea, newSound: WORDS.newSound, keep: WORDS.keep, mute: 'Mute', stopAll: WORDS.stopLoops,
   endPiece: 'End piece', capture: 'Capture',
 };
 /** How often the performance clock is read. */
@@ -3033,16 +3044,20 @@ export default function BoardSequencerScreen() {
   const grooveTab = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14, paddingTop: 10 }}>
       <LabeledSlider
-        label="Tempo" min={50} max={300} value={config.bpm} display={`${config.bpm} BPM`}
+        label={WORDS.speed} min={50} max={300} value={config.bpm} display={`${config.bpm} BPM`}
         reason={tempoReason}
         onChange={(v) => { update({ bpm: v }); holdSpeed(v); engineRef.current?.setBpm(v); /* live, not only on the next start */ }}
       />
+      {/* One swing, said once (A2): Sound → Groove sets these two in one step, here they are fine. */}
+      <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
+        Sound → Overall feel → Groove (Straight, Swung, Lazy) sets Swing and Loose timing in one step. Here they are set finely.
+      </span>
       <LabeledSlider
         label="Swing" min={0} max={60} value={Math.round(config.swing * 100)} display={`${Math.round(config.swing * 100)}%`}
         onChange={(v) => { update({ swing: v / 100 }); engineRef.current?.setSwing(v / 100); }}
       />
       <LabeledSlider
-        label="Humanize" min={0} max={100} value={Math.round(config.humanize * 100)} display={`${Math.round(config.humanize * 100)}%`}
+        label={WORDS.looseTiming} min={0} max={100} value={Math.round(config.humanize * 100)} display={`${Math.round(config.humanize * 100)}%`}
         onChange={(v) => { update({ humanize: v / 100 }); engineRef.current?.setHumanize(v / 100); }}
       />
 
@@ -3077,7 +3092,7 @@ export default function BoardSequencerScreen() {
         {([
           { label: 'Rows', value: config.rows, choices: [2, 3, 4, 5, 6, 7, 8], set: (n: number) => updateGrid({ rows: n }) },
           { label: 'Steps', value: config.cols, choices: [2, 3, 4, 5, 6, 7, 8, 10, 12, 16], set: (n: number) => updateGrid({ cols: n }) },
-          { label: 'Pages', value: config.numPages, choices: [1, 2, 4], set: (n: number) => setPagesCount(n) },
+          { label: WORDS.pages, value: config.numPages, choices: [1, 2, 4], set: (n: number) => setPagesCount(n) },
         ]).map((g) => (
           <div key={g.label} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             <span style={{ fontSize: 13 }}>{g.label}</span>
@@ -3088,6 +3103,9 @@ export default function BoardSequencerScreen() {
             />
           </div>
         ))}
+        <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
+          {`${WORDS.pages}: 1 is the board alone. 2 or 4 keeps the board as pages A, B…, played one after another.`}
+        </span>
         <span style={REASON_STYLE}>{gridReason ?? ''}</span>
       </div>
 
@@ -3128,7 +3146,7 @@ export default function BoardSequencerScreen() {
           onChange={(e) => void handleSelectSong(e.target.value)}
           style={{ minHeight: 'var(--bs-target)' }}
         >
-          <option value="">None (standalone)</option>
+          <option value="">None</option>
           {SONG_LIBRARY.map((sg) => (
             <option key={sg.id} value={sg.id}>{sg.title}</option>
           ))}
@@ -3169,7 +3187,7 @@ export default function BoardSequencerScreen() {
     if (c.fillKept !== null || c.evolveHoldLap !== null) {
       update({ fillKept: null, evolveHoldLap: null });
       sessionLogRef.current.action(logActorRef.current, 'let go');
-      announce('Let go: the fill and the sounds move again.');
+      announce('Let go: the extra notes and the sounds move again.');
       return;
     }
     const notes = engineRef.current?.getFillNotes() ?? [];
@@ -3178,7 +3196,7 @@ export default function BoardSequencerScreen() {
       evolveHoldLap: c.evolveAmount > 0 ? (engineRef.current?.getEvolveLap() ?? 0) : null,
     });
     sessionLogRef.current.action(logActorRef.current, 'keep');
-    announce('Kept: the fill and the sounds stay as they are.');
+    announce('Kept: the extra notes and the sounds stay as they are.');
   };
 
   /**
@@ -3414,6 +3432,7 @@ export default function BoardSequencerScreen() {
     try { localStorage.setItem(WORKSPACE_KEY, w); } catch { /* not remembered */ }
   };
   const [pieceStep, setPieceStep] = useState<PieceStep>('loops');
+  const [playTab, setPlayTab] = useState<PlayTab>('sound');
   const countersNow = boardCellsNow().length;
   // "Lift the counters to start from silence": the wait ends once the board is empty (on a
   // camera board, empty for the settle window). Each look reads this render's board: on a
@@ -4067,7 +4086,7 @@ export default function BoardSequencerScreen() {
             <span style={{ fontWeight: 600, fontSize: 13 }}>For the show</span>
             <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
               The safe show layout: the iPad shows only the Extra notes strip, New idea and End piece (two taps).
-              Mute, the loop and scene pads, Next scene, Capture and Stop all are hidden, and Speed is locked.
+              {`Mute, the loop and scene pads, Next scene, Capture and ${WORDS.stopLoops} are hidden, and Speed is locked.`}
             </span>
             <div>
               <Button tone="secondary" onClick={applySafeShowLayout}>
@@ -4077,7 +4096,7 @@ export default function BoardSequencerScreen() {
             <span role="status" style={{ fontSize: 12, fontWeight: 600, color: 'var(--bs-ok)' }}>
               {!isSafeShowLayout(config) ? ''
                 : safeLayoutSet
-                  ? 'Done: the iPad now shows only the Extra notes strip, New idea and End piece. Speed is locked. Mute, the loops, the scenes, Next scene, Capture and Stop all are hidden.'
+                  ? `Done: the iPad now shows only the Extra notes strip, New idea and End piece. Speed is locked. Mute, the loops, the scenes, Next scene, Capture and ${WORDS.stopLoops} are hidden.`
                   : '✓ The iPad has the safe show layout.'}
             </span>
           </div>
@@ -4109,7 +4128,7 @@ export default function BoardSequencerScreen() {
               <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13 }}>
                 <input type="checkbox" checked={config.remoteLoopsPage} onChange={(e) => update({ remoteLoopsPage: e.target.checked })} />
                 {/* One tick brings back all of these: said, so it is never a surprise (R2-T3-06). */}
-                Loops &amp; scenes page (also shows Capture, Stop all and End piece)
+                {`Loops & scenes page (also shows Capture, ${WORDS.stopLoops} and End piece)`}
               </label>
             </div>
             <span style={{ fontWeight: 600, fontSize: 13, marginTop: 4 }}>Locked strips</span>
@@ -4134,7 +4153,7 @@ export default function BoardSequencerScreen() {
             />
             <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
               {config.remoteStripMode === 'jump'
-                ? 'Like ThumbJam: where the finger lands is the value.'
+                ? 'Where the finger lands is the value.'
                 : 'Landing changes nothing; sliding moves the value from where it was. For a finger that lands roughly.'}
             </span>
             <span style={{ fontWeight: 600, fontSize: 13, marginTop: 4 }}>A pad acts</span>
@@ -4149,7 +4168,7 @@ export default function BoardSequencerScreen() {
                 ? 'Quickest. A resting palm is always ignored.'
                 : 'Nothing happens until the finger comes off the pad it started on, so sliding onto a pad by accident does nothing.'}
             </span>
-            <span style={{ fontWeight: 600, fontSize: 13, marginTop: 4 }}>Time for the second tap (End piece, Stop all, Mute)</span>
+            <span style={{ fontWeight: 600, fontSize: 13, marginTop: 4 }}>{`Time for the second tap (End piece, ${WORDS.stopLoops}, Mute)`}</span>
             <SegmentedControl<number>
               label="Time for the second tap"
               value={config.remoteTouch.confirmSec}
@@ -4165,14 +4184,14 @@ export default function BoardSequencerScreen() {
             />
             <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
               A shaky press can land as several quick touches. A touch this soon after the one before it is ignored, so
-              a press never counts as its own second tap: End piece, Stop all and Mute wait for a real second tap.
+              {`a press never counts as its own second tap: End piece, ${WORDS.stopLoops} and Mute wait for a real second tap.`}
             </span>
             <span style={{ fontWeight: 600, fontSize: 13, marginTop: 4 }}>Also on the Play page</span>
             <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
               Put what the player needs during the piece on the page they play on, so they never have to switch page.
             </span>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-              {([['endPiece', 'End piece'], ['nextScene', 'Next scene'], ['capture', 'Capture'], ['stopAll', 'Stop all']] as const).map(([x, word]) => (
+              {([['endPiece', 'End piece'], ['nextScene', 'Next scene'], ['capture', 'Capture'], ['stopAll', WORDS.stopLoops]] as const).map(([x, word]) => (
                 <label key={x} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
                   <input
                     type="checkbox"
@@ -4597,6 +4616,25 @@ export default function BoardSequencerScreen() {
     ...SOUND_WORLD_IDS.map((id) => ({ value: id, label: SOUND_WORLDS[id].name })),
     { value: 'none', label: 'My picks' },
   ];
+  /** Where a Ready-check fix is made, as the press that goes there. */
+  const goToPlace = (place: CheckPlace) => (): void => {
+    const tab = (t: PlayTab): void => { setWorkspace('play'); setPlayTab(t); };
+    switch (place) {
+      case 'scenes': setWorkspace('piece'); setPieceStep('scenes'); return;
+      case 'sound': tab('sound'); return;
+      case 'cap': tab('cap'); return;
+      case 'connections': tab('connections'); return;
+      case 'cameraBoard': {
+        const pressed = document.activeElement instanceof HTMLElement ? document.activeElement : document.body;
+        switchBoardSource('camera', pressed);
+        return;
+      }
+      default:
+        if (running) stop();
+        setView('setup');
+        setStep(place === 'setupColours' ? 'colours' : place === 'setupBoard' ? 'board' : 'camera');
+    }
+  };
   /** The pre-show checklist, checked by the app wherever it can be. */
   const readyItems = (): ReadyItem[] => {
     const c = config;
@@ -4604,15 +4642,15 @@ export default function BoardSequencerScreen() {
     items.push(boardItem({ laptop, cameraOk: c.enabled && (camera.phase === 'running' || camera.phase === 'fallback') }));
     if (c.cap.enabled) {
       items.push(cap.view.camera === 'no-camera'
-        ? { label: 'Red cap: its camera could not be opened', state: 'problem', fix: 'Cap tab: choose the camera facing the player, or switch the cap off.' }
+        ? { label: 'Red cap: its camera could not be opened', state: 'problem', fix: 'Cap tab: choose the camera facing the player, or switch the cap off.', place: 'cap' }
         : cap.view.camera === 'only-board'
-          ? { label: 'Red cap: no camera of its own (the only one is the board’s)', state: 'problem', fix: 'Connect a second camera facing the player, or switch the cap off.' }
+          ? { label: 'Red cap: no camera of its own (the only one is the board’s)', state: 'problem', fix: 'Connect a second camera facing the player, or switch the cap off.', place: 'cap' }
         : cap.view.seen && cap.view.source !== 'face' && !c.cap.learntHat
           // Not learnt, it may be following a red chair (B7): a thing to check, not "found".
-          ? { label: 'Red cap: a red thing is found, but the hat is not learnt', state: 'warn', fix: 'Cap tab: Learn the hat, so it is sure it is the hat.' }
+          ? { label: 'Red cap: a red thing is found, but the hat is not learnt', state: 'warn', fix: 'Cap tab: Learn the hat, so it is sure it is the hat.', place: 'cap' }
         : cap.view.seen
           ? { label: `Red cap: ${cap.view.source === 'face' ? 'following the face' : 'found'}`, state: 'ok' }
-          : { label: 'Red cap: not in sight', state: 'warn', fix: c.cap.learntHat
+          : { label: 'Red cap: not in sight', state: 'warn', place: 'cap', fix: c.cap.learntHat
             ? 'Cap tab: check the camera sees the player, or learn the hat again.'
             : 'Cap tab: check the camera sees the player and click the cap to learn its colour.' });
       // Which job each move does, so the owner can see it before the piece (B8).
@@ -4623,12 +4661,12 @@ export default function BoardSequencerScreen() {
       items.push(det.mode === 'board'
         ? { label: 'The empty board is learnt', state: 'ok' }
         : c.counterDetection === 'bands'
-          ? { label: 'Counters are found by colour only (the old way)', state: 'warn', fix: 'Set up → Board → For testing: choose "Compare with the empty board".' }
-          : { label: 'Counters are found by colour only for now', state: 'warn', fix: det.reason ?? 'Learn the board in Set up → Board.' });
+          ? { label: 'Counters are found by colour only (the old way)', state: 'warn', fix: 'Set up → Board → For testing: choose "Compare with the empty board".', place: 'setupBoard' }
+          : { label: 'Counters are found by colour only for now', state: 'warn', fix: det.reason ?? 'Learn the board in Set up → Board.', place: 'setupBoard' });
     }
     items.push(c.channels.some((ch) => ch.role !== 'off')
       ? { label: 'Counter colours have jobs', state: 'ok' }
-      : { label: 'No counter colour has a job', state: 'problem', fix: 'Set up: Colours.' });
+      : { label: 'No counter colour has a job', state: 'problem', fix: 'Set up: Colours.', place: 'setupColours' });
     // The piece itself: loops, scenes, times, length and ending (tested in pieceCheck).
     items.push(...pieceCheckItems({
       scenes: c.scenes, loopSlots: c.loopSlots, loopNames: c.loopNames, performance: c.performance, passSec: passSecNow,
@@ -4652,7 +4690,7 @@ export default function BoardSequencerScreen() {
       },
     }));
     if (c.fillEngine === 'magenta' && typeof navigator !== 'undefined' && navigator.onLine === false) {
-      items.push({ label: 'Offline: the AI fill uses simple rules', state: 'warn', fix: 'Fine for the piece; connect once beforehand to load Magenta.' });
+      items.push({ label: 'Offline: the AI’s extra notes use simple rules', state: 'warn', fix: 'Fine for the piece; connect once beforehand to load Magenta.' });
     }
     const ableton = abletonReadyItem({
       soundFrom, deviceId: c.midiDeviceId, connected: midiPort.connected, portName: midiPort.chosenName, holdOnAdmi: midiHold,
@@ -4665,7 +4703,10 @@ export default function BoardSequencerScreen() {
       : { label: 'Not saved on this laptop', state: 'warn', fix: 'Open ADMI at http://localhost:3001 from npm run show, or back up to a file.' });
     items.push(backupItem(backedUpRef.current));
     if ((import.meta as { env?: { DEV?: boolean } }).env?.DEV) items.push({ label: 'Running the development server', state: 'warn', fix: 'For the performance start ADMI with npm run show: it cannot reload itself mid-piece.' });
-    return items;
+    // Each fix that is made somewhere else gets a button that goes straight there (A14).
+    return items.map((i) => (i.place && !i.action && i.state !== 'ok'
+      ? { ...i, action: { label: PLACE_WORDS[i.place], name: `${PLACE_WORDS[i.place]}: ${i.label}`, onClick: goToPlace(i.place) } }
+      : i));
   };
 
   const keepSlotNow = slotForKeep(config.loopSlots, config.scenes);
@@ -4677,6 +4718,7 @@ export default function BoardSequencerScreen() {
   };
   const pieceTab = (
     <PieceSteps
+      palette={palette}
       rows={config.rows}
       cols={config.cols}
       swatchFor={swatchFor}
@@ -4782,9 +4824,9 @@ export default function BoardSequencerScreen() {
         </>
       )}
       <div>
-        <span style={{ fontWeight: 600, display: 'block', marginBottom: 4 }}>Controls live</span>
+        <span style={{ fontWeight: 600, display: 'block', marginBottom: 4 }}>Where control counters go</span>
         <SegmentedControl<ZoneMode>
-          label="Controls live"
+          label="Where control counters go"
           value={config.controlZone.mode === 'off' ? 'anywhere' : config.controlZone.mode}
           onChange={(mode) => setLane('controlZone', clampZone({ mode, index: config.controlZone.index }, config.rows, config.cols))}
           options={[
@@ -4795,7 +4837,7 @@ export default function BoardSequencerScreen() {
         />
         {config.controlZone.mode !== 'anywhere' && config.controlZone.mode !== 'off' && (
           <SegmentedControl<number>
-            label="Which one"
+            label="Which one" showLabel
             value={config.controlZone.index}
             onChange={(index) => setLane('controlZone', { ...config.controlZone, index })}
             options={Array.from(
@@ -4807,9 +4849,9 @@ export default function BoardSequencerScreen() {
       </div>
 
       <div>
-        <span style={{ fontWeight: 600, display: 'block', marginBottom: 4 }}>Loop pads live</span>
+        <span style={{ fontWeight: 600, display: 'block', marginBottom: 4 }}>Where loop pads go</span>
         <SegmentedControl<ZoneMode>
-          label="Loop pads live"
+          label="Where loop pads go"
           value={config.loopZone.mode === 'anywhere' ? 'off' : config.loopZone.mode}
           onChange={(mode) => setLane('loopZone', clampZone(
             { mode, index: mode === 'row' ? config.rows - 1 : config.loopZone.index },
@@ -4825,7 +4867,7 @@ export default function BoardSequencerScreen() {
         {(config.loopZone.mode === 'row' || config.loopZone.mode === 'col') && (
           <>
             <SegmentedControl<number>
-              label="Which one"
+              label="Which one" showLabel
               value={config.loopZone.index}
               onChange={(index) => setLane('loopZone', { ...config.loopZone, index })}
               options={Array.from(
@@ -4834,7 +4876,7 @@ export default function BoardSequencerScreen() {
               )}
             />
             <SegmentedControl<'hold' | 'toggle'>
-              label="How a loop pad works"
+              label="How a loop pad works" showLabel
               value={config.loopPadMode}
               onChange={(m) => update({ loopPadMode: m })}
               options={[
@@ -4853,16 +4895,16 @@ export default function BoardSequencerScreen() {
         hint="Otherwise the stronger colour wins the box."
       />
               <Switch
-                label="Ping-pong"
+                label={WORDS.thereAndBack}
                 checked={config.pingPong}
                 onChange={(pingPong) => update({ pingPong })}
                 hint="The playhead sweeps → then back ←."
               />
               {config.pingPong && config.numPages > 1 && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <span style={{ fontSize: 12 }}>Ping-pong with {config.numPages} pages</span>
+                  <span style={{ fontSize: 12 }}>{`${WORDS.thereAndBack} with ${config.numPages} pages`}</span>
                   <SegmentedControl<'each' | 'chain'>
-                    label={`Ping-pong with ${config.numPages} pages`}
+                    label={`${WORDS.thereAndBack} with ${config.numPages} pages`}
                     value={config.pingPongPages}
                     onChange={(pingPongPages) => update({ pingPongPages })}
                     options={[
@@ -4909,7 +4951,7 @@ export default function BoardSequencerScreen() {
                   value={Math.round(config.variationOffsetThreshold * 100)}
                   display={`${Math.round(config.variationOffsetThreshold * 100)}%`}
                   onChange={(v) => update({ variationOffsetThreshold: v / 100 })}
-                  reason={config.numPages > 1 ? 'Variation works with one page: set Pages to 1 (Groove tab).' : null}
+                  reason={config.numPages > 1 ? `Variation works with one page: set ${WORDS.pages} to 1 (${WORDS.timing} tab).` : null}
                 />
               )}
     </div>
@@ -5323,7 +5365,8 @@ export default function BoardSequencerScreen() {
           : cap.view.source !== 'face' && !config.cap.learntHat && cap.view.camera !== 'mouse' ? 'var(--bs-fg)' : 'var(--bs-ok)',
       }}
       >
-        {`🧢 ${capHudText(cap.view, config.cap.learntHat !== null, config.cap.locked)}`}
+        {/* The word, not a cap emoji (a blue cap on most systems, for a red hat): A16. */}
+        {`Hat: ${capHudText(cap.view, config.cap.learntHat !== null, config.cap.locked)}`}
       </span>
       {(['xRole', 'yRole'] as const).map((k) => {
         const role = config.cap[k];
@@ -5572,6 +5615,15 @@ export default function BoardSequencerScreen() {
 
   const stage = (
     <div style={{ flex: layout.mode === 'stacked' ? 'none' : '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
+      {/* The notices' one place (A3): on the Board view a strip of fixed height above the
+          board, so a notice coming or going never moves the board. More than fits scroll
+          inside it, the newest kind first as before. */}
+      <div
+        data-notice-slot=""
+        style={view === 'play'
+          ? { height: NOTICE_SLOT_HEIGHT, flexShrink: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }
+          : { display: 'contents' }}
+      >
       {view !== 'bigBoard' && reloadNoticeView}
       {undoOffer && (
         <div role="status" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', padding: '6px 12px', borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-raised)', border: '1px solid var(--bs-border)' }}>
@@ -5608,6 +5660,7 @@ export default function BoardSequencerScreen() {
       )}
       {view === 'play' && (
         <NudgeBanner
+          reserve={false}
           signal={nudge}
           align={layout.footerAlign}
           nameFor={labelForId}
@@ -5619,14 +5672,26 @@ export default function BoardSequencerScreen() {
           saveReason={emptyLoopSlot ? null : 'Turn the loop bank on and leave a slot free to save it.'}
         />
       )}
+      </div>
       {laptop && view === 'play' && laptopBar}
       {/* Play is just playing: the piece's strip (Start the piece, Next, End) only once
           there is a piece to steer — scenes, or its clock running. With neither, Next did
           nothing and the clock began a countdown that faded the music out by itself. */}
       {view === 'play' && running && (config.scenes.length > 0 || (clock !== null && clock.phase !== 'idle')) && nowNextStrip}
       {/* The board is the instrument: never squeezed below about half the screen. */}
-      {(view === 'play' || laptop) && <div style={{ flex: 1, minHeight: 'clamp(240px, 52vh, 560px)' }}>{boardView}</div>}
-      {(view === 'play' || laptop) && running && boardLegend}
+      {/* Stacked (narrow, or Large controls) the stage has no height of its own: the board's
+          is set here, as tall as the window allows and never wider than it (A3: on an iPad
+          held upright it was 240 px). */}
+      {(view === 'play' || laptop) && (
+        <div style={layout.mode === 'stacked'
+          ? { height: 'min(clamp(240px, 52vh, 560px), calc(100vw - 32px))', flexShrink: 0 }
+          : { flex: 1, minHeight: 'clamp(240px, 52vh, 560px)' }}
+        >
+          {boardView}
+        </div>
+      )}
+      {/* Always there, playing or not, so starting play never shrinks the board (A3). */}
+      {(view === 'play' || laptop) && boardLegend}
       {(view === 'play' || laptop) && capHud}
       <div style={view === 'play' && !laptop
         ? { width: 220, alignSelf: layout.pip === 'bottom-left' ? 'flex-start' : 'flex-end' }
@@ -5736,10 +5801,11 @@ export default function BoardSequencerScreen() {
         )}
       </CameraSurface>
       </div>
-      {view === 'setup' && (
+      {view === 'setup' && !laptop && (
         <>
           {/* Camera check: which camera, what it delivers, whether the frames the
-              app reads carry colour, and what the last colour click captured. */}
+              app reads carry colour, and what the last colour click captured. Not on the
+              laptop board, which has no camera to start (A16). */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginTop: 8, fontSize: 12, opacity: 0.9 }}>
             <span>
               Camera: <strong>{camInfo ? (camInfo.label || 'Unnamed camera') : error ? 'not available' : 'starting…'}</strong>
@@ -5749,8 +5815,8 @@ export default function BoardSequencerScreen() {
             {/* Always-mounted live regions: only their text changes, so each message is
                 announced once (and the camera notice is visible even with the
                 Camera & board section collapsed). */}
-            <span role="status" style={{ color: '#ffb74d' }}>{camNotice?.text ?? ''}</span>
-            <span role="alert" style={{ color: '#ffb74d' }}>
+            <span role="status" style={{ color: 'var(--bs-warn)' }}>{camNotice?.text ?? ''}</span>
+            <span role="alert" style={{ color: 'var(--bs-warn)' }}>
               {feedColourless
                 ? '⚠ This camera\'s picture is reaching the app in black and white, so piece colours can\'t be told apart. Try another camera, or turn off filters/effects in its app.'
                 : ''}
@@ -5819,6 +5885,13 @@ export default function BoardSequencerScreen() {
             ⟲ Turn board
           </Button>
           )}
+        </div>
+      )}
+      {/* The research tools, folded (A15): closed by default, they are not for the piece. */}
+      {view === 'play' && (
+        <details data-session-log="">
+          <summary style={{ cursor: 'pointer', fontSize: 13, color: 'var(--bs-fg2)', minHeight: 'var(--bs-target)', display: 'flex', alignItems: 'center' }}>Session log</summary>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', paddingTop: 4 }}>
           <Button tone="quiet" onClick={() => announce(describeBoard(active, config.channels, config.rows, config.cols, config.velocity))}>
             Describe board
           </Button>
@@ -5861,17 +5934,25 @@ export default function BoardSequencerScreen() {
               </ul>
             </details>
           )}
-        </div>
+          </div>
+          <p aria-live="off" style={{ margin: 0, fontSize: 12, color: 'var(--bs-fg2)', minHeight: 18 }}>
+            {pops.length > 0
+              ? `Now: ${[...new Map(pops.map((n) => [n.colour, n])).values()]
+                .map((n) => `${labelForId(n.colour)}${n.origin === 'phrase' ? ' (phrase)' : n.origin === 'fill' ? ' (extra note)' : ''}`)
+                .join(', ')}`
+              : ''}
+          </p>
+        </details>
       )}
-      {view === 'play' && (
-        <p aria-live="off" style={{ margin: 0, fontSize: 12, color: 'var(--bs-fg2)', minHeight: 18 }}>
-          {pops.length > 0
-            ? `Now: ${[...new Map(pops.map((n) => [n.colour, n])).values()]
-              .map((n) => `${labelForId(n.colour)}${n.origin === 'phrase' ? ' (phrase)' : n.origin === 'fill' ? ' (fill)' : ''}`)
-              .join(', ')}`
-            : ''}
-        </p>
-      )}
+      {/* The lines about what is playing, in a strip of fixed height under the board, so a
+          line coming or going (the band joining, a note from the iPad) never resizes the
+          board (A3). More than fits scroll inside it. */}
+      <div
+        data-status-lines=""
+        style={view === 'play' && layout.mode !== 'stacked'
+          ? { height: STATUS_LINES_HEIGHT, flexShrink: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }
+          : { display: 'contents' }}
+      >
       {view === 'play' && beyondNote && (
         <p style={{ margin: 0, fontSize: 12, color: 'var(--bs-fg2)' }}>{beyondNote}</p>
       )}
@@ -5903,6 +5984,7 @@ export default function BoardSequencerScreen() {
             .join(' · ')}`}
         </p>
       )}
+      </div>
     </div>
   );
 
@@ -6014,6 +6096,8 @@ export default function BoardSequencerScreen() {
             loopBankRef.current = emptyLoopBank(0);
             storedRef.current = loadBoardSequencerConfig();
             setChooserOpen(false);
+            // ↶ offers this player's sounds before, never the last player's (A16).
+            forgetSoundsBefore();
             // Their board, not the last player's: checked afresh, and set-up if theirs
             // isn't ready (stopped only — playing, nothing moves).
             boardCheckAbortRef.current?.abort();
@@ -6103,14 +6187,18 @@ export default function BoardSequencerScreen() {
               <Button ref={bigBoardButtonRef} tone="secondary" onClick={() => setView('bigBoard')} aria-label="Show: the board, the clock and Now / Next, full screen, for the performance">
                 Show
               </Button>
-              {view !== 'bigBoard' && audienceButton}
-              <Button
-                tone="quiet"
-                onClick={() => confirmThen('setup', () => { if (running) stop(); setView('setup'); if (laptop) setStep('colours'); })}
-              >
-                {armed === 'setup' ? '⚙ Press again to stop and set up' : '⚙ Set up'}
-              </Button>
-              {boardSourceButton}
+              {/* The less-used ones: in a More menu below about 1400 px, so the header stays
+                  one row and never wraps (A3). */}
+              <HeaderMore folded={viewportWidth < HEADER_MORE_BELOW_PX} keepOpen={armed === 'setup' || closeAudienceArmed}>
+                {view !== 'bigBoard' && audienceButton}
+                <Button
+                  tone="quiet"
+                  onClick={() => confirmThen('setup', () => { if (running) stop(); setView('setup'); if (laptop) setStep('colours'); })}
+                >
+                  {armed === 'setup' ? '⚙ Press again to stop and set up' : '⚙ Set up'}
+                </Button>
+                {boardSourceButton}
+              </HeaderMore>
             </div>
           )}
         />
@@ -6241,7 +6329,9 @@ export default function BoardSequencerScreen() {
         >
           {stage}
           {/* The panel keeps its place in the DOM for both hands; only the row flips. */}
-          <div style={{ width: layout.mode === 'stacked' ? '100%' : view === 'play' && workspace === 'piece' ? 540 : 320, flexShrink: 0, display: 'flex', flexDirection: 'column', minHeight: 0, overflowY: layout.mode === 'stacked' ? 'visible' : 'auto' }}>
+          {/* One width for Board, Make a piece and Set up: 400 to 480 px, the board takes the
+              rest, and it keeps its place and size between Board and Make a piece (A3). */}
+          <div style={{ width: layout.mode === 'stacked' ? '100%' : SIDE_PANEL_WIDTH, flexShrink: 0, display: 'flex', flexDirection: 'column', minHeight: 0, overflowY: layout.mode === 'stacked' ? 'visible' : 'auto' }}>
             {view === 'setup' ? setupPanel : (
               <PlayPanel
                 running={running}
@@ -6268,6 +6358,8 @@ export default function BoardSequencerScreen() {
                 loops={loopsTab}
                 stacked={layout.mode === 'stacked'}
                 transportAlign={layout.transportAlign}
+                tab={playTab}
+                onTab={setPlayTab}
               />
             )}
           </div>

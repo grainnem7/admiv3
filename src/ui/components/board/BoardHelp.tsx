@@ -30,7 +30,7 @@ const HELP: HelpEntry[] = [
   },
   {
     title: 'The laptop board — no camera, no board',
-    body: '💻 Laptop (beside 📷 Camera, at the top) plays without the camera or the real board: pick a '
+    body: '💻 Laptop (beside 📷 Camera, at the top, or under More on a narrower screen) plays without the camera or the real board: pick a '
       + 'colour above the board and click squares to put counters down; click again to lift. '
       + 'Everything else is the same — phrases, the band, extra notes, sounds changing, loops, scenes, the '
       + 'performance clock and the iPad — so a piece can be tested and planned at home. '
@@ -103,7 +103,7 @@ const HELP: HelpEntry[] = [
   },
   {
     title: 'Control counters',
-    body: 'Give a colour a Control job (volume, tempo, reverb, delay or tone) and its counter '
+    body: 'Give a colour a Control job (Volume, Speed, Reverb, Echo, Brightness, Extra notes or Sounds change) and its counter '
       + "becomes a fader: the value follows where it sits on the board. Lifting it keeps the "
       + 'last value by default, so nothing goes silent by accident. ‖ means the value is held.',
   },
@@ -113,9 +113,9 @@ const HELP: HelpEntry[] = [
       + 'round (long-dash ring). The A/B letter in the status pill shows the current lap.',
   },
   {
-    title: 'Ping-pong',
-    body: 'Turn on Back and forth: the playhead runs → then ← for a longer, there-and-back '
-      + 'phrase. The arrow shows the direction.',
+    title: 'There and back',
+    body: 'Board tab → There and back: the playhead runs → then ← for a longer phrase. The '
+      + 'arrow shows the direction.',
   },
   {
     title: 'Two players, one board',
@@ -128,6 +128,15 @@ const HELP: HelpEntry[] = [
     body: 'If the pieces stop lining up, or a colour starts matching the board itself, a hint '
       + 'appears above the board. Hints never change anything on their own, and "Not now" '
       + 'hides one until the problem comes back.',
+  },
+  {
+    title: 'The Sound tab',
+    body: 'Overall feel (the world, Energy, Space and Groove) and Your colours are always open. '
+      + 'Each helper below them (Band, Keep my notes on top, Chords, Extra notes, Sounds change, '
+      + 'Loops vary) is one line that says how it is set: press it to open it. Groove (Straight, '
+      + 'Swung, Lazy) sets the swing and the loose timing in one step; the Timing tab sets them '
+      + 'finely, with the speed and the grid. ↶ beside a colour goes back to its sound before, '
+      + 'also after a change made in Set up.',
   },
   {
     title: 'Sound worlds',
@@ -159,8 +168,8 @@ const HELP: HelpEntry[] = [
     body: 'Turn Extra notes up and the instrument adds in-key notes around yours: passing notes, '
       + 'echoes, softer drum hits. It never plays where you already play, never louder than '
       + 'you, and nothing on a part you have not used. Ideas come from Magenta (Google’s '
-      + 'music AI, downloaded the first time) or from simple rules. ↻ Try another gives other '
-      + 'notes (New idea on the iPad), ↶ Previous goes back, 📌 Freeze holds them as they are '
+      + 'music AI, downloaded the first time) or from simple rules. ↻ New idea gives other '
+      + 'notes (New idea on the iPad too), ↶ Previous goes back, 📌 Freeze holds them as they are '
       + '(Keep on the iPad), and Off turns them off. Added notes are dotted rings on the board. '
       + 'A colour can be given the Extra notes control job, so a counter sets how much.',
   },
@@ -168,8 +177,8 @@ const HELP: HelpEntry[] = [
     title: 'Sounds change — the sound keeps moving',
     body: 'Turn Sounds change up and each colour’s sound drifts every loop — brighter, darker, more '
       + 'space, echoes — and every 4, 8 or 16 loops moves to another instrument, another '
-      + 'pattern, another kick and snare. Your notes stay yours. ↻ Try another takes another '
-      + 'path (New sound on the iPad), ↶ Previous goes back, 📌 Freeze holds the sound of this '
+      + 'pattern, another kick and snare. Your notes stay yours. ↻ New sound takes another '
+      + 'path (New sound on the iPad too), ↶ Previous goes back, 📌 Freeze holds the sound of this '
       + 'loop. The Play screen says what '
       + 'each colour sounds like now, and "New sounds" appears on the board at each change. '
       + 'A colour can be given the Sounds change control job.',
@@ -178,7 +187,7 @@ const HELP: HelpEntry[] = [
     title: 'iPad controls',
     body: 'Start ADMI with "npm run show" (or "npm run dev:ipad" for testing), tick iPad controls on the Connections tab, and on an '
       + 'iPad on the same Wi-Fi point the Camera at the QR code it shows (or type the link into Safari). Four strips (Speed, '
-      + 'Dynamics, Extra notes, Sounds change) slide like ThumbJam — the whole strip is the target, the '
+      + 'Dynamics, Extra notes, Sounds change) slide: the whole strip is the target, the '
       + 'ends are generous, values move in steps — and four pads (New idea, New sound, Keep, '
       + 'Mute) act on a tap; Mute needs two. Learn reach makes a player’s comfortable slide the '
       + 'whole range. If the Wi-Fi stops passing anything for about 3 seconds, the iPad greys '
@@ -204,9 +213,10 @@ const HELP: HelpEntry[] = [
   {
     title: 'Session log',
     body: 'While the board runs, every note is logged with where it came from — placed, '
-      + 'phrase, fill or band — plus the board whenever it changes and every setting change '
-      + 'with who made it. "Save session" on the Play screen writes it as JSON (everything) '
-      + 'or CSV (notes). Nothing leaves the machine otherwise.',
+      + 'phrase, extra note or band — plus the board whenever it changes and every setting change '
+      + 'with who made it. Under the board, open Session log: "Save session" writes it as JSON '
+      + '(everything) or CSV (notes), and Describe board reads the board out. Nothing leaves '
+      + 'the machine otherwise.',
   },
   {
     title: 'Camera on its side',
@@ -221,8 +231,9 @@ const HELP: HelpEntry[] = [
   },
   {
     title: 'Board, Make a piece, Show',
-    body: 'Three buttons at the top. Board: just play the board, with the Sound, Groove, Board '
-      + 'and Connections tabs — no loops or scenes needed. ▶ Play the board plays what is on the '
+    body: 'Three buttons at the top. Board: just play the board, with the Sound, Timing, Board '
+      + 'and Connections tabs — no loops or scenes needed. On a narrower screen, Open the audience '
+      + 'screen, Set up and Camera / Laptop are under More. ▶ Play the board plays what is on the '
       + 'board: no clock, no scenes. Make a piece: three steps. '
       + '1 Loops: press New loop, put counters down, then Keep, and give the loop a name. '
       + '2 Scenes: "Make my plan" gives four scenes across the piece, each with your '
@@ -230,7 +241,10 @@ const HELP: HelpEntry[] = [
       + 'plays from it. A scene with no loops is silent unless the player plays: tick "alone" in it '
       + 'only if that is the plan. 3 Ending & check: the length (at most 7:00), how it ends, '
       + 'and a check of everything (advice, such as the laptop board or no backup yet, is marked i '
-      + 'and never stops it saying ready). Each step is optional. Show: the board full screen with '
+      + 'and never stops it saying ready; a fix made elsewhere has a button that goes there). '
+      + 'In a scene, its name, time, loops and Energy (Off, Calm, Steady, Lively, Driving, Big) '
+      + 'show at once; the sound world, the band, the chords, Extra notes, Sounds change, the '
+      + 'speed and New ideas are under More for this scene. Each step is optional. Show: the board full screen with '
       + 'the clock and Now / Next, for the performance — ▶ Start the piece, then, once the clock '
       + 'runs, Next scene ▶ (↶ Back to the scene before, for one pass) and ↘ End piece, the '
       + 'ending you chose. ■ Stop silences everything at once; while '
@@ -276,14 +290,14 @@ const HELP: HelpEntry[] = [
       + 'Otherwise, untick the strips and pads this player '
       + 'will not use: fewer things means bigger things. Lock a strip (a speed that must not '
       + 'change mid-piece) and it ignores touch. "A touch on a strip": Jumps to the finger '
-      + '(like ThumbJam) or Follows the movement (landing changes nothing; sliding moves the '
+      + '(where the finger lands is the value) or Follows the movement (landing changes nothing; sliding moves the '
       + 'value from where it was — for a finger that lands roughly). Learn reach makes a '
       + 'short slide the whole range. "A pad acts" when the finger lands or when it lifts '
-      + '(sliding onto a pad, or off it before lifting, then does nothing). End piece, Stop all '
+      + '(sliding onto a pad, or off it before lifting, then does nothing). End piece, Stop the loops '
       + 'and Mute need two taps: "Time for the second tap" is 3, 6 or 10 seconds, and a second '
       + 'touch sooner than the bounce time (half a second unless changed) is ignored, so one '
       + 'shaky press only gets them ready. "Also on the Play page" puts End piece, Next scene, '
-      + 'Capture, Stop all or loops on the page the player plays on. A loop pad works only '
+      + 'Capture, Stop the loops or loops on the page the player plays on. A loop pad works only '
       + 'while the laptop plays. A resting palm is '
       + 'ignored on every pad, and from the iPad Keep only keeps.',
   },

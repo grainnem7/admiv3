@@ -193,14 +193,14 @@ export function BoardStep({
             Cells won&apos;t line up with the squares; detection may be less reliable.
           </p>
           <SegmentedControl<number>
-            label="Rows, all sizes"
+            label="Rows, all sizes" showLabel
             value={rows}
             onChange={(v) => { onGrid({ rows: v }); setMoreOpen(true); }}
             disabled={running}
             options={options.moreRows.map((n) => ({ value: n, label: String(n) }))}
           />
           <SegmentedControl<number>
-            label="Steps, all sizes"
+            label="Steps, all sizes" showLabel
             value={cols}
             onChange={(v) => { onGrid({ cols: v }); setMoreOpen(true); }}
             disabled={running}
@@ -235,7 +235,7 @@ export function BoardStep({
           <summary style={{ cursor: 'pointer', fontSize: 13, color: 'var(--bs-fg2)' }}>For testing</summary>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 6 }}>
             <SegmentedControl<'board' | 'bands'>
-              label="How counters are found"
+              label="How counters are found" showLabel
               value={counterDetection}
               onChange={onCounterDetection}
               options={[

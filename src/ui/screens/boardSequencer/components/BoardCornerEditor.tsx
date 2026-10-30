@@ -204,7 +204,7 @@ export function BoardCornerEditor({
         {mode === 'adjust' && draft && (
           <>
             <SegmentedControl<'fine' | 'coarse'>
-              label="Nudge size"
+              label="Nudge size" showLabel
               value={stepSize}
               onChange={setStepSize}
               options={[{ value: 'coarse', label: 'Coarse' }, { value: 'fine', label: 'Fine' }]}

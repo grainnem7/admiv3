@@ -25,8 +25,8 @@ describe('disabledReason', () => {
   });
 
   it('a backing song outranks even a tempo counter', () => {
-    expect(disabledReason('tempo', controlOwners(channels), true)).toBe('Tempo follows the backing song');
-    expect(disabledReason('tempo', {}, true)).toBe('Tempo follows the backing song');
+    expect(disabledReason('tempo', controlOwners(channels), true)).toBe('Speed follows the backing song');
+    expect(disabledReason('tempo', {}, true)).toBe('Speed follows the backing song');
   });
 });
 

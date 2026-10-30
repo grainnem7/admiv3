@@ -15,12 +15,11 @@ import {
 import { HAT_SURE_MAX, HAT_SURE_MIN } from '../../../../tracking/cap/hatColour';
 import type { HatBox } from '../../../../tracking/cap/learnHat';
 import { CONTROL_RANGE_LIMITS, type ControlRange, type FaderRole } from '../../../../profiles/BoardSequencerConfig';
+import { FADER_WORDS } from '../words';
 import type { CapPause, CapPreview, CapView, HatLearningView, HatResult, HatStep } from '../useCapTracker';
 
-export const CAP_ROLE_LABELS: Record<CapRole, string> = {
-  off: 'Nothing', volume: 'Volume', tempo: 'Speed', reverb: 'Reverb', delay: 'Echo',
-  tone: 'Brightness', fill: 'Extra notes', evolve: 'Sounds change',
-};
+/** The one word list's words (words.ts, A2), and Nothing. */
+export const CAP_ROLE_LABELS: Record<CapRole, string> = { off: 'Nothing', ...FADER_WORDS };
 const ROLES: CapRole[] = ['off', 'volume', 'tempo', 'reverb', 'delay', 'tone', 'fill', 'evolve'];
 
 /** The hat's two moves, in words. */

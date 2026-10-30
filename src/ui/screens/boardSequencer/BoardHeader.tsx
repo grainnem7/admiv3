@@ -51,7 +51,9 @@ export function BoardHeader({
           {exitArmed ? '← Press again to leave' : '← Exit'}
         </Button>
         <h1 style={{ fontSize: 18, margin: 0, flex: '0 0 auto' }}>{title}</h1>
-        <div style={{ flex: 1, minWidth: 0 }}>{right}</div>
+        {/* Grows to fill the row; on a phone-narrow window it takes a row of its own rather
+            than spilling past the edge (A3: nothing scrolls sideways at 320 px). */}
+        <div style={{ flex: '1 1 240px', minWidth: 0 }}>{right}</div>
         {playerName && onSwitchPlayer && (
           <Button
             tone="secondary"
@@ -73,7 +75,9 @@ export function BoardHeader({
         <Button
           tone="quiet"
           aria-pressed={largeUi}
-          aria-label="Large controls"
+          aria-label="Larger controls"
+          // What Aa does, in words on hover (A14): only screen readers were told.
+          title={largeUi ? 'Larger controls: on' : 'Larger controls'}
           onClick={() => onLargeUiChange(!largeUi)}
         >
           <span aria-hidden="true">Aa</span>

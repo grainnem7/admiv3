@@ -6,6 +6,7 @@ import {
 } from '../../remote/protocol';
 import { BUILD_ID, reloadedFor, reloadFor } from '../../remote/buildId';
 import { useRemoteLink } from '../../remote/useRemoteLink';
+import { WORDS } from './boardSequencer/words';
 
 /**
  * The iPad remote (opened as `/?remote=1234` in Safari on the iPad).
@@ -18,15 +19,16 @@ import { useRemoteLink } from '../../remote/useRemoteLink';
 
 const STRIP_NAMES: Record<RemoteControlName, string> = {
   // The laptop's words, so the iPad, the laptop and Help say the same thing.
-  tempo: 'Speed', dynamics: 'Dynamics', fill: 'Extra notes', evolve: 'Sounds change',
+  tempo: WORDS.speed, dynamics: 'Dynamics', fill: WORDS.extraNotes, evolve: WORDS.soundsChange,
 };
 const STRIP_COLOURS: Record<RemoteControlName, string> = {
   tempo: '#4fc3f7', dynamics: '#ffb74d', fill: '#81c784', evolve: '#ce93d8',
 };
 const PADS: { name: Exclude<RemoteTriggerName, 'stopAll'>; label: (s: RemoteState | null) => string; icon: string }[] = [
-  { name: 'newIdea', icon: '✨', label: () => 'New idea' },
-  { name: 'newSound', icon: '🎨', label: () => 'New sound' },
-  { name: 'keep', icon: '📌', label: (s) => (s?.kept ? 'Kept ✓' : 'Keep') },
+  // The laptop's words (the one word list, A2).
+  { name: 'newIdea', icon: '✨', label: () => WORDS.newIdea },
+  { name: 'newSound', icon: '🎨', label: () => WORDS.newSound },
+  { name: 'keep', icon: '📌', label: (s) => (s?.kept ? 'Kept ✓' : WORDS.keep) },
   { name: 'mute', icon: '🔇', label: (s) => (s?.muted ? 'Muted' : 'Mute') },
 ];
 
@@ -43,7 +45,7 @@ const PALM_PX = 160;
 const isPalm = (e: React.PointerEvent<Element>): boolean => e.pointerType === 'touch' && e.width > PALM_PX && e.height > PALM_PX;
 /** How long the "touch seen" mark stays in the status row. */
 const TOUCH_MARK_MS = 700;
-/** The second tap of End piece, Stop all and Mute is waited for this long, unless the laptop says otherwise (per player). */
+/** The second tap of End piece, Stop the loops and Mute is waited for this long, unless the laptop says otherwise (per player). */
 const DEFAULT_CONFIRM_MS = 6000;
 /** The pads that need a second tap: each one ends, stops or silences the show. */
 type TwoTapName = 'endPiece' | 'stopAll' | 'mute';
@@ -87,7 +89,7 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
   // Follow mode: where the finger landed and what the value was, so sliding moves it from there.
   const followStart = useRef(new Map<RemoteControlName, { fraction: number; value: number }>());
   // How pads respond for this player (set on the laptop): on touch or on lift, how long the
-  // second tap of End piece, Stop all and Mute is waited for, and how soon a second touch
+  // second tap of End piece, Stop the loops and Mute is waited for, and how soon a second touch
   // is still a bounce of the first.
   const actOn = state?.touch?.actOn ?? 'touch';
   const confirmMs = state?.touch ? state.touch.confirmSec * 1000 : DEFAULT_CONFIRM_MS;
@@ -138,7 +140,7 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
   }, [beat, state?.playing]);
   const reducedMotion = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
   const showNext = state?.touch?.showNext !== false;
-  // End piece, Stop all and Mute wait for a second tap: which are waiting, what each pad
+  // End piece, Stop the loops and Mute wait for a second tap: which are waiting, what each pad
   // remembers (when it was armed, its latest touch), and the timers that stop the wait
   // when the window runs out.
   const [armed, setArmed] = useState<ReadonlySet<TwoTapName>>(() => new Set());
@@ -629,14 +631,14 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
             </button>
             <button
               type="button"
-              aria-label={confirmStop ? 'Tap again to stop all loops' : 'Stop all loops'}
+              aria-label={confirmStop ? 'Tap again to stop the loops' : WORDS.stopLoops}
               {...padProps('stopAll', stopTap)}
               style={{
                 borderRadius: 20, touchAction: 'none', color: '#eef1f7', fontSize: confirmStop ? 20 : 24, fontWeight: 800,
                 border: `4px solid ${confirmStop ? '#ffffff' : '#ef5350'}`, background: confirmStop ? '#8a2a2a' : '#4a2323',
               }}
             >
-              {confirmStop ? 'Tap again to stop all' : '■ Stop all'}
+              {confirmStop ? 'Tap again to stop the loops' : `■ ${WORDS.stopLoops}`}
             </button>
           </div>
         </div>
@@ -772,9 +774,9 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
               );
             }
             return (
-              <button key="x-stop" type="button" aria-label={confirmStop ? 'Tap again to stop all loops' : 'Stop all loops'} {...padProps('x-stop', stopTap)}
+              <button key="x-stop" type="button" aria-label={confirmStop ? 'Tap again to stop the loops' : WORDS.stopLoops} {...padProps('x-stop', stopTap)}
                 style={{ borderRadius: 20, touchAction: 'none', color: '#eef1f7', fontSize: confirmStop ? 20 : 24, fontWeight: 800, border: `4px solid ${confirmStop ? '#ffffff' : '#ef5350'}`, background: confirmStop ? '#8a2a2a' : '#4a2323' }}>
-                {confirmStop ? 'Tap again to stop all' : '■ Stop all'}
+                {confirmStop ? 'Tap again to stop the loops' : `■ ${WORDS.stopLoops}`}
               </button>
             );
           })}

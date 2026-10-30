@@ -3,7 +3,7 @@
 // (Colours) and on the Play screen's Sound tab, so a sound can be tried with the player in
 // either place. The rest of a colour's sound lives in its row's More.
 
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { Button } from '../ui/Button';
 import { Switch } from '../ui/Switch';
 import { SwatchChip } from '../ui/SwatchChip';
@@ -52,8 +52,15 @@ const CELL: CSSProperties = { padding: '6px 3px', borderTop: '1px solid var(--bs
 // show as much of a long name as fits.
 const SELECT: CSSProperties = { minHeight: 'var(--bs-target)', width: '100%', minWidth: 0, textOverflow: 'ellipsis' };
 const ICON: CSSProperties = { minWidth: 'var(--bs-target)', padding: '0 8px' };
-/** Plays and Sounds like, side by side, the same width on every row. */
-const TWO: CSSProperties = { display: 'grid', gridTemplateColumns: '2fr 3fr', gap: 6 };
+/**
+ * Plays and Sounds like, side by side, the same width on every row. Sounds like gets the
+ * room: its names are the long ones, and a cut name hid which sound it was (A16).
+ */
+const TWO: CSSProperties = { display: 'flex', flexWrap: 'wrap', gap: 6 };
+/** Plays: a third of the row, never under 110 px. */
+const PLAYS_COL: CSSProperties = { flex: '1 1 110px', minWidth: 0 };
+/** Sounds like: two thirds; under 220 px it takes a line of its own, at full width. */
+const SOUND_COL: CSSProperties = { flex: '2 1 220px', minWidth: 0 };
 
 const SOUND_JOBS: ColourRole[] = ['melody', 'bass', 'chord', 'drums', 'off'];
 const CONTROL_JOBS: ColourRole[] = [...FADER_ROLES, ...TOGGLE_ROLES];
@@ -66,30 +73,37 @@ const soundValue = (c: ColourChannel): string => (c.role === 'drums' ? c.drum ??
 /** Which field that value is: a drum colour's piece, or another colour's instrument. */
 const soundField = (c: ColourChannel): 'drum' | 'instrument' => (c.role === 'drums' ? 'drum' : 'instrument');
 
+/**
+ * ↶: the sound each colour had before its last change, for this session. Kept outside the
+ * table, so the sound before a change made in Set up is still there on the Board view's
+ * Sound tab (A16). Forgotten with the player (their colours are not this player's).
+ */
+const soundHistory = {
+  before: new Map<string, string>(),
+  seen: new Map<string, { field: 'drum' | 'instrument'; value: string }>(),
+};
+
+/** Forget every colour's sound before (a player switched; the tests). */
+export function forgetSoundsBefore(): void {
+  soundHistory.before.clear();
+  soundHistory.seen.clear();
+}
+
 export function ColourTable(p: ColourTableProps): JSX.Element {
-  // ↶: the sound each row had before its last change (this session only). Learnt from the
-  // colours as they change, so a change made outside the table (Reset every colour) counts
-  // too; a job change clears it, so a drum piece never comes back as an instrument.
-  const [before, setBefore] = useState<Record<string, string>>({});
-  const seen = useRef(new Map<string, { field: 'drum' | 'instrument'; value: string }>());
+  // Learnt from the colours as they change, so a change made outside the table (Reset every
+  // colour) counts too; a job change clears it, so a drum piece never comes back as an
+  // instrument. A table that opens later starts from what the last one saw.
+  const [before, setBefore] = useState<Record<string, string>>(() => Object.fromEntries(soundHistory.before));
   useEffect(() => {
-    const changes: Record<string, string | null> = {};
+    let changed = false;
     for (const c of p.config.channels) {
       const now = { field: soundField(c), value: soundValue(c) };
-      const was = seen.current.get(c.id);
-      if (was && was.field !== now.field) changes[c.id] = null;
-      else if (was && was.value !== now.value) changes[c.id] = was.value;
-      seen.current.set(c.id, now);
+      const was = soundHistory.seen.get(c.id);
+      if (was && was.field !== now.field) { changed = soundHistory.before.delete(c.id) || changed; }
+      else if (was && was.value !== now.value) { soundHistory.before.set(c.id, was.value); changed = true; }
+      soundHistory.seen.set(c.id, now);
     }
-    if (Object.keys(changes).length === 0) return;
-    setBefore((b) => {
-      const next = { ...b };
-      for (const [id, v] of Object.entries(changes)) {
-        if (v === null) delete next[id];
-        else next[id] = v;
-      }
-      return next;
-    });
+    if (changed) setBefore(Object.fromEntries(soundHistory.before));
   }, [p.config.channels]);
   // By number, as on the chips and everywhere else (B24): sorted by job, Red 1 sat above
   // Yellow 3 above Blue 2.
@@ -112,7 +126,7 @@ export function ColourTable(p: ColourTableProps): JSX.Element {
         <thead>
           <tr style={{ ...NOTE, textAlign: 'left' }}>
             <th scope="col" style={{ padding: 3 }}>
-              <div style={TWO}><span>Plays</span><span>Sounds like</span></div>
+              <div style={TWO}><span style={PLAYS_COL}>Plays</span><span style={SOUND_COL}>Sounds like</span></div>
             </th>
           </tr>
         </thead>
@@ -186,7 +200,7 @@ function ColourRow({ c, n, p, onSound, canGoBack, onBack }: {
               disabled={p.roleLockedReason !== null}
               title={p.roleLockedReason ?? undefined}
               onChange={(e) => onPlays(e.target.value)}
-              style={SELECT}
+              style={{ ...SELECT, ...PLAYS_COL }}
             >
               {SOUND_JOBS.map((r) => <option key={r} value={r}>{jobName(r)}</option>)}
               <optgroup label="Control">
@@ -203,7 +217,7 @@ function ColourRow({ c, n, p, onSound, canGoBack, onBack }: {
               )}
             </select>
             {hasSound ? (
-              <select aria-label={`${name}: sound`} value={soundValue(c)} onChange={(e) => onSound(e.target.value)} style={SELECT}>
+              <select aria-label={`${name}: sound`} value={soundValue(c)} onChange={(e) => onSound(e.target.value)} style={{ ...SELECT, ...SOUND_COL }}>
                 <option value="">
                   {c.role === 'drums'
                     ? `${followName} (by row)`
@@ -215,7 +229,7 @@ function ColourRow({ c, n, p, onSound, canGoBack, onBack }: {
                   return group ? <optgroup key={group} label={group}>{list}</optgroup> : list;
                 })}
               </select>
-            ) : <span aria-label="No sound of its own" style={{ alignSelf: 'center' }}>—</span>}
+            ) : <span aria-label="No sound of its own" style={{ ...SOUND_COL, alignSelf: 'center' }}>—</span>}
           </div>
           {hasSound && <TuneChoice c={c} phrases={p.config.phrases} set={(patch) => p.setChannelSound(c.id, patch)} />}
           {note && <div role="status" style={{ ...NOTE, marginTop: 4, color: 'var(--bs-accent)', fontWeight: 600 }}>{note}</div>}

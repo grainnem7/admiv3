@@ -21,7 +21,9 @@ describe('fill and evolve as control counters', () => {
     expect(isFaderRole('fill')).toBe(true);
     expect(isFaderRole('evolve')).toBe(true);
     expect(FADER_ROLES).toContain('fill');
-    expect(ROLE_LABELS.fill).toMatch(/fill/i);
+    // The one word list's name (A2): Extra notes, not Fill amount.
+    expect(ROLE_LABELS.fill).toBe('Extra notes');
+    expect(ROLE_LABELS.evolve).toBe('Sounds change');
   });
 
   it('a fill counter high on the board means a lot of fill; lifted, it holds', () => {

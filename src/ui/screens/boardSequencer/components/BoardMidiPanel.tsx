@@ -147,7 +147,7 @@ export function BoardMidiPanel({
 
           {soundFrom === 'both' && (
             <SegmentedControl<MidiSends>
-              label="What goes out in Both"
+              label="What goes out in Both" showLabel
               value={config.midiSends}
               onChange={(v) => onChange({ midiSends: v })}
               options={[{ value: 'player', label: 'The player\u2019s notes only' }, { value: 'all', label: 'Everything (band and Extra notes too)' }]}
@@ -170,7 +170,7 @@ export function BoardMidiPanel({
           </label>
 
           <SegmentedControl<MidiChannelMode>
-            label="Channels"
+            label="Channels" showLabel
             value={config.midiChannelMode}
             onChange={(v) => onChange({ midiChannelMode: v })}
             options={[{ value: 'part', label: 'One per part' }, { value: 'colour', label: 'One per colour' }]}

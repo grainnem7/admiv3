@@ -195,7 +195,7 @@ describe('the iPad page, set up for the player', () => {
   });
 });
 
-describe('two taps, safe from a bounce: End piece, Stop all and Mute', () => {
+describe('two taps, safe from a bounce: End piece, Stop the loops and Mute', () => {
   it('End piece: a bounce 60, 120 or 250 ms after the first touch never ends the piece', async () => {
     await act(async () => { onMsg?.(withTouch({ playExtras: ['endPiece'] })); });
     let t = 20_000;
@@ -278,12 +278,12 @@ describe('two taps, safe from a bounce: End piece, Stop all and Mute', () => {
     expect(sent).toContainEqual(END);
   });
 
-  it('Stop all: a bounce 120 ms after the first touch never stops the loops; a tap 580 ms after the bounce does', async () => {
+  it('Stop the loops (was Stop all, A2): a bounce 120 ms after the first touch never stops the loops; a tap 580 ms after the bounce does', async () => {
     await act(async () => { onMsg?.(withTouch({ playExtras: ['stopAll'] })); });
-    await touchAt(20_000, () => button('Stop all loops'));
-    await touchAt(20_120, () => button('Tap again to stop all'));
+    await touchAt(20_000, () => button('Stop the loops'));
+    await touchAt(20_120, () => button('Tap again to stop the loops'));
     expect(sent).not.toContainEqual(STOP);
-    await touchAt(20_700, () => button('Tap again to stop all'));
+    await touchAt(20_700, () => button('Tap again to stop the loops'));
     expect(sent).toContainEqual(STOP);
   });
 
@@ -382,7 +382,7 @@ describe("the safe show layout on Tim's iPad", () => {
     expect(buttons[1].getAttribute('aria-label')).toBe('End the piece');
     // No page tabs: the loop and scene pages are not there to switch to.
     expect(el.querySelectorAll('[role="tab"]')).toHaveLength(0);
-    for (const gone of ['Mute', 'Stop all', 'Next scene', 'Capture', 'Bass', 'Bed', 'Scene ']) {
+    for (const gone of ['Mute', 'Stop the loops', 'Stop all', 'Next scene', 'Capture', 'Bass', 'Bed', 'Scene ']) {
       expect(el.textContent).not.toContain(gone);
     }
   });
