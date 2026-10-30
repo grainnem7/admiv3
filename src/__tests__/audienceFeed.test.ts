@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { audienceHat, audienceNotes, audienceState, createAudienceFeed, drawStalled, dueNotes, STALE_NOTE_SEC, type HatInput } from '../audience/feed';
 import { choosePlacement, outcomeOf, type ScreenInfo } from '../audience/placement';
-import { audienceNoticeText, openingNotice } from '../audience/useAudienceWindow';
+import { audienceNoticeText, noticeOnceFull, openingNotice } from '../audience/useAudienceWindow';
 import { readAudienceMessage, readLaptopMessage, type AudienceState, type LaptopMessage } from '../audience/protocol';
 import type { FiredNote } from '../songs/BoardSequencerEngine';
 
@@ -231,5 +231,34 @@ describe('the two-window routine (audit 2026-10-30: B5, B6, B26)', () => {
     expect(drawStalled(true, 1000, 990)).toBe(true);
     // Never drawn yet (the board not running): the timer feeds it.
     expect(drawStalled(false, 1000, null)).toBe(true);
+  });
+});
+
+describe('A17: the placed and drag notices clear once the window fills the screen', () => {
+  it('the audience window says whether it fills the screen, and the feed knows', () => {
+    expect(readAudienceMessage({ kind: 'here', full: true })).toEqual({ kind: 'here', full: true });
+    expect(readAudienceMessage({ kind: 'here', full: 'yes' })).toEqual({ kind: 'here' });
+    const { ch, hear } = fakeChannel();
+    const feed = createAudienceFeed(ch);
+    expect(feed.full()).toBe(false);
+    hear({ kind: 'here' });
+    expect(feed.full()).toBe(false);
+    hear({ kind: 'here', full: true });
+    expect(feed.full()).toBe(true);
+    hear({ kind: 'here' });
+    expect(feed.full()).toBe(false);
+    hear({ kind: 'here', full: true });
+    hear({ kind: 'bye' });
+    expect(feed.full()).toBe(false);
+  });
+
+  it('only the placed and drag notices go; the others stay until they time out', () => {
+    expect(noticeOnceFull('placed', true)).toBeNull();
+    expect(noticeOnceFull('drag', true)).toBeNull();
+    expect(noticeOnceFull('placed', false)).toBe('placed');
+    expect(noticeOnceFull('oneScreen', true)).toBe('oneScreen');
+    expect(noticeOnceFull('blocked', true)).toBe('blocked');
+    expect(noticeOnceFull('asking', true)).toBe('asking');
+    expect(noticeOnceFull(null, true)).toBeNull();
   });
 });

@@ -91,6 +91,8 @@ const STATE_KEEP_MS = 1000;
 export interface AudienceFeed {
   /** An audience window is open (heard from lately). */
   alive(nowMs: number): boolean;
+  /** The open window fills its screen (it says so with each hello). */
+  full(): boolean;
   /** Called when one opens or goes. */
   onChange(fn: () => void): void;
   /** Whether a state given now would be looked at (so the caller can skip building one). */
@@ -105,6 +107,7 @@ export interface AudienceFeed {
 
 export function createAudienceFeed(ch: ChannelLike): AudienceFeed {
   let heardAt: number | null = null;
+  let isFull = false;
   let lastJson = '';
   let lastSentAt = -Infinity;
   let listener: (() => void) | null = null;
@@ -115,15 +118,19 @@ export function createAudienceFeed(ch: ChannelLike): AudienceFeed {
     const was = heardAt !== null;
     if (m.kind === 'here') {
       heardAt = performance.now();
+      const wasFull = isFull;
+      isFull = m.full === true;
+      if (wasFull !== isFull) listener?.();
       // A new window (or this page reloaded): it has nothing yet, so the next state goes.
       if (!was) lastJson = '';
-    } else heardAt = null;
+    } else { heardAt = null; isFull = false; }
     if (was !== (heardAt !== null)) listener?.();
   };
   // A laptop page that has just (re)started asks: an audience window already open answers.
   ch.postMessage({ kind: 'hello' });
   return {
     alive,
+    full: () => heardAt !== null && isFull,
     onChange(fn) { listener = fn; },
     wantsState: (nowMs) => heardAt !== null && nowMs - lastSentAt >= STATE_MS,
     state(s, nowMs) {

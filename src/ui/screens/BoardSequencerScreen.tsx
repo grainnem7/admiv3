@@ -884,6 +884,8 @@ export default function BoardSequencerScreen() {
   const stoppedAtRef = useRef(-Infinity);
   /** When the piece last ended by itself (its ending rang out, or the end time came). */
   const pieceEndedAtRef = useRef(-Infinity);
+  /** The piece has ended (its ending rang out, or its end time came): Show says "Ended" where the clock was (A17). */
+  const [pieceEnded, setPieceEnded] = useState(false);
   /**
    * A start pressed too soon starts nothing (startTooSoon): a bounce of Stop, or the second
    * press of a Stop the piece's own end overtook. Straight after the end it says so.
@@ -2621,6 +2623,7 @@ export default function BoardSequencerScreen() {
     setBoardCheck(null);
     startingRef.current = performance.now();
     const generation = startingRef.current;
+    setPieceEnded(false);
     setStarting(true);
     pieceStartingRef.current = piece !== null;
     setPieceStarting(piece !== null);
@@ -3681,6 +3684,7 @@ export default function BoardSequencerScreen() {
       sessionLogRef.current.action('laptop', 'piece ended');
       stop();
       pieceEndedAtRef.current = performance.now();
+      setPieceEnded(true);
       // The piece is over: nothing stays armed, and the next run starts from the top.
       wantedRef.current = new Set();
       setWantedSlots([]);
@@ -3784,6 +3788,7 @@ export default function BoardSequencerScreen() {
         if (engineRef.current !== engine) return;
         stop();
         pieceEndedAtRef.current = performance.now();
+        setPieceEnded(true);
         wantedRef.current = new Set();
         setWantedSlots([]);
         update({ currentScene: null });
@@ -5419,6 +5424,7 @@ export default function BoardSequencerScreen() {
     next: nn.next ? { name: nn.next.scene.name, inSec: nn.next.inSec } : null,
     loops: performLoops.filter((l) => l.state === 'playing' || l.state === 'starting').map((l) => (l.name.length > 0 ? l.name : `Loop ${l.slot + 1}`)),
     ending,
+    ended: pieceEnded && !running,
     waiting: running ? waitingLine(
       waitingNow.flatMap((id) => { const ch = channelById.get(id); return ch ? [ch] : []; }), config.colourComesInAt,
     ) : null,

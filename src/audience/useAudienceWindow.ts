@@ -34,6 +34,15 @@ export function audienceNoticeText(n: AudienceNotice): string {
   }
 }
 
+/**
+ * The notice once the window's state is known: the placed and drag notices are about getting
+ * the window onto the projector, so they go once it fills a screen (A17). The rest stay until
+ * they time out.
+ */
+export function noticeOnceFull(n: AudienceNotice | null, windowFull: boolean): AudienceNotice | null {
+  return windowFull && (n === 'placed' || n === 'drag') ? null : n;
+}
+
 /** How long a notice stays. */
 const NOTICE_MS = 30_000;
 /** A window that hasn't said it is there by now is slow: say it is still opening. */
@@ -78,6 +87,8 @@ export function useAudienceWindow(): {
         setNotice((cur) => (cur === 'stillOpening' ? null : cur));
       }
       setOpen(alive);
+      const full = feed.full();
+      setNotice((cur) => noticeOnceFull(cur, full));
     };
     feed.onChange(check);
     // A window that closed without a word (closed by the browser, crashed) is gone after a while.

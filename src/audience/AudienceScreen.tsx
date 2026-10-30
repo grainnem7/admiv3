@@ -74,6 +74,7 @@ export default function AudienceScreen(): JSX.Element {
     const colourOf = colourReader();
     const ch = typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel(AUDIENCE_CHANNEL);
     const say = (m: AudienceMessage): void => ch?.postMessage(m);
+    const hello = (): void => say(document.fullscreenElement ? { kind: 'here', full: true } : { kind: 'here' });
 
     let state: AudienceState | null = null;
     let lastMsgAt = -Infinity;
@@ -126,7 +127,7 @@ export default function AudienceScreen(): JSX.Element {
             if (blooms.length > 300) blooms = blooms.slice(-300);
             break;
           case 'hello':
-            say({ kind: 'here' });
+            hello();
             break;
           case 'place':
             // Onto the projector, filling it (only before it has been made full screen).
@@ -144,8 +145,10 @@ export default function AudienceScreen(): JSX.Element {
       };
     }
     // Say it is here (the laptop only sends while one is), and keep saying so.
-    say({ kind: 'here' });
-    const here = window.setInterval(() => say({ kind: 'here' }), 1000);
+    hello();
+    const here = window.setInterval(hello, 1000);
+    // Filling the screen is said at once, so the laptop's "drag it…" notice goes (A17).
+    document.addEventListener('fullscreenchange', hello);
     const bye = (): void => say({ kind: 'bye' });
     window.addEventListener('pagehide', bye);
     // A click fills the screen (the browser only allows that after a click on the window).
@@ -330,6 +333,7 @@ export default function AudienceScreen(): JSX.Element {
     return () => {
       cancelAnimationFrame(raf);
       window.clearInterval(here);
+      document.removeEventListener('fullscreenchange', hello);
       window.removeEventListener('pagehide', bye);
       root.removeEventListener('click', fill);
       motion?.removeEventListener?.('change', onMotion);

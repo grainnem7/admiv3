@@ -44,3 +44,25 @@ describe('Now / Next: the piece\'s buttons (B13)', () => {
     expect(onUndoNext).toHaveBeenCalled();
   });
 });
+
+describe('after the piece (A17)', () => {
+  const idle: ClockView = { ...running, phase: 'idle' };
+  it('a quiet "Ended" shows in the clock’s place, and ▶ Start the piece is still there', () => {
+    view = render(<NowNextStrip {...props({ clock: idle, ended: true })} />);
+    const ended = view.container.querySelector('[data-ended]') as HTMLElement;
+    expect(ended.textContent).toBe('Ended');
+    expect(ended.getAttribute('role')).toBe('status');
+    expect(view.container.querySelector('[role="timer"]')).toBeNull();
+    expect(named('▶ Start the piece')).toBeDefined();
+    // Quiet: the secondary text colour, not a warning or a danger colour.
+    expect(ended.style.color).toBe('var(--bs-fg2)');
+  });
+  it('not before the first piece, and not while a clock runs', () => {
+    view = render(<NowNextStrip {...props({ clock: idle })} />);
+    expect(view.container.querySelector('[data-ended]')).toBeNull();
+    view.unmount();
+    view = render(<NowNextStrip {...props({ ended: true })} />);
+    expect(view.container.querySelector('[data-ended]')).toBeNull();
+    expect(view.container.querySelector('[role="timer"]')).not.toBeNull();
+  });
+});

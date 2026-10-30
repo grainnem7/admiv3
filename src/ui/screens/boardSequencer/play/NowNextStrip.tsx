@@ -26,6 +26,8 @@ export interface NowNextStripProps {
   waiting?: string | null;
   /** Show puts focus here once the piece starts (never onto ■ Stop, B3). */
   focusRef?: Ref<HTMLDivElement>;
+  /** The piece has just ended (by its ending or its end time): "Ended" stands where the clock was (A17). */
+  ended?: boolean;
 }
 
 /**
@@ -57,7 +59,13 @@ export function NowNextStrip(p: NowNextStripProps): JSX.Element {
           {phase === 'ending' ? `ending ${p.clock.text}` : p.clock.text}
         </span>
       ) : (
-        <Button tone="primary" onClick={p.onStartPiece}>▶ Start the piece</Button>
+        <>
+          {p.ended && (
+            // Quiet: the piece is over, nothing to do. The clock's own size, so the strip does not jump.
+            <span data-ended="" role="status" style={{ fontSize: 20 * size, fontWeight: 600, color: 'var(--bs-fg2)' }}>Ended</span>
+          )}
+          <Button tone="primary" onClick={p.onStartPiece}>▶ Start the piece</Button>
+        </>
       )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, flex: '1 1 200px' }}>
         <span style={{ fontSize: 20 * size, fontWeight: 700 }}>{p.nowName ? `Now: ${p.nowName}` : 'Now: no scene'}</span>

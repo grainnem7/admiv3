@@ -63,7 +63,8 @@ export type LaptopMessage =
   | { kind: 'place'; left: number; top: number; width: number; height: number }
   | { kind: 'close' };
 
-export type AudienceMessage = { kind: 'here' } | { kind: 'bye' };
+/** `full`: the audience window fills its screen (the placed and drag notices are then done, A17). */
+export type AudienceMessage = { kind: 'here'; full?: true } | { kind: 'bye' };
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null;
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
@@ -117,7 +118,7 @@ export function readLaptopMessage(v: unknown): LaptopMessage | null {
 /** What the laptop page reads from the channel: only the audience window's messages. */
 export function readAudienceMessage(v: unknown): AudienceMessage | null {
   if (!isObj(v)) return null;
-  if (v.kind === 'here') return { kind: 'here' };
+  if (v.kind === 'here') return v.full === true ? { kind: 'here', full: true } : { kind: 'here' };
   if (v.kind === 'bye') return { kind: 'bye' };
   return null;
 }
