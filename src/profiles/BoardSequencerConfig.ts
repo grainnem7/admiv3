@@ -12,6 +12,7 @@ import { sanitizeFillNotes, type FillNote } from '../songs/generative/rulesFill'
 import type { BandLevel } from '../songs/band/band';
 import { DEFAULT_CHORDS, sanitizeChords, type ChordSetting } from '../songs/harmony/currentChord';
 import { DEFAULT_JOBS, sanitizeBandJobs, type BandJobs } from '../songs/band/bandJobs';
+import { DEFAULT_PRESS_AGAIN_SEC, sanitizePressAgainSec, type PressAgainSec } from '../ui/screens/boardSequencer/pressAgain';
 import { KEEP_ON_TOP_DEFAULT_DB, sanitizeKeepOnTopDb } from '../songs/band/keepOnTop';
 import { clampLeadMs, type MidiChannelMode, type MidiSends } from '../midi/boardMidi';
 import {
@@ -214,6 +215,10 @@ export interface BoardSequencerStored {
   loopFadePasses: number;
   /** Scenes leave alone an iPad strip the player has moved since the last scene. */
   sceneRespectsPlayer: boolean;
+  /** How long the first press of Stop, Exit or Set up waits for its second (A7), in seconds. */
+  pressAgainSec: PressAgainSec;
+  /** Space plays and stops the board; off, Space is left to switches and the focused control (A7). */
+  spacePlays: boolean;
   /** The performance clock: length, ending, when it starts (see performance/clock). */
   performance: PerformanceSettings;
   /**
@@ -584,6 +589,8 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   currentScene: null,
   loopFadePasses: 1,
   sceneRespectsPlayer: true,
+  pressAgainSec: DEFAULT_PRESS_AGAIN_SEC,
+  spacePlays: true,
   colourComesInAt: {},
   performance: DEFAULT_PERFORMANCE,
   boardSource: 'camera',
@@ -958,6 +965,9 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     currentScene: null,
     loopFadePasses: [0, 0.5, 1, 2].includes(num(o.loopFadePasses, 1)) ? num(o.loopFadePasses, 1) : 1,
     sceneRespectsPlayer: o.sceneRespectsPlayer !== false,
+    // Players saved before these existed keep today's: 4 s, and Space on.
+    pressAgainSec: sanitizePressAgainSec(o.pressAgainSec),
+    spacePlays: o.spacePlays !== false,
     // Only for colours that still exist: a time left behind would land on a new colour.
     colourComesInAt: sanitizeColourEntries(o.colourComesInAt, new Set(channels.map((c) => c.id))),
     performance: sanitizePerformance(o.performance),

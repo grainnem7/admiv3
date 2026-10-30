@@ -55,8 +55,10 @@ export type SpaceAction = 'startPiece' | 'play' | 'stop' | 'none';
  */
 export function spaceAction(
   view: BoardScreenView, target: EventTarget | null,
-  s: { running: boolean; offerShowing: boolean; msSinceStop: number; msSincePieceEnded: number; pieceOn: boolean },
+  s: { running: boolean; offerShowing: boolean; msSinceStop: number; msSincePieceEnded: number; pieceOn: boolean; spacePlays?: boolean },
 ): SpaceAction {
+  // Switched off in Advanced (a switch box often sends Space): the key does nothing here.
+  if (s.spacePlays === false) return 'none';
   if (!spaceTogglesPlay(view, target)) return 'none';
   if (s.offerShowing) return 'none';
   if (s.running) return view === 'bigBoard' && !s.pieceOn ? 'startPiece' : 'stop';

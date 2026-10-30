@@ -87,3 +87,10 @@ describe('Help says how Show keeps the performance safe (audit 2026-10-30, batch
     expect(entry('Keyboard')).toContain('Start the piece to the Now / Next strip (never onto Stop)');
   });
 });
+
+describe('Help names the times a press waits (A7)', () => {
+  it('says where Time to press again and Space plays and stops are', () => {
+    expect(entry('Board, Make a piece, Show')).toContain('Time to press again: 3, 4, 6 or 10 seconds, 4 until you change it, under Sound → Advanced');
+    expect(entry('Keyboard')).toContain('turn Space plays and stops off under Sound → Advanced');
+  });
+});
