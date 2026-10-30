@@ -466,3 +466,27 @@ describe('the build each side runs', () => {
     });
   });
 });
+
+describe('show safety over the link (audit 2026-10-30: B2, B19, B20)', () => {
+  const base = { values: { tempo: 0, dynamics: 0, fill: 0, evolve: 0 }, labels: { tempo: '', dynamics: '', fill: '', evolve: '' } };
+
+  it('the iPad says when its End piece is waiting for the second tap, and when it no longer is; the relay passes it on', () => {
+    expect(parseRemoteMessage({ type: 'armed', name: 'endPiece', on: true })).toEqual({ type: 'armed', name: 'endPiece', on: true });
+    expect(parseRemoteMessage({ type: 'armed', name: 'endPiece', on: false })).toEqual({ type: 'armed', name: 'endPiece', on: false });
+    expect(parseRemoteMessage({ type: 'armed', name: 'deleteEverything', on: true })).toBeNull();
+    expect(parseRemoteMessage({ type: 'armed', name: 'endPiece', on: 'yes' })).toBeNull();
+    expect(allowedFrom('remote', 'armed')).toBe(true);
+    expect(allowedFrom('host', 'armed')).toBe(false);
+  });
+
+  it('the laptop waiting for Carry on reaches the iPad, and only when exactly true', () => {
+    const m = parseRemoteMessage({ type: 'state', state: { ...base, playing: false, carryOnWaiting: true } });
+    expect(m && m.type === 'state' ? m.state.carryOnWaiting : null).toBe(true);
+    const no = parseRemoteMessage({ type: 'state', state: { ...base, carryOnWaiting: 1 } });
+    expect(no && no.type === 'state' ? 'carryOnWaiting' in no.state : null).toBe(false);
+  });
+
+  it('the iPad heartbeat (a hello that answers no question) is a well-formed hello, so a laptop of any build ignores it', () => {
+    expect(parseRemoteMessage({ type: 'hello', build: 'abc-1', ask: null })).toEqual({ type: 'hello', build: 'abc-1', ask: null });
+  });
+});

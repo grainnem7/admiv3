@@ -48,6 +48,18 @@ export function audienceHat(h: HatInput): AudienceHat {
   return { mode: 'follow', x, y, warmth };
 }
 
+/** No frame drawn for this long: the drawing loop has stopped (B6). */
+export const DRAW_STALL_MS = 500;
+
+/**
+ * Has the laptop page's drawing loop stopped? The browser stops it for a hidden or covered
+ * window, and then the audience screen faded while the music played on. A timer feeds it
+ * instead whenever this is true. `lastDrawMs` is null before the first frame is drawn.
+ */
+export function drawStalled(hidden: boolean, nowMs: number, lastDrawMs: number | null): boolean {
+  return hidden || lastDrawMs === null || nowMs - lastDrawMs > DRAW_STALL_MS;
+}
+
 /** A note heard longer ago than this has missed its bloom (a busy page): it is dropped. */
 export const STALE_NOTE_SEC = 0.3;
 

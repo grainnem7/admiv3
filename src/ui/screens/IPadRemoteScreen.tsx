@@ -159,6 +159,7 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
     clearTimeout(armTimers.current.get(name));
     armTimers.current.delete(name);
     const pad = twoTapPads.current.get(name);
+    if (name === 'endPiece' && pad !== undefined && pad.armedAt !== null) link.send({ type: 'armed', name, on: false });
     if (pad) twoTapPads.current.set(name, { ...pad, armedAt: null });
     setArmedFlag(name, false);
   };
@@ -169,6 +170,7 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
    * quiet starts again from it (see secondTap).
    */
   const twoTap = (name: TwoTapName, act: () => void): void => {
+    if (!live) return;
     const now = performance.now();
     const { step, pad } = secondTap(twoTapPads.current.get(name) ?? TWO_TAP_IDLE, now, { minMs: secondTapMinMs, windowMs: confirmMs });
     twoTapPads.current.set(name, pad);
@@ -177,10 +179,13 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
     armTimers.current.delete(name);
     if (step === 'confirm') {
       setArmedFlag(name, false);
+      if (name === 'endPiece') link.send({ type: 'armed', name, on: false });
       act();
       return;
     }
     setArmedFlag(name, true);
+    // The laptop shows it too: one more tap ends the piece (B20).
+    if (name === 'endPiece') link.send({ type: 'armed', name, on: true });
     armTimers.current.set(name, setTimeout(() => disarm(name), confirmMs));
   };
   // The laptop stopped: nothing stays armed, so one tap in the next run can't end it.
@@ -196,6 +201,7 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
   const stopTap = (): void => twoTap('stopAll', () => padTap('stopAll', { type: 'trigger', name: 'stopAll' }));
   /** A loop or scene pad: acts on touch, repeat taps ignored for a moment. */
   const padTap = (key: string, msg: RemoteMessage): void => {
+    if (!live) return;
     const now = performance.now();
     if (now - (lastPad.current.get(key) ?? -Infinity) < TAP_REPEAT_MS) return;
     lastPad.current.set(key, now);
@@ -237,8 +243,16 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
   const onMessage = useCallback((msg: RemoteMessage) => {
     if (msg.type === 'state') setState(msg.state);
   }, []);
-  const link = useRemoteLink('remote', code, true, onMessage);
-  const connected = link.status === 'open' && link.others > 0;
+  // Said every second: the laptop knows this page is reaching it (a hello that answers no question).
+  const heartbeat = useCallback((): RemoteMessage => ({ type: 'hello', build: BUILD_ID, ask: null }), []);
+  const link = useRemoteLink('remote', code, true, onMessage, heartbeat);
+  // Connected means the laptop's words are getting through, not only that a socket is open:
+  // a stalled Wi-Fi link kept both open while every touch was lost (B2).
+  const connected = link.status === 'open' && link.others > 0 && link.reaching;
+  // The laptop reloaded mid-piece and offers Carry on: nothing is taken until then (B19).
+  const carryOnWaiting = connected && state?.carryOnWaiting === true;
+  /** Touches count only while the laptop is reaching and not waiting for Carry on. */
+  const live = connected && !carryOnWaiting;
   // Which build this page is: said whenever the laptop asks (once per question, and again
   // after a reconnect), so the laptop can tell an iPad page left open from before an update.
   const ask = state?.ask;
@@ -304,7 +318,7 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
   const stripHandlers = (name: RemoteControlName) => ({
     onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => {
       e.preventDefault();
-      if (locked(name)) return;
+      if (locked(name) || !live) return;
       if (isPalm(e)) return; // a palm, not a finger
       try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* the finger is already gone */ }
       touching.current.set(name, e.pointerId);
@@ -353,7 +367,7 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
     // Keyboard and switch access: arrows step the value.
     onKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => {
       const dir = e.key === 'ArrowUp' || e.key === 'ArrowRight' ? 1 : e.key === 'ArrowDown' || e.key === 'ArrowLeft' ? -1 : 0;
-      if (!dir || locked(name)) return;
+      if (!dir || locked(name) || !live) return;
       e.preventDefault();
       const v = Math.max(0, Math.min(1, Math.round((valueOf(name) + dir * STRIP_STEP) / STRIP_STEP) * STRIP_STEP));
       setLocal((l) => ({ ...l, [name]: v }));
@@ -363,6 +377,7 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
   });
 
   const tap = (name: RemoteTriggerName): void => {
+    if (!live) return;
     const now = performance.now();
     if (now - (lastTap.current.get(name) ?? -Infinity) < TAP_REPEAT_MS) return;
     lastTap.current.set(name, now);
@@ -375,6 +390,19 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
     setTimeout(() => setFlash((f) => (f === name ? null : f)), 300);
   };
 
+  // The armed End piece pad: a white ring that drains away over the second-tap window, so
+  // Tim sees how long is left, and the words keep their size (B20).
+  const drainRing = (
+    <span
+      data-drain
+      aria-hidden="true"
+      style={{
+        position: 'absolute', inset: -4, borderRadius: 20, border: '8px solid #ffffff', pointerEvents: 'none',
+        animationName: 'admi-drain', animationDuration: `${confirmMs}ms`, animationTimingFunction: 'linear', animationFillMode: 'forwards',
+      }}
+    />
+  );
+
   const page: CSSProperties = {
     position: 'fixed', inset: 0, display: 'flex', flexDirection: 'column', gap: GAP, padding: `14px 18px 28px`,
     background: '#14171f', color: '#eef1f7', fontFamily: 'system-ui, -apple-system, sans-serif',
@@ -383,17 +411,21 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
 
   return (
     <div style={page} onPointerDownCapture={markTouch}>
+      <style>{'@keyframes admi-drain { from { clip-path: inset(0 0 0 0); } to { clip-path: inset(0 0 0 100%); } }'}</style>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 20 }}>
         <span aria-hidden="true" style={{ fontSize: 18, opacity: touchSeen ? 1 : 0.15, transition: 'opacity 150ms' }}>👆</span>
         <span style={{ width: 16, height: 16, borderRadius: 8, background: connected ? '#66bb6a' : '#ef5350' }} aria-hidden="true" />
         {/* Only the words are announced; the clock beside them changes every second. */}
         <span role="status" aria-live="polite" style={{ fontWeight: 700 }}>
-          {learning
-            ? 'Learning your reach: slide each strip as far as is comfortable'
-            : connected
-              ? (state?.playing ? 'Connected · playing' : 'Connected · press Play on the laptop')
-              : link.status === 'open' ? 'Waiting for the laptop…'
-                : link.status === 'lost' ? 'Link lost — reconnecting…' : 'Connecting…'}
+          {carryOnWaiting
+            ? 'The laptop is getting back: waiting for Carry on'
+            : learning && connected
+              ? 'Learning your reach: slide each strip as far as is comfortable'
+              : connected
+                ? (state?.playing ? 'Connected · playing' : 'Connected · press Play on the laptop')
+                : link.status === 'open' && link.others > 0 ? 'Not reaching the laptop'
+                  : link.status === 'open' ? 'Waiting for the laptop…'
+                    : link.status === 'lost' ? 'Link lost — reconnecting…' : 'Connecting…'}
         </span>
         {clock && clock.phase !== 'idle' && (
           <span
@@ -422,7 +454,7 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
           {refusal}
         </div>
       )}
-      {connected && state?.playing && (
+      {live && state?.playing && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, fontSize: 22, minHeight: 34 }}>
           <span
             aria-hidden="true"
@@ -472,7 +504,7 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
         return (
           <div
             style={{
-              flex: '1 1 0', display: 'grid', gap: GAP, minHeight: 0, opacity: connected ? 1 : 0.4,
+              flex: '1 1 0', display: 'grid', gap: GAP, minHeight: 0, opacity: live ? 1 : 0.4,
               gridTemplateColumns: `repeat(${cols}, 1fr)`, gridAutoRows: '1fr',
             }}
           >
@@ -508,7 +540,7 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
       })()}
 
       {tab === 'loops' && loopsPage && (
-        <div style={{ flex: '1 1 0', display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0, opacity: connected ? 1 : 0.4 }}>
+        <div style={{ flex: '1 1 0', display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0, opacity: live ? 1 : 0.4 }}>
           <div style={{ flex: '3 1 0', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gridTemplateRows: 'repeat(2, 1fr)', gap: GAP, minHeight: 0 }}>
             {Array.from({ length: 8 }, (_, i) => {
               const l = state?.loops?.[i] ?? { name: '', state: 'empty' as RemoteLoopState };
@@ -588,10 +620,11 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
               aria-label={confirmEnd ? 'Tap again to end the piece' : 'End the piece'}
               {...padProps('endPiece', endTap)}
               style={{
-                borderRadius: 20, touchAction: 'none', color: '#eef1f7', fontSize: confirmEnd ? 18 : 22, fontWeight: 800,
+                position: 'relative', borderRadius: 20, touchAction: 'none', color: '#eef1f7', fontSize: 22, fontWeight: 800,
                 border: `4px solid ${confirmEnd ? '#ffffff' : '#ce93d8'}`, background: confirmEnd ? '#6a3a7a' : '#2d2033',
               }}
             >
+              {confirmEnd && drainRing}
               {confirmEnd ? 'Tap again to end' : '⏹ End piece'}
             </button>
             <button
@@ -612,7 +645,7 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
       {(tab === 'play' || !loopsPage) && (<>
 
       {shownStrips.length > 0 && (
-      <div style={{ flex: '1 1 0', display: 'grid', gridTemplateColumns: `repeat(${shownStrips.length}, 1fr)`, gap: GAP, minHeight: 0, opacity: connected ? 1 : 0.4 }}>
+      <div style={{ flex: '1 1 0', display: 'grid', gridTemplateColumns: `repeat(${shownStrips.length}, 1fr)`, gap: GAP, minHeight: 0, opacity: live ? 1 : 0.4 }}>
         {shownStrips.map((name) => {
           const v = valueOf(name);
           const isLocked = locked(name);
@@ -654,7 +687,7 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
       )}
 
       {shownPads.length > 0 && (
-      <div style={{ height: shownStrips.length === 0 ? '100%' : '22%', minHeight: 100, display: 'grid', gridTemplateColumns: `repeat(${shownPads.length}, 1fr)`, gap: GAP, opacity: connected && !learning ? 1 : 0.4 }}>
+      <div style={{ height: shownStrips.length === 0 ? '100%' : '22%', minHeight: 100, display: 'grid', gridTemplateColumns: `repeat(${shownPads.length}, 1fr)`, gap: GAP, opacity: live && !learning ? 1 : 0.4 }}>
         {shownPads.map((p) => {
           const on = (p.name === 'keep' && state?.kept) || (p.name === 'mute' && state?.muted);
           // Mute silences the whole show, so it waits for a second tap like End piece.
@@ -666,6 +699,8 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
               aria-pressed={p.name === 'keep' || p.name === 'mute' ? !!on : undefined}
               {...padProps(`pad-${p.name}`, () => {
                 if (learning || (p.name === 'keep' && state?.kept)) return;
+                // New idea while stopped would switch Extra notes on by itself (B18).
+                if (p.name === 'newIdea' && live && refusedWhileStopped()) return;
                 if (p.name === 'mute') twoTap('mute', () => sendTrigger('mute'));
                 else tap(p.name);
               })}
@@ -687,7 +722,7 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
       {/* What the facilitator added to the Play page: loops and performance pads, so the
           player never has to switch page mid-piece. */}
       {((state?.touch?.playExtras.length ?? 0) > 0 || (state?.touch?.playLoops.length ?? 0) > 0) && (
-        <div style={{ height: '18%', minHeight: 90, display: 'grid', gridAutoFlow: 'column', gridAutoColumns: '1fr', gap: GAP, opacity: connected && !learning ? 1 : 0.4 }}>
+        <div style={{ height: '18%', minHeight: 90, display: 'grid', gridAutoFlow: 'column', gridAutoColumns: '1fr', gap: GAP, opacity: live && !learning ? 1 : 0.4 }}>
           {(state?.touch?.playLoops ?? []).map((i) => {
             const l = state?.loops?.[i] ?? { name: '', state: 'empty' as RemoteLoopState };
             const on = l.state === 'playing' || l.state === 'starting';
@@ -730,7 +765,8 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
             if (x === 'endPiece') {
               return (
                 <button key="x-end" type="button" aria-label={confirmEnd ? 'Tap again to end the piece' : 'End the piece'} {...padProps('x-end', endTap)}
-                  style={{ borderRadius: 20, touchAction: 'none', color: '#eef1f7', fontSize: confirmEnd ? 18 : 22, fontWeight: 800, border: `4px solid ${confirmEnd ? '#ffffff' : '#ce93d8'}`, background: confirmEnd ? '#6a3a7a' : '#2d2033' }}>
+                  style={{ position: 'relative', borderRadius: 20, touchAction: 'none', color: '#eef1f7', fontSize: 22, fontWeight: 800, border: `4px solid ${confirmEnd ? '#ffffff' : '#ce93d8'}`, background: confirmEnd ? '#6a3a7a' : '#2d2033' }}>
+                  {confirmEnd && drainRing}
                   {confirmEnd ? 'Tap again to end' : '⏹ End piece'}
                 </button>
               );

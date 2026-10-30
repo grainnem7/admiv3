@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { audienceHat, audienceNotes, audienceState, createAudienceFeed, dueNotes, STALE_NOTE_SEC, type HatInput } from '../audience/feed';
-import { choosePlacement, type ScreenInfo } from '../audience/placement';
+import { audienceHat, audienceNotes, audienceState, createAudienceFeed, drawStalled, dueNotes, STALE_NOTE_SEC, type HatInput } from '../audience/feed';
+import { choosePlacement, outcomeOf, type ScreenInfo } from '../audience/placement';
+import { audienceNoticeText, openingNotice } from '../audience/useAudienceWindow';
 import { readAudienceMessage, readLaptopMessage, type AudienceState, type LaptopMessage } from '../audience/protocol';
 import type { FiredNote } from '../songs/BoardSequencerEngine';
 
@@ -197,5 +198,38 @@ describe('the feed costs nothing it need not', () => {
     feed.state(STATE, 1000);
     expect(feed.wantsState(1010)).toBe(false);
     expect(feed.wantsState(1100)).toBe(true);
+  });
+});
+
+describe('the two-window routine (audit 2026-10-30: B5, B6, B26)', () => {
+  it('B5: the placed and drag notices end by sending the owner back to the laptop', () => {
+    expect(audienceNoticeText('placed')).toMatch(/then click back on this laptop screen\.$/);
+    expect(audienceNoticeText('drag')).toMatch(/then click back on this laptop screen\.$/);
+  });
+
+  it('B5: with only one screen found, asks whether the projector is set to Extend', () => {
+    expect(outcomeOf({ kind: 'drag', why: 'one-screen' })).toBe('oneScreen');
+    expect(outcomeOf({ kind: 'drag', why: 'refused' })).toBe('drag');
+    expect(outcomeOf({ kind: 'screen', left: 0, top: 0, width: 1, height: 1 })).toBe('placed');
+    expect(audienceNoticeText('oneScreen')).toBe('Only one screen found. Is the projector set to Extend (Windows key + P)?');
+  });
+
+  it('B26: a window slow to say it is there is "still opening" after 8 s, and "didn’t open" only after about 20 s', () => {
+    expect(openingNotice(7_000, false)).toBeNull();
+    expect(openingNotice(8_500, false)).toBe('stillOpening');
+    expect(openingNotice(19_000, false)).toBe('stillOpening');
+    expect(openingNotice(20_500, false)).toBe('blocked');
+    // Once it has said it is there, nothing more is said.
+    expect(openingNotice(9_000, true)).toBeNull();
+    expect(openingNotice(25_000, true)).toBeNull();
+    expect(audienceNoticeText('stillOpening')).toBe('Still opening the audience screen…');
+  });
+
+  it('B6: the audience screen is fed from a timer once the drawing loop stops (page hidden, or no frame for 0.5 s)', () => {
+    expect(drawStalled(false, 1000, 900)).toBe(false);
+    expect(drawStalled(false, 1600, 1000)).toBe(true);
+    expect(drawStalled(true, 1000, 990)).toBe(true);
+    // Never drawn yet (the board not running): the timer feeds it.
+    expect(drawStalled(false, 1000, null)).toBe(true);
   });
 });

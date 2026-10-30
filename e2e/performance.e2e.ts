@@ -273,6 +273,7 @@ test('while the clock runs, Stop needs a second press', async ({ page }) => {
   await place(page, [[3, 1]]);
   await startPiece(page);
   await expect(page.getByRole('timer').first()).toBeVisible();
+  await pause(page, 2100); // ■ Stop ignores presses for the piece's first 2 s (B3)
   await page.getByRole('button', { name: '■ Stop' }).first().click();
   await expect(page.getByRole('button', { name: '■ Press again to stop' }).first()).toBeVisible();
   await expect(page.getByRole('status').filter({ hasText: 'Playing' }).first()).toBeVisible();
@@ -493,8 +494,10 @@ test('"when the finger lifts": a real touch that slides off a pad before lifting
     type, touchPoints: type === 'touchEnd' ? [] : [{ x, y, radiusX: 15, radiusY: 15, force: 1, id: 1 }],
   });
   await ipad.goto(`/?remote=${code}`);
-  // New idea turns Extra notes on, which its strip shows: that is how a press is seen here.
+  // The laptop is stopped, so a press of New idea is refused and the iPad says so (B18):
+  // that is how a press is seen here. Extra notes never changes.
   const extraNotes = ipad.getByRole('slider', { name: 'Extra notes' });
+  const pressed = ipad.getByText('Press Play on the laptop first');
   await expect(extraNotes).toHaveAttribute('aria-valuetext', 'Off');
   const box = (await ipad.getByRole('button', { name: /New idea/ }).boundingBox())!;
   const [x, y] = [box.x + box.width / 2, box.y + box.height / 2];
@@ -504,6 +507,7 @@ test('"when the finger lifts": a real touch that slides off a pad before lifting
   for (const step of [0.25, 0.5, 0.75, 1]) await finger('touchMove', x, y - (y - 20) * step);
   await finger('touchEnd');
   await ipad.waitForTimeout(1500);
+  await expect(pressed).toHaveCount(0);
   await expect(extraNotes).toHaveAttribute('aria-valuetext', 'Off');
 
   // Lands, slides off, comes back, lifts on the pad: still nothing.
@@ -512,12 +516,14 @@ test('"when the finger lifts": a real touch that slides off a pad before lifting
   await finger('touchMove', x, y);
   await finger('touchEnd');
   await ipad.waitForTimeout(1500);
+  await expect(pressed).toHaveCount(0);
   await expect(extraNotes).toHaveAttribute('aria-valuetext', 'Off');
 
-  // The same pad, landed on and lifted from: it works.
+  // The same pad, landed on and lifted from: it acts (refused, as the laptop is stopped).
   await finger('touchStart', x, y);
   await finger('touchEnd');
-  await expect(extraNotes).toHaveAttribute('aria-valuetext', /%/);
+  await expect(pressed).toBeVisible();
+  await expect(extraNotes).toHaveAttribute('aria-valuetext', 'Off');
   expect(pageErrors(page)).toEqual([]);
 });
 
@@ -642,6 +648,7 @@ test("a rehearsal never saves a scene's settings as the player's own: reloaded m
   await page.reload();
   await page.getByRole('alert').filter({ hasText: 'The piece was playing' }).getByRole('button', { name: /Carry on from/ }).click();
   await expect(strip).toContainText('Now: Open');
+  await pause(page, 2100); // ■ Stop ignores presses for the piece's first 2 s (B3)
   await page.getByRole('button', { name: '■ Stop' }).first().click();
   await page.getByRole('button', { name: '■ Press again to stop' }).first().click();
   await expectPlainSound(page);
@@ -1160,7 +1167,7 @@ const timerWhenNow = (page: Page, scene: string, timeout = 30_000): Promise<stri
 /** The line saying the piece ended across a reload. */
 const endedLine = (page: Page) => page.getByRole('status').filter({ hasText: 'The piece was ending when the page closed or reloaded, so it has ended.' });
 
-test('Space in Show starts the piece: the clock, the opening scene and its loop, focus on ■ Stop; Space twice stops it (R2-T4-01)', async ({ page }) => {
+test('Space in Show starts the piece: the clock, the opening scene and its loop, focus on the Now / Next strip; Space twice stops it (R2-T4-01)', async ({ page }) => {
   await openLaptopBoard(page);
   await saveBedAndPulse(page);
   await makePlan(page); // Arrival, at 0:00, has Bed
@@ -1172,8 +1179,10 @@ test('Space in Show starts the piece: the clock, the opening scene and its loop,
   const strip = show.getByRole('region', { name: 'Now and next' });
   await expect(strip).toContainText('Now: Arrival');
   await expect(strip.getByLabel(/^Loops playing: .*Bed/)).toBeVisible();
-  await expect(show.getByRole('button', { name: '■ Stop', exact: true })).toBeFocused();
-  // Space twice, with focus on Show itself: the first only gets Stop ready.
+  // Never onto ■ Stop (B3): the strip.
+  await expect(strip).toBeFocused();
+  // Space twice, with focus on Show itself, past Stop's first 2 s: the first only gets Stop ready.
+  await pause(page, 2100);
   await show.focus();
   await page.keyboard.press('Space');
   await expect(show.getByRole('button', { name: '■ Press again to stop' })).toBeVisible();
@@ -1209,7 +1218,8 @@ test('Space in Show while Tim warms up starts the piece at once: the board never
   });
   expect(stopped).toEqual({ gone: false, timer: true });
   await expect(show.getByRole('region', { name: 'Now and next' })).toContainText('Now: Arrival');
-  // Now the piece plays: Space is Stop again, two presses.
+  // Now the piece plays: Space is Stop again (after its first 2 s, B3), two presses.
+  await pause(page, 2100);
   await show.focus();
   await page.keyboard.press('Space');
   await expect(show.getByRole('button', { name: '■ Press again to stop' })).toBeVisible();
@@ -1234,6 +1244,7 @@ test('a Space 200 ms after a Stop starts nothing, in Show and in Play (ledger M7
   const show = page.getByRole('region', { name: 'Show', exact: true });
   await show.getByRole('button', { name: '▶ Start the piece' }).click();
   await expect(show.getByRole('timer')).toBeVisible({ timeout: 20_000 });
+  await pause(page, 2100); // ■ Stop ignores presses for the piece's first 2 s (B3)
   await spaceAfterStop(2);
   await expect(show.getByRole('button', { name: '▶ Start the piece' })).toBeVisible();
   await expect(show.getByRole('button', { name: /■ Stop|Press again to stop/ })).toHaveCount(0);
@@ -1288,7 +1299,8 @@ test('▶ Start the piece while the board plays after a jump (route A): it opens
   await expect(strip).toContainText('Now: Arrival');
   await expect(strip).toContainText(/Next: Build in 0:1[23]/);
   await expect(strip.getByRole('timer')).toHaveText(/^(1:00|0:5\d)$/);
-  await expect(show.getByRole('button', { name: '■ Stop', exact: true })).toBeFocused();
+  // Focus stays on the strip, never onto ■ Stop (B3).
+  await expect(strip).toBeFocused();
   // Build at 0:13: 0:47 left.
   expect(await timerWhenNow(page, 'Build')).toMatch(/^0:4[678]$/);
   await show.getByRole('button', { name: 'Leave Show' }).click();
@@ -1670,6 +1682,7 @@ test('decision F2\'s path: after Stop ×2, New loop starts the board and the cou
   const newLoop = page.getByRole('button', { name: 'New loop', exact: true });
   await expect(newLoop).toBeDisabled();
   await expect(page.getByText('Stop the piece to make a loop')).toBeVisible();
+  await pause(page, 2100); // ■ Stop ignores presses for the piece's first 2 s (B3)
   await page.getByRole('button', { name: '■ Stop', exact: true }).first().click();
   await page.getByRole('button', { name: '■ Press again to stop' }).first().click();
   await expect(page.getByRole('status').filter({ hasText: 'Stopped' }).first()).toBeVisible();

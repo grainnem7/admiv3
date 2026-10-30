@@ -26,7 +26,7 @@ export default defineConfig({
     baseURL: `http://localhost:${PORT}`,
     headless: true,
     viewport: { width: 1440, height: 900 },
-    launchOptions: { args: ['--autoplay-policy=no-user-gesture-required'] },
+    launchOptions: { args: ['--autoplay-policy=no-user-gesture-required', '--mute-audio'] },
     trace: 'retain-on-failure',
   },
   webServer: {

@@ -49,14 +49,17 @@ test('opening the audience screen shows the board and nothing else, and the lapt
   await expect(aud.getByRole('button')).toHaveCount(0);
   expect((await aud.locator('body').innerText()).trim()).toBe('');
   // One screen, no placing: the laptop says to drag it.
-  await expect(page.getByRole('status', { name: 'Audience screen' })).toContainText('Drag the audience screen to the projector, then click it to fill the screen.');
+  await expect(page.getByRole('status', { name: 'Audience screen' })).toContainText('Drag the audience screen to the projector, then click it to fill the screen, then click back on this laptop screen.');
   // Not another copy of ADMI: the laptop never hears of another tab.
   await pause(page, 3000);
   await expect(page.getByText(/open in another tab/)).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Close the audience screen' }).first()).toBeVisible();
   expect(pageErrors(page)).toEqual([]);
-  // Closing it from the laptop closes it.
+  // Closing it from the laptop takes a second press (B4), then closes it.
   await page.getByRole('button', { name: 'Close the audience screen' }).first().click();
+  await pause(page, 1000);
+  expect(aud.isClosed()).toBe(false);
+  await page.getByRole('button', { name: 'Press again to close the audience screen' }).first().click();
   await expect.poll(() => aud.isClosed(), { timeout: 10_000 }).toBe(true);
   await expect(page.getByRole('button', { name: 'Open the audience screen' }).first()).toBeVisible();
 });
@@ -171,6 +174,7 @@ test('the keeping-time meter reads the same with the audience screen open as wit
     expect(aud.isClosed()).toBe(false);
     await expect(picture(aud)).toHaveAttribute('data-connected', 'yes');
     await page.getByRole('button', { name: 'Close the audience screen' }).first().click();
+    await page.getByRole('button', { name: 'Press again to close the audience screen' }).first().click();
     await expect.poll(() => aud.isClosed(), { timeout: 10_000 }).toBe(true);
   }
   const lost = (ts: Timing[]): number => ts.reduce((n, t) => n + t.lostSec, 0);

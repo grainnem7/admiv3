@@ -18,10 +18,14 @@ import { act } from 'react';
 // The link, with a fake socket that records what the page sends.
 const sent: unknown[] = [];
 let onMsg: ((msg: unknown) => void) | null = null;
+/** Whether the laptop's words are getting through (a stalled Wi-Fi link: false). */
+let linkReaching = true;
+let heartbeatOf: (() => unknown) | undefined;
 vi.mock('../remote/useRemoteLink', () => ({
-  useRemoteLink: (_role: string, _code: string, _enabled: boolean, onMessage: (m: unknown) => void) => {
+  useRemoteLink: (_role: string, _code: string, _enabled: boolean, onMessage: (m: unknown) => void, heartbeat?: () => unknown) => {
     onMsg = onMessage;
-    return { status: 'open', others: 1, send: (m: unknown) => sent.push(m) };
+    heartbeatOf = heartbeat;
+    return { status: 'open', others: 1, reaching: linkReaching, send: (m: unknown) => sent.push(m) };
   },
 }));
 
@@ -57,6 +61,7 @@ let root: Root;
 let el: HTMLDivElement;
 beforeEach(async () => {
   sent.length = 0;
+  linkReaching = true;
   now = 10_000;
   vi.spyOn(performance, 'now').mockImplementation(() => now);
   el = document.createElement('div');
@@ -547,5 +552,70 @@ describe('Capture while the piece clock runs (no new loop during the piece, F2)'
     now += 1000;
     await act(async () => { pointer('pointerdown', capturePad(), 300); });
     expect(sent).toContainEqual(CAPTURE);
+  });
+});
+
+describe('show safety on the iPad (audit 2026-10-30)', () => {
+  const sentOf = (type: string) => sent.filter((m) => (m as { type: string }).type === type);
+
+  it('B2: says a hello every heartbeat that answers no question, so the laptop knows it is reaching', () => {
+    expect(heartbeatOf?.()).toEqual({ type: 'hello', build: BUILD_ID, ask: null });
+  });
+
+  it('B2: a stalled link greys the page out, says "Not reaching the laptop", and a touch is neither sent nor shown as applied', async () => {
+    linkReaching = false;
+    // A fresh state, so the page draws again with the link as it now is.
+    await act(async () => { onMsg?.({ ...STATE, state: { ...STATE.state } }); });
+    expect(el.querySelector('[role="status"]')?.textContent).toBe('Not reaching the laptop');
+    const strip = el.querySelector('[role="slider"][aria-label="Extra notes"]')!;
+    const before = strip.getAttribute('aria-valuenow');
+    await act(async () => { pointer('pointerdown', strip, 40); });
+    await act(async () => { pointer('pointerup', strip, 40); });
+    expect(strip.getAttribute('aria-valuenow')).toBe(before);
+    await act(async () => { pointer('pointerdown', button('New idea'), 300); });
+    expect(sentOf('control')).toEqual([]);
+    expect(sentOf('trigger')).toEqual([]);
+    // Back: the same touch works.
+    linkReaching = true;
+    await act(async () => { onMsg?.({ ...STATE, state: { ...STATE.state } }); });
+    now += 1000;
+    await act(async () => { pointer('pointerdown', button('New idea'), 300); });
+    expect(sent).toContainEqual({ type: 'trigger', name: 'newIdea' });
+  });
+
+  it('B18: New idea while the laptop is stopped is refused, says why, and sends nothing', async () => {
+    await act(async () => { onMsg?.({ ...STATE, state: { ...STATE.state, playing: false } }); });
+    await act(async () => { pointer('pointerdown', button('New idea'), 300); });
+    expect(sentOf('trigger')).toEqual([]);
+    expect(el.textContent).toContain('Press Play on the laptop first');
+  });
+
+  it('B19: while the laptop offers Carry on, the iPad says it is waiting, and its touches are refused', async () => {
+    await act(async () => { onMsg?.(withTouch({ playExtras: ['endPiece'] }, { playing: false, carryOnWaiting: true })); });
+    expect(el.querySelector('[role="status"]')?.textContent).toBe('The laptop is getting back: waiting for Carry on');
+    const strip = el.querySelector('[role="slider"][aria-label="Extra notes"]')!;
+    await act(async () => { pointer('pointerdown', strip, 40); });
+    await act(async () => { pointer('pointerup', strip, 40); });
+    await touchAt(30_000, endPad);
+    await touchAt(31_000, endPad);
+    expect(sentOf('control')).toEqual([]);
+    expect(sentOf('trigger')).toEqual([]);
+    expect(sentOf('armed')).toEqual([]);
+  });
+
+  it('B20: the first End piece tap tells the laptop, and so does the end of the wait; the armed pad keeps its text size and drains its border', async () => {
+    await act(async () => { onMsg?.(withTouch({ playExtras: ['endPiece'], confirmSec: 6 })); });
+    const size = endPad().style.fontSize;
+    await touchAt(40_000, endPad);
+    expect(sent).toContainEqual({ type: 'armed', name: 'endPiece', on: true });
+    expect(endPad().style.fontSize).toBe(size);
+    const ring = endPad().querySelector('[data-drain]') as HTMLElement | null;
+    expect(ring).not.toBeNull();
+    expect(ring!.style.animationDuration).toBe('6000ms');
+    // The second tap ends the piece, and the wait is over.
+    await touchAt(41_000, endPad);
+    expect(sent).toContainEqual(END);
+    expect(sent).toContainEqual({ type: 'armed', name: 'endPiece', on: false });
+    expect(endPad().querySelector('[data-drain]')).toBeNull();
   });
 });

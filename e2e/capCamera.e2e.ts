@@ -95,10 +95,19 @@ function middleThenEdgeVideo(): string {
   });
 }
 
+/** For Show's status row: the red disc in the middle for 4 s, then gone for 4 s, and round again. */
+function inThenOutVideo(): string {
+  const W = 160; const H = 120; const fps = 15; const half = fps * 4;
+  const red: RGB = [200, 30, 40];
+  return y4m('in-out.y4m', W, H, fps, 2 * half, (f, x, y) => (
+    f < half && Math.hypot(x / W - 0.5, (y / H - 0.4) * (H / W)) < 0.08 ? red : WALL
+  ));
+}
+
 const video = capVideo();
 const fakeCamera = (file: string): string[] =>
   ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream', `--use-file-for-fake-video-capture=${file}`];
-test.use({ launchOptions: { args: fakeCamera(video) }, permissions: ['camera'] });
+test.use({ launchOptions: { args: ['--mute-audio', ...fakeCamera(video)] }, permissions: ['camera'] });
 
 test('a red cap seen by a camera moves the speed with it', async ({ page }) => {
   await openLaptopBoard(page);
@@ -175,7 +184,7 @@ test('the hat on Speed moves the speed around the player’s own: in the middle 
   // A video of its own, so a browser of its own (a browser's fake camera is chosen when it
   // starts). The video, in a folder of its own, is removed afterwards.
   const file = middleThenEdgeVideo();
-  const browser = await playwright.chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required', ...fakeCamera(file)] });
+  const browser = await playwright.chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required', '--mute-audio', ...fakeCamera(file)] });
   try {
     const context = await browser.newContext({ baseURL: testInfo.project.use.baseURL, viewport: { width: 1440, height: 900 }, permissions: ['camera'] });
     const page = await context.newPage();
@@ -397,7 +406,7 @@ test('Learn the hat with a red chair in the room: the cap then follows the hat a
   // it starts: so a browser of its own (traced like the others, the trace kept on failure).
   // Its video (about 10 MB, in a folder of its own) is removed afterwards.
   const file = hatVideo();
-  const browser = await playwright.chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required', ...fakeCamera(file)] });
+  const browser = await playwright.chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required', '--mute-audio', ...fakeCamera(file)] });
   try {
     const context = await browser.newContext({ baseURL: testInfo.project.use.baseURL, viewport: { width: 1440, height: 900 }, permissions: ['camera'] });
     await learnTheHatThroughout(await context.newPage());
@@ -566,3 +575,28 @@ async function learnTheHatThroughout(page: Page): Promise<void> {
   expect(wellOut(byColour).every((s) => s.hud.includes('cap found'))).toBe(true);
   expect(pageErrors(page)).toEqual([]);
 }
+
+test('Show says what the hat is doing in its status row: found with its Speed, then not in sight (holding) (B1)', async ({ playwright }, testInfo) => {
+  const file = inThenOutVideo();
+  const browser = await playwright.chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required', '--mute-audio', ...fakeCamera(file)] });
+  try {
+    const context = await browser.newContext({ baseURL: testInfo.project.use.baseURL, viewport: { width: 1366, height: 768 }, permissions: ['camera'] });
+    const page = await context.newPage();
+    await openLaptopBoard(page);
+    await page.getByRole('tab', { name: 'Cap' }).click();
+    await page.getByRole('switch', { name: 'Control with the red cap' }).click();
+    await page.getByRole('switch', { name: /Check it is on the head/ }).click();
+    await expect(page.getByRole('status', { name: 'Red cap' })).toContainText('cap found', { timeout: 15_000 });
+    await page.getByRole('button', { name: /^Show: the board, the clock/ }).click();
+    const row = page.getByRole('region', { name: 'Show', exact: true }).getByRole('group', { name: 'Show status' });
+    // Found, with the controls it moves; then gone, said in amber words; then found again.
+    await expect(row).toContainText(/Hat ✓.*Speed \d+ BPM/, { timeout: 15_000 });
+    await expect(row).toContainText('! Hat not in sight: holding', { timeout: 15_000 });
+    await expect(row.locator('[data-tone="warn"]')).toContainText('Hat not in sight');
+    await expect(row).toContainText('Hat ✓', { timeout: 15_000 });
+    expect(pageErrors(page)).toEqual([]);
+  } finally {
+    await browser.close();
+    rmSync(dirname(file), { recursive: true, force: true });
+  }
+});

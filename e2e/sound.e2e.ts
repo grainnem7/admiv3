@@ -380,6 +380,7 @@ test('▶ Play and ▶ Start the piece on an empty board send nothing to the spe
     expect(levels).toHaveLength(40);
     loudest.push(Math.max(...levels));
     await page.getByRole('button', { name: 'Leave Show' }).click();
+    await gap(2100); // ■ Stop ignores presses for the piece's first 2 s (B3)
     await page.getByRole('button', { name: '■ Stop' }).first().click();
     await page.getByRole('button', { name: '■ Press again to stop' }).first().click();
     await expect(page.getByRole('button', { name: '▶ Play' }).first()).toBeVisible();

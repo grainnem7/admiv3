@@ -86,7 +86,16 @@ const WINDOW_NAME = 'admi-audience';
 const FEATURES_DEFAULT = 'popup,width=960,height=540';
 
 /** Where it went. (Whether it opened at all is known only when it says it is there.) */
-export type OpenOutcome = 'placed' | 'drag';
+export type OpenOutcome = 'placed' | 'drag' | 'oneScreen';
+
+/**
+ * What the laptop says about a placement. Only one screen found usually means the
+ * projector mirrors the laptop: the audience would see the whole Show view (B5).
+ */
+export function outcomeOf(place: Placement): OpenOutcome {
+  if (place.kind === 'screen') return 'placed';
+  return place.why === 'one-screen' ? 'oneScreen' : 'drag';
+}
 
 /**
  * Open the audience window and put it on the projector. `asking` runs just before the
@@ -110,14 +119,14 @@ export async function openAudienceWindow(opts: {
       return 'placed';
     }
     window.open(url, WINDOW_NAME, `noopener,${FEATURES_DEFAULT}`);
-    return 'drag';
+    return outcomeOf(place);
   }
   // Not yet: open it first (the click allows that), then ask, then move it.
   window.open(url, WINDOW_NAME, `noopener,${FEATURES_DEFAULT}`);
   if (!canPlaceWindows()) return 'drag';
   if (opts.permission === 'prompt') opts.asking();
   const place = choosePlacement(await askScreens());
-  if (place.kind !== 'screen') return 'drag';
+  if (place.kind !== 'screen') return outcomeOf(place);
   // The audience window moves itself (the browser lets a window it opened as a pop-up be
   // moved, and to another screen once windows may be placed). It may still be loading:
   // the message is sent a few times.

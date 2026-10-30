@@ -153,6 +153,11 @@ export interface RemoteState {
   build?: string;
   /** Changes whenever the laptop wants every iPad page to say which build it is (a hello). */
   ask?: number;
+  /**
+   * The laptop page reloaded mid-piece and is offering Carry on: the iPad waits for it,
+   * and its touches are refused until then (B19).
+   */
+  carryOnWaiting?: boolean;
 }
 
 export type RemoteMessage =
@@ -167,9 +172,13 @@ export type RemoteMessage =
   | { type: 'state'; state: RemoteState }
   /**
    * The iPad page's build, in answer to the laptop's `ask`. A page too old to know about
-   * builds sends none, and silence counts as "older"; whatever is missing is null.
+   * builds sends none, and silence counts as "older"; whatever is missing is null. With
+   * `ask` null it answers nothing: the iPad sends it every second as its heartbeat, so the
+   * laptop knows it is reaching (see linkReach).
    */
   | { type: 'hello'; build: string | null; ask: number | null }
+  /** The iPad's End piece is waiting for its second tap (on), or no longer is (off). */
+  | { type: 'armed'; name: 'endPiece'; on: boolean }
   /** From the relay: how many of each side are in this room. */
   | { type: 'peers'; hosts: number; remotes: number };
 
@@ -241,6 +250,7 @@ export function parseRemoteMessage(raw: unknown): RemoteMessage | null {
   if (o.type === 'peers' && typeof o.hosts === 'number' && typeof o.remotes === 'number') {
     return { type: 'peers', hosts: o.hosts, remotes: o.remotes };
   }
+  if (o.type === 'armed' && o.name === 'endPiece' && typeof o.on === 'boolean') return { type: 'armed', name: 'endPiece', on: o.on };
   if (o.type === 'hello') return { type: 'hello', build: isBuildId(o.build) ? o.build : null, ask: isAsk(o.ask) ? o.ask : null };
   if (o.type === 'state' && typeof o.state === 'object' && o.state !== null) {
     const s = o.state as Record<string, unknown>;
@@ -272,6 +282,7 @@ export function parseRemoteMessage(raw: unknown): RemoteMessage | null {
         ...(typeof s.beat === 'boolean' ? { beat: s.beat } : {}),
         ...(isBuildId(s.build) ? { build: s.build } : {}),
         ...(isAsk(s.ask) ? { ask: s.ask } : {}),
+        ...(s.carryOnWaiting === true ? { carryOnWaiting: true } : {}),
       },
     };
   }

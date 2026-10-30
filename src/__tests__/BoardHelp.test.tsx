@@ -55,3 +55,24 @@ describe('Help says how things work now', () => {
     expect(entry('Extra notes — the instrument adds notes')).toContain('📌 Freeze');
   });
 });
+
+describe('Help says how Show keeps the performance safe (audit 2026-10-30, batch 1)', () => {
+  it('Show: the status row, Stop’s first 2 seconds, full screen, and the audience screen', () => {
+    const show = entry('Play, Make a piece, Show');
+    expect(show).toContain('for its first 2 seconds Stop does nothing');
+    expect(show).toContain('A line under the clock says how the camera, the hat, the iPad and Ableton are');
+    expect(show).toContain('Show stays open if the browser leaves full screen.');
+    expect(show).toContain('the audience screen can’t be closed from Show; elsewhere closing it takes a second press');
+  });
+
+  it('the iPad: not reaching the laptop, and waiting for Carry on', () => {
+    expect(entry('iPad controls')).toContain('"Not reaching the laptop"');
+    expect(entry('iPad controls')).toContain('Show says "! iPad not reaching"');
+    expect(entry('iPad controls')).toContain('the iPad waits for Carry on');
+  });
+
+  it('Keyboard: Esc leaves Show once out of full screen; focus goes to the Now / Next strip, never onto Stop', () => {
+    expect(entry('Keyboard')).toContain('Leave Show (or Esc, once out of full screen) goes back.');
+    expect(entry('Keyboard')).toContain('Start the piece to the Now / Next strip (never onto Stop)');
+  });
+});

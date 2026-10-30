@@ -83,7 +83,7 @@ test('the piece: Make my plan, Delete scene, Undo and Rehearse from here each le
   expect(pageErrors(page)).toEqual([]);
 });
 
-test('Show: ▶ Start the piece leads to ■ Stop, and the second press of Stop back to ▶ Start the piece', async ({ page }) => {
+test('Show: ▶ Start the piece leads to the Now / Next strip, never onto ■ Stop; the second press of Stop back to ▶ Start the piece (B3)', async ({ page }) => {
   await openLaptopBoard(page);
   await pickColour(page, 'Red');
   await place(page, [[3, 1]]);
@@ -91,8 +91,12 @@ test('Show: ▶ Start the piece leads to ■ Stop, and the second press of Stop 
   await enter(page, page.getByRole('button', { name: /^Show: the board, the clock/ }));
   const show = page.getByRole('region', { name: 'Show', exact: true });
   await enter(page, show.getByRole('button', { name: '▶ Start the piece' }));
-  await focusIsOn(show.getByRole('button', { name: '■ Stop', exact: true }), 20_000);
-  // The clock runs, so the first press only gets Stop ready (it waits 4 s for the second).
+  // Not onto ■ Stop: Enter pressed again there stopped the piece it had just started.
+  await focusIsOn(show.getByRole('region', { name: 'Now and next' }), 20_000);
+  // Past ■ Stop's first 2 s (timed in the page), from ■ Stop: the clock runs, so the first
+  // press only gets Stop ready (it waits 4 s for the second).
+  await page.evaluate(() => new Promise((r) => setTimeout(r, 2100)));
+  await show.getByRole('button', { name: '■ Stop', exact: true }).focus();
   await page.keyboard.press('Enter');
   await focusIsOn(show.getByRole('button', { name: '■ Press again to stop' }));
   await page.keyboard.press('Enter');
@@ -217,7 +221,7 @@ test('the camera path with no camera: Set up the board → the name box, Create 
 test('the camera path with a camera: Set up the board → the name box, Create → the heading of step 1, Laptop → the laptop board (R2-T4-02)', async ({ baseURL }) => {
   // A browser of its own for this test only, with the fake camera Chromium has.
   const browser = await chromium.launch({
-    args: ['--autoplay-policy=no-user-gesture-required', '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'],
+    args: ['--autoplay-policy=no-user-gesture-required', '--mute-audio', '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'],
   });
   try {
     const context = await browser.newContext({ baseURL, permissions: ['camera'], viewport: { width: 1440, height: 900 } });

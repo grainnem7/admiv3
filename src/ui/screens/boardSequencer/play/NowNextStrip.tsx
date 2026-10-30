@@ -1,3 +1,4 @@
+import type { Ref } from 'react';
 import { Button } from '../ui/Button';
 import { formatClock, type ClockView } from '../../../../songs/performance/clock';
 
@@ -20,6 +21,8 @@ export interface NowNextStripProps {
   cue?: string | null;
   /** The colours still waiting for their time: "Waiting: Red at 1:30, Blue at 2:30". */
   waiting?: string | null;
+  /** Show puts focus here once the piece starts (never onto ■ Stop, B3). */
+  focusRef?: Ref<HTMLDivElement>;
 }
 
 /**
@@ -34,6 +37,8 @@ export function NowNextStrip(p: NowNextStripProps): JSX.Element {
   const size = p.big ? 1.5 : 1;
   return (
     <div
+      ref={p.focusRef}
+      tabIndex={p.focusRef ? -1 : undefined}
       role="region"
       aria-label="Now and next"
       style={{

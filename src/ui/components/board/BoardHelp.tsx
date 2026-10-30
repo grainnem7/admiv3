@@ -181,7 +181,10 @@ const HELP: HelpEntry[] = [
       + 'Dynamics, Extra notes, Sounds change) slide like ThumbJam — the whole strip is the target, the '
       + 'ends are generous, values move in steps — and four pads (New idea, New sound, Keep, '
       + 'Mute) act on a tap; Mute needs two. Learn reach makes a player’s comfortable slide the '
-      + 'whole range.',
+      + 'whole range. If the Wi-Fi stops passing anything for about 3 seconds, the iPad greys '
+      + 'out and says "Not reaching the laptop" (its touches do nothing until it is back), and '
+      + 'Show says "! iPad not reaching". After a reload of the laptop page mid-piece, the iPad '
+      + 'waits for Carry on.',
   },
   {
     title: 'Sound from: ADMI, Ableton or Both',
@@ -227,8 +230,12 @@ const HELP: HelpEntry[] = [
       + 'only if that is the plan. 3 Ending & check: the length (at most 7:00), how it ends, '
       + 'and a check of everything. Each step is optional. Show: the board full screen with '
       + 'the clock and Now / Next, for the performance — Start the piece, Next, End; while '
-      + 'the piece plays, Stop needs two presses. While the piece plays no loop is made: stop '
-      + 'it first.',
+      + 'the piece plays, Stop needs two presses, and for its first 2 seconds Stop does '
+      + 'nothing. A line under the clock says how the camera, the hat, the iPad and Ableton '
+      + 'are: ✓ when fine, "!" in amber when not, and Muted or Simplified when they are on. '
+      + 'Show stays open if the browser leaves full screen. While the piece plays, the audience '
+      + 'screen can’t be closed from Show; elsewhere closing it takes a second press. While '
+      + 'the piece plays no loop is made: stop it first.',
   },
   {
     title: 'Loops and scenes while playing',
@@ -294,8 +301,9 @@ const HELP: HelpEntry[] = [
       + 'while the board plays; once the piece plays, Stop (press twice). Never during Set up, and '
       + 'never when a button or slider '
       + 'has focus. Tabs move with the arrow keys. ▶ Show fills the screen; '
-      + 'Leave Show (or Esc) goes back. When a button goes away, focus moves to what takes '
-      + 'its place: Start the piece and Stop to each other, Done and Leave back to New loop. '
+      + 'Leave Show (or Esc, once out of full screen) goes back. When a button goes away, focus '
+      + 'moves to what takes its place: in Show, Start the piece to the Now / Next strip (never '
+      + 'onto Stop) and Stop back to Start the piece; Done and Leave back to New loop. '
       + 'Shift+S: Simplify (the player and the first loop only), and Back to full, in Play and Show '
       + 'while the board plays.',
   },

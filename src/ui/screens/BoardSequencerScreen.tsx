@@ -68,12 +68,16 @@ import { captureReaderFrames, READER_DOWNSCALE } from './boardSequencer/captureR
 import { detectionSetup } from '../../tracking/boardReference/detectionSetup';
 import { LoopThumb, PieceSteps, type PieceLoop, type PieceStep } from './boardSequencer/play/PieceSteps';
 import { NowNextStrip } from './boardSequencer/play/NowNextStrip';
+import { ShowStatusRow } from './boardSequencer/play/ShowStatusRow';
+import {
+  escLeavesShow, showStatusItems, stopGuarded, type ShowHatState, type ShowStatusAction, type ShowStatusInput,
+} from './boardSequencer/play/showStatus';
 import type { ReadyItem } from './boardSequencer/play/ReadyCheck';
 import { PlayPanel } from './boardSequencer/play/PlayPanel';
 import { CapPanel, CAP_ROLE_LABELS, CAP_PAUSE_TEXT, capValueText, hatResultText } from './boardSequencer/play/CapPanel';
 import { useCapTracker } from './boardSequencer/useCapTracker';
 import { audienceNoticeText, useAudienceWindow } from '../../audience/useAudienceWindow';
-import { audienceHat, audienceNotes, audienceState, dueNotes } from '../../audience/feed';
+import { audienceHat, audienceNotes, audienceState, drawStalled, dueNotes } from '../../audience/feed';
 import { useEmptyBoardWait } from './boardSequencer/useEmptyBoardWait';
 import type { BoardActivity, CapSettings } from '../../tracking/cap/capTracker';
 import { BoardLegend } from './boardSequencer/components/BoardLegend';
@@ -284,6 +288,8 @@ const CUE_SHOWN_MS = 5000;
 const SAVE_GATHER_MS = 400;
 /** How long the first press of Stop during a piece waits for the second. */
 const STOP_CONFIRM_MS = 4000;
+/** How long Show says "Keep this window in front" once the audience screen is open. */
+const KEEP_IN_FRONT_MS = 12_000;
 /**
  * A start that runs the piece's clock: from where (seconds into the piece) and, carrying on
  * after a reload, when the piece first started (Date.now()) and the scene that was on.
@@ -375,6 +381,8 @@ export default function BoardSequencerScreen() {
    * the runtime reads it every frame: a colour that comes in later is silent until its time.
    */
   const clockStartRef = useRef<number | null>(null);
+  /** When the piece's clock last started on this page (performance.now), for ■ Stop's 2 s guard (B3). */
+  const pieceStartedAtRef = useRef<number | null>(null);
   /**
    * The speed a scene (or the start of the piece, or the player) set lately, maybe still
    * gliding to it; null = the config's. What the hat on Speed moves around.
@@ -671,6 +679,24 @@ export default function BoardSequencerScreen() {
   // here until they are heard, then bloom there.
   const audience = useAudienceWindow();
   const audiencePendingRef = useRef<FiredNote[]>([]);
+  // The drawing loop feeds the audience screen; when the browser stops that loop (the window
+  // covered or minimised) a timer does, so blooms, the scene and the hat keep coming (B6).
+  const lastDrawAtRef = useRef<number | null>(null);
+  const lastAudienceFrameRef = useRef<RuntimeFrame['frame'] | null>(null);
+  const feedAudienceRef = useRef<(frame: RuntimeFrame['frame'] | null, drained: FiredNote[], nowMs: number) => void>(() => {});
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      const nowMs = performance.now();
+      if (!drawStalled(document.hidden, nowMs, lastDrawAtRef.current)) return;
+      if (!audience.feedRef.current?.alive(nowMs)) return;
+      // The notes the engine scheduled since: kept in the session log as the drawing loop would.
+      const engine = engineRef.current;
+      const drained = engine ? engine.drainFiredNotes() : [];
+      if (drained.length > 0) sessionLogRef.current.addNotes(drained);
+      feedAudienceRef.current(lastAudienceFrameRef.current, drained, nowMs);
+    }, 50);
+    return () => window.clearInterval(id);
+  }, [audience.feedRef, engineRef]);
   const reducedMotion = typeof window !== 'undefined'
     && typeof window.matchMedia === 'function'
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -907,7 +933,15 @@ export default function BoardSequencerScreen() {
   // The link itself. Messages go to the handler defined with the Sound tab, through a ref,
   // so the hook always calls the current one.
   const remoteMsgRef = useRef<(msg: RemoteMessage) => void>(() => {});
-  const remoteLink = useRemoteLink('host', remoteCode, remoteEnabled, (msg) => remoteMsgRef.current(msg));
+  // The laptop's heartbeat is its latest state, said again every second, so the iPad knows
+  // the laptop is reaching it even when nothing changes (B2).
+  const remoteStateRef = useRef<RemoteState | null>(null);
+  const remoteHeartbeat = useCallback((): RemoteMessage | null => (
+    remoteStateRef.current ? { type: 'state', state: remoteStateRef.current } : null
+  ), []);
+  const remoteLink = useRemoteLink('host', remoteCode, remoteEnabled, (msg) => remoteMsgRef.current(msg), remoteHeartbeat);
+  /** The iPad's End piece is waiting for its second tap (B20). */
+  const [ipadEndArmed, setIpadEndArmed] = useState(false);
   // Is each iPad page this build? Whenever the number of iPad pages changes, the laptop
   // asks again (a new `ask` in its state) and waits for every page's hello. A page left
   // open in Safari from before an update reloads itself if it can; if it is still out of
@@ -987,13 +1021,24 @@ export default function BoardSequencerScreen() {
       beat: running ? beatOn : false,
       build: BUILD_ID,
       ask: helloAsk,
+      // Reloaded mid-piece: the iPad waits for Carry on, and nothing from it is taken (B19).
+      ...(resumeFrom !== null && !running ? { carryOnWaiting: true } : {}),
     };
+    remoteStateRef.current = state;
     remoteLink.send({ type: 'state', state });
   }, [remoteEnabled, remoteLink.others, config.bpm, config.velocity, config.fillAmount, config.evolveAmount,
     config.fillKept, config.evolveHoldLap, muted, running, starting, pieceStarting, config.remoteReach, reachLearning,
     config.loopSlots, config.loopNames, config.scenes, config.currentScene, wantedSlots, appliedSlots,
     config.remoteStrips, config.remotePads, config.remoteLoopsPage, config.remoteLocked, config.remoteStripMode, config.loopFadePasses, clock,
-    config.remoteTouch, beatOn, helloAsk]);
+    config.remoteTouch, beatOn, helloAsk, resumeFrom]);
+  // The iPad's End piece waits for at most its window (and a little for the link); it is
+  // over when the piece stops or the iPad goes.
+  useEffect(() => {
+    if (!running || !remoteEnabled || remoteLink.others === 0) { setIpadEndArmed(false); return undefined; }
+    if (!ipadEndArmed) return undefined;
+    const t = window.setTimeout(() => setIpadEndArmed(false), config.remoteTouch.confirmSec * 1000 + 1000);
+    return () => window.clearTimeout(t);
+  }, [ipadEndArmed, running, remoteEnabled, remoteLink.others, config.remoteTouch.confirmSec]);
   const fillSigRef = useRef('');
   const [prevFillSeed, setPrevFillSeed] = useState<number | null>(null);
 
@@ -1452,7 +1497,10 @@ export default function BoardSequencerScreen() {
     setError(null);
   }, [config.cameraDeviceId, cameraRetry]);
 
-  // Big board follows the browser: leaving fullscreen by any route comes back to Play.
+  // Show asks for full screen, but stays when full screen ends: clicking the projector
+  // window, or the browser's own Esc, ended it and dropped Show mid-piece (B5). Show closes
+  // on Leave Show, or on an Esc of its own (see escLeavesShow).
+  const fullscreenEndedAtRef = useRef<number | null>(null);
   useEffect(() => {
     if (view !== 'bigBoard') return;
     const root = bigBoardRef.current;
@@ -1461,7 +1509,7 @@ export default function BoardSequencerScreen() {
       // Refused (or unsupported): the view still fills the window, which is the point.
     });
     const onChange = (): void => {
-      if (document.fullscreenElement === null) setView('play');
+      if (document.fullscreenElement === null) fullscreenEndedAtRef.current = performance.now();
     };
     document.addEventListener('fullscreenchange', onChange);
     return () => {
@@ -1470,11 +1518,13 @@ export default function BoardSequencerScreen() {
       bigBoardButtonRef.current?.focus();
     };
   }, [view]);
-  // Show: ▶ Start the piece and ■ Stop take each other's place, and focus goes with them,
-  // never to the page (T4-09): onto ■ Stop once the piece plays, back onto Start when it
-  // stops (the second press of Stop, the end of the piece, or the iPad's End piece).
+  // Show: ▶ Start the piece gives way to the Now / Next strip, and focus goes with it, never
+  // to the page (T4-09) and never onto ■ Stop, where a repeated Enter stopped the piece it
+  // had just started (B3). Back onto Start when it stops (the second press of Stop, the end
+  // of the piece, or the iPad's End piece).
   const showStartRef = useRef<HTMLButtonElement | null>(null);
   const showStopRef = useRef<HTMLButtonElement | null>(null);
+  const showNowNextRef = useRef<HTMLDivElement | null>(null);
   // Started or stopped by Space, focus was on Show itself: it moves the same way.
   const wasRunningRef = useRef(running);
   useEffect(() => {
@@ -1482,9 +1532,25 @@ export default function BoardSequencerScreen() {
     wasRunningRef.current = running;
     if (view !== 'bigBoard') return;
     if (focusDropped() || (changed && document.activeElement === bigBoardRef.current)) {
-      (running ? showStopRef : showStartRef).current?.focus();
+      (running ? showNowNextRef : showStartRef).current?.focus();
     }
   }, [view, running]);
+  // In Show, with the audience screen open: say once to keep this window in front (B6).
+  const [keepInFront, setKeepInFront] = useState(false);
+  const keepInFrontDue = view === 'bigBoard' && audience.open && (!laptop || config.cap.enabled);
+  useEffect(() => {
+    if (!keepInFrontDue) { setKeepInFront(false); return undefined; }
+    setKeepInFront(true);
+    const t = window.setTimeout(() => setKeepInFront(false), KEEP_IN_FRONT_MS);
+    return () => window.clearTimeout(t);
+  }, [keepInFrontDue]);
+  // "Close the audience screen" waits this long for its second press (B4).
+  const [closeAudienceArmed, setCloseAudienceArmed] = useState(false);
+  useEffect(() => {
+    if (!closeAudienceArmed) return undefined;
+    const t = window.setTimeout(() => setCloseAudienceArmed(false), STOP_CONFIRM_MS);
+    return () => window.clearTimeout(t);
+  }, [closeAudienceArmed]);
 
   /**
    * Find the board: take a few frames, ask each one where the board is, and trust the
@@ -1818,28 +1884,11 @@ export default function BoardSequencerScreen() {
         popStore.set([]);
         setPops((prev) => (prev.length === 0 ? prev : []));
       }
-      // The audience screen, only while one is open: notes as they are heard (none while
-      // muted: nothing sounds), and how the board looks, a few times a second at most.
-      const feed = audience.feedRef.current;
+      // The audience screen, only while one is open (also fed from a timer when this loop stops).
       const nowMs = performance.now();
-      if (feed?.alive(nowMs)) {
-        if (playing && engine) {
-          const r = dueNotes([...audiencePendingRef.current, ...drainedForAudience], engine.audibleNow());
-          audiencePendingRef.current = r.rest;
-          if (!mutedRef.current) feed.notes(audienceNotes(r.due, (id) => loopSwatch(id, cfg.channels)));
-        } else audiencePendingRef.current = [];
-      } else if (audiencePendingRef.current.length > 0) audiencePendingRef.current = [];
-      if (feed?.wantsState(nowMs)) {
-        const live = cap.liveRef.current;
-        const hat = audienceHat({
-          capEnabled: cfg.cap.enabled, laptop: cfg.boardSource === 'laptop', mouse: capMouse, camera: live.camera,
-          seen: live.seen, paused: live.paused, locked: cfg.cap.locked, learning: cap.view.learning !== null || cap.view.hatLearning !== null,
-          axes: live.axes, xRole: cfg.cap.xRole, yRole: cfg.cap.yRole,
-        });
-        // Counters settle only while playing; stopped, the board is what the camera sees (as on the laptop).
-        const cells = runningRef.current ? frame.patternCells : cellsFromOccupied(frame.occupied);
-        feed.state(audienceState(cfg, cells, playing, playing && engine ? engine.getBpm() : cfg.bpm, hat), nowMs);
-      }
+      lastDrawAtRef.current = nowMs;
+      lastAudienceFrameRef.current = frame;
+      feedAudienceRef.current(frame, drainedForAudience, nowMs);
       setNudge((prev) => (prev === signal || (prev !== null && signal !== null && JSON.stringify(prev) === JSON.stringify(signal)) ? prev : signal));
     },
     onThrottledState: (rf: RuntimeFrame) => {
@@ -2479,6 +2528,7 @@ export default function BoardSequencerScreen() {
     // the sound was ready, every Carry on ran the piece over by the time that took.
     const firstStart = piece?.startedAt ?? Date.now() - startSec * 1000;
     clockStartRef.current = clockOn ? performance.now() - (Date.now() - firstStart) : null;
+    if (clockOn) pieceStartedAtRef.current = performance.now();
     if (clockOn) rememberPieceRunning(firstStart, home.performance.lengthSec);
     if (clockStartRef.current !== null) homeSettingsRef.current = sceneSettingsOf(home);
     // The opening scene sets everything: a strip the player moved before the piece is no
@@ -2592,6 +2642,8 @@ export default function BoardSequencerScreen() {
   const confirmThen = useCallback((what: 'stop' | 'exit' | 'setup', act: () => void): void => {
     const a = armedRef.current;
     const pieceRunning = runningRef.current && clockStartRef.current !== null;
+    // Just started: a press now is Enter landing again after Start, never a wish to stop (B3).
+    if (what === 'stop' && pieceRunning && stopGuarded(pieceStartedAtRef.current, performance.now())) return;
     if (pieceRunning && (a === null || a.what !== what || performance.now() - a.at > STOP_CONFIRM_MS)) {
       const at = performance.now();
       armedRef.current = { what, at };
@@ -3536,6 +3588,7 @@ export default function BoardSequencerScreen() {
     wantedRef.current = new Set((opening?.loops ?? []).filter((sl) => (c.loopSlots[sl] ?? null) !== null));
     pushLaunch();
     clockStartRef.current = performance.now();
+    pieceStartedAtRef.current = clockStartRef.current;
     // A colour that waits for its time goes silent now, not on the next frame: what it still
     // had ringing or queued from the warm-up is cut too, so it is never heard in the piece early.
     const waiting = waitingColours(c.channels, c.colourComesInAt, 0).map((ch) => ch.id);
@@ -3559,8 +3612,9 @@ export default function BoardSequencerScreen() {
       sessionLogRef.current.action(logActorRef.current, `scene ${opening.name}`);
     }
     announce(`The piece has started${opening ? `, in ${opening.name}` : ''}: ${formatClock(c.performance.lengthSec)}.`);
-    // The button pressed gives way to the clock: focus goes on to ■ Stop.
-    void focusWhenGone(() => (view === 'bigBoard' ? showStopRef.current : document.getElementById(PLAY_STOP_ID)));
+    // The button pressed gives way to the clock: focus goes on to the Now / Next strip in
+    // Show (never onto ■ Stop, B3), to ■ Stop on Play.
+    void focusWhenGone(() => (view === 'bigBoard' ? showNowNextRef.current : document.getElementById(PLAY_STOP_ID)));
   };
   startThePieceRef.current = startThePiece;
   /** The chosen ending, now: a fade over the fade passes (or a stop at the end of the pass). */
@@ -3787,6 +3841,16 @@ export default function BoardSequencerScreen() {
     }
   };
   const onRemoteMessageInner = (msg: RemoteMessage, c: BoardSequencerStored): void => {
+    if (msg.type === 'armed') {
+      setIpadEndArmed(msg.on && runningRef.current);
+      return;
+    }
+    // Waiting for Carry on after a reload: nothing from the iPad is taken (B19). Today's
+    // iPad says so and refuses its touches; this is for one that is behind.
+    if (!runningRef.current && resumeFrom !== null && msg.type !== 'hello' && msg.type !== 'reach') {
+      setRemoteNote({ text: 'iPad: not taken (waiting for Carry on)', at: performance.now() });
+      return;
+    }
     if (msg.type === 'hello') {
       // An answer to an older question is from before the last page came or went.
       if (msg.ask !== helloAskRef.current) return;
@@ -3840,14 +3904,21 @@ export default function BoardSequencerScreen() {
       else goScene(msg.index);
       setRemoteNote({ text: 'iPad: scene', at: performance.now() });
     } else if (msg.type === 'trigger') {
-      if (msg.name === 'newIdea') newFillIdea();
-      else if (msg.name === 'newSound') newEvolveSound();
+      if (msg.name === 'newIdea') {
+        // Stopped, New idea would switch Extra notes on by itself and change how the piece
+        // opens (B18). While Play is starting it is taken, like a loop.
+        if (!runningRef.current && startingRef.current === null) {
+          setRemoteNote({ text: 'iPad: New idea not taken (press ▶ Play first)', at: performance.now() });
+          return;
+        }
+        newFillIdea();
+      } else if (msg.name === 'newSound') newEvolveSound();
       // From the iPad, Keep only keeps: a second, accidental tap must not let go of what
       // the player chose to keep. Letting go is on the laptop.
       else if (msg.name === 'keep') { if (c.fillKept === null && c.evolveHoldLap === null) toggleKeepAll(); }
       else if (msg.name === 'mute') toggleMuted();
       else if (msg.name === 'stopAll') stopAllLoops();
-      else if (msg.name === 'endPiece') endPiece();
+      else if (msg.name === 'endPiece') { setIpadEndArmed(false); endPiece(); }
       else if (clockStartRef.current !== null || pieceStartingRef.current) {
         // Capture makes a loop, and no loop is made while the piece plays (F2), nor while a
         // start of it is loading (the clock not set yet). Today's iPad greys its Capture out
@@ -3876,8 +3947,8 @@ export default function BoardSequencerScreen() {
       />
       {remoteEnabled && (
         <>
-          <span role="status" style={{ fontSize: 13, fontWeight: 600, color: remoteLink.others > 0 ? 'var(--bs-ok)' : 'var(--bs-fg2)' }}>
-            {remoteLink.others > 0 ? '✓ iPad connected'
+          <span role="status" style={{ fontSize: 13, fontWeight: 600, color: remoteLink.others > 0 ? (remoteLink.reaching ? 'var(--bs-ok)' : 'var(--bs-warn)') : 'var(--bs-fg2)' }}>
+            {remoteLink.others > 0 ? (remoteLink.reaching ? '✓ iPad connected' : '! iPad not reaching')
               : remoteLink.status === 'open' ? 'Waiting for the iPad…'
                 : remoteLink.status === 'lost' ? 'Link lost — reconnecting…' : 'Starting…'}
           </span>
@@ -5173,7 +5244,7 @@ export default function BoardSequencerScreen() {
       playing={running}
       pingPongDirection={pingDir}
       swatchFor={swatchFor}
-      palette={palette}
+      palette={view === 'bigBoard' ? BOARD_TOKENS.calm.dark : palette}
       pageLabel={config.numPages > 1 ? `Page ${String.fromCharCode(65 + playingPage)} · live` : null}
       reducedMotion={reducedMotion}
       fillMarks={running ? fillMarks : undefined}
@@ -5265,7 +5336,7 @@ export default function BoardSequencerScreen() {
     // No Capture here: a loop is made in New loop, never during the show (F1).
   };
   const nowNextStrip = <NowNextStrip {...nowNextProps} />;
-  const bigNowNextStrip = <NowNextStrip {...nowNextProps} big />;
+  const bigNowNextStrip = <NowNextStrip {...nowNextProps} big focusRef={showNowNextRef} />;
 
   /**
    * ▶ Carry on after a reload: from where the clock is now, counted from when the piece
@@ -5351,11 +5422,55 @@ export default function BoardSequencerScreen() {
     </div>
   ) : null;
 
-  // The audience screen: a window of its own for the projector (src/audience). Open in
-  // Show and on Play; the laptop keeps everything else.
-  const audienceButton = (
-    <Button tone="secondary" onClick={audience.open ? audience.closeWindow : audience.openWindow}>
-      {audience.open ? 'Close the audience screen' : 'Open the audience screen'}
+  /**
+   * The audience screen, while one is open: notes as they are heard (none while muted:
+   * nothing sounds), and how the board looks, a few times a second at most. From the
+   * drawing loop, or from a timer while that loop is stopped (B6).
+   */
+  const feedAudience = (frame: RuntimeFrame['frame'] | null, drained: FiredNote[], nowMs: number): void => {
+    const cfg = configRef.current;
+    const engine = engineRef.current;
+    const playing = runningRef.current && !!engine;
+    const feed = audience.feedRef.current;
+    if (feed?.alive(nowMs)) {
+      if (playing && engine) {
+        const r = dueNotes([...audiencePendingRef.current, ...drained], engine.audibleNow());
+        audiencePendingRef.current = r.rest;
+        if (!mutedRef.current) feed.notes(audienceNotes(r.due, (id) => loopSwatch(id, cfg.channels)));
+      } else audiencePendingRef.current = [];
+    } else if (audiencePendingRef.current.length > 0) audiencePendingRef.current = [];
+    if (frame !== null && feed?.wantsState(nowMs)) {
+      const live = cap.liveRef.current;
+      const hat = audienceHat({
+        capEnabled: cfg.cap.enabled, laptop: cfg.boardSource === 'laptop', mouse: capMouse, camera: live.camera,
+        seen: live.seen, paused: live.paused, locked: cfg.cap.locked, learning: cap.view.learning !== null || cap.view.hatLearning !== null,
+        axes: live.axes, xRole: cfg.cap.xRole, yRole: cfg.cap.yRole,
+      });
+      // Counters settle only while playing; stopped, the board is what the camera sees (as on the laptop).
+      const cells = runningRef.current ? frame.patternCells : cellsFromOccupied(frame.occupied);
+      feed.state(audienceState(cfg, cells, playing, playing && engine ? engine.getBpm() : cfg.bpm, hat), nowMs);
+    }
+  };
+  feedAudienceRef.current = feedAudience;
+
+  // The audience screen: a window of its own for the projector (src/audience). Opened in
+  // Show and on Play; the laptop keeps everything else. Closing it takes a second press,
+  // and in Show it can't be closed at all while the piece plays (B4).
+  const audienceButton = audience.open && view === 'bigBoard' && running ? null : (
+    <Button
+      tone="secondary"
+      onClick={() => {
+        if (!audience.open) { setCloseAudienceArmed(false); audience.openWindow(); return; }
+        if (!closeAudienceArmed) {
+          setCloseAudienceArmed(true);
+          announce('Press again to close the audience screen.');
+          return;
+        }
+        setCloseAudienceArmed(false);
+        audience.closeWindow();
+      }}
+    >
+      {!audience.open ? 'Open the audience screen' : closeAudienceArmed ? 'Press again to close the audience screen' : 'Close the audience screen'}
     </Button>
   );
   const audienceNoticeView = audience.notice ? (
@@ -5363,6 +5478,55 @@ export default function BoardSequencerScreen() {
       {audienceNoticeText(audience.notice)}
     </p>
   ) : null;
+
+  // Show's status row (B1, B14): what the owner needs to see mid-piece, in one line of fixed height.
+  const hatState = ((): ShowHatState => {
+    if (capMouse || cap.view.camera === 'mouse') return 'mouse';
+    if (cap.view.paused) return 'paused';
+    if (cap.view.camera === 'off' || cap.view.camera === 'starting') return 'starting';
+    if (cap.view.camera !== 'running') return 'noCamera';
+    if (cap.view.seen) return cap.view.source === 'face' ? 'face' : 'found';
+    return 'holding';
+  })();
+  const resumeAt = resumeFrom !== null ? (Date.now() - resumeFrom.startedAt) / 1000 : 0;
+  const showStatus: ShowStatusInput = {
+    camera: laptop ? null : (cameraStalled && running) || error !== null ? 'stopped' : 'ok',
+    hat: config.cap.enabled ? {
+      state: hatState,
+      ...(cap.view.paused ? { why: CAP_PAUSE_TEXT[cap.view.paused] } : {}),
+      locked: config.cap.locked,
+      values: (['xRole', 'yRole'] as const).flatMap((k) => {
+        const role = config.cap[k];
+        if (role === 'off') return [];
+        return [`${CAP_ROLE_LABELS[role]} ${capValueText(role, cap.view.values[role])}`];
+      }),
+    } : null,
+    ipad: remoteEnabled ? {
+      reaching: remoteLink.status === 'open' && remoteLink.others > 0 && remoteLink.reaching,
+      endPressedOnce: ipadEndArmed,
+    } : null,
+    sound: soundFrom === 'admi' || midiPort.support === 'unknown' || midiPort.support === 'off' ? null
+      : !midiPort.connected ? (running && midiHold ? 'lost' : 'notFound')
+        : midiHold ? 'back' : 'ok',
+    muted,
+    simplify: running && simplify !== 'off'
+      ? (simplify === 'on' ? `Simplified: ${playerWords(activePlayer?.name ?? null).name} and the bed` : 'Back to full from the next pass')
+      : null,
+    keepingTime: timeIndicator ? { text: timeIndicator.lines.join(' '), canRestore: timeIndicator.canRestore } : null,
+    reload: running ? null
+      : resumeFrom !== null ? (resumeAt < resumeFrom.lengthSec ? { kind: 'carryOn', at: formatClock(resumeAt) } : null)
+        : endedNotice ? { kind: 'ended' } : null,
+    keepInFront,
+  };
+  const showStatusAction = (a: ShowStatusAction): JSX.Element => {
+    switch (a) {
+      case 'retryCamera': return <Button tone="quiet" onClick={() => setCameraRetry((n) => n + 1)}>Try the camera again</Button>;
+      case 'switchToAbleton': return <Button tone="quiet" onClick={switchBackToAbleton}>Switch to Ableton</Button>;
+      case 'restoreExtras': return <Button tone="quiet" onClick={restoreExtras}>Switch the extras back on</Button>;
+      case 'carryOn': return <Button ref={carryOnRef} tone="primary" onClick={carryOn}>{`▶ Carry on from ${formatClock(resumeAt)}`}</Button>;
+      default: return <Button tone="quiet" onClick={dismissReloadNotice}>{resumeFrom !== null ? 'No' : 'OK'}</Button>;
+    }
+  };
 
   const stage = (
     <div style={{ flex: layout.mode === 'stacked' ? 'none' : '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
@@ -5672,6 +5836,10 @@ export default function BoardSequencerScreen() {
       {view === 'play' && remoteNote && (
         <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--bs-accent)' }}>{remoteNote.text}</p>
       )}
+      {view === 'play' && ipadEndArmed && (
+        // Until the second tap, or its window runs out (B20).
+        <p role="status" style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>iPad: End piece pressed once</p>
+      )}
       {view === 'play' && ipadOutOfDate && (
         // Stays while it is true, unlike the moment-long notes of what the iPad did.
         <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--bs-warn)' }}>{ipadOutOfDateText}</p>
@@ -5704,22 +5872,21 @@ export default function BoardSequencerScreen() {
       tabIndex={-1}
       role="region"
       aria-label="Show"
-            data-bs-style="calm"
-      data-bs-mode={config.themeMode}
+      // Always dark, whatever the theme: a light Show was a light box in a dark room (B15).
+      className="bs-root"
+      data-bs-style="calm"
+      data-bs-mode="dark"
       style={{
         position: 'fixed', inset: 0, zIndex: 30,
         display: 'flex', flexDirection: 'column',
         padding: 12, boxSizing: 'border-box', gap: 8, background: 'var(--bs-bg)',
       }}
       onKeyDown={(e) => {
-        // Esc leaves when the browser isn't in fullscreen (there it exits fullscreen,
-        // and the fullscreenchange handler brings us back).
-        if (e.key === 'Escape' && document.fullscreenElement === null) setView('play');
+        // Esc leaves when the browser isn't in full screen (there the browser takes it to end
+        // full screen, and Show stays: B5).
+        if (e.key === 'Escape' && escLeavesShow(document.fullscreenElement !== null, fullscreenEndedAtRef.current, performance.now())) setView('play');
       }}
     >
-      {midiBannerView}
-      {reloadNoticeView}
-      {keepingTimeView}
       {running ? bigNowNextStrip : (
         <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap', padding: '10px 14px', borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-elev)' }}>
           <Button
@@ -5735,10 +5902,17 @@ export default function BoardSequencerScreen() {
           </span>
         </div>
       )}
-      <div style={{ flex: 1, minHeight: 0 }}>{boardView}</div>
-      {aiOffLine(config.fillAmount, config.evolveAmount) && (
-        <span role="status" style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>{aiOffLine(config.fillAmount, config.evolveAmount)}</span>
-      )}
+      {/* Camera, hat, iPad, Ableton, and the notices: one line that never moves the board (B1, B14). */}
+      <ShowStatusRow items={showStatusItems(showStatus)} action={showStatusAction} />
+      <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+        {boardView}
+        {/* Over the board's edge, not above it: it comes and goes without moving the board. */}
+        {audienceNoticeView && (
+          <div style={{ position: 'absolute', left: 0, right: 0, bottom: 8, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
+            <div style={{ pointerEvents: 'auto', maxWidth: 760 }}>{audienceNoticeView}</div>
+          </div>
+        )}
+      </div>
       <div
         style={{
           display: 'flex', gap: 8, alignItems: 'center',
@@ -5758,7 +5932,6 @@ export default function BoardSequencerScreen() {
         {audienceButton}
         <Button tone="secondary" onClick={() => setView('play')}>Leave Show</Button>
       </div>
-      {audienceNoticeView}
     </div>
   ) : null;
 
