@@ -172,7 +172,7 @@ describe('the iPad page, set up for the player', () => {
     await act(async () => { pointer('pointerdown', loop, 300); });
     expect(sent).toContainEqual({ type: 'loop', index: 0 });
     now = 20_000;
-    const end = button('End the piece');
+    const end = button('End piece');
     await act(async () => { pointer('pointerdown', end, 300); });
     expect(sent).not.toContainEqual({ type: 'trigger', name: 'endPiece' });
     now = 20_600;
@@ -212,7 +212,7 @@ describe('two taps, safe from a bounce: End piece, Stop the loops and Mute', () 
 
   it('End piece: a second tap after the guard of quiet ends the piece; bounces in between change nothing', async () => {
     await act(async () => { onMsg?.(withTouch({ playExtras: ['endPiece'] })); });
-    await touchAt(20_000, () => button('End the piece'));
+    await touchAt(20_000, () => button('End piece'));
     await touchAt(20_060, () => button('Tap again to end'));
     await touchAt(20_250, () => button('Tap again to end'));
     // 600 ms after the first touch, but only 350 after the last bounce: the same press.
@@ -237,7 +237,7 @@ describe('two taps, safe from a bounce: End piece, Stop the loops and Mute', () 
     expect(sent.filter((m) => JSON.stringify(m) === JSON.stringify(END))).toHaveLength(1);
     await touchAt(20_700, endPad);
     expect(button('Tap again to end')).toBeUndefined();
-    expect(button('End the piece')).toBeTruthy();
+    expect(button('End piece')).toBeTruthy();
   });
 
   it('End piece: armed, then the laptop stops: the pad is no longer waiting, and the next piece needs two taps again', async () => {
@@ -263,7 +263,7 @@ describe('two taps, safe from a bounce: End piece, Stop the loops and Mute', () 
 
   it('End piece: the same with "act on lift", where a bounce is a quick land-lift-land-lift', async () => {
     await act(async () => { onMsg?.(withTouch({ playExtras: ['endPiece'], actOn: 'lift' })); });
-    await touchAt(20_000, () => button('End the piece'));
+    await touchAt(20_000, () => button('End piece'));
     await touchAt(20_120, () => button('Tap again to end'));
     expect(sent).not.toContainEqual(END);
     await touchAt(20_700, () => button('Tap again to end'));
@@ -272,7 +272,7 @@ describe('two taps, safe from a bounce: End piece, Stop the loops and Mute', () 
 
   it("follows the player's own bounce guard", async () => {
     await act(async () => { onMsg?.(withTouch({ playExtras: ['endPiece'], secondTapMinMs: 1200 })); });
-    await touchAt(20_000, () => button('End the piece'));
+    await touchAt(20_000, () => button('End piece'));
     await touchAt(20_800, () => button('Tap again to end'));
     expect(sent).not.toContainEqual(END);
     await touchAt(22_100, () => button('Tap again to end'));
@@ -351,10 +351,10 @@ describe('acting on lift: a finger that slides off a pad takes it back', () => {
   it('a slid-off first tap does not arm End piece', async () => {
     await act(async () => { onMsg?.(withTouch({ actOn: 'lift', playExtras: ['endPiece'] })); });
     now = 20_000;
-    const end = button('End the piece');
+    const end = button('End piece');
     await act(async () => { pointer('pointerdown', end, 300); });
     await act(async () => { pointer('pointerup', end, 600); });
-    expect(button('End the piece')).toBeTruthy();
+    expect(button('End piece')).toBeTruthy();
     expect(button('Tap again to end')).toBeUndefined();
   });
 });
@@ -670,7 +670,7 @@ describe('the iPad page in the board\u2019s own look (A11)', () => {
   });
 
   it('while waiting for the laptop, strips and pads say they are unavailable', async () => {
-    const pads = (): HTMLElement[] => [...el.querySelectorAll<HTMLElement>('button, [role="slider"]')];
+    const pads = (): HTMLElement[] => [...el.querySelectorAll<HTMLElement>('button:not([role="tab"]), [role="slider"]')];
     expect(pads().every((p) => p.getAttribute('aria-disabled') !== 'true')).toBe(true);
     linkReaching = false;
     await act(async () => { onMsg?.({ ...STATE, state: { ...STATE.state } }); });
@@ -709,9 +709,10 @@ describe('the iPad page in the board\u2019s own look (A11)', () => {
     for (const b of el.querySelectorAll<HTMLElement>('button')) {
       const label = b.getAttribute('aria-label');
       if (!label) continue;
-      const clone = b.cloneNode(true) as HTMLElement;
-      clone.querySelectorAll('[aria-hidden="true"]').forEach((n) => n.remove());
-      expect({ label, ok: nameStartsWithVisible(label, clone.textContent ?? '') }).toEqual({ label, ok: true });
+      // What is drawn, word by word (spans stacked in a pad have no space between them in textContent).
+      const parts: string[] = [];
+      for (const w = document.createTreeWalker(b, NodeFilter.SHOW_TEXT); w.nextNode();) parts.push(w.currentNode.textContent ?? '');
+      expect({ label, ok: nameStartsWithVisible(label, parts.join(' ')) }).toEqual({ label, ok: true });
     }
   });
 });

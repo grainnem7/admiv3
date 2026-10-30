@@ -92,7 +92,7 @@ test('the iPad link: a heartbeat each second, a stall shown on both sides in 3â€
     await expect(row).not.toContainText('Muted');
 
     // Tim's first End piece tap: the laptop shows it until the window runs out (B20).
-    await ipad.getByRole('button', { name: 'End the piece', exact: true }).dispatchEvent('pointerdown', touch);
+    await ipad.getByRole('button', { name: 'End piece', exact: true }).dispatchEvent('pointerdown', touch);
     await expect(row).toContainText('iPad: End piece pressed once');
     await expect(row).not.toContainText('End piece pressed once', { timeout: 12_000 });
     await expect(page.getByRole('button', { name: 'Cancel the ending' })).toHaveCount(0);

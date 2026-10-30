@@ -381,7 +381,7 @@ test('the iPad joins with the code, shows the piece, and its End piece reaches t
   await ipad.setViewportSize({ width: 1180, height: 820 });
   await ipad.goto(`/?remote=${code}`);
   await expect(ipad.getByText('Now: Arrival')).toBeVisible();
-  const end = ipad.getByRole('button', { name: 'End the piece' });
+  const end = ipad.getByRole('button', { name: 'End piece', exact: true });
   await end.dispatchEvent('pointerdown', { pointerType: 'touch', pointerId: 1, width: 30, height: 30 });
   await ipad.waitForTimeout(600); // a real second tap, not a bounce
   await ipad.getByRole('button', { name: 'Tap again to end the piece' }).dispatchEvent('pointerdown', { pointerType: 'touch', pointerId: 1, width: 30, height: 30 });
@@ -409,10 +409,10 @@ test("a bounce on the iPad's End piece never ends the piece; a second tap after 
   await ipad.goto(`/?remote=${code}`);
   await expect(ipad.getByText('Now: Arrival')).toBeVisible();
   const touch = { pointerType: 'touch', pointerId: 1, width: 30, height: 30 };
-  const endPad = ipad.getByRole('button', { name: /end the piece/i }); // "End the piece" or "Tap again to end the piece"
+  const endPad = ipad.getByRole('button', { name: /^(End piece|Tap again to end)/i }); // "End piece" or "Tap again to end the piece"
   const ending = page.getByRole('button', { name: 'Cancel the ending' });
   for (const gap of [60, 120, 250]) {
-    await expect(ipad.getByRole('button', { name: 'End the piece', exact: true })).toBeVisible({ timeout: 10_000 });
+    await expect(ipad.getByRole('button', { name: 'End piece', exact: true })).toBeVisible({ timeout: 10_000 });
     // One shaky press: two touches this far apart, timed inside the page, so a busy test
     // runner cannot stretch the gap past the bounce guard.
     await endPad.evaluate((el, ms) => new Promise<void>((done) => {
@@ -426,7 +426,7 @@ test("a bounce on the iPad's End piece never ends the piece; a second tap after 
     await expect(ending).toHaveCount(0);
   }
   // A real second tap, after the bounce guard and inside the window, ends it.
-  await expect(ipad.getByRole('button', { name: 'End the piece', exact: true })).toBeVisible({ timeout: 10_000 });
+  await expect(ipad.getByRole('button', { name: 'End piece', exact: true })).toBeVisible({ timeout: 10_000 });
   await endPad.dispatchEvent('pointerdown', touch);
   await ipad.waitForTimeout(700);
   await endPad.dispatchEvent('pointerdown', touch);
@@ -451,9 +451,9 @@ test("a press on the iPad's End piece that chatters at 0, 200, 400 and 600 ms ne
   await ipad.setViewportSize({ width: 1180, height: 820 });
   await ipad.goto(`/?remote=${code}`);
   await expect(ipad.getByText('Now: Arrival')).toBeVisible();
-  const endPad = ipad.getByRole('button', { name: /end the piece/i });
+  const endPad = ipad.getByRole('button', { name: /^(End piece|Tap again to end)/i });
   const ending = page.getByRole('button', { name: 'Cancel the ending' });
-  await expect(ipad.getByRole('button', { name: 'End the piece', exact: true })).toBeVisible();
+  await expect(ipad.getByRole('button', { name: 'End piece', exact: true })).toBeVisible();
   // One press that chatters for longer than the bounce guard (half a second): four touches
   // 200 ms apart, timed inside the page. Each lands within the guard of the one before.
   const gaps = await endPad.evaluate((el) => new Promise<number[]>((done) => {
