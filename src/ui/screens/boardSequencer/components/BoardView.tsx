@@ -153,7 +153,7 @@ export function BoardView({
         ctx.fillStyle = palette.raised;
         ctx.fill();
         ctx.lineWidth = 1;
-        ctx.strokeStyle = palette.border;
+        ctx.strokeStyle = palette.borderControl;
         ctx.stroke();
       }
     }

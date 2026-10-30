@@ -78,3 +78,18 @@ describe('the playhead and the tune bands sit on top of the squares (B9)', () =>
     });
   }
 });
+
+describe('empty squares have an edge you can see (A4)', () => {
+  for (const mode of ['dark', 'light'] as BoardMode[]) {
+    it(`${mode}: each square is outlined in the control edge colour, at least 3:1 against the page`, () => {
+      draw(mode);
+      const palette = BOARD_TOKENS.calm[mode];
+      const squares = ops.filter((o) => o.op === 'fill' && o.fillStyle === palette.raised).length;
+      expect(squares).toBeGreaterThanOrEqual(32);
+      const edges = ops.filter((o) => o.op === 'stroke' && o.strokeStyle === palette.borderControl && o.lineWidth >= 1);
+      expect(edges.length).toBeGreaterThanOrEqual(32);
+      expect(contrastRatio(palette.borderControl, palette.bg)).toBeGreaterThanOrEqual(3);
+      expect(contrastRatio(palette.borderControl, palette.raised)).toBeGreaterThanOrEqual(3);
+    });
+  }
+});
