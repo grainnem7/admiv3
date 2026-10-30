@@ -34,6 +34,11 @@ export function audienceNoticeText(n: AudienceNotice): string {
   }
 }
 
+/** What the notice becomes once the window fills the projector: the two about placing it go (A17). */
+export function noticeAfterFilled(n: AudienceNotice | null): AudienceNotice | null {
+  return n === 'drag' || n === 'placed' ? null : n;
+}
+
 /** How long a notice stays. */
 const NOTICE_MS = 30_000;
 /** A window that hasn't said it is there by now is slow: say it is still opening. */
@@ -80,6 +85,7 @@ export function useAudienceWindow(): {
       setOpen(alive);
     };
     feed.onChange(check);
+    feed.onFilled(() => setNotice(noticeAfterFilled));
     // A window that closed without a word (closed by the browser, crashed) is gone after a while.
     const id = window.setInterval(check, 1000);
     void placePermission().then((p) => { permissionRef.current = p; });

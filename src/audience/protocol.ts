@@ -63,7 +63,8 @@ export type LaptopMessage =
   | { kind: 'place'; left: number; top: number; width: number; height: number }
   | { kind: 'close' };
 
-export type AudienceMessage = { kind: 'here' } | { kind: 'bye' };
+/** `filled`: the window now fills the projector (A17), so the laptop can drop its "drag it there" notice. */
+export type AudienceMessage = { kind: 'here' } | { kind: 'bye' } | { kind: 'filled' };
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null;
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
@@ -119,5 +120,6 @@ export function readAudienceMessage(v: unknown): AudienceMessage | null {
   if (!isObj(v)) return null;
   if (v.kind === 'here') return { kind: 'here' };
   if (v.kind === 'bye') return { kind: 'bye' };
+  if (v.kind === 'filled') return { kind: 'filled' };
   return null;
 }

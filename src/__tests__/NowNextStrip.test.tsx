@@ -44,3 +44,19 @@ describe('Now / Next: the piece\'s buttons (B13)', () => {
     expect(onUndoNext).toHaveBeenCalled();
   });
 });
+
+describe('A17: a quiet "Ended" in the clock\'s place after the piece', () => {
+  const idle: ClockView = { ...running, phase: 'idle' };
+  it('shows Ended, with the Start button still there, once the piece has ended', () => {
+    view = render(<NowNextStrip {...props({ clock: idle, ended: true })} />);
+    const ended = view.container.querySelector('[data-piece-ended]');
+    expect(ended?.textContent).toBe('Ended');
+    expect(named('▶ Start the piece')).toBeDefined();
+  });
+  it('shows nothing of the kind before a piece, or while one runs', () => {
+    view = render(<NowNextStrip {...props({ clock: idle })} />);
+    expect(view.container.querySelector('[data-piece-ended]')).toBeNull();
+    view.rerender(<NowNextStrip {...props({ ended: true })} />);
+    expect(view.container.querySelector('[data-piece-ended]')).toBeNull();
+  });
+});

@@ -1,7 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { audienceHat, audienceNotes, audienceState, createAudienceFeed, drawStalled, dueNotes, STALE_NOTE_SEC, type HatInput } from '../audience/feed';
 import { choosePlacement, outcomeOf, type ScreenInfo } from '../audience/placement';
-import { audienceNoticeText, openingNotice } from '../audience/useAudienceWindow';
+import { audienceNoticeText, noticeAfterFilled, openingNotice } from '../audience/useAudienceWindow';
 import { readAudienceMessage, readLaptopMessage, type AudienceState, type LaptopMessage } from '../audience/protocol';
 import type { FiredNote } from '../songs/BoardSequencerEngine';
 
@@ -96,6 +96,18 @@ describe('the feed to the audience screen', () => {
     expect(sent).toHaveLength(n + 1);
     feed.state({ ...STATE, scene: 'Build' }, 2300);
     expect(sent).toHaveLength(n + 2);
+  });
+
+  it('A17: hears the audience screen fill the projector, and stays open', () => {
+    const { ch, hear } = fakeChannel();
+    const feed = createAudienceFeed(ch);
+    const filled = vi.fn();
+    feed.onFilled(filled);
+    hear({ kind: 'here' });
+    hear({ kind: 'filled' });
+    expect(filled).toHaveBeenCalledTimes(1);
+    expect(feed.alive(performance.now())).toBe(true);
+    expect(readAudienceMessage({ kind: 'filled' })).toEqual({ kind: 'filled' });
   });
 
   it('hears an audience screen leave', () => {
@@ -231,5 +243,14 @@ describe('the two-window routine (audit 2026-10-30: B5, B6, B26)', () => {
     expect(drawStalled(true, 1000, 990)).toBe(true);
     // Never drawn yet (the board not running): the timer feeds it.
     expect(drawStalled(false, 1000, null)).toBe(true);
+  });
+});
+
+describe('A17: the drag and placed notices clear once the window is placed', () => {
+  it('filling the projector ends "drag" and "placed", and nothing else', () => {
+    expect(noticeAfterFilled('drag')).toBeNull();
+    expect(noticeAfterFilled('placed')).toBeNull();
+    for (const n of ['asking', 'oneScreen', 'stillOpening', 'blocked'] as const) expect(noticeAfterFilled(n)).toBe(n);
+    expect(noticeAfterFilled(null)).toBeNull();
   });
 });

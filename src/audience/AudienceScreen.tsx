@@ -154,6 +154,8 @@ export default function AudienceScreen(): JSX.Element {
       if (!document.fullscreenElement) void document.documentElement.requestFullscreen?.().catch(() => {});
     };
     root.addEventListener('click', fill);
+    const onFull = (): void => { if (document.fullscreenElement) say({ kind: 'filled' }); };
+    document.addEventListener('fullscreenchange', onFull);
 
     // What the tests (and nobody on the projector) can read: set only when it changes.
     const marks: Record<string, string> = {};
@@ -336,6 +338,7 @@ export default function AudienceScreen(): JSX.Element {
       window.clearInterval(here);
       window.removeEventListener('pagehide', bye);
       root.removeEventListener('click', fill);
+      document.removeEventListener('fullscreenchange', onFull);
       motion?.removeEventListener?.('change', onMotion);
       bye();
       if (ch) { ch.onmessage = null; ch.close(); }

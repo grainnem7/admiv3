@@ -93,6 +93,8 @@ export interface AudienceFeed {
   alive(nowMs: number): boolean;
   /** Called when one opens or goes. */
   onChange(fn: () => void): void;
+  /** Called when the window says it fills the projector (A17). */
+  onFilled(fn: () => void): void;
   /** Whether a state given now would be looked at (so the caller can skip building one). */
   wantsState(nowMs: number): boolean;
   /** What the board looks like now: sent when it changes. */
@@ -108,11 +110,13 @@ export function createAudienceFeed(ch: ChannelLike): AudienceFeed {
   let lastJson = '';
   let lastSentAt = -Infinity;
   let listener: (() => void) | null = null;
+  let filledListener: (() => void) | null = null;
   const alive = (nowMs: number): boolean => heardAt !== null && nowMs - heardAt < ALIVE_MS;
   ch.onmessage = (e: MessageEvent) => {
     const m = readAudienceMessage(e.data);
     if (!m) return;
     const was = heardAt !== null;
+    if (m.kind === 'filled') { filledListener?.(); return; }
     if (m.kind === 'here') {
       heardAt = performance.now();
       // A new window (or this page reloaded): it has nothing yet, so the next state goes.
@@ -125,6 +129,7 @@ export function createAudienceFeed(ch: ChannelLike): AudienceFeed {
   return {
     alive,
     onChange(fn) { listener = fn; },
+    onFilled(fn) { filledListener = fn; },
     wantsState: (nowMs) => heardAt !== null && nowMs - lastSentAt >= STATE_MS,
     state(s, nowMs) {
       if (heardAt === null) return;
