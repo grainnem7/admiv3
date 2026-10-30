@@ -599,7 +599,7 @@ test('rehearse from a scene: the clock starts there, in that scene', async ({ pa
   await pickColour(page, 'Red');
   await place(page, [[3, 1]]);
   await makePlan(page);
-  await page.getByRole('button', { name: /Rehearse from Home/ }).click();
+  await page.getByRole('button', { name: /Rehearse from here, Home/ }).click();
   const strip = page.getByRole('region', { name: 'Now and next' });
   await expect(strip).toContainText('Now: Home');
   // 7:00 piece from 6:00: about a minute left.
@@ -615,7 +615,7 @@ test('Jump here now is there only while the board plays; the scene is for that r
   await ownSoundIsPlain(page);
   await makePlan(page);
   // Stopped: each scene offers Rehearse from here; a jump would only have changed settings.
-  await expect(page.getByRole('button', { name: /^Rehearse from Open/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Rehearse from here, Open/ })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Jump to Open now' })).toHaveCount(0);
   // Playing: Open (full band, extra notes, sounds change) comes in at once…
   await page.getByRole('button', { name: '▶ Play the board' }).first().click();
@@ -641,7 +641,7 @@ test("a rehearsal never saves a scene's settings as the player's own: reloaded m
   await place(page, [[3, 1]]);
   await ownSoundIsPlain(page);
   await makePlan(page);
-  await page.getByRole('button', { name: /Rehearse from Open/ }).click();
+  await page.getByRole('button', { name: /Rehearse from here, Open/ }).click();
   const strip = page.getByRole('region', { name: 'Now and next' });
   await expect(strip).toContainText('Now: Open');
   await pieceClockRunning(page);
@@ -919,7 +919,7 @@ test('an iPad loop tap while the laptop is stopped is refused, says why, and Pla
 async function pressAfterNotes(page: Page, label: string): Promise<void> {
   await page.evaluate(async (label) => {
     const count = (): string => [...document.querySelectorAll('button')]
-      .find((b) => /Save the session log/.test(b.getAttribute('aria-label') ?? b.textContent ?? ''))?.textContent ?? '';
+      .find((b) => /Save session/.test(b.getAttribute('aria-label') ?? b.textContent ?? ''))?.textContent ?? '';
     const was = count();
     const until = performance.now() + 15_000;
     while (count() === was && performance.now() < until) await new Promise((r) => setTimeout(r, 10));
@@ -999,7 +999,7 @@ test('while the piece plays: New loop is off and says why, there is no other way
   await expect(page.getByRole('button', { name: 'New loop' })).toBeDisabled();
   await expect(page.getByText('Stop the piece to make a loop')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Keep the board as this loop' })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /Edit the notes of loop/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Edit notes, loop/ })).toHaveCount(0);
   await expect(page.getByRole('status').filter({ hasText: 'Playing' }).first()).toBeVisible();
   expect(pageErrors(page)).toEqual([]);
 });
@@ -1011,7 +1011,7 @@ test('inside New loop there is one way to make a loop: Keep', async ({ page }) =
   await expect(page.getByRole('heading', { name: 'New loop 3 · not kept yet' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Keep the board as this loop' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: /Overwrite/ })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /Edit the notes of loop/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Edit notes, loop/ })).toHaveCount(0);
   await expect(page.getByRole('listitem', { name: /^Loop 1: Bed/ }).getByRole('button', { name: '▶ Play' })).toHaveCount(0);
   // Leaving brings them back, for now.
   await page.getByRole('button', { name: 'Leave', exact: true }).click();
@@ -1377,7 +1377,7 @@ test('a reload in the last seconds (rehearse from Home, reload at 0:54 of 1:00):
   await place(page, [[3, 1]]);
   await pieceLength(page, '1:00');
   await makePlan(page); // Home at 0:51
-  await page.getByRole('button', { name: /Rehearse from Home/ }).click();
+  await page.getByRole('button', { name: /Rehearse from here, Home/ }).click();
   await pieceClockRunning(page);
   await untilPieceAt(page, 54);
   await page.reload();
@@ -1400,7 +1400,7 @@ test('a reload with the automatic ending under way: no Carry on, the piece has e
   await place(page, [[3, 1]]);
   await pieceLength(page, '1:00');
   await makePlan(page); // Open at 0:30; the ending begins by itself about 0:17 before the end
-  await page.getByRole('button', { name: /Rehearse from Open/ }).click();
+  await page.getByRole('button', { name: /Rehearse from here, Open/ }).click();
   await pieceClockRunning(page);
   await expect(page.getByRole('button', { name: 'Cancel the ending' }).first()).toBeVisible({ timeout: 30_000 });
   await page.reload();
@@ -1414,7 +1414,7 @@ test('↘ End piece in Show, then a reload with a minute left: the piece has end
   await openLaptopBoard(page);
   await saveTwoLoops(page);
   await makePlan(page); // 7:00; Home at 6:00 has Bed
-  await page.getByRole('button', { name: /Rehearse from Home/ }).click();
+  await page.getByRole('button', { name: /Rehearse from here, Home/ }).click();
   await pieceClockRunning(page);
   await page.getByRole('button', { name: /^Show: the board, the clock/ }).click();
   const show = page.getByRole('region', { name: 'Show', exact: true });
@@ -1446,7 +1446,7 @@ test('a reload with more left than the ending needs: Carry on, the ending begins
   await ownSoundIsPlain(page);
   await pieceLength(page, '5:00');
   await makePlan(page); // Home at 4:17, 0:43 before the end
-  await page.getByRole('button', { name: /Rehearse from Home/ }).click();
+  await page.getByRole('button', { name: /Rehearse from here, Home/ }).click();
   await pieceClockRunning(page);
   const startedAt = await untilPieceAt(page, 258);
   const before = Math.max(...await outputLevels(page, 20, 250)); // the 5 s before the reload
@@ -1724,7 +1724,7 @@ async function sessionNotes(page: Page): Promise<{ t: number; colour: string }[]
   await sessionLog(page); // folded under the board (A15)
   const [download] = await Promise.all([
     page.waitForEvent('download'),
-    page.getByRole('button', { name: /^Save the session log as JSON/ }).click(),
+    page.getByRole('button', { name: /^Save session/ }).click(),
   ]);
   const data = JSON.parse(readFileSync(await download.path(), 'utf-8')) as { notes: { t: number; colour: string }[] };
   return data.notes;
@@ -1836,7 +1836,7 @@ async function sessionLogFile(page: Page): Promise<LogFile> {
   await sessionLog(page); // folded under the board (A15)
   const [download] = await Promise.all([
     page.waitForEvent('download'),
-    page.getByRole('button', { name: /^Save the session log as JSON/ }).click(),
+    page.getByRole('button', { name: /^Save session/ }).click(),
   ]);
   return JSON.parse(readFileSync(await download.path(), 'utf-8')) as LogFile;
 }

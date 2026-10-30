@@ -75,7 +75,7 @@ export function BoardHeader({
         <Button
           tone="quiet"
           aria-pressed={largeUi}
-          aria-label="Larger controls"
+          aria-label="Aa: larger controls"
           // What Aa does, in words on hover (A14): only screen readers were told.
           title={largeUi ? 'Larger controls: on' : 'Larger controls'}
           onClick={() => onLargeUiChange(!largeUi)}

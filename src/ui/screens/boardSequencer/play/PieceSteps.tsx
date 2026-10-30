@@ -365,7 +365,7 @@ function LoopsStep(p: PieceStepsProps): JSX.Element {
                   </Button>}
                 </>
               )}
-              {oldWays && <Button tone="quiet" onClick={() => p.onDrawLoop(l.slot)} aria-label={`Edit the notes of loop ${l.slot + 1}`} title="See and change this loop's notes">✎ Edit notes</Button>}
+              {oldWays && <Button tone="quiet" onClick={() => p.onDrawLoop(l.slot)} aria-label={`Edit notes, loop ${l.slot + 1}`} title="See and change this loop's notes">✎ Edit notes</Button>}
               {!empty && <Button tone="quiet" onClick={() => p.onClearLoop(l.slot)} aria-label={`Clear loop ${l.slot + 1}`} title="Clear this loop">✕</Button>}
             </li>
           );
@@ -840,7 +840,7 @@ function SceneRow(r: SceneRowProps): JSX.Element {
             tone="secondary"
             // It goes once the rehearsal plays: focus goes to ■ Stop, one press from stopping it.
             onClick={(e) => { r.onRehearse?.(); void focusWhenGone(() => document.getElementById(PLAY_STOP_ID), e.currentTarget, 20_000); }}
-            aria-label={`Rehearse from ${s.name}: play the piece from ${typeof s.at === 'number' ? formatClock(s.at) : ''}`}
+            aria-label={`Rehearse from here, ${s.name}: play the piece from ${typeof s.at === 'number' ? formatClock(s.at) : ''}`}
           >
             ▶ Rehearse from here
           </Button>

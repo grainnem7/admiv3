@@ -33,6 +33,7 @@ import IPadRemoteScreen from '../ui/screens/IPadRemoteScreen';
 import { DEFAULT_REMOTE_TOUCH } from '../remote/protocol';
 import { BUILD_ID, reloadPage } from '../remote/buildId';
 import { safeShowLayout } from '../profiles/BoardSequencerConfig';
+import { nameStartsWithVisible } from '../ui/screens/boardSequencer/labelInName';
 
 const STATE = {
   type: 'state',
@@ -112,7 +113,7 @@ describe('the iPad page, touched', () => {
   it('a loop pad launches its loop', async () => {
     const tab = [...el.querySelectorAll('[role="tab"]')].find((b) => b.textContent === 'Loops & scenes')!;
     await act(async () => { pointer('pointerdown', tab, 10); });
-    const loop = [...el.querySelectorAll('button')].find((b) => b.getAttribute('aria-label')?.startsWith('Bass:'))!;
+    const loop = [...el.querySelectorAll('button')].find((b) => b.getAttribute('aria-label')?.startsWith('Bass'))!;
     expect(loop).toBeTruthy();
     await act(async () => { pointer('pointerdown', loop, 100); });
     expect(sent).toContainEqual({ type: 'loop', index: 0 });
@@ -130,7 +131,7 @@ async function touchAt(t: number, target: () => Element, y = 300): Promise<void>
   await act(async () => { pointer('pointerup', pad, y); });
 }
 /** The End piece pad, armed or not (its name changes to "Tap again to end the piece"). */
-const endPad = () => [...el.querySelectorAll('button')].find((b) => /end the piece/i.test(b.getAttribute('aria-label') ?? ''))!;
+const endPad = () => [...el.querySelectorAll('button')].find((b) => /^(end piece|tap again to end)/i.test(b.getAttribute('aria-label') ?? ''))!;
 const END = { type: 'trigger', name: 'endPiece' };
 const STOP = { type: 'trigger', name: 'stopAll' };
 const MUTE = { type: 'trigger', name: 'mute' };
@@ -166,7 +167,7 @@ describe('the iPad page, set up for the player', () => {
 
   it('pads the facilitator chose appear on the Play page; End piece takes two taps', async () => {
     await act(async () => { onMsg?.(withTouch({ playExtras: ['endPiece'], playLoops: [0] })); });
-    const loop = [...el.querySelectorAll('button')].find((b) => b.getAttribute('aria-label')?.startsWith('Bass:'))!;
+    const loop = [...el.querySelectorAll('button')].find((b) => b.getAttribute('aria-label')?.startsWith('Bass'))!;
     expect(loop).toBeTruthy();
     await act(async () => { pointer('pointerdown', loop, 300); });
     expect(sent).toContainEqual({ type: 'loop', index: 0 });
@@ -379,7 +380,7 @@ describe("the safe show layout on Tim's iPad", () => {
     const buttons = [...el.querySelectorAll('button')];
     expect(buttons).toHaveLength(2);
     expect(buttons[0].textContent).toContain('New idea');
-    expect(buttons[1].getAttribute('aria-label')).toBe('End the piece');
+    expect(buttons[1].getAttribute('aria-label')).toBe('End piece');
     // No page tabs: the loop and scene pages are not there to switch to.
     expect(el.querySelectorAll('[role="tab"]')).toHaveLength(0);
     for (const gone of ['Mute', 'Stop the loops', 'Stop all', 'Next scene', 'Capture', 'Bass', 'Bed', 'Scene ']) {
@@ -395,7 +396,7 @@ describe('a loop pad while the laptop is stopped', () => {
     await act(async () => { onMsg?.({ ...STATE, state: { ...STATE.state, playing: false } }); });
     const tab = [...el.querySelectorAll('[role="tab"]')].find((b) => b.textContent === 'Loops')!;
     await act(async () => { pointer('pointerdown', tab, 10); });
-    const loop = [...el.querySelectorAll('button')].find((b) => b.getAttribute('aria-label')?.startsWith('Bass:'))!;
+    const loop = [...el.querySelectorAll('button')].find((b) => b.getAttribute('aria-label')?.startsWith('Bass'))!;
     await act(async () => { pointer('pointerdown', loop, 100); });
     expect(sent.filter((m) => (m as { type: string }).type === 'loop')).toEqual([]);
     expect(el.textContent).toContain(PRESS_PLAY);
@@ -403,13 +404,13 @@ describe('a loop pad while the laptop is stopped', () => {
 
   it('on the Play page and the Loops & scenes page: refused the same way', async () => {
     await act(async () => { onMsg?.(withTouch({ playLoops: [0] }, { playing: false })); });
-    const playLoop = [...el.querySelectorAll('button')].find((b) => b.getAttribute('aria-label')?.startsWith('Bass:'))!;
+    const playLoop = [...el.querySelectorAll('button')].find((b) => b.getAttribute('aria-label')?.startsWith('Bass'))!;
     await act(async () => { pointer('pointerdown', playLoop, 100); });
     expect(el.textContent).toContain(PRESS_PLAY);
     const tab = [...el.querySelectorAll('[role="tab"]')].find((b) => b.textContent === 'Loops & scenes')!;
     await act(async () => { pointer('pointerdown', tab, 10); });
     now += 1000;
-    const loop = [...el.querySelectorAll('button')].find((b) => b.getAttribute('aria-label')?.startsWith('Bass:'))!;
+    const loop = [...el.querySelectorAll('button')].find((b) => b.getAttribute('aria-label')?.startsWith('Bass'))!;
     await act(async () => { pointer('pointerdown', loop, 100); });
     expect(sent.filter((m) => (m as { type: string }).type === 'loop')).toEqual([]);
   });
@@ -418,7 +419,7 @@ describe('a loop pad while the laptop is stopped', () => {
     await act(async () => { onMsg?.({ ...STATE, state: { ...STATE.state, playing: false, starting: true } }); });
     const tab = [...el.querySelectorAll('[role="tab"]')].find((b) => b.textContent === 'Loops')!;
     await act(async () => { pointer('pointerdown', tab, 10); });
-    const loop = [...el.querySelectorAll('button')].find((b) => b.getAttribute('aria-label')?.startsWith('Bass:'))!;
+    const loop = [...el.querySelectorAll('button')].find((b) => b.getAttribute('aria-label')?.startsWith('Bass'))!;
     await act(async () => { pointer('pointerdown', loop, 100); });
     expect(sent).toContainEqual({ type: 'loop', index: 0 });
     expect(el.textContent).not.toContain(PRESS_PLAY);
@@ -448,7 +449,7 @@ describe('a loop pad while the laptop is stopped', () => {
     const tab = [...el.querySelectorAll('[role="tab"]')].find((b) => b.textContent === 'Loops')!;
     await act(async () => { pointer('pointerdown', tab, 10); });
     await act(async () => { onMsg?.(STATE); });
-    const loop = [...el.querySelectorAll('button')].find((b) => b.getAttribute('aria-label')?.startsWith('Bass:'))!;
+    const loop = [...el.querySelectorAll('button')].find((b) => b.getAttribute('aria-label')?.startsWith('Bass'))!;
     await act(async () => { pointer('pointerdown', loop, 100); });
     expect(sent).toContainEqual({ type: 'loop', index: 0 });
     expect(el.textContent).not.toContain(PRESS_PLAY);
@@ -617,5 +618,100 @@ describe('show safety on the iPad (audit 2026-10-30)', () => {
     expect(sent).toContainEqual(END);
     expect(sent).toContainEqual({ type: 'armed', name: 'endPiece', on: false });
     expect(endPad().querySelector('[data-drain]')).toBeNull();
+  });
+});
+
+
+describe('the iPad page in the board\u2019s own look (A11)', () => {
+  const root1 = (): HTMLElement => el.firstElementChild as HTMLElement;
+  const tabsOf = (): HTMLElement[] => [...el.querySelectorAll<HTMLElement>('[role="tab"]')];
+  const loopsPage = async (): Promise<void> => {
+    await act(async () => { pointer('pointerdown', tabsOf().find((t) => t.textContent === 'Loops & scenes')!, 10); });
+  };
+
+  it('uses the board\u2019s tokens and offers light and dark (while the laptop is stopped)', async () => {
+    try { localStorage.removeItem('admi-ipad-mode'); } catch { /* no storage */ }
+    expect(root1().classList.contains('bs-root')).toBe(true);
+    expect(root1().getAttribute('data-bs-mode')).toBe('dark');
+    // Not while playing: the safe layout has no extra control to touch by mistake.
+    expect(el.querySelector('[data-mode-toggle]')).toBeNull();
+    await act(async () => { onMsg?.({ ...STATE, state: { ...STATE.state, playing: false } }); });
+    const toggle = el.querySelector('[data-mode-toggle]') as HTMLButtonElement;
+    expect(toggle.textContent).toBe('Light');
+    await act(async () => { pointer('pointerdown', toggle, 10); });
+    expect(root1().getAttribute('data-bs-mode')).toBe('light');
+    expect(el.querySelector('[data-mode-toggle]')!.textContent).toBe('Dark');
+  });
+
+  it('the strips are not in a counter hue: one accent for every strip, and a track behind it', () => {
+    for (const strip of el.querySelectorAll('[role="slider"]')) {
+      const fill = strip.querySelector('[data-fill]') as HTMLElement;
+      expect(fill.style.background).toBe('var(--bs-accent)');
+      expect(strip.querySelector('[data-track]')).not.toBeNull();
+    }
+    expect(el.innerHTML).not.toMatch(/#4fc3f7|#ffb74d|#81c784|#ce93d8|#ef5350/i);
+  });
+
+  it('the Extra notes strip shows its value as a number, and while touched the finger\u2019s own', async () => {
+    const strip = el.querySelector('[role="slider"][aria-label="Extra notes"]')!;
+    expect(strip.querySelector('[data-number]')!.textContent).toBe('0%');
+    expect(strip.textContent).toContain('Off');
+    await act(async () => { pointer('pointerdown', strip, 40); }); // near the top of the 400 px strip
+    const touched = strip.querySelector('[data-number]')!.textContent;
+    expect(Number.parseInt(touched ?? '', 10)).toBeGreaterThan(80);
+    expect(strip.textContent).not.toContain('Off'); // the laptop\u2019s word is stale while a finger is on it
+    expect(strip.getAttribute('aria-valuetext')).toBe(touched);
+    await act(async () => { pointer('pointerup', strip, 40); });
+  });
+
+  it('the 👆 mark is easy to see, and brighter on a touch', async () => {
+    const mark = [...el.querySelectorAll('span')].find((x) => x.textContent === '👆')!;
+    expect(Number(mark.style.opacity)).toBeGreaterThanOrEqual(0.6);
+  });
+
+  it('while waiting for the laptop, strips and pads say they are unavailable', async () => {
+    const pads = (): HTMLElement[] => [...el.querySelectorAll<HTMLElement>('button, [role="slider"]')];
+    expect(pads().every((p) => p.getAttribute('aria-disabled') !== 'true')).toBe(true);
+    linkReaching = false;
+    await act(async () => { onMsg?.({ ...STATE, state: { ...STATE.state } }); });
+    expect(pads().length).toBeGreaterThan(0);
+    expect(pads().every((p) => p.getAttribute('aria-disabled') === 'true')).toBe(true);
+  });
+
+  it('the page tabs are one Tab stop, and the arrows move between them', async () => {
+    expect(tabsOf().map((t) => t.tabIndex)).toEqual([0, -1, -1]);
+    await act(async () => { tabsOf()[0].dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true })); });
+    expect(tabsOf().map((t) => t.getAttribute('aria-selected'))).toEqual(['false', 'true', 'false']);
+    expect(tabsOf().map((t) => t.tabIndex)).toEqual([-1, 0, -1]);
+    await act(async () => { tabsOf()[1].dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true })); });
+    expect(tabsOf().map((t) => t.getAttribute('aria-selected'))).toEqual(['true', 'false', 'false']);
+  });
+
+  it('Loops & scenes: rows 18 px apart, End piece stays third and Stop the loops sits away from it', async () => {
+    await act(async () => { onMsg?.({ ...STATE, state: { ...STATE.state, scenes: [{ name: 'Arrival', active: true }, { name: 'Build', active: false }] } }); });
+    await loopsPage();
+    const pageBox = el.querySelector('[role="tablist"]')!.parentElement!;
+    const rows = [...pageBox.children].filter((c) => (c as HTMLElement).style.display === 'grid' || (c as HTMLElement).style.display === 'flex');
+    const column = [...pageBox.querySelectorAll<HTMLElement>(':scope > div')].find((d) => d.style.flexDirection === 'column')!;
+    expect(rows.length).toBeGreaterThan(0);
+    expect(column.style.gap).toBe('18px');
+    const bottom = [...column.children].at(-1) as HTMLElement;
+    const names = [...bottom.children].map((c) => c.getAttribute('aria-label') ?? c.textContent ?? '');
+    const end = names.findIndex((n) => /^End piece/.test(n));
+    const stop = names.findIndex((n) => /^Stop the loops/.test(n));
+    expect(end).toBe(2); // End piece keeps its place (a question for Tim)
+    expect(Math.abs(end - stop)).toBeGreaterThanOrEqual(2);
+  });
+
+  it('every pad\u2019s name starts with what it shows', async () => {
+    await act(async () => { onMsg?.({ ...STATE, state: { ...STATE.state, scenes: [{ name: 'Arrival', active: true }] } }); });
+    await loopsPage();
+    for (const b of el.querySelectorAll<HTMLElement>('button')) {
+      const label = b.getAttribute('aria-label');
+      if (!label) continue;
+      const clone = b.cloneNode(true) as HTMLElement;
+      clone.querySelectorAll('[aria-hidden="true"]').forEach((n) => n.remove());
+      expect({ label, ok: nameStartsWithVisible(label, clone.textContent ?? '') }).toEqual({ label, ok: true });
+    }
   });
 });

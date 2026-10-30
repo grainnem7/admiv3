@@ -120,7 +120,7 @@ export async function sessionLog(page: Page): Promise<void> {
 /** How many notes the session log has counted (the "Save session (N notes)" button). */
 export async function notesPlayed(page: Page): Promise<number> {
   await sessionLog(page);
-  const text = await page.getByRole('button', { name: /Save the session log/ }).textContent();
+  const text = await page.getByRole('button', { name: /Save session/ }).textContent();
   return Number(/\((\d+) notes?\)/.exec(text ?? '')?.[1] ?? 0);
 }
 

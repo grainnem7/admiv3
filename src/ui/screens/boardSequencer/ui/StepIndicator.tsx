@@ -40,7 +40,7 @@ export function StepIndicator<T extends string>({ steps, onOpen, canOpen }: Step
             <button
               type="button"
               aria-current={s.state === 'current' ? 'step' : undefined}
-              aria-label={`Step ${i + 1} of ${steps.length}: ${s.label}, ${mark.word}`}
+              aria-label={`${i + 1}. ${s.label}, ${mark.word}: step ${i + 1} of ${steps.length}`}
               disabled={!open}
               onClick={() => onOpen(s.id)}
               style={{

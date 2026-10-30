@@ -5917,12 +5917,12 @@ export default function BoardSequencerScreen() {
             tone="quiet"
             onClick={() => saveSession('json')}
             reason={logCounts.notes === 0 ? 'Nothing played yet this session.' : null}
-            aria-label={`Save the session log as JSON: ${logCounts.notes} notes, ${logCounts.placed} yours, ${logCounts.added} added`}
+            aria-label={`Save session (${logCounts.notes} notes) as JSON: ${logCounts.placed} yours, ${logCounts.added} added`}
           >
             {`Save session (${logCounts.notes} notes)`}
           </Button>
           {/* Its reason is Save session's, said once beside it. */}
-          <Button tone="quiet" onClick={() => saveSession('csv')} disabled={logCounts.notes === 0} aria-label="Session log as CSV">
+          <Button tone="quiet" onClick={() => saveSession('csv')} disabled={logCounts.notes === 0} aria-label="CSV: save the session log as a spreadsheet file">
             CSV
           </Button>
           {takes.length > 1 && (

@@ -69,7 +69,7 @@ test('the loop edit window shows the board beside the loop, and copies one into 
   await page.getByRole('button', { name: 'Clear the board' }).click();
   await place(page, [[2, 2], [6, 4]]);
 
-  await page.getByRole('button', { name: 'Edit the notes of loop 1' }).click();
+  await page.getByRole('button', { name: 'Edit notes, loop 1' }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByRole('heading', { name: /The board now · 2 counters/ })).toBeVisible();
   await expect(dialog.getByRole('heading', { name: 'Loop 1 as saved' })).toBeVisible();

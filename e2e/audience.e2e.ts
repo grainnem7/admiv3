@@ -139,7 +139,7 @@ async function lastTiming(page: Page): Promise<Timing> {
   await sessionLog(page); // folded under the board (A15)
   const [download] = await Promise.all([
     page.waitForEvent('download'),
-    page.getByRole('button', { name: /^Save the session log as JSON/ }).click(),
+    page.getByRole('button', { name: /^Save session/ }).click(),
   ]);
   const log = JSON.parse(readFileSync(await download.path(), 'utf-8')) as { events: ({ kind: string } & Partial<Timing>)[] };
   const t = log.events.filter((e) => e.kind === 'timing').at(-1);

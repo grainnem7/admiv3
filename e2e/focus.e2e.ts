@@ -78,7 +78,7 @@ test('the piece: Make my plan, Delete scene, Undo and Rehearse from here each le
   await page.keyboard.press('Enter');
   await focusIsOn(page.getByRole('button', { name: /^1:30 · Build/ }));
   // Rehearse from here: onto ■ Stop once the rehearsal plays, one press from stopping it.
-  await enter(page, page.getByRole('button', { name: /^Rehearse from Home/ }));
+  await enter(page, page.getByRole('button', { name: /^Rehearse from here, Home/ }));
   await focusIsOn(page.getByRole('button', { name: '■ Stop', exact: true }), 20_000);
   expect(pageErrors(page)).toEqual([]);
 });
