@@ -78,7 +78,7 @@ function WelcomeScreen() {
   );
 
   return (
-    <div className="welcome-screen" role="main">
+    <div className="welcome-screen">
       {/* Logo */}
       <div className="welcome-hero">
         <div className="welcome-logo">A</div>

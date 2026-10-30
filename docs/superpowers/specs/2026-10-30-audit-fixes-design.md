@@ -231,7 +231,11 @@ Batches 1–4 are built and committed:
 | 3 | 2b8e97d |
 | 4 | 9d6c0be |
 
-Batch 5 is still to build.
+Batch 5 is built on the branch `audit-batch-5` (not merged), one commit per item or pair of items.
+
+Left for later (my call, A5): a venue brightness setting for the audience screen. Only the fixed
+numbers moved (the before level to 0.4, in `DIM_PRESENCE` in `src/audience/light.ts`); a dial the
+owner can turn at the venue is not built.
 
 Notes for whoever builds batch 5:
 - Batch 4's word list is in `src/ui/screens/boardSequencer/words.ts`. Use it for any new wording.

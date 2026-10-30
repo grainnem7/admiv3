@@ -16,17 +16,19 @@ export interface SwatchChipProps {
  * two counters apart.
  */
 export function SwatchChip({ swatch, palette, surface, number, size = 28 }: SwatchChipProps): JSX.Element {
+  // A numbered chip is big enough for a 14 px digit (A10: nothing under 14 px).
+  const px = number === undefined ? size : Math.max(size, 26);
   const { inner, outer } = swatchRingFor(swatch, surface ?? palette.raised, palette);
   return (
     <span
       aria-hidden="true"
       style={{
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        width: size, height: size, borderRadius: '50%', flexShrink: 0,
+        width: px, height: px, borderRadius: '50%', flexShrink: 0,
         background: swatch,
         boxShadow: `0 0 0 2px ${inner}, 0 0 0 4px ${outer}`,
         color: inner,
-        fontSize: Math.round(size * 0.45),
+        fontSize: Math.max(14, Math.round(px * 0.45)),
         fontWeight: 700,
       }}
     >

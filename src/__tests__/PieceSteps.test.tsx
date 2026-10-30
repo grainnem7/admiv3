@@ -399,7 +399,7 @@ describe('focus never drops to the page (T1-04, T4-09)', () => {
     expect(document.activeElement).toBe(button('Undo'));
     render({ ...p, scenes: [scene('Arrival', 0), scene('Open', 210)], deletedSceneName: null });
     await frames();
-    expect(document.activeElement).toBe(host.querySelector('h3#piece-scenes'));
+    expect(document.activeElement).toBe(host.querySelector('h2#piece-scenes'));
   });
 
   it('deleting the last scene (no Undo there): focus goes to the Scenes heading', async () => {
@@ -409,7 +409,7 @@ describe('focus never drops to the page (T1-04, T4-09)', () => {
     pressWithKeyboard(button('Delete scene'));
     render({ ...p, scenes: [], deletedSceneName: 'Arrival' });
     await frames();
-    expect(document.activeElement).toBe(host.querySelector('h3#piece-scenes'));
+    expect(document.activeElement).toBe(host.querySelector('h2#piece-scenes'));
   });
 
   it('Rehearse from here: focus goes to ▶ Play / ■ Stop once the rehearsal plays', async () => {
