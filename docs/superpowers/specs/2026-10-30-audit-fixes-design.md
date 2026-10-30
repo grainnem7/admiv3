@@ -22,7 +22,7 @@ it keeps today's behaviour:
 
 ## Binding everywhere
 - Plain words; the owner is a researcher-performer, not a programmer.
-- Nothing may slow the music or make the keeping-time meter (src/songs/keepingTime.ts) worse.
+- No change may add processing load that makes the sound lag, stutter or fall behind the beat, or make the keeping-time meter (src/songs/keepingTime.ts) worse. (This is about performance only: the hat and the Speed settings still speed the music up and slow it down as they do now.)
 - Tests first, for every behaviour change.
 - When a label is renamed, update the e2e tests and Help to match. Don't loosen the timing-sensitive tests.
 - The board's colours (counters) are reserved for counters. No UI element may use a counter hue as its meaning colour.
