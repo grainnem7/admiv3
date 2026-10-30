@@ -13,7 +13,7 @@ afterEach(() => { act(() => root.unmount()); host.remove(); });
 /** One entry of the Help: its words, found by its title. */
 function entry(title: string): string {
   act(() => root.render(<BoardHelp />));
-  const t = [...host.querySelectorAll('span')].find((s) => s.textContent === title);
+  const t = [...host.querySelectorAll('h3')].find((s) => s.textContent === title);
   return t?.nextElementSibling?.textContent ?? '';
 }
 const all = (): string => { act(() => root.render(<BoardHelp />)); return host.textContent ?? ''; };
@@ -85,5 +85,13 @@ describe('Help says how Show keeps the performance safe (audit 2026-10-30, batch
   it('Keyboard: Esc leaves Show once out of full screen; focus goes to the Now / Next strip, never onto Stop', () => {
     expect(entry('Keyboard')).toContain('Leave Show (or Esc, once out of full screen) goes back.');
     expect(entry('Keyboard')).toContain('Start the piece to the Now / Next strip (never onto Stop)');
+  });
+});
+
+describe('Help says how to change the times and Space (A7)', () => {
+  it('Time to press again and Space plays and stops live in Sound → Advanced → Pressing', () => {
+    const keys = entry('Keyboard');
+    expect(keys).toContain('Sound → Advanced → Pressing sets Time to press again (3, 4, 6 or 10 seconds, 4 to start with)');
+    expect(keys).toContain('"Space plays and stops"');
   });
 });

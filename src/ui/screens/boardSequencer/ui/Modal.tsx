@@ -84,10 +84,16 @@ export interface ModalProps {
   onClose(): void;
   children: ReactNode;
   maxWidth?: number;
+  /**
+   * 'scroll' (default): the panel scrolls as a whole. 'free': the panel does not scroll and
+   * lays out its own children, so a long text can scroll inside it with a heading and Close
+   * that stay put (Help, A8).
+   */
+  layout?: 'scroll' | 'free';
 }
 
 /** A plain modal panel over a dimmed page, with the focus behaviour above. */
-export function Modal({ label, onClose, children, maxWidth = 560 }: ModalProps): JSX.Element {
+export function Modal({ label, onClose, children, maxWidth = 560, layout = 'scroll' }: ModalProps): JSX.Element {
   const panel = useRef<HTMLDivElement | null>(null);
   const onKeyDown = useModalFocus(panel, onClose);
   // Focus moves in on open, even when nothing inside asks for it: Help's only button is
@@ -112,9 +118,10 @@ export function Modal({ label, onClose, children, maxWidth = 560 }: ModalProps):
         aria-label={label}
         tabIndex={-1}
         style={{
-          background: 'var(--bs-raised)', color: 'var(--bs-fg)', padding: 20,
-          borderRadius: 'var(--bs-radius-lg)', maxWidth, maxHeight: '80vh', overflowY: 'auto',
-          display: 'flex', flexDirection: 'column', gap: 12, boxShadow: 'var(--bs-shadow)',
+          background: 'var(--bs-raised)', color: 'var(--bs-fg)', padding: layout === 'free' ? 0 : 20,
+          borderRadius: 'var(--bs-radius-lg)', maxWidth, maxHeight: layout === 'free' ? '88vh' : '80vh',
+          ...(layout === 'free' ? { width: `min(${maxWidth}px, calc(100vw - 24px))`, overflow: 'hidden' } : { overflowY: 'auto' as const }),
+          display: 'flex', flexDirection: 'column', gap: layout === 'free' ? 0 : 12, boxShadow: 'var(--bs-shadow)',
         }}
       >
         {children}

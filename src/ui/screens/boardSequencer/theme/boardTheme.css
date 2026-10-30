@@ -217,3 +217,45 @@
   vertical-align: middle;
   flex-shrink: 0;
 }
+
+/*
+ * Help (A8): the heading and Close stay put; the list of sections and the text scroll on their
+ * own. Side by side when there is room, one above the other when there is not.
+ */
+.bs-help-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--bs-border);
+  flex: none;
+}
+.bs-help-body {
+  display: grid;
+  grid-template-columns: minmax(180px, 260px) 1fr;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.bs-help-nav {
+  overflow-y: auto;
+  min-height: 0;
+  padding: 12px 8px 12px 20px;
+  border-right: 1px solid var(--bs-border);
+}
+.bs-help-nav a {
+  display: block;
+  padding: 8px 6px;
+  color: var(--bs-fg);
+  font-size: 14px;
+  line-height: 1.3;
+}
+.bs-help-text {
+  overflow-y: auto;
+  min-height: 0;
+  padding: 16px 20px 24px;
+}
+@media (max-width: 640px) {
+  .bs-help-body { grid-template-columns: 1fr; grid-template-rows: minmax(0, 30%) minmax(0, 1fr); }
+  .bs-help-nav { border-right: none; border-bottom: 1px solid var(--bs-border); padding-left: 12px; }
+}

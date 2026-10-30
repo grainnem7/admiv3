@@ -1,7 +1,8 @@
 /**
  * BoardHelp — the "How to play" reference behind the ? button, on both Set up and Play.
  * Facilitator-facing: it describes every feature, whether or not it is switched on.
- * Presentational only (no props, no state, no audio).
+ * Presentational only (no props, no state, no audio). The dialog around it, with its heading,
+ * its list of sections and its Close, is boardSequencer/components/HelpDialog.
  */
 
 interface HelpEntry {
@@ -324,19 +325,28 @@ const HELP: HelpEntry[] = [
       + 'moves to what takes its place: in Show, Start the piece to the Now / Next strip (never '
       + 'onto Stop) and Stop back to Start the piece; Done and Leave back to New loop. '
       + 'Shift+S: Simplify (the player and the first loop only), and Back to full, in Play and Show '
-      + 'while the board plays.',
+      + 'while the board plays. Sound → Advanced → Pressing sets Time to press again (3, 4, 6 or 10 '
+      + 'seconds, 4 to start with) for the second press of Stop, Exit and Set up, and Undo and the '
+      + 'notices stay up longer to match it. It also has "Space plays and stops": switch it off '
+      + 'when a switch box sends Space; Shift+S still works.',
   },
 ];
 
+/** The sections' titles, in order: the dialog's list of links reads them. */
+export const HELP_SECTION_TITLES: readonly string[] = HELP.map((e) => e.title);
+
+/** The id of a section's heading (the dialog's links point at it). */
+export const helpSectionId = (index: number): string => `help-section-${index + 1}`;
+
 export default function BoardHelp(): React.JSX.Element {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <h2 style={{ margin: 0, fontSize: 18 }}>How to play</h2>
-      {HELP.map((e) => (
-        <div key={e.title} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <span style={{ fontSize: 13, fontWeight: 600 }}>{e.title}</span>
-          <span style={{ fontSize: 12, color: 'var(--bs-fg2)', lineHeight: 1.45 }}>{e.body}</span>
-        </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {HELP.map((e, i) => (
+        <section key={e.title} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {/* A heading you can move focus to: a link in the list of sections lands here. */}
+          <h3 id={helpSectionId(i)} tabIndex={-1} style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>{e.title}</h3>
+          <p style={{ margin: 0, fontSize: 14, color: 'var(--bs-fg2)', lineHeight: 1.5 }}>{e.body}</p>
+        </section>
       ))}
     </div>
   );
