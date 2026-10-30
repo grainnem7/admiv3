@@ -156,7 +156,7 @@ export function SoundTab(p: SoundTabProps): JSX.Element {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18, paddingTop: 10 }}>
       {/* ---- the whole instrument ---- */}
       <section aria-labelledby="sound-feel" style={SECTION}>
-        <h3 id="sound-feel" style={HEADING}>Overall feel</h3>
+        <h2 id="sound-feel" style={HEADING}>Overall feel</h2>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>World</span>
           <SegmentedControl<SoundWorldChoice>
@@ -214,7 +214,7 @@ export function SoundTab(p: SoundTabProps): JSX.Element {
 
       {/* ---- each colour ---- */}
       <section aria-labelledby="sound-colours" style={SECTION}>
-        <h3 id="sound-colours" style={HEADING}>Your colours</h3>
+        <h2 id="sound-colours" style={HEADING}>Your colours</h2>
         {config.channels.length === 0
           ? <span style={NOTE}>No colours yet. Set up: Colours.</span>
           : (
@@ -237,7 +237,7 @@ export function SoundTab(p: SoundTabProps): JSX.Element {
 
       {/* ---- what the instrument adds ---- */}
       <section aria-labelledby="sound-helpers" style={SECTION}>
-        <h3 id="sound-helpers" style={HEADING}>Helpers</h3>
+        <h2 id="sound-helpers" style={HEADING}>Helpers</h2>
         <span style={NOTE}>Each adds to your music. On the board: ● your counters · ◌ extra notes · ▬ the band.</span>
 
         <HelperFold id="band" title="Band" summary={BAND_LEVEL_WORDS[config.band]}>

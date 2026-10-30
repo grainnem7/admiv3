@@ -92,9 +92,9 @@ export function NewLoopPanel(p: NewLoopPanelProps): JSX.Element {
   const now = p.kept ? 'kept' : waiting ? 'silent' : 'not kept yet';
   return (
     <section aria-labelledby="new-loop" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <h3 id="new-loop" ref={headingRef} tabIndex={-1} style={{ margin: 0, fontSize: 20, fontWeight: 800 }}>
+      <h2 id="new-loop" ref={headingRef} tabIndex={-1} style={{ margin: 0, fontSize: 20, fontWeight: 800 }}>
         {`New loop${p.loopNumber === null ? '' : ` ${p.loopNumber}`} · ${now}`}
-      </h3>
+      </h2>
       {p.stopped && (
         // Stopped (Stop pressed, or the board couldn't start): say so, and ▶ Play is right
         // here. Finding ▶ Play took 39 key presses (R2-T1-01).

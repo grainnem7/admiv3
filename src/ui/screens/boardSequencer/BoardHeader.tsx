@@ -55,6 +55,9 @@ export function BoardHeader({
             than spilling past the edge (A3: nothing scrolls sideways at 320 px). */}
         <div style={{ flex: '1 1 240px', minWidth: 0 }}>{right}</div>
         {playerName && onSwitchPlayer && (
+          // The button keeps a line below it for its reason; taking that line back out of the
+          // row's height keeps the button on the same line as ☀ / Aa / ? (A18).
+          <span data-player-slot style={{ display: 'inline-flex', marginBottom: -16 }}>
           <Button
             tone="secondary"
             onClick={onSwitchPlayer}
@@ -64,6 +67,7 @@ export function BoardHeader({
           >
             {`Player: ${playerName}`}
           </Button>
+          </span>
         )}
         <Button
           tone="quiet"

@@ -281,7 +281,7 @@ function LoopsStep(p: PieceStepsProps): JSX.Element {
   }, [making]);
   return (
     <section aria-labelledby="piece-loops" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <h3 id="piece-loops" style={heading}>1 · Loops</h3>
+      <h2 id="piece-loops" style={heading}>1 · Loops</h2>
       {p.newLoop ?? (
         <div style={card}>
           <p style={{ margin: 0 }}>A loop is something the player makes with counters, from silence, that then plays by itself.</p>
@@ -458,7 +458,7 @@ function ScenesStep(p: PieceStepsProps): JSX.Element {
     .find((b) => id === undefined || b.dataset.sceneRow === id) ?? null;
   return (
     <section ref={sectionRef} aria-labelledby="piece-scenes" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <h3 id="piece-scenes" ref={headingRef} tabIndex={-1} style={heading}>2 · Scenes</h3>
+      <h2 id="piece-scenes" ref={headingRef} tabIndex={-1} style={heading}>2 · Scenes</h2>
       <div style={card}>
         <p style={{ margin: 0 }}>A scene says which loops play and how it sounds. The clock brings each scene in at its time while the player plays on top.</p>
         <p style={note}>Optional: without scenes, the piece doesn&rsquo;t change by itself.</p>
@@ -641,7 +641,7 @@ function EndingStep(p: PieceStepsProps): JSX.Element {
   const perf = p.performance;
   return (
     <section aria-labelledby="piece-ending" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <h3 id="piece-ending" style={heading}>3 · Ending &amp; check</h3>
+      <h2 id="piece-ending" style={heading}>3 · Ending &amp; check</h2>
       <div style={card}>
         <p style={{ margin: 0, fontWeight: 700 }}>{`${formatClock(p.lengthSec)} · ${describeEnding(perf)} · ${perf.ending === 'cue' ? 'you press End' : 'ends at the time'}`}</p>
         <p style={note}>The clock counts down from the length, with cues at 1 minute, 30 and 10 seconds. The piece never runs over: if End hasn&rsquo;t been pressed, the ending starts by itself in time to finish at {formatClock(p.lengthSec)}.</p>
