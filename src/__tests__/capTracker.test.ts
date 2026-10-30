@@ -351,3 +351,54 @@ describe('the hat moves the speed around the scene’s speed', () => {
     expect(withCounterValues({ tempo: 200 }, {})).toEqual({ tempo: 200 });
   });
 });
+
+/**
+ * A12: the hat leaves the picture and comes back somewhere else, still. One direction at a
+ * time only follows a MOVING head, so the controls used to stay at the old place until the
+ * head moved again (Speed held at 188 for 3.5 s). Found again after a real loss, they glide
+ * to where the hat now is.
+ */
+describe('the hat lost and found again', () => {
+  const s = settings({ xRole: 'tempo', yRole: 'volume', oneAtATime: true });
+  const run = (st: ReturnType<typeof initialCapState>, at: { x: number; y: number } | null, frames: number) => {
+    let r = stepCap(st, at ? { ...at, area: 0.01 } : null, s, ranges, 33);
+    for (let i = 1; i < frames; i++) r = stepCap(r.state, at ? { ...at, area: 0.01 } : null, s, ranges, 33);
+    return r;
+  };
+
+  it('found again elsewhere, still: both controls glide to where it now is, without waiting for a movement', () => {
+    let r = run(initialCapState(), { x: 0.2, y: 0.7 }, 60);
+    expect(r.values.tempo!).toBeCloseTo(70 + 0.2 * 60, 0);
+    r = run(r.state, null, 30); // about a second out of sight: the values hold
+    expect(r.values.tempo!).toBeCloseTo(70 + 0.2 * 60, 0);
+    // Back on the far right, lower down, and still.
+    r = run(r.state, { x: 0.8, y: 0.4 }, 1);
+    expect(r.values.tempo!).toBeLessThan(90); // a glide, not a jump
+    r = run(r.state, { x: 0.8, y: 0.4 }, 90);
+    expect(r.values.tempo!).toBeCloseTo(70 + 0.8 * 60, 0);
+    expect(r.values.volume!).toBeCloseTo(0.2 + 0.8 * 0.6, 1); // up the picture is up the control
+  });
+
+  it('a dropout of a frame or two is not "lost": nothing changes for it', () => {
+    let r = run(initialCapState(), { x: 0.2, y: 0.5 }, 60);
+    r = run(r.state, null, 3);
+    r = run(r.state, { x: 0.2, y: 0.5 }, 60);
+    expect(r.values.tempo!).toBeCloseTo(70 + 0.2 * 60, 0);
+  });
+
+  it('a value the iPad set is kept when the hat is found again, until the head really moves', () => {
+    let r = run(initialCapState(), { x: 0.2, y: 0.5 }, 60);
+    r = run(r.state, null, 30);
+    const st = handOverAxis(r.state, 'x', 1);
+    r = run(st, { x: 0.8, y: 0.5 }, 60);
+    expect(r.values.tempo).toBe(130);
+  });
+
+  it('found again while the cap is holding still for the board: it still holds', () => {
+    let r = run(initialCapState(), { x: 0.2, y: 0.5 }, 60);
+    r = run(r.state, null, 30);
+    let st = r.state;
+    for (let i = 0; i < 60; i++) { r = stepCap(st, { x: 0.8, y: 0.5, area: 0.01 }, s, ranges, 33, true); st = r.state; }
+    expect(r.values.tempo!).toBeCloseTo(70 + 0.2 * 60, 0);
+  });
+});

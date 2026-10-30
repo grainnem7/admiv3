@@ -339,6 +339,11 @@ export const CAP_REST_MIN_MS = 1000;
 export const CAP_REST_MAX_MS = 15000;
 /** After a pause, the head must be still this long before the cap follows it again. */
 export const CAP_SETTLE_MS = 300;
+/**
+ * Out of sight at least this long, then seen again, counts as found again: the controls glide
+ * to where it now is. Shorter is a dropped frame or two, and changes nothing.
+ */
+export const CAP_REFOUND_MS = 500;
 /** How much of the cap's recent past is kept, for sliding back. */
 const HISTORY_MS = CAP_REWIND_MAX_MS + 100;
 
@@ -559,6 +564,10 @@ export function stepCap(
   // cap waited, then stopped, would otherwise be left behind for good.
   const pickUp = settling && stillMs >= CAP_SETTLE_MS;
   if (pickUp) settling = false;
+  // Found again after being lost: wherever it is now is where the controls glide to, still
+  // or not (one direction at a time would otherwise wait for the head to move). A value
+  // another control (the iPad) set still waits for a real move of the head.
+  const refound = sighting !== null && st.lostMs >= CAP_REFOUND_MS;
   const hold = paused || settling;
   let fromX = st.x;
   let fromY = st.y;
@@ -566,8 +575,8 @@ export function stepCap(
     const back = positionAt(st.history, t - s.rewindMs);
     if (back) { fromX = rewindAxis(st.x, back.x); fromY = rewindAxis(st.y, back.y); }
   }
-  const x = stepAxis(fromX, rawX, s, dtMs, (allowX || pickUp) && !hold, moving || pickUp);
-  const y = stepAxis(fromY, rawY, s, dtMs, (allowY || pickUp) && !hold, moving || pickUp);
+  const x = stepAxis(fromX, rawX, s, dtMs, (allowX || pickUp || refound) && !hold, moving || pickUp);
+  const y = stepAxis(fromY, rawY, s, dtMs, (allowY || pickUp || refound) && !hold, moving || pickUp);
   const history = st.history.filter((h) => h.t >= t - HISTORY_MS);
   history.push({ t, x: x.pos, y: y.pos });
   const values: Partial<Record<FaderRole, number>> = {};

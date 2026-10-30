@@ -104,6 +104,20 @@ function inThenOutVideo(): string {
   ));
 }
 
+/**
+ * For the hat found again (A12): the red disc in the middle for 2 s, gliding left, still there,
+ * then out of shot for 4 s, then back on the right and still for 3 s, and round again.
+ */
+function lostThenRightVideo(): string {
+  const W = 160; const H = 120; const fps = 15;
+  const red: RGB = [200, 30, 40];
+  return y4m('lost-right.y4m', W, H, fps, 12 * fps, (f, x, y) => {
+    const s = f / fps;
+    const cx = s < 2 ? 0.5 : s < 3.5 ? 0.5 - (0.2 * (s - 2)) / 1.5 : s < 5 ? 0.3 : s < 9 ? null : 0.8;
+    return cx !== null && Math.hypot(x / W - cx, (y / H - 0.4) * (H / W)) < 0.08 ? red : WALL;
+  });
+}
+
 const video = capVideo();
 const fakeCamera = (file: string): string[] =>
   ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream', `--use-file-for-fake-video-capture=${file}`];
@@ -116,11 +130,13 @@ test('a red cap seen by a camera moves the speed with it', async ({ page }) => {
   await page.getByRole('button', { name: '▶ Play' }).first().click();
   await page.getByRole('tab', { name: 'Cap' }).click();
   await page.getByRole('switch', { name: 'Control with the red cap' }).click();
+  // The cap's finer settings are folded under More hat settings (A13).
+  await page.getByRole('button', { name: 'More hat settings' }).click();
   // No face in this video, and no internet needed: the cap alone.
   await page.getByRole('switch', { name: /Check it is on the head/ }).click();
   await page.getByRole('switch', { name: 'Picture like a mirror' }).click();
   const hud = page.getByRole('status', { name: 'Red cap' });
-  await expect(hud).toContainText('cap found', { timeout: 15_000 });
+  await expect(hud).toContainText('a red thing followed', { timeout: 15_000 });
   const bpm = async (): Promise<number> => Number(/(\d+) BPM/.exec((await page.getByText(/·\s*\d+ BPM · step/).first().textContent()) ?? '')?.[1] ?? 0);
   const seen: number[] = [];
   for (let i = 0; i < 40; i++) { seen.push(await bpm()); await page.waitForTimeout(200); }
@@ -133,10 +149,12 @@ test('Learn the hat: the room comes first, both steps run by keyboard and say wh
   await openLaptopBoard(page);
   await page.getByRole('tab', { name: 'Cap' }).click();
   await page.getByRole('switch', { name: 'Control with the red cap' }).click();
+  // The cap's finer settings are folded under More hat settings (A13).
+  await page.getByRole('button', { name: 'More hat settings' }).click();
   await page.getByRole('switch', { name: /Check it is on the head/ }).click();
-  await expect(page.getByRole('status', { name: 'Red cap' })).toContainText('cap found', { timeout: 15_000 });
+  await expect(page.getByRole('status', { name: 'Red cap' })).toContainText('a red thing followed', { timeout: 15_000 });
   const card = page.getByRole('group', { name: 'Learn the hat' });
-  await expect(card).toContainText('Not learnt yet: the cap is found by its colour.');
+  await expect(card).toContainText('Not learnt yet: it follows a red colour, not the hat itself.');
   const room = card.getByRole('button', { name: '1 · Learn the room (hat off)' });
   const hat = card.getByRole('button', { name: '2 · Learn the hat (hat on)' });
   // Step 2 first: it says the room comes first.
@@ -167,16 +185,18 @@ test('the cap holds still while a counter is put down, then carries on', async (
   await openLaptopBoard(page);
   await page.getByRole('tab', { name: 'Cap' }).click();
   await page.getByRole('switch', { name: 'Control with the red cap' }).click();
+  // The cap's finer settings are folded under More hat settings (A13).
+  await page.getByRole('button', { name: 'More hat settings' }).click();
   await page.getByRole('switch', { name: /Check it is on the head/ }).click();
   await page.getByRole('switch', { name: 'Picture like a mirror' }).click();
   const hud = page.getByRole('status', { name: 'Red cap' });
-  await expect(hud).toContainText('cap found', { timeout: 15_000 });
+  await expect(hud).toContainText('a red thing followed', { timeout: 15_000 });
   // A click on the laptop board is a counter put down: the cap holds still…
   await pickColour(page, 'Red');
   await place(page, [[3, 1]]);
   await expect(hud).toContainText('paused: a counter moved');
   // …and once the board has been quiet for a second, it follows the player again.
-  await expect(hud).toContainText('cap found', { timeout: 5_000 });
+  await expect(hud).toContainText('a red thing followed', { timeout: 5_000 });
   expect(pageErrors(page)).toEqual([]);
 });
 
@@ -194,6 +214,8 @@ test('the hat on Speed moves the speed around the player’s own: in the middle 
     await page.getByRole('button', { name: '▶ Play' }).first().click();
     await page.getByRole('tab', { name: 'Cap' }).click();
     await page.getByRole('switch', { name: 'Control with the red cap' }).click();
+    // The cap's finer settings are folded under More hat settings (A13).
+    await page.getByRole('button', { name: 'More hat settings' }).click();
     await page.getByRole('switch', { name: /Check it is on the head/ }).click();
     await page.getByRole('switch', { name: 'Picture like a mirror' }).click();
     // In 5 steps: the middle of the picture is the middle of the range, the edge its end.
@@ -201,7 +223,7 @@ test('the hat on Speed moves the speed around the player’s own: in the middle 
     // Fastest and Slowest are here, in the Cap tab, with the cap on Speed.
     await expect(page.getByRole('spinbutton', { name: /^Fastest/ })).toHaveValue('240');
     await expect(page.getByRole('spinbutton', { name: /^Slowest/ })).toHaveValue('60');
-    await expect(page.getByRole('status', { name: 'Red cap' })).toContainText('cap found', { timeout: 15_000 });
+    await expect(page.getByRole('status', { name: 'Red cap' })).toContainText('a red thing followed', { timeout: 15_000 });
     // The speed as shown, read in the page every 100 ms for 8 s: the video goes round more than once.
     const seen = await page.evaluate(async () => {
       const out: number[] = [];
@@ -220,6 +242,99 @@ test('the hat on Speed moves the speed around the player’s own: in the middle 
     expect(seen.some((b) => Math.abs(b - 90) <= 2)).toBe(true);
     expect(Math.max(...seen)).toBeGreaterThanOrEqual(230);
     expect(Math.max(...seen)).toBeLessThanOrEqual(240);
+    expect(pageErrors(page)).toEqual([]);
+  } finally {
+    await browser.close();
+    rmSync(dirname(file), { recursive: true, force: true });
+  }
+});
+
+test('the Cap panel: Learn the hat, the moves and the picture at the top, the rest folded, nothing cut off sideways at 1366 or narrower (B7, B8, A13)', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await openLaptopBoard(page);
+  await page.getByRole('tab', { name: 'Cap' }).click();
+  await page.getByRole('switch', { name: 'Control with the red cap' }).click();
+  const panel = page.getByRole('tabpanel');
+  // Not learnt: a red thing is found, never "The cap is found" (B7).
+  await expect(panel.getByRole('status')).toHaveText('A red thing is found: is it the hat? Learn the hat to be sure.', { timeout: 15_000 });
+  // In this order, top to bottom: Learn the hat, the moves, the picture, More hat settings.
+  const top = async (l: ReturnType<Page['locator']>): Promise<number> => (await l.boundingBox())?.y ?? -1;
+  const learn = await top(panel.getByRole('group', { name: 'Learn the hat' }));
+  const side = await top(panel.getByRole('combobox', { name: 'Side to side' }));
+  const updown = await top(panel.getByRole('combobox', { name: 'Up and down' }));
+  const picture = await top(panel.getByRole('img', { name: /What the cap camera sees/ }));
+  const more = panel.getByRole('button', { name: 'More hat settings' });
+  expect(learn).toBeGreaterThan(0);
+  expect(side).toBeGreaterThan(learn);
+  expect(updown).toBeGreaterThan(side);
+  expect(picture).toBeGreaterThan(updown);
+  expect(await top(more)).toBeGreaterThan(picture);
+  await expect(panel.getByRole('combobox', { name: 'Up and down' })).toHaveValue('volume');
+  await expect(more).toHaveAttribute('aria-expanded', 'false');
+  await expect(panel.getByRole('button', { name: 'Learn my range' })).toBeHidden();
+  // Lock is a show-time control: at the top, with the moves. The mouse test stays folded.
+  await expect(panel.getByRole('button', { name: /Lock where things are now/ })).toBeVisible();
+  expect(await top(panel.getByRole('button', { name: /Lock where things are now/ }))).toBeLessThan(picture);
+  await expect(panel.getByRole('button', { name: 'Test with the mouse' })).toBeHidden();
+  await more.click();
+  await expect(panel.getByRole('button', { name: 'Learn my range' })).toBeVisible();
+  // Nothing reaches past the panel's right-hand edge, at 1366 and narrower.
+  for (const width of [1366, 1024]) {
+    await page.setViewportSize({ width, height: 768 });
+    const over = await panel.evaluate((el) => {
+      const right = el.getBoundingClientRect().right + 0.5;
+      return [...el.querySelectorAll<HTMLElement>('*')]
+        .filter((e) => e.getBoundingClientRect().width > 0 && e.getBoundingClientRect().right > right)
+        .map((e) => `${e.tagName} ${(e.textContent ?? '').slice(0, 30)}`);
+    });
+    expect(over, `at ${width}`).toEqual([]);
+    expect(await panel.evaluate((el) => el.scrollWidth <= el.clientWidth + 1), `at ${width}`).toBe(true);
+  }
+  // The Ready check says which job each move does, and that a red thing is not yet the hat (B8, B7).
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await page.getByRole('button', { name: 'Make a piece' }).click();
+  await page.getByRole('navigation', { name: 'Make a piece: steps' }).getByRole('button', { name: /· Ending & check/ }).click();
+  await expect(page.getByText('Hat: side to side Speed · up and down Volume')).toBeVisible();
+  await expect(page.getByText('Red cap: a red thing is found, but the hat is not learnt')).toBeVisible();
+  expect(pageErrors(page)).toEqual([]);
+});
+
+test('the hat lost and found again elsewhere: the speed glides to where it now is, without waiting for a movement (A12)', async ({ playwright }, testInfo) => {
+  const file = lostThenRightVideo();
+  const browser = await playwright.chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required', '--mute-audio', ...fakeCamera(file)] });
+  try {
+    const context = await browser.newContext({ baseURL: testInfo.project.use.baseURL, viewport: { width: 1440, height: 900 }, permissions: ['camera'] });
+    const page = await context.newPage();
+    await openLaptopBoard(page);
+    await pickColour(page, 'Red');
+    await place(page, [[3, 1]]);
+    await page.getByRole('button', { name: '▶ Play' }).first().click();
+    await page.getByRole('tab', { name: 'Cap' }).click();
+    await page.getByRole('switch', { name: 'Control with the red cap' }).click();
+    // The cap's finer settings are folded under More hat settings (A13).
+    await page.getByRole('button', { name: 'More hat settings' }).click();
+    await page.getByRole('switch', { name: /Check it is on the head/ }).click();
+    await page.getByRole('switch', { name: 'Picture like a mirror' }).click();
+    // One direction at a time stays on (the default): it is what made the speed wait.
+    await expect(page.getByRole('switch', { name: 'One direction at a time' })).toHaveAttribute('aria-checked', 'true');
+    await expect(page.getByRole('status', { name: 'Red cap' })).toContainText('a red thing followed', { timeout: 15_000 });
+    // The speed as shown, read in the page every 100 ms for two rounds of the video.
+    const seen = await page.evaluate(async () => {
+      const out: number[] = [];
+      const end = performance.now() + 24_000;
+      while (performance.now() < end) {
+        const pill = [...document.querySelectorAll('span[aria-hidden="true"]')]
+          .map((el) => /· (\d+) BPM · step/.exec(el.textContent ?? '')).find((m) => m !== null);
+        if (pill) out.push(Number(pill[1]));
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      return out;
+    });
+    expect(seen.length).toBeGreaterThan(30);
+    // Found again on the right, still: the speed goes up towards Fastest (it used to stay at
+    // the left-hand speed until the head moved). On the left it is below the player's 90.
+    expect(Math.min(...seen)).toBeLessThan(90);
+    expect(Math.max(...seen)).toBeGreaterThanOrEqual(150);
     expect(pageErrors(page)).toEqual([]);
   } finally {
     await browser.close();
@@ -430,15 +545,27 @@ async function learnTheHatThroughout(page: Page): Promise<void> {
   await page.getByRole('button', { name: '▶ Play' }).first().click();
   await page.getByRole('tab', { name: 'Cap' }).click();
   await page.getByRole('switch', { name: 'Control with the red cap' }).click();
+  // The cap's finer settings are folded under More hat settings (A13).
+  await page.getByRole('button', { name: 'More hat settings' }).click();
   // No face in this video, and no internet needed.
   await page.getByRole('switch', { name: /Check it is on the head/ }).click();
   const hud = page.getByRole('status', { name: 'Red cap' });
-  await expect(hud).toContainText('cap found', { timeout: 15_000 });
+  await expect(hud).toContainText('a red thing followed', { timeout: 15_000 });
   await expect(page.getByText('Looking for the cap’s colour.')).toBeVisible();
   const card = page.getByRole('group', { name: 'Learn the hat' });
   const room = card.getByRole('button', { name: '1 · Learn the room (hat off)' });
   const hatStep = card.getByRole('button', { name: '2 · Learn the hat (hat on)' });
   await startProbe(page);
+
+  // Learn the room with the hat still on (B7): it asks whether the hat is still on, and the
+  // room is not kept (step 2 then says the room comes first).
+  await room.focus();
+  await waitForHat(page, true);
+  await page.keyboard.press('Enter');
+  await expect(card).toContainText('Is the hat still on? Take it off and learn the room again.', { timeout: 20_000 });
+  await hatStep.focus();
+  await page.keyboard.press('Enter');
+  await expect(card).toContainText('Learn the room first, with the hat off.');
 
   // Step 1, by keyboard, just after the hat has gone out of shot: a countdown, then it
   // watches with its progress showing (both checked below, from the page's own log), then
@@ -568,15 +695,15 @@ async function learnTheHatThroughout(page: Page): Promise<void> {
   await page.keyboard.press('Enter');
   await expect(forget).toHaveCount(0);
   await expect(room).toBeFocused();
-  await expect(card).toContainText('Not learnt yet: the cap is found by its colour.');
+  await expect(card).toContainText('Not learnt yet: it follows a red colour, not the hat itself.');
   await expect(page.getByText('Looking for the cap’s colour.')).toBeVisible();
   const byColour = await recordFor(page, loopMs);
   expect(settled(byColour, false).length).toBeGreaterThan(Math.max(10, 0.25 * byColour.length));
-  expect(wellOut(byColour).every((s) => s.hud.includes('cap found'))).toBe(true);
+  expect(wellOut(byColour).every((s) => s.hud.includes('a red thing followed'))).toBe(true);
   expect(pageErrors(page)).toEqual([]);
 }
 
-test('Show says what the hat is doing in its status row: found with its Speed, then not in sight (holding) (B1)', async ({ playwright }, testInfo) => {
+test('Show says what the hat is doing in its status row: not learnt (no ✓) with its Speed, then not in sight (holding) (B1, B7)', async ({ playwright }, testInfo) => {
   const file = inThenOutVideo();
   const browser = await playwright.chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required', '--mute-audio', ...fakeCamera(file)] });
   try {
@@ -585,15 +712,21 @@ test('Show says what the hat is doing in its status row: found with its Speed, t
     await openLaptopBoard(page);
     await page.getByRole('tab', { name: 'Cap' }).click();
     await page.getByRole('switch', { name: 'Control with the red cap' }).click();
+    // The cap's finer settings are folded under More hat settings (A13).
+    await page.getByRole('button', { name: 'More hat settings' }).click();
     await page.getByRole('switch', { name: /Check it is on the head/ }).click();
-    await expect(page.getByRole('status', { name: 'Red cap' })).toContainText('cap found', { timeout: 15_000 });
+    await expect(page.getByRole('status', { name: 'Red cap' })).toContainText('a red thing followed', { timeout: 15_000 });
     await page.getByRole('button', { name: /^Show: the board, the clock/ }).click();
     const row = page.getByRole('region', { name: 'Show', exact: true }).getByRole('group', { name: 'Show status' });
-    // Found, with the controls it moves; then gone, said in amber words; then found again.
-    await expect(row).toContainText(/Hat ✓.*Speed \d+ BPM/, { timeout: 15_000 });
+    // Followed, with the controls it moves: not learnt, so a calm note and never a ✓ (B7);
+    // then gone, said in amber words; then followed again.
+    await expect(row).toContainText(/Hat: not learnt \(a red thing is followed\).*Speed \d+ BPM/, { timeout: 15_000 });
+    await expect(row.locator('[data-tone="note"]')).toContainText('Hat: not learnt');
+    await expect(row).not.toContainText('Hat ✓');
     await expect(row).toContainText('! Hat not in sight: holding', { timeout: 15_000 });
     await expect(row.locator('[data-tone="warn"]')).toContainText('Hat not in sight');
-    await expect(row).toContainText('Hat ✓', { timeout: 15_000 });
+    await expect(row).toContainText('Hat: not learnt (a red thing is followed)', { timeout: 15_000 });
+    await expect(row).not.toContainText('Hat ✓');
     expect(pageErrors(page)).toEqual([]);
   } finally {
     await browser.close();

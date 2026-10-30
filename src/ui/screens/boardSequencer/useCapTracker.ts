@@ -69,7 +69,7 @@ export interface HatLearningView {
 
 /** What the last step of Learn the hat came to. */
 export type HatResult =
-  | { step: 'room'; ok: boolean }
+  | { step: 'room'; ok: boolean; hatOn?: boolean }
   | { step: 'hat'; outcome: HatOutcome; found: number; of: number; lookAlike: HatBox | null };
 
 export interface CapView {
@@ -381,9 +381,11 @@ export function useCapTracker(opts: {
           let result: HatResult;
           let learnt: StoredLearntHat | null = null;
           if (hl.room) {
-            const room = hl.room.finish();
+            // The hat still on: the room would take it for part of the room. Not kept.
+            const hatOn = hl.room.hatSeen();
+            const room = hatOn ? null : hl.room.finish();
             roomRef.current = room;
-            result = { step: 'room', ok: room !== null };
+            result = hatOn ? { step: 'room', ok: false, hatOn: true } : { step: 'room', ok: room !== null };
           } else {
             const sure = s.learntHat?.sure ?? HAT_SURE_DEFAULT;
             const r = hl.hat ? hl.hat.finish(sure) : null;
@@ -397,7 +399,7 @@ export function useCapTracker(opts: {
         } else if (now >= hl.readyUntil && frame && now - hl.lastPicture >= HAT_PICTURE_MS) {
           hl.lastPicture = now;
           hl.pictures++;
-          hl.room?.add(frame);
+          hl.room?.add(frame, faceBox);
           hl.hat?.add(frame, faceBox);
         }
       }
@@ -484,7 +486,7 @@ export function useCapTracker(opts: {
     hatRef.current = {
       step, readyUntil: now + HAT_READY_MS, watchUntil: now + HAT_READY_MS + HAT_WATCH_MS, lastPicture: -Infinity,
       pictures: 0, longer: false,
-      room: step === 'room' ? roomLearner() : null,
+      room: step === 'room' ? roomLearner(settingsRef.current.colour) : null,
       hat: step === 'hat' ? hatLearner(roomRef.current) : null,
     };
     hatResultRef.current = null;

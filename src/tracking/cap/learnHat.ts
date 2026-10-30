@@ -15,7 +15,9 @@
  *
  * Pure — pictures in, a model and a verdict out — so it is tested on synthetic pictures.
  */
-import { capPatches, onTheHead, pickCap, type CapPatch, type FaceBox, type Frame } from './capTracker';
+import {
+  capMask, capPatches, DEFAULT_CAP_COLOUR, onTheHead, pickCap, type CapColour, type CapPatch, type FaceBox, type Frame,
+} from './capTracker';
 import {
   blurHistogram, frameBins, hatMask, HAT_BINS, lightGain, ROOM_PICTURE_H, ROOM_PICTURE_W, smallPicture, type HatModel,
 } from './hatColour';
@@ -56,18 +58,77 @@ export interface LearntRoom {
 }
 
 export interface RoomLearner {
-  add(f: Frame): void;
+  /** A picture of the room, and the face when face tracking found one. */
+  add(f: Frame, face?: FaceBox | null): void;
   /** The room learnt, or null with too few pictures. */
   finish(): LearntRoom | null;
+  /**
+   * Something hat-like was seen while learning the room: the hat is probably still on, and
+   * the room must not be kept (it would take the hat for part of the room).
+   */
+  hatSeen(): boolean;
 }
 
-/** Step 1, a picture at a time. */
-export function roomLearner(): RoomLearner {
+/** A patch of the cap's colour that has moved at least this far (of the picture) moves with the head. */
+const HAT_MOVES = 0.02;
+/** A patch is followed from picture to picture while it moves less than this between them. */
+const HAT_FOLLOW = 0.1;
+/** Seen in at least this many pictures (or this share of those with a face) before it counts. */
+const HAT_SEEN_MIN = 3;
+const HAT_ON_HEAD_SHARE = 1 / 3;
+/** A patch bigger than this share of the picture is not a hat. */
+const HAT_MAX_AREA = 0.08;
+
+/**
+ * Watches the pictures of Learn the room for the hat still being on: when the face is known,
+ * a patch of the cap's colour on the head; otherwise one of a hat's size that moves (the
+ * player can't hold still, and the hat moves with the head; a red chair stays put).
+ */
+function hatInRoomWatcher(colour: CapColour): { add(f: Frame, face: FaceBox | null): void; seen(): boolean } {
+  /** Each patch followed through the pictures: where it was last, and how far its centre has ranged. */
+  const tracks: { x: number; y: number; x0: number; x1: number; y0: number; y1: number; n: number }[] = [];
+  let faces = 0;
+  let onHead = 0;
+  return {
+    add(f, face) {
+      const { patches } = capPatches(capMask(f, colour), f.width, f.height);
+      if (face) {
+        faces++;
+        if (patches.some((c) => onTheHead(c, face))) onHead++;
+      }
+      for (const c of patches) {
+        // Bigger than any hat: a chair, a jumper, a poster (partly hidden by an arm, it can seem to move).
+        if (c.area > HAT_MAX_AREA) continue;
+        let best: (typeof tracks)[number] | null = null;
+        let bestD = HAT_FOLLOW;
+        for (const t of tracks) {
+          const d = Math.hypot(c.x - t.x, c.y - t.y);
+          if (d < bestD) { bestD = d; best = t; }
+        }
+        if (!best) { tracks.push({ x: c.x, y: c.y, x0: c.x, x1: c.x, y0: c.y, y1: c.y, n: 1 }); continue; }
+        best.x = c.x; best.y = c.y; best.n++;
+        best.x0 = Math.min(best.x0, c.x); best.x1 = Math.max(best.x1, c.x);
+        best.y0 = Math.min(best.y0, c.y); best.y1 = Math.max(best.y1, c.y);
+      }
+    },
+    seen() {
+      // The face known: only a patch on the head counts (surer than movement).
+      if (faces >= HAT_SEEN_MIN) return onHead >= HAT_ON_HEAD_SHARE * faces;
+      return tracks.some((t) => t.n >= HAT_SEEN_MIN && (t.x1 - t.x0 >= HAT_MOVES || t.y1 - t.y0 >= HAT_MOVES));
+    },
+  };
+}
+
+/** Step 1, a picture at a time. `colour` is the cap's colour, to notice the hat still on. */
+export function roomLearner(colour: CapColour = DEFAULT_CAP_COLOUR): RoomLearner {
   const sum = new Float32Array(PICTURE_LEN);
   const counts = new Float32Array(HAT_BINS);
   const frames: Frame[] = [];
+  const hat = hatInRoomWatcher(colour);
   return {
-    add(f) {
+    hatSeen: () => hat.seen(),
+    add(f, face = null) {
+      hat.add(f, face);
       // Each picture's light corrected to the room so far, so a camera settling its exposure
       // while it watches doesn't smear the room's colours.
       const s = smallPicture(f);

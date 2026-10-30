@@ -6,7 +6,7 @@ import {
   hatMask, hatTable, lightGain, loadLearntHat, sanitizeLearntHat, storeLearntHat, HAT_BINS, HAT_SURE_DEFAULT, HAT_SURE_MAX,
   HAT_SURE_MIN, ROOM_PICTURE_H, ROOM_PICTURE_W, type HatModel,
 } from '../tracking/cap/hatColour';
-import { learnHat, learnRoom, type HatLearning } from '../tracking/cap/learnHat';
+import { learnHat, learnRoom, roomLearner, type HatLearning } from '../tracking/cap/learnHat';
 import {
   createBoardPlayer, loadActiveBoardConfig, saveActiveBoardConfig, setActiveBoardPlayer,
 } from '../profiles/BoardProfiles';
@@ -200,6 +200,45 @@ describe('learning the hat against the room', () => {
   it('too few pictures of the room: nothing learnt', () => {
     expect(learnRoom([])).toBeNull();
     expect(learnRoom(roomFrames({}, 3))).toBeNull();
+  });
+});
+
+/**
+ * B7: Learn the room with the hat still on would learn the hat as part of the room, and step 2
+ * then says only "Couldn't see the hat". Step 1 watches for something hat-like: a patch of
+ * the cap's colour that moves with the head (a red chair stays put), or one on the head when
+ * the face is known.
+ */
+describe('Learn the room with the hat still on', () => {
+  const watch = (frames: Frame[], faces: ({ x: number; y: number; w: number; h: number } | null)[] = []) => {
+    const l = roomLearner();
+    frames.forEach((f, k) => l.add(f, faces[k] ?? null));
+    return { room: l.finish(), hatSeen: l.hatSeen() };
+  };
+
+  it('the hat on, the head moving a little: seen, in a room with a red chair too', () => {
+    expect(watch(hatFrames({ chair: true })).hatSeen).toBe(true);
+    expect(watch(hatFrames()).hatSeen).toBe(true);
+  });
+
+  it('the hat off: a red chair that stays put is not the hat, and the room is learnt', () => {
+    const r = watch(roomFrames({ chair: true }));
+    expect(r.hatSeen).toBe(false);
+    expect(r.room).not.toBeNull();
+  });
+
+  it('the hat on a still head: seen when the face is known (on the head), not without it', () => {
+    const at = { x: 0.5, y: 0.33 };
+    const frames = Array.from({ length: 24 }, (_, i) => picture({ hat: at, chair: true, seed: 300 + i }));
+    const face = { x: 0.41, y: 0.36, w: 0.18, h: 0.22 };
+    expect(watch(frames, frames.map(() => face)).hatSeen).toBe(true);
+    expect(watch(frames).hatSeen).toBe(false);
+  });
+
+  it('the red chair with a face in the picture: not on the head, so not the hat', () => {
+    const frames = roomFrames({ chair: true });
+    const face = { x: 0.41, y: 0.36, w: 0.18, h: 0.22 };
+    expect(watch(frames, frames.map(() => face)).hatSeen).toBe(false);
   });
 });
 

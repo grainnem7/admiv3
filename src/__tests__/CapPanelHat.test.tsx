@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react';
-import { CapPanel, hatResultText, type CapPanelProps } from '../ui/screens/boardSequencer/play/CapPanel';
+import { CapPanel, capHudText, hatJobsLine, hatResultText, type CapPanelProps } from '../ui/screens/boardSequencer/play/CapPanel';
 import type { CapView } from '../ui/screens/boardSequencer/useCapTracker';
 import { DEFAULT_CAP_SETTINGS, type CapSettings } from '../tracking/cap/capTracker';
 import { storeLearntHat, HAT_BINS, ROOM_PICTURE_H, ROOM_PICTURE_W } from '../tracking/cap/hatColour';
@@ -56,7 +56,7 @@ describe('Learn the hat, in the Cap tab', () => {
   it('says under the picture what the cap is looked for by: its colour, or the learnt hat', () => {
     render(props());
     expect(host.textContent).toContain('Looking for the cap’s colour.');
-    expect(card().textContent).toContain('Not learnt yet: the cap is found by its colour.');
+    expect(card().textContent).toContain('Not learnt yet: it follows a red colour, not the hat itself.');
     render(props({ learntHat: hat }));
     expect(host.textContent).toContain('Looking for the learnt hat.');
     expect(host.textContent).not.toContain('Looking for the cap’s colour.');
@@ -123,7 +123,7 @@ describe('Learn the hat, in the Cap tab', () => {
     act(() => forget.click());
     expect(p.onChange).toHaveBeenCalledWith({ learntHat: null });
     expect(p.clearHatResult).toHaveBeenCalled();
-    expect(p.announce).toHaveBeenCalledWith('The learnt hat is forgotten. The cap is found by its colour again.');
+    expect(p.announce).toHaveBeenCalledWith('The learnt hat is forgotten. It follows a red colour again.');
     expect(document.activeElement).toBe(button(step1));
     render({ ...p, settings: { ...p.settings, learntHat: null } });
     expect(button('Forget the learnt hat')).toBeUndefined();
@@ -180,6 +180,110 @@ describe('what each step came to, in words', () => {
     expect(hatStep('not-seen')).toContain('Couldn’t see the hat. Check it is in the picture and learn the hat again.');
     expect(hatStep('not-seen')).toContain('Nothing was changed.');
     expect(hatStep('no-room')).toBe('Learn the room first, with the hat off.');
+    // B7: the hat was still on while learning the room; the room is not kept.
+    expect(hatResultText({ step: 'room', ok: false, hatOn: true })).toBe('Is the hat still on? Take it off and learn the room again.');
+  });
+});
+
+/**
+ * B7, B8, A13: until the hat is learnt the panel never claims the cap is found; Learn the hat,
+ * the moves, the picture and the switch are at the top, and the rest is folded.
+ */
+describe('the Cap panel, in order and folded', () => {
+  const status = (): HTMLElement => host.querySelector('[role="status"]')!;
+  const at = (el: Element | null | undefined): number => {
+    if (!el) throw new Error('not there');
+    return [...host.querySelectorAll('*')].indexOf(el);
+  };
+  const select = (name: string): HTMLSelectElement | undefined =>
+    [...host.querySelectorAll('label')].find((l) => l.textContent?.startsWith(name))?.querySelector('select') ?? undefined;
+  const more = (): HTMLButtonElement => button('More hat settings') ?? [...host.querySelectorAll('button')].find((b) => b.textContent?.includes('More hat settings'))!;
+
+  it('not learnt, a red thing seen: asks whether it is the hat, never "The cap is found" in green', () => {
+    render(props());
+    expect(status().textContent).toBe('A red thing is found: is it the hat? Learn the hat to be sure.');
+    expect(status().style.color).not.toBe('var(--bs-ok)');
+    expect(host.textContent).not.toContain('The cap is found.');
+    expect(host.querySelector('canvas')!.getAttribute('aria-label')).not.toContain('The cap is found.');
+    render(props({ learntHat: hat }));
+    expect(status().textContent).toBe('The cap is found.');
+    expect(status().style.color).toBe('var(--bs-ok)');
+  });
+
+  it('top to bottom: the switch, Learn the hat, the moves, the camera picture, then More hat settings', () => {
+    render(props());
+    const sw = [...host.querySelectorAll('[role="switch"]')].find((x) => x.textContent?.startsWith('Control with the red cap'));
+    expect(at(sw)).toBeLessThan(at(card()));
+    expect(at(card())).toBeLessThan(at(select('Side to side')));
+    expect(at(select('Side to side'))).toBeLessThan(at(select('Up and down')));
+    expect(at(select('Up and down'))).toBeLessThan(at(host.querySelector('canvas')));
+    expect(at(host.querySelector('canvas'))).toBeLessThan(at(more()));
+  });
+
+  it('the rest is under More hat settings, closed until opened, and still all there', () => {
+    render(props());
+    expect(more().getAttribute('aria-expanded')).toBe('false');
+    const hidden = (text: string): boolean => {
+      const el = [...host.querySelectorAll('span, button, label')].find((e) => e.textContent === text);
+      if (!el) throw new Error(`no ${text}`);
+      return el.closest('[hidden]') !== null;
+    };
+    for (const t of ['Your range', 'Keeping the two directions apart', 'While counters are being moved', 'How it responds', 'Test with the mouse']) {
+      expect(hidden(t)).toBe(true);
+    }
+    act(() => more().click());
+    expect(more().getAttribute('aria-expanded')).toBe('true');
+    for (const t of ['Your range', 'Keeping the two directions apart', 'While counters are being moved', 'How it responds', 'Test with the mouse']) {
+      expect(hidden(t)).toBe(false);
+    }
+  });
+
+  it('the moves: side to side and up and down each choose their job', () => {
+    const p = props();
+    render(p);
+    expect(select('Side to side')?.value).toBe('tempo');
+    expect(select('Up and down')?.value).toBe('volume');
+    const el = select('Up and down')!;
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set?.call(el, 'tone');
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    expect(p.onChange).toHaveBeenCalledWith({ yRole: 'tone' });
+  });
+});
+
+describe('the hat under the board (B7)', () => {
+  const v = (over: Partial<CapView> = {}): CapView => view(over);
+  it('says "found" only for a learnt hat; a red thing followed otherwise', () => {
+    expect(capHudText(v(), false, false)).toBe('a red thing followed · not learnt');
+    expect(capHudText(v(), true, false)).toBe('cap found');
+    expect(capHudText(v({ source: 'face' }), false, false)).toBe('following the face');
+    expect(capHudText(v({ seen: false }), false, false)).toBe('cap not in sight (holding)');
+    expect(capHudText(v({ paused: 'hands' }), false, true)).toBe('paused: hands on the board · locked');
+    expect(capHudText(v(), true, true)).toBe('cap found · locked');
+    // The mouse test is the cap on purpose.
+    expect(capHudText(v({ camera: 'mouse' }), false, false)).toBe('cap found');
+  });
+});
+
+describe('Lock, at the top (a show-time control)', () => {
+  it('sits with the moves, outside More hat settings; Test with the mouse stays folded', () => {
+    render(props());
+    const lock = [...host.querySelectorAll('button')].find((b) => b.textContent?.includes('Lock where things are now'))!;
+    expect(lock.closest('[hidden]')).toBeNull();
+    const mouse = [...host.querySelectorAll('button')].find((b) => b.textContent === 'Test with the mouse')!;
+    expect(mouse.closest('[hidden]')).not.toBeNull();
+    const all = [...host.querySelectorAll('*')];
+    const more = [...host.querySelectorAll('button')].find((b) => b.textContent?.includes('More hat settings'))!;
+    expect(all.indexOf(lock)).toBeLessThan(all.indexOf(more));
+  });
+});
+
+describe('the hat in the Ready check (B8)', () => {
+  it('says which job each direction does', () => {
+    expect(hatJobsLine('tempo', 'volume')).toBe('Hat: side to side Speed · up and down Volume');
+    expect(hatJobsLine('tempo', 'tone')).toBe('Hat: side to side Speed · up and down Brightness');
+    expect(hatJobsLine('off', 'volume')).toBe('Hat: side to side Nothing · up and down Volume');
   });
 });
 

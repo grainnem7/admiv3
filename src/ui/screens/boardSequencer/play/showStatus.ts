@@ -25,7 +25,7 @@ export interface ShowStatusItem {
   actions?: ShowStatusAction[];
 }
 
-export type ShowHatState = 'found' | 'face' | 'holding' | 'paused' | 'starting' | 'noCamera' | 'mouse';
+export type ShowHatState = 'found' | 'followed' | 'face' | 'holding' | 'paused' | 'starting' | 'noCamera' | 'mouse';
 
 export interface ShowStatusInput {
   /** The camera board's camera; null on the laptop board. */
@@ -53,6 +53,8 @@ function hatItem(h: NonNullable<ShowStatusInput['hat']>): ShowStatusItem {
   const base = { key: 'hat', ...(detail ? { detail } : {}) };
   switch (h.state) {
     case 'found': return { ...base, tone: 'ok', text: `Hat ✓${locked}` };
+    // Not learnt: a red thing is followed, which may not be the hat (B7). Calm, never a ✓.
+    case 'followed': return { ...base, tone: 'note', text: `Hat: not learnt (a red thing is followed)${locked}` };
     case 'face': return { ...base, tone: 'ok', text: `Hat ✓ (following the face)${locked}` };
     case 'mouse': return { ...base, tone: 'ok', text: `Hat ✓ (the mouse)${locked}` };
     case 'holding': return { ...base, tone: 'warn', text: `! Hat not in sight: holding${locked}` };

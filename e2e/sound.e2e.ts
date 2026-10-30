@@ -107,6 +107,8 @@ test('the red cap (tried with the mouse) moves the speed left–right and shows 
   await page.getByRole('button', { name: '▶ Play' }).first().click();
   await page.getByRole('tab', { name: 'Cap' }).click();
   await page.getByRole('switch', { name: 'Control with the red cap' }).click();
+  // The cap's finer settings are folded under More hat settings (A13).
+  await page.getByRole('button', { name: 'More hat settings' }).click();
   await page.getByRole('button', { name: 'Test with the mouse' }).click();
   const area = page.getByRole('img', { name: /Test area/ });
   await area.scrollIntoViewIfNeeded();

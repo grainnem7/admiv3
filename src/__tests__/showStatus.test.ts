@@ -57,6 +57,13 @@ describe('the Show status row (audit 2026-10-30, B1 and B14)', () => {
     expect(hat({ state: 'found', locked: true, values: [] }).text).toBe('Hat ✓ · locked');
   });
 
+  it('a red thing followed while the hat is not learnt: a calm note, never a ✓ (B7)', () => {
+    const item = showStatusItems({ ...QUIET, hat: { state: 'followed', locked: false, values: ['Speed 90 BPM'] } })[0];
+    expect(item).toMatchObject({ tone: 'note', text: 'Hat: not learnt (a red thing is followed)', detail: 'Speed 90 BPM' });
+    expect(item.text).not.toContain('✓');
+    expect(item.text).not.toContain('!');
+  });
+
   it('Muted, Simplified, the iPad End piece pressed once, and the keeping-time notice live in the row', () => {
     const items = showStatusItems({
       ...QUIET,

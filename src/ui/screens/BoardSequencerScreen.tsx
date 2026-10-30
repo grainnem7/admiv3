@@ -74,7 +74,7 @@ import {
 } from './boardSequencer/play/showStatus';
 import type { ReadyItem } from './boardSequencer/play/ReadyCheck';
 import { PlayPanel } from './boardSequencer/play/PlayPanel';
-import { CapPanel, CAP_ROLE_LABELS, CAP_PAUSE_TEXT, capValueText, hatResultText } from './boardSequencer/play/CapPanel';
+import { CapPanel, CAP_ROLE_LABELS, CAP_PAUSE_TEXT, capHudText, capValueText, hatJobsLine, hatResultText } from './boardSequencer/play/CapPanel';
 import { useCapTracker } from './boardSequencer/useCapTracker';
 import { audienceNoticeText, useAudienceWindow } from '../../audience/useAudienceWindow';
 import { audienceHat, audienceNotes, audienceState, drawStalled, dueNotes } from '../../audience/feed';
@@ -4584,11 +4584,16 @@ export default function BoardSequencerScreen() {
         ? { label: 'Red cap: its camera could not be opened', state: 'problem', fix: 'Cap tab: choose the camera facing the player, or switch the cap off.' }
         : cap.view.camera === 'only-board'
           ? { label: 'Red cap: no camera of its own (the only one is the board’s)', state: 'problem', fix: 'Connect a second camera facing the player, or switch the cap off.' }
+        : cap.view.seen && cap.view.source !== 'face' && !c.cap.learntHat
+          // Not learnt, it may be following a red chair (B7): a thing to check, not "found".
+          ? { label: 'Red cap: a red thing is found, but the hat is not learnt', state: 'warn', fix: 'Cap tab: Learn the hat, so it is sure it is the hat.' }
         : cap.view.seen
           ? { label: `Red cap: ${cap.view.source === 'face' ? 'following the face' : 'found'}`, state: 'ok' }
           : { label: 'Red cap: not in sight', state: 'warn', fix: c.cap.learntHat
             ? 'Cap tab: check the camera sees the player, or learn the hat again.'
             : 'Cap tab: check the camera sees the player and click the cap to learn its colour.' });
+      // Which job each move does, so the owner can see it before the piece (B8).
+      items.push({ label: hatJobsLine(c.cap.xRole, c.cap.yRole), state: 'ok' });
     }
     if (!laptop) {
       const det = detectionSetup(c);
@@ -5289,8 +5294,14 @@ export default function BoardSequencerScreen() {
   const capHud = config.cap.enabled ? (
     <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', fontSize: 13 }}>
       {/* Only the state is announced: the numbers change several times a second. */}
-      <span role="status" aria-label="Red cap" style={{ fontWeight: 700, color: cap.view.seen && !cap.view.paused ? 'var(--bs-ok)' : 'var(--bs-warn)' }}>
-        {`🧢 ${cap.view.paused ? CAP_PAUSE_TEXT[cap.view.paused] : cap.view.seen ? (cap.view.source === 'face' ? 'following the face' : 'cap found') : 'cap not in sight (holding)'}${config.cap.locked ? ' · locked' : ''}`}
+      <span role="status" aria-label="Red cap" style={{
+        fontWeight: 700,
+        // A red thing followed before the hat is learnt is not "found": plain, not green (B7).
+        color: !cap.view.seen || cap.view.paused ? 'var(--bs-warn)'
+          : cap.view.source !== 'face' && !config.cap.learntHat && cap.view.camera !== 'mouse' ? 'var(--bs-fg)' : 'var(--bs-ok)',
+      }}
+      >
+        {`🧢 ${capHudText(cap.view, config.cap.learntHat !== null, config.cap.locked)}`}
       </span>
       {(['xRole', 'yRole'] as const).map((k) => {
         const role = config.cap[k];
@@ -5485,7 +5496,7 @@ export default function BoardSequencerScreen() {
     if (cap.view.paused) return 'paused';
     if (cap.view.camera === 'off' || cap.view.camera === 'starting') return 'starting';
     if (cap.view.camera !== 'running') return 'noCamera';
-    if (cap.view.seen) return cap.view.source === 'face' ? 'face' : 'found';
+    if (cap.view.seen) return cap.view.source === 'face' ? 'face' : config.cap.learntHat ? 'found' : 'followed';
     return 'holding';
   })();
   const resumeAt = resumeFrom !== null ? (Date.now() - resumeFrom.startedAt) / 1000 : 0;
