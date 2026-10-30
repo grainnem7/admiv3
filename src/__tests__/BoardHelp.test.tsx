@@ -20,23 +20,34 @@ const all = (): string => { act(() => root.render(<BoardHelp />)); return host.t
 
 describe('Help says how things work now', () => {
   it('a loop is made with New loop → counters → Keep, never "Save the board here" (F1)', () => {
-    const steps = entry('Play, Make a piece, Show');
+    const steps = entry('Board, Make a piece, Show');
     expect(steps).toMatch(/1 Loops: press New loop, put counters down, then Keep/);
     expect(all()).not.toContain('Save the board here');
   });
 
   it('New loop waits for the piece to stop, in both places that say how to make a loop (F2)', () => {
-    expect(entry('Play, Make a piece, Show')).toContain('While the piece plays no loop is made: stop it first.');
+    expect(entry('Board, Make a piece, Show')).toContain('While the piece plays no loop is made: stop it first.');
     expect(entry('Using saved loops live')).toContain('Not while the piece plays: stop it first.');
   });
 
   it('Stop needs two presses only while the piece plays', () => {
-    expect(entry('Play, Make a piece, Show')).toContain('while the piece plays, Stop needs two presses');
+    expect(entry('Board, Make a piece, Show')).toContain('while the piece plays, Stop needs two presses');
   });
 
-  it('Space: ▶ Play on the board, ▶ Start the piece in Show, also while the board plays (R2-T4-01, R3-TA-01)', () => {
-    expect(entry('Keyboard')).toContain('Space: ▶ Play on the board, and Stop while it plays. In Show: ▶ Start the piece, also while the board plays; once the piece plays, Stop (press twice).');
+  it('Space: ▶ Play the board on the Board view, ▶ Start the piece in Show, also while the board plays (R2-T4-01, R3-TA-01)', () => {
+    expect(entry('Keyboard')).toContain('Space: ▶ Play the board on the Board view, and Stop while it plays. In Show: ▶ Start the piece, also while the board plays; once the piece plays, Stop (press twice).');
     expect(all()).not.toContain('Start clock');
+  });
+
+  it('the names on screen (B16, B13, B23): Board, ▶ Play the board with no clock, Show, Next scene with its Back, ↘ End piece', () => {
+    const views = entry('Board, Make a piece, Show');
+    expect(views).toContain('Board: just play the board');
+    expect(views).toContain('▶ Play the board plays what is on the board: no clock, no scenes.');
+    expect(views).toContain('Next scene ▶ (↶ Back to the scene before, for one pass)');
+    expect(views).toContain('↘ End piece');
+    expect(all()).not.toContain('▶ Show');
+    expect(all()).not.toMatch(/⏹|Next ▶/);
+    expect(entry('Simplify, and keeping time')).toContain('Simplified: Tim and Bed');
   });
 
   it('the iPad: Mute needs two taps; the safe show layout has three things', () => {
@@ -58,7 +69,7 @@ describe('Help says how things work now', () => {
 
 describe('Help says how Show keeps the performance safe (audit 2026-10-30, batch 1)', () => {
   it('Show: the status row, Stop’s first 2 seconds, full screen, and the audience screen', () => {
-    const show = entry('Play, Make a piece, Show');
+    const show = entry('Board, Make a piece, Show');
     expect(show).toContain('for its first 2 seconds Stop does nothing');
     expect(show).toContain('A line under the clock says how the camera, the hat, the iPad and Ableton are');
     expect(show).toContain('Show stays open if the browser leaves full screen.');

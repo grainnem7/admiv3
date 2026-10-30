@@ -77,7 +77,7 @@ test('a note that sounds blooms its square, and the scene name follows a scene c
   // The scene's name, and nothing else.
   await expect.poll(async () => (await aud.locator('body').innerText()).trim()).toBe('Arrival');
   await expect(aud.getByRole('button')).toHaveCount(0);
-  await page.getByRole('region', { name: 'Now and next' }).getByRole('button', { name: 'Next ▶' }).click();
+  await page.getByRole('region', { name: 'Now and next' }).getByRole('button', { name: 'Next scene ▶' }).click();
   await expect.poll(async () => (await aud.locator('body').innerText()).trim(), { timeout: 20_000 }).toBe('Build');
   expect(pageErrors(page)).toEqual([]);
 });
@@ -87,7 +87,7 @@ test('after Stop the audience screen fades slowly to the dim board, and stays op
   await pickColour(page, 'Red');
   await place(page, [[3, 1], [5, 3]]);
   const aud = await openAudience(page);
-  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await page.getByRole('button', { name: '▶ Play the board' }).first().click();
   await expect(picture(aud)).toHaveAttribute('data-awake', 'yes', { timeout: 20_000 });
   await expect.poll(async () => Number(await picture(aud).getAttribute('data-presence')), { timeout: 10_000 }).toBe(1);
   await page.getByRole('button', { name: '■ Stop', exact: true }).first().click();
@@ -148,7 +148,7 @@ async function lastTiming(page: Page): Promise<Timing> {
 
 /** Play the board for `sec` seconds (timed inside the page), then Stop. */
 async function playFor(page: Page, sec: number): Promise<void> {
-  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await page.getByRole('button', { name: '▶ Play the board' }).first().click();
   await expect.poll(() => notesPlayed(page), { timeout: 15_000 }).toBeGreaterThan(0);
   await pause(page, sec * 1000);
   await page.getByRole('button', { name: '■ Stop', exact: true }).first().click();

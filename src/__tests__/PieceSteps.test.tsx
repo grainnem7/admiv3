@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react';
-import { PieceSteps, type PieceLoop, type PieceStepsProps } from '../ui/screens/boardSequencer/play/PieceSteps';
+import { PieceSteps, sceneChipLabel, type PieceLoop, type PieceStepsProps } from '../ui/screens/boardSequencer/play/PieceSteps';
 import { DEFAULT_PERFORMANCE } from '../songs/performance/clock';
 import type { Scene, SceneSettings } from '../songs/performance/launcher';
 
@@ -75,14 +75,24 @@ describe('Scenes: the open panel follows its scene (T2-02)', () => {
     expect(p.onEditScene).toHaveBeenLastCalledWith(2, { loops: [] });
   });
 
-  it('a scene keeps its colour when the list re-sorts', () => {
+  it('scenes never wear a counter colour: one neutral style, the scene’s number, the board’s text colour (B10)', () => {
     const p = props();
     render(p);
-    const colourOf = (name: RegExp): string => (button(name)?.closest('div[style*="border-left"]') as HTMLElement | null)?.style.borderLeft ?? '';
-    const build = colourOf(/^1:30 · Build/);
-    expect(build).toMatch(/solid/);
-    render({ ...p, scenes: [scene('Arrival', 0), scene('Open', 210), scene('Build', 300)] });
-    expect(colourOf(/^5:00 · Build/)).toBe(build);
+    const chips = [...host.querySelectorAll<HTMLElement>('[aria-label="Timeline of the scenes"] button')];
+    expect(chips.map((c) => c.textContent)).toEqual(['1 · Arrival 0:00', '2 · Build 1:30', '3 · Open 3:30']);
+    for (const c of chips) {
+      // Each chip button sits inside a list item of the timeline's list.
+      expect(c.parentElement?.tagName).toBe('LI');
+      expect(c.closest('ul')?.getAttribute('aria-label')).toBe('Timeline of the scenes');
+      expect(c.getAttribute('role')).toBeNull();
+      expect(c.style.color).toBe('var(--bs-fg)');
+      expect(c.style.background).toMatch(/^var\(--bs-(raised|hi)\)$/);
+    }
+    // The cards' stripes too: a token, never a hue of their own.
+    const html = host.innerHTML;
+    expect(html).not.toMatch(/hsl\(/);
+    const stripe = (button(/^1:30 · Build/)?.closest('div[style*="border-left"]') as HTMLElement | null)?.style.borderLeft ?? '';
+    expect(stripe).toMatch(/var\(--bs-/);
   });
 });
 
@@ -225,9 +235,24 @@ describe('Ending & check: fixing from the check', () => {
 describe('Loops: one way to make a loop (F1, T1-01, T2-14)', () => {
   const rows = (): string[] => ['Save the board here', 'Overwrite with board', '✎ Edit notes'];
 
-  it('outside New loop and the show, the old ways are still there for now', () => {
+  it('outside New loop and the show, the old ways are folded under "Other ways to make a loop" (B17)', () => {
     render(props({ step: 'loops', canSaveBoard: true }));
+    for (const r of rows()) expect(button(r), r).toBeUndefined();
+    const fold = button(/Other ways to make a loop/);
+    expect(fold?.getAttribute('aria-expanded')).toBe('false');
+    act(() => fold?.click());
+    expect(fold?.getAttribute('aria-expanded')).toBe('true');
     for (const r of rows()) expect(button(r), r).toBeDefined();
+    // Filled mint is for the one main action, New loop: Save the board here is not it.
+    expect(button('Save the board here')?.style.background).not.toBe('var(--bs-accent)');
+    expect(button('New loop')?.style.background).toBe('var(--bs-accent)');
+    act(() => fold?.click());
+  });
+
+  it('an empty loop’s name field matches Keep (B17)', () => {
+    render(props({ step: 'loops' }));
+    const empty = input('Name of loop 3');
+    expect(empty?.placeholder).toBe('name (after Keep)');
   });
 
   it('inside New loop: no Save the board here, Overwrite or Edit notes, and no ▶ Play on a loop (T1-10)', () => {
@@ -583,5 +608,47 @@ describe('Scenes: band parts and a lead-in (harmony spec stage 2)', () => {
     render({ ...p, scenes: [scene('Arrival', 0), scene('Build', 90), scene('Open', 210, [0], { leadIn: 'rising' })] });
     expect(button(/^3:30 · Open/)?.textContent).toContain('rising before it');
     expect(text()).toContain('Notes that climb and grow through the last pass before the scene.');
+  });
+});
+
+describe('scene chips never cut a word (B10 follow-up)', () => {
+  // A plain measure: 8 px a character.
+  const measure = (t: string): number => t.length * 8;
+
+  it('the whole label when it fits; then the time drops; then only the number; else nothing', () => {
+    expect(sceneChipLabel(4, 'Home', '6:00', 200, measure)).toBe('4 · Home 6:00');
+    expect(sceneChipLabel(4, 'Home', '6:00', 90, measure)).toBe('4 · Home');
+    expect(sceneChipLabel(4, 'Home', '6:00', 30, measure)).toBe('4');
+    expect(sceneChipLabel(4, 'Home', '6:00', 6, measure)).toBe('');
+    // Not measured yet (no layout): the whole label.
+    expect(sceneChipLabel(4, 'Home', '6:00', null, measure)).toBe('4 · Home 6:00');
+  });
+
+  it('a short last scene: every chip shows only whole words, and its name and time stay in its name and tooltip', () => {
+    let width = 0;
+    vi.stubGlobal('ResizeObserver', class {
+      constructor(private cb: () => void) {}
+      observe(): void { width = 1000; this.cb(); }
+      disconnect(): void { /* nothing */ }
+    });
+    Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, get() { return (this as HTMLElement).tagName === 'UL' ? width : 0; } });
+    try {
+      render(props({ scenes: [scene('Arrival', 0), scene('Build', 90), scene('Open', 210), scene('Home', 410)] }));
+      const chips = [...host.querySelectorAll<HTMLElement>('[aria-label^="Timeline of the scenes"] button')];
+      const full = ['1 · Arrival 0:00', '2 · Build 1:30', '3 · Open 3:30', '4 · Home 6:50'];
+      chips.forEach((c, i) => {
+        const [n, , name, time] = full[i].split(' ');
+        expect([full[i], `${n} · ${name}`, n, '']).toContain(c.textContent);
+        expect(c.getAttribute('aria-label')).toMatch(new RegExp(`^${full[i]}`));
+        expect(c.title).toBe(full[i]);
+        void time;
+      });
+      // Home lasts 10 s of 7:00 on a 1000 px timeline: about 24 px, too narrow for "4 · Home".
+      expect(chips[3].textContent).not.toContain('Home');
+      expect(chips[0].textContent).toBe('1 · Arrival 0:00');
+    } finally {
+      delete (HTMLElement.prototype as { clientWidth?: number }).clientWidth;
+      vi.unstubAllGlobals();
+    }
   });
 });

@@ -60,11 +60,13 @@ const button = (r: HTMLElement, name: RegExp): HTMLButtonElement => {
 };
 
 describe('the colour table', () => {
-  it('one row per colour; sound colours first, a control last with no sound', () => {
+  it('one row per colour, in the order of their numbers, as everywhere else (B24); a control has no sound', () => {
     render(props());
     expect(rows()).toHaveLength(4);
-    expect(rows().at(-1)?.getAttribute('aria-label')).toMatch(/^Green/);
-    expect(rows().at(-1)?.textContent).toContain('—');
+    const chip = (r: HTMLElement): string | null | undefined => r.querySelector('span[aria-hidden="true"]')?.textContent;
+    expect(rows().map(chip)).toEqual(['1', '2', '3', '4']);
+    expect(rows()[0]?.getAttribute('aria-label')).toMatch(/^Green/);
+    expect(rows()[0]?.textContent).toContain('—');
   });
 
   it('a melody can choose from the melody sounds, and the choice is saved', () => {
@@ -198,7 +200,7 @@ describe('the colour table', () => {
   it('colours are numbered as everywhere else: by their place in the colour list', () => {
     render(props());
     const chip = (r: HTMLElement): string | null | undefined => r.querySelector('span[aria-hidden="true"]')?.textContent;
-    expect(chip(row('Green'))).toBe('1'); // the tempo colour is first in config, though listed last
+    expect(chip(row('Green'))).toBe('1'); // the tempo colour is first in config, and listed first
     expect(chip(row('Red'))).toBe('2');
   });
 

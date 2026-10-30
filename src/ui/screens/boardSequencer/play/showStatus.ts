@@ -132,3 +132,12 @@ export function escLeavesShow(fullscreenNow: boolean, fullscreenEndedAt: number 
   if (fullscreenNow) return false;
   return fullscreenEndedAt === null || now - fullscreenEndedAt > FULLSCREEN_ESC_MS;
 }
+
+/**
+ * Simplify's line (B23): who and what is left, by name. "the bed" was a word only the code
+ * used: now the loop's own name, or the player alone when no loop plays.
+ */
+export function simplifiedLine(playerName: string | null, bedLoop: string | null): string {
+  const who = playerName && playerName.trim().length > 0 ? playerName.trim() : 'the player';
+  return bedLoop === null ? `Simplified: ${who} alone` : `Simplified: ${who} and ${bedLoop}`;
+}

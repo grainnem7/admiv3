@@ -625,7 +625,7 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
               }}
             >
               {confirmEnd && drainRing}
-              {confirmEnd ? 'Tap again to end' : '⏹ End piece'}
+              {confirmEnd ? 'Tap again to end' : '↘ End piece'}
             </button>
             <button
               type="button"
@@ -767,7 +767,7 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
                 <button key="x-end" type="button" aria-label={confirmEnd ? 'Tap again to end the piece' : 'End the piece'} {...padProps('x-end', endTap)}
                   style={{ position: 'relative', borderRadius: 20, touchAction: 'none', color: '#eef1f7', fontSize: 22, fontWeight: 800, border: `4px solid ${confirmEnd ? '#ffffff' : '#ce93d8'}`, background: confirmEnd ? '#6a3a7a' : '#2d2033' }}>
                   {confirmEnd && drainRing}
-                  {confirmEnd ? 'Tap again to end' : '⏹ End piece'}
+                  {confirmEnd ? 'Tap again to end' : '↘ End piece'}
                 </button>
               );
             }

@@ -15,7 +15,7 @@ const HELP: HelpEntry[] = [
     body: 'Pass: one time round the loop, left to right — scenes, loops and the ending all '
       + 'land on a pass. Phrase: the idea one counter plays until the next counter of its '
       + 'colour. Scene: a set of loops and a sound, brought in by the clock, or by hand with Next '
-      + 'or Jump here now. '
+      + 'scene or Jump here now. '
       + 'Loop: counters kept with New loop and Keep, that then play on their own. Band: a pad, '
       + 'bass and groove that answer the player. Extra notes: notes the instrument adds around '
       + 'yours. Sounds change: the sound of each colour slowly changing. Lane: a row or step kept '
@@ -220,16 +220,20 @@ const HELP: HelpEntry[] = [
       + 'and the wood is never offered as a colour.',
   },
   {
-    title: 'Play, Make a piece, Show',
-    body: 'Three buttons at the top. Play: just play the board, with the Sound, Groove, Board '
-      + 'and Connections tabs — no loops or scenes needed. Make a piece: three steps. '
+    title: 'Board, Make a piece, Show',
+    body: 'Three buttons at the top. Board: just play the board, with the Sound, Groove, Board '
+      + 'and Connections tabs — no loops or scenes needed. ▶ Play the board plays what is on the '
+      + 'board: no clock, no scenes. Make a piece: three steps. '
       + '1 Loops: press New loop, put counters down, then Keep, and give the loop a name. '
       + '2 Scenes: "Make my plan" gives four scenes across the piece, each with your '
       + 'loops; tap one to change it (a time can be typed 2:30 or 2.30); ▶ Rehearse from here '
       + 'plays from it. A scene with no loops is silent unless the player plays: tick "alone" in it '
       + 'only if that is the plan. 3 Ending & check: the length (at most 7:00), how it ends, '
-      + 'and a check of everything. Each step is optional. Show: the board full screen with '
-      + 'the clock and Now / Next, for the performance — Start the piece, Next, End; while '
+      + 'and a check of everything (advice, such as the laptop board or no backup yet, is marked i '
+      + 'and never stops it saying ready). Each step is optional. Show: the board full screen with '
+      + 'the clock and Now / Next, for the performance — ▶ Start the piece, then, once the clock '
+      + 'runs, Next scene ▶ (↶ Back to the scene before, for one pass) and ↘ End piece, the '
+      + 'ending you chose. ■ Stop silences everything at once; while '
       + 'the piece plays, Stop needs two presses, and for its first 2 seconds Stop does '
       + 'nothing. A line under the clock says how the camera, the hat, the iPad and Ableton '
       + 'are: ✓ when fine, "!" in amber when not, and Muted or Simplified when they are on. '
@@ -251,8 +255,8 @@ const HELP: HelpEntry[] = [
     body: 'Make a piece, step 3. Set the length (7:00), and the countdown shows above the '
       + 'board and big on the iPad, with cues at 1 minute, 30 and 10 seconds. Choose the '
       + 'ending in advance — Final chord, Fade out, Slow down, Thin out or Stop — how many '
-      + 'passes it takes, and whether it ends by itself at the time or when End is pressed. '
-      + 'End (laptop) or End piece (iPad, two taps) applies it; Cancel the ending brings the '
+      + 'passes it takes, and whether it ends by itself at the time or when End piece is pressed. '
+      + '↘ End piece (laptop) or End piece (iPad, two taps) applies it; Cancel the ending brings the '
       + 'music back.',
   },
   {
@@ -287,7 +291,8 @@ const HELP: HelpEntry[] = [
     title: 'Simplify, and keeping time',
     body: 'Simplify (on the laptop, in Play and Show, never on the iPad) strips the sound back '
       + 'in one press: the band, Extra notes and Sounds change go, and only the first loop of '
-      + 'the scene keeps playing under the player. The sound world, the speed and the clock '
+      + 'the scene keeps playing under the player, and the line under the board names them '
+      + '("Simplified: Tim and Bed"). The sound world, the speed and the clock '
       + 'carry on, and scenes still come in, with just their first loop. Back to full brings '
       + 'the scene back from the next pass; Stop ends it. ADMI also watches whether the sound '
       + 'keeps time. If the laptop is too busy and the sound falls behind, it says so on the '
@@ -297,10 +302,10 @@ const HELP: HelpEntry[] = [
   },
   {
     title: 'Keyboard',
-    body: 'Space: ▶ Play on the board, and Stop while it plays. In Show: ▶ Start the piece, also '
+    body: 'Space: ▶ Play the board on the Board view, and Stop while it plays. In Show: ▶ Start the piece, also '
       + 'while the board plays; once the piece plays, Stop (press twice). Never during Set up, and '
       + 'never when a button or slider '
-      + 'has focus. Tabs move with the arrow keys. ▶ Show fills the screen; '
+      + 'has focus. Tabs move with the arrow keys. Show fills the screen; '
       + 'Leave Show (or Esc, once out of full screen) goes back. When a button goes away, focus '
       + 'moves to what takes its place: in Show, Start the piece to the Now / Next strip (never '
       + 'onto Stop) and Stop back to Start the piece; Done and Leave back to New loop. '

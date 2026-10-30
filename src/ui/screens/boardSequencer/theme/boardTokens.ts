@@ -132,3 +132,12 @@ export function swatchRingFor(
   const outer = contrastRatio(light, surface) >= contrastRatio(dark, surface) ? light : dark;
   return { inner, outer };
 }
+
+/**
+ * The playhead's outline on the board: the secondary text colour, which is well over 3:1
+ * against the squares in both modes (B9). Never a counter hue, and never the accent, which
+ * already marks a sounding counter.
+ */
+export function playheadColour(palette: BoardPalette): string {
+  return palette.fg2;
+}

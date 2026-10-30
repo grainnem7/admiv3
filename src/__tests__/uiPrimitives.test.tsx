@@ -84,6 +84,17 @@ describe('SegmentedControl', () => {
     click(radios()[0]);
     expect(radios()[0].getAttribute('aria-checked')).toBe('true');
   });
+
+  it('the selected option shows ● and a light tint, not the filled mint of a main action (B17)', () => {
+    const r = render(<SegmentedHarness />);
+    const radios = r.all('[role="radio"]');
+    expect(radios[1].classList.contains('bs-selected')).toBe(true);
+    expect(radios[1].style.background).toBe('var(--bs-accent-muted)');
+    expect(radios[1].style.color).toBe('var(--bs-fg)');
+    expect(radios[0].classList.contains('bs-selected')).toBe(false);
+    // The words are unchanged: the ● is drawn by the stylesheet, not spoken.
+    expect(radios[1].textContent).toBe('4');
+  });
 });
 
 describe('Switch', () => {
@@ -99,6 +110,31 @@ describe('Switch', () => {
 });
 
 describe('Button', () => {
+  it('the danger tone (■ Stop) stands out by weight, never by a counter hue: the text colour as its fill, bold', () => {
+    const r = render(<Button tone="danger">■ Stop</Button>);
+    const button = r.get('button');
+    expect(button.style.background).toBe('var(--bs-fg)');
+    expect(button.style.color).toBe('var(--bs-bg)');
+    expect(button.style.fontWeight).toBe('800');
+    expect(button.outerHTML).not.toMatch(/--bs-danger|--bs-warn/);
+  });
+
+  it('a reserved reason never widens the button’s place, so its coming never re-wraps the header (B25)', () => {
+    const r = render(<Button reserveReason reason={null}>Player: Tim</Button>);
+    const reason = r.container.querySelector('button + span') as HTMLElement;
+    expect(reason.style.position).toBe('absolute');
+    expect((reason.parentElement as HTMLElement).style.position).toBe('relative');
+    expect((reason.parentElement as HTMLElement).style.paddingBottom).toBe('16px');
+  });
+
+  it('the selected tone: ● and a light tint with the accent edge (B17)', () => {
+    const r = render(<Button tone="selected" aria-pressed>Board</Button>);
+    const button = r.get('button');
+    expect(button.classList.contains('bs-selected')).toBe(true);
+    expect(button.style.background).toBe('var(--bs-accent-muted)');
+    expect(button.textContent).toBe('Board');
+  });
+
   it('a reason disables it and is shown in reserved space', () => {
     const onClick = vi.fn();
     const r = render(<Button reason="Volume is set by the volume counter" onClick={onClick}>Volume</Button>);

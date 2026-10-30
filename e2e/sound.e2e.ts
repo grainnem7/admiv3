@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { listenToOutput, makePlan, notesPlayed, oneNote, openLaptopBoard, outputLevels, pageErrors, pickColour, pieceStep, place, pressAndListen } from './app';
+import { listenToOutput, makePlan, notesPlayed, oneNote, openLaptopBoard, outputLevels, pageErrors, pickColour, pieceStep, place, pressAndListen, saveBoardHere } from './app';
 
 /**
  * The Sound tab and the loop edit window, as a musician uses them: each colour's own
@@ -51,7 +51,7 @@ test('the helpers play: extra notes on, then frozen', async ({ page }) => {
   await page.getByRole('tab', { name: 'Sound' }).click();
   const extra = page.getByRole('group', { name: 'Extra notes' });
   await extra.getByRole('radio', { name: 'Some' }).click();
-  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await page.getByRole('button', { name: '▶ Play the board' }).first().click();
   await expect.poll(() => notesPlayed(page), { timeout: 15_000 }).toBeGreaterThan(0);
   const freeze = extra.getByRole('button', { name: /Freeze/ });
   await expect(freeze).toBeEnabled({ timeout: 15_000 });
@@ -65,7 +65,7 @@ test('the loop edit window shows the board beside the loop, and copies one into 
   await pieceStep(page, 'Loops');
   await pickColour(page, 'Red');
   await place(page, [[3, 1]]);
-  await page.getByRole('button', { name: 'Save the board here' }).first().click();
+  await saveBoardHere(page);
   await page.getByRole('button', { name: 'Clear the board' }).click();
   await place(page, [[2, 2], [6, 4]]);
 
@@ -93,7 +93,7 @@ test('the laptop board can add more colours, each with a job, and they play', as
   await expect(colours.getByRole('radio', { name: /Purple/ })).toBeVisible();
   await pickColour(page, 'Orange');
   await place(page, [[4, 1]]);
-  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await page.getByRole('button', { name: '▶ Play the board' }).first().click();
   await expect.poll(() => notesPlayed(page), { timeout: 15_000 }).toBeGreaterThan(0);
   await page.getByRole('tab', { name: 'Sound' }).click();
   await expect(page.getByRole('row', { name: /^Orange: Melody/ })).toBeVisible();
@@ -104,7 +104,7 @@ test('the red cap (tried with the mouse) moves the speed left–right and shows 
   await openLaptopBoard(page);
   await pickColour(page, 'Red');
   await place(page, [[3, 1]]);
-  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await page.getByRole('button', { name: '▶ Play the board' }).first().click();
   await page.getByRole('tab', { name: 'Cap' }).click();
   await page.getByRole('switch', { name: 'Control with the red cap' }).click();
   // The cap's finer settings are folded under More hat settings (A13).
@@ -157,7 +157,7 @@ test('ping-pong with two pages: choose each page there and back, or one strip', 
   await expect(choice.getByRole('radio', { name: 'Each page there and back' })).toBeChecked();
   await choice.getByRole('radio', { name: 'All pages as one strip' }).click();
   await expect(page.getByText('A → B → to the end, then back B ← A ←: like one long board.')).toBeVisible();
-  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await page.getByRole('button', { name: '▶ Play the board' }).first().click();
   await expect.poll(() => notesPlayed(page), { timeout: 15_000 }).toBeGreaterThan(0);
   expect(pageErrors(page)).toEqual([]);
 });
@@ -166,7 +166,7 @@ test('the session log survives a reload, and earlier takes are kept', async ({ p
   await openLaptopBoard(page);
   await pickColour(page, 'Red');
   await place(page, [[3, 1], [5, 3]]);
-  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await page.getByRole('button', { name: '▶ Play the board' }).first().click();
   await expect.poll(() => notesPlayed(page), { timeout: 15_000 }).toBeGreaterThan(2);
   await page.waitForTimeout(5500); // kept every few seconds while playing
   // A reload mid-take: before, "Save session" came back with 0 notes.
@@ -176,7 +176,7 @@ test('the session log survives a reload, and earlier takes are kept', async ({ p
   // A new take: the old one stays, under Earlier takes. (The old count shows until the
   // new take starts, so wait for the new one to begin counting from nothing.)
   const before = await notesPlayed(page);
-  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await page.getByRole('button', { name: '▶ Play the board' }).first().click();
   await expect.poll(() => notesPlayed(page), { timeout: 15_000 }).toBeLessThan(before);
   await expect.poll(() => notesPlayed(page), { timeout: 15_000 }).toBeGreaterThan(0);
   await page.getByRole('button', { name: /■ Stop/ }).first().click();
@@ -229,7 +229,7 @@ test('after saving the board as a loop, its name is ready to type', async ({ pag
   await pickColour(page, 'Red');
   await place(page, [[3, 1]]);
   await pieceStep(page, 'Loops');
-  await page.getByRole('button', { name: 'Save the board here' }).first().click();
+  await saveBoardHere(page);
   await expect(page.getByRole('textbox', { name: 'Name of loop 1' })).toBeFocused();
   await page.keyboard.type('Intro');
   await expect(page.getByRole('textbox', { name: 'Name of loop 1' })).toHaveValue('Intro');
@@ -283,11 +283,11 @@ test('Stop silences a launched loop; it does not come back on Play', async ({ pa
   await pieceStep(page, 'Loops');
   await pickColour(page, 'Red');
   await place(page, [[3, 1], [5, 3]]);
-  await page.getByRole('button', { name: 'Save the board here' }).first().click();
+  await saveBoardHere(page);
   await page.getByRole('button', { name: 'Clear the board' }).click();
   // Launch the loop with the board empty, so every note comes from the loop.
   await page.getByRole('listitem', { name: /^Loop 1:/ }).getByRole('button', { name: '▶ Play' }).click();
-  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await page.getByRole('button', { name: '▶ Play the board' }).first().click();
   await expect.poll(() => notesPlayed(page), { timeout: 15_000 }).toBeGreaterThan(0);
   await page.getByRole('button', { name: '■ Stop' }).first().click();
   // Stop means silence: the loop is stopped, not "ready · starts with Play".
@@ -295,7 +295,7 @@ test('Stop silences a launched loop; it does not come back on Play', async ({ pa
   await expect(page.getByRole('listitem', { name: /^Loop 1: .*2 notes/ })).toBeVisible();
   // Play again with the board still empty: the loop stays stopped, so nothing plays.
   await page.waitForTimeout(600); // ▶ Play ignores a press straight after Stop (a bounce)
-  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await page.getByRole('button', { name: '▶ Play the board' }).first().click();
   await page.waitForTimeout(3000);
   expect(await notesPlayed(page)).toBe(0);
   expect(pageErrors(page)).toEqual([]);
@@ -309,10 +309,10 @@ test('New loop starts from silence, Keep names it, Leave restores the player’s
   await pieceStep(page, 'Loops');
   await pickColour(page, 'Red');
   await place(page, [[3, 1]]);
-  await page.getByRole('button', { name: 'Save the board here' }).first().click();
+  await saveBoardHere(page);
   await page.getByRole('button', { name: 'Clear the board' }).click();
   await page.getByRole('listitem', { name: /^Loop 1:/ }).getByRole('button', { name: '▶ Play' }).click();
-  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await page.getByRole('button', { name: '▶ Play the board' }).first().click();
   await expect.poll(() => notesPlayed(page), { timeout: 15_000 }).toBeGreaterThan(0);
 
   // New loop: everything stops; the board is empty, so it is ready to compose (nothing kept yet).
@@ -337,7 +337,7 @@ test('New loop starts from silence, Keep names it, Leave restores the player’s
   await expect(page.getByRole('listitem', { name: /^Loop 2: Bed, 2 notes/ })).toBeVisible();
 
   // Leaving gave the player's own settings back.
-  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await page.getByRole('button', { name: 'Board', exact: true }).click();
   await page.getByRole('tab', { name: 'Sound' }).click();
   await expect(page.getByRole('group', { name: 'Band' }).getByRole('radio', { name: 'Quiet' })).toHaveAttribute('aria-checked', 'true');
   expect(pageErrors(page)).toEqual([]);
@@ -345,7 +345,7 @@ test('New loop starts from silence, Keep names it, Leave restores the player’s
 
 test('a "d" typed on a button or in a list never opens a Debug Panel (only ?debug in development does)', async ({ page }) => {
   await openLaptopBoard(page);
-  await page.getByRole('button', { name: '▶ Play' }).first().focus();
+  await page.getByRole('button', { name: '▶ Play the board' }).first().focus();
   await page.keyboard.press('d');
   await page.getByRole('tab', { name: 'Sound' }).click();
   // A keyboard user types a letter in a list to jump through it.
@@ -367,11 +367,11 @@ test('▶ Play and ▶ Start the piece on an empty board send nothing to the spe
   const gap = (ms: number) => page.evaluate((t) => new Promise((r) => setTimeout(r, t)), ms);
   const loudest: number[] = [];
   for (let run = 0; run < 5; run++) {
-    const levels = await pressAndListen(page, '▶ Play', 40, 20); // 800 ms from the press
+    const levels = await pressAndListen(page, '▶ Play the board', 40, 20); // 800 ms from the press
     expect(levels).toHaveLength(40);
     loudest.push(Math.max(...levels));
     await page.getByRole('button', { name: '■ Stop' }).first().click();
-    await expect(page.getByRole('button', { name: '▶ Play' }).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: '▶ Play the board' }).first()).toBeVisible();
     await gap(600); // past Play's bounce guard
   }
   // The piece: Show → Start the piece, with the plan's band and no counter down.
@@ -385,14 +385,14 @@ test('▶ Play and ▶ Start the piece on an empty board send nothing to the spe
     await gap(2100); // ■ Stop ignores presses for the piece's first 2 s (B3)
     await page.getByRole('button', { name: '■ Stop' }).first().click();
     await page.getByRole('button', { name: '■ Press again to stop' }).first().click();
-    await expect(page.getByRole('button', { name: '▶ Play' }).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: '▶ Play the board' }).first()).toBeVisible();
     await gap(600);
   }
   expect(loudest.every((v) => v < CLICK), `loudest sample after each press: ${loudest.join(', ')}`).toBe(true);
   // The meter does hear: one counter down, and Play is heard.
   await pickColour(page, 'Red');
   await place(page, [[3, 1], [5, 3], [3, 5], [5, 7]]);
-  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await page.getByRole('button', { name: '▶ Play the board' }).first().click();
   await expect.poll(async () => Math.max(0, ...await outputLevels(page, 4)), { timeout: 20_000 }).toBeGreaterThan(0.02);
   expect(pageErrors(page)).toEqual([]);
 });

@@ -13,6 +13,9 @@ export interface NowNextStripProps {
   /** ▶ Start the piece: from 0:00, whether the board is stopped or already playing. */
   onStartPiece(): void;
   onNext(): void;
+  /** For one pass after Next scene: the scene before, and going back to it (B13). */
+  undoNext?: { name: string } | null;
+  onUndoNext?(): void;
   onEnd(): void;
   onCancelEnding(): void;
   /** Bigger type for the Big board view, read from across the room. */
@@ -82,12 +85,18 @@ export function NowNextStrip(p: NowNextStripProps): JSX.Element {
           {p.cue}
         </span>
       )}
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-        <Button tone="secondary" onClick={p.onNext} disabled={p.ending}>Next ▶</Button>
-        {!p.ending
-          ? <Button tone="primary" onClick={p.onEnd}>⏹ End</Button>
-          : <Button tone="secondary" onClick={p.onCancelEnding}>Cancel the ending</Button>}
-      </div>
+      {/* Only once the clock runs (B13): before, Next scene and End had nothing to act on. End
+          has its own sign and a quiet style; ■ Stop, elsewhere, is the danger button. */}
+      {p.clock && phase !== 'idle' && (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {/* Beside Next, never in its place: a second press of Next goes on, as it always did. */}
+          {p.undoNext && p.onUndoNext && <Button tone="secondary" onClick={p.onUndoNext}>{`↶ Back to ${p.undoNext.name}`}</Button>}
+          <Button tone="secondary" onClick={p.onNext} disabled={p.ending}>Next scene ▶</Button>
+          {!p.ending
+            ? <Button tone="quiet" onClick={p.onEnd} style={{ border: '1px solid var(--bs-border-control)' }}>↘ End piece</Button>
+            : <Button tone="secondary" onClick={p.onCancelEnding}>Cancel the ending</Button>}
+        </div>
+      )}
     </div>
   );
 }

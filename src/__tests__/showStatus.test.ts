@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  escLeavesShow, showStatusItems, stopGuarded, STOP_GUARD_MS, type ShowStatusInput,
+  escLeavesShow, showStatusItems, simplifiedLine, stopGuarded, STOP_GUARD_MS, type ShowStatusInput,
 } from '../ui/screens/boardSequencer/play/showStatus';
 
 const QUIET: ShowStatusInput = {
@@ -69,11 +69,11 @@ describe('the Show status row (audit 2026-10-30, B1 and B14)', () => {
       ...QUIET,
       ipad: { reaching: true, endPressedOnce: true },
       muted: true,
-      simplify: 'Simplified: Tim and the bed',
+      simplify: 'Simplified: Tim and Bed',
       keepingTime: { text: 'The sound is falling behind.', canRestore: true },
     });
     expect(items.find((x) => x.key === 'muted')).toMatchObject({ tone: 'note', text: 'Muted: nothing is sounding' });
-    expect(items.find((x) => x.key === 'simplify')).toMatchObject({ tone: 'note', text: 'Simplified: Tim and the bed', label: 'Simplify' });
+    expect(items.find((x) => x.key === 'simplify')).toMatchObject({ tone: 'note', text: 'Simplified: Tim and Bed', label: 'Simplify' });
     expect(items.find((x) => x.key === 'ipadEnd')).toMatchObject({ text: 'iPad: End piece pressed once' });
     expect(items.find((x) => x.key === 'keepingTime')).toMatchObject({
       tone: 'warn', text: '! The sound is falling behind.', label: 'Keeping time', actions: ['restoreExtras'],
@@ -128,5 +128,16 @@ describe('leaving Show (B5)', () => {
     // Full screen ended a moment ago: that Esc was the browser's, not a second press.
     expect(escLeavesShow(false, 4900, 5000)).toBe(false);
     expect(escLeavesShow(false, 3000, 5000)).toBe(true);
+  });
+});
+
+describe('Simplify says what is left, by name (B23)', () => {
+  it('"Simplified: Tim and <the loop’s name>", never "the bed"', () => {
+    expect(simplifiedLine('Tim', 'Bed')).toBe('Simplified: Tim and Bed');
+    expect(simplifiedLine('Tim', 'Loop 1')).toBe('Simplified: Tim and Loop 1');
+    expect(simplifiedLine(null, 'Loop 2')).toBe('Simplified: the player and Loop 2');
+  });
+  it('with no loop playing, the player alone', () => {
+    expect(simplifiedLine('Tim', null)).toBe('Simplified: Tim alone');
   });
 });

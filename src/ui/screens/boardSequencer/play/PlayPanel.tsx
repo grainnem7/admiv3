@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { Button } from '../ui/Button';
 import { PLAY_STOP_ID } from '../ui/focusNext';
 import { Tabs } from '../ui/Tabs';
@@ -53,6 +53,7 @@ export function PlayPanel({
   heldCount, handGuardWaiting, piece, connections, cap, groove, sound, loops, stacked, transportAlign,
 }: PlayPanelProps): JSX.Element {
   const [tab, setTab] = useState('sound');
+  const playHintId = useId();
 
   const transport = (
     <div
@@ -79,8 +80,10 @@ export function PlayPanel({
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         {/* One button whose words change (the same element), so focus stays on it. */}
         {running
-          ? <Button id={PLAY_STOP_ID} tone="primary" onClick={onStop} style={{ minWidth: '7.5em' }}>{stopArmed ? '■ Press again to stop' : '■ Stop'}</Button>
-          : <Button id={PLAY_STOP_ID} tone="primary" onClick={onStart} style={{ minWidth: '7.5em' }}>▶ Play</Button>}
+          // ■ Stop is the clear danger button (B13); ▶ Play the board plays what is on the board,
+          // with no clock and no scenes (B16).
+          ? <Button id={PLAY_STOP_ID} tone="danger" onClick={onStop} style={{ minWidth: '7.5em' }}>{stopArmed ? '■ Press again to stop' : '■ Stop'}</Button>
+          : <Button id={PLAY_STOP_ID} tone="primary" onClick={onStart} style={{ minWidth: '7.5em' }} aria-describedby={playHintId}>▶ Play the board</Button>}
         <Button tone="secondary" aria-pressed={muted} onClick={onToggleMute} disabled={!running} title={running ? undefined : 'Mute works while playing.'}>
           {muted ? 'Muted' : 'Mute'}
         </Button>
@@ -124,6 +127,12 @@ export function PlayPanel({
           </span>
         )}
       </span>
+      {/* What ▶ Play the board is, said beside it (B16): there is no clock. */}
+      {!running && (
+        <span id={playHintId} style={{ fontSize: 13, color: 'var(--bs-fg2)' }}>
+          No clock, no scenes: the piece starts from Show.
+        </span>
+      )}
       {handGuardWaiting && (
         <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
           Hand guard: waiting for a clear view of the board

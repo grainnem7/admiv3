@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react';
-import { NewLoopPanel, newLoopStatusLine, type NewLoopPanelProps } from '../ui/screens/boardSequencer/play/NewLoopPanel';
+import { NewLoopPanel, liftLine, newLoopStatusLine, type NewLoopPanelProps } from '../ui/screens/boardSequencer/play/NewLoopPanel';
 import { startNewLoop, startWithThese } from '../songs/performance/newLoop';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -70,6 +70,22 @@ describe('New loop', () => {
     act(() => button('Bed')?.click());
     expect(p.onRename).toHaveBeenCalledWith(3, 'Bed');
     for (const quick of ['Bed', 'Pulse', 'Beat', 'Shine']) expect(button(quick)).toBeDefined();
+  });
+});
+
+describe('New loop on the laptop board: Clear the board is named (B22)', () => {
+  it('"Lift the 3 counters, or press Clear the board."', () => {
+    render(props({ state: startNewLoop(3), countersOnBoard: 3, laptop: true }));
+    expect(text()).toContain('Lift the 3 counters, or press Clear the board.');
+  });
+  it('on the camera board there is no Clear the board to press: just lift them', () => {
+    render(props({ state: startNewLoop(3), countersOnBoard: 1 }));
+    expect(text()).toContain('Lift the 1 counter to start from silence.');
+    expect(text()).not.toContain('Clear the board');
+  });
+  it('the line is the same one the screen says aloud', () => {
+    expect(liftLine(2, true)).toBe('Lift the 2 counters, or press Clear the board.');
+    expect(liftLine(1, false)).toBe('Lift the 1 counter to start from silence.');
   });
 });
 
@@ -222,14 +238,14 @@ describe('New loop: focus never drops to the page (T1-04, T4-09)', () => {
 });
 
 describe('New loop on a stopped board (R2-T1-01)', () => {
-  const STOPPED = 'Stopped. Press ▶ Play to hear the counters.';
+  const STOPPED = 'Stopped. Press ▶ Play the board to hear the counters.';
 
   it('stopped inside New loop: says so, with a ▶ Play inside the panel, and never "only the counters sound"', () => {
     const p = props({ countersOnBoard: 2, stopped: { why: null, canPlay: true } });
     render(p);
     expect(text()).toContain(STOPPED);
     expect(text().toLowerCase()).not.toContain('only the counters sound');
-    const play = button('▶ Play');
+    const play = button('▶ Play the board');
     expect(play?.disabled).toBe(false);
     act(() => play?.click());
     expect(p.onPlay).toHaveBeenCalled();
@@ -240,7 +256,7 @@ describe('New loop on a stopped board (R2-T1-01)', () => {
   it('while it plays: no "Press ▶ Play" line and no ▶ Play in the panel', () => {
     render(props({ countersOnBoard: 2, stopped: null }));
     expect(text()).not.toContain('Press ▶ Play');
-    expect(button('▶ Play')).toBeUndefined();
+    expect(button('▶ Play the board')).toBeUndefined();
     expect(text()).toContain('Only the counters sound.');
   });
 
@@ -249,14 +265,14 @@ describe('New loop on a stopped board (R2-T1-01)', () => {
     expect(text()).toContain("The camera isn't working.");
     expect(text()).not.toContain(STOPPED);
     expect(text().toLowerCase()).not.toContain('only the counters sound');
-    expect(button('▶ Play')?.disabled).toBe(true);
-    expect(describedBy(button('▶ Play'))).toBe("The camera isn't working.");
+    expect(button('▶ Play the board')?.disabled).toBe(true);
+    expect(describedBy(button('▶ Play the board'))).toBe("The camera isn't working.");
   });
 
   it('a sound problem: said, and ▶ Play can try again', () => {
     render(props({ countersOnBoard: 2, stopped: { why: 'Could not start. The sound device is busy.', canPlay: true } }));
     expect(text()).toContain('Could not start. The sound device is busy.');
-    expect(button('▶ Play')?.disabled).toBe(false);
+    expect(button('▶ Play the board')?.disabled).toBe(false);
   });
 
   it('waiting for the board to be clear while stopped: both are said', () => {
@@ -268,7 +284,7 @@ describe('New loop on a stopped board (R2-T1-01)', () => {
   it('▶ Play in the panel: once the board plays, focus goes to the heading, never the page', async () => {
     const p = props({ countersOnBoard: 2, stopped: { why: null, canPlay: true } });
     render(p);
-    const play = button('▶ Play') as HTMLButtonElement;
+    const play = button('▶ Play the board') as HTMLButtonElement;
     act(() => play.focus());
     act(() => play.click());
     render({ ...p, stopped: null });

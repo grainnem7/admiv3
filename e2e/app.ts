@@ -108,8 +108,8 @@ export async function makePlan(page: Page): Promise<void> {
 
 
 /**
- * Start the piece the way a performer does: ▶ Show → ▶ Start the piece, then back to the
- * normal view (the clock keeps running). ▶ Play on its own only plays the board.
+ * Start the piece the way a performer does: Show → ▶ Start the piece, then back to the
+ * normal view (the clock keeps running). ▶ Play the board on its own only plays the board.
  */
 export async function startPiece(page: Page): Promise<void> {
   await page.getByRole('button', { name: /^Show: the board, the clock/ }).click();
@@ -186,4 +186,14 @@ export async function pressAndListen(page: Page, buttonText: string, bins = 40, 
     }
     return out;
   }, { buttonText, bins, binMs });
+}
+
+/**
+ * The old way to make a loop: Make a piece → Loops → "Other ways to make a loop" (folded,
+ * B17) → Save the board here, on the first empty loop. The fold stays open once opened.
+ */
+export async function saveBoardHere(page: Page): Promise<void> {
+  const fold = page.getByRole('button', { name: /Other ways to make a loop/ });
+  if ((await fold.getAttribute('aria-expanded')) === 'false') await fold.click();
+  await page.getByRole('button', { name: 'Save the board here' }).first().click();
 }

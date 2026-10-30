@@ -19,7 +19,7 @@ async function boardWithPlan(page: Page): Promise<void> {
   await pickColour(page, 'Red');
   await place(page, [[3, 1], [5, 3], [4, 5], [6, 7]]);
   await makePlan(page);
-  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await page.getByRole('button', { name: 'Board', exact: true }).click();
 }
 
 test('the iPad link: a heartbeat each second, a stall shown on both sides in 3–4 s (never sooner), touches not shown as applied, back without flicker; End piece pressed once and Mute in the Show row (B1, B2, B20)', async ({ page, browser }, testInfo) => {

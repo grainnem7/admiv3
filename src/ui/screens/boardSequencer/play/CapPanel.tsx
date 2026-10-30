@@ -478,7 +478,7 @@ export function CapPanel(p: CapPanelProps): JSX.Element {
             </div>
             {/* A show-time control: kept at the top, never folded away. */}
             <div>
-              <Button tone={s.locked ? 'primary' : 'secondary'} aria-pressed={s.locked} onClick={() => onChange({ locked: !s.locked })}>
+              <Button tone={s.locked ? 'selected' : 'secondary'} aria-pressed={s.locked} onClick={() => onChange({ locked: !s.locked })}>
                 {s.locked ? '🔒 Locked: press to let the cap move things again' : '🔒 Lock where things are now'}
               </Button>
             </div>

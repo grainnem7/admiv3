@@ -64,12 +64,15 @@ export function SegmentedControl<T extends string | number>({
             tabIndex={selected ? 0 : -1}
             disabled={disabled}
             onClick={() => onChange(o.value)}
+            // ● before the words (drawn by the stylesheet, not spoken), B17.
+            className={selected ? 'bs-selected' : undefined}
             style={{
               minHeight: 'var(--bs-target)',
               borderRadius: 'var(--bs-radius-md)',
-              // Selected state carries a fill AND a heavier border: never colour alone.
-              background: selected ? 'var(--bs-accent)' : 'var(--bs-raised)',
-              color: selected ? 'var(--bs-accent-fg)' : 'var(--bs-fg)',
+              // Selected state carries ●, a light tint AND a heavier border: never colour
+              // alone, and never the filled mint kept for a view's one main action (B17).
+              background: selected ? 'var(--bs-accent-muted)' : 'var(--bs-raised)',
+              color: 'var(--bs-fg)',
               borderColor: selected ? 'var(--bs-accent)' : 'var(--bs-border-control)',
               borderWidth: selected ? 2 : 1,
               fontWeight: selected ? 600 : 400,

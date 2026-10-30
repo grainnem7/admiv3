@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react';
 import { ReadyList, type ReadyItem } from '../ui/screens/boardSequencer/play/ReadyCheck';
+import { backupItem, boardItem } from '../ui/screens/boardSequencer/pieceCheck';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -43,5 +44,27 @@ describe('ReadyList', () => {
     render([ok, warn]);
     await frames();
     expect(document.activeElement).toBe(button('Use the safe show layout'));
+  });
+});
+
+describe('advice is not a warning: the check can reach Ready (B21)', () => {
+  it('the laptop board, chosen on purpose, and "Not backed up" are advice', () => {
+    expect(boardItem({ laptop: true, cameraOk: false })).toMatchObject({ label: 'Board: the laptop board', state: 'note' });
+    expect(backupItem(false)).toMatchObject({ label: 'Not backed up to a file yet', state: 'note' });
+    expect(backupItem(true)).toMatchObject({ state: 'ok' });
+    expect(boardItem({ laptop: false, cameraOk: true }).state).toBe('ok');
+    expect(boardItem({ laptop: false, cameraOk: false }).state).toBe('problem');
+  });
+
+  it('with only advice left, the summary says Everything is ready, and the advice is still shown, with its words', () => {
+    render([
+      { label: 'Board found', state: 'ok' },
+      boardItem({ laptop: true, cameraOk: false }),
+      backupItem(false),
+    ]);
+    expect(host.textContent).toContain('Everything is ready.');
+    expect(host.textContent).toContain('Board: the laptop board');
+    expect(host.textContent).toContain('Press Back up to a file below');
+    expect(host.textContent).not.toContain('to check');
   });
 });

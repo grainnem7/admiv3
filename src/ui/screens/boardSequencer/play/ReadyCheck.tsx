@@ -2,7 +2,8 @@ import { useRef } from 'react';
 import { Button } from '../ui/Button';
 import { focusWhenGone } from '../ui/focusNext';
 
-export type CheckState = 'ok' | 'warn' | 'problem';
+/** note: advice, never a warning (B21): shown with its words, not counted against Ready. */
+export type CheckState = 'ok' | 'warn' | 'problem' | 'note';
 
 export interface ReadyItem {
   label: string;
@@ -13,9 +14,9 @@ export interface ReadyItem {
   action?: { label: string; name: string; onClick(): void };
 }
 
-const MARK: Record<CheckState, string> = { ok: '✓', warn: '!', problem: '✕' };
-const COLOUR: Record<CheckState, string> = { ok: 'var(--bs-ok)', warn: 'var(--bs-warn)', problem: 'var(--bs-danger)' };
-const WORD: Record<CheckState, string> = { ok: 'ready', warn: 'check', problem: 'not ready' };
+const MARK: Record<CheckState, string> = { ok: '✓', warn: '!', problem: '✕', note: 'i' };
+const COLOUR: Record<CheckState, string> = { ok: 'var(--bs-ok)', warn: 'var(--bs-warn)', problem: 'var(--bs-danger)', note: 'var(--bs-fg2)' };
+const WORD: Record<CheckState, string> = { ok: 'ready', warn: 'check', problem: 'not ready', note: 'advice' };
 
 /**
  * Before the piece: everything the pre-show checklist asks, checked by the app where it

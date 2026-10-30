@@ -244,7 +244,7 @@ export function BoardMidiPanel({
             <Button
               tone="secondary"
               disabled={!running}
-              reason={running ? null : 'Press Play first (an empty board is fine).'}
+              reason={running ? null : 'Press ▶ Play the board first (an empty board is fine).'}
               onClick={() => setFlash(onTestNote() ? 'sent' : 'notPlaying')}
             >
               Play test note

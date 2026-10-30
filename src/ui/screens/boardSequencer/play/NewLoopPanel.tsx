@@ -13,7 +13,7 @@ const QUICK_NAMES = ['Bed', 'Pulse', 'Beat', 'Shine'];
  */
 export interface NewLoopStopped { why: string | null; canPlay: boolean }
 
-const STOPPED_LINE = 'Stopped. Press ▶ Play to hear the counters.';
+const STOPPED_LINE = 'Stopped. Press ▶ Play the board to hear the counters.';
 const LEAVE_LINE = 'Keep it or leave in Make a piece, 1 · Loops.';
 
 /**
@@ -24,6 +24,15 @@ export function newLoopStatusLine(stopped: NewLoopStopped | null): string {
   return stopped === null
     ? `Making a new loop: only the counters sound. ${LEAVE_LINE}`
     : `Making a new loop. ${stopped.why ?? STOPPED_LINE} ${LEAVE_LINE}`;
+}
+
+/**
+ * What to lift before a new loop starts from silence. On the laptop board, Clear the board
+ * (beside it) does it in one press, so it is named (B22).
+ */
+export function liftLine(count: number, laptop: boolean): string {
+  const counters = `${count} ${count === 1 ? 'counter' : 'counters'}`;
+  return laptop ? `Lift the ${counters}, or press Clear the board.` : `Lift the ${counters} to start from silence.`;
 }
 
 export interface NewLoopPanelProps {
@@ -38,6 +47,8 @@ export interface NewLoopPanelProps {
   otherLoops: { slot: number; name: string }[];
   /** The names the other loops already have, so a quick name never makes a second "Bed". */
   takenNames: string[];
+  /** The laptop board: Clear the board is there to press. */
+  laptop?: boolean;
   /** Set while the board is stopped (not while it plays or is starting). */
   stopped: NewLoopStopped | null;
   /** ▶ Play, from inside the panel: plain play, as the transport's. */
@@ -95,7 +106,7 @@ export function NewLoopPanel(p: NewLoopPanelProps): JSX.Element {
               // The button goes once the board plays: focus goes to the heading.
               onClick={(e) => { p.onPlay(); void focusWhenGone(() => headingRef.current, e.currentTarget); }}
             >
-              ▶ Play
+              ▶ Play the board
             </Button>
           </div>
         </div>
@@ -106,7 +117,7 @@ export function NewLoopPanel(p: NewLoopPanelProps): JSX.Element {
             {/* The board can be clear a moment before the wait ends (a camera board settles
                 first): never "Lift the 0 counters". */}
             {p.countersOnBoard > 0
-              ? `Lift the ${p.countersOnBoard} ${p.countersOnBoard === 1 ? 'counter' : 'counters'} to start from silence.`
+              ? liftLine(p.countersOnBoard, p.laptop === true)
               : 'Ready: the board is clear.'}
           </p>
           <p style={NOTE}>Nothing sounds until the board is empty. Or keep what is down and start with it:</p>
@@ -126,8 +137,8 @@ export function NewLoopPanel(p: NewLoopPanelProps): JSX.Element {
           {/* A group named by its words, so Band is heard as "Hear it with…, Band", not the Sound tab's Band. */}
           <div role="group" aria-labelledby={hearId} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <span id={hearId} style={NOTE}>Hear it with…</span>
-            <Button tone={hearing.band ? 'primary' : 'secondary'} aria-pressed={hearing.band} onClick={() => p.onHearWith({ band: !hearing.band })}>Band</Button>
-            <Button tone={hearing.fill ? 'primary' : 'secondary'} aria-pressed={hearing.fill} onClick={() => p.onHearWith({ fill: !hearing.fill })}>Extra notes</Button>
+            <Button tone={hearing.band ? 'selected' : 'secondary'} aria-pressed={hearing.band} onClick={() => p.onHearWith({ band: !hearing.band })}>Band</Button>
+            <Button tone={hearing.fill ? 'selected' : 'secondary'} aria-pressed={hearing.fill} onClick={() => p.onHearWith({ fill: !hearing.fill })}>Extra notes</Button>
             <select
               aria-label="Hear it with a loop"
               value={hearing.loop === null ? '' : String(hearing.loop)}

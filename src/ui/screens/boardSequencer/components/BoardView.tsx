@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import type { ActiveCell, PieceColour } from '../../../../tracking/BoardSequencerMode';
 import type { ColourId } from '../../../../tracking/boardColours';
 import { CellGrid } from './CellGrid';
-import { swatchRingFor, type BoardPalette } from '../theme/boardTokens';
+import { playheadColour, swatchRingFor, type BoardPalette } from '../theme/boardTokens';
 import { boardSummary, type PhraseSpan, type Pop } from './boardViewModel';
 import type { BankSlotState } from '../../../../tracking/boardFrame';
 
@@ -143,14 +143,32 @@ export function BoardView({
     const fillPopAt = new Set(pops.filter((p) => p.origin === 'fill').map((p) => keyOf(p.row, p.col)));
     const ghostAt = ghostsBySquare(frame.ghosts);
 
-    // Playhead band first, so pieces sit on top of it.
+    // The squares first, all of them: the playhead and the tune bands go on top. Drawn
+    // under the squares they showed only in the gaps, too faint to follow (B9).
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const cellW = cw - pad * 2;
+        const cellH = ch - pad * 2;
+        roundRect(ctx, c * cw + pad, r * ch + pad, cellW, cellH, Math.min(cellW, cellH) * 0.18);
+        ctx.fillStyle = palette.raised;
+        ctx.fill();
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = palette.border;
+        ctx.stroke();
+      }
+    }
+
+    // The playhead's column: a soft tint over its squares (its outline comes last, over
+    // the counters' edges, so it is never hidden).
     if (playing) {
-      ctx.fillStyle = palette.hi;
+      ctx.fillStyle = palette.fg;
+      ctx.globalAlpha = 0.1;
       ctx.fillRect(playheadCol * cw, 0, cw, h);
+      ctx.globalAlpha = 1;
     }
 
     // Phrase spans: a soft band along the counter's row from its column to the next
-    // counter of its colour, wrapping at the right edge. Drawn under the pieces.
+    // counter of its colour, wrapping at the right edge. On the squares, under the pieces.
     if (spans && spans.length > 0) {
       const bandH = Math.max(3, ch * 0.16);
       for (const s of spans) {
@@ -173,13 +191,6 @@ export function BoardView({
         const cellW = cw - pad * 2;
         const cellH = ch - pad * 2;
         const radius = Math.min(cellW, cellH) * 0.18;
-
-        roundRect(ctx, x, y, cellW, cellH, radius);
-        ctx.fillStyle = palette.raised;
-        ctx.fill();
-        ctx.lineWidth = 1;
-        ctx.strokeStyle = palette.border;
-        ctx.stroke();
 
         const key = keyOf(r, c);
         const isHeld = frame.held?.has(key) === true;
@@ -376,6 +387,16 @@ export function BoardView({
           col * cw + cw / 2, row * ch + ch / 2,
         );
       }
+    }
+
+    // The playhead's outline, last: at least 3:1 against the squares in both modes (B9),
+    // so the step playing now can be followed from the player's chair.
+    if (playing) {
+      const lw = 3;
+      ctx.globalAlpha = 1;
+      ctx.lineWidth = lw;
+      ctx.strokeStyle = playheadColour(palette);
+      ctx.strokeRect(playheadCol * cw + lw / 2, lw / 2, cw - lw, h - lw);
     }
 
     // Ping-pong direction, so the sweep's turn is visible, not only audible.

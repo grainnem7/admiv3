@@ -3376,6 +3376,12 @@ export class BoardSequencerEngine {
     return this.simplify;
   }
 
+  /** While simplified, the loop still playing under the player (its slot), or null: for its name (B23). */
+  getSimplifyBed(): number | null {
+    if (this.simplify === 'off') return null;
+    return bedOf(this.launched)[0]?.slot ?? null;
+  }
+
   private endSimplify(): void {
     this.simplify = 'off';
     this.applyBand();

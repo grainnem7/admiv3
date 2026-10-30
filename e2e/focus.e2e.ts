@@ -1,5 +1,5 @@
 import { chromium, test, expect, type Locator, type Page } from '@playwright/test';
-import { makePlan, openEmptyLaptopBoard, openLaptopBoard, openLaptopSetup, openWelcome, pageErrors, pickColour, pieceStep, place } from './app';
+import { makePlan, openEmptyLaptopBoard, openLaptopBoard, openLaptopSetup, openWelcome, pageErrors, pickColour, pieceStep, place, saveBoardHere } from './app';
 
 /**
  * Keyboard only: after each main button, focus lands on what took its place, never on the
@@ -25,7 +25,7 @@ test('set-up: Add four colours leads to the colours, ▶ Play to ■ Stop', asyn
   await focusIsOn(page.getByRole('heading', { name: 'Your colours (4)' }));
   await enter(page, page.getByRole('button', { name: 'Continue' }));
   await focusIsOn(page.getByRole('heading', { name: 'Ready to play' }));
-  await enter(page, page.getByRole('button', { name: '▶ Play', exact: true }));
+  await enter(page, page.getByRole('button', { name: '▶ Play the board', exact: true }));
   // One button that reads ▶ Play, then ■ Stop once the sound is ready: one press from stopping.
   const transport = page.getByRole('button', { name: '■ Stop', exact: true });
   await focusIsOn(transport, 20_000);
@@ -151,7 +151,7 @@ test('Clear it, in the question about clearing a loop: focus goes to Undo, not t
   await pickColour(page, 'Red');
   await place(page, [[3, 1]]);
   await pieceStep(page, 'Loops');
-  await page.getByRole('button', { name: 'Save the board here' }).first().click();
+  await saveBoardHere(page);
   await enter(page, page.getByRole('button', { name: 'Clear loop 1' }));
   const ask = page.getByRole('dialog', { name: 'Clear Loop 1?' });
   await enter(page, ask.getByRole('button', { name: 'Clear it' }));
@@ -172,15 +172,15 @@ test('Undo on the line under the board: the line goes, and focus goes to ▶ Pla
   await enter(page, page.getByRole('button', { name: 'Undo', exact: true }));
   expect(await focusNow(page)).not.toBe('BODY');
   await focusIsOn(play);
-  expect(await focusLater(page)).toBe('BUTTON:▶ Play');
+  expect(await focusLater(page)).toBe('BUTTON:▶ Play the board');
   await pieceStep(page, 'Loops');
-  await page.getByRole('button', { name: 'Save the board here' }).first().click();
+  await saveBoardHere(page);
   await enter(page, page.getByRole('button', { name: 'Clear loop 1' }));
   await enter(page, page.getByRole('dialog', { name: 'Clear Loop 1?' }).getByRole('button', { name: 'Clear it' }));
   await focusIsOn(page.getByRole('button', { name: 'Undo', exact: true }));
   await page.keyboard.press('Enter');
   await focusIsOn(play);
-  expect(await focusLater(page)).toBe('BUTTON:▶ Play');
+  expect(await focusLater(page)).toBe('BUTTON:▶ Play the board');
   expect(pageErrors(page)).toEqual([]);
 });
 

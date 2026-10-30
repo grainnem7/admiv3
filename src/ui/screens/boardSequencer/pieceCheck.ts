@@ -245,3 +245,21 @@ export function keepingTimeCheckItems(p: { report: KeepingTimeReport | null; run
   if (items.length > 0) return items;
   return [{ label: p.running ? 'Keeping time: fine so far' : `Keeping time: fine in the last run (${formatClock(r.runSec)})`, state: 'ok' }];
 }
+
+/**
+ * Which board is in use. The laptop board is chosen with its own button, so it is advice,
+ * not a warning (B21): the check can still reach Ready while planning at home.
+ */
+export function boardItem({ laptop, cameraOk }: { laptop: boolean; cameraOk: boolean }): ReadyItem {
+  if (laptop) return { label: 'Board: the laptop board', state: 'note', fix: 'For the performance with the real board, press 📷 Camera at the top.' };
+  return cameraOk
+    ? { label: 'Board: camera running and the board found', state: 'ok' }
+    : { label: 'Board: camera or board not ready', state: 'problem', fix: 'Set up: Camera and Board.' };
+}
+
+/** A backup file is advice (B21): the work is already saved on the laptop. */
+export function backupItem(backedUp: boolean): ReadyItem {
+  return backedUp
+    ? { label: 'Backed up to a file this session', state: 'ok' }
+    : { label: 'Not backed up to a file yet', state: 'note', fix: 'Press Back up to a file below, and keep the file off the laptop.' };
+}

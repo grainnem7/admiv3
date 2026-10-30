@@ -127,7 +127,7 @@ test('a red cap seen by a camera moves the speed with it', async ({ page }) => {
   await openLaptopBoard(page);
   await pickColour(page, 'Red');
   await place(page, [[3, 1]]);
-  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await page.getByRole('button', { name: '▶ Play the board' }).first().click();
   await page.getByRole('tab', { name: 'Cap' }).click();
   await page.getByRole('switch', { name: 'Control with the red cap' }).click();
   // The cap's finer settings are folded under More hat settings (A13).
@@ -211,7 +211,7 @@ test('the hat on Speed moves the speed around the player’s own: in the middle 
     await openLaptopBoard(page);
     await pickColour(page, 'Red');
     await place(page, [[3, 1]]);
-    await page.getByRole('button', { name: '▶ Play' }).first().click();
+    await page.getByRole('button', { name: '▶ Play the board' }).first().click();
     await page.getByRole('tab', { name: 'Cap' }).click();
     await page.getByRole('switch', { name: 'Control with the red cap' }).click();
     // The cap's finer settings are folded under More hat settings (A13).
@@ -308,7 +308,7 @@ test('the hat lost and found again elsewhere: the speed glides to where it now i
     await openLaptopBoard(page);
     await pickColour(page, 'Red');
     await place(page, [[3, 1]]);
-    await page.getByRole('button', { name: '▶ Play' }).first().click();
+    await page.getByRole('button', { name: '▶ Play the board' }).first().click();
     await page.getByRole('tab', { name: 'Cap' }).click();
     await page.getByRole('switch', { name: 'Control with the red cap' }).click();
     // The cap's finer settings are folded under More hat settings (A13).
@@ -542,7 +542,7 @@ async function learnTheHatThroughout(page: Page): Promise<void> {
   await openLaptopBoard(page);
   await pickColour(page, 'Red');
   await place(page, [[3, 1]]);
-  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await page.getByRole('button', { name: '▶ Play the board' }).first().click();
   await page.getByRole('tab', { name: 'Cap' }).click();
   await page.getByRole('switch', { name: 'Control with the red cap' }).click();
   // The cap's finer settings are folded under More hat settings (A13).

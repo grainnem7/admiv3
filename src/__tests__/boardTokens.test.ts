@@ -71,3 +71,14 @@ describe('swatchRingFor', () => {
     expect(contrastRatio(inner, '#e53935')).toBeGreaterThanOrEqual(3);
   });
 });
+
+describe('■ Stop: a neutral fill, the strongest button (B13 follow-up)', () => {
+  it('its words (the page colour on the text colour) reach 4.5:1, and the button 3:1 against every panel, in both modes', () => {
+    forEachMode((p, mode) => {
+      expect(contrastRatio(p.bg, p.fg), `${mode} words`).toBeGreaterThanOrEqual(4.5);
+      for (const surface of SURFACE_KEYS) {
+        expect(contrastRatio(p.fg, p[surface]), `${mode} on ${surface}`).toBeGreaterThanOrEqual(3);
+      }
+    });
+  });
+});

@@ -249,6 +249,16 @@ describe('Simplify', () => {
     expect(layersOn(p, 1)).toEqual(['live', 'slot0']);
   });
 
+  it('says which loop is the bed, so the laptop can name it (B23)', () => {
+    const { e, p } = simplifiable();
+    expect(e.getSimplifyBed()).toBeNull();
+    e.setSimplified(true);
+    layersOn(p, 1);
+    expect(e.getSimplifyBed()).toBe(0);
+    e.setLaunchedLoops([], []);
+    expect(e.getSimplifyBed()).toBeNull();
+  });
+
   it('while simplified, a scene that arrives brings its own bed, and its extras stay off', () => {
     const { e, p } = simplifiable();
     p.timer = 1; // playing: a launch waits for the pass

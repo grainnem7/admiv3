@@ -47,7 +47,7 @@ async function chooseSoundFrom(page: Page, choice: 'ADMI' | 'Ableton' | 'Both'):
 
 /** Play page → Connections: Sound from Ableton on the ADMI port. */
 async function setUpAbleton(page: Page): Promise<void> {
-  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await page.getByRole('button', { name: 'Board', exact: true }).click();
   await page.getByRole('tab', { name: 'Connections' }).click();
   await chooseSoundFrom(page, 'Ableton');
   await page.getByRole('combobox', { name: 'MIDI port' }).selectOption({ label: 'ADMI' });
@@ -63,7 +63,7 @@ test('Sound from: switching while playing releases every note in Ableton', async
   await pickColour(page, 'Red');
   await place(page, [[3, 1], [5, 2], [4, 3], [6, 4]]);
   await setUpAbleton(page);
-  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await page.getByRole('button', { name: '▶ Play the board' }).first().click();
   await expect.poll(async () => (await sentSince(page, 0)).filter(isOn).length, { timeout: 15_000 }).toBeGreaterThan(0);
   // Leaving a route that was sending releases it: Ableton to ADMI, and Both to Ableton (a
   // new route). ADMI to Both has nothing in Ableton to release.
@@ -82,7 +82,7 @@ test('the port goes mid-piece: ADMI plays on and says so; when it is back, it wa
   await pickColour(page, 'Red');
   await place(page, [[3, 1], [5, 3]]);
   await setUpAbleton(page);
-  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await page.getByRole('button', { name: '▶ Play the board' }).first().click();
   await expect.poll(async () => (await sentSince(page, 0)).filter(isOn).length, { timeout: 15_000 }).toBeGreaterThan(0);
 
   await page.evaluate(() => (window as unknown as { __midiPort: { remove(): void } }).__midiPort.remove());
@@ -166,7 +166,7 @@ test('picking Harp on a card switches that channel’s Ableton chain (CC 30 = 22
   await pickColour(page, 'Red');
   await place(page, [[3, 1]]);
   await setUpAbleton(page);
-  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await page.getByRole('button', { name: '▶ Play the board' }).first().click();
   await expect.poll(async () => (await sentSince(page, 0)).filter(isOn).length, { timeout: 15_000 }).toBeGreaterThan(0);
   await page.getByRole('tab', { name: 'Sound' }).click();
   const t = await now(page);
@@ -184,7 +184,7 @@ test('changing World switches every channel without its own sound', async ({ pag
   await pickColour(page, 'Red');
   await place(page, [[3, 1]]);
   await setUpAbleton(page);
-  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await page.getByRole('button', { name: '▶ Play the board' }).first().click();
   await expect.poll(async () => (await sentSince(page, 0)).filter(isOn).length, { timeout: 15_000 }).toBeGreaterThan(0);
   await page.getByRole('tab', { name: 'Sound' }).click();
   const t = await now(page);

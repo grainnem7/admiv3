@@ -146,17 +146,44 @@ export function loopStateText(l: PieceLoop, running: boolean, fades: boolean): s
   return `${l.notes} ${l.notes === 1 ? 'note' : 'notes'}`;
 }
 
-/** One colour per scene on the timeline, so a block and its row in the list match. */
-const SCENE_HUES = [210, 32, 318, 145, 265, 0, 190, 55, 100, 285, 15, 230];
-const sceneColour = (i: number): string => `hsl(${SCENE_HUES[i % SCENE_HUES.length]} 60% 48%)`;
 /**
- * The colour follows the scene, not its place in the list: when a new time re-sorts the
- * list, the scene being edited keeps its colour (T2-02).
+ * Scenes are told apart by their number, never by a colour of their own: the board's
+ * colours belong to the counters, and white on a bright scene colour was 2.3:1 (B10).
+ * Neighbours on the timeline alternate two neutral surfaces, with the board's text colour.
  */
-function sceneColours(scenes: readonly Scene[]): (s: Scene) => string {
-  const ids = scenes.map((s) => s.id).sort();
-  return (s) => sceneColour(Math.max(0, ids.indexOf(s.id)));
+const sceneChipSurface = (i: number): string => (i % 2 === 0 ? 'var(--bs-raised)' : 'var(--bs-hi)');
+
+/** A chip's padding and edges, either side: what its words never get. */
+const CHIP_EDGES_PX = 18;
+const CHIP_FONT = "700 13px system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
+let chipCanvas: CanvasRenderingContext2D | null | undefined;
+/** How wide the chip's words are drawn; without a canvas (tests), 8 px a character. */
+function chipTextWidth(text: string): number {
+  if (chipCanvas === undefined) {
+    // jsdom (the unit tests) has no canvas: it says so loudly, so it is not asked.
+    const jsdom = typeof navigator !== 'undefined' && navigator.userAgent.includes('jsdom');
+    try { chipCanvas = jsdom ? null : document.createElement('canvas').getContext('2d') ?? null; } catch { chipCanvas = null; }
+    if (chipCanvas) chipCanvas.font = CHIP_FONT;
+  }
+  return chipCanvas ? chipCanvas.measureText(text).width : text.length * 8;
 }
+
+/**
+ * What a scene's chip on the timeline says, in the room it has: the whole label, then
+ * without the time, then the number alone, else nothing. Never a word cut in half (a short
+ * last scene read "4 · Home 6:"); the whole label stays in the chip's name and tooltip.
+ * `widthPx` null: not measured yet, so the whole label.
+ */
+export function sceneChipLabel(
+  n: number, name: string, time: string, widthPx: number | null, measure: (t: string) => number = chipTextWidth,
+): string {
+  const options = [`${n} · ${name} ${time}`, `${n} · ${name}`, String(n)];
+  if (widthPx === null) return options[0];
+  return options.find((o) => measure(o) <= widthPx) ?? '';
+}
+
+/** "Other ways to make a loop" stays open for the rest of the session once opened. */
+let otherWaysOpen = false;
 
 const heading = { margin: 0, fontSize: 18, fontWeight: 800 } as const;
 const note = { fontSize: 13, color: 'var(--bs-fg2)', margin: 0 } as const;
@@ -226,13 +253,18 @@ function LoopsStep(p: PieceStepsProps): JSX.Element {
   const [replaceArmed, setReplaceArmed] = useState<number | null>(null);
   const nameRefs = useRef(new Map<number, HTMLInputElement>());
   const [more, setMore] = useState(false);
+  // The old ways, folded (B17): remembered while the page is open, so a second loop made
+  // the old way doesn't need the fold opened again.
+  const [otherWays, setOtherWays] = useState(otherWaysOpen);
+  const toggleOtherWays = (): void => setOtherWays((o) => { otherWaysOpen = !o; return !o; });
   // While the piece clock runs, the piece is playing: no loop is made then (F2).
   const pieceOn = p.clock !== null && p.clock.phase !== 'idle';
   const making = p.newLoop !== null && p.newLoop !== undefined;
   // The old ways to make a loop (Save the board here, Overwrite, Edit notes) stay for now,
   // but never inside New loop or during the piece, where they made a second, different
   // loop under the New loop heading (F1).
-  const oldWays = !making && !pieceOn;
+  const oldWaysAllowed = !making && !pieceOn;
+  const oldWays = oldWaysAllowed && otherWays;
   // Done or Leave closes New loop: focus goes back to New loop, one Enter from the next
   // loop, never to the page (T1-04). (Opening it, the panel takes focus itself.)
   const newLoopRef = useRef<HTMLButtonElement>(null);
@@ -262,7 +294,16 @@ function LoopsStep(p: PieceStepsProps): JSX.Element {
       )}
       {/* A note, not a warning: an empty board is where New loop starts (R2-T1-07). Not with
           every loop full: New loop is off then, and says why (R3-TB-03). */}
-      {!p.canSaveBoard && oldWays && !p.loopsFull && <p style={note}>To make a loop, press New loop.</p>}
+      {!p.canSaveBoard && oldWaysAllowed && !p.loopsFull && <p style={note}>To make a loop, press New loop.</p>}
+      {oldWaysAllowed && (
+        <button
+          type="button" aria-expanded={otherWays} onClick={toggleOtherWays}
+          style={{ alignSelf: 'flex-start', background: 'transparent', border: 'none', color: 'var(--bs-fg2)', minHeight: 'var(--bs-target)', cursor: 'pointer' }}
+        >
+          {otherWays ? '▾' : '▸'} Other ways to make a loop
+        </button>
+      )}
+      {oldWays && <p style={note}>Save the board here keeps the counters on the board as that loop. ✎ Edit notes changes a loop square by square.</p>}
       <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
         {p.loops.map((l) => {
           const empty = l.state === 'empty';
@@ -280,7 +321,7 @@ function LoopsStep(p: PieceStepsProps): JSX.Element {
               {!empty && <LoopThumb cells={l.cells} rows={p.rows} cols={p.cols} swatchFor={p.swatchFor} />}
               <input
                 ref={(el) => { if (el) nameRefs.current.set(l.slot, el); else nameRefs.current.delete(l.slot); }}
-                type="text" value={l.name} placeholder={empty ? 'name (after saving)' : `Loop ${l.slot + 1}`}
+                type="text" value={l.name} placeholder={empty ? 'name (after Keep)' : `Loop ${l.slot + 1}`}
                 aria-label={`Name of loop ${l.slot + 1}`}
                 onChange={(e) => p.onRenameLoop(l.slot, e.target.value)}
                 style={{ width: 120, minHeight: 'var(--bs-target)' }}
@@ -289,7 +330,7 @@ function LoopsStep(p: PieceStepsProps): JSX.Element {
               <span style={{ flex: 1 }} />
               {empty ? (oldWays && (
                 <Button
-                  tone="primary"
+                  tone="secondary"
                   onClick={() => {
                     p.onSaveBoardToLoop(l.slot);
                     // Next comes its name: focus goes there, rather than dropping to the page.
@@ -302,7 +343,7 @@ function LoopsStep(p: PieceStepsProps): JSX.Element {
               )) : (
                 <>
                   {/* Inside New loop a loop is heard with "Hear it with…"; this did nothing there (T1-10). */}
-                  {!making && <Button tone={on ? 'primary' : 'secondary'} aria-pressed={on} onClick={() => p.onToggleLoop(l.slot)}>{on ? '■ Stop' : '▶ Play'}</Button>}
+                  {!making && <Button tone={on ? 'selected' : 'secondary'} aria-pressed={on} onClick={() => p.onToggleLoop(l.slot)}>{on ? '■ Stop' : '▶ Play'}</Button>}
                   {oldWays && <Button
                     tone="secondary"
                     disabled={!p.canSaveBoard}
@@ -340,7 +381,7 @@ function LoopsStep(p: PieceStepsProps): JSX.Element {
           />
         </div>
       )}
-      <StepFooter next={{ label: 'Next: Scenes', onClick: () => p.onStep('scenes'), primary: true }} />
+      <StepFooter next={{ label: 'Next: Scenes', onClick: () => p.onStep('scenes') }} />
     </section>
   );
 }
@@ -387,9 +428,21 @@ function ScenesStep(p: PieceStepsProps): JSX.Element {
   // the scene being edited, not on whichever scene moves into its place (T2-02).
   const [selected, setSelected] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
+  // The timeline's width, so each chip says only what fits (whole words, never cut).
+  const timelineRef = useRef<HTMLUListElement>(null);
+  const [timelinePx, setTimelinePx] = useState<number | null>(null);
+  const hasTimeline = p.scenes.length > 0;
+  useEffect(() => {
+    const el = timelineRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return undefined;
+    const look = (): void => setTimelinePx(el.clientWidth > 0 ? el.clientWidth : null);
+    const ro = new ResizeObserver(look);
+    ro.observe(el);
+    look();
+    return () => ro.disconnect();
+  }, [hasTimeline]);
   const elapsed = p.clock && p.clock.phase !== 'idle' ? p.clock.elapsedSec : null;
   const saved = p.loops.filter((l) => l.state !== 'empty');
-  const colourOf = sceneColours(p.scenes);
   const who = playerWords(p.playerName);
   // Focus never drops to the page when a pressed button goes (T4-09): these are where it goes.
   const sectionRef = useRef<HTMLElement>(null);
@@ -417,31 +470,41 @@ function ScenesStep(p: PieceStepsProps): JSX.Element {
         </div>
       ) : (
         <>
-          <div role="list" aria-label="Timeline of the scenes" style={{ position: 'relative', height: 44, borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-elev)', overflow: 'hidden' }}>
+          <ul ref={timelineRef} aria-label="Timeline of the scenes" style={{ listStyle: 'none', margin: 0, padding: 0, position: 'relative', height: 44, borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-elev)', overflow: 'hidden' }}>
             {p.scenes.map((s, i) => {
               if (typeof s.at !== 'number' || s.at >= p.lengthSec) return null;
               const nextAt = p.scenes.slice(i + 1).find((x) => typeof x.at === 'number')?.at ?? p.lengthSec;
+              const words = `${i + 1} · ${s.name} ${formatClock(s.at)}`;
+              const share = Math.max(2, ((Math.min(p.lengthSec, nextAt as number) - s.at) / p.lengthSec) * 100);
+              const label = sceneChipLabel(i + 1, s.name, formatClock(s.at), timelinePx === null ? null : (timelinePx * share) / 100 - CHIP_EDGES_PX);
               return (
-                <button
-                  key={s.id} type="button" role="listitem" onClick={() => setSelected(s.id)}
-                  aria-label={`${s.name} at ${formatClock(s.at)}${p.currentScene === i ? ', on now' : ''}`}
-                  style={{
-                    position: 'absolute', left: `${(s.at / p.lengthSec) * 100}%`, width: `${Math.max(2, ((Math.min(p.lengthSec, nextAt as number) - s.at) / p.lengthSec) * 100)}%`,
-                    top: 0, bottom: 0, background: colourOf(s), color: '#fff', border: p.currentScene === i ? '3px solid var(--bs-fg)' : '1px solid var(--bs-bg)',
-                    padding: '2px 6px', textAlign: 'left', fontSize: 12, fontWeight: 700, overflow: 'hidden', whiteSpace: 'nowrap', cursor: 'pointer',
-                  }}
+                <li
+                  key={s.id}
+                  style={{ position: 'absolute', top: 0, bottom: 0, left: `${(s.at / p.lengthSec) * 100}%`, width: `${share}%` }}
                 >
-                  {`${s.name} ${formatClock(s.at)}`}
-                </button>
+                  <button
+                    type="button" onClick={() => setSelected(s.id)}
+                    aria-label={`${words}${p.currentScene === i ? ', on now' : ''}`}
+                    title={words}
+                    style={{
+                      width: '100%', height: '100%', minHeight: 0, minWidth: 0, borderRadius: 0,
+                      background: sceneChipSurface(i), color: 'var(--bs-fg)',
+                      border: p.currentScene === i ? '3px solid var(--bs-accent)' : '1px solid var(--bs-border-control)',
+                      padding: '2px 6px', textAlign: 'left', font: CHIP_FONT, overflow: 'hidden', whiteSpace: 'nowrap', cursor: 'pointer',
+                    }}
+                  >
+                    {label}
+                  </button>
+                </li>
               );
             })}
-            {elapsed !== null && <span aria-hidden="true" style={{ position: 'absolute', top: 0, bottom: 0, width: 3, left: `${Math.min(100, (elapsed / p.lengthSec) * 100)}%`, background: 'var(--bs-fg)' }} />}
-          </div>
+            {elapsed !== null && <li aria-hidden="true" style={{ position: 'absolute', top: 0, bottom: 0, width: 3, left: `${Math.min(100, (elapsed / p.lengthSec) * 100)}%`, background: 'var(--bs-fg)' }} />}
+          </ul>
           <EnergyGraph scenes={p.scenes} lengthSec={p.lengthSec} />
           <p style={note}>{`Tap a scene to change it. ▶ Rehearse from here plays the piece from that moment. While the board plays, Jump here now switches to a scene straight away; Stop gives ${who.name} their own sound back. 1 pass = ${p.passSec.toFixed(1)} s.`}</p>
           {p.scenes.map((s, i) => (
             <SceneRow
-              key={s.id} colour={colourOf(s)} scene={s} open={selected === s.id} current={p.currentScene === i}
+              key={s.id} number={i + 1} scene={s} open={selected === s.id} current={p.currentScene === i}
               lengthSec={p.lengthSec} otherTimes={p.scenes.filter((_, k) => k !== i).map((x) => x.at)}
               loops={p.loops} worldOptions={p.worldOptions} playerName={p.playerName}
               onToggleOpen={() => setSelected(selected === s.id ? null : s.id)}
@@ -487,7 +550,7 @@ function ScenesStep(p: PieceStepsProps): JSX.Element {
             <p style={note}>
               {p.surpriseMe
                 ? 'Surprise me is on: the band, the extra notes and Sounds change come out differently every time the piece plays, and the AI\u2019s ideas are not kept.'
-                : 'The band, the extra notes and Sounds change play the same every time the piece plays, so a rehearsal is the piece. The AI\u2019s ideas are kept with each scene once made. ▶ Play on its own also repeats, but keeps no AI ideas.'}
+                : 'The band, the extra notes and Sounds change play the same every time the piece plays, so a rehearsal is the piece. The AI\u2019s ideas are kept with each scene once made. ▶ Play the board on its own also repeats, but keeps no AI ideas.'}
             </p>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               <Button tone="secondary" onClick={p.onNewIdeasPiece} reason={p.surpriseMe ? 'Surprise me already gives new ideas every time.' : null}>↻ New ideas for the whole piece</Button>
@@ -522,7 +585,7 @@ function ColourTimes({ colours, lengthSec, onChange }: { colours: PieceColourTim
       <span id="piece-colours" style={{ fontWeight: 800 }}>When each colour comes in</span>
       <p style={note}>
         A colour&rsquo;s counters stay silent until its time, then play. The times count only while the
-        piece plays: ▶ Play on its own plays every colour. Blank: from the start. Loops always play.
+        piece plays: ▶ Play the board on its own plays every colour. Blank: from the start. Loops always play.
       </p>
       {colours.map((c) => <ColourTimeRow key={c.id} colour={c} lengthSec={lengthSec} onChange={(at) => onChange(c.id, at)} />)}
     </div>
@@ -616,8 +679,8 @@ function EndingStep(p: PieceStepsProps): JSX.Element {
         <span role="alert" style={{ fontSize: 12, color: 'var(--bs-warn)' }}>The ending takes as long as half the piece at this tempo. Choose fewer passes or a longer length.</span>
       )}
       <p style={note}>
-        The piece starts from <b>▶ Show → Start the piece</b>, or <b>Rehearse from here</b> on a
-        scene. <b>▶ Play</b> on its own just plays what is on the board: no clock, no scenes.
+        The piece starts from <b>Show → ▶ Start the piece</b>, or <b>Rehearse from here</b> on a
+        scene. <b>▶ Play the board</b> on its own just plays what is on the board: no clock, no scenes.
       </p>
       <span style={{ fontWeight: 700, marginTop: 6 }}>Ready check</span>
       <ReadyList items={p.readyItems} />
@@ -627,7 +690,7 @@ function EndingStep(p: PieceStepsProps): JSX.Element {
       </div>
       <p role="status" style={note}>{p.diskLine}</p>
       {p.restoreError && <span role="alert" style={{ fontSize: 12, color: 'var(--bs-danger)' }}>{p.restoreError}</span>}
-      <StepFooter back={{ label: 'Scenes', onClick: () => p.onStep('scenes') }} next={{ label: '▶ Go to Show', onClick: p.onShow, primary: true }} />
+      <StepFooter back={{ label: 'Scenes', onClick: () => p.onStep('scenes') }} next={{ label: 'Go to Show', onClick: p.onShow, primary: true }} />
     </section>
   );
 }
@@ -672,8 +735,8 @@ function LengthField({ lengthSec, scenes, onChange }: { lengthSec: number; scene
 }
 
 interface SceneRowProps {
-  /** The scene's colour, the same as its block on the timeline. */
-  colour: string;
+  /** The scene's number, the same as on its block on the timeline. */
+  number: number;
   scene: Scene;
   open: boolean;
   current: boolean;
@@ -746,10 +809,12 @@ function SceneRow(r: SceneRowProps): JSX.Element {
         borderTop: `2px solid ${r.current ? 'var(--bs-accent)' : 'var(--bs-border)'}`,
         borderRight: `2px solid ${r.current ? 'var(--bs-accent)' : 'var(--bs-border)'}`,
         borderBottom: `2px solid ${r.current ? 'var(--bs-accent)' : 'var(--bs-border)'}`,
-        borderLeft: `8px solid ${r.colour}`,
+        // A neutral stripe, never a colour of the scene's own (B10): the number says which.
+        borderLeft: `8px solid ${r.current ? 'var(--bs-accent)' : 'var(--bs-border-control)'}`,
       }}
     >
       <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+        <span aria-hidden="true" style={{ minWidth: 26, height: 26, borderRadius: 999, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, border: '1px solid var(--bs-border-control)', background: 'var(--bs-raised)' }}>{r.number}</span>
         <button
           type="button" aria-expanded={r.open} onClick={r.onToggleOpen} data-scene-row={s.id}
           style={{ flex: '1 1 200px', minHeight: 'var(--bs-target)', textAlign: 'left', background: 'transparent', border: 'none', color: 'inherit', cursor: 'pointer' }}
@@ -768,7 +833,7 @@ function SceneRow(r: SceneRowProps): JSX.Element {
           </Button>
         )}
         {r.onGo && (
-          <Button tone={r.current ? 'primary' : 'secondary'} aria-pressed={r.current} onClick={r.onGo} aria-label={`Jump to ${s.name} now`}>{r.current ? 'On now' : 'Jump here now'}</Button>
+          <Button tone={r.current ? 'selected' : 'secondary'} aria-pressed={r.current} onClick={r.onGo} aria-label={`Jump to ${s.name} now`}>{r.current ? 'On now' : 'Jump here now'}</Button>
         )}
       </div>
       {r.open && (

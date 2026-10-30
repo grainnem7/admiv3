@@ -60,7 +60,7 @@ export function ReadyStep({
         onClick={(e) => { onPlay(); void focusWhenGone(() => document.getElementById(PLAY_STOP_ID), e.currentTarget, 20_000); }}
         reason={playReason}
       >
-        ▶ Play
+        ▶ Play the board
       </Button>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>

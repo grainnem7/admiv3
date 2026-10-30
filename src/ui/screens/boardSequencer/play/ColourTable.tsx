@@ -57,9 +57,6 @@ const TWO: CSSProperties = { display: 'grid', gridTemplateColumns: '2fr 3fr', ga
 
 const SOUND_JOBS: ColourRole[] = ['melody', 'bass', 'chord', 'drums', 'off'];
 const CONTROL_JOBS: ColourRole[] = [...FADER_ROLES, ...TOGGLE_ROLES];
-/** Sound colours first, in the order a band is read; then the rest. */
-const ORDER: ColourRole[] = ['melody', 'chord', 'bass', 'drums'];
-const rank = (r: ColourRole): number => (ORDER.includes(r) ? ORDER.indexOf(r) : r === 'off' ? ORDER.length : ORDER.length + 1);
 
 const jobName = (r: ColourRole): string => (r === 'off' ? 'Not used' : ROLE_LABELS[r]);
 const isMelodic = (c: ColourChannel): boolean => c.role === 'melody' || c.role === 'chord' || c.role === 'bass';
@@ -94,7 +91,9 @@ export function ColourTable(p: ColourTableProps): JSX.Element {
       return next;
     });
   }, [p.config.channels]);
-  const colours = [...p.config.channels].sort((a, b) => rank(a.role) - rank(b.role));
+  // By number, as on the chips and everywhere else (B24): sorted by job, Red 1 sat above
+  // Yellow 3 above Blue 2.
+  const colours = p.config.channels;
 
   const pickSound = (c: ColourChannel, value: string): void => {
     const v = value === '' ? undefined : value;

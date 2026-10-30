@@ -53,7 +53,7 @@ import {
 } from '../../songs/performance/pieceRunning';
 import { drawCells, keepCells, loopChannelsFor, loopColourLabel, loopSwatch } from '../../songs/performance/loopSounds';
 import { boardSeen, engineSettingsFor, hearWith, loopsToPlay, playerCellsFor, slotForKeep, startNewLoop, startWithThese, stopHearing, type NewLoopState } from '../../songs/performance/newLoop';
-import { NewLoopPanel, newLoopStatusLine, type NewLoopStopped } from './boardSequencer/play/NewLoopPanel';
+import { NewLoopPanel, liftLine, newLoopStatusLine, type NewLoopStopped } from './boardSequencer/play/NewLoopPanel';
 import { LinkQr } from './boardSequencer/components/LinkQr';
 import { createPopStore, soundingKey, type PopStore } from './boardSequencer/popStore';
 import { beyondLoopNote, beyondLoopSquares, playsTune, withTuneDefault } from '../../songs/beyondLoop';
@@ -68,9 +68,10 @@ import { captureReaderFrames, READER_DOWNSCALE } from './boardSequencer/captureR
 import { detectionSetup } from '../../tracking/boardReference/detectionSetup';
 import { LoopThumb, PieceSteps, type PieceLoop, type PieceStep } from './boardSequencer/play/PieceSteps';
 import { NowNextStrip } from './boardSequencer/play/NowNextStrip';
+import { nextSceneUndo, nextUndoOffered, type NextSceneUndo } from './boardSequencer/play/nextSceneUndo';
 import { ShowStatusRow } from './boardSequencer/play/ShowStatusRow';
 import {
-  escLeavesShow, showStatusItems, stopGuarded, type ShowHatState, type ShowStatusAction, type ShowStatusInput,
+  escLeavesShow, showStatusItems, simplifiedLine, stopGuarded, type ShowHatState, type ShowStatusAction, type ShowStatusInput,
 } from './boardSequencer/play/showStatus';
 import type { ReadyItem } from './boardSequencer/play/ReadyCheck';
 import { PlayPanel } from './boardSequencer/play/PlayPanel';
@@ -130,7 +131,7 @@ import { BoardMidiPanel } from './boardSequencer/components/BoardMidiPanel';
 import { planFromConfig } from './boardSequencer/components/AbletonSoundsPanel';
 import { useBoardMidiPort } from './boardSequencer/useBoardMidiPort';
 import { abletonReadyItem, abletonTracksItem } from './boardSequencer/abletonReady';
-import { aloneLine, ipadCheckItems, keepingTimeCheckItems, listNames, pieceCheckItems, playerWords, updatedFromNowLine } from './boardSequencer/pieceCheck';
+import { aloneLine, backupItem, boardItem, ipadCheckItems, keepingTimeCheckItems, listNames, pieceCheckItems, playerWords, updatedFromNowLine } from './boardSequencer/pieceCheck';
 import {
   keepingTimeIndicator, keepingTimeNews, KEEPING_TIME_RANGE, TIME_SEEN_NONE, type KeepingTimeReport, type TimeSeen, type ValveStep,
 } from '../../songs/keepingTime';
@@ -806,6 +807,8 @@ export default function BoardSequencerScreen() {
   const timeSeenRef = useRef<TimeSeen>(TIME_SEEN_NONE);
   const timingLoggedAtRef = useRef(0);
   const [simplify, setSimplify] = useState<'off' | 'on' | 'leaving'>('off');
+  // The loop still playing under the player while simplified, by its slot (B23).
+  const [simplifyBed, setSimplifyBed] = useState<number | null>(null);
   // Launched loops (no pad needed): what is wanted, and what the engine has applied so far.
   const wantedRef = useRef<Set<number>>(new Set());
   const [wantedSlots, setWantedSlots] = useState<number[]>([]);
@@ -2321,8 +2324,10 @@ export default function BoardSequencerScreen() {
     engine.setSimplified(on);
     const now = engine.getSimplify();
     setSimplify(now);
+    const bed = engine.getSimplifyBed();
+    setSimplifyBed(bed);
     const line = on
-      ? `Simplified: ${playerWords(playerNameRef.current).name} and the bed.`
+      ? `${simplifiedLine(playerNameRef.current, bed === null ? null : loopLabel(configRef.current.loopNames, bed))}.`
       : now === 'off' ? 'Back to full.' : 'Back to full from the next pass.';
     announce(line);
     setBoardNotice(on ? 'Simplified' : 'Back to full');
@@ -2355,6 +2360,8 @@ export default function BoardSequencerScreen() {
       setTimeNow((prev) => (timeViewKey(prev) === timeViewKey(view) ? prev : view));
       const sim = engine.getSimplify();
       setSimplify((prev) => (prev === sim ? prev : sim));
+      const bed = engine.getSimplifyBed();
+      setSimplifyBed((prev) => (prev === bed ? prev : bed));
     }, KEEPING_TIME_POLL_MS);
     return () => window.clearInterval(id);
   }, [running, announce, engineRef]);
@@ -3452,7 +3459,7 @@ export default function BoardSequencerScreen() {
     // counters sound" (R2-T1-01). If the board can't start, the panel says why.
     if (!runningRef.current && startingRef.current === null && playReason === null) void start();
     sessionLogRef.current.action(logActorRef.current, 'new loop');
-    announce(`${count > 0 ? `New loop. Lift the ${count} ${count === 1 ? 'counter' : 'counters'} to start from silence.` : 'New loop: silent until a counter goes down.'}${playReason ? ` ${playReason}` : ''}`);
+    announce(`${count > 0 ? `New loop. ${liftLine(count, configRef.current.boardSource === 'laptop')}` : 'New loop: silent until a counter goes down.'}${playReason ? ` ${playReason}` : ''}`);
   };
   const leaveNewLoop = (): void => {
     newLoopRef.current = null;
@@ -3547,12 +3554,32 @@ export default function BoardSequencerScreen() {
     const id = window.setInterval(() => glideTickRef.current(), GLIDE_STEP_MS);
     return () => window.clearInterval(id);
   }, [running]);
+  // For one pass after Next scene: ↶ Back to the scene before (B13).
+  const [undoNext, setUndoNext] = useState<NextSceneUndo | null>(null);
   const nextScene = (): void => {
     const c = configRef.current;
     const i = nextSceneIndex(c.currentScene, c.scenes.length);
-    if (i !== null) goScene(i);
-    else if (c.scenes.length > 0) { setBoardNotice('Last scene'); announce('That was the last scene.'); }
+    if (i !== null) {
+      const passMs = ((c.cols * Math.max(1, c.numPages) * 60) / Math.max(20, c.bpm)) * 1000;
+      const offer = nextSceneUndo(c.currentScene, i, c.scenes, performance.now(), passMs);
+      goScene(i);
+      setUndoNext(offer);
+    } else if (c.scenes.length > 0) { setBoardNotice('Last scene'); announce('That was the last scene.'); }
   };
+  const undoNextScene = (): void => {
+    const u = undoNext;
+    setUndoNext(null);
+    if (!u || !nextUndoOffered(u, performance.now(), configRef.current.currentScene)) return;
+    goScene(u.backTo);
+    announce(`Back to ${u.name}.`);
+  };
+  // The offer goes after its pass, or as soon as another scene comes in.
+  useEffect(() => {
+    if (!undoNext) return undefined;
+    if (!nextUndoOffered(undoNext, performance.now(), config.currentScene) || !running) { setUndoNext(null); return undefined; }
+    const id = window.setTimeout(() => setUndoNext(null), Math.max(0, undoNext.untilMs - performance.now()));
+    return () => window.clearTimeout(id);
+  }, [undoNext, config.currentScene, running]);
   /**
    * ▶ Start the piece: always the piece from 0:00. Stopped, the board starts with it.
    * Playing (Tim warming up), the sound carries on with no restart and no gap: a scene
@@ -3894,7 +3921,7 @@ export default function BoardSequencerScreen() {
       // iPad says "Press Play on the laptop first"; this is for an iPad that is behind.
       // While Play is starting (the sound loading) it is taken and comes in with the sound.
       if (!runningRef.current && startingRef.current === null) {
-        setRemoteNote({ text: `iPad: ${loopLabel(c.loopNames, msg.index)} not started (press ▶ Play first)`, at: performance.now() });
+        setRemoteNote({ text: `iPad: ${loopLabel(c.loopNames, msg.index)} not started (press ▶ Play the board first)`, at: performance.now() });
         return;
       }
       toggleLoop(msg.index);
@@ -3908,7 +3935,7 @@ export default function BoardSequencerScreen() {
         // Stopped, New idea would switch Extra notes on by itself and change how the piece
         // opens (B18). While Play is starting it is taken, like a loop.
         if (!runningRef.current && startingRef.current === null) {
-          setRemoteNote({ text: 'iPad: New idea not taken (press ▶ Play first)', at: performance.now() });
+          setRemoteNote({ text: 'iPad: New idea not taken (press ▶ Play the board first)', at: performance.now() });
           return;
         }
         newFillIdea();
@@ -4574,11 +4601,7 @@ export default function BoardSequencerScreen() {
   const readyItems = (): ReadyItem[] => {
     const c = config;
     const items: ReadyItem[] = [];
-    items.push(laptop
-      ? { label: 'Board: the laptop board', state: 'warn', fix: 'For the performance with the real board, switch Board to Camera.' }
-      : c.enabled && (camera.phase === 'running' || camera.phase === 'fallback')
-        ? { label: 'Board: camera running and the board found', state: 'ok' }
-        : { label: 'Board: camera or board not ready', state: 'problem', fix: 'Set up: Camera and Board.' });
+    items.push(boardItem({ laptop, cameraOk: c.enabled && (camera.phase === 'running' || camera.phase === 'fallback') }));
     if (c.cap.enabled) {
       items.push(cap.view.camera === 'no-camera'
         ? { label: 'Red cap: its camera could not be opened', state: 'problem', fix: 'Cap tab: choose the camera facing the player, or switch the cap off.' }
@@ -4640,9 +4663,7 @@ export default function BoardSequencerScreen() {
     items.push(disk.state === 'saved'
       ? { label: 'Saved on this laptop', state: 'ok' }
       : { label: 'Not saved on this laptop', state: 'warn', fix: 'Open ADMI at http://localhost:3001 from npm run show, or back up to a file.' });
-    items.push(backedUpRef.current
-      ? { label: 'Backed up to a file this session', state: 'ok' }
-      : { label: 'Not backed up to a file yet', state: 'warn', fix: 'Press Back up to a file below, and keep the file off the laptop.' });
+    items.push(backupItem(backedUpRef.current));
     if ((import.meta as { env?: { DEV?: boolean } }).env?.DEV) items.push({ label: 'Running the development server', state: 'warn', fix: 'For the performance start ADMI with npm run show: it cannot reload itself mid-piece.' });
     return items;
   };
@@ -4699,6 +4720,7 @@ export default function BoardSequencerScreen() {
           onRename={renameLoop}
           onLeave={leaveNewLoop}
           stopped={newLoopStopped}
+          laptop={laptop}
           onPlay={() => { if (!startRefused()) void start(); }}
         />
       ) : null}
@@ -5131,7 +5153,7 @@ export default function BoardSequencerScreen() {
       footerAlign={layout.footerAlign}
       heading={laptop && step === 'colours' ? 'Choose the colours' : SETUP_HEADINGS[step]}
       hint={laptop
-        ? (step === 'colours' ? 'Give each colour a job and a sound. ▶ Hear plays it.' : 'Press ▶ Play, then click squares to put counters down.')
+        ? (step === 'colours' ? 'Give each colour a job and a sound. ▶ Hear plays it.' : 'Press ▶ Play the board, then click squares to put counters down.')
         : SETUP_HINTS[step]}
       skip={step === 'board' ? {
         label: "Skip, board hasn't moved",
@@ -5228,7 +5250,7 @@ export default function BoardSequencerScreen() {
       {(['camera', 'laptop'] as const).map((src) => (
         <Button
           key={src}
-          tone={config.boardSource === src ? 'primary' : 'secondary'}
+          tone={config.boardSource === src ? 'selected' : 'secondary'}
           aria-pressed={config.boardSource === src}
           onClick={(e) => { if (config.boardSource !== src) switchBoardSource(src, e.currentTarget); }}
           aria-label={src === 'laptop' ? 'Laptop board: play on the laptop, without the camera or board' : 'Camera board: the camera and the real board'}
@@ -5342,6 +5364,8 @@ export default function BoardSequencerScreen() {
     ) : null,
     onStartPiece: startThePiece,
     onNext: nextScene,
+    undoNext: undoNext ? { name: undoNext.name } : null,
+    onUndoNext: undoNextScene,
     onEnd: endPiece,
     onCancelEnding: cancelEnding,
     // No Capture here: a loop is made in New loop, never during the show (F1).
@@ -5405,23 +5429,30 @@ export default function BoardSequencerScreen() {
   // Simplify and keeping time, on the laptop only (Play and Show): quiet, and only there
   // when Simplify is on or there is a problem.
   const timeIndicator = running && timeNow ? keepingTimeIndicator(timeNow.report, timeNow.valve) : null;
+  const simplifiedNow = simplifiedLine(activePlayer?.name ?? null, simplifyBed === null ? null : loopLabel(config.loopNames, simplifyBed));
+  const simplifyWho = playerWords(activePlayer?.name ?? null).name;
   const simplifyButton = (
     <Button
       tone="secondary"
       aria-pressed={simplify === 'on'}
       disabled={!running}
       onClick={toggleSimplify}
-      aria-label={simplify === 'on' ? 'Back to full (Shift+S)' : 'Simplify: only the player and the first loop (Shift+S)'}
+      aria-label={simplify === 'on' ? 'Back to full (Shift+S)' : `Simplify: only ${simplifyWho} and the first loop (Shift+S)`}
       title={running ? undefined : 'Simplify works while playing.'}
+      style={{ flexDirection: 'column', gap: 0, lineHeight: 1.15, padding: '2px 12px' }}
     >
-      {simplify === 'on' ? 'Back to full' : 'Simplify'}
+      <span>{simplify === 'on' ? 'Back to full' : 'Simplify'}</span>
+      {/* What it does, seen and not only in the tooltip (B23). */}
+      <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--bs-fg2)', whiteSpace: 'nowrap' }}>
+        {simplify === 'on' ? 'from the next pass' : `${simplifyWho} and one loop`}
+      </span>
     </Button>
   );
   const keepingTimeView = running && (timeIndicator !== null || simplify !== 'off') ? (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       {simplify !== 'off' && (
         <div role="status" aria-label="Simplify" style={{ padding: '4px 12px', borderRadius: 'var(--bs-radius-md)', border: '2px solid var(--bs-accent)', fontWeight: 700 }}>
-          {simplify === 'on' ? `Simplified: ${playerWords(activePlayer?.name ?? null).name} and the bed` : 'Back to full from the next pass'}
+          {simplify === 'on' ? simplifiedNow : 'Back to full from the next pass'}
         </div>
       )}
       {timeIndicator && (
@@ -5521,7 +5552,7 @@ export default function BoardSequencerScreen() {
         : midiHold ? 'back' : 'ok',
     muted,
     simplify: running && simplify !== 'off'
-      ? (simplify === 'on' ? `Simplified: ${playerWords(activePlayer?.name ?? null).name} and the bed` : 'Back to full from the next pass')
+      ? (simplify === 'on' ? simplifiedNow : 'Back to full from the next pass')
       : null,
     keepingTime: timeIndicator ? { text: timeIndicator.lines.join(' '), canRestore: timeIndicator.canRestore } : null,
     reload: running ? null
@@ -5930,7 +5961,7 @@ export default function BoardSequencerScreen() {
           justifyContent: layout.bigBoardControls === 'left' ? 'flex-start' : 'flex-end',
         }}
       >
-        {running && <Button ref={showStopRef} tone="secondary" onClick={requestStop}>{stopArmed ? '■ Press again to stop' : '■ Stop'}</Button>}
+        {running && <Button ref={showStopRef} tone="danger" onClick={requestStop}>{stopArmed ? '■ Press again to stop' : '■ Stop'}</Button>}
         <Button tone="secondary" aria-pressed={muted} disabled={!running} onClick={toggleMuted}>
           {muted ? 'Muted' : 'Mute'}
         </Button>
@@ -6062,15 +6093,15 @@ export default function BoardSequencerScreen() {
                 {running ? 'Playing' : 'Stopped'}
               </span>
               <div role="group" aria-label="What you are doing" style={{ display: 'flex' }}>
-                <Button tone={workspace === 'play' ? 'primary' : 'secondary'} aria-pressed={workspace === 'play'} onClick={() => setWorkspace('play')}>
-                  Play
+                <Button tone={workspace === 'play' ? 'selected' : 'secondary'} aria-pressed={workspace === 'play'} onClick={() => setWorkspace('play')}>
+                  Board
                 </Button>
-                <Button tone={workspace === 'piece' ? 'primary' : 'secondary'} aria-pressed={workspace === 'piece'} onClick={() => setWorkspace('piece')}>
+                <Button tone={workspace === 'piece' ? 'selected' : 'secondary'} aria-pressed={workspace === 'piece'} onClick={() => setWorkspace('piece')}>
                   Make a piece
                 </Button>
               </div>
               <Button ref={bigBoardButtonRef} tone="secondary" onClick={() => setView('bigBoard')} aria-label="Show: the board, the clock and Now / Next, full screen, for the performance">
-                ▶ Show
+                Show
               </Button>
               {view !== 'bigBoard' && audienceButton}
               <Button

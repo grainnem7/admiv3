@@ -1,22 +1,25 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
-import { listenToOutput, makePlan, notesPlayed, openAnotherTab, openLaptopBoard, outputLevels, pageErrors, pickColour, pieceStep, place, startPiece } from './app';
+import { listenToOutput, makePlan, notesPlayed, openAnotherTab, openLaptopBoard, outputLevels, pageErrors, pickColour, pieceStep, place, saveBoardHere, startPiece } from './app';
 
 /** Make a piece → Loops: two loops, "Bed" (two yellow counters) and an unnamed one (one blue). */
 async function saveTwoLoops(page: Page): Promise<void> {
   await pieceStep(page, 'Loops');
   await pickColour(page, 'Yellow');
   await place(page, [[4, 1], [4, 5]]);
-  await page.getByRole('button', { name: 'Save the board here' }).first().click();
+  await saveBoardHere(page);
   await page.getByRole('textbox', { name: 'Name of loop 1' }).fill('Bed');
   await page.getByRole('button', { name: 'Clear the board' }).click();
   await pickColour(page, 'Blue');
   await place(page, [[1, 1]]);
-  await page.getByRole('button', { name: 'Save the board here' }).first().click();
+  await saveBoardHere(page);
   await page.getByRole('button', { name: 'Clear the board' }).click();
 }
 
 /** Go to a step of Make a piece from inside it. */
+/** The scene chips' whole words: a chip shows only what fits, its title has them all. */
+const chipTitles = (timeline: Locator): Promise<(string | null)[]> => timeline.getByRole('listitem').getByRole('button').evaluateAll((bs) => bs.map((b) => b.getAttribute('title')));
+
 async function step(page: Page, name: 'Loops' | 'Scenes' | 'Ending & check'): Promise<void> {
   await page.getByRole('navigation', { name: 'Make a piece: steps' }).getByRole('button', { name: new RegExp(`· ${name}`) }).click();
 }
@@ -52,7 +55,7 @@ async function ownSoundIsPlain(page: Page): Promise<void> {
 
 /** The Sound tab shows the player's own plain sound again. */
 async function expectPlainSound(page: Page): Promise<void> {
-  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await page.getByRole('button', { name: 'Board', exact: true }).click();
   await page.getByRole('tab', { name: 'Sound' }).click();
   await expect(page.getByRole('group', { name: 'Band' }).getByRole('radio', { name: 'Off', exact: true })).toHaveAttribute('aria-checked', 'true');
   await expect(page.getByRole('group', { name: 'Extra notes' }).getByRole('radio', { name: 'Off', exact: true })).toHaveAttribute('aria-checked', 'true');
@@ -73,7 +76,7 @@ test('counters placed on the laptop board are played', async ({ page }) => {
   await openLaptopBoard(page);
   await pickColour(page, 'Red');
   await place(page, [[3, 1], [5, 3]]);
-  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await page.getByRole('button', { name: '▶ Play the board' }).first().click();
   await expect.poll(() => notesPlayed(page), { timeout: 15_000 }).toBeGreaterThan(0);
   expect(pageErrors(page)).toEqual([]);
 });
@@ -84,18 +87,18 @@ test('a piece made in Make a piece survives a reload and opens in its first scen
   await pieceStep(page, 'Loops');
   await pickColour(page, 'Yellow');
   await place(page, [[4, 1], [4, 5]]);
-  await page.getByRole('button', { name: 'Save the board here' }).first().click();
+  await saveBoardHere(page);
   await page.getByRole('textbox', { name: 'Name of loop 1' }).fill('Bed');
   await page.getByRole('button', { name: 'Clear the board' }).click();
   await pickColour(page, 'Blue');
   await place(page, [[1, 1]]);
-  await page.getByRole('button', { name: 'Save the board here' }).first().click();
+  await saveBoardHere(page);
   await page.getByRole('button', { name: 'Clear the board' }).click();
 
   await page.getByRole('button', { name: /Next: Scenes/ }).click();
   await page.getByRole('button', { name: /Make my plan/ }).click();
   const timeline = page.getByRole('list', { name: 'Timeline of the scenes' });
-  await expect(timeline.getByRole('listitem')).toHaveText(['Arrival 0:00', 'Build 1:30', 'Open 3:30', 'Home 6:00']);
+  await expect.poll(() => chipTitles(timeline)).toEqual(['1 · Arrival 0:00', '2 · Build 1:30', '3 · Open 3:30', '4 · Home 6:00']);
 
   // Saved: a reload brings the loops and the scenes back.
   await page.waitForTimeout(800); // saves are gathered for a moment
@@ -214,7 +217,7 @@ test('a scene time typed as 2.30 is 2:30; one it cannot read is refused and not 
   await time.press('Tab');
   await expect(page.getByRole('button', { name: /^2:30 · Build/ })).toBeVisible();
   await expect(time).toHaveValue('2:30');
-  await expect(page.getByRole('list', { name: 'Timeline of the scenes' }).getByRole('listitem')).toHaveText(['Arrival 0:00', 'Build 2:30', 'Open 3:30', 'Home 6:00']);
+  await expect.poll(() => chipTitles(page.getByRole('list', { name: 'Timeline of the scenes' }))).toEqual(['1 · Arrival 0:00', '2 · Build 2:30', '3 · Open 3:30', '4 · Home 6:00']);
   await time.fill('2.5');
   await time.press('Tab');
   await expect(page.getByRole('alert').filter({ hasText: 'Type a time as minutes:seconds, like 2:30.' })).toBeVisible();
@@ -241,7 +244,7 @@ test('after a new time re-sorts the scenes, the open panel stays on the scene be
   const time = page.getByRole('textbox', { name: /When Build comes in/ });
   await time.fill('5:00');
   await time.press('Tab');
-  await expect(page.getByRole('list', { name: 'Timeline of the scenes' }).getByRole('listitem')).toHaveText(['Arrival 0:00', 'Open 3:30', 'Build 5:00', 'Home 6:00']);
+  await expect.poll(() => chipTitles(page.getByRole('list', { name: 'Timeline of the scenes' }))).toEqual(['1 · Arrival 0:00', '2 · Open 3:30', '3 · Build 5:00', '4 · Home 6:00']);
   await expect(page.getByRole('textbox', { name: 'Scene name' })).toHaveValue('Build');
   await expect(page.getByRole('button', { name: /^5:00 · Build/ })).toHaveAttribute('aria-expanded', 'true');
   await expect(page.getByRole('button', { name: /^3:30 · Open/ })).toHaveAttribute('aria-expanded', 'false');
@@ -264,7 +267,7 @@ test('while the clock runs, Exit and Set up need a second press too', async ({ p
   await expect(page.getByRole('status').filter({ hasText: 'Playing' }).first()).toBeVisible();
   // The second press leaves.
   await page.getByRole('button', { name: '⚙ Press again to stop and set up' }).click();
-  await expect(page.getByRole('button', { name: '▶ Play' }).first()).toBeHidden();
+  await expect(page.getByRole('button', { name: '▶ Play the board' }).first()).toBeHidden();
 });
 
 test('while the clock runs, Stop needs a second press', async ({ page }) => {
@@ -278,7 +281,7 @@ test('while the clock runs, Stop needs a second press', async ({ page }) => {
   await expect(page.getByRole('button', { name: '■ Press again to stop' }).first()).toBeVisible();
   await expect(page.getByRole('status').filter({ hasText: 'Playing' }).first()).toBeVisible();
   await page.getByRole('button', { name: '■ Press again to stop' }).first().click();
-  await expect(page.getByRole('button', { name: '▶ Play' }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: '▶ Play the board' }).first()).toBeVisible();
 });
 
 test('End now: the chosen ending runs, then the piece stops by itself', async ({ page }) => {
@@ -288,10 +291,10 @@ test('End now: the chosen ending runs, then the piece stops by itself', async ({
   await makePlan(page); // Arrival sets band Gentle
   await startPiece(page);
   await expect(page.getByRole('region', { name: 'Now and next' })).toContainText('Now: Arrival');
-  await page.getByRole('region', { name: 'Now and next' }).getByRole('button', { name: '⏹ End' }).click();
+  await page.getByRole('region', { name: 'Now and next' }).getByRole('button', { name: '↘ End piece' }).click();
   await expect(page.getByRole('button', { name: 'Cancel the ending' }).first()).toBeVisible();
   // A fade over two passes, from the next pass: well under a minute at 90 BPM on 8 steps.
-  await expect(page.getByRole('button', { name: '▶ Play' }).first()).toBeVisible({ timeout: 45_000 });
+  await expect(page.getByRole('button', { name: '▶ Play the board' }).first()).toBeVisible({ timeout: 45_000 });
   await expect(page.getByRole('region', { name: 'Now and next' })).toHaveCount(0);
   expect(pageErrors(page)).toEqual([]);
 });
@@ -304,7 +307,7 @@ const pressesAfterTheEnd = (page: Page, view: 'play' | 'show'): Promise<{ first:
   const show = (): Element | null => document.querySelector('[role="region"][aria-label="Show"]');
   const button = (text: string): HTMLButtonElement | undefined =>
     [...(v === 'show' ? show()! : document).querySelectorAll('button')].find((b) => b.textContent === text);
-  const ended = (): boolean => (v === 'show' ? button('▶ Start the piece') !== undefined : document.getElementById('bs-play-stop')?.textContent === '▶ Play');
+  const ended = (): boolean => (v === 'show' ? button('▶ Start the piece') !== undefined : document.getElementById('bs-play-stop')?.textContent === '▶ Play the board');
   const state = (): string => `${v === 'show' ? (button('▶ Start the piece') ? 'Start the piece' : 'no Start') : document.getElementById('bs-play-stop')?.textContent}${document.querySelector('[role="timer"]') ? ' + clock' : ''}`;
   const wait = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
   while (!ended()) await new Promise((r) => requestAnimationFrame(r));
@@ -325,8 +328,8 @@ test('straight after the piece ends by itself, ▶ Play and Space start nothing 
   await place(page, [[3, 1]]);
   await makePlan(page);
   await startPiece(page);
-  await page.getByRole('region', { name: 'Now and next' }).getByRole('button', { name: '⏹ End' }).click();
-  expect(await pressesAfterTheEnd(page, 'play')).toEqual({ first: '▶ Play', space: '▶ Play', said: 'The piece has just ended.' });
+  await page.getByRole('region', { name: 'Now and next' }).getByRole('button', { name: '↘ End piece' }).click();
+  expect(await pressesAfterTheEnd(page, 'play')).toEqual({ first: '▶ Play the board', space: '▶ Play the board', said: 'The piece has just ended.' });
   // Only for a moment: 5 s on, ▶ Play plays.
   await page.waitForTimeout(1500);
   await page.locator('#bs-play-stop').click();
@@ -342,7 +345,7 @@ test('in Show, straight after the piece ends by itself, ▶ Start the piece and 
   await page.getByRole('button', { name: /^Show: the board, the clock/ }).click();
   const show = page.getByRole('region', { name: 'Show', exact: true });
   await show.getByRole('button', { name: '▶ Start the piece' }).click();
-  await show.getByRole('button', { name: '⏹ End' }).click();
+  await show.getByRole('button', { name: '↘ End piece' }).click();
   expect(await pressesAfterTheEnd(page, 'show')).toEqual({ first: 'Start the piece', space: 'Start the piece', said: 'The piece has just ended.' });
   await page.waitForTimeout(1500);
   await show.getByRole('button', { name: '▶ Start the piece' }).click();
@@ -366,7 +369,7 @@ test('the iPad joins with the code, shows the piece, and its End piece reaches t
   await pickColour(page, 'Red');
   await place(page, [[3, 1]]);
   await makePlan(page);
-  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await page.getByRole('button', { name: 'Board', exact: true }).click();
   await page.getByRole('tab', { name: 'Connections' }).click();
   await page.getByRole('switch', { name: 'iPad controls' }).click();
   await page.getByRole('checkbox', { name: 'End piece', exact: true }).check();
@@ -391,7 +394,7 @@ test("a bounce on the iPad's End piece never ends the piece; a second tap after 
   await pickColour(page, 'Red');
   await place(page, [[3, 1]]);
   await makePlan(page);
-  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await page.getByRole('button', { name: 'Board', exact: true }).click();
   await page.getByRole('tab', { name: 'Connections' }).click();
   await page.getByRole('switch', { name: 'iPad controls' }).click();
   // A new player's iPad has the safe show layout: End piece is on the page Tim plays on.
@@ -436,7 +439,7 @@ test("a press on the iPad's End piece that chatters at 0, 200, 400 and 600 ms ne
   await pickColour(page, 'Red');
   await place(page, [[3, 1]]);
   await makePlan(page);
-  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await page.getByRole('button', { name: 'Board', exact: true }).click();
   await page.getByRole('tab', { name: 'Connections' }).click();
   await page.getByRole('switch', { name: 'iPad controls' }).click();
   // The longest window, so the runner's own pauses can't let it lapse before the last tap.
@@ -478,7 +481,7 @@ test("a press on the iPad's End piece that chatters at 0, 200, 400 and 600 ms ne
 
 test('"when the finger lifts": a real touch that slides off a pad before lifting does nothing', async ({ page, context }) => {
   await openLaptopBoard(page);
-  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await page.getByRole('button', { name: 'Board', exact: true }).click();
   await page.getByRole('tab', { name: 'Connections' }).click();
   await page.getByRole('switch', { name: 'iPad controls' }).click();
   await page.getByRole('radiogroup', { name: 'A pad acts' }).getByRole('radio', { name: 'When the finger lifts' }).click();
@@ -529,7 +532,7 @@ test('"when the finger lifts": a real touch that slides off a pad before lifting
 
 test('"Use the safe show layout" sets out the iPad for the show and says what it did', async ({ page }) => {
   await openLaptopBoard(page);
-  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await page.getByRole('button', { name: 'Board', exact: true }).click();
   await page.getByRole('tab', { name: 'Connections' }).click();
   await page.getByRole('switch', { name: 'iPad controls' }).click();
   // A new player starts with it.
@@ -553,7 +556,7 @@ test('"Use the safe show layout" sets out the iPad for the show and says what it
 
 test("an iPad page from before an update is named on the laptop, never on the iPad; the check offers the safe show layout", async ({ page, context }) => {
   await openLaptopBoard(page);
-  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await page.getByRole('button', { name: 'Board', exact: true }).click();
   await page.getByRole('tab', { name: 'Connections' }).click();
   await page.getByRole('switch', { name: 'iPad controls' }).click();
   const code = await page.evaluate(() => localStorage.getItem('admi-remote-code'));
@@ -580,7 +583,7 @@ test("an iPad page from before an update is named on the laptop, never on the iP
   // A fuller iPad than the safe show layout: a warning in the check, with the button.
   const notSafe = page.getByText("Test's iPad is not in the safe show layout");
   await expect(notSafe).toHaveCount(0);
-  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await page.getByRole('button', { name: 'Board', exact: true }).click();
   await page.getByRole('tab', { name: 'Connections' }).click();
   await page.getByRole('checkbox', { name: 'Loops & scenes page' }).check();
   await pieceStep(page, 'Ending & check');
@@ -615,10 +618,10 @@ test('Jump here now is there only while the board plays; the scene is for that r
   await expect(page.getByRole('button', { name: /^Rehearse from Open/ })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Jump to Open now' })).toHaveCount(0);
   // Playing: Open (full band, extra notes, sounds change) comes in at once…
-  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await page.getByRole('button', { name: '▶ Play the board' }).first().click();
   await page.getByRole('button', { name: 'Jump to Open now' }).click();
   await expect(page.getByRole('button', { name: 'Jump to Open now' })).toHaveAttribute('aria-pressed', 'true');
-  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await page.getByRole('button', { name: 'Board', exact: true }).click();
   await page.getByRole('tab', { name: 'Sound' }).click();
   await expect(page.getByRole('group', { name: 'Band' }).getByRole('radio', { name: 'Full', exact: true })).toHaveAttribute('aria-checked', 'true');
   // …for this run only: what is saved stays the player's own (saves are gathered for a moment).
@@ -779,19 +782,19 @@ test('the iPad Loops page shows only the saved loops, and a tap turns one on and
   await pieceStep(page, 'Loops');
   await pickColour(page, 'Red');
   await place(page, [[3, 1], [5, 3]]);
-  await page.getByRole('button', { name: 'Save the board here' }).first().click();
+  await saveBoardHere(page);
   await page.getByRole('textbox', { name: 'Name of loop 1' }).fill('Bells');
   await page.getByRole('button', { name: 'Clear the board' }).click();
   await pickColour(page, 'Blue');
   await place(page, [[1, 1]]);
-  await page.getByRole('button', { name: 'Save the board here' }).first().click();
+  await saveBoardHere(page);
   await page.getByRole('button', { name: 'Clear the board' }).click();
-  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await page.getByRole('button', { name: 'Board', exact: true }).click();
   await page.getByRole('tab', { name: 'Connections' }).click();
   await page.getByRole('switch', { name: 'iPad controls' }).click();
   await page.getByRole('checkbox', { name: 'Loops & scenes page' }).check();
   const code = await page.evaluate(() => localStorage.getItem('admi-remote-code'));
-  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await page.getByRole('button', { name: '▶ Play the board' }).first().click();
 
   const ipad = await context.newPage();
   await ipad.setViewportSize({ width: 1180, height: 820 });
@@ -819,7 +822,7 @@ test('while Start the piece loads, the iPad shows the opening loops on, and a lo
   await openLaptopBoard(page);
   await saveTwoLoops(page); // Bed, and Loop 2
   await makePlan(page); // Arrival, at 0:00, has Bed
-  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await page.getByRole('button', { name: 'Board', exact: true }).click();
   await page.getByRole('tab', { name: 'Connections' }).click();
   await page.getByRole('switch', { name: 'iPad controls' }).click();
   await page.getByRole('checkbox', { name: 'Loops & scenes page' }).check();
@@ -854,7 +857,7 @@ test("Capture from an iPad while the piece plays makes no loop, and the laptop s
   await pickColour(page, 'Red');
   await place(page, [[3, 1], [5, 3]]);
   await makePlan(page);
-  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await page.getByRole('button', { name: 'Board', exact: true }).click();
   await page.getByRole('tab', { name: 'Connections' }).click();
   await page.getByRole('switch', { name: 'iPad controls' }).click();
   const code = await page.evaluate(() => localStorage.getItem('admi-remote-code'));
@@ -880,10 +883,10 @@ test('an iPad loop tap while the laptop is stopped is refused, says why, and Pla
   await pieceStep(page, 'Loops');
   await pickColour(page, 'Red');
   await place(page, [[3, 1], [5, 3]]);
-  await page.getByRole('button', { name: 'Save the board here' }).first().click();
+  await saveBoardHere(page);
   await page.getByRole('textbox', { name: 'Name of loop 1' }).fill('Bells');
   await page.getByRole('button', { name: 'Clear the board' }).click();
-  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await page.getByRole('button', { name: 'Board', exact: true }).click();
   await page.getByRole('tab', { name: 'Connections' }).click();
   await page.getByRole('switch', { name: 'iPad controls' }).click();
   await page.getByRole('checkbox', { name: 'Loops & scenes page' }).check();
@@ -900,7 +903,7 @@ test('an iPad loop tap while the laptop is stopped is refused, says why, and Pla
   await expect(ipad.getByRole('alert')).toHaveText('Press Play on the laptop first');
   await expect(ipad.getByRole('button', { name: /^Bells: OFF/ })).toBeVisible();
   // ▶ Play on the laptop: the board plays, and no loop comes in by itself.
-  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await page.getByRole('button', { name: '▶ Play the board' }).first().click();
   await expect(ipad.getByText('Connected · playing')).toBeVisible();
   await page.waitForTimeout(3000);
   await expect(ipad.getByRole('button', { name: /^Bells: OFF/ })).toBeVisible();
@@ -936,7 +939,7 @@ test('New loop silences the notes still ringing at once, as Stop does; after the
   await pickColour(page, 'Yellow');
   await place(page, [[4, 1]]);
   await page.getByRole('button', { name: 'Make a piece', exact: true }).click();
-  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await page.getByRole('button', { name: '▶ Play the board' }).first().click();
   await expect.poll(async () => Math.max(0, ...await outputLevels(page, 4)), { timeout: 20_000 }).toBeGreaterThan(0.05);
   await pressAfterNotes(page, 'New loop');
   // Silence from the first quarter second (before: about 2.5 s of ringing at full level).
@@ -944,7 +947,7 @@ test('New loop silences the notes still ringing at once, as Stop does; after the
   expect(after.length).toBe(8);
   expect(Math.max(...after)).toBeLessThan(0.01);
   await expect(page.getByRole('heading', { name: 'New loop 1 · silent' })).toBeVisible();
-  await expect(page.getByText('Lift the 2 counters to start from silence.', { exact: true })).toBeVisible();
+  await expect(page.getByText('Lift the 2 counters, or press Clear the board.', { exact: true })).toBeVisible();
   // Clear the board: straight on to composing, never "Lift the 0 counters" (T2-03, T1-05).
   await page.getByRole('button', { name: 'Clear the board' }).click();
   await expect(page.getByText('Only the counters sound. Put them down, listen, change them.')).toBeVisible();
@@ -962,7 +965,7 @@ test('with every loop full, New loop is off and says why beside it; clearing one
   await pickColour(page, 'Red');
   await place(page, [[3, 1]]);
   for (let i = 1; i <= 8; i++) {
-    await page.getByRole('button', { name: 'Save the board here' }).first().click();
+    await saveBoardHere(page);
     await expect(page.getByRole('listitem', { name: new RegExp(`^Loop ${i}: Loop ${i}, 1 note$`) })).toBeVisible();
   }
   // No loop can be kept, so New loop is off before the board is cleared for one.
@@ -1021,10 +1024,10 @@ test('Stop while hearing a loop in New loop, then Play: the loop does not come b
   await pieceStep(page, 'Loops');
   await pickColour(page, 'Red');
   await place(page, [[3, 1], [5, 3], [4, 5], [6, 7]]);
-  await page.getByRole('button', { name: 'Save the board here' }).first().click();
+  await saveBoardHere(page);
   await page.getByRole('textbox', { name: 'Name of loop 1' }).fill('Bed');
   await page.getByRole('button', { name: 'Clear the board' }).click();
-  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await page.getByRole('button', { name: '▶ Play the board' }).first().click();
   await page.getByRole('button', { name: 'New loop' }).click();
   const hearLoop = page.getByRole('combobox', { name: 'Hear it with a loop' });
   await hearLoop.selectOption({ label: 'Bed' });
@@ -1034,7 +1037,7 @@ test('Stop while hearing a loop in New loop, then Play: the loop does not come b
   // Stop ends "Hear it with…" too.
   await expect(hearLoop).toHaveValue('');
   await page.waitForTimeout(600); // ▶ Play ignores a press straight after Stop (a bounce): this is a new press
-  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await page.getByRole('button', { name: '▶ Play the board' }).first().click();
   await expect(page.getByRole('status').filter({ hasText: 'Playing' }).first()).toBeVisible();
   await expect.poll(() => notesPlayed(page), { timeout: 10_000 }).toBe(0);
   await page.waitForTimeout(4000);
@@ -1047,17 +1050,17 @@ test('■ Stop pressed twice quickly, with no piece clock, stops and stays stopp
   await openLaptopBoard(page);
   await pickColour(page, 'Red');
   await place(page, [[3, 1]]);
-  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await page.getByRole('button', { name: '▶ Play the board' }).first().click();
   await expect(page.getByRole('button', { name: '■ Stop' }).first()).toBeVisible();
   // Two presses 150 ms apart, timed inside the page: the second lands on ▶ Play.
   await page.evaluate(async () => {
     const find = (text: string): HTMLButtonElement | undefined => [...document.querySelectorAll('button')].find((b) => b.textContent === text);
     find('■ Stop')?.click();
     await new Promise((r) => setTimeout(r, 150));
-    find('▶ Play')?.click();
+    find('▶ Play the board')?.click();
   });
   await page.waitForTimeout(1500);
-  await expect(page.getByRole('button', { name: '▶ Play' }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: '▶ Play the board' }).first()).toBeVisible();
   await expect(page.getByRole('button', { name: '■ Stop' })).toHaveCount(0);
   expect(pageErrors(page)).toEqual([]);
 });
@@ -1103,7 +1106,7 @@ test('two tabs: only the first saves; the second says why and saves nothing; whe
   // A loop kept in the first tab while the second is open.
   await pickColour(page, 'Green');
   await place(page, [[6, 2]]);
-  await page.getByRole('button', { name: 'Save the board here' }).first().click();
+  await saveBoardHere(page);
   await page.getByRole('textbox', { name: 'Name of loop 3' }).fill('Kept in A');
   await page.getByRole('textbox', { name: 'Name of loop 3' }).press('Tab');
   await pause(page, 800);
@@ -1196,7 +1199,7 @@ test('Space in Show while Tim warms up starts the piece at once: the board never
   await openLaptopBoard(page);
   await saveBedAndPulse(page);
   await makePlan(page); // Arrival, at 0:00, has Bed
-  await page.getByRole('button', { name: '▶ Play', exact: true }).first().click();
+  await page.getByRole('button', { name: '▶ Play the board', exact: true }).first().click();
   await expect(page.locator('#bs-play-stop')).toHaveText('■ Stop', { timeout: 20_000 });
   await page.getByRole('button', { name: /^Show: the board, the clock/ }).click();
   const show = page.getByRole('region', { name: 'Show', exact: true });
@@ -1251,10 +1254,10 @@ test('a Space 200 ms after a Stop starts nothing, in Show and in Play (ledger M7
   // Play, plain play: one Stop, then Space.
   await show.getByRole('button', { name: 'Leave Show' }).click();
   await pause(page, 500);
-  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await page.getByRole('button', { name: '▶ Play the board' }).first().click();
   await expect(page.getByRole('button', { name: '■ Stop' }).first()).toBeVisible();
   await spaceAfterStop(1);
-  await expect(page.getByRole('button', { name: '▶ Play' }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: '▶ Play the board' }).first()).toBeVisible();
   await expect(page.getByRole('button', { name: '■ Stop' })).toHaveCount(0);
   expect(pageErrors(page)).toEqual([]);
 });
@@ -1274,7 +1277,7 @@ test('the Carry on offer takes focus; Space on the page under it starts nothing,
   await page.keyboard.press('Space');
   await pause(page, 2000);
   await expect(carryOn).toBeVisible();
-  await expect(page.getByRole('button', { name: '▶ Play' }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: '▶ Play the board' }).first()).toBeVisible();
   await expect(page.getByRole('button', { name: '■ Stop' })).toHaveCount(0);
   expect(pageErrors(page)).toEqual([]);
 });
@@ -1286,7 +1289,7 @@ test('▶ Start the piece while the board plays after a jump (route A): it opens
   await ownSoundIsPlain(page);
   await pieceLength(page, '1:00');
   await makePlan(page); // Arrival 0:00, Build 0:13, Open 0:30, Home 0:51
-  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await page.getByRole('button', { name: '▶ Play the board' }).first().click();
   await page.getByRole('button', { name: 'Jump to Build now' }).click();
   await expect(page.getByRole('button', { name: 'Jump to Build now' })).toHaveAttribute('aria-pressed', 'true');
   await page.getByRole('button', { name: /^Show: the board, the clock/ }).click();
@@ -1332,7 +1335,7 @@ test('a scene added while stopped is never "on now" (route B): after a reload, �
   await pieceStep(page, 'Scenes');
   await expect(page.getByRole('button', { name: /^0:20 · Coda/ })).toBeVisible();
   await expect(page.getByRole('button', { name: /· on now/ })).toHaveCount(0);
-  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await page.getByRole('button', { name: '▶ Play the board' }).first().click();
   await expect(page.getByRole('button', { name: '■ Stop' }).first()).toBeVisible();
   await page.getByRole('button', { name: /^Show: the board, the clock/ }).click();
   const strip = page.getByRole('region', { name: 'Show', exact: true }).getByRole('region', { name: 'Now and next' });
@@ -1355,7 +1358,7 @@ test('the first scene at 0:10 and a later one left on by a jump: Start the piece
   await time.fill('0:10');
   await time.press('Tab');
   await expect(page.getByRole('button', { name: /^0:10 · Arrival/ })).toBeVisible();
-  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await page.getByRole('button', { name: '▶ Play the board' }).first().click();
   await page.getByRole('button', { name: 'Jump to Open now' }).click();
   await page.getByRole('button', { name: /^Show: the board, the clock/ }).click();
   const strip = page.getByRole('region', { name: 'Show', exact: true }).getByRole('region', { name: 'Now and next' });
@@ -1383,7 +1386,7 @@ test('a reload in the last seconds (rehearse from Home, reload at 0:54 of 1:00):
   const levels = await outputLevels(page, 12, 250); // 3 s
   expect(levels.every((v) => v === 0), `levels after the reload: ${levels.join(', ')}`).toBe(true);
   await expect(page.getByRole('timer')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: '▶ Play' }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: '▶ Play the board' }).first()).toBeVisible();
   // OK: the line goes, and nothing starts.
   await endedLine(page).getByRole('button', { name: 'OK' }).click();
   await expect(endedLine(page)).toHaveCount(0);
@@ -1406,7 +1409,7 @@ test('a reload with the automatic ending under way: no Carry on, the piece has e
   expect(pageErrors(page)).toEqual([]);
 });
 
-test('⏹ End in Show, then a reload with a minute left: the piece has ended, in Show, with no Bed (R2-T3-02)', async ({ page }) => {
+test('↘ End piece in Show, then a reload with a minute left: the piece has ended, in Show, with no Bed (R2-T3-02)', async ({ page }) => {
   await listenToOutput(page);
   await openLaptopBoard(page);
   await saveTwoLoops(page);
@@ -1416,7 +1419,7 @@ test('⏹ End in Show, then a reload with a minute left: the piece has ended, in
   await page.getByRole('button', { name: /^Show: the board, the clock/ }).click();
   const show = page.getByRole('region', { name: 'Show', exact: true });
   await untilPieceAt(page, 362);
-  await show.getByRole('button', { name: '⏹ End' }).click();
+  await show.getByRole('button', { name: '↘ End piece' }).click();
   await expect(show.getByRole('button', { name: 'Cancel the ending' })).toBeVisible();
   await pause(page, 3000);
   await page.reload();
@@ -1526,7 +1529,7 @@ test('two reloads mid-piece, each carried on: silent by the first start + the le
   }, startedAt);
   expect(lastSound).toBeGreaterThan(30); // it played
   expect(lastSound).toBeLessThanOrEqual(60.5);
-  await expect(page.getByRole('button', { name: '▶ Play' }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: '▶ Play the board' }).first()).toBeVisible();
   expect(pageErrors(page)).toEqual([]);
 });
 
@@ -1535,7 +1538,7 @@ test('while ▶ Start the piece loads, an iPad Capture is refused and the iPad s
   await pickColour(page, 'Red');
   await place(page, [[3, 1], [5, 3]]);
   await makePlan(page);
-  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await page.getByRole('button', { name: 'Board', exact: true }).click();
   await page.getByRole('tab', { name: 'Connections' }).click();
   await page.getByRole('switch', { name: 'iPad controls' }).click();
   await page.getByRole('checkbox', { name: 'Loops & scenes page' }).check();
@@ -1607,11 +1610,11 @@ test('Update from now: not there while stopped; while playing it copies the loop
   const before = await savedScene(page, 'Open');
   expect(before).not.toBeNull();
   // The sound now: a full band and some extra notes; then the board plays, with Bed on.
-  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await page.getByRole('button', { name: 'Board', exact: true }).click();
   await page.getByRole('tab', { name: 'Sound' }).click();
   await page.getByRole('group', { name: 'Band' }).getByRole('radio', { name: 'Full' }).click();
   await page.getByRole('group', { name: 'Extra notes' }).getByRole('radio', { name: 'Some' }).click();
-  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await page.getByRole('button', { name: '▶ Play the board' }).first().click();
   await expect(page.getByRole('status').filter({ hasText: 'Playing' }).first()).toBeVisible({ timeout: 20_000 });
   await pieceStep(page, 'Loops');
   await page.getByRole('listitem', { name: /^Loop 1: Bed/ }).getByRole('button', { name: '▶ Play' }).click();
@@ -1688,7 +1691,7 @@ test('decision F2\'s path: after Stop ×2, New loop starts the board and the cou
   await expect(page.getByRole('status').filter({ hasText: 'Stopped' }).first()).toBeVisible();
   await newLoop.click();
   await expect(page.getByRole('status').filter({ hasText: 'Playing' }).first()).toBeVisible({ timeout: 20_000 });
-  const stopped = 'Stopped. Press ▶ Play to hear the counters.';
+  const stopped = 'Stopped. Press ▶ Play the board to hear the counters.';
   await expect(page.getByText(stopped)).toHaveCount(0);
   await pickColour(page, 'Blue');
   await place(page, [[1, 1], [1, 5]]);
@@ -1705,7 +1708,7 @@ test('decision F2\'s path: after Stop ×2, New loop starts the board and the cou
   await expect(panel.getByRole('button', { name: 'Keep', exact: true })).toBeEnabled();
   // ▶ Play in the panel: the counters are heard again.
   await pause(page, 600); // ▶ Play ignores a press straight after Stop (a bounce): this is a new press
-  await panel.getByRole('button', { name: '▶ Play' }).click();
+  await panel.getByRole('button', { name: '▶ Play the board' }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Playing' }).first()).toBeVisible({ timeout: 20_000 });
   await expect(page.getByText(stopped)).toHaveCount(0);
   await expect.poll(async () => Math.max(0, ...await outputLevels(page, 4)), { timeout: 20_000 }).toBeGreaterThan(0.01);
@@ -1768,7 +1771,7 @@ test('a colour that comes in at 0:05: on the board but silent in the piece until
   await page.getByRole('button', { name: '■ Press again to stop' }).first().click();
   await expect(page.getByRole('status').filter({ hasText: 'Stopped' }).first()).toBeVisible();
   await pause(page, 600); // ▶ Play ignores a press straight after Stop (a bounce): this is a new press
-  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await page.getByRole('button', { name: '▶ Play the board' }).first().click();
   await expect(page.getByRole('status').filter({ hasText: 'Playing' }).first()).toBeVisible({ timeout: 20_000 });
   await expect(strip).toHaveCount(0);
   await expect.poll(async () => (await sessionNotes(page)).some((n) => n.colour === redId && n.t < 3), { timeout: 20_000 }).toBe(true);
@@ -1847,7 +1850,7 @@ test('keeping time: a normal run shows nothing while it plays, and the Ready che
   await place(page, [[3, 1], [5, 3], [4, 5]]);
   await pieceStep(page, 'Ending & check');
   await expect(page.getByText('Keeping time: not measured yet', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await page.getByRole('button', { name: '▶ Play the board' }).first().click();
   await expect(page.getByRole('status').filter({ hasText: 'Playing' }).first()).toBeVisible({ timeout: 20_000 });
   await expect.poll(() => notesPlayed(page), { timeout: 15_000 }).toBeGreaterThan(0);
   await expect(page.getByText('Keeping time: fine so far', { exact: true })).toBeVisible();
@@ -1906,14 +1909,14 @@ test('Simplify, by mouse and by Shift+S: the band, Extra notes and the second lo
   await pickColour(page, 'Red');
   await place(page, [[3, 1], [5, 3], [4, 5], [6, 7]]);
   await expect(page.getByRole('button', { name: /^Simplify/ })).toHaveCount(0); // only while playing
-  await page.getByRole('button', { name: '▶ Play' }).first().click();
+  await page.getByRole('button', { name: '▶ Play the board' }).first().click();
   await expect(page.getByRole('status').filter({ hasText: 'Playing' }).first()).toBeVisible({ timeout: 20_000 });
   await pause(page, 8000); // the band joins on the pass after the first counter
 
   const banner = page.getByRole('status', { name: 'Simplify' });
   // By mouse.
   await page.getByRole('button', { name: /^Simplify/ }).click();
-  await expect(banner).toHaveText('Simplified: Test and the bed');
+  await expect(banner).toHaveText('Simplified: Test and Bed');
   await expect(page.getByRole('button', { name: /^Back to full/ })).toHaveAttribute('aria-pressed', 'true');
   await pause(page, 6000);
   await page.getByRole('button', { name: /^Back to full/ }).click();
@@ -1923,7 +1926,7 @@ test('Simplify, by mouse and by Shift+S: the band, Extra notes and the second lo
   // By keyboard, in Show.
   await page.getByRole('button', { name: /^Show: the board, the clock/ }).click();
   await page.keyboard.press('Shift+S');
-  await expect(banner).toHaveText('Simplified: Test and the bed');
+  await expect(banner).toHaveText('Simplified: Test and Bed');
   await pause(page, 6000);
   await page.keyboard.press('Shift+S');
   await expect(banner).toHaveText('Back to full from the next pass');
