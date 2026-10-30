@@ -8,7 +8,7 @@ export function StepRow({ label, steps, value, onPick, disabled = false, hint }:
   const i = nearest(steps, value);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>{label}</span>
+      <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>{label}</span>
       <SegmentedControl<number>
         label={label}
         value={i}
@@ -16,7 +16,7 @@ export function StepRow({ label, steps, value, onPick, disabled = false, hint }:
         onChange={(k) => onPick(steps[k].value)}
         options={steps.map((s, k) => ({ value: k, label: s.label }))}
       />
-      {hint && <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>{hint}</span>}
+      {hint && <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>{hint}</span>}
     </div>
   );
 }

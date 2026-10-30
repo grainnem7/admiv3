@@ -342,21 +342,27 @@ function goTo(title: string, from: HTMLElement): void {
 export default function BoardHelp(): React.JSX.Element {
   return (
     <div data-help="" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <h2 tabIndex={-1} data-autofocus="" style={{ margin: 0, fontSize: 18 }}>How to play</h2>
+      <h2 tabIndex={-1} data-autofocus="" style={{ margin: 0, fontSize: 20 }}>How to play</h2>
+      {/* Folded: all of it open would fill the dialog before any of the text. */}
       <nav aria-label="Help sections">
-        <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexWrap: 'wrap', gap: '4px 12px' }}>
-          {HELP.map((e) => (
-            <li key={e.title}>
-              <a
-                href={`#${sectionId(e.title)}`}
-                onClick={(ev) => { ev.preventDefault(); goTo(e.title, ev.currentTarget); }}
-                style={{ display: 'inline-block', minHeight: 'var(--bs-target)', lineHeight: 'var(--bs-target)', fontSize: 14 }}
-              >
-                {e.title}
-              </a>
-            </li>
-          ))}
-        </ul>
+        <details>
+          <summary style={{ cursor: 'pointer', minHeight: 'var(--bs-target)', display: 'flex', alignItems: 'center', fontWeight: 600 }}>
+            Jump to a section
+          </summary>
+          <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column' }}>
+            {HELP.map((e) => (
+              <li key={e.title}>
+                <a
+                  href={`#${sectionId(e.title)}`}
+                  onClick={(ev) => { ev.preventDefault(); goTo(e.title, ev.currentTarget); }}
+                  style={{ display: 'flex', alignItems: 'center', minHeight: 'var(--bs-target)', color: 'var(--bs-accent)', textDecoration: 'underline' }}
+                >
+                  {e.title}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </details>
       </nav>
       {HELP.map((e) => (
         <div key={e.title} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>

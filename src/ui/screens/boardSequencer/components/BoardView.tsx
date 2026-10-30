@@ -436,7 +436,7 @@ export function BoardView({
           style={{ position: 'absolute', top: 0, left: 0, right: 0, height: noticeH, display: 'flex', justifyContent: 'center', alignItems: 'center', pointerEvents: 'none' }}
         >
           {notice && (
-            <span style={{ padding: '3px 14px', borderRadius: 999, background: 'var(--bs-accent)', color: 'var(--bs-bg)', fontWeight: 600, fontSize: 15 }}>
+            <span style={{ padding: '3px 14px', borderRadius: 999, background: 'var(--bs-accent)', color: 'var(--bs-bg)', fontWeight: 600, fontSize: 16 }}>
               {notice}
             </span>
           )}
@@ -463,7 +463,7 @@ export function BoardView({
       )}
       {pageLabel && (
         <span style={{
-          position: 'absolute', top: 6, left: 6, fontSize: 12, color: 'var(--bs-fg2)',
+          position: 'absolute', top: 6, left: 6, fontSize: 14, color: 'var(--bs-fg2)',
           background: 'var(--bs-bg)', padding: '2px 6px', borderRadius: 'var(--bs-radius-sm)',
         }}
         >

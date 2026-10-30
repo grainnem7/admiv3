@@ -108,7 +108,7 @@ export function BoardStep({
           {/* Learning is part of Looks right; the button is on show only when it hasn't happened. */}
           {boardLearnt === 0 && (
             <>
-              <p style={{ margin: 0, color: 'var(--bs-fg2)', fontSize: 13 }}>
+              <p style={{ margin: 0, color: 'var(--bs-fg2)', fontSize: 14 }}>
                 Take every counter off, then press the button. ADMI remembers how the empty
                 board looks, so anything new on it is a counter.
               </p>
@@ -118,13 +118,13 @@ export function BoardStep({
             </>
           )}
           {learnMessage && (
-            <p role="status" aria-live="polite" style={{ margin: 0, fontSize: 13, color: 'var(--bs-fg)' }}>
+            <p role="status" aria-live="polite" style={{ margin: 0, fontSize: 14, color: 'var(--bs-fg)' }}>
               {learnMessage}
             </p>
           )}
           {/* Only when something is wrong: "not learnt yet" already says the usual reason. */}
           {detection.mode !== 'board' && (boardLearnt > 0 || counterDetection === 'bands') && (
-            <span role="status" style={{ fontSize: 13, color: 'var(--bs-warn)' }}>
+            <span role="status" style={{ fontSize: 14, color: 'var(--bs-warn)' }}>
               {counterDetection === 'bands'
                 ? 'Counters are found by colour only (the old way, chosen under More → For testing).'
                 : detection.reason}
@@ -143,7 +143,7 @@ export function BoardStep({
               <div>
                 <Button tone="secondary" onClick={onLearnBoard} reason={running ? 'Stop the board first.' : null}>Learn it again</Button>
               </div>
-              <p style={{ margin: 0, color: 'var(--bs-fg2)', fontSize: 12 }}>
+              <p style={{ margin: 0, color: 'var(--bs-fg2)', fontSize: 14 }}>
                 With every counter off. Do it again if the light in the room changes a lot.
               </p>
             </div>
@@ -181,7 +181,7 @@ export function BoardStep({
         </div>
         {/* Board size and the playing grid are different things, and the screen only ever
             shows the grid — so say which one the player will see. */}
-        <p role="status" style={{ margin: 0, fontSize: 13, color: 'var(--bs-fg2)' }}>
+        <p role="status" style={{ margin: 0, fontSize: 14, color: 'var(--bs-fg2)' }}>
           {`You will play on a ${rows} × ${cols} grid.`}
           {boardSquares % rows === 0 && boardSquares % cols === 0 && (rows < boardSquares || cols < boardSquares)
             ? ` Each box covers ${boardSquares / rows} × ${boardSquares / cols} squares. For one box per square, choose ${boardSquares} rows and ${boardSquares} steps.`
@@ -189,7 +189,7 @@ export function BoardStep({
         </p>
 
         <Disclosure summary="More sizes…" defaultOpen={moreOpen}>
-          <p style={{ margin: 0, fontSize: 12, color: 'var(--bs-fg2)' }}>
+          <p style={{ margin: 0, fontSize: 14, color: 'var(--bs-fg2)' }}>
             Cells won&apos;t line up with the squares; detection may be less reliable.
           </p>
           <SegmentedControl<number>
@@ -232,7 +232,7 @@ export function BoardStep({
           />
         </Disclosure>
         <details>
-          <summary style={{ cursor: 'pointer', fontSize: 13, color: 'var(--bs-fg2)' }}>For testing</summary>
+          <summary style={{ cursor: 'pointer', fontSize: 14, color: 'var(--bs-fg2)' }}>For testing</summary>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 6 }}>
             <SegmentedControl<'board' | 'bands'>
               label="How counters are found" showLabel
@@ -243,19 +243,19 @@ export function BoardStep({
                 { value: 'bands', label: 'By colour only (old way)' },
               ]}
             />
-            <p style={{ margin: 0, fontSize: 13, color: 'var(--bs-fg2)' }}>
+            <p style={{ margin: 0, fontSize: 14, color: 'var(--bs-fg2)' }}>
               Saves ten camera pictures to a file, with the corners and colours, so counter
               detection can be tested on this real board. Say what is on the board (for
               example &ldquo;empty&rdquo;, &ldquo;one of each colour&rdquo;, &ldquo;hand over the left side&rdquo;).
             </p>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 13 }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 14 }}>
               What is on the board
               <input type="text" value={testNote} onChange={(e) => setTestNote(e.target.value)} style={{ minHeight: 'var(--bs-target)' }} />
             </label>
             <div>
               <Button tone="secondary" onClick={() => onSaveTestPictures(testNote)}>Save 10 test pictures</Button>
             </div>
-            {testPicturesMessage && <span role="status" style={{ fontSize: 13 }}>{testPicturesMessage}</span>}
+            {testPicturesMessage && <span role="status" style={{ fontSize: 14 }}>{testPicturesMessage}</span>}
           </div>
         </details>
         </div>

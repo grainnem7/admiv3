@@ -68,7 +68,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       {button}
       {/* Reserved space: showing a reason must never shift what sits under the pointer. */}
       <span id={reasonId} style={{
-        display: 'block', minHeight: 16, fontSize: 12, color: 'var(--bs-fg2)',
+        display: 'block', minHeight: 16, fontSize: 14, color: 'var(--bs-fg2)',
         // Reserved: exactly one line, whatever the reason says, so its coming and going
         // moves nothing (a wrapped reason was taller than the space kept for it). Out of the
         // flow, so a reason wider than the button never widens its place either: the header

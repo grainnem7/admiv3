@@ -60,7 +60,7 @@ export interface NewLoopPanelProps {
   onLeave(): void;
 }
 
-const NOTE = { fontSize: 13, color: 'var(--bs-fg2)', margin: 0 } as const;
+const NOTE = { fontSize: 14, color: 'var(--bs-fg2)', margin: 0 } as const;
 const card = { padding: 12, borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-elev)', display: 'flex', flexDirection: 'column', gap: 8 } as const;
 
 /**
@@ -92,7 +92,7 @@ export function NewLoopPanel(p: NewLoopPanelProps): JSX.Element {
   const now = p.kept ? 'kept' : waiting ? 'silent' : 'not kept yet';
   return (
     <section aria-labelledby="new-loop" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <h3 id="new-loop" ref={headingRef} tabIndex={-1} style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>
+      <h3 id="new-loop" ref={headingRef} tabIndex={-1} style={{ margin: 0, fontSize: 20, fontWeight: 800 }}>
         {`New loop${p.loopNumber === null ? '' : ` ${p.loopNumber}`} · ${now}`}
       </h3>
       {p.stopped && (

@@ -45,7 +45,7 @@ export function PlayerChooser({ players, onPick, onCreate, onEdit, onCancel }: P
                   }}
                 >
                   <span style={{ fontSize: 20, fontWeight: 600 }}>{p.name}</span>
-                  <span style={{ color: 'var(--bs-fg2)', fontSize: 13 }}>
+                  <span style={{ color: 'var(--bs-fg2)', fontSize: 14 }}>
                     {p.settings.handedness === 'left' ? 'Left-handed' : 'Right-handed'}
                   </span>
                 </button>
@@ -104,7 +104,7 @@ function PlayerForm({ initialName = '', initialHand = 'right', submitLabel, onSu
           autoFocus
           style={{ minHeight: 'var(--bs-target)', padding: '0 10px' }}
         />
-        <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
+        <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>
           Initials or a code are fine — this is stored on this computer.
         </span>
       </label>
@@ -116,7 +116,7 @@ function PlayerForm({ initialName = '', initialHand = 'right', submitLabel, onSu
           onChange={setHandedness}
           options={[{ value: 'left', label: 'Left' }, { value: 'right', label: 'Right' }]}
         />
-        <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--bs-fg2)' }}>
+        <p style={{ margin: '4px 0 0', fontSize: 14, color: 'var(--bs-fg2)' }}>
           Controls move to that side. The board, the camera and the music never mirror.
         </p>
       </div>

@@ -7,7 +7,7 @@ import type { BoardSequencerStored } from '../../../../profiles/BoardSequencerCo
 import { Button } from '../ui/Button';
 import { Disclosure } from '../ui/Disclosure';
 
-const NOTE = { fontSize: 12, color: 'var(--bs-fg2)' } as const;
+const NOTE = { fontSize: 14, color: 'var(--bs-fg2)' } as const;
 
 export interface AbletonLiveState {
   chains: ReadonlyMap<number, number>;
@@ -61,7 +61,7 @@ export function AbletonSoundsPanel({ config, getLive, onSend, connected }: {
         ADMI picks each track&apos;s Instrument Rack chain with CC 30, so a colour card&apos;s sound, the World, a
         scene&apos;s World and Sounds change switch Ableton&apos;s sound too. A track without a rack ignores it.
       </span>
-      <table style={{ fontSize: 13, borderCollapse: 'collapse' }}>
+      <table style={{ fontSize: 14, borderCollapse: 'collapse' }}>
         <caption style={{ ...NOTE, textAlign: 'left' }}>Each channel&apos;s chain now</caption>
         <thead>
           <tr>
@@ -81,7 +81,7 @@ export function AbletonSoundsPanel({ config, getLive, onSend, connected }: {
         </tbody>
       </table>
       {planned.shares.size > 0 && (
-        <span role="status" style={{ fontSize: 12, color: 'var(--bs-warn)' }}>
+        <span role="status" style={{ fontSize: 14, color: 'var(--bs-warn)' }}>
           Some colours share a channel (one per part): Ableton plays one sound for each pair. Choose One per colour above to give each its own.
         </span>
       )}
@@ -104,7 +104,7 @@ export function AbletonSoundsPanel({ config, getLive, onSend, connected }: {
           {chainRange(3)[0]}, {chainRange(17)[0]} and {chainRange(29)[0]}.
         </span>
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ fontSize: 12, borderCollapse: 'collapse' }}>
+          <table style={{ fontSize: 14, borderCollapse: 'collapse' }}>
             <caption style={{ ...NOTE, textAlign: 'left' }}>Every rack has these chains, named exactly, in this order. Real: a real instrument on that track. Placeholder: the light stand-in.</caption>
             <thead>
               <tr>

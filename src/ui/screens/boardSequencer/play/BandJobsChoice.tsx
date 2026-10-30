@@ -7,7 +7,7 @@ import {
   AS_BEFORE_JOBS, BAND_JOBS, BAND_JOB_WORDS, DEFAULT_JOBS, type BandJobs,
 } from '../../../../songs/band/bandJobs';
 
-const SMALL = { fontSize: 12, color: 'var(--bs-fg2)' } as const;
+const SMALL = { fontSize: 14, color: 'var(--bs-fg2)' } as const;
 
 export function BandJobsChoice({ value, onChange }: { value: BandJobs; onChange(next: BandJobs): void }): JSX.Element {
   return (

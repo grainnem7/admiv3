@@ -41,7 +41,7 @@ export function BoardLegend({ loops, extra, band, tunes }: BoardLegendProps): JS
   return (
     <ul
       aria-label="What the board shows"
-      style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px', margin: 0, padding: 0, listStyle: 'none', fontSize: 12, color: 'var(--bs-fg2)' }}
+      style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px', margin: 0, padding: 0, listStyle: 'none', fontSize: 14, color: 'var(--bs-fg2)' }}
     >
       {items.map((i) => (
         <li key={i.kind} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>

@@ -82,7 +82,7 @@ export function LoopEditor({ rows, cols, channels, cells, palette, onChange }: L
         style={{ gridTemplateColumns: `repeat(${cols}, ${size}px)`, gridTemplateRows: `repeat(${rows}, ${size}px)`, gap: 3 }}
       />
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        <span style={{ fontSize: 12, color: 'var(--bs-fg2)', flex: 1 }}>
+        <span style={{ fontSize: 14, color: 'var(--bs-fg2)', flex: 1 }}>
           {`${cells.length} ${cells.length === 1 ? 'note' : 'notes'}. Bottom row is the lowest note; left to right is time.`}
         </span>
         <Button tone="quiet" onClick={() => onChange([])} reason={cells.length === 0 ? 'Already empty.' : null}>Clear</Button>

@@ -121,7 +121,7 @@ export function CameraStep({
       <details open={moreOpened || undefined}>
         <summary style={{ cursor: 'pointer', color: 'var(--bs-fg2)', minHeight: 'var(--bs-target)', display: 'flex', alignItems: 'center' }}>More</summary>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 6 }}>
-          <p style={{ margin: 0, color: 'var(--bs-fg2)', fontSize: 12 }}>
+          <p style={{ margin: 0, color: 'var(--bs-fg2)', fontSize: 14 }}>
             {trackInfo ? `${trackInfo.label || 'Camera'} · ${trackInfo.width} × ${trackInfo.height}` : 'No camera details yet'}
           </p>
 
@@ -140,7 +140,7 @@ export function CameraStep({
               }}
               options={CAMERA_RESOLUTIONS.map((r) => ({ value: `${r.width}x${r.height}`, label: r.label }))}
             />
-            <p style={{ margin: '4px 0 0', color: 'var(--bs-fg2)', fontSize: 12 }}>
+            <p style={{ margin: '4px 0 0', color: 'var(--bs-fg2)', fontSize: 14 }}>
               If the counters&rsquo; colours come out wrong &mdash; a purple counter reading as
               brown, say &mdash; change this before changing anything else. A phone used as a
               camera can send colour the browser reads correctly at one size and wrongly at
@@ -154,11 +154,11 @@ export function CameraStep({
               <Button tone="secondary" onClick={onTurn} aria-label={`Turn the picture a quarter turn. Now turned ${rotation * 90} degrees.`}>
                 ↻ Turn 90°
               </Button>
-              <span aria-hidden="true" style={{ color: 'var(--bs-fg2)', fontSize: 13 }}>
+              <span aria-hidden="true" style={{ color: 'var(--bs-fg2)', fontSize: 14 }}>
                 {rotation === 0 ? 'Not turned' : `Turned ${rotation * 90}°`}
               </span>
             </div>
-            <p style={{ margin: 0, color: 'var(--bs-fg2)', fontSize: 12 }}>
+            <p style={{ margin: 0, color: 'var(--bs-fg2)', fontSize: 14 }}>
               For a camera mounted on its side. Keep turning until the board is the right way up
               for the player. The board&rsquo;s corners and your colours are kept.
             </p>
@@ -178,7 +178,7 @@ export function CameraStep({
           />
 
           <Disclosure summary="Where to put the camera">
-            <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--bs-fg2)', fontSize: 12, lineHeight: 1.5 }}>
+            <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--bs-fg2)', fontSize: 14, lineHeight: 1.5 }}>
               <li>
                 {`High up and opposite the player — never over their shoulder. For a ${handedness}-handed player, front-${handedness === 'left' ? 'right' : 'left'}.`}
               </li>
@@ -188,7 +188,7 @@ export function CameraStep({
           </Disclosure>
 
           <Disclosure summary="Details">
-            <p style={{ margin: 0, fontSize: 12, color: 'var(--bs-fg2)' }}>
+            <p style={{ margin: 0, fontSize: 14, color: 'var(--bs-fg2)' }}>
               {`Colour in the frames the app reads: ${saturation === null ? 'not measured yet' : saturation.toFixed(1)}`}
             </p>
           </Disclosure>

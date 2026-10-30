@@ -37,7 +37,7 @@ export default function LoopBankView({
               opacity: filled ? (slot.active ? 1 : 0.55) : 0.3,
             }}
           >
-            <span style={{ fontSize: 10, opacity: 0.7 }}>Slot {i + 1}</span>
+            <span style={{ fontSize: 14, opacity: 0.7 }}>Slot {i + 1}</span>
             <div
               style={{
                 display: 'grid',
@@ -57,7 +57,7 @@ export default function LoopBankView({
             </div>
             <button
               type="button" disabled={!filled} onClick={() => onClear(i)}
-              style={{ fontSize: 10, opacity: filled ? 0.8 : 0.3 }}
+              style={{ fontSize: 14, opacity: filled ? 0.8 : 0.3 }}
             >
               Clear
             </button>

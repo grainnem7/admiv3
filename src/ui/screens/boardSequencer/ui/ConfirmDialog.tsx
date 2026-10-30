@@ -53,7 +53,7 @@ export function ConfirmDialog({
           boxShadow: 'var(--bs-shadow)',
         }}
       >
-        <h2 style={{ margin: 0, fontSize: 18 }}>{title}</h2>
+        <h2 style={{ margin: 0, fontSize: 20 }}>{title}</h2>
         {body && <p style={{ margin: 0, color: 'var(--bs-fg2)' }}>{body}</p>}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <Button ref={cancelRef} tone="secondary" onClick={onCancel}>{cancelLabel}</Button>

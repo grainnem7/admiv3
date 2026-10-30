@@ -6,7 +6,7 @@ import { Button } from '../ui/Button';
 import { SegmentedControl } from '../ui/SegmentedControl';
 import { planFromConfig } from './AbletonSoundsPanel';
 
-const NOTE = { fontSize: 12, color: 'var(--bs-fg2)' } as const;
+const NOTE = { fontSize: 14, color: 'var(--bs-fg2)' } as const;
 
 type MapGroup = 'fades' | 'sounds';
 
@@ -60,7 +60,7 @@ export function AbletonMappingHelper({ config, connected }: {
         <li>Press Ctrl+M again to finish, and save the Set.{group === 'fades' ? ' The tracks stay silent until ADMI plays (Play sends full Expression).' : ''}</li>
       </ol>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-        <label style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 13 }}>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 14 }}>
           Next to map
           <select value={index} onChange={(e) => setIndex(Number(e.target.value))}>
             {targets.map((t, i) => <option key={`${t.cc}-${t.channel}`} value={i}>{t.what}</option>)}

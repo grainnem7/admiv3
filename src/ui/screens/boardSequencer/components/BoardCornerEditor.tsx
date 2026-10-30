@@ -167,7 +167,7 @@ export function BoardCornerEditor({
         // A press on the controls is not a press on the board.
         onClick={(e) => e.stopPropagation()}
       >
-        <p role="status" style={{ margin: 0, fontSize: 12, color: tapError ? 'var(--bs-warn)' : 'var(--bs-fg2)' }}>
+        <p role="status" style={{ margin: 0, fontSize: 14, color: tapError ? 'var(--bs-warn)' : 'var(--bs-fg2)' }}>
           {prompt}
         </p>
 
@@ -335,7 +335,7 @@ function dotStyle(p: Point): React.CSSProperties {
     borderRadius: '50%',
     display: 'grid',
     placeItems: 'center',
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: 700,
   };
 }
@@ -351,7 +351,7 @@ function labelStyle(a: Point, b: Point): React.CSSProperties {
     borderRadius: 'var(--bs-radius-sm)',
     background: 'var(--bs-bg)',
     color: 'var(--bs-fg2)',
-    fontSize: 11,
+    fontSize: 14,
     pointerEvents: 'none',
   };
 }

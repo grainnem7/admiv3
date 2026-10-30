@@ -36,7 +36,7 @@ export interface BoardMidiPanelProps {
   onSendSounds(): void;
 }
 
-const NOTE = { fontSize: 12, color: 'var(--bs-fg2)' } as const;
+const NOTE = { fontSize: 14, color: 'var(--bs-fg2)' } as const;
 
 /** What each part goes out on in "one channel per part", for the table. */
 const PART_ROWS: { what: string; channel: number }[] = [
@@ -89,7 +89,7 @@ export function BoardMidiPanel({
     <div role="group" aria-label="Sound from" style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 10, borderRadius: 'var(--bs-radius-md)', border: '1px solid var(--bs-border)' }}>
       {/* Seen as well as heard: the cheat sheet and Help say "Sound from". */}
       <span style={{ fontWeight: 600 }}>Sound from</span>
-      <div style={{ fontSize: 17 }}>
+      <div style={{ fontSize: 16 }}>
         <SegmentedControl<SoundFrom>
           label="Sound from"
           value={soundFrom}
@@ -109,19 +109,19 @@ export function BoardMidiPanel({
 
       {midiOn && <span style={NOTE}>{ABLETON_TRACKS_NOTE}</span>}
       {midiOn && port.support === 'unsupported' && (
-        <span role="status" style={{ fontSize: 13, color: 'var(--bs-warn)' }}>
+        <span role="status" style={{ fontSize: 14, color: 'var(--bs-warn)' }}>
           This browser has no Web MIDI. Chrome or Edge do; Safari does not. ADMI is playing its own sound.
         </span>
       )}
       {midiOn && port.support === 'denied' && (
-        <span role="status" style={{ fontSize: 13, color: 'var(--bs-warn)' }}>
+        <span role="status" style={{ fontSize: 14, color: 'var(--bs-warn)' }}>
           MIDI access was refused. Allow it in the browser&apos;s site settings and try again. ADMI is playing its own sound.
         </span>
       )}
 
       {midiOn && port.support === 'ready' && (
         <>
-          <label style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 13 }}>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 14 }}>
             MIDI port
             <select value={chosen ? config.midiDeviceId : ''} onChange={(e) => onChange({ midiDeviceId: e.target.value })}>
               <option value="">{port.devices.length === 0 ? 'No MIDI outputs found' : 'Choose a port…'}</option>
@@ -134,7 +134,7 @@ export function BoardMidiPanel({
               Chrome). A hardware synth needs its USB or MIDI lead in.
             </span>
           )}
-          <span role="status" style={{ fontSize: 13, fontWeight: 600, color: port.connected && !holdOnAdmi ? 'var(--bs-ok)' : 'var(--bs-warn)' }}>
+          <span role="status" style={{ fontSize: 14, fontWeight: 600, color: port.connected && !holdOnAdmi ? 'var(--bs-ok)' : 'var(--bs-warn)' }}>
             {port.connected && !holdOnAdmi && `✓ Sending to ${port.chosenName ?? 'the port'}`}
             {port.connected && holdOnAdmi && 'The port is back. ADMI is still playing its own sound until you switch.'}
             {!port.connected && (config.midiDeviceId
@@ -154,7 +154,7 @@ export function BoardMidiPanel({
             />
           )}
 
-          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13 }}>
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 14 }}>
             <input
               type="checkbox"
               checked={config.midiLoopChannels}
@@ -182,7 +182,7 @@ export function BoardMidiPanel({
               moves the later ones up.
             </span>
           )}
-          <table style={{ fontSize: 13, borderCollapse: 'collapse' }}>
+          <table style={{ fontSize: 14, borderCollapse: 'collapse' }}>
             <caption style={{ ...NOTE, textAlign: 'left' }}>What goes out on each MIDI channel</caption>
             <thead>
               <tr><th scope="col" style={{ textAlign: 'left' }}>What plays</th><th scope="col" style={{ textAlign: 'left' }}>Channel</th></tr>
@@ -210,7 +210,7 @@ export function BoardMidiPanel({
             </tbody>
           </table>
           {config.midiChannelMode === 'colour' && shared.size > 0 && (
-            <span role="status" style={{ fontSize: 13, color: 'var(--bs-warn)' }}>
+            <span role="status" style={{ fontSize: 14, color: 'var(--bs-warn)' }}>
               {[...shared.entries()].map(([ch, ids]) => `${ids.map((id) => {
                 const c = config.channels.find((x) => x.id === id);
                 return c ? describeChannel(c) : id;
