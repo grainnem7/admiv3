@@ -1034,6 +1034,8 @@ export default function BoardSequencerScreen() {
       ask: helloAsk,
       // Reloaded mid-piece: the iPad waits for Carry on, and nothing from it is taken (B19).
       ...(resumeFrom !== null && !running ? { carryOnWaiting: true } : {}),
+      // The board's light or dark (A11); Show is always dark.
+      theme: view === 'bigBoard' ? 'dark' : config.themeMode,
     };
     remoteStateRef.current = state;
     remoteLink.send({ type: 'state', state });
@@ -1041,7 +1043,7 @@ export default function BoardSequencerScreen() {
     config.fillKept, config.evolveHoldLap, muted, running, starting, pieceStarting, config.remoteReach, reachLearning,
     config.loopSlots, config.loopNames, config.scenes, config.currentScene, wantedSlots, appliedSlots,
     config.remoteStrips, config.remotePads, config.remoteLoopsPage, config.remoteLocked, config.remoteStripMode, config.loopFadePasses, clock,
-    config.remoteTouch, beatOn, helloAsk, resumeFrom]);
+    config.remoteTouch, beatOn, helloAsk, resumeFrom, view, config.themeMode]);
   // The iPad's End piece waits for at most its window (and a little for the link); it is
   // over when the piece stops or the iPad goes.
   useEffect(() => {

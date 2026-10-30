@@ -158,6 +158,11 @@ export interface RemoteState {
    * and its touches are refused until then (B19).
    */
   carryOnWaiting?: boolean;
+  /**
+   * The board's own light or dark for the iPad page (A11): the laptop's ☀/☾, and always dark in
+   * Show. Missing = dark, as the page was before.
+   */
+  theme?: 'dark' | 'light';
 }
 
 export type RemoteMessage =
@@ -283,6 +288,7 @@ export function parseRemoteMessage(raw: unknown): RemoteMessage | null {
         ...(isBuildId(s.build) ? { build: s.build } : {}),
         ...(isAsk(s.ask) ? { ask: s.ask } : {}),
         ...(s.carryOnWaiting === true ? { carryOnWaiting: true } : {}),
+        ...(s.theme === 'light' || s.theme === 'dark' ? { theme: s.theme } : {}),
       },
     };
   }

@@ -7,6 +7,8 @@ import {
 import { BUILD_ID, reloadedFor, reloadFor } from '../../remote/buildId';
 import { useRemoteLink } from '../../remote/useRemoteLink';
 import { WORDS } from './boardSequencer/words';
+import { BOARD_TOKENS } from './boardSequencer/theme/boardTokens';
+import './boardSequencer/theme/boardTheme.css';
 
 /**
  * The iPad remote (opened as `/?remote=1234` in Safari on the iPad).
@@ -21,9 +23,6 @@ const STRIP_NAMES: Record<RemoteControlName, string> = {
   // The laptop's words, so the iPad, the laptop and Help say the same thing.
   tempo: WORDS.speed, dynamics: 'Dynamics', fill: WORDS.extraNotes, evolve: WORDS.soundsChange,
 };
-const STRIP_COLOURS: Record<RemoteControlName, string> = {
-  tempo: '#4fc3f7', dynamics: '#ffb74d', fill: '#81c784', evolve: '#ce93d8',
-};
 const PADS: { name: Exclude<RemoteTriggerName, 'stopAll'>; label: (s: RemoteState | null) => string; icon: string }[] = [
   // The laptop's words (the one word list, A2).
   { name: 'newIdea', icon: '✨', label: () => WORDS.newIdea },
@@ -32,6 +31,8 @@ const PADS: { name: Exclude<RemoteTriggerName, 'stopAll'>; label: (s: RemoteStat
   { name: 'mute', icon: '🔇', label: (s) => (s?.muted ? 'Muted' : 'Mute') },
 ];
 
+/** The iPad's pages, in the order of its tabs. */
+const PAGES = ['play', 'onoff', 'loops'] as const;
 /** After a finger lifts, trust the laptop's value again once it has caught up. */
 const TRUST_LAPTOP_AFTER_MS = 400;
 /** At most this often per strip while sliding. */
@@ -61,6 +62,22 @@ const BEAT_FLASH_MS = 140;
 /** Room between targets, so a finger that strays does not land on the neighbour. */
 const GAP = 18;
 
+/**
+ * The words beside a strip's number, or null when the number says it all. The laptop's own
+ * words ("Off", "96 BPM") while the strip shows what the laptop has; with a finger on it
+ * that the laptop has not caught up with, the finger's value in words (A11: a strip at 90%
+ * read "Off").
+ */
+function stripWords(name: RemoteControlName, v: number, touching: boolean, state: RemoteState | null): string | null {
+  const pct = `${Math.round(v * 100)}%`;
+  const laptop = state?.labels[name];
+  const agrees = !touching || (state !== null && Math.abs((state.values[name] ?? -1) - v) < STRIP_STEP / 2);
+  if (agrees) return laptop !== undefined && laptop !== pct ? laptop : null;
+  // Under the finger now: the same words the laptop would use, where they do not need its settings.
+  if (name === 'fill' || name === 'evolve') return v <= 0 ? 'Off' : null;
+  return null;
+}
+
 export default function IPadRemoteScreen({ code }: { code: string }): JSX.Element {
   const [state, setState] = useState<RemoteState | null>(null);
   // What each strip shows: the finger's value while touching, otherwise the laptop's.
@@ -74,7 +91,8 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
   const [flash, setFlash] = useState<RemoteTriggerName | null>(null);
   // Three pages: the strips and pads; just the saved loops, on and off; and the loops and
   // scenes prepared for the performance.
-  const [tab, setTab] = useState<'play' | 'onoff' | 'loops'>('play');
+  const [tab, setTab] = useState<(typeof PAGES)[number]>('play');
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const lastPad = useRef(new Map<string, number>());
   // Shown for a moment whenever a touch reaches the page at all: with it, "nothing
   // happens" can be told apart from "the laptop is not connected".
@@ -281,18 +299,20 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
   const locked = (name: RemoteControlName): boolean => state?.locked?.includes(name) === true;
   const follow = state?.stripMode === 'follow';
   const big = shownStrips.length <= 2;
+  // The board's own light and dark: the laptop says which (its ☀/☾; Show is always dark), dark until it does.
+  const theme = state?.theme === 'light' ? 'light' : 'dark';
 
   // Keep the page still: no scroll, no zoom, no text selection, on the whole document.
   useEffect(() => {
     const prev = document.body.style.cssText;
-    document.body.style.cssText = 'margin:0;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none;background:#14171f;';
+    document.body.style.cssText = `margin:0;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none;background:${BOARD_TOKENS.calm[theme].bg};`;
     const stop = (e: Event): void => e.preventDefault();
     document.addEventListener('gesturestart', stop);
     return () => {
       document.body.style.cssText = prev;
       document.removeEventListener('gesturestart', stop);
     };
-  }, []);
+  }, [theme]);
 
   const valueOf = (name: RemoteControlName): number => {
     const mine = local[name];
@@ -311,7 +331,8 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
 
   /** The finger's place on the strip, 0 at the bottom, before any mapping. */
   const fractionAt = (el: HTMLElement, clientY: number): number => {
-    const box = el.getBoundingClientRect();
+    // From the strip's track (below its words); a finger above it is at the very top.
+    const box = (el.querySelector('[data-strip-track]') ?? el).getBoundingClientRect();
     return Math.max(0, Math.min(1, 1 - (clientY - box.top) / Math.max(1, box.height)));
   };
   const fromPointer = (el: HTMLElement, clientY: number, name: RemoteControlName): number =>
@@ -399,7 +420,7 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
       data-drain
       aria-hidden="true"
       style={{
-        position: 'absolute', inset: -4, borderRadius: 20, border: '8px solid #ffffff', pointerEvents: 'none',
+        position: 'absolute', inset: -4, borderRadius: 20, border: '8px solid var(--bs-fg)', pointerEvents: 'none',
         animationName: 'admi-drain', animationDuration: `${confirmMs}ms`, animationTimingFunction: 'linear', animationFillMode: 'forwards',
       }}
     />
@@ -407,16 +428,16 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
 
   const page: CSSProperties = {
     position: 'fixed', inset: 0, display: 'flex', flexDirection: 'column', gap: GAP, padding: `14px 18px 28px`,
-    background: '#14171f', color: '#eef1f7', fontFamily: 'system-ui, -apple-system, sans-serif',
+    background: 'var(--bs-bg)', color: 'var(--bs-fg)', fontFamily: 'var(--bs-font)',
     touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', boxSizing: 'border-box',
   };
 
   return (
-    <div style={page} onPointerDownCapture={markTouch}>
+    <div className="bs-root" data-bs-style="calm" data-bs-mode={theme} style={page} onPointerDownCapture={markTouch}>
       <style>{'@keyframes admi-drain { from { clip-path: inset(0 0 0 0); } to { clip-path: inset(0 0 0 100%); } }'}</style>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 20 }}>
-        <span aria-hidden="true" style={{ fontSize: 18, opacity: touchSeen ? 1 : 0.15, transition: 'opacity 150ms' }}>👆</span>
-        <span style={{ width: 16, height: 16, borderRadius: 8, background: connected ? '#66bb6a' : '#ef5350' }} aria-hidden="true" />
+        <span aria-hidden="true" style={{ fontSize: 24, opacity: touchSeen ? 1 : 0.6, transition: 'opacity 150ms' }}>👆</span>
+        <span style={{ width: 16, height: 16, borderRadius: 8, background: connected ? 'var(--bs-ok)' : 'var(--bs-danger)' }} aria-hidden="true" />
         {/* Only the words are announced; the clock beside them changes every second. */}
         <span role="status" aria-live="polite" style={{ fontWeight: 700 }}>
           {carryOnWaiting
@@ -435,8 +456,8 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
             aria-label={`${clock.text} left`}
             style={{
               marginLeft: 'auto', padding: '4px 16px', borderRadius: 14, fontSize: 30, fontWeight: 800, fontVariantNumeric: 'tabular-nums',
-              background: clock.phase === 'running' ? '#232836' : clock.phase === 'lastMinute' ? '#8a6d1a' : '#8a2a2a',
-              border: `3px solid ${clock.phase === 'running' ? '#3a4152' : clock.phase === 'lastMinute' ? '#ffd54f' : '#ef5350'}`,
+              background: clock.phase === 'running' ? 'var(--bs-raised)' : clock.phase === 'lastMinute' ? 'var(--bs-warn-tint)' : 'var(--bs-raised)',
+              border: `3px solid ${clock.phase === 'running' ? 'var(--bs-border-control)' : clock.phase === 'lastMinute' ? 'var(--bs-warn)' : 'var(--bs-danger)'}`,
             }}
           >
             {clock.phase === 'ending' ? `ending ${clock.text}` : clock.phase === 'over' ? `over ${clock.text}` : `⏱ ${clock.text}`}
@@ -449,8 +470,8 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
           role="alert"
           style={{
             position: 'fixed', top: 64, left: '50%', transform: 'translateX(-50%)', zIndex: 2, pointerEvents: 'none',
-            padding: '12px 28px', borderRadius: 16, background: '#4a3f1f', border: '3px solid #ffd54f',
-            fontSize: 28, fontWeight: 800, textAlign: 'center', boxShadow: '0 4px 18px #000a',
+            padding: '12px 28px', borderRadius: 16, background: 'var(--bs-warn-tint)', border: '3px solid var(--bs-warn)',
+            fontSize: 28, fontWeight: 800, textAlign: 'center', boxShadow: 'var(--bs-shadow)',
           }}
         >
           {refusal}
@@ -460,7 +481,7 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, fontSize: 22, minHeight: 34 }}>
           <span
             aria-hidden="true"
-            style={{ width: 26, height: 26, borderRadius: 13, flexShrink: 0, background: beatLit ? '#ffd54f' : '#3a4152', boxShadow: beatLit && !reducedMotion ? '0 0 12px #ffd54f' : 'none' }}
+            style={{ width: 26, height: 26, borderRadius: 13, flexShrink: 0, background: beatLit ? 'var(--bs-accent)' : 'var(--bs-border-control)', boxShadow: beatLit && !reducedMotion ? '0 0 12px var(--bs-accent)' : 'none' }}
           />
           <span style={{ fontWeight: 800 }}>{state.piece?.now ? `Now: ${state.piece.now}` : 'Playing'}</span>
           {state.piece?.next && (
@@ -470,17 +491,32 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
       )}
 
       {loopsPage && (
-      <div role="tablist" aria-label="Page" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: GAP }}>
-        {(['play', 'onoff', 'loops'] as const).map((p) => (
+      <div
+        role="tablist" aria-label="Page" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: GAP }}
+        // One Tab stop: the page you are on. The arrow keys, Home and End move between the pages.
+        onKeyDown={(e) => {
+          const at = PAGES.indexOf(tab);
+          const to = e.key === 'ArrowRight' ? (at + 1) % PAGES.length
+            : e.key === 'ArrowLeft' ? (at + PAGES.length - 1) % PAGES.length
+              : e.key === 'Home' ? 0 : e.key === 'End' ? PAGES.length - 1 : -1;
+          if (to < 0) return;
+          e.preventDefault();
+          setTab(PAGES[to]);
+          tabRefs.current[to]?.focus();
+        }}
+      >
+        {PAGES.map((p, i) => (
           <button
             key={p}
+            ref={(b) => { tabRefs.current[i] = b; }}
             type="button"
             role="tab"
             aria-selected={tab === p}
+            tabIndex={tab === p ? 0 : -1}
             {...padProps(`tab-${p}`, () => setTab(p))}
             style={{
-              minHeight: 56, borderRadius: 16, fontSize: 22, fontWeight: 800, color: '#eef1f7',
-              border: `3px solid ${tab === p ? '#ffffff' : '#3a4152'}`, background: tab === p ? '#3f4a63' : '#232836', touchAction: 'none',
+              minHeight: 56, borderRadius: 16, fontSize: 22, fontWeight: 800, color: 'var(--bs-fg)',
+              border: `3px solid ${tab === p ? 'var(--bs-fg)' : 'var(--bs-border-control)'}`, background: tab === p ? 'var(--bs-hi)' : 'var(--bs-raised)', touchAction: 'none',
             }}
           >
             {p === 'play' ? 'Play' : p === 'onoff' ? 'Loops' : 'Loops & scenes'}
@@ -522,18 +558,19 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
                 <button
                   key={`onoff-${l.i}`}
                   type="button"
+              aria-disabled={!live || undefined}
                   aria-pressed={on}
                   aria-label={`${label}: ${status}. Tap to turn ${on ? 'off' : 'on'}.`}
                   {...padProps(`onoff${l.i}`, () => loopTap(l.i))}
                   style={{
-                    borderRadius: 24, touchAction: 'none', color: '#eef1f7',
+                    borderRadius: 24, touchAction: 'none', color: 'var(--bs-fg)',
                     display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10,
-                    border: `6px ${l.state === 'starting' || l.state === 'stopping' ? 'dashed' : 'solid'} ${on ? '#81c784' : l.state === 'stopping' ? '#ffb74d' : '#3a4152'}`,
-                    background: on ? '#2e5a37' : '#232836',
+                    border: `6px ${l.state === 'starting' || l.state === 'stopping' ? 'dashed' : 'solid'} ${on ? 'var(--bs-accent)' : l.state === 'stopping' ? 'var(--bs-warn)' : 'var(--bs-border-control)'}`,
+                    background: on ? 'var(--bs-accent-muted)' : 'var(--bs-raised)',
                   }}
                 >
                   <span style={{ fontSize: 30, fontWeight: 800 }}>{label}</span>
-                  <span style={{ fontSize: 26, fontWeight: 800, color: on ? '#c8f0cb' : '#9aa3b5' }}>{status}</span>
+                  <span style={{ fontSize: 26, fontWeight: 800, color: on ? 'var(--bs-fg)' : 'var(--bs-fg2)' }}>{status}</span>
                 </button>
               );
             })}
@@ -542,7 +579,7 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
       })()}
 
       {tab === 'loops' && loopsPage && (
-        <div style={{ flex: '1 1 0', display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0, opacity: live ? 1 : 0.4 }}>
+        <div data-loops-page style={{ flex: '1 1 0', display: 'flex', flexDirection: 'column', gap: GAP, minHeight: 0, opacity: live ? 1 : 0.4 }}>
           <div style={{ flex: '3 1 0', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gridTemplateRows: 'repeat(2, 1fr)', gap: GAP, minHeight: 0 }}>
             {Array.from({ length: 8 }, (_, i) => {
               const l = state?.loops?.[i] ?? { name: '', state: 'empty' as RemoteLoopState };
@@ -552,15 +589,16 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
                 <button
                   key={`loop-${i}`}
                   type="button"
+              aria-disabled={!live || undefined}
                   aria-pressed={on}
                   aria-label={`${label}: ${l.state}`}
                   disabled={l.state === 'empty'}
                   {...padProps(`loop${i}`, () => { if (l.state !== 'empty') loopTap(i); })}
                   style={{
-                    borderRadius: 20, touchAction: 'none', color: '#eef1f7', fontSize: 22, fontWeight: 800,
+                    borderRadius: 20, touchAction: 'none', color: 'var(--bs-fg)', fontSize: 22, fontWeight: 800,
                     display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4,
-                    border: `4px ${l.state === 'starting' || l.state === 'stopping' ? 'dashed' : 'solid'} ${on ? '#81c784' : l.state === 'stopping' ? '#ffb74d' : '#3a4152'}`,
-                    background: l.state === 'playing' ? '#2e5a37' : l.state === 'starting' ? '#2b4a33' : '#232836',
+                    border: `4px ${l.state === 'starting' || l.state === 'stopping' ? 'dashed' : 'solid'} ${on ? 'var(--bs-accent)' : l.state === 'stopping' ? 'var(--bs-warn)' : 'var(--bs-border-control)'}`,
+                    background: l.state === 'playing' ? 'var(--bs-accent-muted)' : l.state === 'starting' ? 'var(--bs-accent-muted)' : 'var(--bs-raised)',
                     opacity: l.state === 'empty' ? 0.35 : 1,
                   }}
                 >
@@ -585,12 +623,13 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
                 <button
                   key={`scene-${k}`}
                   type="button"
+              aria-disabled={!live || undefined}
                   aria-pressed={sc?.active === true}
                   disabled={!sc}
                   {...padProps(`scene${k}`, () => { if (sc) sceneTap(i); })}
                   style={{
-                    borderRadius: 20, touchAction: 'none', color: '#eef1f7', fontSize: 20, fontWeight: 800,
-                    border: `4px solid ${sc?.active ? '#ce93d8' : '#3a4152'}`, background: sc?.active ? '#4a2f55' : '#232836',
+                    borderRadius: 20, touchAction: 'none', color: 'var(--bs-fg)', fontSize: 20, fontWeight: 800,
+                    border: `4px solid ${sc?.active ? 'var(--bs-accent)' : 'var(--bs-border-control)'}`, background: sc?.active ? 'var(--bs-accent-muted)' : 'var(--bs-raised)',
                     opacity: sc ? 1 : 0.35,
                   }}
                 >
@@ -599,46 +638,50 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
               );
             })}
           </div>
-          <div style={{ height: '18%', minHeight: 90, display: 'grid', gridTemplateColumns: '1fr 1.4fr 1fr 1fr', gap: GAP }}>
+          <div data-loops-bottom style={{ height: '18%', minHeight: 90, display: 'grid', gridTemplateColumns: '1fr 1fr 1.4fr 1fr', gap: GAP }}>
             <button
               type="button"
+              aria-disabled={!live || undefined}
+              aria-label={confirmStop ? 'Tap again to stop the loops' : WORDS.stopLoops}
+              {...padProps('stopAll', stopTap)}
+              style={{
+                borderRadius: 20, touchAction: 'none', color: confirmStop ? 'var(--bs-danger-fg)' : 'var(--bs-fg)', fontSize: confirmStop ? 20 : 24, fontWeight: 800,
+                border: `4px solid ${confirmStop ? 'var(--bs-fg)' : 'var(--bs-danger)'}`, background: confirmStop ? 'var(--bs-danger)' : 'var(--bs-raised)',
+              }}
+            >
+              {confirmStop ? 'Tap again to stop the loops' : `■ ${WORDS.stopLoops}`}
+            </button>
+            <button
+              type="button"
+              aria-disabled={!live || undefined}
               aria-label="Capture: save what is on the board as a loop and start it"
               disabled={captureOff}
               {...padProps('capture', captureTap)}
-              style={{ borderRadius: 20, touchAction: 'none', color: '#eef1f7', fontSize: 22, fontWeight: 800, border: '4px solid #4fc3f7', background: '#1f3a4a', opacity: captureOff ? 0.35 : 1 }}
+              style={{ borderRadius: 20, touchAction: 'none', color: 'var(--bs-fg)', fontSize: 22, fontWeight: 800, border: '4px solid var(--bs-border-control)', background: 'var(--bs-raised)', opacity: captureOff ? 0.35 : 1 }}
             >
               ⏺ Capture
             </button>
             {showNext ? <button
               type="button"
+              aria-disabled={!live || undefined}
               disabled={!state?.scenes || state.scenes.length === 0}
               {...padProps('next', () => sceneTap('next'))}
-              style={{ borderRadius: 20, touchAction: 'none', color: '#eef1f7', fontSize: 26, fontWeight: 800, border: '4px solid #ce93d8', background: '#232836', opacity: state?.scenes?.length ? 1 : 0.35 }}
+              style={{ borderRadius: 20, touchAction: 'none', color: 'var(--bs-fg)', fontSize: 26, fontWeight: 800, border: '4px solid var(--bs-border-control)', background: 'var(--bs-raised)', opacity: state?.scenes?.length ? 1 : 0.35 }}
             >
               Next scene ▶
             </button> : <span />}
             <button
               type="button"
+              aria-disabled={!live || undefined}
               aria-label={confirmEnd ? 'Tap again to end the piece' : 'End the piece'}
               {...padProps('endPiece', endTap)}
               style={{
-                position: 'relative', borderRadius: 20, touchAction: 'none', color: '#eef1f7', fontSize: 22, fontWeight: 800,
-                border: `4px solid ${confirmEnd ? '#ffffff' : '#ce93d8'}`, background: confirmEnd ? '#6a3a7a' : '#2d2033',
+                position: 'relative', borderRadius: 20, touchAction: 'none', color: 'var(--bs-fg)', fontSize: 22, fontWeight: 800,
+                border: `4px solid ${confirmEnd ? 'var(--bs-fg)' : 'var(--bs-border-control)'}`, background: confirmEnd ? 'var(--bs-elev)' : 'var(--bs-raised)',
               }}
             >
               {confirmEnd && drainRing}
               {confirmEnd ? 'Tap again to end' : '↘ End piece'}
-            </button>
-            <button
-              type="button"
-              aria-label={confirmStop ? 'Tap again to stop the loops' : WORDS.stopLoops}
-              {...padProps('stopAll', stopTap)}
-              style={{
-                borderRadius: 20, touchAction: 'none', color: '#eef1f7', fontSize: confirmStop ? 20 : 24, fontWeight: 800,
-                border: `4px solid ${confirmStop ? '#ffffff' : '#ef5350'}`, background: confirmStop ? '#8a2a2a' : '#4a2323',
-              }}
-            >
-              {confirmStop ? 'Tap again to stop the loops' : `■ ${WORDS.stopLoops}`}
             </button>
           </div>
         </div>
@@ -651,36 +694,56 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
         {shownStrips.map((name) => {
           const v = valueOf(name);
           const isLocked = locked(name);
+          const pct = Math.round(v * 100);
+          const words = stripWords(name, v, touching.current.has(name), state);
           return (
             <div
               key={name}
               role="slider"
               tabIndex={isLocked ? -1 : 0}
-              aria-disabled={isLocked || undefined}
+              aria-disabled={isLocked || !live || undefined}
               aria-label={`${STRIP_NAMES[name]}${isLocked ? ', locked' : ''}`}
               aria-valuemin={0}
               aria-valuemax={100}
-              aria-valuenow={Math.round(v * 100)}
-              aria-valuetext={state?.labels[name] ?? `${Math.round(v * 100)}%`}
+              aria-valuenow={pct}
+              aria-valuetext={words ?? `${pct}%`}
               {...stripHandlers(name)}
               style={{
-                position: 'relative', borderRadius: 24, overflow: 'hidden', background: '#232836',
-                border: `3px solid ${touching.current.has(name) ? '#ffffff' : '#3a4152'}`, touchAction: 'none',
-                opacity: isLocked ? 0.45 : 1,
+                position: 'relative', borderRadius: 24, overflow: 'hidden', background: 'var(--bs-raised)',
+                border: `3px solid ${touching.current.has(name) ? 'var(--bs-fg)' : 'var(--bs-border-control)'}`, touchAction: 'none',
+                opacity: isLocked ? 0.45 : 1, display: 'flex', flexDirection: 'column',
               }}
             >
+              {/* Its name and its value, in numbers and in words, above the track: never over the fill. */}
+              <div style={{ padding: '10px 8px 8px', textAlign: 'center', pointerEvents: 'none', flex: 'none' }}>
+                <div style={{ fontSize: big ? 34 : 26, fontWeight: 800 }}>{`${isLocked ? '🔒 ' : ''}${STRIP_NAMES[name]}`}</div>
+                <div style={{ fontSize: big ? 26 : 20, fontWeight: 700, marginTop: 2 }}>{`${pct}%`}</div>
+                {words !== null && <div style={{ fontSize: big ? 22 : 16, fontWeight: 600, color: 'var(--bs-fg2)' }}>{words}</div>}
+              </div>
+              {/* The track: an outlined channel the level fills from the bottom, with a line at the level, so Off is a place on it. */}
               <div
+                data-strip-track
                 aria-hidden="true"
                 style={{
-                  position: 'absolute', left: 0, right: 0, bottom: 0, height: `${unmapReach(v, reachOf(name)) * 100}%`,
-                  background: STRIP_COLOURS[name], opacity: 0.85, transition: reducedMotion ? 'none' : 'height 60ms linear',
+                  position: 'relative', flex: '1 1 0', minHeight: 0, margin: '0 14px 14px', borderRadius: 14, overflow: 'hidden',
+                  background: 'var(--bs-bg)', border: '3px solid var(--bs-border-control)',
                 }}
-              />
-              <div style={{ position: 'absolute', top: 12, left: 0, right: 0, textAlign: 'center', pointerEvents: 'none' }}>
-                <div style={{ fontSize: big ? 34 : 26, fontWeight: 800 }}>{`${isLocked ? '🔒 ' : ''}${STRIP_NAMES[name]}`}</div>
-                <div style={{ fontSize: big ? 26 : 20, fontWeight: 600, marginTop: 4, textShadow: '0 1px 3px #000' }}>
-                  {state?.labels[name] ?? `${Math.round(v * 100)}%`}
-                </div>
+              >
+                <div
+                  data-strip-fill
+                  style={{
+                    position: 'absolute', left: 0, right: 0, bottom: 0, height: `${unmapReach(v, reachOf(name)) * 100}%`,
+                    background: 'var(--bs-accent)', opacity: 0.85, transition: reducedMotion ? 'none' : 'height 60ms linear',
+                  }}
+                />
+                <div
+                  data-strip-level
+                  style={{
+                    position: 'absolute', left: 0, right: 0, height: 8, background: 'var(--bs-fg)',
+                    bottom: `calc(${unmapReach(v, reachOf(name)) * 100}% - ${unmapReach(v, reachOf(name)) * 8}px)`,
+                    transition: reducedMotion ? 'none' : 'bottom 60ms linear',
+                  }}
+                />
               </div>
             </div>
           );
@@ -698,6 +761,7 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
             <button
               key={p.name}
               type="button"
+              aria-disabled={(!live || learning) || undefined}
               aria-pressed={p.name === 'keep' || p.name === 'mute' ? !!on : undefined}
               {...padProps(`pad-${p.name}`, () => {
                 if (learning || (p.name === 'keep' && state?.kept)) return;
@@ -707,8 +771,8 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
                 else tap(p.name);
               })}
               style={{
-                borderRadius: 20, border: `3px solid ${flash === p.name || waiting ? '#ffffff' : on ? '#ffd54f' : '#3a4152'}`,
-                background: waiting ? '#6a3a7a' : flash === p.name ? '#3f4a63' : on ? '#4a3f1f' : '#232836', color: '#eef1f7',
+                borderRadius: 20, border: `3px solid ${flash === p.name || waiting ? 'var(--bs-fg)' : on ? 'var(--bs-warn)' : 'var(--bs-border-control)'}`,
+                background: waiting ? 'var(--bs-elev)' : flash === p.name ? 'var(--bs-hi)' : on ? 'var(--bs-warn-tint)' : 'var(--bs-raised)', color: 'var(--bs-fg)',
                 fontSize: 24, fontWeight: 800, display: 'flex', flexDirection: 'column', alignItems: 'center',
                 justifyContent: 'center', gap: 6, touchAction: 'none',
               }}
@@ -733,14 +797,15 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
               <button
                 key={`play-loop-${i}`}
                 type="button"
+              aria-disabled={(!live || learning) || undefined}
                 aria-pressed={on}
                 aria-label={`${label}: ${l.state}`}
                 disabled={l.state === 'empty'}
                 {...padProps(`play-loop${i}`, () => { if (l.state !== 'empty') loopTap(i); })}
                 style={{
-                  borderRadius: 20, touchAction: 'none', color: '#eef1f7', fontSize: 22, fontWeight: 800,
-                  border: `4px ${l.state === 'starting' || l.state === 'stopping' ? 'dashed' : 'solid'} ${on ? '#81c784' : '#3a4152'}`,
-                  background: on ? '#2e5a37' : '#232836', opacity: l.state === 'empty' ? 0.35 : 1,
+                  borderRadius: 20, touchAction: 'none', color: 'var(--bs-fg)', fontSize: 22, fontWeight: 800,
+                  border: `4px ${l.state === 'starting' || l.state === 'stopping' ? 'dashed' : 'solid'} ${on ? 'var(--bs-accent)' : 'var(--bs-border-control)'}`,
+                  background: on ? 'var(--bs-accent-muted)' : 'var(--bs-raised)', opacity: l.state === 'empty' ? 0.35 : 1,
                 }}
               >
                 {label}
@@ -750,32 +815,36 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
           {(state?.touch?.playExtras ?? []).map((x) => {
             if (x === 'nextScene') {
               return showNext ? (
-                <button key="x-next" type="button" disabled={!state?.scenes?.length} {...padProps('x-next', () => sceneTap('next'))}
-                  style={{ borderRadius: 20, touchAction: 'none', color: '#eef1f7', fontSize: 24, fontWeight: 800, border: '4px solid #ce93d8', background: '#232836' }}>
+                <button key="x-next" type="button"
+              aria-disabled={(!live || learning) || undefined} disabled={!state?.scenes?.length} {...padProps('x-next', () => sceneTap('next'))}
+                  style={{ borderRadius: 20, touchAction: 'none', color: 'var(--bs-fg)', fontSize: 24, fontWeight: 800, border: '4px solid var(--bs-border-control)', background: 'var(--bs-raised)' }}>
                   Next scene ▶
                 </button>
               ) : null;
             }
             if (x === 'capture') {
               return (
-                <button key="x-capture" type="button" aria-label="Capture: save what is on the board as a loop and start it" disabled={captureOff} {...padProps('x-capture', captureTap)}
-                  style={{ borderRadius: 20, touchAction: 'none', color: '#eef1f7', fontSize: 22, fontWeight: 800, border: '4px solid #4fc3f7', background: '#1f3a4a', opacity: captureOff ? 0.35 : 1 }}>
+                <button key="x-capture" type="button"
+              aria-disabled={(!live || learning) || undefined} aria-label="Capture: save what is on the board as a loop and start it" disabled={captureOff} {...padProps('x-capture', captureTap)}
+                  style={{ borderRadius: 20, touchAction: 'none', color: 'var(--bs-fg)', fontSize: 22, fontWeight: 800, border: '4px solid var(--bs-border-control)', background: 'var(--bs-raised)', opacity: captureOff ? 0.35 : 1 }}>
                   ⏺ Capture
                 </button>
               );
             }
             if (x === 'endPiece') {
               return (
-                <button key="x-end" type="button" aria-label={confirmEnd ? 'Tap again to end the piece' : 'End the piece'} {...padProps('x-end', endTap)}
-                  style={{ position: 'relative', borderRadius: 20, touchAction: 'none', color: '#eef1f7', fontSize: 22, fontWeight: 800, border: `4px solid ${confirmEnd ? '#ffffff' : '#ce93d8'}`, background: confirmEnd ? '#6a3a7a' : '#2d2033' }}>
+                <button key="x-end" type="button"
+              aria-disabled={(!live || learning) || undefined} aria-label={confirmEnd ? 'Tap again to end the piece' : 'End the piece'} {...padProps('x-end', endTap)}
+                  style={{ position: 'relative', borderRadius: 20, touchAction: 'none', color: 'var(--bs-fg)', fontSize: 22, fontWeight: 800, border: `4px solid ${confirmEnd ? 'var(--bs-fg)' : 'var(--bs-border-control)'}`, background: confirmEnd ? 'var(--bs-elev)' : 'var(--bs-raised)' }}>
                   {confirmEnd && drainRing}
                   {confirmEnd ? 'Tap again to end' : '↘ End piece'}
                 </button>
               );
             }
             return (
-              <button key="x-stop" type="button" aria-label={confirmStop ? 'Tap again to stop the loops' : WORDS.stopLoops} {...padProps('x-stop', stopTap)}
-                style={{ borderRadius: 20, touchAction: 'none', color: '#eef1f7', fontSize: confirmStop ? 20 : 24, fontWeight: 800, border: `4px solid ${confirmStop ? '#ffffff' : '#ef5350'}`, background: confirmStop ? '#8a2a2a' : '#4a2323' }}>
+              <button key="x-stop" type="button"
+              aria-disabled={(!live || learning) || undefined} aria-label={confirmStop ? 'Tap again to stop the loops' : WORDS.stopLoops} {...padProps('x-stop', stopTap)}
+                style={{ borderRadius: 20, touchAction: 'none', color: confirmStop ? 'var(--bs-danger-fg)' : 'var(--bs-fg)', fontSize: confirmStop ? 20 : 24, fontWeight: 800, border: `4px solid ${confirmStop ? 'var(--bs-fg)' : 'var(--bs-danger)'}`, background: confirmStop ? 'var(--bs-danger)' : 'var(--bs-raised)' }}>
                 {confirmStop ? 'Tap again to stop the loops' : `■ ${WORDS.stopLoops}`}
               </button>
             );
