@@ -1,0 +1,184 @@
+import { test, expect, type Page } from '@playwright/test';
+import { makePlan, openLaptopBoard, openLaptopSetup, openWelcome, pageErrors, pickColour, pieceStep, place, sceneMore, sessionLog, soundTab } from './app';
+import { nameMismatches } from './names';
+
+/** Batch 5 (audit 2026-10-30): what the owner and a keyboard user meet, checked in a real browser. */
+
+const openAllFolds = (page: Page): Promise<void> =>
+  page.evaluate(() => document.querySelectorAll('details').forEach((d) => { d.open = true; }));
+
+test('A9: every name starts with the words on the control, on every screen', async ({ page }) => {
+  await openLaptopSetup(page);
+  expect(await nameMismatches(page)).toEqual([]);
+  await page.getByRole('button', { name: 'Add four colours' }).click();
+  await page.getByRole('button', { name: 'Continue' }).click();
+  expect(await nameMismatches(page)).toEqual([]);
+});
+
+test('A9: the same on the board, the tabs, Make a piece and Show', async ({ page }) => {
+  await openLaptopBoard(page);
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1], [5, 3]]);
+  await sessionLog(page);
+  expect(await nameMismatches(page)).toEqual([]);
+  await soundTab(page);
+  await openAllFolds(page);
+  expect(await nameMismatches(page)).toEqual([]);
+  for (const t of ['Timing', 'Board', 'Connections', 'Cap']) {
+    await page.getByRole('tab', { name: t }).click();
+    await openAllFolds(page);
+    expect(await nameMismatches(page), t).toEqual([]);
+  }
+  await makePlan(page);
+  for (const s of ['Loops', 'Scenes', 'Ending & check'] as const) {
+    await pieceStep(page, s);
+    if (s === 'Scenes' && await page.getByRole('button', { name: /More for this scene/ }).count() > 0) await sceneMore(page);
+    await openAllFolds(page);
+    expect(await nameMismatches(page), s).toEqual([]);
+  }
+  await page.getByRole('button', { name: /^Show: the board, the clock/ }).click();
+  expect(await nameMismatches(page)).toEqual([]);
+  expect(pageErrors(page)).toEqual([]);
+});
+
+test('A8: Help opens at the top on its heading, with links to its sections and Close outside the scroll', async ({ page }) => {
+  await openLaptopBoard(page);
+  await page.getByRole('button', { name: 'Help' }).click();
+  const dialog = page.getByRole('dialog', { name: 'How to play' });
+  await expect(page.getByRole('heading', { name: 'How to play', level: 2 })).toBeFocused();
+  const text = dialog.locator('[data-help-text]');
+  expect(await text.evaluate((e) => e.scrollTop)).toBe(0);
+  expect(await text.evaluate((e) => e.scrollHeight > e.clientHeight)).toBe(true);
+  // Close is not inside the scrolling text, and stays in view after scrolling it.
+  await text.evaluate((e) => { e.scrollTop = e.scrollHeight; });
+  await expect(dialog.getByRole('button', { name: 'Close' })).toBeInViewport();
+  // A link goes to its section and puts focus on its heading.
+  const link = dialog.getByRole('navigation', { name: 'Sections of Help' }).getByRole('link', { name: 'Keyboard' });
+  await link.click();
+  await expect(dialog.getByRole('heading', { name: 'Keyboard', level: 3 })).toBeFocused();
+  await expect(dialog.getByRole('heading', { name: 'Keyboard', level: 3 })).toBeInViewport();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+});
+
+test('A10: text is 14, 16 or 20 px (or a display size), never smaller; text fields have 10 px inside', async ({ page }) => {
+  await openLaptopBoard(page);
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1]]);
+  const sizes = async (): Promise<{ small: string[]; odd: string[] }> => page.evaluate(() => {
+    const small: string[] = [];
+    const odd: string[] = [];
+    document.querySelectorAll('.bs-root *').forEach((el) => {
+      if (!(el instanceof HTMLElement) || el.offsetParent === null) return;
+      const own = [...el.childNodes].some((n) => n.nodeType === Node.TEXT_NODE && (n.textContent ?? '').trim().length > 0);
+      if (!own || el.closest('canvas, svg, [data-swatch]')) return;
+      const px = parseFloat(getComputedStyle(el).fontSize);
+      const what = `${el.tagName} "${(el.textContent ?? '').trim().slice(0, 30)}" ${px}px`;
+      if (px < 14) small.push(what);
+      else if (px < 22 && ![14, 16, 20].includes(px)) odd.push(what);
+    });
+    return { small, odd };
+  });
+  const check = async (label: string): Promise<void> => {
+    const r = await sizes();
+    expect(r.small, `${label}: under 14 px`).toEqual([]);
+    expect(r.odd, `${label}: not 14, 16 or 20`).toEqual([]);
+  };
+  await check('board');
+  await soundTab(page);
+  await openAllFolds(page);
+  await check('Sound');
+  await makePlan(page);
+  await pieceStep(page, 'Scenes');
+  await check('Scenes');
+  const pads = await page.evaluate(() => [...document.querySelectorAll<HTMLInputElement>('.bs-root input[type="text"]')]
+    .filter((i) => i.offsetParent !== null).map((i) => parseFloat(getComputedStyle(i).paddingLeft)));
+  expect(pads.length).toBeGreaterThan(0);
+  for (const p of pads) expect(p).toBeGreaterThanOrEqual(10);
+  // ADMI / Ableton / Both are the same size as every other choice.
+  await page.getByRole('button', { name: 'Board', exact: true }).click();
+  await page.getByRole('tab', { name: 'Connections' }).click();
+  const choice = (name: string) => page.getByRole('radio', { name, exact: true }).first().evaluate((e) => getComputedStyle(e).fontSize);
+  expect(await choice('ADMI')).toBe(await choice('Both'));
+});
+
+test('A7: Time to press again and Space plays and stops live in Advanced, and Space can be switched off', async ({ page }) => {
+  await openLaptopBoard(page);
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1]]);
+  await soundTab(page);
+  await page.getByRole('button', { name: /^Advanced: key, scale/ }).click();
+  const group = page.getByRole('radiogroup', { name: 'Time to press again' });
+  await expect(group.getByRole('radio', { name: '4 seconds' })).toBeChecked();
+  await group.getByRole('radio', { name: '10 seconds' }).click();
+  const space = page.getByRole('checkbox', { name: 'Space plays and stops' });
+  await expect(space).toBeChecked();
+  await space.uncheck();
+  // With Space off it starts nothing.
+  await page.locator('body').click({ position: { x: 5, y: 5 } });
+  await page.keyboard.press('Space');
+  await page.waitForTimeout(800);
+  await expect(page.getByRole('button', { name: '■ Stop', exact: true })).toHaveCount(0);
+  await space.check();
+  await page.locator('body').click({ position: { x: 5, y: 5 } });
+  await page.keyboard.press('Space');
+  await expect(page.getByRole('button', { name: '■ Stop', exact: true }).first()).toBeVisible({ timeout: 20_000 });
+  expect(pageErrors(page)).toEqual([]);
+});
+
+test('A18: the Welcome page has one main region and its headings run in order; the Player button sits on the line of ☀ / Aa / ?', async ({ page }) => {
+  await openWelcome(page);
+  await expect(page.locator('main, [role="main"]')).toHaveCount(1);
+  const levels = await page.evaluate(() => [...document.querySelectorAll('h1,h2,h3,h4,h5,h6')].map((h) => Number(h.tagName[1])));
+  expect(levels[0]).toBe(1);
+  for (let i = 1; i < levels.length; i++) expect(levels[i] - levels[i - 1]).toBeLessThanOrEqual(1);
+  await openLaptopBoard(page);
+  const boardLevels = await page.evaluate(() => [...document.querySelectorAll('h1,h2,h3,h4,h5,h6')].map((h) => Number(h.tagName[1])));
+  for (let i = 1; i < boardLevels.length; i++) expect(boardLevels[i] - boardLevels[i - 1]).toBeLessThanOrEqual(1);
+  await soundTab(page);
+  const soundLevels = await page.evaluate(() => [...document.querySelectorAll('h1,h2,h3,h4,h5,h6')].map((h) => Number(h.tagName[1])));
+  for (let i = 1; i < soundLevels.length; i++) expect(soundLevels[i] - soundLevels[i - 1]).toBeLessThanOrEqual(1);
+  const centre = async (name: string | RegExp): Promise<number> => {
+    const b = await page.getByRole('button', { name }).first().boundingBox();
+    return b ? b.y + b.height / 2 : -1;
+  };
+  expect(Math.abs((await centre(/^Player:/)) - (await centre('Help')))).toBeLessThanOrEqual(2);
+});
+
+test('A18: the audience page is called "ADMI – audience"', async ({ page }) => {
+  await page.goto('/audience.html');
+  await expect(page).toHaveTitle('ADMI – audience');
+});
+
+test('A4: the squares of the board have an edge (checked in the drawing)', async ({ page }) => {
+  await openLaptopBoard(page);
+  // The laptop board is buttons: each empty square has a border of at least 3:1.
+  const grid = page.getByRole('grid', { name: /Laptop board/ });
+  const ratio = await grid.getByRole('button').first().evaluate((e) => {
+    const lum = (c: string): number => {
+      const m = c.match(/\d+(\.\d+)?/g)!.map(Number);
+      const f = (v: number): number => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; };
+      return 0.2126 * f(m[0]) + 0.7152 * f(m[1]) + 0.0722 * f(m[2]);
+    };
+    const cs = getComputedStyle(e);
+    const bg = getComputedStyle(document.querySelector('.bs-root')!).backgroundColor;
+    const a = lum(cs.borderTopColor);
+    const b = lum(bg);
+    return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+  });
+  expect(ratio).toBeGreaterThanOrEqual(3);
+});
+
+test('A5: the scene name on the audience screen sits 5% in, at 2.2% of the width, up to 0.8 opacity', async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await page.goto('/audience.html');
+  const box = await page.evaluate(() => {
+    const root = document.querySelector('#root > div') as HTMLElement;
+    const name = root.lastElementChild as HTMLElement;
+    const cs = getComputedStyle(name);
+    return { right: parseFloat(cs.right), bottom: parseFloat(cs.bottom), size: parseFloat(cs.fontSize), w: root.clientWidth, h: root.clientHeight };
+  });
+  expect(box.right / box.w).toBeCloseTo(0.05, 2);
+  expect(box.bottom / box.h).toBeCloseTo(0.05, 2);
+  expect(box.size / box.w).toBeCloseTo(0.022, 3);
+});

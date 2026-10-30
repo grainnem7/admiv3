@@ -20,6 +20,8 @@ export function SwatchChip({ swatch, palette, surface, number, size = 28 }: Swat
   return (
     <span
       aria-hidden="true"
+      // The numeral is drawn to fit the round swatch (size x 0.45), not set in the text scale.
+      data-swatch
       style={{
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
         width: size, height: size, borderRadius: '50%', flexShrink: 0,

@@ -266,3 +266,8 @@
   padding-left: 10px;
   padding-right: 10px;
 }
+
+/* The app-wide stylesheet sets labels to 13 px; the board's smallest text is 14 px (A10). */
+.bs-root label {
+  font-size: 14px;
+}
