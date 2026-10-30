@@ -24,6 +24,7 @@ import { sanitizeSceneEnergy, type SceneEnergy } from '../songs/performance/ener
 import { sanitizeIdeas } from '../songs/performance/ideas';
 import { DEFAULT_PERFORMANCE, sanitizePerformance, type PerformanceSettings } from '../songs/performance/clock';
 import { DEFAULT_KEEPING_TIME_LIMITS, KEEPING_TIME_RANGE } from '../songs/keepingTime';
+import { DEFAULT_PRESS_AGAIN_SEC, sanitizePressAgainSec } from './pressAgain';
 import { isSoundWorldChoice, type SoundWorldChoice } from '../audio/worlds/soundWorlds';
 import { quarterTurns, type QuarterTurns } from '../tracking/frameOrientation';
 import type { TrackedColor } from '../tracking/ColorTracker';
@@ -311,6 +312,13 @@ export interface BoardSequencerStored {
   keepTimeBehindSec: number;
   keepTimeDriftSec: number;
   keepTimeValve: boolean;
+  /**
+   * Time to press again (3, 4, 6 or 10 s): how long the first press of Stop, Exit or Set up
+   * waits for its second while the piece plays. Undo and the notices follow it (A7).
+   */
+  pressAgainSec: number;
+  /** Space plays and stops. Off for a switch box that sends Space (A7). */
+  spaceKeyOn: boolean;
   /**
    * Usable range per fader control, so a counter can't reach silence or a runaway tempo. The
    * speed's is also the hat's Slowest and Fastest (Cap tab).
@@ -623,6 +631,8 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   keepTimeBehindSec: DEFAULT_KEEPING_TIME_LIMITS.behindSec,
   keepTimeDriftSec: DEFAULT_KEEPING_TIME_LIMITS.driftSec,
   keepTimeValve: DEFAULT_KEEPING_TIME_LIMITS.valve,
+  pressAgainSec: DEFAULT_PRESS_AGAIN_SEC,
+  spaceKeyOn: true,
   controlRanges: DEFAULT_CONTROL_RANGES,
   controlRangesRev: CONTROL_RANGES_REV,
   controlRemoval: DEFAULT_CONTROL_REMOVAL,
@@ -1006,6 +1016,9 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     keepTimeBehindSec: clampNum(o.keepTimeBehindSec, KEEPING_TIME_RANGE.behindSec.min, KEEPING_TIME_RANGE.behindSec.max, d.keepTimeBehindSec),
     keepTimeDriftSec: clampNum(o.keepTimeDriftSec, KEEPING_TIME_RANGE.driftSec.min, KEEPING_TIME_RANGE.driftSec.max, d.keepTimeDriftSec),
     keepTimeValve: o.keepTimeValve !== false,
+    // Players saved before these existed keep today's behaviour: 4 s, and Space on.
+    pressAgainSec: sanitizePressAgainSec(o.pressAgainSec),
+    spaceKeyOn: o.spaceKeyOn !== false,
     controlRanges: migratedControlRanges(o),
     controlRangesRev: CONTROL_RANGES_REV,
     controlRemoval: sanitizeControlRemoval(o.controlRemoval),

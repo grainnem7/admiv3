@@ -3,6 +3,7 @@ import {
   abletonChecklist, abletonPlan, CHAIN_CC, chainLabel, chainRange, controlKey,
 } from '../../../../midi/abletonSounds';
 import { colourChannelMap } from '../../../../midi/boardMidi';
+import { noticeMs } from '../../../../profiles/pressAgain';
 import type { BoardSequencerStored } from '../../../../profiles/BoardSequencerConfig';
 import { Button } from '../ui/Button';
 import { Disclosure } from '../ui/Disclosure';
@@ -90,7 +91,7 @@ export function AbletonSoundsPanel({ config, getLive, onSend, connected }: {
           tone="secondary"
           disabled={!connected}
           reason={connected ? null : 'Choose the port first.'}
-          onClick={() => { onSend(); setSentNote(true); window.setTimeout(() => setSentNote(false), 1500); }}
+          onClick={() => { onSend(); setSentNote(true); window.setTimeout(() => setSentNote(false), noticeMs(1500)); }}
         >
           Send sound choices to Ableton
         </Button>

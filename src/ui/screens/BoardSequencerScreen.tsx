@@ -101,6 +101,7 @@ import { loadCameraChoice, saveCameraChoice } from '../../tracking/cameraChoice'
 import { CameraDebugPanel } from '../components/camera/CameraDebugPanel';
 import { ConfirmDialog } from './boardSequencer/ui/ConfirmDialog';
 import { colourMatchesBoardRaw, type NudgeSignal } from './boardSequencer/playNudge';
+import { noticeMs, pressAgainMs, PRESS_AGAIN_CHOICES, undoMs } from '../../profiles/pressAgain';
 import { START_AFTER_PIECE_MS, simplifyKey, spaceAction, spaceTogglesPlay, startTooSoon, type BoardScreenView } from './boardSequencer/spaceKey';
 import { ghostsForSave } from '../../tracking/handGuard/knockGuard';
 import { TRACK_SAVE_MS } from '../../tracking/handGuard/boardTrack';
@@ -290,8 +291,6 @@ const CAMERA_STALL_MS = 1500;
 const CUE_SHOWN_MS = 5000;
 /** Config saves are gathered over this long (and written at once when the page closes). */
 const SAVE_GATHER_MS = 400;
-/** How long the first press of Stop during a piece waits for the second. */
-const STOP_CONFIRM_MS = 4000;
 /** How long Show says "Keep this window in front" once the audience screen is open. */
 const KEEP_IN_FRONT_MS = 12_000;
 /**
@@ -316,8 +315,6 @@ const STATUS_LINES_HEIGHT = 56;
 const HEADER_MORE_BELOW_PX = 1400;
 /** Where Play / Make a piece is remembered. */
 const WORKSPACE_KEY = 'admi-board-workspace';
-/** How long Undo stays on offer after the board, a loop or the scenes are thrown away. */
-const UNDO_MS = 15000;
 /** How often a take being played is kept (storage/sessionArchive). */
 const TAKE_SAVE_MS = 5000;
 const REMOTE_ENABLED_KEY = 'admi-remote-enabled';
@@ -332,15 +329,15 @@ const REMOTE_TRIGGER_WORDS: Record<RemoteTriggerName, string> = {
 };
 /** How often the performance clock is read. */
 const CLOCK_TICK_MS = 250;
-/** How long "iPad: Speed 96 BPM" stays on screen. */
-const REMOTE_NOTE_MS = 2500;
+/** How long "iPad: Speed 96 BPM" stays on screen (a notice: at least 5 s, A7). */
+const REMOTE_NOTE_MS = noticeMs(2500);
 /**
  * How long an iPad page has to say which build it is. One that says nothing by then is too
  * old to know about builds (from before they were compared), so it is out of date.
  */
 const HELLO_WAIT_MS = 4000;
-/** How long "New sounds" / "Band joins" stays on the board. */
-const BOARD_NOTICE_MS = 2500;
+/** How long "New sounds" / "Band joins" stays on the board (at least 5 s, A7). */
+const BOARD_NOTICE_MS = noticeMs(2500);
 
 /** What the player is told about where the fill is coming from. */
 const FILL_STATUS_TEXT: Record<FillSourceStatus, string> = {
@@ -847,7 +844,7 @@ export default function BoardSequencerScreen() {
   };
   useEffect(() => {
     if (!undoOffer) return;
-    const id = window.setTimeout(dropUndoOffer, UNDO_MS);
+    const id = window.setTimeout(dropUndoOffer, undoMs(configRef.current.pressAgainSec));
     return () => window.clearTimeout(id);
   // eslint-disable-next-line react-hooks/exhaustive-deps -- dropUndoOffer reads refs only
   }, [undoOffer]);
@@ -865,7 +862,7 @@ export default function BoardSequencerScreen() {
   const [deletedScene, setDeletedScene] = useState<{ scene: BoardSequencerStored['scenes'][number]; index: number; wasCurrent: boolean } | null>(null);
   useEffect(() => {
     if (!deletedScene) return;
-    const id = window.setTimeout(() => setDeletedScene(null), 15000);
+    const id = window.setTimeout(() => setDeletedScene(null), undoMs(configRef.current.pressAgainSec));
     return () => window.clearTimeout(id);
   }, [deletedScene]);
   const [restoreError, setRestoreError] = useState<string | null>(null);
@@ -1562,7 +1559,7 @@ export default function BoardSequencerScreen() {
   const [closeAudienceArmed, setCloseAudienceArmed] = useState(false);
   useEffect(() => {
     if (!closeAudienceArmed) return undefined;
-    const t = window.setTimeout(() => setCloseAudienceArmed(false), STOP_CONFIRM_MS);
+    const t = window.setTimeout(() => setCloseAudienceArmed(false), pressAgainMs(configRef.current.pressAgainSec));
     return () => window.clearTimeout(t);
   }, [closeAudienceArmed]);
 
@@ -2662,7 +2659,7 @@ export default function BoardSequencerScreen() {
     const pieceRunning = runningRef.current && clockStartRef.current !== null;
     // Just started: a press now is Enter landing again after Start, never a wish to stop (B3).
     if (what === 'stop' && pieceRunning && stopGuarded(pieceStartedAtRef.current, performance.now())) return;
-    if (pieceRunning && (a === null || a.what !== what || performance.now() - a.at > STOP_CONFIRM_MS)) {
+    if (pieceRunning && (a === null || a.what !== what || performance.now() - a.at > pressAgainMs(configRef.current.pressAgainSec))) {
       const at = performance.now();
       armedRef.current = { what, at };
       setArmed(what);
@@ -2674,7 +2671,7 @@ export default function BoardSequencerScreen() {
           armedRef.current = null;
           setArmed(null);
         }
-      }, STOP_CONFIRM_MS);
+      }, pressAgainMs(configRef.current.pressAgainSec));
       return;
     }
     armedRef.current = null;
@@ -2690,13 +2687,14 @@ export default function BoardSequencerScreen() {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent): void => {
       if (e.key !== ' ' || e.repeat) return;
-      if (!spaceTogglesPlay(view, e.target)) return;
+      if (!spaceTogglesPlay(view, e.target, configRef.current.spaceKeyOn)) return;
       e.preventDefault();
       const act = spaceAction(view, e.target, {
         running: runningRef.current, offerShowing: reloadNoticeRef.current,
         msSinceStop: performance.now() - stoppedAtRef.current,
         msSincePieceEnded: performance.now() - pieceEndedAtRef.current,
         pieceOn: clockStartRef.current !== null || endingRef.current || pieceStartingRef.current,
+        spaceOn: configRef.current.spaceKeyOn,
       });
       if (act === 'none' && !runningRef.current) startRefused();
       if (act === 'stop') requestStop();
@@ -4274,6 +4272,30 @@ export default function BoardSequencerScreen() {
         options={[{ value: 4, label: '4 loops' }, { value: 8, label: '8 loops' }, { value: 16, label: '16 loops' }]}
       />
     </div>
+    <fieldset style={{ border: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
+      <legend style={{ fontWeight: 600, padding: 0 }}>Pressing</legend>
+      <span style={{ fontSize: 13 }}>Time to press again</span>
+      <SegmentedControl<number>
+        label="Time to press again"
+        value={config.pressAgainSec}
+        onChange={(pressAgainSec) => update({ pressAgainSec })}
+        options={PRESS_AGAIN_CHOICES.map((sec) => ({ value: sec, label: `${sec} seconds` }))}
+      />
+      <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
+        While the piece plays, Stop, Exit and Set up need a second press within this time. Undo and the notices stay up
+        for longer to match.
+      </span>
+      <label>
+        <input
+          type="checkbox" checked={config.spaceKeyOn}
+          onChange={(e) => update({ spaceKeyOn: e.target.checked })}
+        />
+        Space plays and stops
+      </label>
+      <span style={{ fontSize: 12, color: 'var(--bs-fg2)' }}>
+        Switch it off if a switch box sends Space. Shift+S still simplifies.
+      </span>
+    </fieldset>
     <fieldset style={{ border: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
       <legend style={{ fontWeight: 600, padding: 0 }}>Keeping time</legend>
       <label>

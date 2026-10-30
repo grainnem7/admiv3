@@ -34,8 +34,9 @@ export function startTooSoon(msSinceStop: number, msSincePieceEnded: number): bo
   return msSinceStop < PLAY_AFTER_STOP_MS || msSincePieceEnded < START_AFTER_PIECE_MS;
 }
 
-export function spaceTogglesPlay(view: BoardScreenView, target: EventTarget | null): boolean {
-  if (view === 'setup') return false;
+export function spaceTogglesPlay(view: BoardScreenView, target: EventTarget | null, spaceOn = true): boolean {
+  // Switched off in Advanced (A7): a switch box often sends Space, and Shift+S still works.
+  if (!spaceOn || view === 'setup') return false;
   if (target instanceof Element && target.closest(CONTROL_SELECTOR) !== null) return false;
   return true;
 }
@@ -55,9 +56,9 @@ export type SpaceAction = 'startPiece' | 'play' | 'stop' | 'none';
  */
 export function spaceAction(
   view: BoardScreenView, target: EventTarget | null,
-  s: { running: boolean; offerShowing: boolean; msSinceStop: number; msSincePieceEnded: number; pieceOn: boolean },
+  s: { running: boolean; offerShowing: boolean; msSinceStop: number; msSincePieceEnded: number; pieceOn: boolean; spaceOn?: boolean },
 ): SpaceAction {
-  if (!spaceTogglesPlay(view, target)) return 'none';
+  if (!spaceTogglesPlay(view, target, s.spaceOn)) return 'none';
   if (s.offerShowing) return 'none';
   if (s.running) return view === 'bigBoard' && !s.pieceOn ? 'startPiece' : 'stop';
   if (startTooSoon(s.msSinceStop, s.msSincePieceEnded)) return 'none';

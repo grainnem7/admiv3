@@ -4,6 +4,7 @@ import {
   MAX_MIDI_LEAD_MS, ROLE_CHANNEL, sharedColourChannels, soundFromToConfig, VOLUME_CHANNEL,
   type MidiChannelMode, type MidiSends, type SoundFrom,
 } from '../../../../midi/boardMidi';
+import { noticeMs } from '../../../../profiles/pressAgain';
 import type { BoardSequencerStored } from '../../../../profiles/BoardSequencerConfig';
 import { describeChannel, ROLE_LABELS } from '../../../../tracking/boardColours';
 import type { BoardMidiPort } from '../useBoardMidiPort';
@@ -65,7 +66,7 @@ export function BoardMidiPanel({
   useEffect(() => {
     if (flash === null) return;
     if (flash === 'notPlaying') {
-      const id = window.setTimeout(() => setFlash(null), 1200);
+      const id = window.setTimeout(() => setFlash(null), noticeMs(1200));
       return () => window.clearTimeout(id);
     }
     setTestAt(0);
@@ -76,7 +77,7 @@ export function BoardMidiPanel({
   const [panicFlash, setPanicFlash] = useState(false);
   useEffect(() => {
     if (!panicFlash) return;
-    const id = window.setTimeout(() => setPanicFlash(false), 1200);
+    const id = window.setTimeout(() => setPanicFlash(false), noticeMs(1200));
     return () => window.clearTimeout(id);
   }, [panicFlash]);
 
