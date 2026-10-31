@@ -60,7 +60,9 @@ describe('Learn the hat, in the Cap tab', () => {
     render(props({ learntHat: hat }));
     expect(host.textContent).toContain('Looking for the learnt hat.');
     expect(host.textContent).not.toContain('Looking for the cap’s colour.');
-    expect(card().textContent).toMatch(/A learnt hat is in use \(learnt 28 Oct.*14:05\)\./);
+    // The time is written in the browser's own locale ("28 Oct, 14:05" or "Oct 28, 02:05 PM"): expect the same words from the same moment.
+    const learntWhen = new Date(2026, 9, 28, 14, 5).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    expect(card().textContent).toContain(`A learnt hat is in use (learnt ${learntWhen}).`);
     const canvas = host.querySelector('canvas')!;
     expect(canvas.getAttribute('aria-label')).toContain('The learnt hat is in use.');
   });
