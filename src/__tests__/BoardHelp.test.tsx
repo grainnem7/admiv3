@@ -104,3 +104,11 @@ describe('Help says how New loop asks first (U1)', () => {
     expect(live).not.toContain('Start with these');
   });
 });
+
+describe('Help on scenes (U2)', () => {
+  it('Jump here now is on every scene but the one on now; How scenes work explains them', () => {
+    const steps = entry('Board, Make a piece, Show');
+    expect(steps).toContain('Jump here now (on every scene but the one on now) switches to it at once');
+    expect(steps).toContain('How scenes work, above the timeline, explains them.');
+  });
+});

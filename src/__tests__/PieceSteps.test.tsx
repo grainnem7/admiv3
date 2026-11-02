@@ -647,6 +647,11 @@ describe('scene chips never cut a word (B10 follow-up)', () => {
   it('the whole label when it fits; then the time drops; then only the number; else nothing', () => {
     expect(sceneChipLabel(4, 'Home', '6:00', 200, measure)).toBe('4 · Home 6:00');
     expect(sceneChipLabel(4, 'Home', '6:00', 90, measure)).toBe('4 · Home');
+    // U2: then as much of the name as fits, marked with …, before the number alone.
+    expect(sceneChipLabel(4, 'Home', '6:00', 60, measure)).toBe('4 · Ho…');
+    expect(sceneChipLabel(4, 'Arrival', '0:00', 72, measure)).toBe('4 · Arri…');
+    // At least two letters, or it is only the number.
+    expect(sceneChipLabel(4, 'Home', '6:00', 48, measure)).toBe('4');
     expect(sceneChipLabel(4, 'Home', '6:00', 30, measure)).toBe('4');
     expect(sceneChipLabel(4, 'Home', '6:00', 6, measure)).toBe('');
     // Not measured yet (no layout): the whole label.
@@ -667,7 +672,9 @@ describe('scene chips never cut a word (B10 follow-up)', () => {
       const full = ['1 · Arrival 0:00', '2 · Build 1:30', '3 · Open 3:30', '4 · Home 6:50'];
       chips.forEach((c, i) => {
         const [n, , name, time] = full[i].split(' ');
-        expect([full[i], `${n} · ${name}`, n, '']).toContain(c.textContent);
+        const t = c.textContent ?? '';
+        const shortened = t.startsWith(`${n} · `) && t.endsWith('…') && name.startsWith(t.slice(`${n} · `.length, -1));
+        expect(shortened || [full[i], `${n} · ${name}`, n, ''].includes(t), t).toBe(true);
         expect(c.getAttribute('aria-label')).toMatch(new RegExp(`^${full[i]}`));
         expect(c.title).toBe(full[i]);
         void time;
@@ -718,5 +725,38 @@ describe('U1: the loop list shows the loops you have kept', () => {
     otherWays(false);
     expect(items()).toEqual([]);
     expect(text()).toContain('8 of 8 places free');
+  });
+});
+
+describe('U2: making scenes', () => {
+  const foldButton = (): HTMLButtonElement | undefined => button(/How scenes work/);
+
+  it('with scenes made, the explanation folds to one line, How scenes work, that opens it', () => {
+    render(props({ step: 'scenes' }));
+    const fold = foldButton()!;
+    const body = (): HTMLElement => document.getElementById(fold.getAttribute('aria-controls') ?? '')!;
+    expect(fold.getAttribute('aria-expanded')).toBe('false');
+    expect(body().hidden).toBe(true);
+    expect(body().textContent).toContain('A scene says which loops play');
+    act(() => fold.click());
+    expect(body().hidden).toBe(false);
+    act(() => fold.click());
+  });
+
+  it('with no scenes yet, the explanation is open, as the first thing to read', () => {
+    render(props({ step: 'scenes', scenes: [] }));
+    expect(text()).toContain('A scene says which loops play');
+  });
+
+  it('while the board plays, Jump here now is on every scene but the one on now, whose line says so', () => {
+    render(props({ step: 'scenes', running: true, currentScene: 1 }));
+    expect(button('Jump here now')).toBeDefined();
+    const jumps = [...host.querySelectorAll('button')].filter((b) => /^Jump here now: /.test(b.getAttribute('aria-label') ?? ''));
+    expect(jumps.map((b) => b.getAttribute('aria-label'))).toEqual(['Jump here now: Arrival', 'Jump here now: Open']);
+    // On now is said, not a button to press.
+    expect([...host.querySelectorAll('button')].some((b) => /On now/.test(b.textContent ?? ''))).toBe(false);
+    const row = host.querySelector('[data-scene-row="Build"]')!.closest('div')!;
+    // Its own line already says so: "1:30 · Build · on now".
+    expect(row.textContent).toContain('1:30 · Build · on now');
   });
 });

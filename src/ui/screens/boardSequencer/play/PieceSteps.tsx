@@ -4,6 +4,7 @@ import { focusDropped, focusWhenGone, PLAY_STOP_ID } from '../ui/focusNext';
 import { LabeledSlider } from '../ui/LabeledSlider';
 import { SegmentedControl } from '../ui/SegmentedControl';
 import { Switch } from '../ui/Switch';
+import { Disclosure } from '../ui/Disclosure';
 import type { BandLevel } from '../../../../songs/band/band';
 import type { SoundWorldChoice } from '../../../../audio/worlds/soundWorlds';
 import {
@@ -184,8 +185,10 @@ function chipTextWidth(text: string): number {
 export function sceneChipLabel(
   n: number, name: string, time: string, widthPx: number | null, measure: (t: string) => number = chipTextWidth,
 ): string {
-  const options = [`${n} · ${name} ${time}`, `${n} · ${name}`, String(n)];
-  if (widthPx === null) return options[0];
+  if (widthPx === null) return `${n} · ${name} ${time}`;
+  // Then as much of the name as fits, marked with … (U2): at least two letters of it.
+  const shortened = [...Array(Math.max(0, name.length - 2)).keys()].map((k) => `${n} · ${name.slice(0, name.length - 1 - k)}…`);
+  const options = [`${n} · ${name} ${time}`, `${n} · ${name}`, ...shortened, String(n)];
   return options.find((o) => measure(o) <= widthPx) ?? '';
 }
 
@@ -458,15 +461,24 @@ function ScenesStep(p: PieceStepsProps): JSX.Element {
   const sectionRef = useRef<HTMLElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const undoRef = useRef<HTMLButtonElement>(null);
+  const scenesIntro = (
+    <div style={card}>
+      <p style={{ margin: 0 }}>A scene says which loops play and how it sounds. The clock brings each scene in at its time while the player plays on top.</p>
+      <p style={note}>Optional: without scenes, the piece doesn&rsquo;t change by itself.</p>
+      {p.scenes.length > 0 && (
+        <p style={note}>{`Tap a scene to change it. ▶ Rehearse from here plays the piece from that moment. While the board plays, Jump here now switches to a scene straight away; Stop gives ${who.name} their own sound back. 1 pass = ${p.passSec.toFixed(1)} s.`}</p>
+      )}
+    </div>
+  );
   const sceneRow = (id?: string): HTMLElement | null => [...(sectionRef.current?.querySelectorAll<HTMLElement>('[data-scene-row]') ?? [])]
     .find((b) => id === undefined || b.dataset.sceneRow === id) ?? null;
   return (
     <section ref={sectionRef} aria-labelledby="piece-scenes" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <h2 id="piece-scenes" ref={headingRef} tabIndex={-1} style={heading}>2 · Scenes</h2>
-      <div style={card}>
-        <p style={{ margin: 0 }}>A scene says which loops play and how it sounds. The clock brings each scene in at its time while the player plays on top.</p>
-        <p style={note}>Optional: without scenes, the piece doesn&rsquo;t change by itself.</p>
-      </div>
+      {/* Read first while there are no scenes; once there are, one line that opens it (U2). */}
+      {p.scenes.length === 0 ? scenesIntro : (
+        <Disclosure summary="How scenes work">{scenesIntro}</Disclosure>
+      )}
       {p.scenes.length === 0 ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-start' }}>
           <Button
@@ -511,7 +523,6 @@ function ScenesStep(p: PieceStepsProps): JSX.Element {
             {elapsed !== null && <li aria-hidden="true" style={{ position: 'absolute', top: 0, bottom: 0, width: 3, left: `${Math.min(100, (elapsed / p.lengthSec) * 100)}%`, background: 'var(--bs-fg)' }} />}
           </ul>
           <EnergyGraph scenes={p.scenes} lengthSec={p.lengthSec} />
-          <p style={note}>{`Tap a scene to change it. ▶ Rehearse from here plays the piece from that moment. While the board plays, Jump here now switches to a scene straight away; Stop gives ${who.name} their own sound back. 1 pass = ${p.passSec.toFixed(1)} s.`}</p>
           {p.scenes.map((s, i) => (
             <SceneRow
               key={s.id} number={i + 1} scene={s} open={selected === s.id} current={p.currentScene === i}
@@ -849,8 +860,9 @@ function SceneRow(r: SceneRowProps): JSX.Element {
             ▶ Rehearse from here
           </Button>
         )}
-        {r.onGo && (
-          <Button tone={r.current ? 'selected' : 'secondary'} aria-pressed={r.current} onClick={r.onGo} aria-label={`${r.current ? 'On now' : 'Jump here now'}: ${s.name}`}>{r.current ? 'On now' : 'Jump here now'}</Button>
+        {/* Only where it would do something (U2): the scene on now says so in its own line. */}
+        {r.onGo && !r.current && (
+          <Button tone="secondary" onClick={r.onGo} aria-label={`Jump here now: ${s.name}`}>Jump here now</Button>
         )}
       </div>
       {r.open && (

@@ -622,11 +622,13 @@ test('Jump here now is there only while the board plays; the scene is for that r
   await makePlan(page);
   // Stopped: each scene offers Rehearse from here; a jump would only have changed settings.
   await expect(page.getByRole('button', { name: /^Rehearse from here: Open/ })).toBeVisible();
-  await expect(page.getByRole('button', { name: /^(Jump here now|On now): Open$/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Jump here now: Open' })).toHaveCount(0);
   // Playing: Open (full band, extra notes, sounds change) comes in at once…
   await page.getByRole('button', { name: '▶ Play the board' }).first().click();
-  await page.getByRole('button', { name: /^(Jump here now|On now): Open$/ }).click();
-  await expect(page.getByRole('button', { name: /^(Jump here now|On now): Open$/ })).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', { name: 'Jump here now: Open' }).click();
+  // On now: its line says so, and it no longer offers to jump to itself (U2).
+  await expect(page.getByRole('button', { name: / · Open · on now/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Jump here now: Open' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Board', exact: true }).click();
   await soundTab(page);
   await expect(page.getByRole('group', { name: 'Band' }).getByRole('radio', { name: 'Full', exact: true })).toHaveAttribute('aria-checked', 'true');
@@ -1299,8 +1301,10 @@ test('▶ Start the piece while the board plays after a jump (route A): it opens
   await pieceLength(page, '1:00');
   await makePlan(page); // Arrival 0:00, Build 0:13, Open 0:30, Home 0:51
   await page.getByRole('button', { name: '▶ Play the board' }).first().click();
-  await page.getByRole('button', { name: /^(Jump here now|On now): Build$/ }).click();
-  await expect(page.getByRole('button', { name: /^(Jump here now|On now): Build$/ })).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', { name: 'Jump here now: Build' }).click();
+  // On now: its line says so, and it no longer offers to jump to itself (U2).
+  await expect(page.getByRole('button', { name: / · Build · on now/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Jump here now: Build' })).toHaveCount(0);
   await page.getByRole('button', { name: /^Show: the board, the clock/ }).click();
   const show = page.getByRole('region', { name: 'Show', exact: true });
   const strip = show.getByRole('region', { name: 'Now and next' });
@@ -1368,7 +1372,7 @@ test('the first scene at 0:10 and a later one left on by a jump: Start the piece
   await time.press('Tab');
   await expect(page.getByRole('button', { name: /^0:10 · Arrival/ })).toBeVisible();
   await page.getByRole('button', { name: '▶ Play the board' }).first().click();
-  await page.getByRole('button', { name: /^(Jump here now|On now): Open$/ }).click();
+  await page.getByRole('button', { name: 'Jump here now: Open' }).click();
   await page.getByRole('button', { name: /^Show: the board, the clock/ }).click();
   const strip = page.getByRole('region', { name: 'Show', exact: true }).getByRole('region', { name: 'Now and next' });
   await strip.getByRole('button', { name: '▶ Start the piece' }).click();
