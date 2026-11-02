@@ -301,7 +301,12 @@ test('End now: the chosen ending runs, then the piece stops by itself', async ({
   await expect(page.getByRole('button', { name: 'Cancel the ending' }).first()).toBeVisible();
   // A fade over two passes, from the next pass: well under a minute at 90 BPM on 8 steps.
   await expect(page.getByRole('button', { name: '▶ Play the board' }).first()).toBeVisible({ timeout: 45_000 });
-  await expect(page.getByRole('region', { name: 'Now and next' })).toHaveCount(0);
+  // With scenes made the strip stays (U5): it says Ended, offers ▶ Start the piece again, and
+  // has nothing left to move on or end.
+  const strip = page.getByRole('region', { name: 'Now and next' });
+  await expect(strip).toContainText('Ended');
+  await expect(strip.getByRole('button', { name: '▶ Start the piece' })).toBeVisible();
+  await expect(strip.getByRole('button', { name: /End piece|Next scene/ })).toHaveCount(0);
   expect(pageErrors(page)).toEqual([]);
 });
 
