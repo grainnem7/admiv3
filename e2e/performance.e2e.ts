@@ -2047,7 +2047,7 @@ test('one shared harmony: the band follows each scene’s chords, Tim’s chord 
 
 // ---- A band with jobs (spec 2026-10-28-harmony-and-band, stage 2) ----
 
-test('a band with jobs: at Full with Tim on bass, chords and drums, the band’s pads, drums and counter-melody play around him; its bass steps aside while his plays, and comes back when he lifts it', async ({ page }) => {
+test('a band with jobs: at Full with Tim on bass, chords and drums, the band’s pads, drums and counter-melody play with him; its bass steps aside while his plays, and comes back when he lifts it', async ({ page }) => {
   test.setTimeout(180_000);
   await openLaptopBoard(page);
   // Tim: Blue bass at step 1, Yellow chord at step 3, Green kicks at steps 5 and 7.
@@ -2092,15 +2092,7 @@ test('a band with jobs: at Full with Tim on bass, chords and drums, the band’s
   expect(band('bass').filter((n) => n.t <= lastTimBass)).toEqual([]);
   // Once he lifted it, the band's bass came back.
   expect(band('bass').filter((n) => n.t > lastTimBass).length).toBeGreaterThan(0);
-  // The band's drums only on beats his drums leave empty.
-  const spb = 60 / 90;
-  const drums = tim('drums');
-  // The grid from his last drum: the first beats of a piece can be sent a little late.
-  const t0 = Math.max(...drums.map((n) => n.t));
-  const beatOf = (t: number): number => Math.floor((t - t0) / spb + 0.02);
-  const his = new Set(drums.map((n) => beatOf(n.t)));
-  expect(band('groove').length).toBeGreaterThan(0);
-  for (const n of band('groove')) expect(his.has(beatOf(n.t)), `band drum at ${n.t.toFixed(2)} s`).toBe(false);
+  // A band drum may land on the same beat as one of his (owner, 2 Nov 2026: fine with Tim).
   expect(pageErrors(page)).toEqual([]);
 });
 

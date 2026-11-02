@@ -68,8 +68,9 @@ E = `src/songs/BoardSequencerEngine.ts`. Line numbers are as of 11e7eb7.
   pads and bass; Open all four; Home pads **(my call)**.
 - **The band keeps its jobs whatever Tim plays**, fitting around him instead of leaving:
   - **Pads** are voiced away from the register of Tim's and the loops' chord parts.
-  - **Drums** complement the board's drums: the band fills the steps they leave empty,
-    never doubling a hit.
+  - **Drums** complement the board's drums: the band fills the steps they leave empty. A
+    band hit may still land on the same beat as one of Tim's; that is fine (owner, 2 Nov
+    2026: the owner and Tim don't mind it), and no test asks otherwise.
   - **Counter-melody** plays in the gaps of Tim's melody, in a different register, never on
     his notes.
   - **Bass:** one bass at a time **(owner)**. When Tim's (or a loop's) bass plays, the
