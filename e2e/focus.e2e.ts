@@ -39,7 +39,7 @@ test('the laptop board: Add four colours leads to the colour to put down', async
   expect(pageErrors(page)).toEqual([]);
 });
 
-test('loops: New loop, Start with these, Keep, Done and Leave each leave focus where the next step is', async ({ page }) => {
+test('loops: New loop, Keep what\'s on the board, Start from empty, Start with these, Keep, Done and Leave each leave focus where the next step is', async ({ page }) => {
   await openLaptopBoard(page);
   await pickColour(page, 'Red');
   await place(page, [[3, 1], [5, 3]]);
@@ -48,15 +48,25 @@ test('loops: New loop, Start with these, Keep, Done and Leave each leave focus w
   await enter(page, newLoop);
   const heading = page.getByRole('heading', { name: /^New loop 1/ });
   await focusIsOn(heading);
+  // Counters are down: the choice (U1). Start from empty, then Start with these after all.
+  await enter(page, page.getByRole('button', { name: 'Start from empty' }));
+  await focusIsOn(heading);
   await enter(page, page.getByRole('button', { name: 'Start with these' }));
   await focusIsOn(heading);
   await enter(page, page.getByRole('button', { name: 'Keep', exact: true }));
   await focusIsOn(page.getByRole('textbox', { name: 'Name of the new loop' }));
+  await enter(page, page.getByRole('button', { name: 'Done', exact: true }));
+  await focusIsOn(newLoop);
+  // The quick way: Keep what's on the board makes the loop at once, and focus goes to its name.
+  await enter(page, newLoop);
+  await enter(page, page.getByRole('button', { name: "Keep what's on the board" }));
+  await focusIsOn(page.getByRole('textbox', { name: 'Name of the new loop' }));
+  await expect(page.getByRole('heading', { name: 'New loop 2 · kept' })).toBeVisible();
   // Done: back on New loop, so the next loop is one Enter away.
   await enter(page, page.getByRole('button', { name: 'Done', exact: true }));
   await focusIsOn(newLoop);
   await page.keyboard.press('Enter');
-  await focusIsOn(page.getByRole('heading', { name: /^New loop 2/ }));
+  await focusIsOn(page.getByRole('heading', { name: /^New loop 3/ }));
   // Leave: the same.
   await enter(page, page.getByRole('button', { name: 'Leave', exact: true }));
   await focusIsOn(newLoop);

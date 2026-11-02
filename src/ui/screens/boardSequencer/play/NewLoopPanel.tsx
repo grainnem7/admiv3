@@ -54,6 +54,10 @@ export interface NewLoopPanelProps {
   /** ▶ Play, from inside the panel: plain play, as the transport's. */
   onPlay(): void;
   onStartWithThese(): void;
+  /** Counters were down when New loop opened: keep them as the loop now (the main choice). */
+  onKeepBoard(): void;
+  /** Counters were down when New loop opened: lift them and start from silence. */
+  onStartFromEmpty(): void;
   onHearWith(what: Partial<NewLoopState['with']>): void;
   onKeep(): void;
   onRename(slot: number, name: string): void;
@@ -84,6 +88,8 @@ export function NewLoopPanel(p: NewLoopPanelProps): JSX.Element {
   useEffect(() => { if (keptSlot !== null) nameRef.current?.focus(); }, [keptSlot]);
 
   const waiting = p.state.phase === 'waitEmpty';
+  // Counters were down when it opened: the owner chooses first (a choice every time).
+  const choosing = waiting && p.state.choosing && p.countersOnBoard > 0;
   const hearing = p.state.with;
   const full = p.loopNumber === null && !p.kept;
   const keepReason = full ? 'Every loop is full: clear one first' : p.countersOnBoard > 0 ? null : 'Nothing to keep yet';
@@ -111,7 +117,31 @@ export function NewLoopPanel(p: NewLoopPanelProps): JSX.Element {
           </div>
         </div>
       )}
-      {waiting ? (
+      {choosing ? (
+        <div style={card}>
+          <p role="status" style={{ margin: 0 }}>
+            {`${p.countersOnBoard} ${p.countersOnBoard === 1 ? 'counter is' : 'counters are'} on the board.`}
+          </p>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <Button
+              tone="primary"
+              reason={full ? 'Every loop is full: clear one first' : null}
+              // The choice goes once the loop is kept: focus then goes to its name (below).
+              onClick={p.onKeepBoard}
+            >
+              Keep what&apos;s on the board
+            </Button>
+            <Button
+              tone="secondary"
+              // The choice goes: focus goes to the heading, which says it is waiting.
+              onClick={(e) => { p.onStartFromEmpty(); void focusWhenGone(() => headingRef.current, e.currentTarget); }}
+            >
+              Start from empty
+            </Button>
+          </div>
+          <p style={NOTE}>Start from empty: lift them, and only what you put down next is heard.</p>
+        </div>
+      ) : waiting ? (
         <div style={card}>
           <p role="status" style={{ margin: 0 }}>
             {/* The board can be clear a moment before the wait ends (a camera board settles
@@ -137,7 +167,7 @@ export function NewLoopPanel(p: NewLoopPanelProps): JSX.Element {
           {/* A group named by its words, so Band is heard as "Hear it with…, Band", not the Sound tab's Band. */}
           <div role="group" aria-labelledby={hearId} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <span id={hearId} style={NOTE}>Hear it with…</span>
-            <Button tone={hearing.band ? 'selected' : 'secondary'} aria-pressed={hearing.band} onClick={() => p.onHearWith({ band: !hearing.band })}>Band</Button>
+            <Button tone={hearing.band ? 'selected' : 'secondary'} aria-pressed={hearing.band} onClick={() => p.onHearWith({ band: !hearing.band })}>The band</Button>
             <Button tone={hearing.fill ? 'selected' : 'secondary'} aria-pressed={hearing.fill} onClick={() => p.onHearWith({ fill: !hearing.fill })}>Extra notes</Button>
             <select
               aria-label="Hear it with a loop"
@@ -145,7 +175,7 @@ export function NewLoopPanel(p: NewLoopPanelProps): JSX.Element {
               onChange={(e) => p.onHearWith({ loop: e.target.value === '' ? null : Number(e.target.value) })}
               style={{ minHeight: 'var(--bs-target)' }}
             >
-              <option value="">No other loop</option>
+              <option value="">On its own</option>
               {p.otherLoops.map((l) => <option key={l.slot} value={l.slot}>{l.name || `Loop ${l.slot + 1}`}</option>)}
             </select>
           </div>
@@ -174,7 +204,8 @@ export function NewLoopPanel(p: NewLoopPanelProps): JSX.Element {
         {!waiting && !p.kept && (
           <Button tone="primary" onClick={p.onKeep} reason={keepReason}>Keep</Button>
         )}
-        <Button tone="quiet" onClick={p.onLeave}>{p.kept ? 'Done' : 'Leave'}</Button>
+        {/* A real button, with an edge: as a quiet one it read as a word (U1). */}
+        <Button tone="secondary" onClick={p.onLeave}>{p.kept ? 'Done' : 'Leave'}</Button>
       </div>
     </section>
   );

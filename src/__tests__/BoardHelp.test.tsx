@@ -95,3 +95,12 @@ describe('Help says how to change the times and Space (A7)', () => {
     expect(keys).toContain('"Space plays and stops"');
   });
 });
+
+describe('Help says how New loop asks first (U1)', () => {
+  it('Keep what’s on the board, or Start from empty, and only kept loops listed', () => {
+    const live = entry('Using saved loops live');
+    expect(live).toContain('New loop asks first: Keep what’s on the board makes the loop from them at once; Start from empty');
+    expect(live).toContain('Only the loops you have kept are listed, with how many places are free');
+    expect(live).not.toContain('Start with these');
+  });
+});

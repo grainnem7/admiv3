@@ -261,8 +261,10 @@ describe('Loops: one way to make a loop (F1, T1-01, T2-14)', () => {
     act(() => fold?.click());
   });
 
-  it('an empty loop’s name field matches Keep (B17)', () => {
+  it('an empty loop’s name field matches Keep (B17), where empty places are shown: under Other ways', () => {
     render(props({ step: 'loops' }));
+    const fold = button(/Other ways to make a loop/);
+    if (fold?.getAttribute('aria-expanded') !== 'true') act(() => fold?.click());
     const empty = input('Name of loop 3');
     expect(empty?.placeholder).toBe('name (after Keep)');
   });
@@ -677,5 +679,44 @@ describe('scene chips never cut a word (B10 follow-up)', () => {
       delete (HTMLElement.prototype as { clientWidth?: number }).clientWidth;
       vi.unstubAllGlobals();
     }
+  });
+});
+
+describe('U1: the loop list shows the loops you have kept', () => {
+  /** Other ways is remembered for the session: set it as each test needs it. */
+  const otherWays = (open: boolean): void => {
+    const fold = button(/Other ways to make a loop/);
+    if ((fold?.getAttribute('aria-expanded') === 'true') !== open) act(() => fold?.click());
+  };
+  const items = (): string[] => [...host.querySelectorAll('li[aria-label^="Loop "]')].map((li) => li.getAttribute('aria-label') ?? '');
+
+  it('only kept loops, then how many places are free', () => {
+    render(props({ step: 'loops' }));
+    otherWays(false);
+    expect(items()).toEqual(['Loop 1: Bed, 2 notes', 'Loop 2: Pulse, 2 notes']);
+    expect(input('Name of loop 3')).toBeUndefined();
+    expect(text()).toContain('6 of 8 places free');
+  });
+
+  it('under Other ways the empty places come back, each with Keep the board as this loop', () => {
+    render(props({ step: 'loops', canSaveBoard: true }));
+    otherWays(true);
+    expect(items()).toHaveLength(8);
+    otherWays(false);
+  });
+
+  it('a kept loop’s ✕ sits at the end of its row, after ▶ Play', () => {
+    render(props({ step: 'loops' }));
+    const row = host.querySelector('li[aria-label^="Loop 1:"]')!;
+    const names = [...row.querySelectorAll('button')].map((b) => b.getAttribute('aria-label') ?? b.textContent);
+    expect(names.at(-1)).toBe('Clear loop 1');
+    expect(names.indexOf('▶ Play')).toBeLessThan(names.indexOf('Clear loop 1'));
+  });
+
+  it('no loops kept yet: the list says so, not eight empty rows', () => {
+    render(props({ step: 'loops', loops: [0, 1, 2, 3, 4, 5, 6, 7].map((s) => loop(s, '', true)) }));
+    otherWays(false);
+    expect(items()).toEqual([]);
+    expect(text()).toContain('8 of 8 places free');
   });
 });

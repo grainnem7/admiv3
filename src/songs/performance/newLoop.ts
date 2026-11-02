@@ -18,26 +18,42 @@ export interface NewLoopState {
   leftover: number;
   /** What the owner asked to hear the loop with, while composing. */
   with: { band: boolean; fill: boolean; loop: number | null };
+  /**
+   * Counters were down when New loop opened, and the owner has not yet chosen between
+   * keeping them and starting from empty (owner, 2 Nov 2026: a choice every time). Silent
+   * meanwhile, as while waiting for an empty board.
+   */
+  choosing: boolean;
 }
 
 const NOTHING: NewLoopState['with'] = { band: false, fill: false, loop: null };
 
 /** Begin: silent, and waiting while anything is still on the board. */
 export function startNewLoop(countersOnBoard: number): NewLoopState {
-  return { phase: countersOnBoard > 0 ? 'waitEmpty' : 'composing', leftover: countersOnBoard, with: NOTHING };
+  return { phase: countersOnBoard > 0 ? 'waitEmpty' : 'composing', leftover: countersOnBoard, with: NOTHING, choosing: countersOnBoard > 0 };
 }
 
 /** The board has been seen with this many counters: once empty, composing can begin. */
 export function boardSeen(s: NewLoopState, countersOnBoard: number): NewLoopState {
   if (s.phase === 'composing') return s;
-  if (countersOnBoard === 0) return { ...s, phase: 'composing', leftover: 0 };
+  if (countersOnBoard === 0) return { ...s, phase: 'composing', leftover: 0, choosing: false };
   // Unchanged is the same state, so looking again and again redraws nothing.
   return countersOnBoard === s.leftover ? s : { ...s, leftover: countersOnBoard };
 }
 
 /** The owner keeps the counters already on the board as the start of the loop. */
 export function startWithThese(s: NewLoopState): NewLoopState {
-  return { ...s, phase: 'composing', leftover: 0 };
+  return { ...s, phase: 'composing', leftover: 0, choosing: false };
+}
+
+/** Start from empty: the counters already down wait to be lifted, and nothing sounds until then. */
+export function chooseFromEmpty(s: NewLoopState): NewLoopState {
+  return s.choosing ? { ...s, choosing: false } : s;
+}
+
+/** The line under the loops: how many of the places for loops are still free. */
+export function placesFreeLine(free: number, total: number): string {
+  return free > 0 ? `${free} of ${total} places free` : 'Every place is full: clear a loop to make another';
 }
 
 /** Hear it with the band, Extra notes, or one other loop (null = none). */

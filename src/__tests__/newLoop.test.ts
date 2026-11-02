@@ -109,3 +109,45 @@ describe('quick names never give two loops the same name (T1-08)', () => {
     expect(quickName('Bed', ['bed ', 'Bed 2'])).toBe('Bed 3');
   });
 });
+
+import { chooseFromEmpty, placesFreeLine } from '../songs/performance/newLoop';
+
+describe('U1: with counters already down, New loop asks first (owner: a choice every time)', () => {
+  it('opens on the choice, silent, as before', () => {
+    const s = startNewLoop(4);
+    expect(s.choosing).toBe(true);
+    expect(s.phase).toBe('waitEmpty');
+    expect(engineSettingsFor(s, own)).toEqual({ band: 'off', fillAmount: 0, evolveAmount: 0, loops: [] });
+  });
+
+  it('an empty board has nothing to choose', () => {
+    expect(startNewLoop(0).choosing).toBe(false);
+  });
+
+  it('Start from empty: the wait to lift the counters, no longer choosing', () => {
+    const s = chooseFromEmpty(startNewLoop(4));
+    expect(s.choosing).toBe(false);
+    expect(s.phase).toBe('waitEmpty');
+    expect(s.leftover).toBe(4);
+  });
+
+  it('keeping what is on the board composes with it, no longer choosing', () => {
+    const s = startWithThese(startNewLoop(4));
+    expect(s.choosing).toBe(false);
+    expect(s.phase).toBe('composing');
+  });
+
+  it('lifting every counter while choosing starts from empty by itself', () => {
+    const s = boardSeen(startNewLoop(4), 0);
+    expect(s.phase).toBe('composing');
+    expect(s.choosing).toBe(false);
+  });
+});
+
+describe('U1: how many places are free for loops', () => {
+  it('says how many of the eight are free', () => {
+    expect(placesFreeLine(6, 8)).toBe('6 of 8 places free');
+    expect(placesFreeLine(1, 8)).toBe('1 of 8 places free');
+    expect(placesFreeLine(0, 8)).toBe('Every place is full: clear a loop to make another');
+  });
+});

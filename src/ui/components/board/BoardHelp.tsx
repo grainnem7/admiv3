@@ -279,9 +279,12 @@ const HELP: HelpEntry[] = [
     body: 'Give each scene a time ("at 2:30") and the clock brings it in by itself; the '
       + 'player plays over the top and can still take any part. To make a loop, press New '
       + 'loop (Make a piece → Loops): everything stops, only the counters sound, and Keep '
-      + 'saves them as a loop with a name. Counters already down stay silent until they are '
-      + 'lifted, or Start with these keeps them. Hear it with… lets you try the band, Extra '
-      + 'notes or another loop first. Not while the piece plays: stop it first.',
+      + 'saves them as a loop with a name. If counters are already down, New loop asks first: '
+      + 'Keep what’s on the board makes the loop from them at once; Start from empty keeps them '
+      + 'silent until they are lifted. Hear it with… lets you try the band, Extra notes or '
+      + 'another loop first. Only the loops you have kept are listed, with how many places are '
+      + 'free; the empty places are under Other ways to make a loop. Not while the piece plays: '
+      + 'stop it first.',
   },
   {
     title: 'The iPad for a player without fine control',

@@ -109,9 +109,10 @@ test('scene chips: numbered, each in a list item, readable in both modes, no cou
   // The old ways to make a loop are folded, and the empty name says Keep.
   await pieceStep(page, 'Loops');
   await expect(page.getByRole('button', { name: 'Keep the board as this loop' })).toHaveCount(0);
-  await expect(page.getByRole('textbox', { name: 'Name of loop 1' })).toHaveAttribute('placeholder', 'name (after Keep)');
   await page.getByRole('button', { name: /Other ways to make a loop/ }).click();
   await expect(page.getByRole('button', { name: 'Keep the board as this loop' }).first()).toBeVisible();
+  // The empty places are listed here (U1), and an empty name says Keep.
+  await expect(page.getByRole('textbox', { name: 'Name of loop 1' })).toHaveAttribute('placeholder', 'name (after Keep)');
   expect(pageErrors(page)).toEqual([]);
 });
 

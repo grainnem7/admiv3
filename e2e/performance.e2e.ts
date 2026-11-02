@@ -184,9 +184,13 @@ test('clearing a loop that scenes use asks first, naming them, and takes it out 
   const ask = page.getByRole('dialog', { name: 'Clear Bed?' });
   await expect(ask).toContainText('Bed is used in Arrival, Build, Open and Home. Clear it and take it out of those scenes?');
   await ask.getByRole('button', { name: 'Clear it' }).click();
-  // The loop and its name are gone (T2-01: the next loop kept there was called "Bed").
+  // The loop and its name are gone (T2-01: the next loop kept there was called "Bed"). Only
+  // kept loops are listed (U1): its empty place is under Other ways.
+  await expect(page.getByRole('listitem', { name: /^Loop 1:/ })).toHaveCount(0);
+  await page.getByRole('button', { name: /Other ways to make a loop/ }).click();
   await expect(page.getByRole('listitem', { name: 'Loop 1: Loop 1, empty' })).toBeVisible();
   await expect(page.getByRole('textbox', { name: 'Name of loop 1' })).toHaveValue('');
+  await page.getByRole('button', { name: /Other ways to make a loop/ }).click();
   await step(page, 'Scenes');
   await expect(page.getByRole('button', { name: /^0:00 · Arrival/ })).toContainText('no loops');
   await expect(page.getByRole('button', { name: /^1:30 · Build/ })).toContainText('Loop 2');
@@ -874,7 +878,9 @@ test("Capture from an iPad while the piece plays makes no loop, and the laptop s
   await expect(page.getByText('iPad: Capture not taken (stop the piece to make a loop)')).toBeVisible();
   await page.getByRole('button', { name: 'Make a piece', exact: true }).click();
   await page.getByRole('navigation', { name: 'Make a piece: steps' }).getByRole('button', { name: /· Loops/ }).click();
-  await expect(page.getByRole('listitem', { name: 'Loop 1: Loop 1, empty' })).toBeVisible();
+  // No loop was made: none is listed, and all eight places are free (U1).
+  await expect(page.getByRole('listitem', { name: /^Loop 1:/ })).toHaveCount(0);
+  await expect(page.getByText('8 of 8 places free')).toBeVisible();
   expect(pageErrors(page)).toEqual([]);
 });
 
@@ -980,8 +986,9 @@ test('with every loop full, New loop is off and says why beside it; clearing one
   await expect(page.getByText('Every loop is full: clear one first')).toHaveCount(0);
   await newLoop.click();
   await expect(page.getByRole('heading', { name: 'New loop 8 · silent' })).toBeVisible();
-  await page.getByRole('button', { name: 'Start with these' }).click();
-  await expect(page.getByRole('button', { name: 'Keep', exact: true })).toBeEnabled();
+  // Counters are down: New loop asks first, and keeping them takes the place just freed (U1).
+  await page.getByRole('button', { name: "Keep what's on the board" }).click();
+  await expect(page.getByRole('textbox', { name: 'Name of the new loop' })).toBeVisible();
   expect(pageErrors(page)).toEqual([]);
 });
 
@@ -1571,7 +1578,9 @@ test('while ▶ Start the piece loads, an iPad Capture is refused and the iPad s
   await expect(capture).toBeDisabled();
   await page.getByRole('button', { name: 'Make a piece', exact: true }).click();
   await page.getByRole('navigation', { name: 'Make a piece: steps' }).getByRole('button', { name: /· Loops/ }).click();
-  await expect(page.getByRole('listitem', { name: 'Loop 1: Loop 1, empty' })).toBeVisible();
+  // No loop was made: none is listed, and all eight places are free (U1).
+  await expect(page.getByRole('listitem', { name: /^Loop 1:/ })).toHaveCount(0);
+  await expect(page.getByText('8 of 8 places free')).toBeVisible();
   expect(pageErrors(page)).toEqual([]);
 });
 

@@ -12,6 +12,7 @@ import {
 } from '../../../../songs/performance/clock';
 import { MAX_SCENES, type LoopSlotState, type Scene } from '../../../../songs/performance/launcher';
 import { sceneTimeProblem, type ScenePatch } from '../../../../songs/performance/piece';
+import { placesFreeLine } from '../../../../songs/performance/newLoop';
 import { bandJobsWords, LEAD_INS, LEAD_IN_WORDS, type LeadIn } from '../../../../songs/band/bandJobs';
 import { colourEntryProblem } from '../../../../songs/performance/colourEntries';
 import { GLIDE_DEFAULT_SEC, GLIDE_MAX_SEC, GLIDE_MIN_SEC } from '../../../../songs/performance/speedGlide';
@@ -311,7 +312,9 @@ function LoopsStep(p: PieceStepsProps): JSX.Element {
       )}
       {oldWays && <p style={note}>{`${WORDS.keepBoardAsLoop} keeps the counters on the board as that loop. ✎ Edit notes changes a loop square by square.`}</p>}
       <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {p.loops.map((l) => {
+        {/* Only the loops kept (U1): the empty places come back under Other ways, where
+            Keep the board as this loop fills one. */}
+        {p.loops.filter((l) => oldWays || l.state !== 'empty').map((l) => {
           const empty = l.state === 'empty';
           const on = l.state === 'playing' || l.state === 'starting';
           return (
@@ -371,6 +374,7 @@ function LoopsStep(p: PieceStepsProps): JSX.Element {
           );
         })}
       </ul>
+      <p style={note}>{placesFreeLine(p.loops.filter((l) => l.state === 'empty').length, p.loops.length)}</p>
       <button
         type="button" aria-expanded={more} onClick={() => setMore((m) => !m)}
         style={{ alignSelf: 'flex-start', background: 'transparent', border: 'none', color: 'var(--bs-fg2)', minHeight: 'var(--bs-target)', cursor: 'pointer' }}

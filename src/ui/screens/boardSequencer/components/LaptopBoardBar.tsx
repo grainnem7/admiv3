@@ -107,7 +107,8 @@ export function LaptopBoardBar({
         {`${count} on the board. Click a square to put a counter down, click it again to lift it.`}
       </span>
       <Button
-        tone="quiet"
+        // A real button, with an edge: as a quiet one it read as a word (U1).
+        tone="secondary"
         reason={count === 0 ? 'The board is already empty.' : null}
         // The reason's line is kept either way, so clearing never moves the board (A3).
         reserveReason

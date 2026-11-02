@@ -52,7 +52,7 @@ import {
   forgetPieceRunning, readPieceRunning, rememberEnding, rememberPieceRunning, rememberScene, rememberShowing, reloadOffer, type PieceRunning,
 } from '../../songs/performance/pieceRunning';
 import { drawCells, keepCells, loopChannelsFor, loopColourLabel, loopSwatch } from '../../songs/performance/loopSounds';
-import { boardSeen, engineSettingsFor, hearWith, loopsToPlay, playerCellsFor, slotForKeep, startNewLoop, startWithThese, stopHearing, type NewLoopState } from '../../songs/performance/newLoop';
+import { boardSeen, chooseFromEmpty, engineSettingsFor, hearWith, loopsToPlay, playerCellsFor, slotForKeep, startNewLoop, startWithThese, stopHearing, type NewLoopState } from '../../songs/performance/newLoop';
 import { NewLoopPanel, liftLine, newLoopStatusLine, type NewLoopStopped } from './boardSequencer/play/NewLoopPanel';
 import { LinkQr } from './boardSequencer/components/LinkQr';
 import { createPopStore, soundingKey, type PopStore } from './boardSequencer/popStore';
@@ -3480,7 +3480,7 @@ export default function BoardSequencerScreen() {
     // counters sound" (R2-T1-01). If the board can't start, the panel says why.
     if (!runningRef.current && startingRef.current === null && playReason === null) void start();
     sessionLogRef.current.action(logActorRef.current, 'new loop');
-    announce(`${count > 0 ? `New loop. ${liftLine(count, configRef.current.boardSource === 'laptop')}` : 'New loop: silent until a counter goes down.'}${playReason ? ` ${playReason}` : ''}`);
+    announce(`${count > 0 ? `New loop. ${count} ${count === 1 ? 'counter is' : 'counters are'} on the board: keep what's on the board, or start from empty.` : 'New loop: silent until a counter goes down.'}${playReason ? ` ${playReason}` : ''}`);
   };
   const leaveNewLoop = (): void => {
     newLoopRef.current = null;
@@ -4786,6 +4786,17 @@ export default function BoardSequencerScreen() {
           otherLoops={config.loopSlots.flatMap((s, i) => ((s?.length ?? 0) === 0 || i === keptLoop?.slot ? [] : [{ slot: i, name: config.loopNames[i] ?? '' }]))}
           takenNames={config.loopNames.filter((n, i) => i !== keptLoop?.slot && (config.loopSlots[i]?.length ?? 0) > 0 && n.trim() !== '')}
           onStartWithThese={() => setNewLoop((s) => (s ? startWithThese(s) : s))}
+          onKeepBoard={() => {
+            // Keep what's on the board: the counters sound again, and the loop is kept at once.
+            const nl = newLoopRef.current ? startWithThese(newLoopRef.current) : null;
+            newLoopRef.current = nl;
+            setNewLoop(nl);
+            keepNewLoop();
+          }}
+          onStartFromEmpty={() => {
+            setNewLoop((s) => (s ? chooseFromEmpty(s) : s));
+            announce(liftLine(soundingOnBoard(), configRef.current.boardSource === 'laptop'));
+          }}
           onHearWith={(what) => { setNewLoop((s) => (s ? hearWith(s, what) : s)); }}
           onKeep={keepNewLoop}
           onRename={renameLoop}

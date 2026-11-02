@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react';
 import { NewLoopPanel, liftLine, newLoopStatusLine, type NewLoopPanelProps } from '../ui/screens/boardSequencer/play/NewLoopPanel';
-import { startNewLoop, startWithThese } from '../songs/performance/newLoop';
+import { chooseFromEmpty, startNewLoop, startWithThese } from '../songs/performance/newLoop';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -16,7 +16,7 @@ function props(over: Partial<NewLoopPanelProps> = {}): NewLoopPanelProps {
     state: startNewLoop(0), loopNumber: 4, countersOnBoard: 0, kept: null,
     otherLoops: [{ slot: 0, name: 'Bed' }, { slot: 1, name: '' }], takenNames: [],
     stopped: null, onPlay: vi.fn(),
-    onStartWithThese: vi.fn(), onHearWith: vi.fn(), onKeep: vi.fn(), onRename: vi.fn(), onLeave: vi.fn(),
+    onStartWithThese: vi.fn(), onKeepBoard: vi.fn(), onStartFromEmpty: vi.fn(), onHearWith: vi.fn(), onKeep: vi.fn(), onRename: vi.fn(), onLeave: vi.fn(),
     ...over,
   };
 }
@@ -27,7 +27,7 @@ const button = (name: string | RegExp): HTMLButtonElement | undefined =>
 
 describe('New loop', () => {
   it('says it is silent, and while counters are still down asks for them to be lifted, with Start with these', () => {
-    const p = props({ state: startNewLoop(3), countersOnBoard: 3 });
+    const p = props({ state: chooseFromEmpty(startNewLoop(3)), countersOnBoard: 3 });
     render(p);
     expect(text()).toContain('New loop 4 · silent');
     expect(text()).toContain('Lift the 3 counters to start from silence');
@@ -40,18 +40,26 @@ describe('New loop', () => {
     const p = props({ countersOnBoard: 2 });
     render(p);
     expect(text()).not.toContain('Lift the');
-    act(() => button('Band')?.click());
+    act(() => button('The band')?.click());
     expect(p.onHearWith).toHaveBeenCalledWith({ band: true });
     act(() => button('Extra notes')?.click());
     expect(p.onHearWith).toHaveBeenCalledWith({ fill: true });
     const select = host.querySelector('select[aria-label="Hear it with a loop"]') as HTMLSelectElement;
-    expect([...select.options].map((o) => o.textContent)).toEqual(['No other loop', 'Bed', 'Loop 2']);
+    expect([...select.options].map((o) => o.textContent)).toEqual(['On its own', 'Bed', 'Loop 2']);
     act(() => { select.value = '0'; select.dispatchEvent(new Event('change', { bubbles: true })); });
     expect(p.onHearWith).toHaveBeenCalledWith({ loop: 0 });
     act(() => button('Keep')?.click());
     expect(p.onKeep).toHaveBeenCalled();
     act(() => button('Leave')?.click());
     expect(p.onLeave).toHaveBeenCalled();
+  });
+
+  it('U1: Leave and Done are real buttons with an edge, not words that look like text', () => {
+    render(props({ countersOnBoard: 2 }));
+    const leave = button('Leave')!;
+    expect(leave.style.background).toBe('var(--bs-raised)');
+    render(props({ kept: { slot: 3, name: '' } }));
+    expect(button('Done')!.style.background).toBe('var(--bs-raised)');
   });
 
   it('Keep is off with nothing on the board, and says why', () => {
@@ -75,11 +83,11 @@ describe('New loop', () => {
 
 describe('New loop on the laptop board: Clear the board is named (B22)', () => {
   it('"Lift the 3 counters, or press Clear the board."', () => {
-    render(props({ state: startNewLoop(3), countersOnBoard: 3, laptop: true }));
+    render(props({ state: chooseFromEmpty(startNewLoop(3)), countersOnBoard: 3, laptop: true }));
     expect(text()).toContain('Lift the 3 counters, or press Clear the board.');
   });
   it('on the camera board there is no Clear the board to press: just lift them', () => {
-    render(props({ state: startNewLoop(3), countersOnBoard: 1 }));
+    render(props({ state: chooseFromEmpty(startNewLoop(3)), countersOnBoard: 1 }));
     expect(text()).toContain('Lift the 1 counter to start from silence.');
     expect(text()).not.toContain('Clear the board');
   });
@@ -91,14 +99,14 @@ describe('New loop on the laptop board: Clear the board is named (B22)', () => {
 
 describe('New loop: never "Lift the 0 counters" (T1-05, T2-03)', () => {
   it('waiting with the board already clear says it is ready, with no number', () => {
-    render(props({ state: startNewLoop(3), countersOnBoard: 0 }));
+    render(props({ state: chooseFromEmpty(startNewLoop(3)), countersOnBoard: 0 }));
     expect(text()).not.toMatch(/Lift the 0/);
     expect(text()).not.toMatch(/0 counters?/);
     expect(text()).toContain('Ready: the board is clear.');
   });
 
   it('one counter left is "the 1 counter"', () => {
-    render(props({ state: startNewLoop(1), countersOnBoard: 1 }));
+    render(props({ state: chooseFromEmpty(startNewLoop(1)), countersOnBoard: 1 }));
     expect(text()).toContain('Lift the 1 counter to start from silence.');
   });
 });
@@ -163,7 +171,7 @@ describe('New loop: names a screen reader can follow (T4-10)', () => {
     render(props({ countersOnBoard: 2 }));
     const g = group('Hear it with…');
     expect(g).toBeDefined();
-    expect(g?.contains(button('Band') ?? null)).toBe(true);
+    expect(g?.contains(button('The band') ?? null)).toBe(true);
     expect(g?.contains(button('Extra notes') ?? null)).toBe(true);
     expect(g?.querySelector('select[aria-label="Hear it with a loop"]')).not.toBeNull();
   });
@@ -193,7 +201,7 @@ describe('New loop: names a screen reader can follow (T4-10)', () => {
 
 describe('New loop: the heading says what is true (T4-10, T1-09)', () => {
   it('silent while it waits for the board to be clear', () => {
-    render(props({ state: startNewLoop(2), countersOnBoard: 2 }));
+    render(props({ state: chooseFromEmpty(startNewLoop(2)), countersOnBoard: 2 }));
     expect(heading()).toBe('New loop 4 · silent');
   });
 
@@ -219,13 +227,13 @@ describe('New loop: the heading says what is true (T4-10, T1-09)', () => {
 
 describe('New loop: focus never drops to the page (T1-04, T4-09)', () => {
   it('opening it, with focus fallen to the page (New loop has gone), puts focus on its heading', () => {
-    render(props({ state: startNewLoop(2), countersOnBoard: 2 }));
+    render(props({ state: chooseFromEmpty(startNewLoop(2)), countersOnBoard: 2 }));
     expect(document.activeElement).toBe(host.querySelector('h2'));
     expect(host.querySelector('h2')?.tabIndex).toBe(-1);
   });
 
   it('Start with these: focus goes to the heading, which now says the loop is not kept yet', async () => {
-    const p = props({ state: startNewLoop(2), countersOnBoard: 2 });
+    const p = props({ state: chooseFromEmpty(startNewLoop(2)), countersOnBoard: 2 });
     render(p);
     const start = button('Start with these') as HTMLButtonElement;
     act(() => start.focus());
@@ -276,7 +284,7 @@ describe('New loop on a stopped board (R2-T1-01)', () => {
   });
 
   it('waiting for the board to be clear while stopped: both are said', () => {
-    render(props({ state: startNewLoop(3), countersOnBoard: 3, stopped: { why: null, canPlay: true } }));
+    render(props({ state: chooseFromEmpty(startNewLoop(3)), countersOnBoard: 3, stopped: { why: null, canPlay: true } }));
     expect(text()).toContain(STOPPED);
     expect(text()).toContain('Lift the 3 counters to start from silence.');
   });
@@ -296,5 +304,47 @@ describe('New loop on a stopped board (R2-T1-01)', () => {
     expect(newLoopStatusLine(null)).toBe('Making a new loop: only the counters sound. Keep it or leave in Make a piece, 1 · Loops.');
     expect(newLoopStatusLine({ why: null, canPlay: true })).toBe(`Making a new loop. ${STOPPED} Keep it or leave in Make a piece, 1 · Loops.`);
     expect(newLoopStatusLine({ why: "The camera isn't working.", canPlay: false })).toBe("Making a new loop. The camera isn't working. Keep it or leave in Make a piece, 1 · Loops.");
+  });
+});
+
+describe('U1: counters already down, so New loop asks first (owner: a choice every time)', () => {
+  const choosing = (): NewLoopPanelProps => props({ state: startNewLoop(3), countersOnBoard: 3 });
+
+  it('says how many are down, and offers Keep what\'s on the board (the main button) beside Start from empty', () => {
+    render(choosing());
+    expect(text()).toContain('3 counters are on the board.');
+    const keep = button("Keep what's on the board")!;
+    const empty = button('Start from empty')!;
+    expect(keep.style.background).toBe('var(--bs-accent)');
+    expect(empty.style.background).toBe('var(--bs-raised)');
+    // Nothing about lifting until the owner chooses to start from empty.
+    expect(text()).not.toContain('Lift the');
+    expect(button('Keep')).toBeUndefined();
+  });
+
+  it('each choice does its own thing', () => {
+    const p = choosing();
+    render(p);
+    act(() => button("Keep what's on the board")?.click());
+    expect(p.onKeepBoard).toHaveBeenCalledTimes(1);
+    act(() => button('Start from empty')?.click());
+    expect(p.onStartFromEmpty).toHaveBeenCalledTimes(1);
+  });
+
+  it('one counter is "1 counter is on the board."', () => {
+    render(props({ state: startNewLoop(1), countersOnBoard: 1 }));
+    expect(text()).toContain('1 counter is on the board.');
+  });
+
+  it('with every loop full there is nowhere to keep it: the main choice says why', () => {
+    render(props({ state: startNewLoop(2), countersOnBoard: 2, loopNumber: null }));
+    expect(button("Keep what's on the board")?.disabled).toBe(true);
+  });
+
+  it('Leave is there while choosing too', () => {
+    const p = choosing();
+    render(p);
+    act(() => button('Leave')?.click());
+    expect(p.onLeave).toHaveBeenCalled();
   });
 });

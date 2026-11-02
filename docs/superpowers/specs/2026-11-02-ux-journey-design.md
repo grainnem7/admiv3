@@ -121,6 +121,24 @@ Each batch is built, tested and committed on its own, in the order U1, U2, U3, U
   - e2e for the screens it changes, plus `focus`, `setupScreens` and `access`;
   - the keeping-time meter no worse.
 
+## Status
+**U1, as built:**
+- New loop asks first when counters are down: "Keep what's on the board" (the main button) and
+  "Start from empty".
+- Done, Leave and Clear the board are real buttons.
+- Only kept loops are listed, with "N of 8 places free". The empty places show under Other
+  ways.
+- Hear it with: "The band", "Extra notes", and "On its own".
+
+**Left out of U1, with reasons (my call):**
+- The three-step line: the New loop heading already says silent, not kept yet, or kept, so a
+  second line would say the same thing twice.
+- The ⋯ menu: ✕ already sits at the end of each row, after ▶ Play, so the risky button is
+  apart from the others without hiding Rename and Edit notes behind another press.
+- The single name field: each loop keeps its own name field in the list. While New loop's
+  name box is showing, that loop's row still has its field too. For a later batch if it
+  confuses.
+
 ## Decided by the owner (2 Nov 2026)
 - New loop with counters down: "Keep what's on the board" is the main choice, and "Start from
   empty" is always offered beside it, so there is a choice every time.
