@@ -139,6 +139,20 @@ Each batch is built, tested and committed on its own, in the order U1, U2, U3, U
   name box is showing, that loop's row still has its field too. For a later batch if it
   confuses.
 
+**U2, as built:**
+- Timeline names shortened with … instead of the bare number.
+- How scenes work folded once there are scenes.
+- Jump here now only on scenes you are not in.
+
+**U3, as built:**
+- ▶ Start the piece is the big button in Show, also while the board is already playing.
+- Show's controls in two groups: ■ Stop and Mute on the playing hand's side, and the rest on
+  the other.
+- The Player button's reason stays inside the header.
+
+**Changed in U3 (my call):** Simplify keeps its visible hint, because audit fix B23 asked for
+it.
+
 ## Decided by the owner (2 Nov 2026)
 - New loop with counters down: "Keep what's on the board" is the main choice, and "Start from
   empty" is always offered beside it, so there is a choice every time.

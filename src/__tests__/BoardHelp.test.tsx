@@ -112,3 +112,9 @@ describe('Help on scenes (U2)', () => {
     expect(steps).toContain('How scenes work, above the timeline, explains them.');
   });
 });
+
+describe('Help on Show’s two groups (U3)', () => {
+  it('Stop and Mute on the playing hand’s side, the rest on the other', () => {
+    expect(entry('Board, Make a piece, Show')).toContain('■ Stop and Mute sit on the playing hand’s side, and Simplify, the audience screen and Leave Show on the other.');
+  });
+});

@@ -182,3 +182,33 @@ test('A5: the scene name on the audience screen sits 5% in, at 2.2% of the width
   expect(box.bottom / box.h).toBeCloseTo(0.05, 2);
   expect(box.size / box.w).toBeCloseTo(0.022, 3);
 });
+
+test('U3: Show splits its controls: ■ Stop and Mute on the playing side, the rest on the other; the Player reason stays in the header', async ({ page }) => {
+  await openLaptopBoard(page);
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1]]);
+  await page.getByRole('button', { name: '▶ Play the board', exact: true }).click();
+  await expect(page.locator('#bs-play-stop')).toHaveText('■ Stop', { timeout: 20_000 });
+  // The reason the Player button is off sits inside the header, over nothing below it.
+  const reason = await page.getByText('Stop playing to switch player.').boundingBox();
+  const header = await page.locator('header').boundingBox();
+  expect(reason!.y + reason!.height).toBeLessThanOrEqual(header!.y + header!.height + 1);
+  await page.getByRole('button', { name: /^Show: the board, the clock/ }).click();
+  const show = page.getByRole('region', { name: 'Show', exact: true });
+  // Before the piece: the big Start button.
+  const start = show.getByRole('button', { name: '▶ Start the piece' });
+  expect(await start.evaluate((e) => getComputedStyle(e).fontSize)).toBe('22px');
+  const box = async (name: string | RegExp): Promise<{ x: number; w: number }> => {
+    const b = (await show.getByRole('button', { name, exact: typeof name === 'string' }).first().boundingBox())!;
+    return { x: b.x, w: b.width };
+  };
+  const stop = await box('■ Stop');
+  const mute = await box('Mute');
+  const leave = await box('Leave Show');
+  const width = page.viewportSize()!.width;
+  // Right-handed: Stop and Mute at the right, Leave Show at the left, far apart.
+  expect(stop.x).toBeGreaterThan(width / 2);
+  expect(mute.x).toBeGreaterThan(width / 2);
+  expect(leave.x + leave.w).toBeLessThan(width / 2);
+  expect(pageErrors(page)).toEqual([]);
+});

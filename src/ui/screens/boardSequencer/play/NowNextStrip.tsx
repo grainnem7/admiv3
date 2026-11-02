@@ -63,7 +63,8 @@ export function NowNextStrip(p: NowNextStripProps): JSX.Element {
           {p.ended && (
             <span data-piece-ended style={{ fontSize: 20 * size, fontWeight: 600, color: 'var(--bs-fg2)' }}>Ended</span>
           )}
-          <Button tone="primary" onClick={p.onStartPiece}>▶ Start the piece</Button>
+          {/* In Show the one thing to press before the piece: as big as Show's own (U3). */}
+          <Button tone="primary" onClick={p.onStartPiece} style={p.big ? { fontSize: 22, padding: '10px 26px' } : undefined}>▶ Start the piece</Button>
         </>
       )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, flex: '1 1 200px' }}>

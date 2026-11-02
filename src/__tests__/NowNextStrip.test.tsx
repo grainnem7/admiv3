@@ -60,3 +60,15 @@ describe('A17: a quiet "Ended" in the clock\'s place after the piece', () => {
     expect(view.container.querySelector('[data-piece-ended]')).toBeNull();
   });
 });
+
+describe('U3: in Show, ▶ Start the piece is the big thing to press', () => {
+  it('big (Show) and the clock not running: the same size as Show\'s own Start button', () => {
+    view = render(<NowNextStrip {...props({ clock: { ...running, phase: 'idle' }, big: true })} />);
+    const start = named('▶ Start the piece')!;
+    expect(start.style.fontSize).toBe('22px');
+  });
+  it('on the Board view it stays the normal size', () => {
+    view = render(<NowNextStrip {...props({ clock: { ...running, phase: 'idle' } })} />);
+    expect(named('▶ Start the piece')!.style.fontSize).toBe('');
+  });
+});

@@ -6072,24 +6072,32 @@ export default function BoardSequencerScreen() {
           </div>
         )}
       </div>
+      {/* Two groups (U3): the sound's own controls on the playing hand's side, and the rest
+          (Simplify, the audience screen, Leave Show) on the other, so Leave Show is never next
+          to Stop. */}
       <div
         style={{
-          display: 'flex', gap: 8, alignItems: 'center',
-          justifyContent: layout.bigBoardControls === 'left' ? 'flex-start' : 'flex-end',
+          display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap',
+          flexDirection: layout.bigBoardControls === 'left' ? 'row-reverse' : 'row',
         }}
       >
-        {running && <Button ref={showStopRef} tone="danger" onClick={requestStop}>{stopArmed ? '■ Press again to stop' : '■ Stop'}</Button>}
-        <Button tone="secondary" aria-pressed={muted} disabled={!running} onClick={toggleMuted}>
-          {muted ? 'Muted' : 'Mute'}
-        </Button>
-        {running && simplifyButton}
-        {soundFrom !== 'admi' && (
-          <Button tone="secondary" onClick={midiPanic} aria-label="Panic: stop every note Ableton is holding">
-            Panic
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', flexDirection: layout.bigBoardControls === 'left' ? 'row-reverse' : 'row' }}>
+          <Button tone="secondary" onClick={() => setView('play')}>Leave Show</Button>
+          {audienceButton}
+          {running && simplifyButton}
+        </div>
+        {/* ■ Stop at the outer edge, on the playing hand's side. */}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', flexDirection: layout.bigBoardControls === 'left' ? 'row-reverse' : 'row' }}>
+          {soundFrom !== 'admi' && (
+            <Button tone="secondary" onClick={midiPanic} aria-label="Panic: stop every note Ableton is holding">
+              Panic
+            </Button>
+          )}
+          <Button tone="secondary" aria-pressed={muted} disabled={!running} onClick={toggleMuted}>
+            {muted ? 'Muted' : 'Mute'}
           </Button>
-        )}
-        {audienceButton}
-        <Button tone="secondary" onClick={() => setView('play')}>Leave Show</Button>
+          {running && <Button ref={showStopRef} tone="danger" onClick={requestStop}>{stopArmed ? '■ Press again to stop' : '■ Stop'}</Button>}
+        </div>
       </div>
     </div>
   ) : null;
