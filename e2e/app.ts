@@ -18,7 +18,20 @@ export async function openEmptyLaptopBoard(page: Page): Promise<void> {
   // The first run asks who is playing and which hand they use.
   await page.getByRole('region', { name: "Who's playing?" }).getByRole('textbox', { name: 'Name' }).fill('Test');
   await page.getByRole('button', { name: 'Create' }).click();
-  await page.getByRole('button', { name: /Laptop board: play on the laptop/ }).click();
+  await (await headerButton(page, /Laptop board: play on the laptop/)).click();
+}
+
+/**
+ * A button of the header's More (U4: the audience screen, Set up and Camera / Laptop live
+ * there at every width on the Board view). Set up shows Camera / Laptop in its own header,
+ * so a button already in sight is used as it is; otherwise More is opened first.
+ */
+export async function headerButton(page: Page, name: string | RegExp): Promise<Locator> {
+  const direct = page.getByRole('button', { name, exact: typeof name === 'string' }).first();
+  if (await direct.isVisible()) return direct;
+  const more = page.locator('header').getByRole('button', { name: /^More [▾▴]$/ });
+  if ((await more.getAttribute('aria-expanded')) !== 'true') await more.click();
+  return page.getByRole('group', { name: 'More', exact: true }).getByRole('button', { name, exact: typeof name === 'string' });
 }
 
 /** A new player's set-up on the laptop, from Welcome → Play on the laptop: step 1, the colours. */

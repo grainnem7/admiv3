@@ -1,7 +1,7 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { makePlan, notesPlayed, openLaptopBoard, pageErrors, pickColour, place, sessionLog, startPiece } from './app';
+import { headerButton, makePlan, notesPlayed, openLaptopBoard, pageErrors, pickColour, place, sessionLog, startPiece } from './app';
 
 /**
  * The audience screen (spec 2026-10-29): a window of its own for the projector, fed by the
@@ -20,7 +20,7 @@ const picture = (aud: Page): Locator => aud.locator('#root > div');
 async function openAudience(page: Page): Promise<Page> {
   const [aud] = await Promise.all([
     page.context().waitForEvent('page'),
-    page.getByRole('button', { name: 'Open the audience screen' }).first().click(),
+    headerButton(page, 'Open the audience screen').then((b) => b.click()),
   ]);
   await aud.waitForLoadState();
   await expect(picture(aud)).toHaveAttribute('data-connected', 'yes', { timeout: 20_000 });
@@ -61,7 +61,7 @@ test('opening the audience screen shows the board and nothing else, and the lapt
   expect(aud.isClosed()).toBe(false);
   await page.getByRole('button', { name: 'Press again to close the audience screen' }).first().click();
   await expect.poll(() => aud.isClosed(), { timeout: 10_000 }).toBe(true);
-  await expect(page.getByRole('button', { name: 'Open the audience screen' }).first()).toBeVisible();
+  await expect(await headerButton(page, 'Open the audience screen')).toBeVisible();
 });
 
 test('a note that sounds blooms its square, and the scene name follows a scene change', async ({ page }) => {

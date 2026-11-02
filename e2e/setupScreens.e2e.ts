@@ -17,7 +17,7 @@ const headerRows = (page: Page): Promise<number> => page.locator('header').evalu
 ).size);
 const sideways = (page: Page): Promise<boolean> => page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
 
-test('the header: one row, the less-used buttons under More below 1400 px, and the board keeps its place and size (A3)', async ({ page }) => {
+test('the header: one row, the less-used buttons under More at every width, and the board keeps its place and size (A3, U4)', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 768 });
   await openLaptopBoard(page);
   await pickColour(page, 'Red');
@@ -48,11 +48,13 @@ test('the header: one row, the less-used buttons under More below 1400 px, and t
   await page.getByRole('button', { name: 'Clear the board' }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Board cleared.' }).filter({ has: page.getByRole('button', { name: 'Undo' }) })).toBeVisible();
   expect(await boardBox(page)).toBe(board);
-  // Wide: the buttons sit in the header, still one row.
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await expect(page.getByRole('button', { name: 'Open the audience screen' })).toBeVisible();
-  await expect(page.getByRole('button', { name: /^More [▾▴]$/ })).toHaveCount(0);
-  expect(await headerRows(page)).toBe(1);
+  // Wide: still under More (U4), still one row: at 1400 the header used to wrap.
+  for (const w of [1400, 1440]) {
+    await page.setViewportSize({ width: w, height: 900 });
+    await expect(page.getByRole('button', { name: 'Open the audience screen' })).toBeHidden();
+    await expect(page.locator('header').getByRole('button', { name: /^More [▾▴]$/ })).toBeVisible();
+    await expect.poll(() => headerRows(page), { message: `at ${w}` }).toBe(1);
+  }
   for (const [w, h] of [[1024, 768], [1180, 820], [1920, 1080]] as const) {
     await page.setViewportSize({ width: w, height: h });
     await expect.poll(() => headerRows(page), { message: `at ${w}` }).toBe(1);

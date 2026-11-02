@@ -148,10 +148,12 @@ Each batch is built, tested and committed on its own, in the order U1, U2, U3, U
 - ▶ Start the piece is the big button in Show, also while the board is already playing.
 - Show's controls in two groups: ■ Stop and Mute on the playing hand's side, and the rest on
   the other.
-- The Player button's reason stays inside the header.
 
-**Changed in U3 (my call):** Simplify keeps its visible hint, because audit fix B23 asked for
-it.
+**Changed in U3 (my call):**
+- Simplify keeps its visible hint, because audit fix B23 asked for it.
+- "Stop playing to switch player" stays where it is, under the Player button. Keeping it inside
+  the header made the header wrap at 1400 px while playing (the B25 test), and where it is now
+  it only sits over empty space above ■ Stop.
 
 ## Decided by the owner (2 Nov 2026)
 - New loop with counters down: "Keep what's on the board" is the main choice, and "Start from

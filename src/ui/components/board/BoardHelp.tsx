@@ -31,7 +31,7 @@ const HELP: HelpEntry[] = [
   },
   {
     title: 'The laptop board — no camera, no board',
-    body: '💻 Laptop (beside 📷 Camera, at the top, or under More on a narrower screen) plays without the camera or the real board: pick a '
+    body: '💻 Laptop (beside 📷 Camera in Set up, or under More at the top) plays without the camera or the real board: pick a '
       + 'colour above the board and click squares to put counters down; click again to lift. '
       + 'Everything else is the same — phrases, the band, extra notes, sounds changing, loops, scenes, the '
       + 'performance clock and the iPad — so a piece can be tested and planned at home. '
@@ -233,8 +233,8 @@ const HELP: HelpEntry[] = [
   {
     title: 'Board, Make a piece, Show',
     body: 'Three buttons at the top. Board: just play the board, with the Sound, Timing, Board '
-      + 'and Connections tabs — no loops or scenes needed. On a narrower screen, Open the audience '
-      + 'screen, Set up and Camera / Laptop are under More. ▶ Play the board plays what is on the '
+      + 'and Connections tabs — no loops or scenes needed. Open the audience screen, Set up and '
+      + 'Camera / Laptop are under More, at the top. ▶ Play the board plays what is on the '
       + 'board: no clock, no scenes. Make a piece: three steps. '
       + '1 Loops: press New loop, put counters down, then Keep, and give the loop a name. '
       + '2 Scenes: "Make my plan" gives four scenes across the piece, each with your '

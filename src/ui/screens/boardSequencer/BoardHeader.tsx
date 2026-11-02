@@ -46,9 +46,7 @@ export function BoardHeader({
         display: hidden ? 'none' : 'flex', flexDirection: 'column', gap: 8, flexShrink: 0,
       }}
     >
-      {/* With the Player button, its reason's line is kept inside the header (U3): it spilled
-          over the row below while playing. */}
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', paddingBottom: playerName && onSwitchPlayer ? 16 : 0 }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <Button tone="quiet" onClick={onExit} aria-label={exitArmed ? 'Press again to stop the piece and exit' : 'Exit the Board Sequencer'}>
           {exitArmed ? '← Press again to leave' : '← Exit'}
         </Button>

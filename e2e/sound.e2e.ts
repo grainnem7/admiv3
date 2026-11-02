@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { listenToOutput, makePlan, notesPlayed, oneNote, openLaptopBoard, outputLevels, pageErrors, pickColour, pieceStep, place, pressAndListen, saveBoardHere, soundTab } from './app';
+import { headerButton, listenToOutput, makePlan, notesPlayed, oneNote, openLaptopBoard, outputLevels, pageErrors, pickColour, pieceStep, place, pressAndListen, saveBoardHere, soundTab } from './app';
 
 /**
  * The Sound tab and the loop edit window, as a musician uses them: each colour's own
@@ -244,7 +244,7 @@ test('Play on the laptop from Welcome: the laptop board, and a two-step set-up w
   await page.getByRole('button', { name: /Play on the laptop/ }).click();
   await page.getByRole('region', { name: "Who's playing?" }).getByRole('textbox', { name: 'Name' }).fill('Test');
   await page.getByRole('button', { name: 'Create' }).click();
-  await expect(page.getByRole('button', { name: /Laptop board: play on the laptop/ })).toHaveAttribute('aria-pressed', 'true');
+  await expect(await headerButton(page, /Laptop board: play on the laptop/)).toHaveAttribute('aria-pressed', 'true');
   // A new player starts at the colours: no camera, no board to find.
   await expect(page.getByRole('region', { name: 'Set up, step 1 of 2' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Choose the colours' })).toBeVisible();

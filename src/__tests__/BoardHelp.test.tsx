@@ -118,3 +118,10 @@ describe('Help on Show’s two groups (U3)', () => {
     expect(entry('Board, Make a piece, Show')).toContain('■ Stop and Mute sit on the playing hand’s side, and Simplify, the audience screen and Leave Show on the other.');
   });
 });
+
+describe('Help: More at every width (U4)', () => {
+  it('the audience screen, Set up and Camera / Laptop are under More, at the top', () => {
+    expect(entry('Board, Make a piece, Show')).toContain('Open the audience screen, Set up and Camera / Laptop are under More, at the top.');
+    expect(all()).not.toContain('narrower screen');
+  });
+});

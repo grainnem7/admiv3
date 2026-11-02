@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Button } from './Button';
 
 export interface HeaderMoreProps {
-  /** Narrow window: the buttons go into the menu. Wide: they sit in the header as before. */
+  /** The buttons go into the menu (now always, U4). False puts them in the header as before. */
   folded: boolean;
   /** A button inside is waiting for its second press: the menu stays open for it. */
   keepOpen?: boolean;
@@ -10,8 +10,8 @@ export interface HeaderMoreProps {
 }
 
 /**
- * "More" in the header (A3): below about 1400 px the less-used buttons (the audience screen,
- * Set up, Camera / Laptop) open from here, so the header stays one row and never pushes the
+ * "More" in the header (A3, U4): the less-used buttons (the audience screen, Set up, Camera /
+ * Laptop) open from here at every width, so the header stays one row and never pushes the
  * board down. The buttons are the same ones, so they do and say exactly what they did.
  * Esc or a click elsewhere closes it; focus goes back to More.
  */

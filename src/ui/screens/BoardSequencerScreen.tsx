@@ -311,8 +311,6 @@ const SIDE_PANEL_WIDTH = 'clamp(400px, 30vw, 480px)';
 const NOTICE_SLOT_HEIGHT = 'calc(var(--bs-target) + 14px)';
 /** The status lines' fixed strip under the board: three short lines (A3). */
 const STATUS_LINES_HEIGHT = 56;
-/** Below this width the less-used header buttons go into More (A3). */
-const HEADER_MORE_BELOW_PX = 1400;
 /** Where Play / Make a piece is remembered. */
 const WORKSPACE_KEY = 'admi-board-workspace';
 /** How often a take being played is kept (storage/sessionArchive). */
@@ -6232,7 +6230,8 @@ export default function BoardSequencerScreen() {
               </Button>
               {/* The less-used ones: in a More menu below about 1400 px, so the header stays
                   one row and never wraps (A3). */}
-              <HeaderMore folded={viewportWidth < HEADER_MORE_BELOW_PX} keepOpen={armed === 'setup' || closeAudienceArmed}>
+              {/* Under More at every width (owner, U4): at 1400 px the header wrapped onto two rows. */}
+              <HeaderMore folded keepOpen={armed === 'setup' || closeAudienceArmed}>
                 {view !== 'bigBoard' && audienceButton}
                 <Button
                   tone="quiet"

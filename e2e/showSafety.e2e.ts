@@ -1,5 +1,5 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { makePlan, openLaptopBoard, pageErrors, pickColour, place, soundTab } from './app';
+import { headerButton, makePlan, openLaptopBoard, pageErrors, pickColour, place, soundTab } from './app';
 
 /**
  * Show safety (audit 2026-10-30, batch 1): the status row in Show, the iPad link that
@@ -214,7 +214,7 @@ test('in Show the audience screen can’t be closed while the piece plays, and k
   await page.getByRole('button', { name: 'Switch to light mode' }).click();
   const [aud] = await Promise.all([
     page.context().waitForEvent('page'),
-    page.getByRole('button', { name: 'Open the audience screen' }).first().click(),
+    headerButton(page, 'Open the audience screen').then((b) => b.click()),
   ]);
   await aud.waitForLoadState();
   const picture = aud.locator('#root > div');

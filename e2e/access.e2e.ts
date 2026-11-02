@@ -183,16 +183,12 @@ test('A5: the scene name on the audience screen sits 5% in, at 2.2% of the width
   expect(box.size / box.w).toBeCloseTo(0.022, 3);
 });
 
-test('U3: Show splits its controls: ■ Stop and Mute on the playing side, the rest on the other; the Player reason stays in the header', async ({ page }) => {
+test('U3: Show splits its controls: ■ Stop and Mute on the playing side, the rest on the other', async ({ page }) => {
   await openLaptopBoard(page);
   await pickColour(page, 'Red');
   await place(page, [[3, 1]]);
   await page.getByRole('button', { name: '▶ Play the board', exact: true }).click();
   await expect(page.locator('#bs-play-stop')).toHaveText('■ Stop', { timeout: 20_000 });
-  // The reason the Player button is off sits inside the header, over nothing below it.
-  const reason = await page.getByText('Stop playing to switch player.').boundingBox();
-  const header = await page.locator('header').boundingBox();
-  expect(reason!.y + reason!.height).toBeLessThanOrEqual(header!.y + header!.height + 1);
   await page.getByRole('button', { name: /^Show: the board, the clock/ }).click();
   const show = page.getByRole('region', { name: 'Show', exact: true });
   // Before the piece: the big Start button.

@@ -1,6 +1,6 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
-import { listenToOutput, makePlan, notesPlayed, openAnotherTab, openLaptopBoard, outputLevels, pageErrors, pickColour, pieceStep, place, saveBoardHere, sceneMore, sceneMoreLine, sessionLog, soundTab, startPiece } from './app';
+import { headerButton, listenToOutput, makePlan, notesPlayed, openAnotherTab, openLaptopBoard, outputLevels, pageErrors, pickColour, pieceStep, place, saveBoardHere, sceneMore, sceneMoreLine, sessionLog, soundTab, startPiece } from './app';
 
 /** Make a piece → Loops: two loops, "Bed" (two yellow counters) and an unnamed one (one blue). */
 async function saveTwoLoops(page: Page): Promise<void> {
@@ -268,7 +268,7 @@ test('while the clock runs, Exit and Set up need a second press too', async ({ p
   await expect(page.getByRole('button', { name: 'Press again to stop the piece and exit' })).toBeVisible();
   await expect(page.getByRole('timer').first()).toBeVisible();
   // One press of Set up: the same.
-  await page.getByRole('button', { name: '⚙ Set up' }).click();
+  await (await headerButton(page, '⚙ Set up')).click();
   await expect(page.getByRole('button', { name: '⚙ Press again to stop and set up' })).toBeVisible();
   await expect(page.getByRole('status').filter({ hasText: 'Playing' }).first()).toBeVisible();
   // The second press leaves.
