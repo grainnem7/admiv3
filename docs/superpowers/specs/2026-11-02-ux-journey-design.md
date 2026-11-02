@@ -62,11 +62,12 @@ first (owner).** My calls are marked **(my call)**.
 ## The design
 
 ### Batch U1: making loops (first)
-- **New loop opens on two equal choices** when counters are already down:
+- **New loop always opens on a choice** when counters are already down (owner):
   - "Keep what's on the board" (the main button), and
-  - "Start from empty" (lifts nothing, silences the board, as today's New loop does).
+  - "Start from empty" beside it (lifts nothing, silences the board, as today's New loop does).
 
-  With an empty board it goes straight to "Put counters down, then Keep". **(my call)**
+  With an empty board there is nothing to choose, so it goes straight to "Put counters down,
+  then Keep".
 - **Three steps, shown as a small line of three:** Put counters down · Listen · Keep. The step
   you are on is marked, as in Set up.
 - **Name it once, in place.** After Keep the name field is right there, filled with "Loop N"
@@ -106,9 +107,8 @@ first (owner).** My calls are marked **(my call)**.
   legend, the AI line, every colour's sound and count, and Session log.
 - **The header:**
   - Exit, title, the view switch (Board · Make a piece · Show), the Player, then ☀ · Aa · ?.
-  - Camera / Laptop, Set up and the audience screen move to "More" at every width.
-    **(my call)**
-- **Welcome in the board's style:** the same font, colours and buttons as the Board Sequencer,
+  - Camera / Laptop, Set up and the audience screen move to "More" at every width (owner).
+- **Welcome in the board's style (owner):** the same font, colours and buttons as the Board Sequencer,
   mint for the main action. The gesture instrument's own screens are not changed.
 - **Set up's board can be tried at once:** click a square to put a counter down, with no
   sound until Play.
@@ -121,9 +121,8 @@ Each batch is built, tested and committed on its own, in the order U1, U2, U3, U
   - e2e for the screens it changes, plus `focus`, `setupScreens` and `access`;
   - the keeping-time meter no worse.
 
-## Questions for the owner (not decided here)
-- New loop: when counters are already down, should "Keep what's on the board" be the main
-  choice? (Proposed: yes.)
-- Should Camera / Laptop and Set up live under "More" at every width? (Proposed: yes.)
-- Welcome is shared with the gesture instrument. Is it right to restyle it in the board's
-  look? (Proposed: yes, Welcome only.)
+## Decided by the owner (2 Nov 2026)
+- New loop with counters down: "Keep what's on the board" is the main choice, and "Start from
+  empty" is always offered beside it, so there is a choice every time.
+- Camera / Laptop and Set up live under "More" at every width.
+- Welcome is restyled in the board's look (Welcome only, not the gesture instrument's screens).
