@@ -957,7 +957,11 @@ test('New loop silences the notes still ringing at once, as Stop does; after the
   expect(after.length).toBe(8);
   expect(Math.max(...after)).toBeLessThan(0.01);
   await expect(page.getByRole('heading', { name: 'New loop 1 · silent' })).toBeVisible();
-  await expect(page.getByText('Lift the 2 counters, or press Clear the board.', { exact: true })).toBeVisible();
+  // Counters are down: it asks first (U1), and stays silent while it asks.
+  await expect(page.getByText('2 counters are on the board.', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Start from empty' }).click();
+  // In the panel (it is also said aloud, in the announcer's own region).
+  await expect(page.getByRole('region', { name: /^New loop 1/ }).getByText('Lift the 2 counters, or press Clear the board.', { exact: true })).toBeVisible();
   // Clear the board: straight on to composing, never "Lift the 0 counters" (T2-03, T1-05).
   await page.getByRole('button', { name: 'Clear the board' }).click();
   await expect(page.getByText('Only the counters sound. Put them down, listen, change them.')).toBeVisible();
