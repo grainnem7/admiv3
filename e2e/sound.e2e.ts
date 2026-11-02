@@ -252,8 +252,11 @@ test('Play on the laptop from Welcome: the laptop board, and a two-step set-up w
   await expect(page.getByRole('button', { name: '← Back' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Add four colours' }).click();
   await expect(page.getByRole('combobox', { name: 'Red: plays' })).toBeVisible();
-  // In set-up the board only shows: a click puts nothing down (that is Play's, with its picker).
-  await expect(page.getByRole('grid', { name: /Laptop board/ })).toHaveCount(0);
+  // With colours, the board can be tried in set-up (U4): the picker is above it, and nothing
+  // plays until Play.
+  await expect(page.getByRole('grid', { name: /Laptop board/ })).toBeVisible();
+  await expect(page.getByRole('radiogroup', { name: 'Counter to put down' })).toBeVisible();
+  await expect(page.locator('#bs-play-stop')).toHaveCount(0);
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.getByRole('region', { name: 'Set up, step 2 of 2' })).toBeVisible();
   await page.getByRole('button', { name: /Play/ }).filter({ hasText: '▶' }).first().click();
