@@ -185,7 +185,7 @@ export function NewLoopPanel(p: NewLoopPanelProps): JSX.Element {
       {p.kept ? (
         <div style={card}>
           <p role="status" style={{ margin: 0, fontWeight: 600 }}>{`Kept: Loop ${p.kept.slot + 1}`}</p>
-          <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
             Name
             <input
               ref={nameRef} type="text" aria-label="Name of the new loop" value={p.kept.name}

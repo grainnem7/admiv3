@@ -325,3 +325,12 @@
   flex-direction: column;
   gap: 2px;
 }
+
+/*
+ * A fold laid out as a row loses the browser's own ▶, and then read as plain words (U5): it
+ * gets the sign every other fold here shows, ▸ shut and ▾ open.
+ */
+.bs-root summary.bs-fold { list-style: none; gap: 8px; }
+.bs-root summary.bs-fold::-webkit-details-marker { display: none; }
+.bs-root summary.bs-fold::before { content: '▸'; }
+.bs-root details[open] > summary.bs-fold::before { content: '▾'; }

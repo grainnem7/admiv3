@@ -4774,6 +4774,7 @@ export default function BoardSequencerScreen() {
       }))}
       onColourEntry={(id, at) => update({ colourComesInAt: withColourEntry(configRef.current.colourComesInAt, id, at) })}
       onNewLoop={beginNewLoop}
+      namingSlot={newLoop && keptLoop ? keptLoop.slot : null}
       newLoop={newLoop ? (
         <NewLoopPanel
           state={newLoop}
@@ -5712,7 +5713,9 @@ export default function BoardSequencerScreen() {
       {/* Play is just playing: the piece's strip (Start the piece, Next, End) only once
           there is a piece to steer — scenes, or its clock running. With neither, Next did
           nothing and the clock began a countdown that faded the music out by itself. */}
-      {view === 'play' && running && (config.scenes.length > 0 || (clock !== null && clock.phase !== 'idle')) && nowNextStrip}
+      {/* With scenes made, there whether or not the board plays (U5): it appeared when play
+          started and the board shrank by its height. */}
+      {view === 'play' && (config.scenes.length > 0 || (running && clock !== null && clock.phase !== 'idle')) && nowNextStrip}
       {/* The board is the instrument: never squeezed below about half the screen. */}
       {/* Stacked (narrow, or Large controls) the stage has no height of its own: the board's
           is set here, as tall as the window allows and never wider than it (A3: on an iPad
@@ -5882,7 +5885,7 @@ export default function BoardSequencerScreen() {
           sound and count, and the session log. Four lines here kept the board small. */}
       {view === 'play' && (
       <details data-board-details="" style={{ flexShrink: 0 }}>
-        <summary style={{ cursor: 'pointer', fontSize: 14, color: 'var(--bs-fg2)', minHeight: 'var(--bs-target)', display: 'flex', alignItems: 'center' }}>Details</summary>
+        <summary className="bs-fold" style={{ cursor: 'pointer', fontSize: 14, color: 'var(--bs-fg2)', minHeight: 'var(--bs-target)', display: 'flex', alignItems: 'center' }}>Details</summary>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingBottom: 6 }}>
       {boardLegend}
       {view === 'play' && aiOffLine(config.fillAmount, config.evolveAmount) && (
@@ -5933,7 +5936,7 @@ export default function BoardSequencerScreen() {
       {/* The research tools, folded (A15): closed by default, they are not for the piece. */}
       {view === 'play' && (
         <details data-session-log="">
-          <summary style={{ cursor: 'pointer', fontSize: 14, color: 'var(--bs-fg2)', minHeight: 'var(--bs-target)', display: 'flex', alignItems: 'center' }}>Session log</summary>
+          <summary className="bs-fold" style={{ cursor: 'pointer', fontSize: 14, color: 'var(--bs-fg2)', minHeight: 'var(--bs-target)', display: 'flex', alignItems: 'center' }}>Session log</summary>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', paddingTop: 4 }}>
           <Button tone="quiet" onClick={() => announce(describeBoard(active, config.channels, config.rows, config.cols, config.velocity))}>
             Describe board

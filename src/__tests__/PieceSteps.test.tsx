@@ -760,3 +760,18 @@ describe('U2: making scenes', () => {
     expect(row.textContent).toContain('1:30 · Build · on now');
   });
 });
+
+describe('U5: a new loop is named in one place', () => {
+  it('while New loop names loop 1, its row shows the name as words, not a second field', () => {
+    render(props({ step: 'loops', namingSlot: 0 }));
+    expect(input('Name of loop 1')).toBeUndefined();
+    expect(host.querySelector('li[aria-label^="Loop 1:"]')?.textContent).toContain('Bed');
+    // The other loops keep their fields.
+    expect(input('Name of loop 2')).toBeDefined();
+  });
+
+  it('with no new loop being named, every kept loop has its field', () => {
+    render(props({ step: 'loops' }));
+    expect(input('Name of loop 1')).toBeDefined();
+  });
+});

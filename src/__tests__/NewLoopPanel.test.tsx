@@ -348,3 +348,11 @@ describe('U1: counters already down, so New loop asks first (owner: a choice eve
     expect(p.onLeave).toHaveBeenCalled();
   });
 });
+
+describe('U5: the Name label lines up on the left, as every other label', () => {
+  it('after Keep', () => {
+    render(props({ kept: { slot: 0, name: '' } }));
+    const label = host.querySelector('input[aria-label="Name of the new loop"]')!.closest('label') as HTMLElement;
+    expect(label.style.alignItems).toBe('flex-start');
+  });
+});

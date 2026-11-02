@@ -169,6 +169,15 @@ Each batch is built, tested and committed on its own, in the order U1, U2, U3, U
   places so the board never moves; merging the two would give the board more room.
 - At 1280x720 the page still runs 34 px past the bottom.
 
+### U5: from a second walk through (my calls)
+- With scenes made, the Now / Next strip (▶ Start the piece) shows on the Board view whether or
+  not the board plays. It used to appear when play started, and the board shrank from 522 to
+  about 440 px. Starting from the Board view while warming up (route A, B13) is kept.
+- The folds laid out as a row (Details, Session log, Set up's More) show ▸ and ▾ like every
+  other fold. Without them they read as plain words.
+- A new loop is named in one place: while New loop's name box is open, the loop's row shows the
+  name as words. The Name label lines up on the left.
+
 ## Decided by the owner (2 Nov 2026)
 - New loop with counters down: "Keep what's on the board" is the main choice, and "Start from
   empty" is always offered beside it, so there is a choice every time.

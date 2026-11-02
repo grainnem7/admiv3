@@ -119,7 +119,7 @@ export function CameraStep({
       {/* Everything a working camera never needs. Opens by itself on a black-and-white
           picture, since Picture size is the usual fix. */}
       <details open={moreOpened || undefined}>
-        <summary style={{ cursor: 'pointer', color: 'var(--bs-fg2)', minHeight: 'var(--bs-target)', display: 'flex', alignItems: 'center' }}>More</summary>
+        <summary className="bs-fold" style={{ cursor: 'pointer', color: 'var(--bs-fg2)', minHeight: 'var(--bs-target)', display: 'flex', alignItems: 'center' }}>More</summary>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 6 }}>
           <p style={{ margin: 0, color: 'var(--bs-fg2)', fontSize: 14 }}>
             {trackInfo ? `${trackInfo.label || 'Camera'} · ${trackInfo.width} × ${trackInfo.height}` : 'No camera details yet'}

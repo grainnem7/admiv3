@@ -136,7 +136,7 @@ export function BoardStep({
       {/* Everything a usual session never needs. Opens by itself when the sizes don't line
           up with the squares, since the fix is in here. */}
       <details open={offNearest || undefined}>
-        <summary style={{ cursor: 'pointer', color: 'var(--bs-fg2)', minHeight: 'var(--bs-target)', display: 'flex', alignItems: 'center' }}>More</summary>
+        <summary className="bs-fold" style={{ cursor: 'pointer', color: 'var(--bs-fg2)', minHeight: 'var(--bs-target)', display: 'flex', alignItems: 'center' }}>More</summary>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 6 }}>
           {boardLearnt > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>

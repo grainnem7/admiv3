@@ -82,6 +82,8 @@ export interface PieceStepsProps {
   palette: BoardPalette;
   /** New loop: composing from silence. Shown in place of the list while it is on. */
   newLoop: ReactNode;
+  /** The loop New loop has just kept and is naming: its row shows the name as words (U5). */
+  namingSlot?: number | null;
   /** The colours that play notes, each with when it comes in (Scenes: When each colour comes in). */
   colours: PieceColourTime[];
   /** A colour's time set, or cleared (null = from the start). */
@@ -331,13 +333,18 @@ function LoopsStep(p: PieceStepsProps): JSX.Element {
             >
               <span style={{ fontWeight: 800, width: 18, textAlign: 'right', color: 'var(--bs-fg2)' }}>{l.slot + 1}</span>
               {!empty && <LoopThumb cells={l.cells} rows={p.rows} cols={p.cols} swatchFor={p.swatchFor} />}
-              <input
-                ref={(el) => { if (el) nameRefs.current.set(l.slot, el); else nameRefs.current.delete(l.slot); }}
-                type="text" value={l.name} placeholder={empty ? 'name (after Keep)' : `Loop ${l.slot + 1}`}
-                aria-label={`Name of loop ${l.slot + 1}`}
-                onChange={(e) => p.onRenameLoop(l.slot, e.target.value)}
-                style={{ width: 120, minHeight: 'var(--bs-target)' }}
-              />
+              {/* Named in one place (U5): while New loop's own name box is open, the row says the name. */}
+              {p.namingSlot === l.slot ? (
+                <span style={{ width: 120, fontWeight: 600 }}>{l.name || `Loop ${l.slot + 1}`}</span>
+              ) : (
+                <input
+                  ref={(el) => { if (el) nameRefs.current.set(l.slot, el); else nameRefs.current.delete(l.slot); }}
+                  type="text" value={l.name} placeholder={empty ? 'name (after Keep)' : `Loop ${l.slot + 1}`}
+                  aria-label={`Name of loop ${l.slot + 1}`}
+                  onChange={(e) => p.onRenameLoop(l.slot, e.target.value)}
+                  style={{ width: 120, minHeight: 'var(--bs-target)' }}
+                />
+              )}
               <span style={{ fontSize: 14, color: on ? 'var(--bs-ok)' : 'var(--bs-fg2)', minWidth: 60 }}>{loopStateText(l, p.running, p.loopFadePasses > 0)}</span>
               <span style={{ flex: 1 }} />
               {empty ? (oldWays && (

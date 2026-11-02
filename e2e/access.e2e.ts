@@ -261,3 +261,26 @@ test('U4: in Set up the laptop board can be tried at once: counters go down befo
   await expect(page.getByText('Red: 1')).toBeVisible();
   expect(pageErrors(page)).toEqual([]);
 });
+
+test('U5: with scenes made, the board keeps its size when play starts; Details shows ▸ and ▾ like every other fold', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openLaptopBoard(page);
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1]]);
+  await makePlan(page);
+  await page.getByRole('button', { name: 'Board', exact: true }).click();
+  const grid = page.getByRole('grid', { name: /Laptop board/ });
+  const stopped = await grid.boundingBox();
+  // The strip with ▶ Start the piece is there before play, so starting moves nothing.
+  await expect(page.getByRole('region', { name: 'Now and next' }).getByRole('button', { name: '▶ Start the piece' })).toBeVisible();
+  await page.getByRole('button', { name: '▶ Play the board', exact: true }).click();
+  await expect(page.locator('#bs-play-stop')).toHaveText('■ Stop', { timeout: 20_000 });
+  expect(await grid.boundingBox()).toEqual(stopped);
+  // The fold's sign, as on How scenes work and Other ways.
+  const summary = page.locator('details[data-board-details] > summary');
+  const sign = (): Promise<string> => summary.evaluate((e) => getComputedStyle(e, '::before').content);
+  expect(await sign()).toBe('"▸"');
+  await summary.click();
+  expect(await sign()).toBe('"▾"');
+  expect(pageErrors(page)).toEqual([]);
+});
