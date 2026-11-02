@@ -1,0 +1,129 @@
+# Making loops, scenes and the show: an easier journey and a cleaner look
+
+2 Nov 2026. Built on `audit-batch-5b`. Source: a walk through the whole journey on the
+laptop board at 1440x900 and 1366x768 (31 screenshots, kept off the repository), as a new
+player would: Welcome, Set up, the Board, Make a piece (loops, scenes, ending), the tabs,
+Show, and the ending.
+
+The owner asked for a journey that is excellent, intuitive and easy, where it is easy to make
+loops and scenes and to perform, and that looks sleek and professional. **Making loops comes
+first (owner).** My calls are marked **(my call)**.
+
+## Binding everywhere
+- Every rule in the audit spec's "Binding everywhere" still holds: plain words, tests first,
+  no extra processing load on the sound, counter hues only for counters, Help and e2e tests
+  updated with every renamed label.
+- One word list: `src/ui/screens/boardSequencer/words.ts`.
+- Nothing that the questions for Tim and Chris left as it is changes here: End piece's place on
+  the iPad, the second-tap window, the hat's default, the hat holding when lost.
+- Every screen works with the keyboard and a switch, at 320 px and at 1440 px, in light and dark.
+
+## What the walk found
+
+### Making loops (first)
+1. **New loop asks you to undo what you just made.** It opens with "Lift the 6 counters, or
+   press Clear the board". But a player usually has just played something they like. Keeping
+   what is on the board is behind "Start with these", a smaller button below.
+2. **The next step looks like plain text.** "Leave", "Done" and "Clear the board" are quiet
+   buttons with no edge, so they read as words, not as things to press.
+3. **The name is asked for twice.** After Keep, a box asks for the name (an empty field and four
+   name chips), and the same loop also appears in the list with its own name field.
+4. **The loop list is mostly empty rows.** All 8 slots show, each "empty" with a cut-off
+   "name (after Ke…" hint. The ✕ for a kept loop sits under its number, away from the row's
+   other buttons.
+5. **"Hear it with… Band · Extra notes · No other loop"** doesn't say what it does until you
+   press it.
+
+### Making scenes
+6. The scene list reads well. But the timeline chips cut names short (the fourth shows only
+   "4"), and a five-line paragraph sits between the timeline and the scenes.
+7. Every scene shows "Jump here now" as a full button whenever the board plays, so a list of
+   four scenes has four large buttons that say the same thing.
+
+### Performing
+8. Show is calm and readable. Before the piece, "▶ Start the piece" is small in the top-left
+   corner, the one thing to press is the hardest to find.
+9. Show's bottom bar is five buttons of the same size in one row: Stop, Mute, Simplify (on two
+   lines), Open the audience screen, Leave Show.
+10. On the Board view while playing, the header and the transport take two rows, and "Stop
+    playing to switch player" sits on top of the row below it.
+
+### The look
+11. **The board is small.** At 1440 wide it is about 430 px, centred in its half, with a wide
+    empty gap between it and the side panel. At 1366 it is pushed down and its bottom rows are
+    below the fold.
+12. **Four lines of small status text under the board:** the legend, the "AI: Extra notes off…"
+    line, a long line of every colour's sound and count, and Session log.
+13. **The header holds up to 13 controls.** Camera, Laptop and Set up are needed once a
+    session, but always take room.
+14. **Welcome is orange; the board is mint.** They look like two different products.
+15. **In Set up the board can't be tried yet:** its squares can't be clicked until Play.
+
+## The design
+
+### Batch U1: making loops (first)
+- **New loop opens on two equal choices** when counters are already down:
+  - "Keep what's on the board" (the main button), and
+  - "Start from empty" (lifts nothing, silences the board, as today's New loop does).
+
+  With an empty board it goes straight to "Put counters down, then Keep". **(my call)**
+- **Three steps, shown as a small line of three:** Put counters down · Listen · Keep. The step
+  you are on is marked, as in Set up.
+- **Name it once, in place.** After Keep the name field is right there, filled with "Loop N"
+  and selected, so typing replaces it. The name chips sit under it. The loop list shows the name
+  as text with a small "Rename" button, not a second field.
+- **Done and Leave become real buttons** with an edge (secondary style). "Clear the board" too.
+- **The loop list shows only kept loops,** then one line: "6 of 8 places free". Each kept loop
+  is one row with its picture, name, number of notes, ▶ Play, and a "⋯" with Rename, Edit
+  notes and Clear. **(my call)**
+- **"Hear it with…" says what it adds:** "Hear it with: the band", "with Extra notes", and
+  "On its own".
+- Tests: unit tests for the new choice and the free-places line; e2e for making two loops by
+  keyboard only, with focus landing on the next thing to press after each step.
+
+### Batch U2: making scenes
+- Timeline chips show the scene's number and as much name as fits, with the full name on
+  focus and hover. Nothing cut to a lone number.
+- The intro paragraph folds to one line, "How scenes work", opened on request.
+- "Jump here now" becomes a smaller button on the row's right, and only on the scene you are
+  not already in.
+
+### Batch U3: performing
+- **Before the piece, Show centres one large "▶ Start the piece"** under the clock's place. It
+  moves to the strip once the piece runs. Focus rules from B3 stay.
+- **Show's bottom bar in two groups:**
+  - Left: ■ Stop (the danger button) and Mute.
+  - Right: Simplify, the audience screen and Leave Show, in a quieter style.
+
+  The Simplify hint goes into its tooltip and Help, so it is one line.
+- **Board view while playing:** the transport stays in one row with the header, and "Stop
+  playing to switch player" becomes the Player button's tooltip and a line in Help.
+
+### Batch U4: the look
+- **The board fills its side:** as big as the space allows (square cells), its top edge in line
+  with the panel's. The board keeps its place and size between Board and Make a piece (A3).
+- **One status line under the board:** what is sounding now, then "Details" to open the
+  legend, the AI line, every colour's sound and count, and Session log.
+- **The header:**
+  - Exit, title, the view switch (Board · Make a piece · Show), the Player, then ☀ · Aa · ?.
+  - Camera / Laptop, Set up and the audience screen move to "More" at every width.
+    **(my call)**
+- **Welcome in the board's style:** the same font, colours and buttons as the Board Sequencer,
+  mint for the main action. The gesture instrument's own screens are not changed.
+- **Set up's board can be tried at once:** click a square to put a counter down, with no
+  sound until Play.
+
+## Order and checks
+Each batch is built, tested and committed on its own, in the order U1, U2, U3, U4.
+- Before each batch: the same walk-through again, with screenshots before and after.
+- Every batch:
+  - `npm run lint` clean and `npm run test:run` passing;
+  - e2e for the screens it changes, plus `focus`, `setupScreens` and `access`;
+  - the keeping-time meter no worse.
+
+## Questions for the owner (not decided here)
+- New loop: when counters are already down, should "Keep what's on the board" be the main
+  choice? (Proposed: yes.)
+- Should Camera / Laptop and Set up live under "More" at every width? (Proposed: yes.)
+- Welcome is shared with the gesture instrument. Is it right to restyle it in the board's
+  look? (Proposed: yes, Welcome only.)
