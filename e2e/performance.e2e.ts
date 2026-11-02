@@ -2048,7 +2048,12 @@ test('one shared harmony: the band follows each scene’s chords, Tim’s chord 
 // ---- A band with jobs (spec 2026-10-28-harmony-and-band, stage 2) ----
 
 test('a band with jobs: at Full with Tim on bass, chords and drums, the band’s pads, drums and counter-melody play with him; its bass steps aside while his plays, and comes back when he lifts it', async ({ page }) => {
-  test.setTimeout(180_000);
+  // The tests run the development build, where each redraw of the screen costs several
+  // times what it does in the built app on stage. With the full band playing, the page is
+  // nearly always busy, so the clicks during the piece and saving the log are slow on a
+  // slower or busy laptop: at a fifth of this machine's speed the test needed about 205 s
+  // and ran out at 180 s, with no check failing. Its checks are unchanged.
+  test.setTimeout(240_000);
   await openLaptopBoard(page);
   // Tim: Blue bass at step 1, Yellow chord at step 3, Green kicks at steps 5 and 7.
   await pickColour(page, 'Blue');
