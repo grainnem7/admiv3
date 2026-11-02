@@ -124,7 +124,9 @@ test('the Sound tab: each helper one line until opened; the Timing tab; New idea
   await expect(page.getByRole('slider', { name: /^Speed/ })).toBeVisible();
   await expect(page.getByRole('slider', { name: /^Loose timing/ })).toBeVisible();
   await expect(page.getByText(/Groove \(Straight, Swung, Lazy\) sets Swing and Loose timing in one step/)).toBeVisible();
-  // The research tools: folded under Session log, closed by default.
+  // The research tools: folded under Session log, inside Details (U4), both closed by default.
+  await expect(page.getByRole('button', { name: /^Save session/ })).toBeHidden();
+  await page.locator('details[data-board-details] > summary').click();
   await expect(page.getByRole('button', { name: /^Save session/ })).toBeHidden();
   await page.locator('details[data-session-log] > summary').click();
   await expect(page.getByRole('button', { name: /^Save session/ })).toBeVisible();
