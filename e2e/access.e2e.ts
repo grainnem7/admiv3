@@ -246,3 +246,18 @@ test('U4: Welcome wears the board’s colours: the main way in is mint, not oran
   expect(logo).toBe('rgb(159, 216, 196)');
   expect(pageErrors(page)).toEqual([]);
 });
+
+test('U4: in Set up the laptop board can be tried at once: counters go down before Play, silent', async ({ page }) => {
+  await openLaptopSetup(page);
+  await page.getByRole('button', { name: 'Add four colours' }).click();
+  // The colour to put down, above the board, as on the Board view.
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1]]);
+  await expect(page.getByRole('grid', { name: /Laptop board/ }).getByRole('button', { name: /^Row 3 from the bottom, step 1: Red/ })).toBeVisible();
+  await expect(page.getByText('1 on the board')).toBeVisible();
+  // Nothing plays until ▶ Play the board.
+  await expect(page.locator('#bs-play-stop')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.getByText('Red: 1')).toBeVisible();
+  expect(pageErrors(page)).toEqual([]);
+});

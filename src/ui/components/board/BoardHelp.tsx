@@ -27,7 +27,9 @@ const HELP: HelpEntry[] = [
     title: 'Setting up',
     body: 'Set up walks through four steps: Camera, Board, Colours, Ready. Each step says '
       + 'what to do with the real board; Continue is only offered once that step is done, '
-      + 'and says why when it is not.',
+      + 'and says why when it is not. On the laptop board, once there are colours, the board '
+      + 'can be tried straight away: pick a colour above it and click squares. Nothing sounds '
+      + 'until ▶ Play the board.',
   },
   {
     title: 'The laptop board — no camera, no board',

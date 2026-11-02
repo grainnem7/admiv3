@@ -131,3 +131,9 @@ describe('Help: Details under the board (U4)', () => {
     expect(entry('Board, Make a piece, Show')).toContain('Under the board, Details opens the key to the marks, the AI line, every colour’s sound and count, and Session log.');
   });
 });
+
+describe('Help: trying the board in Set up (U4)', () => {
+  it('says the laptop board can be tried in Set up, silent until Play', () => {
+    expect(entry('Setting up')).toContain('the board can be tried straight away: pick a colour above it and click squares. Nothing sounds until ▶ Play the board.');
+  });
+});

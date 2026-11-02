@@ -5357,7 +5357,8 @@ export default function BoardSequencerScreen() {
       spans={running && config.phrases ? spans : undefined}
       notice={running ? boardNotice : null}
       // Counters go down on Play, where the colour picker is; in set-up the board only shows.
-      onCellTap={laptop && view === 'play' ? tapLaptopCell : undefined}
+      // Set up too (U4): the board can be tried as soon as there are colours, silent until Play.
+      onCellTap={laptop && (view === 'play' || (view === 'setup' && config.channels.length > 0)) ? tapLaptopCell : undefined}
       describeCell={laptop ? describeLaptopCell : undefined}
       silent={silentSquares}
       waiting={running && waitingNow.length > 0 ? new Set(waitingNow) : undefined}
@@ -5706,7 +5707,8 @@ export default function BoardSequencerScreen() {
         />
       )}
       </div>
-      {laptop && view === 'play' && laptopBar}
+      {/* In Set up only once there are colours: before that, the step's own Add four colours is the way in. */}
+      {laptop && (view === 'play' || (view === 'setup' && config.channels.length > 0)) && laptopBar}
       {/* Play is just playing: the piece's strip (Start the piece, Next, End) only once
           there is a piece to steer — scenes, or its clock running. With neither, Next did
           nothing and the clock began a countdown that faded the music out by itself. */}

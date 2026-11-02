@@ -155,6 +155,20 @@ Each batch is built, tested and committed on its own, in the order U1, U2, U3, U
   the header made the header wrap at 1400 px while playing (the B25 test), and where it is now
   it only sits over empty space above ■ Stop.
 
+**U4, as built:**
+- The board fills its side: 522 px at 1440x900 (was 436), and the page fits the screen.
+- One Details line under the board holds the rest.
+- The laptop board's colour bar is one row: just how many counters are down, with how to place
+  them in its tooltip.
+- The audience screen, Set up and Camera / Laptop are under More at every width.
+- Welcome is in the board's look.
+- In Set up the laptop board can be tried once there are colours, silent until Play.
+
+**Left for later (my call):**
+- The empty strips above the board kept for notices (58 px and 32 px). A3 keeps notices in fixed
+  places so the board never moves; merging the two would give the board more room.
+- At 1280x720 the page still runs 34 px past the bottom.
+
 ## Decided by the owner (2 Nov 2026)
 - New loop with counters down: "Keep what's on the board" is the main choice, and "Start from
   empty" is always offered beside it, so there is a choice every time.
