@@ -5228,7 +5228,7 @@ export default function BoardSequencerScreen() {
       footerAlign={layout.footerAlign}
       heading={laptop && step === 'colours' ? 'Choose the colours' : SETUP_HEADINGS[step]}
       hint={laptop
-        ? (step === 'colours' ? 'Give each colour a job and a sound. ▶ Hear plays it.' : 'Press ▶ Play the board, then click squares to put counters down.')
+        ? (step === 'colours' ? 'Give each colour a job and a sound. ▶ Hear plays it.' : 'Click squares to put counters down, then press ▶ Play the board to hear them.')
         : SETUP_HINTS[step]}
       skip={step === 'board' ? {
         label: "Skip, board hasn't moved",

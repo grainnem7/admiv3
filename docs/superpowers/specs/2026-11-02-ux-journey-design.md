@@ -178,6 +178,16 @@ Each batch is built, tested and committed on its own, in the order U1, U2, U3, U
 - A new loop is named in one place: while New loop's name box is open, the loop's row shows the
   name as words. The Name label lines up on the left.
 
+### U6: from a third walk through (my calls)
+- "Stop playing to switch player" is the greyed Player button's tooltip, with a description a
+  screen reader hears. Drawn as a line under the button it touched the transport row.
+- A kept loop's ▶ Play and ✕ share one group at the end of its row, so a narrow panel never
+  leaves ✕ alone on a line under the picture. The name field is 100 px.
+- Set up's Ready step says "Click squares to put counters down, then press ▶ Play the board to
+  hear them", the order it now happens in.
+- Clear the board with nothing to clear is greyed, the reason in its tooltip, instead of a
+  second line under the bar.
+
 ## Decided by the owner (2 Nov 2026)
 - New loop with counters down: "Keep what's on the board" is the main choice, and "Start from
   empty" is always offered beside it, so there is a choice every time.

@@ -342,11 +342,10 @@ function LoopsStep(p: PieceStepsProps): JSX.Element {
                   type="text" value={l.name} placeholder={empty ? 'name (after Keep)' : `Loop ${l.slot + 1}`}
                   aria-label={`Name of loop ${l.slot + 1}`}
                   onChange={(e) => p.onRenameLoop(l.slot, e.target.value)}
-                  style={{ width: 120, minHeight: 'var(--bs-target)' }}
+                  style={{ width: 100, minHeight: 'var(--bs-target)' }}
                 />
               )}
-              <span style={{ fontSize: 14, color: on ? 'var(--bs-ok)' : 'var(--bs-fg2)', minWidth: 60 }}>{loopStateText(l, p.running, p.loopFadePasses > 0)}</span>
-              <span style={{ flex: 1 }} />
+              <span style={{ fontSize: 14, color: on ? 'var(--bs-ok)' : 'var(--bs-fg2)', minWidth: 0, flex: '1 1 60px' }}>{loopStateText(l, p.running, p.loopFadePasses > 0)}</span>
               {empty ? (oldWays && (
                 <Button
                   tone="secondary"
@@ -361,8 +360,6 @@ function LoopsStep(p: PieceStepsProps): JSX.Element {
                 </Button>
               )) : (
                 <>
-                  {/* Inside New loop a loop is heard with "Hear it with…"; this did nothing there (T1-10). */}
-                  {!making && <Button tone={on ? 'selected' : 'secondary'} aria-pressed={on} onClick={() => p.onToggleLoop(l.slot)}>{on ? '■ Stop' : '▶ Play'}</Button>}
                   {oldWays && <Button
                     tone="secondary"
                     disabled={!p.canSaveBoard}
@@ -379,7 +376,15 @@ function LoopsStep(p: PieceStepsProps): JSX.Element {
                 </>
               )}
               {oldWays && <Button tone="quiet" onClick={() => p.onDrawLoop(l.slot)} aria-label={`Edit notes: loop ${l.slot + 1}`} title="See and change this loop's notes">✎ Edit notes</Button>}
-              {!empty && <Button tone="quiet" onClick={() => p.onClearLoop(l.slot)} aria-label={`Clear loop ${l.slot + 1}`} title="Clear this loop">✕</Button>}
+              {/* ▶ Play and ✕ together at the end (U6): apart, a narrow panel left ✕ alone on a
+                  line under the picture. Inside New loop a loop is heard with "Hear it with…", so
+                  no ▶ Play there (T1-10). */}
+              {!empty && (
+                <span data-loop-actions style={{ display: 'flex', gap: 6, flexWrap: 'nowrap', marginLeft: 'auto' }}>
+                  {!making && <Button tone={on ? 'selected' : 'secondary'} aria-pressed={on} onClick={() => p.onToggleLoop(l.slot)}>{on ? '■ Stop' : '▶ Play'}</Button>}
+                  <Button tone="quiet" onClick={() => p.onClearLoop(l.slot)} aria-label={`Clear loop ${l.slot + 1}`} title="Clear this loop">✕</Button>
+                </span>
+              )}
             </li>
           );
         })}

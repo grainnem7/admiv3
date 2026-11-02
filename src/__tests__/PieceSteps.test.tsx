@@ -775,3 +775,17 @@ describe('U5: a new loop is named in one place', () => {
     expect(input('Name of loop 1')).toBeDefined();
   });
 });
+
+describe('U6: a kept loop’s ▶ Play and ✕ stay together at the end of its row', () => {
+  it('they share one group, last in the row, so a narrow panel never leaves ✕ alone on a line', () => {
+    render(props({ step: 'loops' }));
+    const row = host.querySelector('li[aria-label^="Loop 1:"]')!;
+    const group = row.querySelector('[data-loop-actions]')!;
+    expect(group).not.toBeNull();
+    expect(row.lastElementChild).toBe(group);
+    const names = [...group.querySelectorAll('button')].map((b) => b.getAttribute('aria-label') ?? b.textContent);
+    expect(names).toEqual(['▶ Play', 'Clear loop 1']);
+    expect((group as HTMLElement).style.flexWrap).toBe('nowrap');
+    expect((group as HTMLElement).style.marginLeft).toBe('auto');
+  });
+});

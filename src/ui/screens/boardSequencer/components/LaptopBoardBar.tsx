@@ -109,11 +109,12 @@ export function LaptopBoardBar({
         {`${count} on the board`}
       </span>
       <Button
-        // A real button, with an edge: as a quiet one it read as a word (U1).
+        // A real button, with an edge: as a quiet one it read as a word (U1). With nothing to
+        // clear it is greyed, the reason in its tooltip (U6): as a line under the bar it
+        // repeated "0 on the board" beside it, and made the bar two lines.
         tone="secondary"
-        reason={count === 0 ? 'The board is already empty.' : null}
-        // The reason's line is kept either way, so clearing never moves the board (A3).
-        reserveReason
+        disabled={count === 0}
+        title={count === 0 ? 'The board is already empty.' : undefined}
         onClick={() => {
           onClear();
           // It turns itself off: focus goes to the colour a click puts down, as Add four

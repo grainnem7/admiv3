@@ -22,3 +22,18 @@ describe('Clear the board (U1)', () => {
     expect(clear.style.background).toBe('var(--bs-raised)');
   });
 });
+
+describe('Clear the board with nothing to clear (U6)', () => {
+  it('is greyed with the reason as its tooltip, not a second line under the bar', () => {
+    view = render(
+      <LaptopBoardBar
+        channels={[red]} knownColours={1} selected="c1" onSelect={vi.fn()} count={0} onClear={vi.fn()}
+        onAddColours={vi.fn()} onAddColour={null} palette={BOARD_TOKENS.calm.dark}
+      />,
+    );
+    const clear = view.byText('Clear the board', 'button') as HTMLButtonElement;
+    expect(clear.disabled).toBe(true);
+    expect(clear.title).toBe('The board is already empty.');
+    expect(view.container.textContent).not.toContain('The board is already empty.');
+  });
+});

@@ -129,7 +129,9 @@ test('the header keeps its place when the board starts: nothing in it wraps or m
     const before = await where();
     await page.getByRole('button', { name: '▶ Play the board', exact: true }).click();
     await expect(page.locator('#bs-play-stop')).toHaveText('■ Stop', { timeout: 20_000 });
-    await expect(page.getByText('Stop playing to switch player.')).toBeVisible();
+    // The reason is the greyed button's tooltip (U6), not a line under it.
+    await expect(page.getByRole('button', { name: /^Player: Test/ })).toBeDisabled();
+    await expect(page.getByRole('button', { name: /^Player: Test/ })).toHaveAttribute('title', 'Stop playing to switch player.');
     expect(await where(), `${width} wide`).toBe(before);
     await page.locator('#bs-play-stop').click();
     await expect(page.locator('#bs-play-stop')).toHaveText('▶ Play the board');

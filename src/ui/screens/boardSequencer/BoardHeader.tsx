@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
 import { Button } from './ui/Button';
 import type { BoardMode } from './theme/boardTokens';
 
@@ -39,6 +39,7 @@ export function BoardHeader({
   title, onExit, exitArmed = false, mode, onModeChange, largeUi, onLargeUiChange, onHelp, right,
   playerName, onSwitchPlayer, switchPlayerDisabledReason = null, notice, onChangeCamera, hidden = false,
 }: BoardHeaderProps): JSX.Element {
+  const playerReasonId = useId();
   return (
     <header
       aria-hidden={hidden || undefined}
@@ -55,19 +56,26 @@ export function BoardHeader({
             than spilling past the edge (A3: nothing scrolls sideways at 320 px). */}
         <div style={{ flex: '1 1 240px', minWidth: 0 }}>{right}</div>
         {playerName && onSwitchPlayer && (
-          // The button keeps a line below it for its reason; taking that line back out of the
-          // row's height keeps the button on the same line as ☀ / Aa / ? (A18).
-          <span data-player-slot style={{ display: 'inline-flex', marginBottom: -16 }}>
-          <Button
-            tone="secondary"
-            onClick={onSwitchPlayer}
-            reason={switchPlayerDisabledReason}
-            reserveReason
-            aria-label={`Player: ${playerName}. Switch player`}
-          >
-            {`Player: ${playerName}`}
-          </Button>
-          </span>
+          // While the board plays the button is greyed, with why in its tooltip and in a
+          // description a screen reader hears (U6): drawn as a line under the button, the
+          // reason touched the transport row.
+          <>
+            <Button
+              tone="secondary"
+              onClick={onSwitchPlayer}
+              disabled={switchPlayerDisabledReason !== null}
+              title={switchPlayerDisabledReason ?? undefined}
+              aria-describedby={switchPlayerDisabledReason ? playerReasonId : undefined}
+              aria-label={`Player: ${playerName}. Switch player`}
+            >
+              {`Player: ${playerName}`}
+            </Button>
+            {switchPlayerDisabledReason && (
+              <span id={playerReasonId} style={{ position: 'absolute', width: '1px', height: '1px', overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' }}>
+                {switchPlayerDisabledReason}
+              </span>
+            )}
+          </>
         )}
         <Button
           tone="quiet"

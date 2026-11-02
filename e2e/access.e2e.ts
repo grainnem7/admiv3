@@ -259,6 +259,8 @@ test('U4: in Set up the laptop board can be tried at once: counters go down befo
   await expect(page.locator('#bs-play-stop')).toHaveCount(0);
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.getByText('Red: 1')).toBeVisible();
+  // The Ready step says it in the order it now happens (U6).
+  await expect(page.getByText('Click squares to put counters down, then press ▶ Play the board to hear them.')).toBeVisible();
   expect(pageErrors(page)).toEqual([]);
 });
 
