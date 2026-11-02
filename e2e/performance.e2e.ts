@@ -186,11 +186,13 @@ test('clearing a loop that scenes use asks first, naming them, and takes it out 
   await ask.getByRole('button', { name: 'Clear it' }).click();
   // The loop and its name are gone (T2-01: the next loop kept there was called "Bed"). Only
   // kept loops are listed (U1): its empty place is under Other ways.
+  const otherWays = page.getByRole('button', { name: /Other ways to make a loop/ });
+  // Other ways is remembered for the session: Keep the board as this loop left it open.
+  if ((await otherWays.getAttribute('aria-expanded')) === 'true') await otherWays.click();
   await expect(page.getByRole('listitem', { name: /^Loop 1:/ })).toHaveCount(0);
-  await page.getByRole('button', { name: /Other ways to make a loop/ }).click();
+  await otherWays.click();
   await expect(page.getByRole('listitem', { name: 'Loop 1: Loop 1, empty' })).toBeVisible();
   await expect(page.getByRole('textbox', { name: 'Name of loop 1' })).toHaveValue('');
-  await page.getByRole('button', { name: /Other ways to make a loop/ }).click();
   await step(page, 'Scenes');
   await expect(page.getByRole('button', { name: /^0:00 · Arrival/ })).toContainText('no loops');
   await expect(page.getByRole('button', { name: /^1:30 · Build/ })).toContainText('Loop 2');
