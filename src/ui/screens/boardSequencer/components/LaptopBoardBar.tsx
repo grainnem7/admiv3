@@ -103,8 +103,10 @@ export function LaptopBoardBar({
           <Button tone="quiet" onClick={() => setAdding(false)}>Cancel</Button>
         </div>
       )}
-      <span style={{ fontSize: 14, color: 'var(--bs-fg2)', flex: '1 1 160px' }}>
-        {`${count} on the board. Click a square to put a counter down, click it again to lift it.`}
+      {/* Just the count, so the bar stays one row and the board gets the room (U4). How to
+          place is in its tooltip, in Set up's Ready step and in Help. */}
+      <span title="Click a square to put a counter down, click it again to lift it." style={{ fontSize: 14, color: 'var(--bs-fg2)', flex: '0 1 auto' }}>
+        {`${count} on the board`}
       </span>
       <Button
         // A real button, with an edge: as a quiet one it read as a word (U1).

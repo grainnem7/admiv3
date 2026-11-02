@@ -125,3 +125,9 @@ describe('Help: More at every width (U4)', () => {
     expect(all()).not.toContain('narrower screen');
   });
 });
+
+describe('Help: Details under the board (U4)', () => {
+  it('says what Details holds', () => {
+    expect(entry('Board, Make a piece, Show')).toContain('Under the board, Details opens the key to the marks, the AI line, every colour’s sound and count, and Session log.');
+  });
+});

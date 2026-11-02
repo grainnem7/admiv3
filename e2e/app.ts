@@ -125,9 +125,17 @@ export async function sceneMoreLine(page: Page): Promise<Locator> {
 
 /** The research tools under the board, folded under "Session log" (A15): opened if shut. */
 export async function sessionLog(page: Page): Promise<void> {
+  // Inside Details, under the board (U4).
+  await boardDetails(page);
   const log = page.locator('details[data-session-log]');
   // Its own summary: Earlier takes, inside it, has one too.
   if ((await log.getAttribute('open')) === null) await log.locator(':scope > summary').click();
+}
+
+/** Details under the board (U4): the legend, the AI line, every colour's sound and count, and Session log. Opened if shut. */
+export async function boardDetails(page: Page): Promise<void> {
+  const details = page.locator('details[data-board-details]');
+  if ((await details.getAttribute('open')) === null) await details.locator(':scope > summary').click();
 }
 
 /** How many notes the session log has counted (the "Save session (N notes)" button). */

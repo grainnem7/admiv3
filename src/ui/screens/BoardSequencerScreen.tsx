@@ -5723,8 +5723,9 @@ export default function BoardSequencerScreen() {
           {boardView}
         </div>
       )}
-      {/* Always there, playing or not, so starting play never shrinks the board (A3). */}
-      {(view === 'play' || laptop) && boardLegend}
+      {/* In Set up on the laptop board: always there, so starting play never shrinks the
+          board (A3). On the Board view it is under Details (U4). */}
+      {view !== 'play' && laptop && boardLegend}
       {(view === 'play' || laptop) && capHud}
       <div style={view === 'play' && !laptop
         ? { width: 220, alignSelf: layout.pip === 'bottom-left' ? 'flex-start' : 'flex-end' }
@@ -5875,6 +5876,13 @@ export default function BoardSequencerScreen() {
           </div>
         </>
       )}
+      {/* Under the board, one line (U4): Details opens the legend, the AI line, every colour's
+          sound and count, and the session log. Four lines here kept the board small. */}
+      {view === 'play' && (
+      <details data-board-details="" style={{ flexShrink: 0 }}>
+        <summary style={{ cursor: 'pointer', fontSize: 14, color: 'var(--bs-fg2)', minHeight: 'var(--bs-target)', display: 'flex', alignItems: 'center' }}>Details</summary>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingBottom: 6 }}>
+      {boardLegend}
       {view === 'play' && aiOffLine(config.fillAmount, config.evolveAmount) && (
         <span role="status" style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>{aiOffLine(config.fillAmount, config.evolveAmount)}</span>
       )}
@@ -5976,6 +5984,9 @@ export default function BoardSequencerScreen() {
               : ''}
           </p>
         </details>
+      )}
+        </div>
+      </details>
       )}
       {/* The lines about what is playing, in a strip of fixed height under the board, so a
           line coming or going (the band joining, a note from the iPad) never resizes the

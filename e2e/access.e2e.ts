@@ -208,3 +208,30 @@ test('U3: Show splits its controls: ■ Stop and Mute on the playing side, the r
   expect(leave.x + leave.w).toBeLessThan(width / 2);
   expect(pageErrors(page)).toEqual([]);
 });
+
+test('U4: the board fills its side, the page fits the screen, and one Details line under the board holds the rest', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openLaptopBoard(page);
+  const grid = page.getByRole('grid', { name: /Laptop board/ });
+  const empty = await grid.boundingBox();
+  // 436 px before U4 at this size, with the page running 66 px past the bottom.
+  expect(empty!.width).toBeGreaterThanOrEqual(500);
+  // The first counter moves nothing: the bar above the board stays one row.
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1]]);
+  const placed = await grid.boundingBox();
+  expect(placed).toEqual(empty);
+  for (const [w, h] of [[1440, 900], [1366, 768]] as const) {
+    await page.setViewportSize({ width: w, height: h });
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollHeight), { message: `${w}x${h}` }).toBe(h);
+  }
+  // Details: closed at first, it holds the legend, the AI line, the colours and Session log.
+  const details = page.locator('details[data-board-details]');
+  await expect(details).not.toHaveAttribute('open', '');
+  await expect(details.getByText('your counters')).toBeHidden();
+  await details.locator(':scope > summary').click();
+  await expect(details.getByText('your counters')).toBeVisible();
+  await expect(details.getByText(/AI: Extra notes off/)).toBeVisible();
+  await expect(details.locator('details[data-session-log]')).toHaveCount(1);
+  expect(pageErrors(page)).toEqual([]);
+});

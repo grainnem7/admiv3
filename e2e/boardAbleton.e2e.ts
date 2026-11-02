@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { notesPlayed, openLaptopBoard, pageErrors, pickColour, pieceStep, place, soundTab, startPiece } from './app';
+import { boardDetails, notesPlayed, openLaptopBoard, pageErrors, pickColour, pieceStep, place, soundTab, startPiece } from './app';
 
 /**
  * Ableton as the Board Sequencer's sound, end to end with a stand-in MIDI port: Chrome's
@@ -197,6 +197,7 @@ test('changing World switches every channel without its own sound', async ({ pag
 
 test('the AI line says when Extra notes and Sounds change are both off', async ({ page }) => {
   await openLaptopBoard(page);
+  await boardDetails(page); // under the board, in Details (U4)
   const line = page.getByText(/AI: Extra notes off · Sounds change off/);
   // A new player starts with both off: what they hear is their own counters.
   await expect(line.first()).toBeVisible();
