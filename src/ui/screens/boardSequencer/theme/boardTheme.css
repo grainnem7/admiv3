@@ -271,3 +271,57 @@
 .bs-root label {
   font-size: 14px;
 }
+
+/*
+ * Welcome in the board's look (owner, U4): the same mint for the main way in, the same edged
+ * buttons and the same text colours as the Board Sequencer, in place of the app's orange.
+ */
+.bs-root.welcome-screen {
+  background-color: var(--bs-bg);
+  background-image: radial-gradient(ellipse at 50% 0%, var(--bs-accent-muted) 0%, transparent 60%);
+}
+.bs-root.welcome-screen .welcome-logo {
+  background: var(--bs-accent);
+  color: var(--bs-accent-fg);
+  box-shadow: var(--bs-shadow);
+}
+.bs-root.welcome-screen .welcome-title { color: var(--bs-fg); }
+.bs-root.welcome-screen .welcome-subtitle,
+.bs-root.welcome-screen .welcome-camera-status,
+.bs-root.welcome-screen .welcome__pillar-desc,
+.bs-root.welcome-screen .welcome-other__title { color: var(--bs-fg2); }
+.bs-root.welcome-screen .welcome__pillar-title { color: var(--bs-fg); }
+.bs-root.welcome-screen .welcome__pillar-icon {
+  color: var(--bs-accent);
+  background: var(--bs-raised);
+  border-color: var(--bs-border-control);
+}
+.bs-root.welcome-screen .welcome-pillars__arrow { color: var(--bs-fg3); }
+.bs-root.welcome-screen .welcome-other { border-top-color: var(--bs-border); }
+.bs-root.welcome-screen .btn {
+  border-radius: var(--bs-radius-md);
+  color: var(--bs-fg);
+}
+.bs-root.welcome-screen .btn--primary {
+  background: var(--bs-accent);
+  border-color: var(--bs-accent);
+  color: var(--bs-accent-fg);
+}
+.bs-root.welcome-screen .btn--primary:hover:not(:disabled) {
+  background: var(--bs-accent);
+  box-shadow: 0 0 0 3px var(--bs-accent-muted);
+}
+.bs-root.welcome-screen .btn--ghost:hover:not(:disabled) {
+  background: var(--bs-elev);
+  color: var(--bs-fg);
+}
+/* Buttons as tall as their words: a fixed height cut the second line off. */
+.bs-root.welcome-screen .btn {
+  height: auto;
+  min-height: var(--bs-target);
+  padding-block: 8px;
+}
+.bs-root.welcome-screen .btn:has(.welcome-board-btn__sub) {
+  flex-direction: column;
+  gap: 2px;
+}

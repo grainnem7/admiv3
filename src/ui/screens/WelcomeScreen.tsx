@@ -7,6 +7,7 @@
  * Uses SVG icons, design tokens, no emoji.
  */
 
+import './boardSequencer/theme/boardTheme.css';
 import { useEffect, useState } from 'react';
 import { useAppStore, useHasCompletedSetup } from '../../state/store';
 import { getAudioEngine } from '../../sound/AudioEngine';
@@ -78,7 +79,9 @@ function WelcomeScreen() {
   );
 
   return (
-    <div className="welcome-screen">
+    // The board's own look (owner, U4): its colours, buttons and type, dark, as the Board
+    // Sequencer that Welcome leads into. The gesture instrument's own screens are not changed.
+    <div className="welcome-screen bs-root" data-bs-style="calm" data-bs-mode="dark">
       {/* Logo */}
       <div className="welcome-hero">
         <div className="welcome-logo">A</div>

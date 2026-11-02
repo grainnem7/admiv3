@@ -235,3 +235,14 @@ test('U4: the board fills its side, the page fits the screen, and one Details li
   await expect(details.locator('details[data-session-log]')).toHaveCount(1);
   expect(pageErrors(page)).toEqual([]);
 });
+
+test('U4: Welcome wears the board’s colours: the main way in is mint, not orange', async ({ page }) => {
+  await openWelcome(page);
+  const main = page.locator('.welcome-board-btn').first();
+  const bg = await main.evaluate((e) => getComputedStyle(e).backgroundColor);
+  // The board's accent in dark mode, #9fd8c4.
+  expect(bg).toBe('rgb(159, 216, 196)');
+  const logo = await page.locator('.welcome-logo').evaluate((e) => getComputedStyle(e).backgroundColor);
+  expect(logo).toBe('rgb(159, 216, 196)');
+  expect(pageErrors(page)).toEqual([]);
+});

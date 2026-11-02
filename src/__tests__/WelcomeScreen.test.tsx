@@ -19,3 +19,18 @@ describe('Welcome', () => {
     expect(host.querySelector('kbd')).toBeNull();
   });
 });
+
+describe('U4: Welcome in the board’s look (owner)', () => {
+  it('is a board page: the board’s class, style and dark mode, so it wears the board’s colours', () => {
+    act(() => root.render(<WelcomeScreen />));
+    const page = host.querySelector('.welcome-screen') as HTMLElement;
+    expect(page.classList.contains('bs-root')).toBe(true);
+    expect(page.dataset.bsStyle).toBe('calm');
+    expect(page.dataset.bsMode).toBe('dark');
+  });
+
+  it('keeps one main region (A18): the app’s own', () => {
+    act(() => root.render(<WelcomeScreen />));
+    expect(host.querySelectorAll('[role="main"], main')).toHaveLength(0);
+  });
+});
