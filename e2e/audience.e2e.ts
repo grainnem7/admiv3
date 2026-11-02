@@ -53,10 +53,10 @@ test('opening the audience screen shows the board and nothing else, and the lapt
   // Not another copy of ADMI: the laptop never hears of another tab.
   await pause(page, 3000);
   await expect(page.getByText(/open in another tab/)).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Close the audience screen' }).first()).toBeVisible();
+  await expect(await headerButton(page, 'Close the audience screen')).toBeVisible();
   expect(pageErrors(page)).toEqual([]);
   // Closing it from the laptop takes a second press (B4), then closes it.
-  await page.getByRole('button', { name: 'Close the audience screen' }).first().click();
+  await (await headerButton(page, 'Close the audience screen')).click();
   await pause(page, 1000);
   expect(aud.isClosed()).toBe(false);
   await page.getByRole('button', { name: 'Press again to close the audience screen' }).first().click();
@@ -122,7 +122,7 @@ test('a reload of the laptop page keeps the audience screen, and it picks up aga
   const offer = page.getByRole('alert').filter({ hasText: 'The piece was playing' });
   await expect(offer).toBeVisible({ timeout: 20_000 });
   // The laptop finds it again without a click.
-  await expect(page.getByRole('button', { name: 'Close the audience screen' }).first()).toBeVisible({ timeout: 10_000 });
+  await expect(await headerButton(page, 'Close the audience screen')).toBeVisible({ timeout: 10_000 });
   await expect(aud.getByRole('button')).toHaveCount(0);
   await offer.getByRole('button', { name: /Carry on from/ }).click();
   await expect(picture(aud)).toHaveAttribute('data-connected', 'yes');
@@ -174,7 +174,7 @@ test('the keeping-time meter reads the same with the audience screen open as wit
     // It was really there and drawing all along.
     expect(aud.isClosed()).toBe(false);
     await expect(picture(aud)).toHaveAttribute('data-connected', 'yes');
-    await page.getByRole('button', { name: 'Close the audience screen' }).first().click();
+    await (await headerButton(page, 'Close the audience screen')).click();
     await page.getByRole('button', { name: 'Press again to close the audience screen' }).first().click();
     await expect.poll(() => aud.isClosed(), { timeout: 10_000 }).toBe(true);
   }
