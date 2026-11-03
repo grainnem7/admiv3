@@ -130,8 +130,8 @@ export function BoardMidiPanel({
           </label>
           {port.devices.length === 0 && (
             <span style={NOTE}>
-              Nothing to send to yet. Open loopMIDI and check there is a port called ADMI (start loopMIDI before
-              Chrome). A hardware synth needs its USB or MIDI lead in.
+              Nothing to send to yet. Open loopMIDI and check there is a port called ADMIOutput (start loopMIDI,
+              then close the browser completely and open it again). A hardware synth needs its USB or MIDI lead in.
             </span>
           )}
           <span role="status" style={{ fontSize: 14, fontWeight: 600, color: port.connected && !holdOnAdmi ? 'var(--bs-ok)' : 'var(--bs-warn)' }}>

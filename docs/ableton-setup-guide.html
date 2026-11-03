@@ -60,13 +60,13 @@ a:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
   </header>
 
   <section id="loopmidi" aria-labelledby="h-loopmidi">
-    <h2 id="h-loopmidi">1. loopMIDI: the cable between Chrome and Ableton</h2>
-    <p>loopMIDI is already installed on this laptop. It makes a "virtual cable": ADMI sends into it from Chrome, and Ableton listens to it.</p>
+    <h2 id="h-loopmidi">1. loopMIDI: the cable between your browser and Ableton</h2>
+    <p>loopMIDI is already installed on this laptop. It makes a "virtual cable": ADMI sends into it from your browser (Chrome or Edge), and Ableton listens to it.</p>
     <ol>
       <li>Open <strong>loopMIDI</strong> from the Start menu (or the small icon by the clock).</li>
       <li>Look in the list for the ADMI port. <strong>On this laptop it is called <code>ADMIOutput</code></strong>; that is the one Ableton and the template use, so choose it wherever this guide says ADMI. On a new laptop, type <code>ADMI</code> in the "New port name" box and press <span class="btn">+</span>, then restart Ableton so it sees the new port.</li>
       <li>Right click the loopMIDI icon by the clock and tick <strong>Autostart</strong> (start with Windows), so the port is there every time.</li>
-      <li><strong>Start loopMIDI before Chrome.</strong> Chrome only sees the ports that exist when it opens. If you made the port with Chrome already open, close Chrome completely and open it again.</li>
+      <li><strong>Start loopMIDI before your browser.</strong> A browser only sees the ports that exist when it opens. If you made the port with the browser already open, close it completely and open it again. Edge keeps running after its last window shuts: right click its icon by the clock and choose Exit, or in Edge’s settings turn off "Continue running background extensions and apps when Microsoft Edge is closed".</li>
     </ol>
   </section>
 
@@ -143,7 +143,7 @@ a:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
     <h2 id="h-admi">4. ADMI's Connections tab</h2>
     <ol>
       <li>Open the Board Sequencer, then the <strong>Connections</strong> tab.</li>
-      <li>Under <strong>Sound from</strong>, press <span class="btn">Ableton</span>. Chrome asks to use MIDI devices the first time: allow it.</li>
+      <li>Under <strong>Sound from</strong>, press <span class="btn">Ableton</span>. The browser asks to use MIDI devices the first time: allow it.</li>
       <li>Under <strong>MIDI port</strong>, choose <code>ADMI</code>. It says <strong>✓ Sending to ADMI</strong>.</li>
       <li><span class="btn">Both</span> plays ADMI's sound and Ableton's together: useful for the timing check, or to layer the two.</li>
     </ol>
@@ -287,13 +287,13 @@ a:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
   <section id="showday" aria-labelledby="h-showday">
     <h2 id="h-showday">7. Show day checklist</h2>
     <ul class="checklist">
-      <li>loopMIDI open, with the ADMI port, before Chrome.</li>
+      <li>loopMIDI open, with the ADMIOutput port, before the browser.</li>
       <li>Ableton open with the <strong>ADMI template</strong> Set, buffer 128, the right audio device.</li>
       <li>ADMI started with <code>npm run show</code>; Connections tab: Sound from Ableton, port ADMI, "✓ Sending to ADMI".</li>
       <li>Press Play, then <span class="btn">Play test note</span>: it plays one note on each channel in turn (1, 2, 3, 10, 11, 12, 13) and names it on screen. A silent one is a missing track. Extra notes need track 13, the band 11 and 12.</li>
       <li>The Ready check (Make a piece, step 3) says "MIDI port ADMI connected". It can only see the port, not whether Ableton is listening: that is what the test note is for.</li>
       <li>A short test ending: Ableton fades with ADMI.</li>
-      <li>A full 7 minute run on this laptop with this Set, at least once before the show (the camera, Chrome and Ableton together use a lot of the laptop).</li>
+      <li>A full 7 minute run on this laptop with this Set, at least once before the show (the camera, the browser and Ableton together use a lot of the laptop).</li>
     </ul>
   </section>
 
@@ -303,7 +303,7 @@ a:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
       <li><strong>Ableton freezes or crashes:</strong> press <span class="btn">ADMI</span> under Sound from. ADMI's own sound comes straight back and the piece carries on.</li>
       <li><strong>The port disappears</strong> (loopMIDI closed, a cable out): ADMI switches to its own sound by itself and shows "Ableton's port has gone, so ADMI is playing its own sound." When the port comes back, ADMI waits: press <span class="btn">Switch to Ableton</span> when it suits the music. It never jumps twice in a piece on its own.</li>
       <li><strong>A note is stuck on</strong> in Ableton: press <span class="btn">Panic</span> (Connections tab, or in Show). It sends every note off and all sound off on all 16 channels. The piece carries on.</li>
-      <li><strong>Notes stop after the laptop has slept:</strong> close Chrome, restart loopMIDI, then open Chrome and ADMI again.</li>
+      <li><strong>Notes stop after the laptop has slept:</strong> close the browser completely, restart loopMIDI, then open the browser and ADMI again.</li>
       <li><strong>No sound from one part:</strong> check that track's MIDI From is ADMI with the right channel, and Monitor is In.</li>
       <li><strong>Ableton doesn't fade at the end:</strong> the Utility's Gain is not mapped to CC 11 on that track (section 3). The notes still get softer, but the long ones keep ringing.</li>
     </ul>

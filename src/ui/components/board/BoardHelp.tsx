@@ -201,7 +201,7 @@ const HELP: HelpEntry[] = [
   {
     title: 'Sound from: ADMI, Ableton or Both',
     body: 'Connections tab → Sound from. ADMI: its own sound. Ableton: everything the board plays '
-      + 'goes to Ableton over MIDI (the loopMIDI port called ADMI) and Ableton makes the sound; ADMI '
+      + 'goes to Ableton over MIDI (the loopMIDI port called ADMIOutput) and Ableton makes the sound; ADMI '
       + 'still draws every note. Both: the two together, for checking the timing. Channels: melody 1, '
       + 'bass 2, chords 3, all drums 10, band chords 11, band bass 12, Extra notes 13, or one per colour '
       + '(melody colours 1, 14 and 15 in turn, bass 2, chords 3; shown as "MIDI ch" on each colour card). Fades and Mute go out as CC 11, the Volume counter as '
