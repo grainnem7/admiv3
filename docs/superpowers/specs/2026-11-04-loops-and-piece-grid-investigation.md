@@ -295,3 +295,19 @@ Help; the owner's and Tim's own words after a run.
 - **G5, built (4 Nov).** Help's Make a piece section describes the rail, the grid and the two
   tabs; the iPad's Loops page numbers the same eight places as the rail, unchanged. Every
   learnt word stays. The e2e helpers open Piece for the old Loops and Scenes steps.
+- **Walked end to end (4 Nov), in a real browser on the laptop board.** Counters down, the
+  board kept in place 1, the board cleared, place 1 pressed: the loop sounds alone (notes in
+  the session log, sound at the speakers). A second loop kept, renamed through the … menu,
+  place 1 stopped and started. Make my plan, a cell pressed on and off, the row agreeing.
+  The piece started from Show: Now and next right, the lit column on the Piece tab, the
+  scene's loops sounding with the board empty, both places "playing" in the rail; after a
+  reload both loops and the four scenes are back. Two faults found and fixed:
+  - Keep on the playing laptop board read the engine's settled cells, which lag a click, so
+    a counter put down just before Keep was left out of the loop (the rail said "1 note"
+    for two counters). Keep now takes what is placed on the laptop board, playing or not.
+    An e2e test keeps straight after the second counter.
+  - With Details open, the row holding the board and the rail was squeezed below the rail's
+    height and the Details block covered Loop 8, the … button and New loop. The row is now
+    never shorter than the rail (`RAIL_MIN_HEIGHT`); the page scrolls instead.
+  Still to be seen in use: the camera board (Keep reads the settled cells there, as it must),
+  and a player's own hands on the rail and the grid.

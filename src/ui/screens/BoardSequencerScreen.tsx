@@ -67,7 +67,7 @@ import { findCounterBlobs } from '../../tracking/boardReference/findCounters';
 import { captureReaderFrames, READER_DOWNSCALE } from './boardSequencer/captureReaderFrames';
 import { detectionSetup } from '../../tracking/boardReference/detectionSetup';
 import { LoopThumb, PieceSteps, type PieceLoop, type PieceStep } from './boardSequencer/play/PieceSteps';
-import { LoopRail } from './boardSequencer/play/LoopRail';
+import { LoopRail, RAIL_MIN_HEIGHT } from './boardSequencer/play/LoopRail';
 import { NowNextStrip } from './boardSequencer/play/NowNextStrip';
 import { nextSceneUndo, nextUndoOffered, type NextSceneUndo } from './boardSequencer/play/nextSceneUndo';
 import { letterKeyAction } from './boardSequencer/letterKeys';
@@ -3268,9 +3268,12 @@ export default function BoardSequencerScreen() {
    * the settle like a camera reading (Save was refused for half a second after a click).
    */
   const boardCellsNow = (): ActiveCell[] => {
-    if (runningRef.current) return activeCellsRef.current;
     const c = configRef.current;
+    // The laptop board, playing or not: what is placed. The playing board's settled cells
+    // lag a click by the settle window, so a loop kept straight after the last counter
+    // went down missed that counter.
     if (c.boardSource === 'laptop') return laptopCellsNow(c);
+    if (runningRef.current) return activeCellsRef.current;
     return active;
   };
   /** The laptop board's counters as placed: a click is certain. */
@@ -5963,9 +5966,11 @@ export default function BoardSequencerScreen() {
         // piece alike, so the board keeps its place and size between them (A3). Stacked, it is a
         // row under the board.
         <div style={{
-          display: 'flex', gap: 12, minHeight: 0,
+          display: 'flex', gap: 12,
           flexDirection: layout.mode === 'stacked' ? 'column' : config.handedness === 'left' ? 'row-reverse' : 'row',
-          ...(layout.mode === 'stacked' ? { flexShrink: 0 } : { flex: 1 }),
+          // Never shorter than the rail: squeezed (Details open), the rail ran on under the
+          // Details block and its last places were covered. The page scrolls instead.
+          ...(layout.mode === 'stacked' ? { flexShrink: 0 } : { flex: 1, minHeight: view === 'play' ? RAIL_MIN_HEIGHT : 0 }),
         }}
         >
           {view === 'play' && loopRail}

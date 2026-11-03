@@ -73,6 +73,19 @@ const checkSummary = (page: Page) => page.getByRole('status').filter({ hasText: 
  * performance, checked in a real browser with real sound scheduling.
  */
 
+test('a counter put down and kept in the rail at once is in the loop, while the board plays', async ({ page }) => {
+  await openLaptopBoard(page);
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1]]);
+  await page.getByRole('button', { name: '▶ Play the board', exact: true }).first().click();
+  await expect(page.getByRole('button', { name: /■ Stop/ }).first()).toBeVisible();
+  // The second counter and Keep in the same breath: the loop has both.
+  await place(page, [[5, 3]]);
+  await page.locator('[data-loop-rail]').getByRole('button', { name: /^Loop 1: empty/ }).click();
+  await expect(page.locator('[data-loop-rail]').getByRole('button', { name: /^Loop 1: 2 notes, / })).toBeVisible();
+  expect(pageErrors(page)).toEqual([]);
+});
+
 test('counters placed on the laptop board are played', async ({ page }) => {
   await openLaptopBoard(page);
   await pickColour(page, 'Red');
