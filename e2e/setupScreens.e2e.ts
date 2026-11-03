@@ -58,11 +58,8 @@ test('the header: one row, the less-used buttons under More at every width, and 
   for (const [w, h] of [[1024, 768], [1180, 820], [1920, 1080]] as const) {
     await page.setViewportSize({ width: w, height: h });
     await expect.poll(() => headerRows(page), { message: `at ${w}` }).toBe(1);
-    const panel = await page.getByRole('tablist').evaluate((el) => {
-      let p: HTMLElement | null = el as HTMLElement;
-      while (p?.parentElement && !getComputedStyle(p.parentElement).flexDirection.startsWith('row')) p = p.parentElement;
-      return p?.getBoundingClientRect().width ?? 0;
-    });
+    // The card itself (U8): its padding is inside the 400 to 480 px.
+    const panel = await page.locator('.bs-panel').evaluate((el) => el.getBoundingClientRect().width);
     expect(panel, `panel at ${w}`).toBeGreaterThanOrEqual(399);
     expect(panel, `panel at ${w}`).toBeLessThanOrEqual(481);
     expect(await sideways(page), `at ${w}`).toBe(false);
