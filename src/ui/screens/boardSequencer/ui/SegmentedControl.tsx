@@ -47,7 +47,8 @@ export function SegmentedControl<T extends string | number>({
     <div
       role="radiogroup"
       aria-label={label}
-      style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}
+      // One joined group (U9): the options share their edges, and only the ends are rounded.
+      style={{ display: 'flex', gap: 0, flexWrap: 'wrap' }}
       onKeyDown={(e) => {
         if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); move(1); }
         else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); move(-1); }
@@ -73,14 +74,19 @@ export function SegmentedControl<T extends string | number>({
             className={selected ? 'bs-selected' : undefined}
             style={{
               minHeight: 'var(--bs-target)',
-              borderRadius: 'var(--bs-radius-md)',
-              // Selected state carries ●, a light tint AND a heavier border: never colour
-              // alone, and never the filled mint kept for a view's one main action (B17).
+              borderTopLeftRadius: i === 0 ? 'var(--bs-radius-md)' : 0,
+              borderBottomLeftRadius: i === 0 ? 'var(--bs-radius-md)' : 0,
+              borderTopRightRadius: i === options.length - 1 ? 'var(--bs-radius-md)' : 0,
+              borderBottomRightRadius: i === options.length - 1 ? 'var(--bs-radius-md)' : 0,
+              marginLeft: i === 0 ? undefined : -1,
+              // Selected state carries ● and a light tint, bold: never colour alone, and never
+              // the filled mint kept for a view's one main action (B17). A neutral edge, so
+              // the mint means "press this" (U9).
               background: selected ? 'var(--bs-accent-muted)' : 'var(--bs-raised)',
               color: 'var(--bs-fg)',
-              borderColor: selected ? 'var(--bs-accent)' : 'var(--bs-border-control)',
-              borderWidth: selected ? 2 : 1,
+              borderColor: 'var(--bs-border-control)',
               fontWeight: selected ? 600 : 400,
+              position: 'relative', zIndex: selected ? 1 : undefined,
             }}
           >
             {o.label}

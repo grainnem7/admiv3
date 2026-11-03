@@ -1,3 +1,8 @@
+/* Inter (U9, owner), bundled so it is there offline on the stage laptop and the same on the iPad. */
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/600.css';
+@import '@fontsource/inter/700.css';
+
 /*
  * Board Sequencer theme. Mirrors src/ui/screens/boardSequencer/theme/boardTokens.ts,
  * which is the source of truth and carries the contrast contract test.
@@ -11,7 +16,7 @@
   --bs-radius-md: 10px;
   --bs-radius-lg: 14px;
   --bs-radius-xl: 20px;
-  --bs-font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --bs-font: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --bs-target: 44px;
 
   font-family: var(--bs-font);
@@ -48,6 +53,8 @@
   --bs-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
   --bs-swatch-ring-light: #e7e9ee;
   --bs-swatch-ring-dark: #14171f;
+  /* The well the board sits in (U9): a little darker than the page. */
+  --bs-well: #1a1e28;
 }
 
 .bs-root[data-bs-style='calm'][data-bs-mode='light'] {
@@ -74,6 +81,7 @@
   --bs-shadow: 0 1px 2px rgba(20, 25, 35, 0.14);
   --bs-swatch-ring-light: #ffffff;
   --bs-swatch-ring-dark: #232833;
+  --bs-well: #e4e8ee;
 }
 
 /* Focus is never only a colour change: a 2px outline with an offset, everywhere. */
@@ -189,10 +197,11 @@
 /*
  * The app-wide stylesheet rings every [aria-pressed="true"] in orange (#f97316, !important),
  * which reads as the orange counter (1.03:1). Inside the Board Sequencer a pressed or
- * selected control wears the board's own style: the accent edge, no extra ring (B11).
+ * selected control wears the board's own style (B11): the tint and ●, with a neutral edge,
+ * so the mint is left for the one main action of a view and for focus (U9).
  */
 .bs-root [aria-pressed="true"] {
-  border-color: var(--bs-accent) !important;
+  border-color: var(--bs-border-control) !important;
   box-shadow: none;
 }
 

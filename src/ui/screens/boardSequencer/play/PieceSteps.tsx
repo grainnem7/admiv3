@@ -166,7 +166,7 @@ const sceneChipSurface = (i: number): string => (i % 2 === 0 ? 'var(--bs-raised)
 
 /** A chip's padding and edges, either side: what its words never get. */
 const CHIP_EDGES_PX = 18;
-const CHIP_FONT = "700 14px system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
+const CHIP_FONT = "700 14px Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
 let chipCanvas: CanvasRenderingContext2D | null | undefined;
 /** How wide the chip's words are drawn; without a canvas (tests), 8 px a character. */
 function chipTextWidth(text: string): number {
@@ -225,9 +225,11 @@ export function PieceSteps(p: PieceStepsProps): JSX.Element {
   ];
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14, paddingTop: 10 }}>
-      <nav aria-label="Make a piece: steps" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
-        {steps.map((s) => {
+      {/* One joined group (U9): the three steps share their edges; the one you are on is tinted. */}
+      <nav aria-label="Make a piece: steps" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 0 }}>
+        {steps.map((s, i) => {
           const on = p.step === s.id;
+          const r = 'var(--bs-radius-md)';
           return (
             <button
               key={s.id}
@@ -235,8 +237,10 @@ export function PieceSteps(p: PieceStepsProps): JSX.Element {
               aria-current={on ? 'step' : undefined}
               onClick={() => p.onStep(s.id)}
               style={{
-                minHeight: 'var(--bs-target)', padding: '6px 8px', borderRadius: 'var(--bs-radius-md)', textAlign: 'left', cursor: 'pointer', color: 'inherit',
-                border: `2px solid ${on ? 'var(--bs-accent)' : 'var(--bs-border-control)'}`, background: on ? 'var(--bs-accent-muted)' : 'var(--bs-raised)',
+                minHeight: 'var(--bs-target)', padding: '6px 10px', textAlign: 'left', cursor: 'pointer', color: 'inherit',
+                borderRadius: i === 0 ? `${r} 0 0 ${r}` : i === steps.length - 1 ? `0 ${r} ${r} 0` : 0,
+                marginLeft: i === 0 ? undefined : -1, position: 'relative', zIndex: on ? 1 : undefined,
+                border: '1px solid var(--bs-border-control)', background: on ? 'var(--bs-accent-muted)' : 'var(--bs-raised)',
               }}
             >
               <span style={{ display: 'block', fontWeight: 800 }}>{`${s.n} · ${s.label}`}</span>

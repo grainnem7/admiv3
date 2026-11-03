@@ -68,3 +68,13 @@ describe('every empty square has an edge you can see (A4)', () => {
     });
   }
 });
+
+describe('U9: the board sits in a well', () => {
+  it('its stage has a surface of its own, a little darker than the page', () => {
+    draw('dark');
+    const well = view!.container.querySelector('[data-board-well]') as HTMLElement;
+    expect(well).not.toBeNull();
+    expect(well.style.background).toBe('var(--bs-well)');
+    expect(parseInt(well.style.padding, 10)).toBeGreaterThanOrEqual(8);
+  });
+});

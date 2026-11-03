@@ -95,6 +95,22 @@ describe('SegmentedControl', () => {
     // The words are unchanged: the ● is drawn by the stylesheet, not spoken.
     expect(radios[1].textContent).toBe('4');
   });
+
+  it('U9: the options are one joined group, the chosen one with a neutral edge', () => {
+    const r = render(<SegmentedHarness />);
+    const radios = r.all('[role="radio"]');
+    // Joined: the edges overlap, and only the ends are rounded.
+    expect(radios[0].style.marginLeft).toBe('');
+    expect(radios[1].style.marginLeft).toBe('-1px');
+    expect(radios[0].style.borderTopLeftRadius).not.toBe('0px');
+    expect(radios[0].style.borderTopRightRadius).toMatch(/^0(px)?$/);
+    expect(radios[radios.length - 1].style.borderTopRightRadius).not.toBe('0px');
+    expect(radios[radios.length - 1].style.borderTopLeftRadius).toMatch(/^0(px)?$/);
+    // The chosen one: the tint and ●, never the mint edge.
+    expect(radios[1].style.borderColor).toBe('var(--bs-border-control)');
+    expect(radios[0].style.borderColor).toBe('var(--bs-border-control)');
+    expect((r.get('[role="radiogroup"]') as HTMLElement).style.gap).toMatch(/^0(px)?$/);
+  });
 });
 
 describe('Switch', () => {
@@ -127,11 +143,13 @@ describe('Button', () => {
     expect((reason.parentElement as HTMLElement).style.paddingBottom).toBe('16px');
   });
 
-  it('the selected tone: ● and a light tint with the accent edge (B17)', () => {
+  it('the selected tone: ● and a light tint (B17), with a neutral edge so the mint is left for a main action (U9)', () => {
     const r = render(<Button tone="selected" aria-pressed>Board</Button>);
     const button = r.get('button');
     expect(button.classList.contains('bs-selected')).toBe(true);
     expect(button.style.background).toBe('var(--bs-accent-muted)');
+    expect(button.style.borderColor).toBe('var(--bs-border-control)');
+    expect(button.style.fontWeight).toBe('600');
     expect(button.textContent).toBe('Board');
   });
 

@@ -31,7 +31,8 @@ const TONE_STYLE: Record<ButtonTone, CSSProperties> = {
   // ■ Stop and the like: the strongest button by weight, never by hue. The danger colours are
   // close to the red and orange counters, which are reserved for the board.
   danger: { background: 'var(--bs-fg)', color: 'var(--bs-bg)', borderColor: 'var(--bs-fg)', fontWeight: 800 },
-  selected: { background: 'var(--bs-accent-muted)', color: 'var(--bs-fg)', borderColor: 'var(--bs-accent)', borderWidth: 2 },
+  // The tint and ● (B17), a neutral edge and weight (U9): the mint is for the one main action.
+  selected: { background: 'var(--bs-accent-muted)', color: 'var(--bs-fg)', borderColor: 'var(--bs-border-control)', fontWeight: 600 },
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(

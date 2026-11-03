@@ -215,6 +215,16 @@ Each batch is built, tested and committed on its own, in the order U1, U2, U3, U
 - Kept as they were: the 44 px targets, the 3:1 edges on every control (A4, B11), the mint for
   one main action a view (B17).
 
+### U9: sleek (owner: "go further")
+- Inter is the face (owner), bundled with the app (@fontsource/inter, SIL Open Font Licence),
+  so it is there offline on the stage laptop and the same on the iPad and the audience screen.
+- Choices are one joined group: the options share their edges and only the ends are rounded.
+  The chosen one keeps ● and the tint (B17) with a neutral edge, so the mint means "press
+  this" (the one main action of a view) and focus. The three steps of Make a piece, and the
+  Board / Make a piece and Camera / Laptop buttons, follow the same rule.
+- The board sits in a well, a surface a little darker than the page, with 12 px round it.
+- Kept: the 44 px targets and the 3:1 edge on every control (A4, B11).
+
 ## Decided by the owner (2 Nov 2026)
 - New loop with counters down: "Keep what's on the board" is the main choice, and "Start from
   empty" is always offered beside it, so there is a choice every time.

@@ -789,3 +789,16 @@ describe('U6: a kept loop’s ▶ Play and ✕ stay together at the end of its r
     expect((group as HTMLElement).style.marginLeft).toBe('auto');
   });
 });
+
+describe('U9: the three steps of Make a piece are one joined group', () => {
+  it('no gap between them, the middle one square, the chosen one tinted with a neutral edge', () => {
+    render(props({ step: 'scenes' }));
+    const nav = host.querySelector('nav[aria-label="Make a piece: steps"]') as HTMLElement;
+    expect(nav.style.gap).toMatch(/^0(px)?$/);
+    const steps = [...nav.querySelectorAll('button')] as HTMLButtonElement[];
+    expect(steps[1].style.borderRadius).toMatch(/^0(px)?$/);
+    expect(steps[1].style.background).toBe('var(--bs-accent-muted)');
+    expect(steps[1].style.border).toContain('var(--bs-border-control)');
+    expect(steps[0].style.border).toContain('var(--bs-border-control)');
+  });
+});

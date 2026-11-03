@@ -355,7 +355,7 @@ export default function AudienceScreen(): JSX.Element {
         ref={sceneRef}
         style={{
           position: 'absolute', right: `${SCENE_NAME.inset * 100}%`, bottom: `${SCENE_NAME.inset * 100}%`, opacity: 0, pointerEvents: 'none',
-          color: '#e6e8f2', font: `500 max(14px, ${SCENE_NAME.widthShare * 100}vw)/1.2 system-ui, sans-serif`, letterSpacing: '0.04em',
+          color: '#e6e8f2', font: `600 max(14px, ${SCENE_NAME.widthShare * 100}vw)/1.2 Inter, system-ui, sans-serif`, letterSpacing: '0.04em',
         }}
       >
         {scene ?? ''}

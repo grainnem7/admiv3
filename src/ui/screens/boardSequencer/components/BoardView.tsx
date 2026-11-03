@@ -88,6 +88,8 @@ function ghostsBySquare(ghosts: ReadonlyMap<string, ActiveCell> | undefined): Ma
  * white one on light) is still visible.
  */
 /** Height of the line kept above the board for a notice. */
+/** Room round the board inside its well (U9). */
+const WELL_PAD = 12;
 const NOTICE_H = 32;
 
 const CLEAR_CELL = (): CSSProperties => ({ background: 'transparent', border: 'none', borderRadius: 6 });
@@ -109,8 +111,8 @@ export function BoardView({
     const el = wrapRef.current;
     if (!el) return;
     const fit = (): void => {
-      const aw = el.clientWidth;
-      const ah = el.clientHeight - noticeH;
+      const aw = el.clientWidth - 2 * WELL_PAD;
+      const ah = el.clientHeight - noticeH - 2 * WELL_PAD;
       if (aw <= 0 || ah <= 0) return;
       const aspect = cols / rows;
       let w = aw;
@@ -245,7 +247,7 @@ export function BoardView({
           ctx.arc(cx, cy, rr - 4, 0, Math.PI * 2);
           ctx.stroke();
           ctx.fillStyle = palette.fg2;
-          ctx.font = `${Math.round(rr)}px system-ui, sans-serif`;
+          ctx.font = `${Math.round(rr)}px Inter, system-ui, sans-serif`;
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
           ctx.fillText('↺', cx, cy);
@@ -378,7 +380,7 @@ export function BoardView({
     if (frame.bankCells && frame.bankCells.size > 0) {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.font = `${Math.round(Math.min(cw, ch) * 0.4)}px system-ui, sans-serif`;
+      ctx.font = `${Math.round(Math.min(cw, ch) * 0.4)}px Inter, system-ui, sans-serif`;
       for (const [key, state] of frame.bankCells) {
         const [row, col] = key.split(',').map(Number);
         if (row < 0 || row >= rows || col < 0 || col >= cols) continue;
@@ -403,7 +405,7 @@ export function BoardView({
     // Ping-pong direction, so the sweep's turn is visible, not only audible.
     if (playing && pingPongDirection !== 0) {
       ctx.fillStyle = palette.accent;
-      ctx.font = `${Math.round(Math.min(cw, ch) * 0.35)}px system-ui, sans-serif`;
+      ctx.font = `${Math.round(Math.min(cw, ch) * 0.35)}px Inter, system-ui, sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
       ctx.fillText(pingPongDirection > 0 ? '→' : '←', playheadCol * cw + cw / 2, 2);
@@ -429,7 +431,15 @@ export function BoardView({
   const loopNotes = loopCells?.length ?? 0;
   const heldCount = frame.held?.size ?? 0;
   return (
-    <div ref={wrapRef} style={{ position: 'relative', width: '100%', height: '100%', minHeight: 160, display: 'grid', placeItems: 'center', paddingTop: noticeH, boxSizing: 'border-box' }}>
+    <div
+      ref={wrapRef}
+      // The well (U9): the board sits in a surface a little darker than the page.
+      data-board-well=""
+      style={{
+        position: 'relative', width: '100%', height: '100%', minHeight: 160, display: 'grid', placeItems: 'center',
+        padding: WELL_PAD, paddingTop: noticeH + WELL_PAD, boxSizing: 'border-box', background: 'var(--bs-well)', borderRadius: 'var(--bs-radius-lg)',
+      }}
+    >
       {/* A change that was only heard, said above the board for a moment. */}
       {noticeH > 0 && (
         <div

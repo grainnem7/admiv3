@@ -352,3 +352,19 @@ test('U8: the side panel is a card: its own surface, its controls one shade ligh
   expect(tabs!.x - card!.x).toBeGreaterThanOrEqual(12);
   expect(pageErrors(page)).toEqual([]);
 });
+
+test('U9: Inter is the face, bundled, and the board sits in a well', async ({ page }) => {
+  await openLaptopBoard(page);
+  const loaded = await page.evaluate(async () => { await document.fonts.ready; return document.fonts.check('600 16px Inter'); });
+  expect(loaded).toBe(true);
+  const family = await page.getByRole('button', { name: 'Mute' }).evaluate((e) => getComputedStyle(e).fontFamily);
+  expect(family.startsWith('Inter')).toBe(true);
+  // Bundled, from this server: no request leaves for a font.
+  const fromElsewhere = await page.evaluate(() => performance.getEntriesByType('resource')
+    .map((r) => r.name).filter((n) => /\.woff2?($|\?)/.test(n) && !n.startsWith(location.origin)));
+  expect(fromElsewhere).toEqual([]);
+  const well = await page.locator('[data-board-well]').evaluate((e) => getComputedStyle(e).backgroundColor);
+  const pageBg = await page.locator('.bs-root.board-sequencer-screen').evaluate((e) => getComputedStyle(e).backgroundColor);
+  expect(well).not.toBe(pageBg);
+  expect(pageErrors(page)).toEqual([]);
+});
