@@ -21,8 +21,6 @@ async function focusIsOn(target: Locator, timeout?: number): Promise<void> {
 
 test('set-up: Add four colours leads to the colours, ▶ Play to ■ Stop', async ({ page }) => {
   await openLaptopSetup(page);
-  await enter(page, page.getByRole('button', { name: 'Add four colours' }));
-  await focusIsOn(page.getByRole('heading', { name: 'Your colours (4)' }));
   await enter(page, page.getByRole('button', { name: 'Continue' }));
   await focusIsOn(page.getByRole('heading', { name: 'Ready to play' }));
   await enter(page, page.getByRole('button', { name: '▶ Play the board', exact: true }));

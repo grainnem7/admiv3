@@ -20,6 +20,7 @@ import {
 } from '../remote/protocol';
 import { sanitizeLoopNames, sanitizeScenes, type Scene } from '../songs/performance/launcher';
 import { sanitizeColourEntries } from '../songs/performance/colourEntries';
+import { sanitizePieces, type SavedPiece } from '../songs/performance/pieces';
 import { sanitizeSceneEnergy, type SceneEnergy } from '../songs/performance/energy';
 import { sanitizeIdeas } from '../songs/performance/ideas';
 import { DEFAULT_PERFORMANCE, sanitizePerformance, type PerformanceSettings } from '../songs/performance/clock';
@@ -217,6 +218,15 @@ export interface BoardSequencerStored {
   sceneRespectsPlayer: boolean;
   /** The performance clock: length, ending, when it starts (see performance/clock). */
   performance: PerformanceSettings;
+  /**
+   * The player's pieces (producer flow, item 3): each its scenes, its length and ending, and
+   * when each colour comes in. `scenes`, `performance` and `colourComesInAt` above are the
+   * piece open now, `pieceId`, mirrored into the list on every change (see performance/pieces).
+   */
+  pieces: SavedPiece[];
+  pieceId: string;
+  /** The laptop board starts when the first counter goes down (item 1): on for a player who began with Play on the laptop. */
+  autoStart: boolean;
   /**
    * Where the counters come from: the camera watching the real board, or a board on the
    * laptop screen (click to place), for testing and planning without setting up the rig.
@@ -596,6 +606,9 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   sceneRespectsPlayer: true,
   colourComesInAt: {},
   performance: DEFAULT_PERFORMANCE,
+  pieces: [{ id: 'piece-1', name: 'Piece 1', scenes: [], performance: DEFAULT_PERFORMANCE, colourComesInAt: {} }],
+  pieceId: 'piece-1',
+  autoStart: false,
   boardSource: 'camera',
   laptopBoard: [],
   // New players start with the safe show layout on the iPad. A player saved before it keeps
@@ -902,6 +915,16 @@ function sanitize(input: unknown): BoardSequencerStored | null {
   // player's coverage — yet a player who had moved that slider kept 5 x 5 for good. On the
   // real board, at an angle, 5 x 5 lost counters that 9 x 9 read in every frame.
   samplesPerAxis = Math.max(samplesPerAxis, suggestReadSettings(boardSquares, rows, cols).samplesPerAxis);
+  // The piece open now (item 3): made safe here, then mirrored into the list below.
+  const sceneDefaults = {
+    soundWorld: d.soundWorld, band: d.band, phrases: d.phrases, fillAmount: d.fillAmount, evolveAmount: d.evolveAmount, bpm: d.bpm,
+    chords: d.chords, bandJobs: d.bandJobs, sceneEnergy: 0 as const,
+  };
+  const scenes = sanitizeScenes(o.scenes, sceneDefaults);
+  const performance = sanitizePerformance(o.performance);
+  const channelIds = new Set(channels.map((c) => c.id));
+  // Only for colours that still exist: a time left behind would land on a new colour.
+  const colourComesInAt = sanitizeColourEntries(o.colourComesInAt, channelIds);
   return {
     version: CONFIG_VERSION,
     enabled: o.enabled === true,
@@ -961,10 +984,7 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     tunesForNewColours: o.tunesForNewColours === true,
     remoteReach: sanitizeReachMap(o.remoteReach),
     loopNames: sanitizeLoopNames(o.loopNames),
-    scenes: sanitizeScenes(o.scenes, {
-      soundWorld: d.soundWorld, band: d.band, phrases: d.phrases, fillAmount: d.fillAmount, evolveAmount: d.evolveAmount, bpm: d.bpm,
-      chords: d.chords, bandJobs: d.bandJobs, sceneEnergy: 0,
-    }),
+    scenes,
     // A saved board is a stopped board, and a stopped board has no scene on now: one left
     // marked (a scene added while stopped, a save from before) made the next piece open in
     // it and skip every scene before it (R2-T2-01). A reload carries on from pieceRunning.
@@ -972,8 +992,10 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     loopFadePasses: [0, 0.5, 1, 2].includes(num(o.loopFadePasses, 1)) ? num(o.loopFadePasses, 1) : 1,
     sceneRespectsPlayer: o.sceneRespectsPlayer !== false,
     // Only for colours that still exist: a time left behind would land on a new colour.
-    colourComesInAt: sanitizeColourEntries(o.colourComesInAt, new Set(channels.map((c) => c.id))),
-    performance: sanitizePerformance(o.performance),
+    colourComesInAt,
+    performance,
+    ...sanitizePieces(o.pieces, o.pieceId, { scenes, performance, colourComesInAt }, sceneDefaults, channelIds),
+    autoStart: o.autoStart === true,
     boardSource: o.boardSource === 'laptop' ? 'laptop' : 'camera',
     laptopBoard: Array.isArray(o.laptopBoard) ? (sanitizeLoopSlots([o.laptopBoard])[0] ?? []) : [],
     remoteStrips: Array.isArray(o.remoteStrips)

@@ -708,3 +708,30 @@ describe('BoardSequencerConfig — a band with jobs (stage 2)', () => {
     expect(loadBoardSequencerConfig()).toMatchObject({ bandJobs: { asBefore: true }, keepOnTop: true, keepOnTopDb: 3 });
   });
 });
+
+describe('named pieces (producer flow, item 3)', () => {
+  it('a player saved before pieces existed gets one piece made from their scenes, and the working copy stays theirs', () => {
+    const scene = { id: 's1', name: 'Arrival', loops: [0], settings: {}, at: 0 };
+    const cfg = loadWith({ scenes: [scene], performance: { lengthSec: 300, ending: 'cue', style: 'fade', fadePasses: 2, startOn: 'play' } });
+    expect(cfg.pieces.length).toBe(1);
+    expect(cfg.pieceId).toBe(cfg.pieces[0].id);
+    expect(cfg.pieces[0].name).toBe('Piece 1');
+    expect(cfg.pieces[0].scenes.map((s) => s.name)).toEqual(['Arrival']);
+    expect(cfg.pieces[0].performance.lengthSec).toBe(300);
+    expect(cfg.scenes.map((s) => s.name)).toEqual(['Arrival']);
+    expect(cfg.autoStart).toBe(false);
+  });
+
+  it('a saved list keeps every piece; the open one takes the working copy', () => {
+    const cfg = loadWith({
+      scenes: [], performance: { lengthSec: 120 },
+      pieces: [{ id: 'x', name: 'Opening set', scenes: [{ id: 'q', name: 'Quiet', loops: [], settings: {}, at: 0 }], performance: { lengthSec: 240 } }, { id: 'y', name: 'Encore', scenes: [] }],
+      pieceId: 'y', autoStart: true,
+    });
+    expect(cfg.pieces.map((p) => p.name)).toEqual(['Opening set', 'Encore']);
+    expect(cfg.pieceId).toBe('y');
+    expect(cfg.pieces[1].performance.lengthSec).toBe(120);
+    expect(cfg.pieces[0].scenes.length).toBe(1);
+    expect(cfg.autoStart).toBe(true);
+  });
+});

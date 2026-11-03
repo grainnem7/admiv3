@@ -72,6 +72,7 @@ import { nextSceneUndo, nextUndoOffered, type NextSceneUndo } from './boardSeque
 import { letterKeyAction } from './boardSequencer/letterKeys';
 import { describeEdit, EMPTY_HISTORY, recordEdit, redoEdit, undoEdit, undoKey, type EditHistory } from './boardSequencer/editHistory';
 import { duplicateScene } from '../../songs/performance/sceneTools';
+import { addPiece, deletePiece, duplicatePiece, mirrorPiece, openPiece, renamePiece } from '../../songs/performance/pieces';
 import { ShowStatusRow } from './boardSequencer/play/ShowStatusRow';
 import {
   escLeavesShow, showStatusItems, simplifiedLine, stopGuarded, type ShowHatState, type ShowStatusAction, type ShowStatusInput,
@@ -625,6 +626,8 @@ export default function BoardSequencerScreen() {
   // Who's playing: asked on the very first run — name and hand — rather than silently
   // making a right-handed "Player 1" (Tim is left-handed), and when no player is
   // remembered. Otherwise the last player plays again; the header's button switches.
+  // Play on the laptop (item 1): a new player gets four colours and the board, no Set up.
+  const [quickLaptop] = useState(() => laptopRequestedOnOpen());
   const [chooserOpen, setChooserOpen] = useState(() => askWhoIsPlaying(
     listBoardPlayers().map((p) => p.id), rememberedBoardPlayerId(),
   ));
@@ -1075,7 +1078,9 @@ export default function BoardSequencerScreen() {
   const update = useCallback((patch: Partial<BoardSequencerStored>) => {
     sessionLogRef.current.setting(logActorRef.current, patch as Record<string, unknown>);
     setConfig((prev) => {
-      const next = { ...prev, ...patch };
+      let next = { ...prev, ...patch };
+      // The piece open now follows its working copy (item 3).
+      if ('scenes' in patch || 'performance' in patch || 'colourComesInAt' in patch) next = mirrorPiece(next);
       historyRef.current = recordEdit(historyRef.current, prev, next, Object.keys(patch), performance.now());
       return next;
     });
@@ -1084,7 +1089,7 @@ export default function BoardSequencerScreen() {
     const r = undoEdit(historyRef.current);
     if (!r) { announce('Nothing to undo.'); return; }
     historyRef.current = r.history;
-    setConfig((prev) => ({ ...prev, ...r.patch }));
+    setConfig((prev) => mirrorPiece({ ...prev, ...r.patch }));
     sessionLogRef.current.action(logActorRef.current, `undo ${describeEdit(r.keys)}`);
     announce(`Undone: ${describeEdit(r.keys)}.`);
   };
@@ -1092,7 +1097,7 @@ export default function BoardSequencerScreen() {
     const r = redoEdit(historyRef.current);
     if (!r) { announce('Nothing to redo.'); return; }
     historyRef.current = r.history;
-    setConfig((prev) => ({ ...prev, ...r.patch }));
+    setConfig((prev) => mirrorPiece({ ...prev, ...r.patch }));
     sessionLogRef.current.action(logActorRef.current, `redo ${describeEdit(r.keys)}`);
     announce(`Done again: ${describeEdit(r.keys)}.`);
   };
@@ -3327,7 +3332,9 @@ export default function BoardSequencerScreen() {
       const loopSlots = prev.loopSlots.slice();
       while (loopSlots.length <= slot) loopSlots.push(null);
       loopSlots[slot] = cells;
-      return { ...prev, loopSlots };
+      const next = { ...prev, loopSlots };
+      historyRef.current = recordEdit(historyRef.current, prev, next, ['loopSlots'], performance.now());
+      return next;
     });
     // The pads' bank holds its own copy of the slots it covers.
     if (slot < loopBankRef.current.saved.length) {
@@ -4419,6 +4426,16 @@ export default function BoardSequencerScreen() {
       <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>
         M mutes, N is Next scene, E is End piece, and 1, 2, 3 are Board, Make a piece and Show. Switch them off if a switch box sends letters.
       </span>
+      <label>
+        <input
+          type="checkbox" checked={config.autoStart}
+          onChange={(e) => update({ autoStart: e.target.checked })}
+        />
+        The first counter starts the board
+      </label>
+      <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>
+        On the laptop board, on the Board view: a counter put down on a stopped board starts it. On for a player who began with Play on the laptop.
+      </span>
     </fieldset>
     <fieldset style={{ border: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
       <legend style={{ fontWeight: 600, padding: 0 }}>Keeping time</legend>
@@ -4856,6 +4873,57 @@ export default function BoardSequencerScreen() {
   };
 
   const keepSlotNow = slotForKeep(config.loopSlots, config.scenes);
+  // Keep as loop (item 2): what is on the board now, as the next loop, in one press, while it
+  // plays. Never during the piece (F2), never inside New loop (Keep is there), never with
+  // nothing to keep or nowhere to put it.
+  const pieceOnNow = (clock !== null && clock.phase !== 'idle') || pieceStarting || ending;
+  const keepReasonNow = pieceOnNow ? 'Stop the piece to make a loop.'
+    : newLoop ? 'New loop is open: press Keep there.'
+      : countersNow === 0 ? 'Put counters down first.'
+        : keepSlotNow === null ? 'Every loop is full: clear one first.' : null;
+  const keepAsLoop = (): void => {
+    const c = configRef.current;
+    const slot = slotForKeep(c.loopSlots, c.scenes);
+    if (keepReasonNow !== null || slot === null) { announce(keepReasonNow ?? 'Every loop is full: clear one first.'); return; }
+    saveBoardToSlot(slot);
+  };
+  // The pieces (item 3): opened, made, copied, taken out and renamed. Never while the piece plays.
+  const pieceLockedNow = pieceOnNow ? 'Stop the piece first.' : null;
+  const applyPieces = (next: BoardSequencerStored | null, said: string): void => {
+    if (!next) return;
+    update({ pieces: next.pieces, pieceId: next.pieceId, scenes: next.scenes, performance: next.performance, colourComesInAt: next.colourComesInAt, currentScene: null });
+    announce(said);
+  };
+  const openPieceById = (id: string): void => {
+    if (pieceLockedNow) { announce(pieceLockedNow); return; }
+    const next = openPiece(configRef.current, id);
+    applyPieces(next, `Piece: ${next?.pieces.find((x) => x.id === id)?.name ?? ''}.`);
+  };
+  const newPiece = (): void => {
+    if (pieceLockedNow) { announce(pieceLockedNow); return; }
+    const next = addPiece(configRef.current);
+    if (!next) { announce('Twelve pieces is the most: delete one first.'); return; }
+    applyPieces(next, `${next.pieces.find((x) => x.id === next.pieceId)?.name ?? 'New piece'}: empty, ready for loops and scenes.`);
+  };
+  const duplicatePieceById = (id: string): void => {
+    if (pieceLockedNow) { announce(pieceLockedNow); return; }
+    const next = duplicatePiece(configRef.current, id);
+    if (!next) { announce('Twelve pieces is the most: delete one first.'); return; }
+    applyPieces(next, `${next.pieces.find((x) => x.id === next.pieceId)?.name ?? 'Copy'}: a copy, open now.`);
+  };
+  const deletePieceById = (id: string): void => {
+    if (pieceLockedNow) { announce(pieceLockedNow); return; }
+    const c = configRef.current;
+    const gone = c.pieces.find((x) => x.id === id);
+    const next = deletePiece(c, id);
+    if (!next || !gone) return;
+    const before = { pieces: c.pieces, pieceId: c.pieceId, scenes: c.scenes, performance: c.performance, colourComesInAt: c.colourComesInAt };
+    applyPieces(next, `${gone.name} deleted.`);
+    setUndoOffer({ text: `${gone.name} deleted.`, restore: () => update({ ...before, currentScene: null }) });
+  };
+  const renamePieceById = (id: string, name: string): void => {
+    update({ pieces: renamePiece(configRef.current, id, name).pieces });
+  };
   // New loop on a stopped board (Stop pressed inside it, or a start that failed): what
   // stops the counters sounding, and whether ▶ Play can start them (R2-T1-01).
   const newLoopStopped: NewLoopStopped | null = running || starting ? null : {
@@ -4882,6 +4950,16 @@ export default function BoardSequencerScreen() {
       respectPlayer={config.sceneRespectsPlayer}
       canSaveBoard={countersNow > 0}
       loopsFull={keepSlotNow === null}
+      onKeepAsLoop={keepAsLoop}
+      keepReason={keepReasonNow}
+      pieces={config.pieces.map((x) => ({ id: x.id, name: x.name, scenes: x.scenes.length, lengthSec: x.performance.lengthSec }))}
+      pieceId={config.pieceId}
+      pieceLocked={pieceLockedNow}
+      onOpenPiece={openPieceById}
+      onNewPiece={newPiece}
+      onDuplicatePiece={duplicatePieceById}
+      onDeletePiece={deletePieceById}
+      onRenamePiece={renamePieceById}
       deletedSceneName={deletedScene?.scene.name ?? null}
       diskLine={diskLine}
       restoreError={restoreError}
@@ -5391,12 +5469,15 @@ export default function BoardSequencerScreen() {
     const ch = laptopChannels.find((c) => c.id === laptopPick);
     if (!ch) { announce('Choose a colour above the board first.'); return; }
     const single = isControlRole(ch.role) || isLoopRole(ch.role);
+    const wasEmpty = !configRef.current.laptopBoard.some((x) => x.row === row && x.col === col);
     // From the latest state, not the last render: two quick clicks must both land.
     setConfig((prev) => {
       const next = { ...prev, laptopBoard: placeLaptopCounter(prev.laptopBoard, row, col, ch.id, single) };
       historyRef.current = recordEdit(historyRef.current, prev, next, ['laptopBoard'], performance.now());
       return next;
     });
+    // The first counter starts the board (item 1), on the Board view, when the player has it on.
+    if (wasEmpty && configRef.current.autoStart && view === 'play' && !runningRef.current && !startingRef.current && !newLoopRef.current && !startRefused()) void start();
   };
   const describeLaptopCell = (row: number, col: number): string => {
     const c = config.laptopBoard.find((x) => x.row === row && x.col === col);
@@ -6014,7 +6095,12 @@ export default function BoardSequencerScreen() {
       {/* Under the board, one line (U4): Details opens the legend, the AI line, every colour's
           sound and count, and the session log. Four lines here kept the board small. */}
       {view === 'play' && (
-      <details data-board-details="" style={{ flexShrink: 0 }}>
+      <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap', flexShrink: 0 }}>
+      {/* Keep as loop (item 2): one press, while it plays. The same as in Make a piece. */}
+      {/* Greyed with the reason in its tooltip, as Clear the board is (U6): a line of reason
+          under it came and went, and the board moved with it (A3). */}
+      <Button tone="secondary" onClick={keepAsLoop} disabled={keepReasonNow !== null} title={keepReasonNow ?? 'Keep what is on the board as the next loop'}>Keep as loop</Button>
+      <details data-board-details="" style={{ flexShrink: 0, flex: '1 1 200px' }}>
         <summary className="bs-fold" style={{ cursor: 'pointer', fontSize: 14, color: 'var(--bs-fg2)', minHeight: 'var(--bs-target)', display: 'flex', alignItems: 'center' }}>Details</summary>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingBottom: 6 }}>
       {boardLegend}
@@ -6122,6 +6208,7 @@ export default function BoardSequencerScreen() {
       )}
         </div>
       </details>
+      </div>
       )}
       {/* The lines about what is playing, in a strip of fixed height under the board, so a
           line coming or going (the band joining, a note from the iPad) never resizes the
@@ -6305,6 +6392,15 @@ export default function BoardSequencerScreen() {
             loopBankRef.current = emptyLoopBank(0);
             storedRef.current = loadBoardSequencerConfig();
             setChooserOpen(false);
+            if (quickLaptop && (loaded?.channels ?? []).length === 0) {
+              // Play on the laptop, a new player (item 1): four ready-made colours and the
+              // board at once, and the board starts when the first counter goes down.
+              addLaptopColours();
+              setConfig((prev) => ({ ...prev, boardSource: 'laptop', autoStart: true }));
+              setView('play');
+              announce('Four colours are ready. Click a square: the board plays.');
+              return;
+            }
             setView('setup');
             // A new player needs their own jobs for the rig's colours — but only once
             // there is a board to put them on. Otherwise start them at the beginning.

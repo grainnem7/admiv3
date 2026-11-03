@@ -96,9 +96,20 @@ A walk through the whole journey as a producer would, from Welcome to the end of
 found thirteen things. The owner said "Ok" to building them; 1 to 3 change what the players
 have learnt and wait for an explicit yes on each.
 
-1. Six screens before the first sound (waiting).
-2. Capturing a loop stops the music; Keep as loop as one press (waiting).
-3. One piece per player; named pieces with Duplicate (waiting).
+1. **Built.** Play on the laptop: a new player gets the four ready-made colours and the Board
+   view straight after Who's playing (Set up is under More), and the first counter put down
+   starts the board (`autoStart`, on for such a player, a checkbox in Advanced, Pressing).
+   Three screens to the first sound, from six.
+2. **Built.** Keep as loop: one press, under the board and first in Loops, keeps what is on
+   the board as the next loop while the music plays on (greyed with the reason in its tooltip
+   during the piece, inside New loop, with nothing to keep or nowhere to put it). New loop,
+   from silence, is the second way.
+3. **Built.** Named pieces (`songs/performance/pieces.ts`): a fold at the top of Make a piece
+   names the piece open now and lists the player's pieces with Open, Duplicate, Delete (with
+   Undo), Rename and New piece. A piece is its scenes, its length and ending, and when each
+   colour comes in; the loops are shared. The config's `scenes`, `performance` and
+   `colourComesInAt` stay the working copy and are mirrored into `pieces[pieceId]` on every
+   change; a player saved before gets one piece, "Piece 1", from what they had.
 4. **Built.** The speed in the transport: the readout is a button (`SpeedControl`), arrow keys
    change it by one (five with Shift), a press opens a slider and Tap (`songs/tapTempo.ts`).
 5. **Built.** Undo and redo of the edits: Ctrl+Z, Ctrl+Shift+Z or Ctrl+Y (`editHistory.ts`): the

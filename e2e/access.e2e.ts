@@ -10,7 +10,6 @@ const openAllFolds = (page: Page): Promise<void> =>
 test('A9: every name starts with the words on the control, on every screen', async ({ page }) => {
   await openLaptopSetup(page);
   expect(await nameMismatches(page)).toEqual([]);
-  await page.getByRole('button', { name: 'Add four colours' }).click();
   await page.getByRole('button', { name: 'Continue' }).click();
   expect(await nameMismatches(page)).toEqual([]);
 });
@@ -249,7 +248,6 @@ test('U4: Welcome wears the board’s colours: the main way in is the board’s 
 
 test('U4: in Set up the laptop board can be tried at once: counters go down before Play, silent', async ({ page }) => {
   await openLaptopSetup(page);
-  await page.getByRole('button', { name: 'Add four colours' }).click();
   // The colour to put down, above the board, as on the Board view.
   await pickColour(page, 'Red');
   await place(page, [[3, 1]]);
@@ -369,5 +367,58 @@ test('U9: Inter is the face, bundled; L3: the board sits on the page, not in a w
   await expect(page.locator('[data-board-well]')).toHaveCount(0);
   const stage = await page.locator('[data-board-stage]').evaluate((e) => getComputedStyle(e).backgroundColor);
   expect(stage).toBe('rgba(0, 0, 0, 0)');
+  expect(pageErrors(page)).toEqual([]);
+});
+
+test('P2: Keep as loop keeps the board as the next loop in one press, while it plays', async ({ page }) => {
+  await openLaptopBoard(page);
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1], [5, 3]]);
+  await page.getByRole('button', { name: '▶ Play the board', exact: true }).click();
+  await expect(page.locator('#bs-play-stop')).toHaveText('■ Stop', { timeout: 20_000 });
+  await page.getByRole('button', { name: 'Keep as loop' }).first().click();
+  await expect(page.getByRole('status').filter({ hasText: 'Saved 2 notes to Loop 1' }).first()).toBeVisible();
+  // Still playing: nothing stopped for it.
+  await expect(page.locator('#bs-play-stop')).toHaveText('■ Stop');
+  await pieceStep(page, 'Loops');
+  await expect(page.getByRole('listitem', { name: /^Loop 1:/ })).toBeVisible();
+  await expect(page.getByText('7 of 8 places free')).toBeVisible();
+  expect(pageErrors(page)).toEqual([]);
+});
+
+test('P1: Play on the laptop: the board with four colours straight after the name, and the first counter starts it', async ({ page }) => {
+  await openWelcome(page);
+  await page.getByRole('button', { name: /Play on the laptop/ }).click();
+  await page.getByRole('region', { name: "Who's playing?" }).getByRole('textbox', { name: 'Name' }).fill('Tim');
+  await page.getByRole('button', { name: 'Create' }).click();
+  await expect(page.getByRole('radiogroup', { name: 'Counter to put down' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Choose the colours' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '▶ Play the board', exact: true })).toBeVisible();
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1]]);
+  await expect(page.locator('#bs-play-stop')).toHaveText('■ Stop', { timeout: 20_000 });
+  expect(pageErrors(page)).toEqual([]);
+});
+
+test('P3: pieces: New piece starts empty, Open brings the first piece back with its scenes', async ({ page }) => {
+  await openLaptopBoard(page);
+  await makePlan(page);
+  await expect(page.getByRole('list', { name: 'Timeline of the scenes' })).toBeVisible();
+  const fold = page.locator('[data-piece-picker]');
+  await expect(fold).toContainText('Piece 1');
+  await fold.click();
+  await page.getByRole('button', { name: 'New piece' }).click();
+  await expect(fold).toContainText('Piece 2');
+  await expect(page.getByRole('list', { name: 'Timeline of the scenes' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Make my plan/ })).toBeVisible();
+  if ((await fold.getAttribute('aria-expanded')) !== 'true') await fold.click();
+  await page.getByRole('button', { name: 'Open: Piece 1' }).click();
+  await expect(fold).toContainText('Piece 1');
+  await expect(page.getByRole('list', { name: 'Timeline of the scenes' }).getByRole('button')).toHaveCount(4);
+  // A reload keeps both pieces and which one is open.
+  await page.reload();
+  await page.getByRole('button', { name: /Play my board/ }).click();
+  await page.getByRole('button', { name: 'Make a piece', exact: true }).click();
+  await expect(page.locator('[data-piece-picker]')).toContainText('2 pieces');
   expect(pageErrors(page)).toEqual([]);
 });

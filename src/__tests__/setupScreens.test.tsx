@@ -56,7 +56,7 @@ function pieceProps(over: Partial<PieceStepsProps> = {}): PieceStepsProps {
     colours: [{ id: 'c1', name: 'Black', swatch: '#111111', job: 'Melody', at: null }],
     onColourEntry: vi.fn(), onNewLoop: vi.fn(), onToggleLoop: vi.fn(), onSaveBoardToLoop: vi.fn(), onDrawLoop: vi.fn(), onClearLoop: vi.fn(),
     onRenameLoop: vi.fn(), onLoopFade: vi.fn(), onGoScene: vi.fn(), onRehearseFrom: vi.fn(), onSaveSceneFromNow: vi.fn(),
-    onUpdateSceneFromNow: vi.fn(), onEditScene: vi.fn(), onDeleteScene: vi.fn(), onDuplicateScene: vi.fn(), onUndoDelete: vi.fn(), onMakePlan: vi.fn(),
+    onUpdateSceneFromNow: vi.fn(), onEditScene: vi.fn(), onDeleteScene: vi.fn(), onDuplicateScene: vi.fn(), onKeepAsLoop: vi.fn(), keepReason: null, pieces: [{ id: 'piece-1', name: 'Piece 1', scenes: 3, lengthSec: 420 }], pieceId: 'piece-1', pieceLocked: null, onOpenPiece: vi.fn(), onNewPiece: vi.fn(), onDuplicatePiece: vi.fn(), onDeletePiece: vi.fn(), onRenamePiece: vi.fn(), onUndoDelete: vi.fn(), onMakePlan: vi.fn(),
     onRespectPlayer: vi.fn(), onNewIdeasScene: vi.fn(), onNewIdeasPiece: vi.fn(), surpriseMe: false, onSurpriseMe: vi.fn(),
     onPerformance: vi.fn(), onBackup: vi.fn(), onRestore: vi.fn(), onShow: vi.fn(),
     ...over,

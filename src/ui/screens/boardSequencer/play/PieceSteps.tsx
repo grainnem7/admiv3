@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Button } from '../ui/Button';
-import { UNDERLINE_OFF, UNDERLINE_ON } from '../ui/text';
+import { CAPTION_STYLE, UNDERLINE_OFF, UNDERLINE_ON } from '../ui/text';
 import { dragTime } from '../../../../songs/performance/sceneTools';
+import { MAX_PIECES } from '../../../../songs/performance/pieces';
 import { focusDropped, focusWhenGone, PLAY_STOP_ID } from '../ui/focusNext';
 import { LabeledSlider } from '../ui/LabeledSlider';
 import { SegmentedControl } from '../ui/SegmentedControl';
@@ -92,6 +93,20 @@ export interface PieceStepsProps {
   /** A colour's time set, or cleared (null = from the start). */
   onColourEntry(id: string, at: number | null): void;
   onNewLoop(): void;
+  /** Keep what is on the board now as the next loop, in one press, while it plays (item 2). */
+  onKeepAsLoop(): void;
+  /** Why Keep as loop can't be pressed now, or null. */
+  keepReason: string | null;
+  /** The player's pieces (item 3): the one open now, and the rest. */
+  pieces: { id: string; name: string; scenes: number; lengthSec: number }[];
+  pieceId: string;
+  /** Why another piece can't be opened now (the piece plays), or null. */
+  pieceLocked: string | null;
+  onOpenPiece(id: string): void;
+  onNewPiece(): void;
+  onDuplicatePiece(id: string): void;
+  onDeletePiece(id: string): void;
+  onRenamePiece(id: string, name: string): void;
   onToggleLoop(slot: number): void;
   onSaveBoardToLoop(slot: number): void;
   onDrawLoop(slot: number): void;
@@ -230,7 +245,7 @@ export function PieceSteps(p: PieceStepsProps): JSX.Element {
   ];
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14, paddingTop: 10 }}>
-      {/* One joined group (U9): the three steps share their edges; the one you are on is tinted. */}
+      <PiecePicker {...p} />
       {/* The three steps as words (L5): the one you are on in the text colour, underlined. */}
       <nav aria-label="Make a piece: steps" style={{ display: 'flex', columnGap: 18, flexWrap: 'wrap', borderBottom: '1px solid var(--bs-border)' }}>
         {steps.map((s) => {
@@ -269,6 +284,65 @@ function StepFooter({ back, next }: { back?: { label: string; onClick(): void };
   );
 }
 
+/**
+ * The piece open now, and the player's other pieces (item 3): a fold at the top of Make a
+ * piece. Open, it lists every piece with Open, Duplicate and Delete, a Rename field for the
+ * one open now, and New piece. The loops are shared, so they are not here.
+ */
+function PiecePicker(p: PieceStepsProps): JSX.Element {
+  const [open, setOpen] = useState(false);
+  const current = p.pieces.find((x) => x.id === p.pieceId) ?? null;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <button
+        type="button" aria-expanded={open} onClick={() => setOpen((o) => !o)} data-piece-picker=""
+        style={{ display: 'flex', alignItems: 'center', gap: 8, alignSelf: 'flex-start', background: 'transparent', border: 'none', color: 'var(--bs-fg)', minHeight: 'var(--bs-target)', padding: 0, cursor: 'pointer' }}
+      >
+        <span aria-hidden="true" style={{ color: 'var(--bs-fg2)' }}>{open ? '▾' : '▸'}</span>
+        <span style={CAPTION_STYLE}>Piece</span>
+        <span style={{ fontWeight: 600 }}>{current?.name ?? 'Piece 1'}</span>
+        {p.pieces.length > 1 && <span style={{ fontSize: 14, color: 'var(--bs-fg3)' }}>{`· ${p.pieces.length} pieces`}</span>}
+      </button>
+      {open && (
+        <div role="group" aria-label="Pieces" style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingBottom: 6, borderBottom: '1px solid var(--bs-border)' }}>
+          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column' }}>
+            {p.pieces.map((x) => {
+              const isCurrent = x.id === p.pieceId;
+              return (
+                <li
+                  key={x.id}
+                  aria-label={`${x.name}: ${x.scenes} ${x.scenes === 1 ? 'scene' : 'scenes'}, ${formatClock(x.lengthSec)}${isCurrent ? ', open now' : ''}`}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '6px 0', borderTop: '1px solid var(--bs-border)' }}
+                >
+                  {isCurrent ? (
+                    <input
+                      type="text" value={x.name} aria-label="Name of this piece"
+                      onChange={(e) => p.onRenamePiece(x.id, e.target.value)}
+                      style={{ width: 140, minHeight: 'var(--bs-target)', fontWeight: 600 }}
+                    />
+                  ) : (
+                    <span style={{ width: 140, fontWeight: 500 }}>{x.name}</span>
+                  )}
+                  <span style={{ fontSize: 14, color: 'var(--bs-fg2)', flex: '1 1 80px' }}>{`${x.scenes} ${x.scenes === 1 ? 'scene' : 'scenes'} · ${formatClock(x.lengthSec)}${isCurrent ? ' · open now' : ''}`}</span>
+                  <span style={{ display: 'flex', gap: 4, marginLeft: 'auto' }}>
+                    {!isCurrent && <Button tone="secondary" onClick={() => p.onOpenPiece(x.id)} aria-label={`Open: ${x.name}`} reason={p.pieceLocked}>Open</Button>}
+                    <Button tone="quiet" onClick={() => p.onDuplicatePiece(x.id)} aria-label={`Duplicate: ${x.name}`} reason={p.pieceLocked ?? (p.pieces.length >= MAX_PIECES ? 'Twelve pieces is the most.' : null)}>Duplicate</Button>
+                    {p.pieces.length > 1 && <Button tone="quiet" onClick={() => p.onDeletePiece(x.id)} aria-label={`Delete: ${x.name}`} reason={p.pieceLocked}>Delete</Button>}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+          <div>
+            <Button tone="secondary" onClick={p.onNewPiece} reason={p.pieceLocked ?? (p.pieces.length >= MAX_PIECES ? 'Twelve pieces is the most.' : null)}>New piece</Button>
+          </div>
+          <Note as="p">A piece is its scenes, its length and its ending, and when each colour comes in. The loops are the player&rsquo;s, shared by every piece.</Note>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** Step 1: the loops — a board saved once, that then plays by itself. */
 function LoopsStep(p: PieceStepsProps): JSX.Element {
   const [replaceArmed, setReplaceArmed] = useState<number | null>(null);
@@ -299,18 +373,20 @@ function LoopsStep(p: PieceStepsProps): JSX.Element {
       <h2 id="piece-loops" style={heading}>1 · Loops</h2>
       {p.newLoop ?? (
         <div style={card}>
-          <Note as="p" style={{ color: 'var(--bs-fg)' }}>A loop is something the player makes with counters, from silence, that then plays by itself.</Note>
-          {/* Off while the piece plays (F2), and with no loop left to keep it in: nobody
+          <Note as="p" style={{ color: 'var(--bs-fg)' }}>A loop is a board that then plays by itself: what is on the board now, kept in one press, or one made from silence.</Note>
+          {/* Keep as loop (item 2): the producer's move, while it plays. New loop, from silence,
+              is off while the piece plays (F2), and with no loop left to keep it in: nobody
               clears the board for a loop that can't be kept (R2-T4-04). */}
-          <div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+            <Button tone="primary" onClick={p.onKeepAsLoop} reason={p.keepReason}>Keep as loop</Button>
             <Button
-              ref={newLoopRef} tone="primary" onClick={p.onNewLoop}
+              ref={newLoopRef} tone="secondary" onClick={p.onNewLoop}
               reason={pieceOn ? 'Stop the piece to make a loop' : p.loopsFull ? 'Every loop is full: clear one first' : null}
             >
               New loop
             </Button>
           </div>
-          <Note as="p">Everything stops; only the counters sound. Keep makes the loop.</Note>
+          <Note as="p">Keep as loop keeps the counters on the board as the next loop, while the music plays on. New loop starts from silence: everything stops, only the counters sound, and Keep makes the loop.</Note>
         </div>
       )}
       {/* A note, not a warning: an empty board is where New loop starts (R2-T1-07). Not with

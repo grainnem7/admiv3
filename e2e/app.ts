@@ -41,6 +41,9 @@ export async function openLaptopSetup(page: Page): Promise<void> {
   await page.getByRole('button', { name: /Play on the laptop/ }).click();
   await page.getByRole('region', { name: "Who's playing?" }).getByRole('textbox', { name: 'Name' }).fill('Test');
   await page.getByRole('button', { name: 'Create' }).click();
+  // A new player from Play on the laptop lands on the board with four colours (item 1); Set up is under More.
+  await expect(page.getByRole('radiogroup', { name: 'Counter to put down' })).toBeVisible();
+  await (await headerButton(page, '⚙ Set up')).click();
   await expect(page.getByRole('heading', { name: 'Choose the colours' })).toBeVisible();
 }
 

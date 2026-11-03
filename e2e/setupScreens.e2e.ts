@@ -154,7 +154,6 @@ test('the Ready check: a fix made elsewhere has a button that goes there (A14)',
 
 test('↶ keeps the sound before from Set up into the Board view, and the laptop set-up says nothing of a camera (A16)', async ({ page }) => {
   await openLaptopSetup(page);
-  await page.getByRole('button', { name: 'Add four colours' }).click();
   await expect(page.getByText(/Camera: /)).toHaveCount(0);
   const sound = page.getByRole('combobox', { name: 'Red: sound' });
   const before = await sound.inputValue();

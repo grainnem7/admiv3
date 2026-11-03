@@ -35,7 +35,7 @@ function props(over: Partial<PieceStepsProps> = {}): PieceStepsProps {
     onColourEntry: vi.fn(),
     onNewLoop: vi.fn(), onToggleLoop: vi.fn(), onSaveBoardToLoop: vi.fn(), onDrawLoop: vi.fn(), onClearLoop: vi.fn(),
     onRenameLoop: vi.fn(), onLoopFade: vi.fn(), onGoScene: vi.fn(), onRehearseFrom: vi.fn(), onSaveSceneFromNow: vi.fn(),
-    onUpdateSceneFromNow: vi.fn(), onEditScene: vi.fn(), onDeleteScene: vi.fn(), onDuplicateScene: vi.fn(), onUndoDelete: vi.fn(), onMakePlan: vi.fn(),
+    onUpdateSceneFromNow: vi.fn(), onEditScene: vi.fn(), onDeleteScene: vi.fn(), onDuplicateScene: vi.fn(), onKeepAsLoop: vi.fn(), keepReason: null, pieces: [{ id: 'piece-1', name: 'Piece 1', scenes: 3, lengthSec: 420 }], pieceId: 'piece-1', pieceLocked: null, onOpenPiece: vi.fn(), onNewPiece: vi.fn(), onDuplicatePiece: vi.fn(), onDeletePiece: vi.fn(), onRenamePiece: vi.fn(), onUndoDelete: vi.fn(), onMakePlan: vi.fn(),
     onRespectPlayer: vi.fn(), onNewIdeasScene: vi.fn(), onNewIdeasPiece: vi.fn(), surpriseMe: false, onSurpriseMe: vi.fn(), onPerformance: vi.fn(), onBackup: vi.fn(), onRestore: vi.fn(), onShow: vi.fn(),
     ...over,
   };
@@ -256,9 +256,11 @@ describe('Loops: one way to make a loop (F1, T1-01, T2-14)', () => {
     act(() => fold?.click());
     expect(fold?.getAttribute('aria-expanded')).toBe('true');
     for (const r of rows()) expect(button(r), r).toBeDefined();
-    // Filled mint is for the one main action, New loop: Keep the board as this loop is not it.
+    // The filled button is for the one main action, Keep as loop (item 2): neither New loop
+    // nor Keep the board as this loop is it.
     expect(button('Keep the board as this loop')?.style.background).not.toBe('var(--bs-accent)');
-    expect(button('New loop')?.style.background).toBe('var(--bs-accent)');
+    expect(button('New loop')?.style.background).not.toBe('var(--bs-accent)');
+    expect(button('Keep as loop')?.style.background).toBe('var(--bs-accent)');
     act(() => fold?.click());
   });
 
@@ -832,5 +834,56 @@ describe('item 11: before there are scenes, When each colour comes in is folded'
     render(props({ step: 'scenes' }));
     expect([...host.querySelectorAll('button')].find((b) => b.textContent?.includes('When each colour comes in'))).toBeUndefined();
     expect(host.querySelector('#piece-colours')).not.toBeNull();
+  });
+});
+
+describe('item 2: Keep as loop, one press', () => {
+  it('Loops offers Keep as loop first, New loop second, and Keep says why when it can’t', () => {
+    const p = props({ step: 'loops' });
+    render(p);
+    const keep = button('Keep as loop')!;
+    expect(keep.style.background).toBe('var(--bs-accent)');
+    act(() => keep.click());
+    expect(p.onKeepAsLoop).toHaveBeenCalledTimes(1);
+    expect(button('New loop')!.style.background).toBe('transparent');
+    render(props({ step: 'loops', keepReason: 'Put counters down first.' }));
+    expect(button('Keep as loop')!.disabled).toBe(true);
+    expect(host.textContent).toContain('Put counters down first.');
+  });
+});
+
+describe('item 3: the pieces at the top of Make a piece', () => {
+  it('folded, it names the piece open now; open, it lists the pieces with Open, Duplicate, Delete, Rename and New piece', () => {
+    const p = props({ step: 'loops', pieces: [{ id: 'a', name: 'Opening set', scenes: 4, lengthSec: 420 }, { id: 'b', name: 'Encore', scenes: 0, lengthSec: 120 }], pieceId: 'a' });
+    render(p);
+    const fold = host.querySelector('[data-piece-picker]') as HTMLButtonElement;
+    expect(fold.textContent).toContain('Opening set');
+    expect(fold.textContent).toContain('2 pieces');
+    expect(fold.getAttribute('aria-expanded')).toBe('false');
+    act(() => fold.click());
+    const group = host.querySelector('[role="group"][aria-label="Pieces"]')!;
+    const rows = [...group.querySelectorAll('li')].map((li) => li.getAttribute('aria-label'));
+    expect(rows).toEqual(['Opening set: 4 scenes, 7:00, open now', 'Encore: 0 scenes, 2:00']);
+    expect(input('Name of this piece')!.value).toBe('Opening set');
+    const named = (n: string): HTMLButtonElement | undefined => [...group.querySelectorAll('button')].find((b) => b.getAttribute('aria-label') === n);
+    expect(named('Open: Opening set')).toBeUndefined();
+    act(() => named('Open: Encore')!.click());
+    expect(p.onOpenPiece).toHaveBeenCalledWith('b');
+    act(() => named('Duplicate: Opening set')!.click());
+    expect(p.onDuplicatePiece).toHaveBeenCalledWith('a');
+    act(() => named('Delete: Encore')!.click());
+    expect(p.onDeletePiece).toHaveBeenCalledWith('b');
+    act(() => button('New piece')!.click());
+    expect(p.onNewPiece).toHaveBeenCalledTimes(1);
+  });
+
+  it('with one piece there is no Delete; while the piece plays nothing can be opened', () => {
+    render(props({ step: 'loops', pieceLocked: 'Stop the piece first.', pieces: [{ id: 'a', name: 'Piece 1', scenes: 1, lengthSec: 60 }, { id: 'b', name: 'Piece 2', scenes: 0, lengthSec: 60 }], pieceId: 'a' }));
+    act(() => (host.querySelector('[data-piece-picker]') as HTMLButtonElement).click());
+    const open = [...host.querySelectorAll('button')].find((b) => b.getAttribute('aria-label') === 'Open: Piece 2') as HTMLButtonElement;
+    expect(open.disabled).toBe(true);
+    render(props({ step: 'loops' }));
+    act(() => (host.querySelector('[data-piece-picker]') as HTMLButtonElement).click());
+    expect([...host.querySelectorAll('button')].some((b) => (b.getAttribute('aria-label') ?? '').startsWith('Delete:'))).toBe(false);
   });
 });
