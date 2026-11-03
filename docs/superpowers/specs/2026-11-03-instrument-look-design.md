@@ -61,3 +61,32 @@ Each batch: tests first, `npm run lint`, `npm run test:run`, the e2e for the scr
 changes, the keeping-time meter no worse.
 
 ## Status
+**L1, as built:** the tokens for both modes (dark #0e0f11, light #f4f4f5; the accent is the text
+colour; the surfaces a step of grey apart), `--bs-shadow: none`, no card for the panel, pills
+for buttons (filled, hairline, words), choices and tabs as rows of words with the chosen one
+underlined under its words (`data-words`), the Switch and the sliders in the text colour, the
+caption style in `ui/text.ts`, and `instrumentLook.test.ts` keeping the stylesheet to it.
+
+**L2 and L3, as built:** the ADMI wordmark and the screen's name in the quiet colour; the
+views (Board, Make a piece, Show) and Camera / Laptop as words; round icon buttons; the
+transport's status a readout on the page with the same words the tests read (the header no
+longer says Stopped / Playing as well, so it stays one row at 1024 px). The board: empty
+squares as dots of 3:1 (A4), flat counters ringed only when they would vanish, the column
+playing now tinted with a marker along its top (B9) and its number lit, a thin ring on a
+sounding counter, step numbers above the board (`data-board-steps`), no well
+(`data-board-stage`). The colours above the board are words with a numbered dot.
+
+**L4 to L6, as built:** helper folds, New loop's steps, the Cap tab's sections and the iPad
+group parted by hairlines; captions tracked; the helper's own button a hairline pill. Make a
+piece: the three steps as words, loop and scene rows under hairlines (the scene on now with
+a stripe in the text colour, B10), the timeline as marks on a line, the loop thumbnails and
+the energy graph on the page, the ending choices as rows. The Now / Next strip and Show's
+start line on the page under a hairline, the clock light and tabular. The Ready step's
+colours as words with a dot.
+
+**L7, as built:** Welcome follows the tokens (a filled pill in the text colour for the main way
+in). Help needed no change: no label changed. The e2e tests that pinned the old look (the
+mint, the card, the well, the chip fills, the joined groups) now pin this one.
+
+**Left for later (my call):** Show's clock and scene name at display sizes larger than today's
+(the mock's 56 and 72 px), and the loop list's name field as an underlined field.

@@ -308,6 +308,8 @@ const endingLeadOf = (c: BoardSequencerStored): number => pieceEndingLeadSec(
 );
 /** The side panel: 400 px, growing with the window to 480 px (A3). */
 const SIDE_PANEL_WIDTH = 'clamp(400px, 30vw, 480px)';
+/** A view's word in the header (L2): less air round it than a pill has, so the header stays one row at 1024 px. */
+const VIEW_WORD = { padding: '0 10px' } as const;
 /** The status lines' fixed strip under the board: three short lines (A3). */
 const STATUS_LINES_HEIGHT = 56;
 /** Where Play / Make a piece is remembered. */
@@ -5320,11 +5322,12 @@ export default function BoardSequencerScreen() {
   // Which board is in use, always visible: a planning session left on the laptop board
   // must not surprise anyone on the day.
   const boardSourceButton = (
-    <div role="group" aria-label="Board" style={{ display: 'flex', gap: 0, alignItems: 'center' }}>
+    <div role="group" aria-label="Board" style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
       {(['camera', 'laptop'] as const).map((src) => (
         <Button
           key={src}
-          tone={config.boardSource === src ? 'selected' : 'secondary'}
+          // Words, the chosen one underlined (L2), as the views are.
+          tone={config.boardSource === src ? 'selected' : 'quiet'}
           aria-pressed={config.boardSource === src}
           onClick={(e) => { if (config.boardSource !== src) switchBoardSource(src, e.currentTarget); }}
           aria-label={src === 'laptop' ? 'Laptop board: play on the laptop, without the camera or board' : 'Camera board: the camera and the real board'}
@@ -6231,20 +6234,18 @@ export default function BoardSequencerScreen() {
             // Labels never break mid-label ("Set / up" on three lines), and the controls
             // wrap as whole buttons; the status word keeps one width. Otherwise pressing Play
             // re-wrapped the header and moved everything under it, Stop included.
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', whiteSpace: 'nowrap' }}>
-              <span style={{ color: 'var(--bs-fg3)', fontSize: 14, minWidth: '4.5em' }}>
-                {running ? 'Playing' : 'Stopped'}
-              </span>
-              {/* The views as words (L2): the one you are in underlined, the others quiet. */}
+            <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap', whiteSpace: 'nowrap' }}>
+              {/* The views as words (L2): the one you are in underlined, the others quiet. Whether
+                  the board plays is the transport's readout, not said here too. */}
               <div role="group" aria-label="What you are doing" style={{ display: 'flex', gap: 4 }}>
-                <Button tone={workspace === 'play' ? 'selected' : 'quiet'} aria-pressed={workspace === 'play'} onClick={() => setWorkspace('play')}>
+                <Button tone={workspace === 'play' ? 'selected' : 'quiet'} aria-pressed={workspace === 'play'} onClick={() => setWorkspace('play')} style={VIEW_WORD}>
                   Board
                 </Button>
-                <Button tone={workspace === 'piece' ? 'selected' : 'quiet'} aria-pressed={workspace === 'piece'} onClick={() => setWorkspace('piece')}>
+                <Button tone={workspace === 'piece' ? 'selected' : 'quiet'} aria-pressed={workspace === 'piece'} onClick={() => setWorkspace('piece')} style={VIEW_WORD}>
                   Make a piece
                 </Button>
               </div>
-              <Button ref={bigBoardButtonRef} tone="quiet" onClick={() => setView('bigBoard')} aria-label="Show: the board, the clock and Now / Next, full screen, for the performance">
+              <Button ref={bigBoardButtonRef} tone="quiet" onClick={() => setView('bigBoard')} aria-label="Show: the board, the clock and Now / Next, full screen, for the performance" style={VIEW_WORD}>
                 Show
               </Button>
               {/* The less-used ones: in a More menu below about 1400 px, so the header stays

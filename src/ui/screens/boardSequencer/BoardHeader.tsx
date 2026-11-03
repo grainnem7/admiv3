@@ -50,8 +50,8 @@ export function BoardHeader({
         display: hidden ? 'none' : 'flex', flexDirection: 'column', gap: 8, flexShrink: 0,
       }}
     >
-      <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-        <Button tone="quiet" onClick={onExit} aria-label={exitArmed ? 'Press again to stop the piece and exit' : 'Exit the Board Sequencer'}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <Button tone="quiet" onClick={onExit} style={{ padding: '0 10px' }} aria-label={exitArmed ? 'Press again to stop the piece and exit' : 'Exit the Board Sequencer'}>
           {exitArmed ? '← Press again to leave' : '← Exit'}
         </Button>
         {/* The wordmark, then the screen's name in the quiet colour (L2). */}
@@ -74,7 +74,7 @@ export function BoardHeader({
               title={switchPlayerDisabledReason ?? undefined}
               aria-describedby={switchPlayerDisabledReason ? playerReasonId : undefined}
               aria-label={`Player: ${playerName}. Switch player`}
-              style={{ color: 'var(--bs-fg)' }}
+              style={{ color: 'var(--bs-fg)', padding: '0 10px' }}
             >
               {`Player: ${playerName}`}
             </Button>

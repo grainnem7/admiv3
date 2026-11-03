@@ -63,15 +63,12 @@ export function ReadyStep({
         ▶ Play the board
       </Button>
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+      {/* Each colour with its count, as words with a numbered dot (L7): no chips. */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', columnGap: 18, rowGap: 4 }}>
         {channels.map((c, i) => (
           <div
             key={c.id}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px',
-              borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-raised)',
-              border: '1px solid var(--bs-border)',
-            }}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 32 }}
           >
             <SwatchChip swatch={c.swatch} palette={palette} number={i + 1} size={24} />
             <span style={{ fontVariantNumeric: 'tabular-nums' }}>{`${describeChannel(c)}: ${steadyCounts.get(c.id) ?? 0}`}</span>

@@ -15,7 +15,11 @@ const contrastIn = (page: Page, selector: string): Promise<{ text: string; ratio
   };
   return [...document.querySelectorAll<HTMLElement>(sel)].map((el) => {
     const cs = getComputedStyle(el);
-    const a = lum(cs.color); const b = lum(cs.backgroundColor);
+    // The surface behind the words: the element's own, or the first one up the tree that
+    // has one (a chip on the page has no fill of its own, L5).
+    let node: HTMLElement | null = el; let bg = cs.backgroundColor;
+    while (node && bg === 'rgba(0, 0, 0, 0)') { node = node.parentElement; if (node) bg = getComputedStyle(node).backgroundColor; }
+    const a = lum(cs.color); const b = lum(bg);
     return { text: el.textContent ?? '', ratio: (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) };
   });
 }, selector);
