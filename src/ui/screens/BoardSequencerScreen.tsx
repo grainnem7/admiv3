@@ -67,6 +67,7 @@ import { findCounterBlobs } from '../../tracking/boardReference/findCounters';
 import { captureReaderFrames, READER_DOWNSCALE } from './boardSequencer/captureReaderFrames';
 import { detectionSetup } from '../../tracking/boardReference/detectionSetup';
 import { LoopThumb, PieceSteps, type PieceLoop, type PieceStep } from './boardSequencer/play/PieceSteps';
+import { LoopRail } from './boardSequencer/play/LoopRail';
 import { NowNextStrip } from './boardSequencer/play/NowNextStrip';
 import { nextSceneUndo, nextUndoOffered, type NextSceneUndo } from './boardSequencer/play/nextSceneUndo';
 import { letterKeyAction } from './boardSequencer/letterKeys';
@@ -4887,6 +4888,34 @@ export default function BoardSequencerScreen() {
     if (keepReasonNow !== null || slot === null) { announce(keepReasonNow ?? 'Every loop is full: clear one first.'); return; }
     saveBoardToSlot(slot);
   };
+  // The rail (G1): the board kept into the place the owner pressed.
+  const keepReasonForPlace = pieceOnNow ? 'Stop the piece to change the loops.'
+    : newLoop ? 'New loop is open: press Keep there.'
+      : countersNow === 0 ? 'Put counters down first.' : null;
+  const keepAsLoopAt = (slot: number): void => {
+    if (keepReasonForPlace !== null) { announce(keepReasonForPlace); return; }
+    saveBoardToSlot(slot);
+  };
+  const loopRail = (
+    <LoopRail
+      loops={performLoops}
+      rows={config.rows}
+      cols={config.cols}
+      swatchFor={swatchFor}
+      running={running}
+      keepReason={keepReasonForPlace}
+      locked={pieceOnNow ? 'Stop the piece to change the loops.' : null}
+      newLoopReason={pieceOnNow ? 'Stop the piece to make a loop.' : newLoop ? 'New loop is already open.' : keepSlotNow === null ? 'Every loop is full: clear one first.' : null}
+      onKeep={keepAsLoopAt}
+      onToggle={toggleLoop}
+      onRename={renameLoop}
+      onReplace={saveBoardToSlot}
+      onEditNotes={(slot) => setEditSlot(slot)}
+      onClear={(slot) => setClearSlotTarget(slot)}
+      onNewLoop={() => { setWorkspace('piece'); setPieceStep('loops'); beginNewLoop(); }}
+      direction={layout.mode === 'stacked' ? 'row' : 'column'}
+    />
+  );
   // The pieces (item 3): opened, made, copied, taken out and renamed. Never while the piece plays.
   const pieceLockedNow = pieceOnNow ? 'Stop the piece first.' : null;
   const applyPieces = (next: BoardSequencerStored | null, said: string): void => {
@@ -5930,11 +5959,22 @@ export default function BoardSequencerScreen() {
           is set here, as tall as the window allows and never wider than it (A3: on an iPad
           held upright it was 240 px). */}
       {(view === 'play' || laptop) && (
-        <div style={layout.mode === 'stacked'
-          ? { height: 'min(clamp(240px, 52vh, 560px), calc(100vw - 32px))', flexShrink: 0 }
-          : { flex: 1, minHeight: 'clamp(240px, 52vh, 560px)' }}
+        // The loop rail (G1) sits on the board's side away from the panel, in Board and Make a
+        // piece alike, so the board keeps its place and size between them (A3). Stacked, it is a
+        // row under the board.
+        <div style={{
+          display: 'flex', gap: 12, minHeight: 0,
+          flexDirection: layout.mode === 'stacked' ? 'column' : config.handedness === 'left' ? 'row-reverse' : 'row',
+          ...(layout.mode === 'stacked' ? { flexShrink: 0 } : { flex: 1 }),
+        }}
         >
-          {boardView}
+          {view === 'play' && loopRail}
+          <div style={layout.mode === 'stacked'
+            ? { height: 'min(clamp(240px, 52vh, 560px), calc(100vw - 32px))', flexShrink: 0 }
+            : { flex: 1, minHeight: 'clamp(240px, 52vh, 560px)', minWidth: 0 }}
+          >
+            {boardView}
+          </div>
         </div>
       )}
       {/* In Set up on the laptop board: always there, so starting play never shrinks the
@@ -6096,10 +6136,6 @@ export default function BoardSequencerScreen() {
           sound and count, and the session log. Four lines here kept the board small. */}
       {view === 'play' && (
       <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap', flexShrink: 0 }}>
-      {/* Keep as loop (item 2): one press, while it plays. The same as in Make a piece. */}
-      {/* Greyed with the reason in its tooltip, as Clear the board is (U6): a line of reason
-          under it came and went, and the board moved with it (A3). */}
-      <Button tone="secondary" onClick={keepAsLoop} disabled={keepReasonNow !== null} title={keepReasonNow ?? 'Keep what is on the board as the next loop'}>Keep as loop</Button>
       <details data-board-details="" style={{ flexShrink: 0, flex: '1 1 200px' }}>
         <summary className="bs-fold" style={{ cursor: 'pointer', fontSize: 14, color: 'var(--bs-fg2)', minHeight: 'var(--bs-target)', display: 'flex', alignItems: 'center' }}>Details</summary>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingBottom: 6 }}>
