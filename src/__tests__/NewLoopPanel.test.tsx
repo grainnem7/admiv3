@@ -57,9 +57,10 @@ describe('New loop', () => {
   it('U1: Leave and Done are real buttons with an edge, not words that look like text', () => {
     render(props({ countersOnBoard: 2 }));
     const leave = button('Leave')!;
-    expect(leave.style.background).toBe('var(--bs-raised)');
+    // A pill with a hairline edge (L1): the edge is what makes it a button.
+    expect(leave.style.borderColor).toBe('var(--bs-border-control)');
     render(props({ kept: { slot: 3, name: '' } }));
-    expect(button('Done')!.style.background).toBe('var(--bs-raised)');
+    expect(button('Done')!.style.borderColor).toBe('var(--bs-border-control)');
   });
 
   it('Keep is off with nothing on the board, and says why', () => {
@@ -316,7 +317,8 @@ describe('U1: counters already down, so New loop asks first (owner: a choice eve
     const keep = button("Keep what's on the board")!;
     const empty = button('Start from empty')!;
     expect(keep.style.background).toBe('var(--bs-accent)');
-    expect(empty.style.background).toBe('var(--bs-raised)');
+    expect(empty.style.background).toBe('transparent');
+    expect(empty.style.borderColor).toBe('var(--bs-border-control)');
     // Nothing about lifting until the owner chooses to start from empty.
     expect(text()).not.toContain('Lift the');
     expect(button('Keep')).toBeUndefined();

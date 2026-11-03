@@ -85,31 +85,32 @@ describe('SegmentedControl', () => {
     expect(radios()[0].getAttribute('aria-checked')).toBe('true');
   });
 
-  it('the selected option shows ● and a light tint, not the filled mint of a main action (B17)', () => {
+  it('L1: the chosen option is the text colour with a thin underline under its words, the rest grey: never a tint, never colour alone', () => {
     const r = render(<SegmentedHarness />);
     const radios = r.all('[role="radio"]');
-    expect(radios[1].classList.contains('bs-selected')).toBe(true);
-    expect(radios[1].style.background).toBe('var(--bs-accent-muted)');
+    expect(radios[1].style.background).toBe('transparent');
     expect(radios[1].style.color).toBe('var(--bs-fg)');
-    expect(radios[0].classList.contains('bs-selected')).toBe(false);
-    // The words are unchanged: the ● is drawn by the stylesheet, not spoken.
+    expect(radios[1].style.fontWeight).toBe('600');
+    expect(radios[0].style.color).toBe('var(--bs-fg3)');
+    expect(radios[0].style.fontWeight).toBe('500');
+    const words = (b: HTMLElement): HTMLElement => b.querySelector('[data-words]') as HTMLElement;
+    expect(words(radios[1]).style.borderBottom).toMatch(/^1px solid currentcolor$/i);
+    expect(words(radios[0]).style.borderBottom).toBe('1px solid transparent');
+    // The words are unchanged, and no ● is drawn before them.
     expect(radios[1].textContent).toBe('4');
+    expect(radios[1].classList.contains('bs-selected')).toBe(false);
   });
 
-  it('U9: the options are one joined group, the chosen one with a neutral edge', () => {
+  it('L1: the options are words in a row, not a joined group: no edges, a gap between them', () => {
     const r = render(<SegmentedHarness />);
     const radios = r.all('[role="radio"]');
-    // Joined: the edges overlap, and only the ends are rounded.
-    expect(radios[0].style.marginLeft).toBe('');
-    expect(radios[1].style.marginLeft).toBe('-1px');
-    expect(radios[0].style.borderTopLeftRadius).not.toBe('0px');
-    expect(radios[0].style.borderTopRightRadius).toMatch(/^0(px)?$/);
-    expect(radios[radios.length - 1].style.borderTopRightRadius).not.toBe('0px');
-    expect(radios[radios.length - 1].style.borderTopLeftRadius).toMatch(/^0(px)?$/);
-    // The chosen one: the tint and ●, never the mint edge.
-    expect(radios[1].style.borderColor).toBe('var(--bs-border-control)');
-    expect(radios[0].style.borderColor).toBe('var(--bs-border-control)');
-    expect((r.get('[role="radiogroup"]') as HTMLElement).style.gap).toMatch(/^0(px)?$/);
+    for (const b of radios) {
+      expect(b.style.border).toBe('1px solid transparent');
+      expect(b.style.marginLeft).toBe('');
+    }
+    expect(parseInt((r.get('[role="radiogroup"]') as HTMLElement).style.columnGap, 10)).toBeGreaterThanOrEqual(16);
+    // Still a 44 px target (A4), with the words inside it.
+    expect(radios[0].style.minHeight).toBe('var(--bs-target)');
   });
 });
 
@@ -143,14 +144,30 @@ describe('Button', () => {
     expect((reason.parentElement as HTMLElement).style.paddingBottom).toBe('16px');
   });
 
-  it('the selected tone: ● and a light tint (B17), with a neutral edge so the mint is left for a main action (U9)', () => {
+  it('L1: the selected tone is the text colour, semibold, with an underline under its words: no tint, no edge', () => {
     const r = render(<Button tone="selected" aria-pressed>Board</Button>);
     const button = r.get('button');
-    expect(button.classList.contains('bs-selected')).toBe(true);
-    expect(button.style.background).toBe('var(--bs-accent-muted)');
-    expect(button.style.borderColor).toBe('var(--bs-border-control)');
+    expect(button.classList.contains('bs-selected')).toBe(false);
+    expect(button.style.background).toBe('transparent');
+    expect(button.style.borderColor).toBe('transparent');
     expect(button.style.fontWeight).toBe('600');
+    expect(button.style.color).toBe('var(--bs-fg)');
+    expect((button.querySelector('[data-words]') as HTMLElement).style.borderBottom).toMatch(/^1px solid currentcolor$/i);
     expect(button.textContent).toBe('Board');
+  });
+
+  it('L1: primary is a filled pill in the text colour, secondary a pill with a hairline edge, quiet plain words', () => {
+    const r = render(<><Button tone="primary">▶ Play the board</Button><Button tone="secondary">Mute</Button><Button tone="quiet">Details</Button></>);
+    const [primary, secondary, quiet] = r.all('button');
+    expect(primary.style.background).toBe('var(--bs-accent)');
+    expect(primary.style.color).toBe('var(--bs-accent-fg)');
+    expect(primary.style.borderRadius).toBe('var(--bs-radius-pill)');
+    expect(secondary.style.background).toBe('transparent');
+    expect(secondary.style.borderColor).toBe('var(--bs-border-control)');
+    expect(secondary.style.borderRadius).toBe('var(--bs-radius-pill)');
+    expect(quiet.style.background).toBe('transparent');
+    expect(quiet.style.borderColor).toBe('transparent');
+    for (const b of [primary, secondary, quiet]) expect(b.style.minHeight).toBe('var(--bs-target)');
   });
 
   it('a reason disables it and is shown in reserved space', () => {

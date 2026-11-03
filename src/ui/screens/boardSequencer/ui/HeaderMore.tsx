@@ -52,8 +52,8 @@ export function HeaderMore({ folded, keepOpen = false, children }: HeaderMorePro
         style={{
           display: shown ? 'flex' : 'none', flexDirection: 'column', alignItems: 'stretch', gap: 6,
           position: 'absolute', top: 'calc(100% + 4px)', right: 0, zIndex: 30, padding: 8, minWidth: 240,
-          background: 'var(--bs-raised)', border: '1px solid var(--bs-border-control)', borderRadius: 'var(--bs-radius-md)',
-          boxShadow: '0 6px 18px rgba(0, 0, 0, 0.25)',
+          // A step up from the page with a hairline edge, no shadow (L1).
+          background: 'var(--bs-elev)', border: '1px solid var(--bs-border-control)', borderRadius: 'var(--bs-radius-md)',
         }}
       >
         {children}

@@ -40,11 +40,12 @@ export function LabeledSlider({
         disabled={disabled || reason !== null}
         aria-describedby={reason ? reasonId : undefined}
         onChange={(e) => onChange(Number(e.target.value))}
-        // The track drawn here, filled up to the value: the page's own slider style takes the
-        // browser's away, and a transparent background left only a knob floating on nothing.
+        // The track drawn here, a 2 px line filled up to the value in the text colour (L1): the
+        // page's own slider style takes the browser's away, and a transparent background left
+        // only a knob floating on nothing.
         style={{
           minHeight: 'var(--bs-target)', border: 'none', margin: 0,
-          background: `linear-gradient(to right, var(--bs-accent) 0 ${fill}%, var(--bs-border-control) ${fill}% 100%) center / 100% 8px no-repeat`,
+          background: `linear-gradient(to right, var(--bs-fg) 0 ${fill}%, var(--bs-border-control) ${fill}% 100%) center / 100% 2px no-repeat`,
         }}
       />
       {/* Reserved space so a reason appearing never shifts the layout under the pointer. */}

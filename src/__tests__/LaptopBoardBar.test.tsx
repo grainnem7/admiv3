@@ -19,7 +19,8 @@ describe('Clear the board (U1)', () => {
       />,
     );
     const clear = view.byText('Clear the board', 'button');
-    expect(clear.style.background).toBe('var(--bs-raised)');
+    // A pill with a hairline edge (L1): the edge is what makes it a button.
+    expect(clear.style.borderColor).toBe('var(--bs-border-control)');
   });
 });
 

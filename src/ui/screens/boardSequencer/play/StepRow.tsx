@@ -2,6 +2,7 @@
 import { SegmentedControl } from '../ui/SegmentedControl';
 import { nearest, type Step } from '../../../../audio/soundSteps';
 import { Note, NOTE_STYLE } from '../ui/explain';
+import { CAPTION_STYLE } from '../ui/text';
 
 /** `hint` explains the choice (shown while Explain the choices is on); `reason` says why it is off (always). */
 export function StepRow({ label, steps, value, onPick, disabled = false, hint, reason }: {
@@ -10,7 +11,7 @@ export function StepRow({ label, steps, value, onPick, disabled = false, hint, r
   const i = nearest(steps, value);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <span style={{ ...NOTE_STYLE, fontWeight: 600 }}>{label}</span>
+      <span style={CAPTION_STYLE}>{label}</span>
       <SegmentedControl<number>
         label={label}
         value={i}

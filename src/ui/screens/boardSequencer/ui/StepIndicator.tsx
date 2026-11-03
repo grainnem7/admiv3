@@ -1,4 +1,5 @@
 import type { StepIndicator as StepState } from '../boardSetupFlow';
+import { UNDERLINE_OFF, UNDERLINE_ON } from './text';
 
 export interface StepIndicatorItem<T extends string> {
   id: T;
@@ -44,16 +45,18 @@ export function StepIndicator<T extends string>({ steps, onOpen, canOpen }: Step
               aria-label={`${i + 1}. ${s.label}, ${mark.word}`}
               disabled={!open}
               onClick={() => onOpen(s.id)}
+              // Words in a row (L1): the current step in the text colour, underlined; the rest grey.
               style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6,
+                display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 6px',
                 minHeight: 'var(--bs-target)',
-                background: s.state === 'current' ? 'var(--bs-elev)' : 'transparent',
-                borderColor: s.state === 'current' ? 'var(--bs-accent)' : 'transparent',
-                color: 'var(--bs-fg)',
+                background: 'transparent',
+                borderColor: 'transparent',
+                color: s.state === 'current' ? 'var(--bs-fg)' : 'var(--bs-fg3)',
+                fontWeight: s.state === 'current' ? 600 : 500,
               }}
             >
               <span aria-hidden="true" style={{ color: COLOUR[s.state], fontWeight: 700 }}>{mark.glyph}</span>
-              <span aria-hidden="true">{`${i + 1}. ${s.label}`}</span>
+              <span aria-hidden="true" data-words="" style={{ borderBottom: s.state === 'current' ? UNDERLINE_ON : UNDERLINE_OFF, paddingBottom: 1 }}>{`${i + 1}. ${s.label}`}</span>
             </button>
           </li>
         );

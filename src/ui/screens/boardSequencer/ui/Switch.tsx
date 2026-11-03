@@ -18,32 +18,33 @@ export function Switch({ label, checked, onChange, disabled = false, hint }: Swi
         aria-checked={checked}
         disabled={disabled}
         onClick={() => onChange(!checked)}
+        // Words and a track on the page (L1): no box round them.
         style={{
           display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'space-between',
-          minHeight: 'var(--bs-target)', borderRadius: 'var(--bs-radius-md)',
-          background: 'var(--bs-raised)', textAlign: 'left',
+          minHeight: 'var(--bs-target)', borderRadius: 0, padding: 0,
+          background: 'transparent', border: 'none', textAlign: 'left',
         }}
       >
         <span>{label}</span>
         <span
           aria-hidden="true"
           style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6,
-            color: checked ? 'var(--bs-accent)' : 'var(--bs-fg2)', fontWeight: 600,
+            display: 'inline-flex', alignItems: 'center', gap: 8,
+            color: checked ? 'var(--bs-fg)' : 'var(--bs-fg3)', fontWeight: 600,
           }}
         >
           {/* The word, not only the track position: state is never shape or colour alone. */}
           {checked ? 'On' : 'Off'}
           <span
             style={{
-              width: 34, height: 20, borderRadius: 999, position: 'relative',
-              background: checked ? 'var(--bs-accent)' : 'var(--bs-elev)',
-              border: '1px solid var(--bs-border-control)',
+              width: 34, height: 20, borderRadius: 999, position: 'relative', boxSizing: 'border-box',
+              background: checked ? 'var(--bs-fg)' : 'transparent',
+              border: `1px solid ${checked ? 'var(--bs-fg)' : 'var(--bs-border-control)'}`,
             }}
           >
             <span style={{
               position: 'absolute', top: 2, left: checked ? 16 : 2, width: 14, height: 14,
-              borderRadius: '50%', background: checked ? 'var(--bs-accent-fg)' : 'var(--bs-fg2)',
+              borderRadius: '50%', background: checked ? 'var(--bs-bg)' : 'var(--bs-fg3)',
             }}
             />
           </span>

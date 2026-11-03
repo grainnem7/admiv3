@@ -1,4 +1,5 @@
 import { useId, useRef } from 'react';
+import { CAPTION_STYLE, UNDERLINE_OFF, UNDERLINE_ON } from './text';
 
 export interface SegmentedOption<T extends string | number> {
   value: T;
@@ -22,9 +23,10 @@ export interface SegmentedControlProps<T extends string | number> {
 }
 
 /**
- * A radiogroup rendered as a row of buttons. Arrow keys move the selection (as a
- * radiogroup should), and only the selected option is in the tab order, so Tab still
- * steps through the form rather than through every option.
+ * A radiogroup rendered as a row of words (L1): the chosen one in the text colour, semibold,
+ * with a thin underline under its words; the rest grey. Arrow keys move the selection (as a
+ * radiogroup should), and only the selected option is in the tab order, so Tab still steps
+ * through the form rather than through every option. Each word is still a 44 px target.
  */
 export function SegmentedControl<T extends string | number>({
   label, value, options, onChange, disabled = false, name, showLabel = false,
@@ -47,8 +49,7 @@ export function SegmentedControl<T extends string | number>({
     <div
       role="radiogroup"
       aria-label={label}
-      // One joined group (U9): the options share their edges, and only the ends are rounded.
-      style={{ display: 'flex', gap: 0, flexWrap: 'wrap' }}
+      style={{ display: 'flex', columnGap: 18, rowGap: 0, flexWrap: 'wrap' }}
       onKeyDown={(e) => {
         if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); move(1); }
         else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); move(-1); }
@@ -70,26 +71,18 @@ export function SegmentedControl<T extends string | number>({
             tabIndex={selected ? 0 : -1}
             disabled={disabled}
             onClick={() => onChange(o.value)}
-            // ● before the words (drawn by the stylesheet, not spoken), B17.
-            className={selected ? 'bs-selected' : undefined}
             style={{
               minHeight: 'var(--bs-target)',
-              borderTopLeftRadius: i === 0 ? 'var(--bs-radius-md)' : 0,
-              borderBottomLeftRadius: i === 0 ? 'var(--bs-radius-md)' : 0,
-              borderTopRightRadius: i === options.length - 1 ? 'var(--bs-radius-md)' : 0,
-              borderBottomRightRadius: i === options.length - 1 ? 'var(--bs-radius-md)' : 0,
-              marginLeft: i === 0 ? undefined : -1,
-              // Selected state carries ● and a light tint, bold: never colour alone, and never
-              // the filled mint kept for a view's one main action (B17). A neutral edge, so
-              // the mint means "press this" (U9).
-              background: selected ? 'var(--bs-accent-muted)' : 'var(--bs-raised)',
-              color: 'var(--bs-fg)',
-              borderColor: 'var(--bs-border-control)',
-              fontWeight: selected ? 600 : 400,
-              position: 'relative', zIndex: selected ? 1 : undefined,
+              padding: 0,
+              background: 'transparent',
+              border: '1px solid transparent',
+              borderRadius: 0,
+              color: selected ? 'var(--bs-fg)' : 'var(--bs-fg3)',
+              fontWeight: selected ? 600 : 500,
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
             }}
           >
-            {o.label}
+            <span data-words="" style={{ borderBottom: selected ? UNDERLINE_ON : UNDERLINE_OFF, paddingBottom: 1 }}>{o.label}</span>
             {o.hint && (
               <span id={hintId(String(o.value))} hidden>{o.hint}</span>
             )}
@@ -101,7 +94,7 @@ export function SegmentedControl<T extends string | number>({
   if (!showLabel) return group;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <span aria-hidden="true" style={{ fontSize: 14, color: 'var(--bs-fg2)', fontWeight: 600 }}>{label}</span>
+      <span aria-hidden="true" style={CAPTION_STYLE}>{label}</span>
       {group}
     </div>
   );

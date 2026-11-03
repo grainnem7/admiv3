@@ -1,9 +1,11 @@
 import { forwardRef, useId } from 'react';
 import type { ButtonHTMLAttributes, CSSProperties, ReactNode } from 'react';
+import { UNDERLINE_ON } from './text';
 
 /**
- * primary: the one main action of a view (filled mint). selected: a choice that is on
- * (● and a light tint, B17), never filled. danger: ■ Stop, in the text colour, bold, never a hue.
+ * primary: the one main action of a view (a filled pill in the text colour). selected: a choice
+ * that is on (semibold, its words underlined, L1), never filled. danger: ■ Stop, filled in the
+ * text colour, bold, never a hue. secondary: a pill with a hairline edge. quiet: plain words.
  */
 export type ButtonTone = 'primary' | 'secondary' | 'quiet' | 'danger' | 'selected';
 
@@ -25,14 +27,14 @@ export interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement
 }
 
 const TONE_STYLE: Record<ButtonTone, CSSProperties> = {
-  primary: { background: 'var(--bs-accent)', color: 'var(--bs-accent-fg)', borderColor: 'var(--bs-accent)' },
-  secondary: { background: 'var(--bs-raised)', color: 'var(--bs-fg)' },
-  quiet: { background: 'transparent', color: 'var(--bs-fg2)', borderColor: 'transparent' },
+  primary: { background: 'var(--bs-accent)', color: 'var(--bs-accent-fg)', borderColor: 'var(--bs-accent)', fontWeight: 600 },
+  secondary: { background: 'transparent', color: 'var(--bs-fg)', borderColor: 'var(--bs-border-control)', fontWeight: 500 },
+  quiet: { background: 'transparent', color: 'var(--bs-fg2)', borderColor: 'transparent', fontWeight: 500 },
   // ■ Stop and the like: the strongest button by weight, never by hue. The danger colours are
   // close to the red and orange counters, which are reserved for the board.
   danger: { background: 'var(--bs-fg)', color: 'var(--bs-bg)', borderColor: 'var(--bs-fg)', fontWeight: 800 },
-  // The tint and ● (B17), a neutral edge and weight (U9): the mint is for the one main action.
-  selected: { background: 'var(--bs-accent-muted)', color: 'var(--bs-fg)', borderColor: 'var(--bs-border-control)', fontWeight: 600 },
+  // Semibold with its words underlined (L1): no tint, no edge, never colour alone.
+  selected: { background: 'transparent', color: 'var(--bs-fg)', borderColor: 'transparent', fontWeight: 600 },
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
@@ -44,23 +46,27 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
     <button
       ref={ref}
       type="button"
-      className={[tone === 'selected' ? 'bs-selected' : '', className ?? ''].filter(Boolean).join(' ') || undefined}
+      className={className}
       disabled={disabled || reason !== null}
       style={{
         ...TONE_STYLE[tone],
+        // The edge a pressed button keeps (the stylesheet beats the app's orange ring with it).
+        ['--bs-pressed-edge' as string]: TONE_STYLE[tone].borderColor,
         minHeight: 'var(--bs-target)',
-        borderRadius: 'var(--bs-radius-md)',
+        borderRadius: 'var(--bs-radius-pill)',
         display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',
         gap: 8,
         width: full ? '100%' : undefined,
         ...style,
-      }}
+      } as CSSProperties}
       {...rest}
       aria-describedby={describedBy}
     >
-      {children}
+      {tone === 'selected'
+        ? <span data-words="" style={{ borderBottom: UNDERLINE_ON, paddingBottom: 1 }}>{children}</span>
+        : children}
     </button>
   );
   if (reason === null && !reserveReason) return button;

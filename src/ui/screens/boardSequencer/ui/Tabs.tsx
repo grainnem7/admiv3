@@ -1,5 +1,6 @@
 import { useId, useRef } from 'react';
 import type { ReactNode } from 'react';
+import { UNDERLINE_OFF, UNDERLINE_ON } from './text';
 
 export interface TabItem {
   id: string;
@@ -35,7 +36,8 @@ export function Tabs({ label, tabs, active, onChange }: TabsProps): JSX.Element 
       <div
         role="tablist"
         aria-label={label}
-        style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--bs-border)' }}
+        // Words in a row over one hairline (L1): the open tab in the text colour, underlined.
+        style={{ display: 'flex', columnGap: 22, flexWrap: 'wrap', borderBottom: '1px solid var(--bs-border)' }}
         onKeyDown={(e) => {
           if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); focusTab(index + 1); }
           else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); focusTab(index - 1); }
@@ -58,15 +60,15 @@ export function Tabs({ label, tabs, active, onChange }: TabsProps): JSX.Element 
               onClick={() => onChange(t.id)}
               style={{
                 minHeight: 'var(--bs-target)',
-                background: selected ? 'var(--bs-elev)' : 'transparent',
-                color: selected ? 'var(--bs-fg)' : 'var(--bs-fg2)',
+                padding: 0,
+                background: 'transparent',
+                color: selected ? 'var(--bs-fg)' : 'var(--bs-fg3)',
                 border: 'none',
-                borderBottom: selected ? '3px solid var(--bs-accent)' : '3px solid transparent',
                 borderRadius: 0,
-                fontWeight: selected ? 600 : 400,
+                fontWeight: selected ? 600 : 500,
               }}
             >
-              {t.label}
+              <span data-words="" style={{ borderBottom: selected ? UNDERLINE_ON : UNDERLINE_OFF, paddingBottom: 1 }}>{t.label}</span>
             </button>
           );
         })}
