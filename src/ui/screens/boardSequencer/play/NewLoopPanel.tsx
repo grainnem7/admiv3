@@ -65,7 +65,8 @@ export interface NewLoopPanelProps {
 }
 
 const NOTE = { fontSize: 14, color: 'var(--bs-fg2)', margin: 0 } as const;
-const card = { padding: 12, borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-elev)', display: 'flex', flexDirection: 'column', gap: 8 } as const;
+/** A step of New loop (L4): a hairline above it, never a card. */
+const card = { padding: '10px 0 4px', borderTop: '1px solid var(--bs-border)', display: 'flex', flexDirection: 'column', gap: 8 } as const;
 
 /**
  * Making a loop from silence: the board, nothing else sounding, until the owner asks to

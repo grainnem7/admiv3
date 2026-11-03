@@ -23,6 +23,7 @@ import { Switch } from '../ui/Switch';
 import { configToSoundFrom } from '../../../../midi/boardMidi';
 import { useSessionFold } from '../ui/useSessionFold';
 import { WORDS } from '../words';
+import { CAPTION_STYLE } from '../ui/text';
 
 /** Said wherever a control only changes ADMI's own sound, while Ableton makes it. */
 const IN_ABLETON = 'Sound set in Ableton';
@@ -96,13 +97,14 @@ function grooveOf(swing: number, humanize: number): GrooveName | null {
 const SECTION: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 10 };
 /** Every section after the first: a hairline and air above its heading, so the tab reads in parts (U8). */
 const SECTION_NEXT: CSSProperties = { ...SECTION, borderTop: '1px solid var(--bs-border)', paddingTop: 14, marginTop: 4 };
-const HEADING: CSSProperties = { margin: 0, fontSize: 16, fontWeight: 700 };
-/** The caption above a choice: a little bolder than the sentence under it (U8). */
-const CAPTION: CSSProperties = { fontSize: 14, color: 'var(--bs-fg2)', fontWeight: 600 };
+const HEADING: CSSProperties = { margin: 0, fontSize: 16, fontWeight: 600 };
+/** The caption above a choice: small capitals in the quiet colour (L4). */
+const CAPTION: CSSProperties = CAPTION_STYLE;
 const NOTE: CSSProperties = { fontSize: 14, color: 'var(--bs-fg2)' };
+/** A helper's section (L4): parted from the one above by a hairline, never a card. */
 const CARD: CSSProperties = {
-  display: 'flex', flexDirection: 'column', gap: 8, padding: 10,
-  borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-raised)', border: '1px solid var(--bs-border)',
+  display: 'flex', flexDirection: 'column', gap: 8, padding: '4px 0 10px',
+  borderTop: '1px solid var(--bs-border)',
 };
 
 // ---- a helper: Band, Extra notes, Sounds change ----
@@ -135,7 +137,7 @@ function HelperFold({ id, title, summary, children }: { id: string; title: strin
 function HelperButtons({ a, tryWord, tryLabel }: { a: HelperActions; tryWord: string; tryLabel: string }): JSX.Element {
   return (
     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-      <Button tone="primary" onClick={a.onTry} aria-label={tryLabel}>{`↻ ${tryWord}`}</Button>
+      <Button tone="secondary" onClick={a.onTry} aria-label={tryLabel}>{`↻ ${tryWord}`}</Button>
       <Button onClick={a.onPrevious} reason={a.canPrevious ? null : 'Nothing to go back to yet.'}>↶ Previous</Button>
       <Button aria-pressed={a.frozen} onClick={a.onFreeze} reason={a.frozen ? null : a.freezeReason}>
         {a.frozen ? '📌 Frozen ✓' : '📌 Freeze'}

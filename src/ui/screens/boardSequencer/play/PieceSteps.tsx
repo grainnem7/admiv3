@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Button } from '../ui/Button';
+import { UNDERLINE_OFF, UNDERLINE_ON } from '../ui/text';
 import { focusDropped, focusWhenGone, PLAY_STOP_ID } from '../ui/focusNext';
 import { LabeledSlider } from '../ui/LabeledSlider';
 import { SegmentedControl } from '../ui/SegmentedControl';
@@ -128,9 +129,10 @@ export function LoopThumb({ cells, rows, cols, swatchFor, width = 64 }: {
   const cw = width / Math.max(1, cols);
   const h = cw * rows;
   return (
-    <svg width={width} height={h} aria-hidden="true" style={{ flexShrink: 0, borderRadius: 4, background: 'var(--bs-elev)', border: '1px solid var(--bs-border)' }}>
-      {width >= 120 && Array.from({ length: rows * cols }, (_, k) => (
-        <rect key={`sq${k}`} x={(k % cols) * cw + 1} y={Math.floor(k / cols) * cw + 1} width={cw - 2} height={cw - 2} rx={3} fill="none" stroke="var(--bs-border)" />
+    <svg width={width} height={h} aria-hidden="true" style={{ flexShrink: 0 }}>
+      {/* The empty squares as dots, as the board draws them (L5). */}
+      {Array.from({ length: rows * cols }, (_, k) => (
+        <circle key={`sq${k}`} cx={(k % cols) * cw + cw / 2} cy={Math.floor(k / cols) * cw + cw / 2} r={Math.max(1, cw * 0.08)} fill="var(--bs-border-control)" />
       ))}
       {cells.map((c, i) => (
         <circle key={i} cx={c.col * cw + cw / 2} cy={c.row * cw + cw / 2} r={Math.max(1.5, cw * 0.38)} fill={swatchFor(c.colour)} />
@@ -162,7 +164,6 @@ export function loopStateText(l: PieceLoop, running: boolean, fades: boolean): s
  * colours belong to the counters, and white on a bright scene colour was 2.3:1 (B10).
  * Neighbours on the timeline alternate two neutral surfaces, with the board's text colour.
  */
-const sceneChipSurface = (i: number): string => (i % 2 === 0 ? 'var(--bs-raised)' : 'var(--bs-hi)');
 
 /** A chip's padding and edges, either side: what its words never get. */
 const CHIP_EDGES_PX = 18;
@@ -198,9 +199,10 @@ export function sceneChipLabel(
 /** "Other ways to make a loop" stays open for the rest of the session once opened. */
 let otherWaysOpen = false;
 
-const heading = { margin: 0, fontSize: 20, fontWeight: 800 } as const;
+const heading = { margin: 0, fontSize: 20, fontWeight: 600 } as const;
 const note = { fontSize: 14, color: 'var(--bs-fg2)', margin: 0 } as const;
-const card = { padding: 12, borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-elev)', display: 'flex', flexDirection: 'column', gap: 6 } as const;
+/** A section (L5): a hairline above it, never a card. */
+const card = { padding: '10px 0 4px', borderTop: '1px solid var(--bs-border)', display: 'flex', flexDirection: 'column', gap: 6 } as const;
 
 const ENDINGS: { value: EndingStyle; label: string; what: string }[] = [
   { value: 'chord', label: 'Final chord', what: 'The texture thins, then a held chord and a crash ring out. A clear end the audience hears.' },
@@ -226,10 +228,10 @@ export function PieceSteps(p: PieceStepsProps): JSX.Element {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14, paddingTop: 10 }}>
       {/* One joined group (U9): the three steps share their edges; the one you are on is tinted. */}
-      <nav aria-label="Make a piece: steps" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 0 }}>
-        {steps.map((s, i) => {
+      {/* The three steps as words (L5): the one you are on in the text colour, underlined. */}
+      <nav aria-label="Make a piece: steps" style={{ display: 'flex', columnGap: 18, flexWrap: 'wrap', borderBottom: '1px solid var(--bs-border)' }}>
+        {steps.map((s) => {
           const on = p.step === s.id;
-          const r = 'var(--bs-radius-md)';
           return (
             <button
               key={s.id}
@@ -237,14 +239,13 @@ export function PieceSteps(p: PieceStepsProps): JSX.Element {
               aria-current={on ? 'step' : undefined}
               onClick={() => p.onStep(s.id)}
               style={{
-                minHeight: 'var(--bs-target)', padding: '6px 10px', textAlign: 'left', cursor: 'pointer', color: 'inherit',
-                borderRadius: i === 0 ? `${r} 0 0 ${r}` : i === steps.length - 1 ? `0 ${r} ${r} 0` : 0,
-                marginLeft: i === 0 ? undefined : -1, position: 'relative', zIndex: on ? 1 : undefined,
-                border: '1px solid var(--bs-border-control)', background: on ? 'var(--bs-accent-muted)' : 'var(--bs-raised)',
+                minHeight: 'var(--bs-target)', padding: '4px 0', textAlign: 'left', cursor: 'pointer',
+                borderRadius: 0, border: '1px solid transparent', background: 'transparent',
+                color: on ? 'var(--bs-fg)' : 'var(--bs-fg3)', fontWeight: on ? 600 : 500,
               }}
             >
-              <span style={{ display: 'block', fontWeight: 800 }}>{`${s.n} · ${s.label}`}</span>
-              <span style={{ display: 'block', fontSize: 14, color: 'var(--bs-fg2)' }}>{s.status}</span>
+              <span data-words="" style={{ display: 'inline-block', borderBottom: on ? UNDERLINE_ON : UNDERLINE_OFF, paddingBottom: 1 }}>{`${s.n} · ${s.label}`}</span>
+              <span style={{ display: 'block', fontSize: 14, color: 'var(--bs-fg3)', fontWeight: 500 }}>{s.status}</span>
             </button>
           );
         })}
@@ -331,12 +332,13 @@ function LoopsStep(p: PieceStepsProps): JSX.Element {
             <li
               key={l.slot}
               aria-label={`Loop ${l.slot + 1}: ${loopName(l)}, ${loopStateText(l, p.running, p.loopFadePasses > 0)}`}
+              // A row under a hairline (L5), never a box: a loop that plays says so in bold.
               style={{
-                display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', padding: 8, borderRadius: 'var(--bs-radius-md)',
-                border: `2px solid ${on ? 'var(--bs-ok)' : 'var(--bs-border)'}`, background: empty ? 'transparent' : 'var(--bs-raised)',
+                display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', padding: '8px 0',
+                borderTop: '1px solid var(--bs-border)', background: 'transparent',
               }}
             >
-              <span style={{ fontWeight: 800, width: 18, textAlign: 'right', color: 'var(--bs-fg2)' }}>{l.slot + 1}</span>
+              <span style={{ fontWeight: 600, width: 18, textAlign: 'right', color: 'var(--bs-fg3)', fontVariantNumeric: 'tabular-nums' }}>{l.slot + 1}</span>
               {!empty && <LoopThumb cells={l.cells} rows={p.rows} cols={p.cols} swatchFor={p.swatchFor} />}
               {/* Named in one place (U5): while New loop's own name box is open, the row says the name. */}
               {p.namingSlot === l.slot ? (
@@ -350,7 +352,7 @@ function LoopsStep(p: PieceStepsProps): JSX.Element {
                   style={{ width: 100, minHeight: 'var(--bs-target)' }}
                 />
               )}
-              <span style={{ fontSize: 14, color: on ? 'var(--bs-ok)' : 'var(--bs-fg2)', minWidth: 0, flex: '1 1 60px' }}>{loopStateText(l, p.running, p.loopFadePasses > 0)}</span>
+              <span style={{ fontSize: 14, color: on ? 'var(--bs-fg)' : 'var(--bs-fg2)', fontWeight: on ? 600 : 400, minWidth: 0, flex: '1 1 60px' }}>{loopStateText(l, p.running, p.loopFadePasses > 0)}</span>
               {empty ? (oldWays && (
                 <Button
                   tone="secondary"
@@ -429,7 +431,7 @@ function EnergyGraph({ scenes, lengthSec }: { scenes: readonly Scene[]; lengthSe
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       <svg
         role="img" aria-label={`Energy across the piece: ${words.join(', ')}`} viewBox="0 0 100 50" preserveAspectRatio="none"
-        style={{ width: '100%', height: 48, borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-elev)' }}
+        style={{ width: '100%', height: 48 }}
       >
         {ENERGY_LEVELS.map((e) => <line key={e} x1={0} x2={100} y1={y(e)} y2={y(e)} stroke="var(--bs-border)" strokeWidth={0.5} vectorEffect="non-scaling-stroke" />)}
         {line.map((x, k) => {
@@ -509,7 +511,7 @@ function ScenesStep(p: PieceStepsProps): JSX.Element {
         </div>
       ) : (
         <>
-          <ul ref={timelineRef} aria-label="Timeline of the scenes" style={{ listStyle: 'none', margin: 0, padding: 0, position: 'relative', height: 44, borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-elev)', overflow: 'hidden' }}>
+          <ul ref={timelineRef} aria-label="Timeline of the scenes" style={{ listStyle: 'none', margin: 0, padding: 0, position: 'relative', height: 44, borderBottom: '1px solid var(--bs-border-control)', overflow: 'hidden' }}>
             {p.scenes.map((s, i) => {
               if (typeof s.at !== 'number' || s.at >= p.lengthSec) return null;
               const nextAt = p.scenes.slice(i + 1).find((x) => typeof x.at === 'number')?.at ?? p.lengthSec;
@@ -525,10 +527,12 @@ function ScenesStep(p: PieceStepsProps): JSX.Element {
                     type="button" onClick={() => setSelected(s.id)}
                     aria-label={`${words}${p.currentScene === i ? ', on now' : ''}`}
                     title={words}
+                    // A mark on a line (L5): each scene starts at a tick, the one on now at a
+                    // thicker one, in the text colour.
                     style={{
                       width: '100%', height: '100%', minHeight: 0, minWidth: 0, borderRadius: 0,
-                      background: sceneChipSurface(i), color: 'var(--bs-fg)',
-                      border: p.currentScene === i ? '3px solid var(--bs-accent)' : '1px solid var(--bs-border-control)',
+                      background: 'transparent', color: p.currentScene === i ? 'var(--bs-fg)' : 'var(--bs-fg2)',
+                      border: 'none', borderLeft: p.currentScene === i ? '3px solid var(--bs-fg)' : '1px solid var(--bs-border-control)',
                       padding: '2px 6px', textAlign: 'left', font: CHIP_FONT, overflow: 'hidden', whiteSpace: 'nowrap', cursor: 'pointer',
                     }}
                   >
@@ -686,12 +690,14 @@ function EndingStep(p: PieceStepsProps): JSX.Element {
           return (
             <button
               key={e.value} type="button" role="radio" aria-checked={on} onClick={() => p.onPerformance({ style: e.value })}
+              // Rows under hairlines (L5): the chosen one says so with ● and its weight.
               style={{
-                textAlign: 'left', padding: '8px 10px', borderRadius: 'var(--bs-radius-md)', cursor: 'pointer', color: 'inherit', minHeight: 'var(--bs-target)',
-                border: `2px solid ${on ? 'var(--bs-accent)' : 'var(--bs-border-control)'}`, background: on ? 'var(--bs-accent-muted)' : 'var(--bs-raised)',
+                textAlign: 'left', padding: '8px 0', borderRadius: 0, cursor: 'pointer', minHeight: 'var(--bs-target)',
+                color: on ? 'var(--bs-fg)' : 'var(--bs-fg2)',
+                border: 'none', borderTop: '1px solid var(--bs-border)', background: 'transparent',
               }}
             >
-              <span style={{ fontWeight: 700 }}>{`${on ? '● ' : '○ '}${e.label}`}</span>
+              <span style={{ fontWeight: on ? 600 : 500 }}>{`${on ? '● ' : '○ '}${e.label}`}</span>
               <span style={{ display: 'block', fontSize: 14, color: 'var(--bs-fg2)' }}>{e.what}</span>
             </button>
           );
@@ -849,17 +855,16 @@ function SceneRow(r: SceneRowProps): JSX.Element {
 
   return (
     <div
+      // A row under a hairline (L5): the scene on now has a thick stripe in the text colour
+      // on its left, never a colour of its own (B10). The number says which.
       style={{
-        borderRadius: 'var(--bs-radius-md)', padding: 6, display: 'flex', flexDirection: 'column', gap: 6,
-        borderTop: `2px solid ${r.current ? 'var(--bs-accent)' : 'var(--bs-border)'}`,
-        borderRight: `2px solid ${r.current ? 'var(--bs-accent)' : 'var(--bs-border)'}`,
-        borderBottom: `2px solid ${r.current ? 'var(--bs-accent)' : 'var(--bs-border)'}`,
-        // A neutral stripe, never a colour of the scene's own (B10): the number says which.
-        borderLeft: `8px solid ${r.current ? 'var(--bs-accent)' : 'var(--bs-border-control)'}`,
+        padding: '6px 0 6px 10px', display: 'flex', flexDirection: 'column', gap: 6,
+        borderTop: '1px solid var(--bs-border)',
+        borderLeft: `3px solid ${r.current ? 'var(--bs-fg)' : 'transparent'}`,
       }}
     >
       <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-        <span aria-hidden="true" style={{ minWidth: 26, height: 26, borderRadius: 999, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 14, border: '1px solid var(--bs-border-control)', background: 'var(--bs-raised)' }}>{r.number}</span>
+        <span aria-hidden="true" style={{ minWidth: 20, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, fontSize: 14, color: 'var(--bs-fg3)', fontVariantNumeric: 'tabular-nums' }}>{r.number}</span>
         <button
           type="button" aria-expanded={r.open} onClick={r.onToggleOpen} data-scene-row={s.id}
           style={{ flex: '1 1 200px', minHeight: 'var(--bs-target)', textAlign: 'left', background: 'transparent', border: 'none', color: 'inherit', cursor: 'pointer' }}
@@ -918,8 +923,8 @@ function SceneRow(r: SceneRowProps): JSX.Element {
                 onClick={() => r.onEdit({ loops: s.loops.filter((x) => x !== l.slot) })}
                 title="This loop holds nothing, so nothing plays from it"
                 style={{
-                  minHeight: 'var(--bs-target)', padding: '4px 10px', borderRadius: 999, cursor: 'pointer', color: 'inherit',
-                  border: '2px dashed var(--bs-warn)', background: 'transparent',
+                  minHeight: 'var(--bs-target)', padding: '4px 12px', borderRadius: 999, cursor: 'pointer', color: 'inherit',
+                  border: '1px dashed var(--bs-warn)', background: 'transparent',
                 }}
               >
                 {`${loopName(l)}: empty, take it out`}
@@ -931,9 +936,11 @@ function SceneRow(r: SceneRowProps): JSX.Element {
                 <button
                   key={l.slot} type="button" aria-pressed={inScene}
                   onClick={() => r.onEdit({ loops: inScene ? s.loops.filter((x) => x !== l.slot) : [...s.loops, l.slot].sort((a, b) => a - b) })}
+                  // In the scene: a pill in the text colour, semibold, with its ✓ (L5).
                   style={{
-                    minHeight: 'var(--bs-target)', padding: '4px 10px', borderRadius: 999, cursor: 'pointer', color: 'inherit',
-                    border: `2px solid ${inScene ? 'var(--bs-accent)' : 'var(--bs-border-control)'}`, background: inScene ? 'var(--bs-accent-muted)' : 'transparent',
+                    minHeight: 'var(--bs-target)', padding: '4px 12px', borderRadius: 999, cursor: 'pointer',
+                    color: inScene ? 'var(--bs-fg)' : 'var(--bs-fg2)', fontWeight: inScene ? 600 : 500,
+                    border: `1px solid ${inScene ? 'var(--bs-fg)' : 'var(--bs-border-control)'}`, background: 'transparent',
                   }}
                 >
                   {`${inScene ? '✓ ' : ''}${loopName(l)}`}

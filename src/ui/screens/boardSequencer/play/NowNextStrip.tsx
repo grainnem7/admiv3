@@ -46,15 +46,16 @@ export function NowNextStrip(p: NowNextStripProps): JSX.Element {
       tabIndex={p.focusRef ? -1 : undefined}
       role="region"
       aria-label="Now and next"
+      // On the page, under a hairline (L6): the clock light and tabular, the scene's name bold.
       style={{
-        display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', padding: '8px 12px',
-        borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-elev)', border: '1px solid var(--bs-border)',
+        display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', padding: '8px 4px 10px',
+        borderBottom: '1px solid var(--bs-border)',
       }}
     >
       {p.clock && phase !== 'idle' ? (
         <span
           role="timer" aria-label={`${p.clock.text} left`}
-          style={{ fontSize: 34 * size, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: clockColour, lineHeight: 1 }}
+          style={{ fontSize: 34 * size, fontWeight: 300, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em', color: clockColour, lineHeight: 1 }}
         >
           {phase === 'ending' ? `ending ${p.clock.text}` : p.clock.text}
         </span>
@@ -68,7 +69,7 @@ export function NowNextStrip(p: NowNextStripProps): JSX.Element {
         </>
       )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, flex: '1 1 200px' }}>
-        <span style={{ fontSize: 20 * size, fontWeight: 700 }}>{p.nowName ? `Now: ${p.nowName}` : 'Now: no scene'}</span>
+        <span style={{ fontSize: 20 * size, fontWeight: 600 }}>{p.nowName ? `Now: ${p.nowName}` : 'Now: no scene'}</span>
         <span style={{ fontSize: 14 * size, color: 'var(--bs-fg2)' }}>
           {p.next ? `Next: ${p.next.name} in ${formatClock(p.next.inSec)}` : phase !== 'idle' ? 'No more scenes on the clock' : 'Scenes come in once the clock starts'}
         </span>
@@ -79,7 +80,7 @@ export function NowNextStrip(p: NowNextStripProps): JSX.Element {
         {p.loops.length > 0 && (
           <span style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 2 }} aria-label={`Loops playing: ${p.loops.join(', ')}`}>
             {p.loops.map((l) => (
-              <span key={l} style={{ fontSize: 14 * size, padding: '1px 8px', borderRadius: 999, background: 'var(--bs-accent-muted)', border: '1px solid var(--bs-accent)' }}>{l}</span>
+              <span key={l} style={{ fontSize: 14 * size, padding: '1px 10px', borderRadius: 999, border: '1px solid var(--bs-border-control)' }}>{l}</span>
             ))}
           </span>
         )}
@@ -88,7 +89,7 @@ export function NowNextStrip(p: NowNextStripProps): JSX.Element {
         // Seen here; spoken by the screen's own announcement, so not announced twice.
         <span
           aria-hidden="true"
-          style={{ fontSize: 24 * size, fontWeight: 800, padding: '4px 14px', borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-warn)', color: 'var(--bs-bg)' }}
+          style={{ fontSize: 24 * size, fontWeight: 600, padding: '4px 14px', borderRadius: 'var(--bs-radius-pill)', background: 'var(--bs-warn)', color: 'var(--bs-warn-fg)' }}
         >
           {p.cue}
         </span>

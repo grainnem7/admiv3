@@ -141,9 +141,10 @@ export interface CapPanelProps {
 }
 
 const NOTE: CSSProperties = { fontSize: 14, color: 'var(--bs-fg2)', margin: 0 };
+/** A section of the Cap tab (L4): a hairline above it, never a card. */
 const CARD: CSSProperties = {
-  display: 'flex', flexDirection: 'column', gap: 8, padding: 10,
-  borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-raised)', border: '1px solid var(--bs-border)',
+  display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 0 4px',
+  borderTop: '1px solid var(--bs-border)',
 };
 const PREVIEW_W = 320;
 const PREVIEW_H = 240;

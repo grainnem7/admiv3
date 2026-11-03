@@ -97,14 +97,15 @@ describe('Scenes: the open panel follows its scene (T2-02)', () => {
       expect(c.parentElement?.tagName).toBe('LI');
       expect(c.closest('ul')?.getAttribute('aria-label')).toBe('Timeline of the scenes');
       expect(c.getAttribute('role')).toBeNull();
-      expect(c.style.color).toBe('var(--bs-fg)');
-      expect(c.style.background).toMatch(/^var\(--bs-(raised|hi)\)$/);
+      // A mark on a line (L5): the text colours, no fill of its own.
+      expect(c.style.color).toMatch(/^var\(--bs-fg2?\)$/);
+      expect(c.style.background).toBe('transparent');
     }
-    // The cards' stripes too: a token, never a hue of their own.
+    // The rows' stripes too: a token (or none), never a hue of their own.
     const html = host.innerHTML;
     expect(html).not.toMatch(/hsl\(/);
     const stripe = (button(/^1:30 · Build/)?.closest('div[style*="border-left"]') as HTMLElement | null)?.style.borderLeft ?? '';
-    expect(stripe).toMatch(/var\(--bs-/);
+    expect(stripe).toMatch(/var\(--bs-|transparent/);
   });
 });
 
@@ -790,15 +791,22 @@ describe('U6: a kept loop’s ▶ Play and ✕ stay together at the end of its r
   });
 });
 
-describe('U9: the three steps of Make a piece are one joined group', () => {
-  it('no gap between them, the middle one square, the chosen one tinted with a neutral edge', () => {
+describe('L5: the three steps of Make a piece are words in a row', () => {
+  it('the one you are on in the text colour with its words underlined, the rest grey, none boxed', () => {
     render(props({ step: 'scenes' }));
     const nav = host.querySelector('nav[aria-label="Make a piece: steps"]') as HTMLElement;
-    expect(nav.style.gap).toMatch(/^0(px)?$/);
+    expect(parseInt(nav.style.columnGap, 10)).toBeGreaterThanOrEqual(16);
     const steps = [...nav.querySelectorAll('button')] as HTMLButtonElement[];
-    expect(steps[1].style.borderRadius).toMatch(/^0(px)?$/);
-    expect(steps[1].style.background).toBe('var(--bs-accent-muted)');
-    expect(steps[1].style.border).toContain('var(--bs-border-control)');
-    expect(steps[0].style.border).toContain('var(--bs-border-control)');
+    for (const b of steps) {
+      expect(b.style.background).toBe('transparent');
+      expect(b.style.border).toBe('1px solid transparent');
+      expect(b.style.minHeight).toBe('var(--bs-target)');
+    }
+    expect(steps[1].style.color).toBe('var(--bs-fg)');
+    expect(steps[1].style.fontWeight).toBe('600');
+    expect(steps[0].style.color).toBe('var(--bs-fg3)');
+    const words = (b: HTMLElement): HTMLElement => b.querySelector('[data-words]') as HTMLElement;
+    expect(words(steps[1]).style.borderBottom).toMatch(/^1px solid currentcolor$/i);
+    expect(words(steps[0]).style.borderBottom).toBe('1px solid transparent');
   });
 });

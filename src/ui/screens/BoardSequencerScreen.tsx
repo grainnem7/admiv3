@@ -3984,7 +3984,7 @@ export default function BoardSequencerScreen() {
   const connectionsTab = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 10 }}>
     {/* The iPad remote: a second controller in the performance (see src/remote). */}
-    <div role="group" aria-label="iPad controls" style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 8, borderRadius: 'var(--bs-radius-md)', border: '1px solid var(--bs-border)' }}>
+    <div role="group" aria-label="iPad controls" style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '8px 0', borderTop: '1px solid var(--bs-border)' }}>
       <Switch
         label="iPad controls"
         checked={remoteEnabled}
@@ -6063,7 +6063,7 @@ export default function BoardSequencerScreen() {
       }}
     >
       {running ? bigNowNextStrip : (
-        <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap', padding: '10px 14px', borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-elev)' }}>
+        <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap', padding: '10px 4px', borderBottom: '1px solid var(--bs-border)' }}>
           <Button
             ref={showStartRef}
             tone="primary"
