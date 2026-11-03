@@ -106,7 +106,7 @@ export function AbletonSoundsPanel({ config, getLive, onSend, connected }: {
         </span>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ fontSize: 14, borderCollapse: 'collapse' }}>
-            <caption style={{ ...NOTE, textAlign: 'left' }}>Every rack has these chains, named exactly, in this order. Real: a real instrument on that track. Placeholder: the light stand-in.</caption>
+            <caption style={{ ...NOTE, textAlign: 'left' }}>Melody, Bass and Chords have every one of these chains, named exactly, in this order. Real: a real instrument on that track. Placeholder: the chain left empty, or the light stand-in. Band, Extra notes and Loops need only the four World chains, zones 0 to 2, 3 to 5, 6 to 8 and 9 to 127 set by hand.</caption>
             <thead>
               <tr>
                 {['Chain', 'Name', 'Zone (CC 30)', 'Melody', 'Chords', 'Bass', 'Band, Extra notes and Loops'].map((h) => (
@@ -128,7 +128,7 @@ export function AbletonSoundsPanel({ config, getLive, onSend, connected }: {
             </tbody>
           </table>
         </div>
-        <span style={NOTE}>Placeholder: Operator with its default sound. In One per colour mode the melody colours use tracks 1, 14 and 15: build three Melody tracks.</span>
+        <span style={NOTE}>Placeholder: an empty chain, or Operator with its default sound. ADMI never sends a track to a chain it does not hold. In One per colour mode the melody colours use tracks 1, 14 and 15: build three Melody tracks first. A fader per loop needs the Loop 1 to 6 tracks first.</span>
         <span style={NOTE}>Macros on every chain: 1 Volume (CC 24), 2 Brightness (CC 25), 3 Space (CC 26). Echo is CC 27.</span>
       </Disclosure>
     </div>

@@ -18,7 +18,7 @@ function render(): void {
 }
 
 const checklist = (): HTMLTableElement => {
-  const t = [...host.querySelectorAll('table')].find((x) => x.querySelector('caption')?.textContent?.includes('Every rack'));
+  const t = [...host.querySelectorAll('table')].find((x) => x.querySelector('caption')?.textContent?.includes('named exactly'));
   if (!t) throw new Error('no checklist table');
   return t as HTMLTableElement;
 };
@@ -43,6 +43,6 @@ describe('the Template checklist', () => {
     expect(host.textContent).toContain(
       'Changing from the 16-sound racks? On every track except the drums (channel 10): rename chains 11, 14, 15 and 16, add chains 17 to 33 with the placeholder, then drag chain 33’s zone out to end at 127, select every chain and choose Distribute Ranges Equally. Then check in the ruler that chains 4, 18 and 30 start at 9, 64 and 112.',
     );
-    expect(host.textContent).toContain('Placeholder: Operator with its default sound. In One per colour mode the melody colours use tracks 1, 14 and 15: build three Melody tracks.');
+    expect(host.textContent).toContain('Placeholder: an empty chain, or Operator with its default sound. ADMI never sends a track to a chain it does not hold. In One per colour mode the melody colours use tracks 1, 14 and 15: build three Melody tracks first. A fader per loop needs the Loop 1 to 6 tracks first.');
   });
 });

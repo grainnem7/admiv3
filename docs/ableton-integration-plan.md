@@ -481,5 +481,22 @@ World's sounds in Ableton.
   - the guide's checklist.
 - Laptop CPU: camera tracking, a browser and Ableton with heavy Suite instruments. **Do a
   full 7-minute run on the performance laptop** with the real Set before relying on it.
+- Measured on the show laptop (31.5 GB, Live 12 Suite, 2026-11-03), One per part:
+  - Ableton with no racks: 650 MB. With a 23-real Melody rack, a 12-real Bass rack, a
+    17-real Chords rack and eleven World-only racks of 33 chains: 6,409 MB after a fresh
+    load, the laptop at 84 to 90% with the browser and VS Code open.
+  - The 29 Operator placeholders in one World-only rack: about 270 MB (one reading).
+  - Melody rack alone, about 30 s of playing: CPU meter peak about 9%.
+  - Decision: the show Set is the seven tracks of guide section 3. Melody 2, Melody 3
+    and the loop tracks are built only when One per colour or A fader per loop is used;
+    placeholder chains are left empty; the band and Extra notes racks hold four World
+    chains with zones set by hand (0 to 2, 3 to 5, 6 to 8, 9 to 127). The full run with
+    the camera is still to be done; it is a show-day step, not a gate on the Set.
+  - Audio: MME at 768 samples was the lowest that did not crackle on the laptop speakers
+    (about 17 ms before the driver's own delay). The interface's ASIO driver at 128 or
+    256 is the route to the under-20 ms aim.
+- OneDrive: the Set and 28.7 GB of packs lived in OneDrive, and Ableton's Open window
+  froze there with the account disconnected. Keep the packs and the User Library in a
+  plain local folder (Preferences, Library), and Collect All and Save the Set.
 - Windows loopMIDI quirks. If notes stop after sleep or resume, restart loopMIDI, then
   reload ADMI.
