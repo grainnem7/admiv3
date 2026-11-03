@@ -289,10 +289,10 @@ a:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
     <h2 id="h-showday">7. Show day checklist</h2>
     <ul class="checklist">
       <li>loopMIDI open, with the ADMIOutput port, before the browser.</li>
-      <li>Ableton open with the <strong>ADMI template</strong> Set, buffer 128, the right audio device.</li>
-      <li>ADMI started with <code>npm run show</code>; Connections tab: Sound from Ableton, port ADMI, "✓ Sending to ADMI".</li>
+      <li>Ableton open with the <strong>ADMI template</strong> Set, opened from its local folder (not OneDrive), on the audio device and buffer the timing check settled on (section 6), with nothing else big open.</li>
+      <li>ADMI started with <code>npm run show</code>; Connections tab: Sound from Ableton, port ADMIOutput, "✓ Sending to ADMIOutput".</li>
       <li>Press Play, then <span class="btn">Play test note</span>: it plays one note on each channel in turn (1, 2, 3, 10, 11, 12, 13) and names it on screen. A silent one is a missing track. Extra notes need track 13, the band 11 and 12.</li>
-      <li>The Ready check (Make a piece, step 3) says "MIDI port ADMI connected". It can only see the port, not whether Ableton is listening: that is what the test note is for.</li>
+      <li>The Check tab in Make a piece says "MIDI port ADMIOutput connected". It can only see the port, not whether Ableton is listening: that is what the test note is for.</li>
       <li>A short test ending: Ableton fades with ADMI.</li>
       <li>A full 7 minute run on this laptop with this Set, at least once before the show (the camera, the browser and Ableton together use a lot of the laptop).</li>
     </ul>
