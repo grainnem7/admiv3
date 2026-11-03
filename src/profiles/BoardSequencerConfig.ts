@@ -319,6 +319,8 @@ export interface BoardSequencerStored {
   pressAgainSec: number;
   /** Space plays and stops. Off for a switch box that sends Space (A7). */
   spaceKeyOn: boolean;
+  /** The letter keys: M mutes, N next scene, E end piece, 1 2 3 the views. Off for a switch box that sends letters. */
+  keysOn: boolean;
   /**
    * Usable range per fader control, so a counter can't reach silence or a runaway tempo. The
    * speed's is also the hat's Slowest and Fastest (Cap tab).
@@ -633,6 +635,7 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   keepTimeValve: DEFAULT_KEEPING_TIME_LIMITS.valve,
   pressAgainSec: DEFAULT_PRESS_AGAIN_SEC,
   spaceKeyOn: true,
+  keysOn: true,
   controlRanges: DEFAULT_CONTROL_RANGES,
   controlRangesRev: CONTROL_RANGES_REV,
   controlRemoval: DEFAULT_CONTROL_REMOVAL,
@@ -1019,6 +1022,7 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     // Players saved before these existed keep today's behaviour: 4 s, and Space on.
     pressAgainSec: sanitizePressAgainSec(o.pressAgainSec),
     spaceKeyOn: o.spaceKeyOn !== false,
+    keysOn: o.keysOn !== false,
     controlRanges: migratedControlRanges(o),
     controlRangesRev: CONTROL_RANGES_REV,
     controlRemoval: sanitizeControlRemoval(o.controlRemoval),

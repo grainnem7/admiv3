@@ -3,6 +3,7 @@ import { Button } from '../ui/Button';
 import { PLAY_STOP_ID } from '../ui/focusNext';
 import { Tabs } from '../ui/Tabs';
 import { WORDS } from '../words';
+import { SpeedControl } from './SpeedControl';
 
 export interface PlayPanelProps {
   running: boolean;
@@ -16,6 +17,10 @@ export interface PlayPanelProps {
   simplify?: ReactNode;
   /** The tempo actually in effect: the engine's while playing, the saved one when stopped. */
   bpm: number;
+  /** Change the speed from the transport (item 4): arrow keys, a slider, tap tempo. */
+  onBpm?(bpm: number): void;
+  /** Why the speed can't be changed here (a tempo counter owns it), or null. */
+  bpmReason?: string | null;
   /** A scene is reaching its speed gradually: the speed it is on its way to (null = none). */
   bpmTo?: number | null;
   step: number;
@@ -65,7 +70,7 @@ export type PlayTab = 'sound' | 'groove' | 'loops' | 'connections' | 'cap';
  * room for it, so a focused control is never hidden behind the bar.
  */
 export function PlayPanel({
-  running, muted, onStart, onStop, stopArmed = false, onToggleMute, simplify = null, bpm, bpmTo = null, step, cols, variationLap, beatOn, clock = null,
+  running, muted, onStart, onStop, stopArmed = false, onToggleMute, simplify = null, bpm, onBpm, bpmReason = null, bpmTo = null, step, cols, variationLap, beatOn, clock = null,
   heldCount, handGuardWaiting, piece, connections, cap, groove, sound, loops, stacked, transportAlign, tab: shownTab, onTab, notices = null,
 }: PlayPanelProps): JSX.Element {
   const [ownTab, setOwnTab] = useState<PlayTab>('sound');
@@ -126,10 +131,12 @@ export function PlayPanel({
             several times a second, and putting them in a live region meant a screen
             reader read the pill over and over and nothing else on the screen got through. */}
         <span role="status">{running ? 'Playing' : 'Stopped'}</span>
+        <span aria-hidden="true">{' · '}</span>
+        {/* The speed: a control when the screen lets it be changed here (item 4), words otherwise. */}
+        {onBpm
+          ? <SpeedControl bpm={Math.round(bpm)} onBpm={onBpm} reason={bpmReason} />
+          : <span aria-hidden="true"><span style={{ color: 'var(--bs-fg)', fontWeight: 600 }}>{Math.round(bpm)}</span>{' BPM'}</span>}
         <span aria-hidden="true">
-          {' · '}
-          <span style={{ color: 'var(--bs-fg)', fontWeight: 600 }}>{Math.round(bpm)}</span>
-          {' BPM'}
           {running && <>{' · step '}<span style={{ color: 'var(--bs-fg)', fontWeight: 600 }}>{step + 1}</span>{` of ${cols}`}</>}
           {running && bpmTo !== null && Math.round(bpm) !== bpmTo && ` · ${bpmTo > bpm ? 'speeding up' : 'slowing down'} to ${bpmTo} BPM`}
           {variationLap !== null && running && ` · lap ${variationLap ? 'B' : 'A'}`}

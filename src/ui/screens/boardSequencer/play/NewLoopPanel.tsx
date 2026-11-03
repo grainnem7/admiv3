@@ -168,8 +168,9 @@ export function NewLoopPanel(p: NewLoopPanelProps): JSX.Element {
           {/* A group named by its words, so Band is heard as "Hear it with…, Band", not the Sound tab's Band. */}
           <div role="group" aria-labelledby={hearId} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <span id={hearId} style={NOTE}>Hear it with…</span>
-            <Button tone={hearing.band ? 'selected' : 'secondary'} aria-pressed={hearing.band} onClick={() => p.onHearWith({ band: !hearing.band })}>The band</Button>
-            <Button tone={hearing.fill ? 'selected' : 'secondary'} aria-pressed={hearing.fill} onClick={() => p.onHearWith({ fill: !hearing.fill })}>Extra notes</Button>
+            {/* Words, the ones on underlined (item 9): as every other choice. */}
+            <Button tone={hearing.band ? 'selected' : 'quiet'} aria-pressed={hearing.band} onClick={() => p.onHearWith({ band: !hearing.band })}>The band</Button>
+            <Button tone={hearing.fill ? 'selected' : 'quiet'} aria-pressed={hearing.fill} onClick={() => p.onHearWith({ fill: !hearing.fill })}>Extra notes</Button>
             <select
               aria-label="Hear it with a loop"
               value={hearing.loop === null ? '' : String(hearing.loop)}

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Button } from '../ui/Button';
 import { UNDERLINE_OFF, UNDERLINE_ON } from '../ui/text';
+import { dragTime } from '../../../../songs/performance/sceneTools';
 import { focusDropped, focusWhenGone, PLAY_STOP_ID } from '../ui/focusNext';
 import { LabeledSlider } from '../ui/LabeledSlider';
 import { SegmentedControl } from '../ui/SegmentedControl';
@@ -103,6 +104,8 @@ export interface PieceStepsProps {
   onUpdateSceneFromNow(i: number): void;
   onEditScene(i: number, patch: ScenePatch): void;
   onDeleteScene(i: number): void;
+  /** A copy of a scene, right after it, with no time yet (item 7). */
+  onDuplicateScene(i: number): void;
   onUndoDelete(): void;
   onMakePlan(): void;
   onRespectPlayer(on: boolean): void;
@@ -339,7 +342,7 @@ function LoopsStep(p: PieceStepsProps): JSX.Element {
               }}
             >
               <span style={{ fontWeight: 600, width: 18, textAlign: 'right', color: 'var(--bs-fg3)', fontVariantNumeric: 'tabular-nums' }}>{l.slot + 1}</span>
-              {!empty && <LoopThumb cells={l.cells} rows={p.rows} cols={p.cols} swatchFor={p.swatchFor} />}
+              {!empty && <LoopThumb cells={l.cells} rows={p.rows} cols={p.cols} swatchFor={p.swatchFor} width={56} />}
               {/* Named in one place (U5): while New loop's own name box is open, the row says the name. */}
               {p.namingSlot === l.slot ? (
                 <span style={{ width: 120, fontWeight: 600 }}>{l.name || `Loop ${l.slot + 1}`}</span>
@@ -349,10 +352,10 @@ function LoopsStep(p: PieceStepsProps): JSX.Element {
                   type="text" value={l.name} placeholder={empty ? 'name (after Keep)' : `Loop ${l.slot + 1}`}
                   aria-label={`Name of loop ${l.slot + 1}`}
                   onChange={(e) => p.onRenameLoop(l.slot, e.target.value)}
-                  style={{ width: 100, minHeight: 'var(--bs-target)' }}
+                  style={{ width: 88, minHeight: 'var(--bs-target)' }}
                 />
               )}
-              <span style={{ fontSize: 14, color: on ? 'var(--bs-fg)' : 'var(--bs-fg2)', fontWeight: on ? 600 : 400, minWidth: 0, flex: '1 1 60px' }}>{loopStateText(l, p.running, p.loopFadePasses > 0)}</span>
+              <span style={{ fontSize: 14, color: on ? 'var(--bs-fg)' : 'var(--bs-fg2)', fontWeight: on ? 600 : 400, minWidth: 0, flex: '1 1 40px' }}>{loopStateText(l, p.running, p.loopFadePasses > 0)}</span>
               {empty ? (oldWays && (
                 <Button
                   tone="secondary"
@@ -388,7 +391,8 @@ function LoopsStep(p: PieceStepsProps): JSX.Element {
                   no ▶ Play there (T1-10). */}
               {!empty && (
                 <span data-loop-actions style={{ display: 'flex', gap: 6, flexWrap: 'nowrap', marginLeft: 'auto' }}>
-                  {!making && <Button tone={on ? 'selected' : 'secondary'} aria-pressed={on} onClick={() => p.onToggleLoop(l.slot)}>{on ? '■ Stop' : '▶ Play'}</Button>}
+                  {/* A round button with the sign only (item 10): the row stays one line. */}
+                  {!making && <Button tone={on ? 'selected' : 'secondary'} aria-pressed={on} aria-label={on ? '■ Stop' : '▶ Play'} title={on ? 'Stop this loop' : 'Play this loop'} onClick={() => p.onToggleLoop(l.slot)} style={{ width: 'var(--bs-target)', padding: 0, borderRadius: '50%' }}>{on ? '■' : '▶'}</Button>}
                   <Button tone="quiet" onClick={() => p.onClearLoop(l.slot)} aria-label={`Clear loop ${l.slot + 1}`} title="Clear this loop">✕</Button>
                 </span>
               )}
@@ -474,6 +478,16 @@ function ScenesStep(p: PieceStepsProps): JSX.Element {
     return () => ro.disconnect();
   }, [hasTimeline]);
   const elapsed = p.clock && p.clock.phase !== 'idle' ? p.clock.elapsedSec : null;
+  // Dragging a scene's mark along the timeline (item 7): the time it lands on is shown as
+  // it moves and kept on release. A press that hardly moves is a click, as before.
+  const dragRef = useRef<{ i: number; startX: number; moved: boolean; at: number | null } | null>(null);
+  const [dragAt, setDragAt] = useState<{ i: number; at: number } | null>(null);
+  const timedAt = (i: number): number | null => (typeof p.scenes[i]?.at === 'number' ? (p.scenes[i].at as number) : null);
+  const neighbourTimes = (i: number): { prev: number | null; next: number | null } => {
+    const before = p.scenes.slice(0, i).map((x) => x.at).filter((t): t is number => typeof t === 'number');
+    const after = p.scenes.slice(i + 1).map((x) => x.at).filter((t): t is number => typeof t === 'number');
+    return { prev: before.length > 0 ? before[before.length - 1] : null, next: after.length > 0 ? after[0] : null };
+  };
   const saved = p.loops.filter((l) => l.state !== 'empty');
   const who = playerWords(p.playerName);
   // Focus never drops to the page when a pressed button goes (T4-09): these are where it goes.
@@ -517,14 +531,45 @@ function ScenesStep(p: PieceStepsProps): JSX.Element {
               const nextAt = p.scenes.slice(i + 1).find((x) => typeof x.at === 'number')?.at ?? p.lengthSec;
               const words = `${i + 1} · ${s.name} ${formatClock(s.at)}`;
               const share = Math.max(2, ((Math.min(p.lengthSec, nextAt as number) - s.at) / p.lengthSec) * 100);
-              const label = sceneChipLabel(i + 1, s.name, formatClock(s.at), timelinePx === null ? null : (timelinePx * share) / 100 - CHIP_EDGES_PX);
+              const shownAt = dragAt && dragAt.i === i ? dragAt.at : s.at;
+              const label = sceneChipLabel(i + 1, s.name, formatClock(shownAt), timelinePx === null ? null : (timelinePx * share) / 100 - CHIP_EDGES_PX);
               return (
                 <li
                   key={s.id}
                   style={{ position: 'absolute', top: 0, bottom: 0, left: `${(s.at / p.lengthSec) * 100}%`, width: `${share}%` }}
                 >
                   <button
-                    type="button" onClick={() => setSelected(s.id)}
+                    type="button"
+                    onClick={() => {
+                      // A drag that moved is not a click.
+                      if (dragRef.current?.moved) { dragRef.current = null; return; }
+                      setSelected(s.id);
+                    }}
+                    onPointerDown={(e) => {
+                      if (e.button !== 0 || i === 0 || timedAt(i) === null) return;
+                      dragRef.current = { i, startX: e.clientX, moved: false, at: null };
+                      e.currentTarget.setPointerCapture?.(e.pointerId);
+                    }}
+                    onPointerMove={(e) => {
+                      const d = dragRef.current;
+                      if (!d || d.i !== i) return;
+                      if (Math.abs(e.clientX - d.startX) > 4) d.moved = true;
+                      if (!d.moved) return;
+                      const rect = timelineRef.current?.getBoundingClientRect();
+                      if (!rect || rect.width <= 0) return;
+                      const { prev, next } = neighbourTimes(i);
+                      const at = dragTime(e.clientX - rect.left, rect.width, p.lengthSec, prev, next);
+                      d.at = at;
+                      setDragAt({ i, at });
+                    }}
+                    onPointerUp={() => {
+                      const d = dragRef.current;
+                      setDragAt(null);
+                      if (!d || !d.moved) { dragRef.current = null; return; }
+                      if (d.at !== null && d.at !== s.at) p.onEditScene(i, { at: d.at });
+                      // Left for the click that follows the release, which then does nothing.
+                    }}
+                    onPointerCancel={() => { dragRef.current = null; setDragAt(null); }}
                     aria-label={`${words}${p.currentScene === i ? ', on now' : ''}`}
                     title={words}
                     // A mark on a line (L5): each scene starts at a tick, the one on now at a
@@ -533,7 +578,8 @@ function ScenesStep(p: PieceStepsProps): JSX.Element {
                       width: '100%', height: '100%', minHeight: 0, minWidth: 0, borderRadius: 0,
                       background: 'transparent', color: p.currentScene === i ? 'var(--bs-fg)' : 'var(--bs-fg2)',
                       border: 'none', borderLeft: p.currentScene === i ? '3px solid var(--bs-fg)' : '1px solid var(--bs-border-control)',
-                      padding: '2px 6px', textAlign: 'left', font: CHIP_FONT, overflow: 'hidden', whiteSpace: 'nowrap', cursor: 'pointer',
+                      padding: '2px 6px', textAlign: 'left', font: CHIP_FONT, overflow: 'hidden', whiteSpace: 'nowrap',
+                      cursor: i === 0 ? 'pointer' : 'ew-resize', touchAction: 'none',
                     }}
                   >
                     {label}
@@ -555,6 +601,7 @@ function ScenesStep(p: PieceStepsProps): JSX.Element {
               onUpdateFromNow={p.running ? () => p.onUpdateSceneFromNow(i) : undefined}
               onEdit={(patch) => p.onEditScene(i, patch)}
               onNewIdeas={() => p.onNewIdeasScene(i)}
+              onDuplicate={() => p.onDuplicateScene(i)}
               onDelete={(pressed) => {
                 setSelected(null);
                 p.onDeleteScene(i);
@@ -610,7 +657,10 @@ function ScenesStep(p: PieceStepsProps): JSX.Element {
           />
         </>
       )}
-      {p.colours.length > 0 && <ColourTimes colours={p.colours} lengthSec={p.lengthSec} palette={p.palette} onChange={p.onColourEntry} />}
+      {/* Before there are scenes it is folded (item 11): the first thing to do here is the plan. */}
+      {p.colours.length > 0 && (p.scenes.length === 0
+        ? <Disclosure summary="When each colour comes in"><ColourTimes colours={p.colours} lengthSec={p.lengthSec} palette={p.palette} onChange={p.onColourEntry} /></Disclosure>
+        : <ColourTimes colours={p.colours} lengthSec={p.lengthSec} palette={p.palette} onChange={p.onColourEntry} />)}
       <StepFooter back={{ label: 'Loops', onClick: () => p.onStep('loops') }} next={{ label: 'Next: Ending & check', onClick: () => p.onStep('ending'), primary: true }} />
     </section>
   );
@@ -808,6 +858,8 @@ interface SceneRowProps {
   onEdit(patch: ScenePatch): void;
   /** New ideas for this scene. */
   onNewIdeas(): void;
+  /** A copy of this scene, right after it (item 7). */
+  onDuplicate(): void;
   /** Delete it; `pressed` is the Delete button, for where focus goes next. */
   onDelete(pressed: HTMLElement): void;
 }
@@ -833,9 +885,13 @@ function SceneRow(r: SceneRowProps): JSX.Element {
   const fill = FILL_STEPS[nearestStep(FILL_STEPS, s.settings.fillAmount)].label.toLowerCase();
   const evolve = EVOLVE_STEPS[nearestStep(EVOLVE_STEPS, s.settings.evolveAmount)].label.toLowerCase();
   // The line under the scene: what A1 keeps in view, its loops and its Energy.
+  // How long it lasts (item 7): until the next timed scene, or the end of the piece.
+  const after = r.otherTimes.filter((t): t is number => typeof t === 'number' && typeof s.at === 'number' && t > s.at);
+  const lengthOf = typeof s.at === 'number' ? (after.length > 0 ? Math.min(...after) : r.lengthSec) - s.at : null;
   const summary = [
     loopNames.length > 0 ? loopNames.join(', ') : s.alone ? `${who.Name} alone` : 'no loops',
     `Energy: ${ENERGY_NAMES[s.settings.sceneEnergy]}`,
+    ...(lengthOf !== null ? [`${formatClock(lengthOf)} long`] : []),
   ].join(' · ');
   // The rest, said on "More for this scene" while it is folded, so nothing set is hidden.
   const moreSummary = [
@@ -1025,8 +1081,12 @@ function SceneRow(r: SceneRowProps): JSX.Element {
             <div><Button tone="secondary" onClick={r.onUpdateFromNow} title="Replace this scene's loops and sound with what is playing now">Update from now</Button></div>
           )}
           </>)}
-          {/* Not a setting: always in reach, folded or not. */}
-          <div><Button tone="quiet" onClick={(e) => r.onDelete(e.currentTarget)}>Delete scene</Button></div>
+          {/* Not settings: always in reach, folded or not. Duplicate (item 7) makes a copy after
+              this scene with no time yet; Delete takes it out, with Undo. */}
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            <Button tone="quiet" onClick={r.onDuplicate} aria-label={`Duplicate: ${s.name}`} title="A copy of this scene, after it, for you to give a time">Duplicate</Button>
+            <Button tone="quiet" onClick={(e) => r.onDelete(e.currentTarget)}>Delete scene</Button>
+          </div>
         </div>
       )}
     </div>

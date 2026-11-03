@@ -338,7 +338,11 @@ const HELP: HelpEntry[] = [
       + 'while the board plays. Sound → Advanced → Pressing sets Time to press again (3, 4, 6 or 10 '
       + 'seconds, 4 to start with) for the second press of Stop, Exit and Set up, and Undo and the '
       + 'notices stay up longer to match it. It also has "Space plays and stops": switch it off '
-      + 'when a switch box sends Space; Shift+S still works.',
+      + 'when a switch box sends Space; Shift+S still works. The letter keys, on the same list: M mutes '
+      + 'while the board plays, N is Next scene and E is End piece while the piece plays, and 1, 2, 3 go to '
+      + 'Board, Make a piece and Show. Never while typing, never in Set up. The speed in the transport '
+      + '(90 BPM) is a button: the arrow keys change it by one (five with Shift), and pressing it opens a '
+      + 'slider and Tap: tap along four times and the speed follows.',
   },
 ];
 

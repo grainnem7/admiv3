@@ -69,6 +69,8 @@ import { detectionSetup } from '../../tracking/boardReference/detectionSetup';
 import { LoopThumb, PieceSteps, type PieceLoop, type PieceStep } from './boardSequencer/play/PieceSteps';
 import { NowNextStrip } from './boardSequencer/play/NowNextStrip';
 import { nextSceneUndo, nextUndoOffered, type NextSceneUndo } from './boardSequencer/play/nextSceneUndo';
+import { letterKeyAction } from './boardSequencer/letterKeys';
+import { duplicateScene } from '../../songs/performance/sceneTools';
 import { ShowStatusRow } from './boardSequencer/play/ShowStatusRow';
 import {
   escLeavesShow, showStatusItems, simplifiedLine, stopGuarded, type ShowHatState, type ShowStatusAction, type ShowStatusInput,
@@ -2707,6 +2709,27 @@ export default function BoardSequencerScreen() {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [view, start, requestStop, runningRef]);
+  // The letter keys (item 6): M, N, E and 1 2 3. What they call is defined further down,
+  // so it is reached through a ref, as Start the piece is for Space.
+  const letterActionsRef = useRef<{ nextScene(): void; endPiece(): void; setWorkspace(w: 'play' | 'piece'): void }>({ nextScene: () => {}, endPiece: () => {}, setWorkspace: () => {} });
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent): void => {
+      const act = letterKeyAction(e, view, e.target, {
+        running: runningRef.current, keysOn: configRef.current.keysOn,
+        pieceOn: clockStartRef.current !== null || endingRef.current,
+      });
+      if (!act) return;
+      e.preventDefault();
+      const a = letterActionsRef.current;
+      if (act === 'mute') toggleMuted();
+      else if (act === 'nextScene') a.nextScene();
+      else if (act === 'endPiece') a.endPiece();
+      else if (act === 'viewShow') setView('bigBoard');
+      else { if (view === 'bigBoard') setView('play'); a.setWorkspace(act === 'viewPiece' ? 'piece' : 'play'); }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [view, toggleMuted]);
   // Shift+S: Simplify and Back to full, in Play and Show (never by accident, never while typing).
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent): void => {
@@ -3696,6 +3719,7 @@ export default function BoardSequencerScreen() {
     sessionLogRef.current.action(logActorRef.current, `end piece: ${what}`);
     announce(`Ending: ${what}.`);
   };
+  letterActionsRef.current = { nextScene, endPiece, setWorkspace };
   const cancelEnding = (): void => {
     engineRef.current?.cancelFinish();
     endingRef.current = false;
@@ -3797,6 +3821,17 @@ export default function BoardSequencerScreen() {
     }
   };
 
+  /** A copy of a scene, after it, with no time yet (item 7): the owner gives it one. */
+  const duplicateSceneAt = (i: number): void => {
+    const c = configRef.current;
+    const original = c.scenes[i];
+    if (!original) return;
+    const scenes = duplicateScene(c.scenes, i, `${original.id}-copy-${Date.now().toString(36)}`);
+    if (!scenes) { announce('The piece is full: no room for another scene.'); return; }
+    update(scenesInOrder(scenes, c.currentScene !== null && c.currentScene > i ? c.currentScene + 1 : c.currentScene));
+    sessionLogRef.current.action(logActorRef.current, `duplicate scene ${original.name}`);
+    announce(`${scenes[i + 1].name} added after ${original.name}, with no time yet.`);
+  };
   const deleteScene = (i: number): void => {
     const c = configRef.current;
     const gone = c.scenes[i];
@@ -4300,6 +4335,16 @@ export default function BoardSequencerScreen() {
       </label>
       <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>
         Switch it off if a switch box sends Space. Shift+S still simplifies.
+      </span>
+      <label>
+        <input
+          type="checkbox" checked={config.keysOn}
+          onChange={(e) => update({ keysOn: e.target.checked })}
+        />
+        Letter keys: M, N, E and 1, 2, 3
+      </label>
+      <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>
+        M mutes, N is Next scene, E is End piece, and 1, 2, 3 are Board, Make a piece and Show. Switch them off if a switch box sends letters.
       </span>
     </fieldset>
     <fieldset style={{ border: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
@@ -4818,6 +4863,7 @@ export default function BoardSequencerScreen() {
       onUpdateSceneFromNow={updateSceneFromNow}
       onEditScene={editScene}
       onDeleteScene={deleteScene}
+      onDuplicateScene={duplicateSceneAt}
       onUndoDelete={undoDeleteScene}
       onMakePlan={() => { if (configRef.current.scenes.length > 0) setPlanConfirm(true); else makePlan(); }}
       onRespectPlayer={(on) => update({ sceneRespectsPlayer: on })}
@@ -6404,6 +6450,8 @@ export default function BoardSequencerScreen() {
                 onToggleMute={toggleMuted}
                 simplify={simplifyButton}
                 bpm={liveBpm}
+                onBpm={(v) => { update({ bpm: v }); holdSpeed(v); engineRef.current?.setBpm(v); }}
+                bpmReason={tempoReason}
                 bpmTo={glideTo}
                 step={playheadCol}
                 cols={config.cols}

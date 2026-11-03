@@ -35,7 +35,7 @@ function props(over: Partial<PieceStepsProps> = {}): PieceStepsProps {
     onColourEntry: vi.fn(),
     onNewLoop: vi.fn(), onToggleLoop: vi.fn(), onSaveBoardToLoop: vi.fn(), onDrawLoop: vi.fn(), onClearLoop: vi.fn(),
     onRenameLoop: vi.fn(), onLoopFade: vi.fn(), onGoScene: vi.fn(), onRehearseFrom: vi.fn(), onSaveSceneFromNow: vi.fn(),
-    onUpdateSceneFromNow: vi.fn(), onEditScene: vi.fn(), onDeleteScene: vi.fn(), onUndoDelete: vi.fn(), onMakePlan: vi.fn(),
+    onUpdateSceneFromNow: vi.fn(), onEditScene: vi.fn(), onDeleteScene: vi.fn(), onDuplicateScene: vi.fn(), onUndoDelete: vi.fn(), onMakePlan: vi.fn(),
     onRespectPlayer: vi.fn(), onNewIdeasScene: vi.fn(), onNewIdeasPiece: vi.fn(), surpriseMe: false, onSurpriseMe: vi.fn(), onPerformance: vi.fn(), onBackup: vi.fn(), onRestore: vi.fn(), onShow: vi.fn(),
     ...over,
   };
@@ -808,5 +808,29 @@ describe('L5: the three steps of Make a piece are words in a row', () => {
     const words = (b: HTMLElement): HTMLElement => b.querySelector('[data-words]') as HTMLElement;
     expect(words(steps[1]).style.borderBottom).toMatch(/^1px solid currentcolor$/i);
     expect(words(steps[0]).style.borderBottom).toBe('1px solid transparent');
+  });
+});
+
+describe('item 7: Duplicate scene and how long a scene lasts', () => {
+  it('each timed scene says its length; Duplicate asks the screen for a copy', () => {
+    const p = props({ step: 'scenes' });
+    render(p);
+    expect(button(/^0:00 · Arrival/)?.textContent).toContain('1:30 long');
+    act(() => button(/^0:00 · Arrival/)?.click());
+    const dup = [...host.querySelectorAll('button')].find((b) => b.getAttribute('aria-label') === 'Duplicate: Arrival');
+    expect(dup).toBeDefined();
+    act(() => dup?.click());
+    expect(p.onDuplicateScene).toHaveBeenCalledWith(0);
+  });
+});
+
+describe('item 11: before there are scenes, When each colour comes in is folded', () => {
+  it('folded with no scenes, open once there are some', () => {
+    render(props({ step: 'scenes', scenes: [] }));
+    const fold = [...host.querySelectorAll('button')].find((b) => b.textContent?.includes('When each colour comes in'));
+    expect(fold?.getAttribute('aria-expanded')).toBe('false');
+    render(props({ step: 'scenes' }));
+    expect([...host.querySelectorAll('button')].find((b) => b.textContent?.includes('When each colour comes in'))).toBeUndefined();
+    expect(host.querySelector('#piece-colours')).not.toBeNull();
   });
 });
