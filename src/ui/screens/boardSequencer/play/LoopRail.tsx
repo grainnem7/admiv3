@@ -31,11 +31,11 @@ export interface LoopRailProps {
 const THUMB = 36;
 /**
  * The rail's height as a column: the caption (20), the eight places with their gaps
- * (8 targets + 7 × 4), the two gaps of 6, and the … and New loop buttons stacked (4 + a
- * target + 4 + a target). The row holding the board and the rail is never shorter than
- * this, so nothing under the board can cover the rail's last places.
+ * (8 targets + 7 × 4), the two gaps of 6, and the … and New loop row (4 + a target). The
+ * row holding the board and the rail is never shorter than this, so nothing under the
+ * board can cover the rail's last places; and it fits a 768 px screen (U4).
  */
-export const RAIL_MIN_HEIGHT = 'calc(10 * var(--bs-target) + 68px)';
+export const RAIL_MIN_HEIGHT = 'calc(9 * var(--bs-target) + 64px)';
 
 export const loopName = (l: PieceLoop): string => (l.name.length > 0 ? l.name : `Loop ${l.slot + 1}`);
 
@@ -166,7 +166,8 @@ export function LoopRail(p: LoopRailProps): JSX.Element {
           );
         })}
       </div>
-      <div style={{ display: 'flex', flexDirection: column ? 'column' : 'row', gap: 4, marginTop: column ? 4 : 0 }}>
+      {/* One row either way: … and New loop side by side, so the rail fits a 768 px screen. */}
+      <div style={{ display: 'flex', flexDirection: 'row', gap: 4, marginTop: column ? 4 : 0, alignItems: 'center' }}>
         <Button
           tone="quiet"
           aria-expanded={menuFor !== null}

@@ -1051,12 +1051,12 @@ test('with every loop full, New loop is off and says why beside it; clearing one
   const newLoop = page.getByRole('button', { name: 'New loop', exact: true });
   await expect(newLoop).toBeDisabled();
   await expect(newLoop).toHaveAccessibleDescription('Every loop is full: clear one first');
-  await expect(page.getByText('Every loop is full: clear one first')).toBeVisible();
+  await expect(page.getByText('Every loop is full: clear one first', { exact: true })).toBeVisible();
   // Clear one: now there is a place for it.
   await page.getByRole('button', { name: 'Clear loop 8' }).click();
   await page.getByRole('dialog', { name: 'Clear Loop 8?' }).getByRole('button', { name: 'Clear it' }).click();
   await expect(newLoop).toBeEnabled();
-  await expect(page.getByText('Every loop is full: clear one first')).toHaveCount(0);
+  await expect(page.getByText('Every loop is full: clear one first', { exact: true })).toHaveCount(0);
   await newLoop.click();
   await expect(page.getByRole('heading', { name: 'New loop 8 · silent' })).toBeVisible();
   // Counters are down: New loop asks first, and keeping them takes the place just freed (U1).
@@ -1077,7 +1077,7 @@ test('while the piece plays: New loop is off and says why, there is no other way
   await expect(page.getByRole('button', { name: /Capture/ })).toHaveCount(0);
   await pieceStep(page, 'Loops');
   await expect(page.getByRole('button', { name: 'New loop', exact: true })).toBeDisabled();
-  await expect(page.getByText('Stop the piece to make a loop')).toBeVisible();
+  await expect(page.getByText('Stop the piece to make a loop', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Keep the board as this loop' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: /Edit notes: loop/ })).toHaveCount(0);
   await expect(page.getByRole('status').filter({ hasText: 'Playing' }).first()).toBeVisible();
@@ -1402,9 +1402,12 @@ test('a scene added while stopped is never "on now" (route B): after a reload, �
   await saveTwoLoops(page); // Bed, and Loop 2
   await pieceLength(page, '1:00');
   await makePlan(page);
-  await page.getByRole('textbox', { name: 'Name for a new scene' }).fill('Coda');
-  await page.getByRole('button', { name: /Add a scene from what/ }).click();
-  await page.getByRole('button', { name: /^by hand · Coda/ }).click();
+  // Kept from what plays now, it lands at a time of its own: halfway from Home (0:51) to the end.
+  await page.getByRole('button', { name: '+ Keep what plays now as a scene' }).click();
+  await page.getByRole('button', { name: /^0:55 · Scene 5/ }).click();
+  const nameBox = page.getByRole('textbox', { name: 'Scene name' }).last();
+  await nameBox.fill('Coda');
+  await nameBox.press('Tab');
   await page.getByRole('group', { name: 'Loops in this scene' }).getByRole('button', { name: 'Bed' }).click();
   const time = page.getByRole('textbox', { name: /When Coda comes in/ });
   await time.fill('0:20');
@@ -1772,7 +1775,7 @@ test('decision F2\'s path: after Stop ×2, New loop starts the board and the cou
   await pieceStep(page, 'Loops');
   const newLoop = page.getByRole('button', { name: 'New loop', exact: true });
   await expect(newLoop).toBeDisabled();
-  await expect(page.getByText('Stop the piece to make a loop')).toBeVisible();
+  await expect(page.getByText('Stop the piece to make a loop', { exact: true })).toBeVisible();
   await pause(page, 2100); // ■ Stop ignores presses for the piece's first 2 s (B3)
   await page.getByRole('button', { name: '■ Stop', exact: true }).first().click();
   await page.getByRole('button', { name: '■ Press again to stop' }).first().click();
@@ -1790,7 +1793,7 @@ test('decision F2\'s path: after Stop ×2, New loop starts the board and the cou
   await expect(page.getByRole('status').filter({ hasText: 'Stopped' }).first()).toBeVisible();
   const panel = page.getByRole('region', { name: /^New loop 1/ });
   await expect(panel.getByText(stopped)).toBeVisible();
-  await expect(page.getByText(`Making a new loop. ${stopped} Keep it or leave in Make a piece, 1 · Loops.`)).toBeVisible();
+  await expect(page.getByText(`Making a new loop. ${stopped} Keep it or leave in Make a piece, Loops.`)).toBeVisible();
   await expect(page.getByText(/only the counters sound/i)).toHaveCount(0);
   // Keep still keeps the counters on the board.
   await expect(panel.getByRole('button', { name: 'Keep', exact: true })).toBeEnabled();
@@ -1823,6 +1826,9 @@ test('a colour that comes in at 0:05: on the board but silent in the piece until
   await pickColour(page, 'Blue');
   await place(page, [[1, 1], [2, 5]]);
   await pieceStep(page, 'Scenes');
+  // Folded since G3: one line opens it.
+  const fold = page.getByRole('button', { name: 'When each colour comes in' });
+  if ((await fold.getAttribute('aria-expanded')) === 'false') await fold.click();
   const card = page.getByRole('group', { name: 'When each colour comes in' });
   await expect(card).toContainText('The times count only while the piece plays');
   const red = card.getByRole('textbox', { name: /^When Red comes in, in the piece/ });
@@ -1890,9 +1896,10 @@ test('a scene at 0:05 that reaches its faster speed over 4 s: the speed read dur
     const out: { bpm: number; rising: boolean }[] = [];
     const end = performance.now() + 11_000;
     while (performance.now() < end) {
-      const pill = [...document.querySelectorAll('span[aria-hidden="true"]')]
-        .map((el) => /· (\d+) BPM · step/.exec(el.textContent ?? '')).find((m) => m !== null);
-      if (pill) out.push({ bpm: Number(pill[1]), rising: /speeding up to 150 BPM/.test(pill.input) });
+      // The speed is its own control since item 4 (SpeedControl), the step its own span.
+      const stepSpan = [...document.querySelectorAll('span[aria-hidden="true"]')].find((el) => /^ · step /.test(el.textContent ?? ''));
+      const bpm = [...document.querySelectorAll('button, span')].map((el) => /^(\d+) BPM/.exec((el.textContent ?? '').trim())).find((m) => m !== null);
+      if (stepSpan && bpm) out.push({ bpm: Number(bpm[1]), rising: /speeding up to 150 BPM/.test(stepSpan.textContent ?? '') });
       await new Promise((r) => setTimeout(r, 100));
     }
     return out;
