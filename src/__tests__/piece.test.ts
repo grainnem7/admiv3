@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { decideClockTick, editedScene, nowNext, openingScene, planScenes, sceneAt, sceneTimeProblem, sortScenes, takeLoopOut, withSceneAdded } from '../songs/performance/piece';
+import { decideClockTick, editedScene, nextSceneTime, nowNext, openingScene, planScenes, sceneAt, sceneTimeProblem, sortScenes, takeLoopOut, withSceneAdded } from '../songs/performance/piece';
 import { CLOCK_NOT_STARTED, DEFAULT_PERFORMANCE } from '../songs/performance/clock';
 import type { Scene, SceneSettings } from '../songs/performance/launcher';
 import { AS_BEFORE_JOBS } from '../songs/band/bandJobs';
@@ -289,5 +289,33 @@ describe('the piece — the ending fits with the hat on Speed', () => {
     const { pieceEndingLeadSec, pieceSpeeds } = await import('../songs/performance/piece');
     expect(pieceEndingLeadSec(perf, 8, pieceSpeeds(base))).toBeCloseTo(pieceEndingLeadSec(perf, 8, [40]), 6);
     expect(pieceEndingLeadSec(perf, 8, pieceSpeeds(base))).toBeGreaterThan(pieceEndingLeadSec(perf, 8, [90, 96]));
+  });
+});
+
+describe('nextSceneTime: a scene kept from what plays now lands at a sensible moment', () => {
+  const sc = (at: number | null | undefined, id = `s${at}`) => ({ id, name: id, loops: [], settings: {} as never, at });
+  it('the first scene comes in at 0', () => {
+    expect(nextSceneTime([], 420, null)).toBe(0);
+  });
+  it('after one scene: a minute on', () => {
+    expect(nextSceneTime([sc(0)], 420, null)).toBe(60);
+  });
+  it('after two or more: the same gap as the last, to the nearest 5 s', () => {
+    expect(nextSceneTime([sc(0), sc(90)], 420, null)).toBe(180);
+    expect(nextSceneTime([sc(0), sc(90), sc(210)], 420, null)).toBe(330);
+    expect(nextSceneTime([sc(0), sc(92)], 420, null)).toBe(182);
+  });
+  it('never past the end: halfway to the end instead, and null when there is no room', () => {
+    expect(nextSceneTime([sc(0), sc(360)], 420, null)).toBe(390);
+    expect(nextSceneTime([sc(0), sc(415)], 420, null)).toBe(null);
+  });
+  it('while the piece runs: now, to the nearest 5 s, nudged past a scene already at that time', () => {
+    expect(nextSceneTime([sc(0), sc(90)], 420, 93)).toBe(95);
+    expect(nextSceneTime([sc(0), sc(90)], 420, 91)).toBe(95);
+    expect(nextSceneTime([sc(0)], 420, 2)).toBe(5);
+    expect(nextSceneTime([sc(0)], 420, 419)).toBe(null);
+  });
+  it('untimed scenes are not in the way', () => {
+    expect(nextSceneTime([sc(0), sc(null), sc(undefined)], 420, null)).toBe(60);
   });
 });

@@ -163,8 +163,7 @@ import {
   type ClockView,
 } from '../../songs/performance/clock';
 import {
-  decideClockTick, editedScene, nowNext, type ScenePatch, openingScene, pieceEndingLeadSec, pieceSpeeds, planScenes, putLoopBack, sortScenes, takeLoopOut, withSceneAdded,
-} from '../../songs/performance/piece';
+  decideClockTick, editedScene, nowNext, type ScenePatch, openingScene, pieceEndingLeadSec, pieceSpeeds, planScenes, putLoopBack, sortScenes, takeLoopOut, withSceneAdded, nextSceneTime } from '../../songs/performance/piece';
 import {
   cellsSoundingAt, comesInLine, holdsBack, waitingColours, waitingLine, withColourEntry,
 } from '../../songs/performance/colourEntries';
@@ -3359,12 +3358,16 @@ export default function BoardSequencerScreen() {
     const c = configRef.current;
     // Storage keeps twelve; a thirteenth would play now and vanish on the next reload.
     if (c.scenes.length >= MAX_SCENES) { announce('Twelve scenes is the most. Delete one first.'); return; }
-    const scene = sceneFromNow(name || `Scene ${c.scenes.length + 1}`, wantedRef.current, sceneSettingsNow(c));
+    const made = sceneFromNow(name || `Scene ${c.scenes.length + 1}`, wantedRef.current, sceneSettingsNow(c));
+    // Its time, so it lands on the timeline and in the grid at once: now while the piece
+    // runs, else after the last scene (G7).
+    const at = nextSceneTime(c.scenes, c.performance.lengthSec, clock && clock.phase !== 'idle' ? clock.elapsedSec : null);
+    const scene = at === null ? made : { ...made, at };
     // Never marked on now: that made the next piece open in it (R2-T2-01).
     const added = withSceneAdded(c.scenes, c.currentScene, scene);
     update({ scenes: added.scenes, currentScene: added.current });
     sessionLogRef.current.action(logActorRef.current, `save scene ${scene.name}`);
-    announce(`Scene saved: ${scene.name}.`);
+    announce(at === null ? `Scene saved: ${scene.name}. Give it a time in its row.` : `Scene saved: ${scene.name}, at ${formatClock(at)}.`);
   };
   /** The scenes in time order, with the scene that is on still pointed at. */
   const scenesInOrder = (scenes: BoardSequencerStored['scenes'], current: number | null): Pick<BoardSequencerStored, 'scenes' | 'currentScene'> => {
@@ -4961,6 +4964,7 @@ export default function BoardSequencerScreen() {
       newLoopReason={pieceOnNow ? 'Stop the piece to make a loop.' : newLoop ? 'New loop is already open.' : keepSlotNow === null ? 'Every loop is full: clear one first.' : null}
       onKeep={keepAsLoopAt}
       onToggle={toggleLoop}
+      stepsToPass={running ? config.cols - playheadCol : null}
       onRename={renameLoop}
       onReplace={saveBoardToSlot}
       onEditNotes={(slot) => setEditSlot(slot)}

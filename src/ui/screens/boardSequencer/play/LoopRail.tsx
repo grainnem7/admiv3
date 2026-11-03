@@ -15,6 +15,8 @@ export interface LoopRailProps {
   locked: string | null;
   /** Why New loop can't open now, or null. */
   newLoopReason: string | null;
+  /** Steps until the next pass, when a starting or stopping loop changes over; null when stopped. */
+  stepsToPass?: number | null;
   onKeep(slot: number): void;
   onToggle(slot: number): void;
   onRename(slot: number, name: string): void;
@@ -38,7 +40,7 @@ export const RAIL_MIN_HEIGHT = 'calc(10 * var(--bs-target) + 68px)';
 export const loopName = (l: PieceLoop): string => (l.name.length > 0 ? l.name : `Loop ${l.slot + 1}`);
 
 /** A place's name for a screen reader: starts with the words on it (A9). */
-export function placeLabel(l: PieceLoop, running: boolean): string {
+export function placeLabel(l: PieceLoop, running: boolean, stepsToPass: number | null = null): string {
   const shown = loopName(l);
   if (l.state === 'empty') return `${shown}: empty. Keep the board here`;
   const what = l.name.length > 0 ? `loop ${l.slot + 1}, ` : '';
@@ -46,7 +48,8 @@ export function placeLabel(l: PieceLoop, running: boolean): string {
   const state = running
     ? (l.state === 'playing' ? 'playing' : l.state === 'starting' ? 'starting' : l.state === 'stopping' ? 'stopping' : 'stopped')
     : 'stopped';
-  return `${shown}: ${what}${notes}, ${state}`;
+  const wait = stepsToPass !== null && (state === 'starting' || state === 'stopping') ? `, in ${stepsToPass} ${stepsToPass === 1 ? 'step' : 'steps'}` : '';
+  return `${shown}: ${what}${notes}, ${state}${wait}`;
 }
 
 /**
@@ -131,7 +134,7 @@ export function LoopRail(p: LoopRailProps): JSX.Element {
               ref={(el) => { refs.current[l.slot] = el; }}
               type="button"
               data-loop-place={l.slot}
-              aria-label={placeLabel(l, p.running)}
+              aria-label={placeLabel(l, p.running, p.stepsToPass ?? null)}
               aria-pressed={empty ? undefined : on}
               aria-disabled={cantKeep ? true : undefined}
               title={empty ? (cantKeep ?? 'Keep the board here') : on ? 'Stop this loop' : 'Play this loop'}
@@ -155,6 +158,10 @@ export function LoopRail(p: LoopRailProps): JSX.Element {
             >
               <LoopThumb cells={l.cells} rows={p.rows} cols={p.cols} swatchFor={p.swatchFor} width={THUMB} />
               <span style={{ fontSize: 14, minWidth: 0, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{loopName(l)}</span>
+              {/* A loop changes over on the next pass: the steps to go, counted down on its place. */}
+              {(l.state === 'starting' || offSoon) && p.running && typeof p.stepsToPass === 'number' && (
+                <span aria-hidden="true" data-steps-to-pass="" style={{ fontSize: 14, color: 'var(--bs-fg2)', flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>{`in ${p.stepsToPass}`}</span>
+              )}
             </button>
           );
         })}

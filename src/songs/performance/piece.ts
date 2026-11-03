@@ -54,6 +54,33 @@ export function withSceneAdded(scenes: readonly Scene[], current: number | null,
   return sortScenes([...scenes, scene], current);
 }
 
+/** Scene times are kept to these steps, as the timeline's drag is. */
+const SCENE_TIME_STEP_SEC = 5;
+
+/**
+ * When a scene kept from what is playing now should come in, so it lands on the timeline
+ * and in the grid without a time being typed. While the piece runs: now, to the nearest
+ * 5 s. Otherwise after the last timed scene, by the same gap as the one before it (a
+ * minute when there is only one; 0 for the first scene), and never past the end. The
+ * time is nudged on until no other scene has it. Null when the piece has no room left.
+ */
+export function nextSceneTime(scenes: readonly Scene[], lengthSec: number, elapsedSec: number | null): number | null {
+  const taken = scenes.map((s) => s.at).filter((t): t is number => typeof t === 'number').sort((a, b) => a - b);
+  const free = (t: number): boolean => !taken.includes(t);
+  const settle = (from: number): number | null => {
+    for (let t = from; t < lengthSec; t += SCENE_TIME_STEP_SEC) if (free(t)) return t;
+    return null;
+  };
+  if (elapsedSec !== null) return settle(Math.max(0, Math.round(elapsedSec / SCENE_TIME_STEP_SEC) * SCENE_TIME_STEP_SEC));
+  if (taken.length === 0) return settle(0);
+  const last = taken[taken.length - 1];
+  const gap = taken.length >= 2 ? last - taken[taken.length - 2] : 60;
+  const wanted = last + Math.max(SCENE_TIME_STEP_SEC, Math.round(gap / SCENE_TIME_STEP_SEC) * SCENE_TIME_STEP_SEC);
+  // Past the end: halfway between the last scene and the end instead, if that is still a step on.
+  const at = wanted < lengthSec ? wanted : Math.round((last + lengthSec) / 2 / SCENE_TIME_STEP_SEC) * SCENE_TIME_STEP_SEC;
+  return at > last ? settle(at) : null;
+}
+
 /** What is wrong with a scene's time, in words, or null when it is fine. */
 export function sceneTimeProblem(at: number | null, lengthSec: number, others: readonly (number | null | undefined)[]): string | null {
   if (at === null) return null;

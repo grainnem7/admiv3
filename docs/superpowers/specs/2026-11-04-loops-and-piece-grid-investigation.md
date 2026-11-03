@@ -319,3 +319,12 @@ Help; the owner's and Tim's own words after a run.
   The first time counters are down with nothing kept, one line says where loops come from.
   Help says so. e2e: the handover and Undo; P2 reads the new notice. The old way (Keep the
   board as this loop under Other ways) is unchanged.
+- **G7 Scenes from what plays, and the rail counts down (4 Nov).** "Add a scene from what's
+  playing" made a scene with no time, which the timeline and the grid could not show until
+  one was typed, from a button under the whole list. Now "Keep what plays now as a scene"
+  sits right under the grid, and as "Keep what plays now as scene 1" beside Make my plan
+  for a first scene, and the scene lands at a time of its own (`nextSceneTime`): now while
+  the piece runs, else after the last scene by the same gap as before (a minute after the
+  first), never past the end, nudged clear of another scene's time. The place of a loop
+  that is starting or stopping shows "in N", the steps to the next pass, and says so to a
+  screen reader. The name box went: a scene is named in its row.

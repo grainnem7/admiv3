@@ -569,7 +569,6 @@ function ScenesStep(p: PieceStepsProps): JSX.Element {
   // The open scene, by its id: a new time re-sorts the list, and the panel must stay on
   // the scene being edited, not on whichever scene moves into its place (T2-02).
   const [selected, setSelected] = useState<string | null>(null);
-  const [newName, setNewName] = useState('');
   // The timeline's width, so each chip says only what fits (whole words, never cut).
   const timelineRef = useRef<HTMLUListElement>(null);
   const [timelinePx, setTimelinePx] = useState<number | null>(null);
@@ -626,6 +625,13 @@ function ScenesStep(p: PieceStepsProps): JSX.Element {
             onClick={(e) => { p.onMakePlan(); void focusWhenGone(() => sceneRow(), e.currentTarget); }}
           >
             {`✦ Make my plan: 4 scenes over ${formatClock(p.lengthSec)}`}
+          </Button>
+          <Button
+            tone="secondary"
+            title="The loops playing now and the sound as it is now, as the first scene"
+            onClick={() => p.onSaveSceneFromNow('')}
+          >
+            + Keep what plays now as scene 1
           </Button>
           <p style={note}>Arrival, Build, Open and Home, using {saved.length > 0 ? 'your saved loops' : `no loops yet (keep some in the rail beside the board first: a scene without loops is silent unless ${who.name} plays)`}. Every scene can be changed afterwards.</p>
         </div>
@@ -702,6 +708,16 @@ function ScenesStep(p: PieceStepsProps): JSX.Element {
             onSelectScene={(id) => setSelected(id)}
             onToggleLoop={p.onToggleLoop}
           />
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+            <Button
+              tone="secondary" disabled={p.scenes.length >= MAX_SCENES}
+              title={p.scenes.length >= MAX_SCENES ? 'Twelve scenes is the most.' : 'The loops playing now and the sound as it is now, at the next moment free'}
+              onClick={() => p.onSaveSceneFromNow('')}
+            >
+              + Keep what plays now as a scene
+            </Button>
+            <Button tone="quiet" onClick={p.onMakePlan}>✦ Start again from the plan</Button>
+          </div>
           <EnergyGraph scenes={p.scenes} lengthSec={p.lengthSec} />
           {p.scenes.map((s, i) => (
             <SceneRow
@@ -733,20 +749,6 @@ function ScenesStep(p: PieceStepsProps): JSX.Element {
               <Button ref={undoRef} tone="secondary" onClick={p.onUndoDelete}>Undo</Button>
             </div>
           )}
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-            <input
-              type="text" value={newName} placeholder={`Scene ${p.scenes.length + 1}`} aria-label="Name for a new scene"
-              onChange={(e) => setNewName(e.target.value)} style={{ width: 140, minHeight: 'var(--bs-target)' }}
-            />
-            <Button
-              tone="secondary" disabled={p.scenes.length >= MAX_SCENES}
-              title={p.scenes.length >= MAX_SCENES ? 'Twelve scenes is the most.' : 'The loops playing now and the sound as it is now'}
-              onClick={() => { p.onSaveSceneFromNow(newName); setNewName(''); }}
-            >
-              + Add a scene from what&rsquo;s playing
-            </Button>
-            <Button tone="quiet" onClick={p.onMakePlan}>✦ Start again from the plan</Button>
-          </div>
           <div role="group" aria-label="The same ideas each rehearsal" style={card}>
             <span style={{ fontWeight: 800 }}>The same ideas each rehearsal</span>
             <p style={note}>

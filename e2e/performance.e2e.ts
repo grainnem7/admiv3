@@ -73,6 +73,30 @@ const checkSummary = (page: Page) => page.getByRole('status').filter({ hasText: 
  * performance, checked in a real browser with real sound scheduling.
  */
 
+test('Keep what plays now as a scene: the scene gets its time by itself and shows on the timeline and in the grid', async ({ page }) => {
+  await openLaptopBoard(page);
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1], [5, 3]]);
+  await page.getByRole('button', { name: '▶ Play the board', exact: true }).first().click();
+  await expect(page.getByRole('button', { name: /■ Stop/ }).first()).toBeVisible();
+  const rail = page.locator('[data-loop-rail]');
+  await rail.getByRole('button', { name: /^Loop 1: empty/ }).click();
+  // The loop is on its way: the place counts the steps down to the next pass.
+  await expect(rail.getByRole('button', { name: /^Loop 1: 2 notes, starting, in \d steps?$/ })).toBeVisible();
+  await page.getByRole('button', { name: 'Make a piece', exact: true }).click();
+  // The first scene, from what plays now: at 0:00, with Loop 1 in it.
+  await page.getByRole('button', { name: '+ Keep what plays now as scene 1' }).click();
+  const timeline = page.getByRole('list', { name: 'Timeline of the scenes' });
+  await expect(timeline.getByRole('button', { name: '1 · Scene 1 0:00' })).toBeVisible();
+  await expect(page.getByRole('status').filter({ hasText: 'Scene saved: Scene 1, at 0:00.' }).first()).toBeVisible();
+  const grid = page.getByRole('grid', { name: 'Which loops play in which scene' });
+  await expect(grid.getByRole('button', { name: 'Loop 1 in Scene 1' })).toHaveAttribute('aria-pressed', 'true');
+  // The next one lands a minute on, beside the grid.
+  await page.getByRole('button', { name: '+ Keep what plays now as a scene' }).click();
+  await expect(timeline.getByRole('button', { name: '2 · Scene 2 1:00' })).toBeVisible();
+  expect(pageErrors(page)).toEqual([]);
+});
+
 test('Keep in the rail hands over on the laptop board: the loop plays, the board is clear, and Undo puts it back', async ({ page }) => {
   await openLaptopBoard(page);
   await pickColour(page, 'Red');
