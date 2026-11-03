@@ -378,9 +378,9 @@ test('P2: Keep as loop keeps the board as the next loop in one press, while it p
   await expect(page.locator('#bs-play-stop')).toHaveText('■ Stop', { timeout: 20_000 });
   // The loop rail (G1): an empty place keeps the board there.
   await page.getByRole('button', { name: /^Loop 1: empty/ }).click();
-  await expect(page.getByRole('status').filter({ hasText: 'Saved 2 notes to Loop 1' }).first()).toBeVisible();
-  await expect(page.getByRole('button', { name: /^Loop 1: 2 notes/ })).toBeVisible();
-  // Still playing: nothing stopped for it.
+  // One press: kept, started, the board cleared; the music never stopped.
+  await expect(page.getByRole('status').filter({ hasText: 'Kept as Loop 1: it plays on, and the board is clear.' }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Loop 1: 2 notes, (starting|playing)/ })).toBeVisible();
   await expect(page.locator('#bs-play-stop')).toHaveText('■ Stop');
   await pieceStep(page, 'Loops');
   await expect(page.getByRole('listitem', { name: /^Loop 1:/ })).toBeVisible();

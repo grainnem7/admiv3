@@ -3327,11 +3327,11 @@ export default function BoardSequencerScreen() {
     announce('All loops stop on the next pass.');
   };
   stopAllLoopsRef.current = stopAllLoops;
-  /** The board as it is now (settled while playing, seen otherwise), into a slot. */
-  const saveBoardToSlot = (slot: number): void => {
+  /** The board as it is now (settled while playing, seen otherwise), into a slot. Returns what was kept. */
+  const saveBoardToSlot = (slot: number): StoredLoopCell[] | null => {
     const cfg = configRef.current;
     const cells = keepCells(boardCellsNow(), cfg.channels);
-    if (cells.length === 0) return;
+    if (cells.length === 0) return null;
     setConfig((prev) => {
       const loopSlots = prev.loopSlots.slice();
       while (loopSlots.length <= slot) loopSlots.push(null);
@@ -3346,6 +3346,7 @@ export default function BoardSequencerScreen() {
     }
     sessionLogRef.current.action(logActorRef.current, `save board to loop ${slot + 1}`);
     announce(`Saved ${cells.length} notes to ${loopLabel(cfg.loopNames, slot)}.`);
+    return cells;
   };
   const renameLoop = (slot: number, name: string): void => {
     update({ loopNames: configRef.current.loopNames.map((n, i) => (i === slot ? name.slice(0, 24) : n)) });
@@ -4895,10 +4896,59 @@ export default function BoardSequencerScreen() {
   const keepReasonForPlace = pieceOnNow ? 'Stop the piece to change the loops.'
     : newLoop ? 'New loop is open: press Keep there.'
       : countersNow === 0 ? 'Put counters down first.' : null;
+  /**
+   * The rail's Keep hands the music over, so there is no second press: on the laptop board
+   * the loop starts and the board is cleared in the same breath (Undo puts the counters back
+   * and stops the loop); on the camera board, where counters can't vanish, the loop starts
+   * by itself when they are lifted (within a minute), so nothing doubles up meanwhile.
+   */
+  const handoverRef = useRef<{ slot: number; until: number } | null>(null);
   const keepAsLoopAt = (slot: number): void => {
     if (keepReasonForPlace !== null) { announce(keepReasonForPlace); return; }
-    saveBoardToSlot(slot);
+    const cells = saveBoardToSlot(slot);
+    if (cells === null) return;
+    const c = configRef.current;
+    const name = loopLabel(c.loopNames, slot);
+    if (c.boardSource === 'laptop') {
+      const before = c.laptopBoard;
+      update({ laptopBoard: [] });
+      wantedRef.current = new Set([...wantedRef.current, slot]);
+      pushLaunch({ slot, cells });
+      sessionLogRef.current.action(logActorRef.current, `launch loop ${slot + 1}`);
+      setUndoOffer({
+        text: `Kept as ${name}: it plays on, and the board is clear.`,
+        restore: () => {
+          update({ laptopBoard: before });
+          wantedRef.current = toggleSlot(wantedRef.current, slot, false);
+          pushLaunch();
+        },
+      });
+      announce(runningRef.current ? `Kept as ${name}: it plays on, and the board is clear.` : `Kept as ${name}. The board is clear: Play brings it in.`);
+      return;
+    }
+    handoverRef.current = { slot, until: performance.now() + 60_000 };
+    announce(`Kept as ${name}. Lift the counters and it plays on.`);
   };
+  // The camera board's handover: the counters lifted, the kept loop comes in.
+  useEffect(() => {
+    const h = handoverRef.current;
+    if (!h) return;
+    if (performance.now() > h.until || wantedRef.current.has(h.slot)) { handoverRef.current = null; return; }
+    if (countersNow !== 0 || !running) return;
+    handoverRef.current = null;
+    wantedRef.current = new Set([...wantedRef.current, h.slot]);
+    pushLaunch();
+    sessionLogRef.current.action(logActorRef.current, `launch loop ${h.slot + 1}`);
+    announce(`${loopLabel(configRef.current.loopNames, h.slot)} plays on.`);
+  }, [countersNow, running]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The first time counters are down with nothing kept: where loops come from, said once.
+  const railHintedRef = useRef(false);
+  useEffect(() => {
+    if (railHintedRef.current || view !== 'play' || countersNow === 0 || workspace === 'piece') return;
+    if (config.loopSlots.some((l) => l !== null && l.length > 0)) return;
+    railHintedRef.current = true;
+    announce('To keep this as a loop, press an empty place in the loop rail beside the board.');
+  }, [countersNow, view, workspace, config.loopSlots, announce]);
   const loopRail = (
     <LoopRail
       loops={performLoops}

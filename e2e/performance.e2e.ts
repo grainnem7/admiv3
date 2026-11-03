@@ -73,6 +73,27 @@ const checkSummary = (page: Page) => page.getByRole('status').filter({ hasText: 
  * performance, checked in a real browser with real sound scheduling.
  */
 
+test('Keep in the rail hands over on the laptop board: the loop plays, the board is clear, and Undo puts it back', async ({ page }) => {
+  await openLaptopBoard(page);
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1], [5, 3]]);
+  await page.getByRole('button', { name: '▶ Play the board', exact: true }).first().click();
+  await expect(page.getByRole('button', { name: /■ Stop/ }).first()).toBeVisible();
+  const rail = page.locator('[data-loop-rail]');
+  await rail.getByRole('button', { name: /^Loop 1: empty/ }).click();
+  // One press: the loop is on its way and the board is clear, with the music carrying on.
+  await expect(rail.getByRole('button', { name: /^Loop 1: 2 notes, (starting|playing)/ })).toBeVisible();
+  await expect(page.getByText('0 on the board')).toBeVisible();
+  await expect(page.getByRole('status').filter({ hasText: 'Kept as Loop 1: it plays on, and the board is clear.' }).first()).toBeVisible();
+  const before = await notesPlayed(page);
+  await expect.poll(() => notesPlayed(page), { timeout: 15_000 }).toBeGreaterThan(before);
+  // Undo: the counters are back and the loop stops.
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect(page.getByText('2 on the board')).toBeVisible();
+  await expect(rail.getByRole('button', { name: /^Loop 1: 2 notes, (stopping|stopped)/ })).toBeVisible({ timeout: 15_000 });
+  expect(pageErrors(page)).toEqual([]);
+});
+
 test('a counter put down and kept in the rail at once is in the loop, while the board plays', async ({ page }) => {
   await openLaptopBoard(page);
   await pickColour(page, 'Red');

@@ -311,3 +311,11 @@ Help; the owner's and Tim's own words after a run.
     never shorter than the rail (`RAIL_MIN_HEIGHT`); the page scrolls instead.
   Still to be seen in use: the camera board (Keep reads the settled cells there, as it must),
   and a player's own hands on the rail and the grid.
+- **G6 Keep hands over (4 Nov).** The second press is gone. On the laptop board, Keep in the
+  rail keeps the board as the loop, starts it and clears the board in the same press, so
+  the music never stops; the notice offers Undo, which puts the counters back and stops
+  the loop. On the camera board, where counters can't vanish, the loop starts by itself
+  when the counters are lifted within a minute of Keep, so nothing doubles up meanwhile.
+  The first time counters are down with nothing kept, one line says where loops come from.
+  Help says so. e2e: the handover and Undo; P2 reads the new notice. The old way (Keep the
+  board as this loop under Other ways) is unchanged.
