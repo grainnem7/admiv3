@@ -239,7 +239,8 @@ test('the piece is at most 7:00: a length of 8:00 is refused, says so, and is no
   await length.fill('8:00');
   await length.press('Tab');
   await expect(page.getByText('The piece can be at most 7:00.')).toBeVisible();
-  await expect(page.getByRole('navigation', { name: 'Make a piece: steps' }).getByRole('button', { name: /Ending & check/ })).toContainText('7:00');
+  // The Check tab's status line sits under its button (G3).
+  await expect(page.getByRole('navigation', { name: 'Make a piece: steps' })).toContainText('7:00');
   await expect(page.getByText(/^7:00 · fade over 2 passes/)).toBeVisible();
   expect(pageErrors(page)).toEqual([]);
 });
@@ -887,7 +888,7 @@ test("Capture from an iPad while the piece plays makes no loop, and the laptop s
   }), code);
   await expect(page.getByText('iPad: Capture not taken (stop the piece to make a loop)')).toBeVisible();
   await page.getByRole('button', { name: 'Make a piece', exact: true }).click();
-  await page.getByRole('navigation', { name: 'Make a piece: steps' }).getByRole('button', { name: /· Loops/ }).click();
+  await page.getByRole('navigation', { name: 'Make a piece: steps' }).getByRole('button', { name: 'Piece', exact: true }).click();
   // No loop was made: none is listed, and all eight places are free (U1).
   await expect(page.getByRole('listitem', { name: /^Loop 1:/ })).toHaveCount(0);
   await expect(page.getByText('8 of 8 places free')).toBeVisible();
@@ -1593,7 +1594,7 @@ test('while ▶ Start the piece loads, an iPad Capture is refused and the iPad s
   await pieceClockRunning(page);
   await expect(capture).toBeDisabled();
   await page.getByRole('button', { name: 'Make a piece', exact: true }).click();
-  await page.getByRole('navigation', { name: 'Make a piece: steps' }).getByRole('button', { name: /· Loops/ }).click();
+  await page.getByRole('navigation', { name: 'Make a piece: steps' }).getByRole('button', { name: 'Piece', exact: true }).click();
   // No loop was made: none is listed, and all eight places are free (U1).
   await expect(page.getByRole('listitem', { name: /^Loop 1:/ })).toHaveCount(0);
   await expect(page.getByText('8 of 8 places free')).toBeVisible();
