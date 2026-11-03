@@ -330,3 +330,25 @@ test('U7: notices sit in the side panel and move nothing; Explain the choices un
   await expect(simplify).toHaveAttribute('title', /only Test and the first loop/);
   expect(pageErrors(page)).toEqual([]);
 });
+
+test('U8: the side panel is a card: its own surface, its controls one shade lighter, the board on the page', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openLaptopBoard(page);
+  const rgb = (hex: string): string => `rgb(${parseInt(hex.slice(1, 3), 16)}, ${parseInt(hex.slice(3, 5), 16)}, ${parseInt(hex.slice(5, 7), 16)})`;
+  const panel = page.locator('.bs-panel');
+  await expect(panel).toHaveCount(1);
+  const bg = (sel: string) => page.locator(sel).first().evaluate((e) => getComputedStyle(e).backgroundColor);
+  // Dark: the panel is the raised shade, a button inside it one shade lighter, the page behind the board the base.
+  expect(await bg('.bs-panel')).toBe(rgb('#262c39'));
+  expect(await panel.getByRole('button', { name: 'Mute' }).evaluate((e) => getComputedStyle(e).backgroundColor)).toBe(rgb('#2f3645'));
+  expect(await bg('.bs-root.board-sequencer-screen')).toBe(rgb('#1f2430'));
+  // Light: a white card on the page, its buttons a light grey.
+  await page.getByRole('button', { name: 'Switch to light mode' }).click();
+  expect(await bg('.bs-panel')).toBe(rgb('#ffffff'));
+  expect(await panel.getByRole('button', { name: 'Mute' }).evaluate((e) => getComputedStyle(e).backgroundColor)).toBe(rgb('#e6eaf0'));
+  // The panel's edge and its padding: the tabs do not touch the card's edge.
+  const card = await panel.boundingBox();
+  const tabs = await panel.getByRole('tablist').boundingBox();
+  expect(tabs!.x - card!.x).toBeGreaterThanOrEqual(12);
+  expect(pageErrors(page)).toEqual([]);
+});

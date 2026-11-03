@@ -384,3 +384,21 @@ describe('A16: ↶ keeps the sound before from set-up into the Board view', () =
     expect(back()?.disabled).toBe(true);
   });
 });
+
+describe('U8: the Sound tab reads in sections', () => {
+  it('each section after the first starts with a hairline and air above its heading', () => {
+    renderSound(soundProps());
+    const sections = [...host.querySelectorAll('section')] as HTMLElement[];
+    expect(sections.length).toBeGreaterThanOrEqual(3);
+    expect(sections[0].style.borderTop).toBe('');
+    for (const s of sections.slice(1)) {
+      expect(s.style.borderTop).toContain('var(--bs-border)');
+      expect(parseInt(s.style.paddingTop, 10)).toBeGreaterThanOrEqual(12);
+    }
+  });
+  it('a caption above a choice is a little bolder than the sentence under it', () => {
+    renderSound(soundProps());
+    const caption = [...host.querySelectorAll('span')].find((s) => s.textContent === 'World') as HTMLElement;
+    expect(caption.style.fontWeight).toBe('600');
+  });
+});

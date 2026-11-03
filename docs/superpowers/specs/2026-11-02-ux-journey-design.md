@@ -203,6 +203,18 @@ Each batch is built, tested and committed on its own, in the order U1, U2, U3, U
   line keeps it).
 - No hat line under the board on the laptop board: there is no camera there for the hat.
 
+### U8: the look (owner: "sleek")
+- The side panel is a card: its own surface (the raised shade; white in light), a hairline edge,
+  a soft shadow and 12 to 14 px of padding. Inside it every surface is one step up the ladder
+  (raised → elev, elev → hi), so buttons, cards and tabs stand off the card. The board, the
+  header and Show stay on the page, so the board reads as the instrument and the panel as its
+  controls.
+- The Sound tab reads in sections: every section after the first starts with a hairline and air
+  above its heading. Captions above the choices ("World", "Energy") are a little bolder than
+  the sentences under them.
+- Kept as they were: the 44 px targets, the 3:1 edges on every control (A4, B11), the mint for
+  one main action a view (B17).
+
 ## Decided by the owner (2 Nov 2026)
 - New loop with counters down: "Keep what's on the board" is the main choice, and "Start from
   empty" is always offered beside it, so there is a choice every time.

@@ -334,3 +334,27 @@
 .bs-root summary.bs-fold::-webkit-details-marker { display: none; }
 .bs-root summary.bs-fold::before { content: '▸'; }
 .bs-root details[open] > summary.bs-fold::before { content: '▾'; }
+
+/*
+ * The side panel as a card (U8): the controls on a surface of their own, the board on the
+ * page. Inside it every surface is one step up the ladder (raised → elev, elev → hi), so
+ * buttons, cards and tabs stand off the card without any component knowing where it is.
+ * The card's own colour is set in full, since the variables below are what it hands down.
+ */
+.bs-root .bs-panel {
+  border: 1px solid var(--bs-border);
+  border-radius: var(--bs-radius-lg);
+  padding: 12px 14px;
+  box-shadow: var(--bs-shadow);
+  box-sizing: border-box;
+}
+.bs-root[data-bs-mode='dark'] .bs-panel {
+  background: #262c39;
+  --bs-raised: #2f3645;
+  --bs-elev: #353d4e;
+}
+.bs-root[data-bs-mode='light'] .bs-panel {
+  background: #ffffff;
+  --bs-raised: #e6eaf0;
+  --bs-elev: #dce1e8;
+}

@@ -95,7 +95,7 @@ export function SegmentedControl<T extends string | number>({
   if (!showLabel) return group;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <span aria-hidden="true" style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>{label}</span>
+      <span aria-hidden="true" style={{ fontSize: 14, color: 'var(--bs-fg2)', fontWeight: 600 }}>{label}</span>
       {group}
     </div>
   );

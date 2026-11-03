@@ -10,7 +10,7 @@ export function StepRow({ label, steps, value, onPick, disabled = false, hint, r
   const i = nearest(steps, value);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>{label}</span>
+      <span style={{ ...NOTE_STYLE, fontWeight: 600 }}>{label}</span>
       <SegmentedControl<number>
         label={label}
         value={i}

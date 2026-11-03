@@ -93,8 +93,12 @@ function grooveOf(swing: number, humanize: number): GrooveName | null {
   return null;
 }
 
-const SECTION: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 8 };
+const SECTION: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 10 };
+/** Every section after the first: a hairline and air above its heading, so the tab reads in parts (U8). */
+const SECTION_NEXT: CSSProperties = { ...SECTION, borderTop: '1px solid var(--bs-border)', paddingTop: 14, marginTop: 4 };
 const HEADING: CSSProperties = { margin: 0, fontSize: 16, fontWeight: 700 };
+/** The caption above a choice: a little bolder than the sentence under it (U8). */
+const CAPTION: CSSProperties = { fontSize: 14, color: 'var(--bs-fg2)', fontWeight: 600 };
 const NOTE: CSSProperties = { fontSize: 14, color: 'var(--bs-fg2)' };
 const CARD: CSSProperties = {
   display: 'flex', flexDirection: 'column', gap: 8, padding: 10,
@@ -159,7 +163,7 @@ export function SoundTab(p: SoundTabProps): JSX.Element {
       <section aria-labelledby="sound-feel" style={SECTION}>
         <h2 id="sound-feel" style={HEADING}>Overall feel</h2>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>World</span>
+          <span style={CAPTION}>World</span>
           <SegmentedControl<SoundWorldChoice>
             label="Sound world"
             value={config.soundWorld}
@@ -195,7 +199,7 @@ export function SoundTab(p: SoundTabProps): JSX.Element {
           hint={inAbleton ? '→ Ableton Return A level (CC 22 on channel 16).' : 'How much room and echo around everything. A reverb or echo counter on the board takes over.'}
         />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>Groove</span>
+          <span style={CAPTION}>Groove</span>
           <SegmentedControl<GrooveName | 'custom'>
             label="Groove"
             value={groove ?? 'custom'}
@@ -214,7 +218,7 @@ export function SoundTab(p: SoundTabProps): JSX.Element {
       </section>
 
       {/* ---- each colour ---- */}
-      <section aria-labelledby="sound-colours" style={SECTION}>
+      <section aria-labelledby="sound-colours" style={SECTION_NEXT}>
         <h2 id="sound-colours" style={HEADING}>Your colours</h2>
         {config.channels.length === 0
           ? <span style={NOTE}>No colours yet. Set up: Colours.</span>
@@ -237,7 +241,7 @@ export function SoundTab(p: SoundTabProps): JSX.Element {
       </section>
 
       {/* ---- what the instrument adds ---- */}
-      <section aria-labelledby="sound-helpers" style={SECTION}>
+      <section aria-labelledby="sound-helpers" style={SECTION_NEXT}>
         <h2 id="sound-helpers" style={HEADING}>Helpers</h2>
         <Note>Each adds to your music. On the board: ● your counters · ◌ extra notes · ▬ the band.</Note>
 
@@ -327,7 +331,7 @@ export function SoundTab(p: SoundTabProps): JSX.Element {
         </HelperFold>
       </section>
 
-      <section aria-label="Loops vary" style={SECTION}>
+      <section aria-label="Loops vary" style={SECTION_NEXT}>
         <HelperFold id="loops-vary" title="Loops vary" summary={LOOP_VARY_STEPS[nearest(LOOP_VARY_STEPS, config.loopVary)].label}>
           <StepRow
             label="How much saved loops change"

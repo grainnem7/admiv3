@@ -6390,7 +6390,8 @@ export default function BoardSequencerScreen() {
           {/* The panel keeps its place in the DOM for both hands; only the row flips. */}
           {/* One width for Board, Make a piece and Set up: 400 to 480 px, the board takes the
               rest, and it keeps its place and size between Board and Make a piece (A3). */}
-          <div style={{ width: layout.mode === 'stacked' ? '100%' : SIDE_PANEL_WIDTH, flexShrink: 0, display: 'flex', flexDirection: 'column', minHeight: 0, overflowY: layout.mode === 'stacked' ? 'visible' : 'auto' }}>
+          {/* A card (U8): the panel is the controls, on a surface of its own, the board on the page. */}
+          <div className="bs-panel" style={{ width: layout.mode === 'stacked' ? '100%' : SIDE_PANEL_WIDTH, flexShrink: 0, display: 'flex', flexDirection: 'column', minHeight: 0, overflowY: layout.mode === 'stacked' ? 'visible' : 'auto' }}>
             {view === 'setup' ? setupPanel : (
               <PlayPanel
                 running={running}
