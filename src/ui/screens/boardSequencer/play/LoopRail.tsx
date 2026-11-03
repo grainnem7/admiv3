@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState, type CSSProperties } from 'react';
 import { Button } from '../ui/Button';
 import { CAPTION_STYLE } from '../ui/text';
 import { LoopThumb, type PieceLoop } from './PieceSteps';
@@ -137,12 +137,14 @@ export function LoopRail(p: LoopRailProps): JSX.Element {
                 display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8,
                 width: 124, minHeight: 'var(--bs-target)', padding: '2px 6px', boxSizing: 'border-box', textAlign: 'left',
                 borderRadius: 'var(--bs-radius-md)',
-                border: `1px solid ${on ? 'var(--bs-fg)' : offSoon ? 'var(--bs-border-control)' : 'transparent'}`,
-                borderStyle: offSoon || (empty && !cantKeep) ? 'dashed' : 'solid',
-                background: 'transparent',
+                // Kept: a step up from the page. Playing: an edge in the text colour. Empty: a dashed hairline.
+                border: `1px ${empty || offSoon ? 'dashed' : 'solid'} ${on ? 'var(--bs-fg)' : offSoon ? 'var(--bs-border-control)' : empty ? 'var(--bs-border)' : 'transparent'}`,
+                background: empty ? 'transparent' : 'var(--bs-raised)',
                 color: empty ? (cantKeep ? 'var(--bs-fg3)' : 'var(--bs-fg2)') : 'var(--bs-fg)',
                 fontWeight: on ? 600 : 500, cursor: cantKeep ? 'not-allowed' : 'pointer', opacity: empty && cantKeep ? 0.7 : 1,
-              }}
+                // The place's own edge says playing; the app's pressed edge stays off it.
+                ['--bs-pressed-edge' as string]: on ? 'var(--bs-fg)' : 'transparent',
+              } as CSSProperties}
             >
               <LoopThumb cells={l.cells} rows={p.rows} cols={p.cols} swatchFor={p.swatchFor} width={THUMB} />
               <span style={{ fontSize: 14, minWidth: 0, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{loopName(l)}</span>

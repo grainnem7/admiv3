@@ -265,3 +265,18 @@ Help; the owner's and Tim's own words after a run.
    as New loop does. I recommend named at once, with "Loop N" until renamed.
 3. **Transitions.** Build the Fade, Overlap and Cut chips as batch G6 after the grid, or leave
    the one fade setting as it is.
+
+## Status
+- **G1, built (4 Nov).** `play/LoopRail.tsx`: the eight places beside the board (a row each:
+  picture, name), kept ones a step up from the page, the playing one edged in the text colour,
+  empty ones a dashed hairline. Press, play or stop, the … menu (Rename, Replace with the board,
+  Edit notes, Clear), New loop from silence. One tab stop. In Board and Make a piece alike, on the
+  side away from the panel (A3); a row under the board when stacked. The Keep as loop button
+  under the board went. The owner's answers assumed: the rail on the panel's side, loops named
+  "Loop N" until renamed, transitions later.
+- **G2, built (4 Nov).** `play/PieceGrid.tsx` and `performance/pieceGrid.ts`: under the
+  timeline's ruler, a row for each kept loop and a cell per timed scene, a dot where the loop
+  plays; a press turns it on or off (`onEditScene`); the row's name plays the loop; the column
+  on now is lit while the piece plays; one tab stop with arrows, Home and End. With no loops it
+  says where to keep one. The scene rows stay under it for now as the editor of the selected
+  scene (G3 makes them the inspector).

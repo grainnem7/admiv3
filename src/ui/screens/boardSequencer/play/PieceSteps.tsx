@@ -3,6 +3,7 @@ import { Button } from '../ui/Button';
 import { CAPTION_STYLE, UNDERLINE_OFF, UNDERLINE_ON } from '../ui/text';
 import { dragTime } from '../../../../songs/performance/sceneTools';
 import { MAX_PIECES } from '../../../../songs/performance/pieces';
+import { PieceGrid } from './PieceGrid';
 import { focusDropped, focusWhenGone, PLAY_STOP_ID } from '../ui/focusNext';
 import { LabeledSlider } from '../ui/LabeledSlider';
 import { SegmentedControl } from '../ui/SegmentedControl';
@@ -665,6 +666,13 @@ function ScenesStep(p: PieceStepsProps): JSX.Element {
             })}
             {elapsed !== null && <li aria-hidden="true" style={{ position: 'absolute', top: 0, bottom: 0, width: 3, left: `${Math.min(100, (elapsed / p.lengthSec) * 100)}%`, background: 'var(--bs-fg)' }} />}
           </ul>
+          {/* The piece as one picture (G2): the kept loops by the scenes, under the ruler. */}
+          <PieceGrid
+            scenes={p.scenes} loops={p.loops} lengthSec={p.lengthSec} currentScene={p.currentScene} running={p.running}
+            onToggle={(i, loops) => p.onEditScene(i, { loops })}
+            onSelectScene={(id) => setSelected(id)}
+            onToggleLoop={p.onToggleLoop}
+          />
           <EnergyGraph scenes={p.scenes} lengthSec={p.lengthSec} />
           {p.scenes.map((s, i) => (
             <SceneRow

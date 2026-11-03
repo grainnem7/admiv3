@@ -202,7 +202,7 @@ test('clearing a loop that scenes use asks first, naming them, and takes it out 
   await expect(page.getByText('No loop plays in Arrival and Home')).toBeVisible();
   // A new loop kept now is a new loop: no scene plays it until it is put there.
   await step(page, 'Loops');
-  await page.getByRole('button', { name: 'New loop' }).click();
+  await page.getByRole('button', { name: 'New loop', exact: true }).click();
   await pickColour(page, 'Red');
   await place(page, [[3, 1], [5, 3], [6, 5]]);
   await page.getByRole('button', { name: 'Keep', exact: true }).click();
@@ -1016,7 +1016,7 @@ test('while the piece plays: New loop is off and says why, there is no other way
   await page.getByRole('button', { name: 'Leave Show' }).click();
   await expect(page.getByRole('button', { name: /Capture/ })).toHaveCount(0);
   await pieceStep(page, 'Loops');
-  await expect(page.getByRole('button', { name: 'New loop' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'New loop', exact: true })).toBeDisabled();
   await expect(page.getByText('Stop the piece to make a loop')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Keep the board as this loop' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: /Edit notes: loop/ })).toHaveCount(0);
@@ -1027,7 +1027,7 @@ test('while the piece plays: New loop is off and says why, there is no other way
 test('inside New loop there is one way to make a loop: Keep', async ({ page }) => {
   await openLaptopBoard(page);
   await saveTwoLoops(page);
-  await page.getByRole('button', { name: 'New loop' }).click();
+  await page.getByRole('button', { name: 'New loop', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'New loop 3 · not kept yet' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Keep the board as this loop' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: /Overwrite/ })).toHaveCount(0);
@@ -1048,7 +1048,7 @@ test('Stop while hearing a loop in New loop, then Play: the loop does not come b
   await page.getByRole('textbox', { name: 'Name of loop 1' }).fill('Bed');
   await page.getByRole('button', { name: 'Clear the board' }).click();
   await page.getByRole('button', { name: '▶ Play the board' }).first().click();
-  await page.getByRole('button', { name: 'New loop' }).click();
+  await page.getByRole('button', { name: 'New loop', exact: true }).click();
   const hearLoop = page.getByRole('combobox', { name: 'Hear it with a loop' });
   await hearLoop.selectOption({ label: 'Bed' });
   const row = page.getByRole('listitem', { name: /^Loop 1: Bed/ });

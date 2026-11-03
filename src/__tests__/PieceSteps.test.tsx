@@ -887,3 +887,28 @@ describe('item 3: the pieces at the top of Make a piece', () => {
     expect([...host.querySelectorAll('button')].some((b) => (b.getAttribute('aria-label') ?? '').startsWith('Delete:'))).toBe(false);
   });
 });
+
+describe('G2: the piece as a grid of loops by scenes', () => {
+  it('a row for each kept loop, a cell per timed scene, pressed where the loop plays; a press turns it on or off', () => {
+    const p = props({ step: 'scenes' });
+    render(p);
+    const grid = host.querySelector('[data-piece-grid]')!;
+    expect(grid.getAttribute('role')).toBe('grid');
+    const cells = [...grid.querySelectorAll('button[aria-label*=" in "]')] as HTMLButtonElement[];
+    const names = cells.map((b) => `${b.getAttribute('aria-label')}=${b.getAttribute('aria-pressed')}`);
+    expect(names.some((n) => n.endsWith('=true'))).toBe(true);
+    const off = cells.find((b) => b.getAttribute('aria-pressed') === 'false')!;
+    act(() => off.click());
+    expect(p.onEditScene).toHaveBeenCalled();
+    const [i, patch] = (p.onEditScene as ReturnType<typeof vi.fn>).mock.calls.at(-1)!;
+    expect(typeof i).toBe('number');
+    expect(Array.isArray(patch.loops)).toBe(true);
+    // One tab stop: one cell carries tabindex 0.
+    expect(cells.filter((b) => b.getAttribute('tabindex') === '0').length).toBe(1);
+  });
+
+  it('with no loops kept it says where to keep one', () => {
+    render(props({ step: 'scenes', loops: props().loops.map((l) => ({ ...l, state: 'empty' as const, notes: 0, cells: [] })) }));
+    expect(host.querySelector('[data-piece-grid-empty]')?.textContent).toContain('Keep one in the rail');
+  });
+});
