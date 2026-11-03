@@ -152,10 +152,13 @@ export function pageErrors(page: Page): string[] {
   return (page as Page & { admiErrors?: string[] }).admiErrors ?? [];
 }
 
-/** Open Make a piece at a step: 'Loops', 'Scenes' or 'Ending & check'. */
+/**
+ * Open Make a piece at a step. Since G3 there are two tabs: Piece (the grid, the scenes and
+ * the loops, so 'Loops' and 'Scenes' both open it) and Check ('Ending & check').
+ */
 export async function pieceStep(page: Page, step: 'Loops' | 'Scenes' | 'Ending & check'): Promise<void> {
   await page.getByRole('button', { name: 'Make a piece', exact: true }).click();
-  await page.getByRole('navigation', { name: 'Make a piece: steps' }).getByRole('button', { name: new RegExp(step.replace('&', '&')) }).click();
+  await page.getByRole('navigation', { name: 'Make a piece: steps' }).getByRole('button', { name: step === 'Ending & check' ? 'Check' : 'Piece', exact: true }).click();
 }
 
 /** Make a piece → Scenes → Make my plan (four scenes over the length). */

@@ -21,7 +21,8 @@ async function saveTwoLoops(page: Page): Promise<void> {
 const chipTitles = (timeline: Locator): Promise<(string | null)[]> => timeline.getByRole('listitem').getByRole('button').evaluateAll((bs) => bs.map((b) => b.getAttribute('title')));
 
 async function step(page: Page, name: 'Loops' | 'Scenes' | 'Ending & check'): Promise<void> {
-  await page.getByRole('navigation', { name: 'Make a piece: steps' }).getByRole('button', { name: new RegExp(`· ${name}`) }).click();
+  // Two tabs since G3: Piece holds the loops and the scenes; Check the ending and the check.
+  await page.getByRole('navigation', { name: 'Make a piece: steps' }).getByRole('button', { name: name === 'Ending & check' ? 'Check' : 'Piece', exact: true }).click();
 }
 
 /** The player's scene settings as saved in the browser: what a reload or the next session gets. */
@@ -95,7 +96,7 @@ test('a piece made in Make a piece survives a reload and opens in its first scen
   await saveBoardHere(page);
   await page.getByRole('button', { name: 'Clear the board' }).click();
 
-  await page.getByRole('button', { name: /Next: Scenes/ }).click();
+  // The scenes sit on the same tab as the loops (G3).
   await page.getByRole('button', { name: /Make my plan/ }).click();
   const timeline = page.getByRole('list', { name: 'Timeline of the scenes' });
   await expect.poll(() => chipTitles(timeline)).toEqual(['1 · Arrival 0:00', '2 · Build 1:30', '3 · Open 3:30', '4 · Home 6:00']);
@@ -369,9 +370,9 @@ test('step 3 checks what is ready, and says what to fix', async ({ page }) => {
   await pieceStep(page, 'Ending & check');
   await expect(page.getByText('Board: the laptop board')).toBeVisible();
   await expect(page.getByText('No scenes yet')).toBeVisible();
-  await page.getByRole('button', { name: /← Scenes/ }).click();
+  await page.getByRole('button', { name: /← Piece/ }).click();
   await page.getByRole('button', { name: /Make my plan/ }).click();
-  await page.getByRole('button', { name: /Next: Ending & check/ }).click();
+  await page.getByRole('button', { name: /Next: Check/ }).click();
   await expect(page.getByText('4 scenes come in on the clock, one at 0:00')).toBeVisible();
 });
 

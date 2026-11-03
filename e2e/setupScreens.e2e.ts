@@ -142,7 +142,7 @@ test('the Ready check: a fix made elsewhere has a button that goes there (A14)',
   await pieceStep(page, 'Ending & check');
   // No scenes yet: Go to Scenes opens step 2.
   await page.getByRole('button', { name: /^Go to Scenes: No scenes yet/ }).click();
-  await expect(page.getByRole('heading', { name: '2 · Scenes' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Scenes' })).toBeVisible();
   await pieceStep(page, 'Ending & check');
   // The laptop board is advice, with the button that changes it, not "press 📷 Camera at the top".
   // Advice is one line until pressed (U7).

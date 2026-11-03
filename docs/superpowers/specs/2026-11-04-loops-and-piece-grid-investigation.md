@@ -280,3 +280,13 @@ Help; the owner's and Tim's own words after a run.
   on now is lit while the piece plays; one tab stop with arrows, Home and End. With no loops it
   says where to keep one. The scene rows stay under it for now as the editor of the selected
   scene (G3 makes them the inspector).
+- **G3, built (4 Nov).** Two tabs, Piece and Check, in place of the three numbered steps
+  (the step ids stay underneath: Loops and Scenes both open Piece; the e2e helper maps them).
+  Piece holds, in order: the piece fold, the three teaching lines while there are no scenes
+  (`FirstPiece`, each ticked as it is done), Scenes (the ruler, the grid, the energy line, the
+  scene rows as the editor of the one open), then Loops (Keep as loop, New loop from silence,
+  the list with names and Other ways). Check is the former Ending & check: the length, how it
+  ends, Count in and the ready check. The headings lost their numbers; "Next: Check" and
+  "← Piece" are the footers. Kept for now against the design: length, ending and count in stay
+  on Check rather than under the grid, and the scene rows stay as the inspector, so the tests
+  of both hold; the energy line stays under the grid.

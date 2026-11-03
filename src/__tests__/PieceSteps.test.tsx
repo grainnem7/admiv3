@@ -793,9 +793,9 @@ describe('U6: a kept loop’s ▶ Play and ✕ stay together at the end of its r
   });
 });
 
-describe('L5: the three steps of Make a piece are words in a row', () => {
-  it('the one you are on in the text colour with its words underlined, the rest grey, none boxed', () => {
-    render(props({ step: 'scenes' }));
+describe('L5 and G3: the two tabs of Make a piece are words in a row', () => {
+  it('the one you are on in the text colour with its words underlined, the other grey, none boxed', () => {
+    render(props({ step: 'ending' }));
     const nav = host.querySelector('nav[aria-label="Make a piece: steps"]') as HTMLElement;
     expect(parseInt(nav.style.columnGap, 10)).toBeGreaterThanOrEqual(16);
     const steps = [...nav.querySelectorAll('button')] as HTMLButtonElement[];

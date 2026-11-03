@@ -14,7 +14,7 @@ const QUICK_NAMES = ['Bed', 'Pulse', 'Beat', 'Shine'];
 export interface NewLoopStopped { why: string | null; canPlay: boolean }
 
 const STOPPED_LINE = 'Stopped. Press ▶ Play the board to hear the counters.';
-const LEAVE_LINE = 'Keep it or leave in Make a piece, 1 · Loops.';
+const LEAVE_LINE = 'Keep it or leave in Make a piece, Loops.';
 
 /**
  * The line under the board while New loop is open: never "only the counters sound" while

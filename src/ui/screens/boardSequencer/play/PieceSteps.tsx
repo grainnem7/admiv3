@@ -239,18 +239,20 @@ const ENDINGS: { value: EndingStyle; label: string; what: string }[] = [
  */
 export function PieceSteps(p: PieceStepsProps): JSX.Element {
   const saved = p.loops.filter((l) => l.state !== 'empty');
-  const steps: { id: PieceStep; n: number; label: string; status: string }[] = [
-    { id: 'loops', n: 1, label: 'Loops', status: saved.length === 0 ? 'optional' : `${saved.length} saved` },
-    { id: 'scenes', n: 2, label: 'Scenes', status: p.scenes.length === 0 ? 'optional' : `${p.scenes.length}` },
-    { id: 'ending', n: 3, label: 'Ending & check', status: formatClock(p.lengthSec) },
+  // Two tabs (G3): Piece holds the grid, the scenes and the loops; Check the length, the
+  // ending and the ready check. The steps' ids stay as they were underneath.
+  const steps: { id: PieceStep; label: string; status: string }[] = [
+    { id: 'scenes', label: 'Piece', status: p.scenes.length === 0 ? (saved.length === 0 ? 'empty' : `${saved.length} ${saved.length === 1 ? 'loop' : 'loops'}`) : `${p.scenes.length} ${p.scenes.length === 1 ? 'scene' : 'scenes'} · ${saved.length} ${saved.length === 1 ? 'loop' : 'loops'}` },
+    { id: 'ending', label: 'Check', status: formatClock(p.lengthSec) },
   ];
+  const onPiece = p.step === 'loops' || p.step === 'scenes';
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14, paddingTop: 10 }}>
       <PiecePicker {...p} />
-      {/* The three steps as words (L5): the one you are on in the text colour, underlined. */}
+      {/* The tabs as words (L5): the one you are on in the text colour, underlined. */}
       <nav aria-label="Make a piece: steps" style={{ display: 'flex', columnGap: 18, flexWrap: 'wrap', borderBottom: '1px solid var(--bs-border)' }}>
         {steps.map((s) => {
-          const on = p.step === s.id;
+          const on = s.id === 'scenes' ? onPiece : p.step === s.id;
           return (
             <button
               key={s.id}
@@ -263,16 +265,42 @@ export function PieceSteps(p: PieceStepsProps): JSX.Element {
                 color: on ? 'var(--bs-fg)' : 'var(--bs-fg3)', fontWeight: on ? 600 : 500,
               }}
             >
-              <span data-words="" style={{ display: 'inline-block', borderBottom: on ? UNDERLINE_ON : UNDERLINE_OFF, paddingBottom: 1 }}>{`${s.n} · ${s.label}`}</span>
+              <span data-words="" style={{ display: 'inline-block', borderBottom: on ? UNDERLINE_ON : UNDERLINE_OFF, paddingBottom: 1 }}>{s.label}</span>
               <span style={{ display: 'block', fontSize: 14, color: 'var(--bs-fg3)', fontWeight: 500 }}>{s.status}</span>
             </button>
           );
         })}
       </nav>
-      {p.step === 'loops' && <LoopsStep {...p} />}
-      {p.step === 'scenes' && <ScenesStep {...p} />}
+      {/* The piece's picture first, the loops under it, always in this order: New loop's panel
+          takes focus when it opens and the page follows it there. */}
+      {onPiece && p.scenes.length === 0 && <FirstPiece {...p} />}
+      {onPiece && <ScenesStep {...p} />}
+      {onPiece && <LoopsStep {...p} />}
       {p.step === 'ending' && <EndingStep {...p} />}
     </div>
+  );
+}
+
+/**
+ * An empty piece teaches itself (G3): three lines, each ticked as it is done, in place of
+ * the paragraphs. They go once there are scenes.
+ */
+function FirstPiece(p: PieceStepsProps): JSX.Element {
+  const kept = p.loops.filter((l) => l.state !== 'empty').length;
+  const lines: { done: boolean; text: string }[] = [
+    { done: kept >= 1, text: 'Play something, then press an empty place in the loop rail beside the board. Two or three loops is plenty.' },
+    { done: false, text: 'Press Make my plan: four scenes across the piece, with your loops in them.' },
+    { done: false, text: 'Go to Show and press Start the piece.' },
+  ];
+  return (
+    <ol data-first-piece="" aria-label="Your first piece, in three steps" style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {lines.map((l, i) => (
+        <li key={i} style={{ display: 'flex', gap: 10, alignItems: 'baseline', color: l.done ? 'var(--bs-fg3)' : 'var(--bs-fg)' }}>
+          <span aria-hidden="true" style={{ width: 18, flexShrink: 0, fontWeight: 700, textAlign: 'center' }}>{l.done ? '✓' : String(i + 1)}</span>
+          <span>{l.done ? <><span style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>Done: </span>{l.text}</> : l.text}</span>
+        </li>
+      ))}
+    </ol>
   );
 }
 
@@ -371,7 +399,7 @@ function LoopsStep(p: PieceStepsProps): JSX.Element {
   }, [making]);
   return (
     <section aria-labelledby="piece-loops" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <h2 id="piece-loops" style={heading}>1 · Loops</h2>
+      <h2 id="piece-loops" style={heading}>Loops</h2>
       {p.newLoop ?? (
         <div style={card}>
           <Note as="p" style={{ color: 'var(--bs-fg)' }}>A loop is a board that then plays by itself: what is on the board now, kept in one press, or one made from silence.</Note>
@@ -494,7 +522,6 @@ function LoopsStep(p: PieceStepsProps): JSX.Element {
           />
         </div>
       )}
-      <StepFooter next={{ label: 'Next: Scenes', onClick: () => p.onStep('scenes') }} />
     </section>
   );
 }
@@ -584,7 +611,7 @@ function ScenesStep(p: PieceStepsProps): JSX.Element {
     .find((b) => id === undefined || b.dataset.sceneRow === id) ?? null;
   return (
     <section ref={sectionRef} aria-labelledby="piece-scenes" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <h2 id="piece-scenes" ref={headingRef} tabIndex={-1} style={heading}>2 · Scenes</h2>
+      <h2 id="piece-scenes" ref={headingRef} tabIndex={-1} style={heading}>Scenes</h2>
       {/* Read first while there are no scenes; once there are, one line that opens it (U2). */}
       {p.scenes.length === 0 ? scenesIntro : (
         <Disclosure summary="How scenes work">{scenesIntro}</Disclosure>
@@ -745,7 +772,7 @@ function ScenesStep(p: PieceStepsProps): JSX.Element {
       {p.colours.length > 0 && (p.scenes.length === 0
         ? <Disclosure summary="When each colour comes in"><ColourTimes colours={p.colours} lengthSec={p.lengthSec} palette={p.palette} onChange={p.onColourEntry} /></Disclosure>
         : <ColourTimes colours={p.colours} lengthSec={p.lengthSec} palette={p.palette} onChange={p.onColourEntry} />)}
-      <StepFooter back={{ label: 'Loops', onClick: () => p.onStep('loops') }} next={{ label: 'Next: Ending & check', onClick: () => p.onStep('ending'), primary: true }} />
+      <StepFooter next={{ label: 'Next: Check', onClick: () => p.onStep('ending'), primary: true }} />
     </section>
   );
 }
@@ -811,7 +838,7 @@ function EndingStep(p: PieceStepsProps): JSX.Element {
   const perf = p.performance;
   return (
     <section aria-labelledby="piece-ending" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <h2 id="piece-ending" style={heading}>3 · Ending &amp; check</h2>
+      <h2 id="piece-ending" style={heading}>Check</h2>
       <div style={card}>
         <p style={{ margin: 0, fontWeight: 700 }}>{`${formatClock(p.lengthSec)} · ${describeEnding(perf)} · ${perf.ending === 'cue' ? 'you press End' : 'ends at the time'}`}</p>
         <p style={note}>The clock counts down from the length, with cues at 1 minute, 30 and 10 seconds. The piece never runs over: if End hasn&rsquo;t been pressed, the ending starts by itself in time to finish at {formatClock(p.lengthSec)}.</p>
@@ -873,7 +900,7 @@ function EndingStep(p: PieceStepsProps): JSX.Element {
       </div>
       <p role="status" style={note}>{p.diskLine}</p>
       {p.restoreError && <span role="alert" style={{ fontSize: 14, color: 'var(--bs-danger)' }}>{p.restoreError}</span>}
-      <StepFooter back={{ label: 'Scenes', onClick: () => p.onStep('scenes') }} next={{ label: 'Go to Show', onClick: p.onShow, primary: true }} />
+      <StepFooter back={{ label: 'Piece', onClick: () => p.onStep('scenes') }} next={{ label: 'Go to Show', onClick: p.onShow, primary: true }} />
     </section>
   );
 }

@@ -21,7 +21,7 @@ const all = (): string => { act(() => root.render(<BoardHelp />)); return host.t
 describe('Help says how things work now', () => {
   it('a loop is made with New loop → counters → Keep, never "Save the board here" (F1)', () => {
     const steps = entry('Board, Make a piece, Show');
-    expect(steps).toMatch(/1 Loops: Keep as loop, or New loop from silence: put counters down, then Keep/);
+    expect(steps).toMatch(/Loops: Keep as loop, or New loop from silence: put counters down, then Keep/);
     expect(all()).not.toContain('Save the board here');
   });
 

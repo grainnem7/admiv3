@@ -302,9 +302,9 @@ describe('New loop on a stopped board (R2-T1-01)', () => {
   });
 
   it('the status line under the board says the same', () => {
-    expect(newLoopStatusLine(null)).toBe('Making a new loop: only the counters sound. Keep it or leave in Make a piece, 1 · Loops.');
-    expect(newLoopStatusLine({ why: null, canPlay: true })).toBe(`Making a new loop. ${STOPPED} Keep it or leave in Make a piece, 1 · Loops.`);
-    expect(newLoopStatusLine({ why: "The camera isn't working.", canPlay: false })).toBe("Making a new loop. The camera isn't working. Keep it or leave in Make a piece, 1 · Loops.");
+    expect(newLoopStatusLine(null)).toBe('Making a new loop: only the counters sound. Keep it or leave in Make a piece, Loops.');
+    expect(newLoopStatusLine({ why: null, canPlay: true })).toBe(`Making a new loop. ${STOPPED} Keep it or leave in Make a piece, Loops.`);
+    expect(newLoopStatusLine({ why: "The camera isn't working.", canPlay: false })).toBe("Making a new loop. The camera isn't working. Keep it or leave in Make a piece, Loops.");
   });
 });
 
