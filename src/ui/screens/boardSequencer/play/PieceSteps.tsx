@@ -254,20 +254,22 @@ export function PieceSteps(p: PieceStepsProps): JSX.Element {
         {steps.map((s) => {
           const on = s.id === 'scenes' ? onPiece : p.step === s.id;
           return (
-            <button
-              key={s.id}
-              type="button"
-              aria-current={on ? 'step' : undefined}
-              onClick={() => p.onStep(s.id)}
-              style={{
-                minHeight: 'var(--bs-target)', padding: '4px 0', textAlign: 'left', cursor: 'pointer',
-                borderRadius: 0, border: '1px solid transparent', background: 'transparent',
-                color: on ? 'var(--bs-fg)' : 'var(--bs-fg3)', fontWeight: on ? 600 : 500,
-              }}
-            >
-              <span data-words="" style={{ display: 'inline-block', borderBottom: on ? UNDERLINE_ON : UNDERLINE_OFF, paddingBottom: 1 }}>{s.label}</span>
-              <span style={{ display: 'block', fontSize: 14, color: 'var(--bs-fg3)', fontWeight: 500 }}>{s.status}</span>
-            </button>
+            // The word is the button; its status line sits under it, outside the name (A9).
+            <div key={s.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+              <button
+                type="button"
+                aria-current={on ? 'step' : undefined}
+                onClick={() => p.onStep(s.id)}
+                style={{
+                  minHeight: 'var(--bs-target)', padding: '4px 0', textAlign: 'left', cursor: 'pointer',
+                  borderRadius: 0, border: '1px solid transparent', background: 'transparent',
+                  color: on ? 'var(--bs-fg)' : 'var(--bs-fg3)', fontWeight: on ? 600 : 500,
+                }}
+              >
+                <span data-words="" style={{ display: 'inline-block', borderBottom: on ? UNDERLINE_ON : UNDERLINE_OFF, paddingBottom: 1 }}>{s.label}</span>
+              </button>
+              <span aria-hidden="true" style={{ fontSize: 14, color: 'var(--bs-fg3)', fontWeight: 500, paddingBottom: 6 }}>{s.status}</span>
+            </div>
           );
         })}
       </nav>

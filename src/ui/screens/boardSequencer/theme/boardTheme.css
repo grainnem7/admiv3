@@ -115,6 +115,9 @@
   padding: 0 16px;
   border-radius: var(--bs-radius-pill);
   cursor: pointer;
+  /* No fade between states: the app's "transition: all" left a button's words mid-way between
+     two colours for a moment, below 4.5:1, and costs paint time the sound needs. */
+  transition: none;
 }
 
 .bs-root button[disabled] {
