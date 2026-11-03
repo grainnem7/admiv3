@@ -45,7 +45,17 @@ export interface PlayPanelProps {
   /** The open tab, when the screen opens one itself (a Ready-check fix going to its place). */
   tab?: PlayTab;
   onTab?(tab: PlayTab): void;
+  /**
+   * The notices (Undo, the reload offer, keeping time, the camera): side by side they sit
+   * here, in a slot of fixed height between the transport and the tabs, so a notice coming
+   * or going never moves the board (A3) and the board has the strip above it back (U7).
+   * Stacked, the page keeps them above the board.
+   */
+  notices?: ReactNode;
 }
+
+/** The notices' slot: one notice with its button; more than fits scroll inside it. */
+export const NOTICE_SLOT_HEIGHT = 'calc(var(--bs-target) + 8px)';
 
 export type PlayTab = 'sound' | 'groove' | 'loops' | 'connections' | 'cap';
 
@@ -56,7 +66,7 @@ export type PlayTab = 'sound' | 'groove' | 'loops' | 'connections' | 'cap';
  */
 export function PlayPanel({
   running, muted, onStart, onStop, stopArmed = false, onToggleMute, simplify = null, bpm, bpmTo = null, step, cols, variationLap, beatOn, clock = null,
-  heldCount, handGuardWaiting, piece, connections, cap, groove, sound, loops, stacked, transportAlign, tab: shownTab, onTab,
+  heldCount, handGuardWaiting, piece, connections, cap, groove, sound, loops, stacked, transportAlign, tab: shownTab, onTab, notices = null,
 }: PlayPanelProps): JSX.Element {
   const [ownTab, setOwnTab] = useState<PlayTab>('sound');
   const tab = shownTab ?? ownTab;
@@ -152,6 +162,11 @@ export function PlayPanel({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: 1, gap: 8 }}>
       {!stacked && transport}
+      {!stacked && (
+        <div data-notice-slot="" style={{ height: NOTICE_SLOT_HEIGHT, flexShrink: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {notices}
+        </div>
+      )}
       <div
         style={{
           flex: 1,

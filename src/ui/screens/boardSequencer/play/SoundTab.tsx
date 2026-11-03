@@ -5,6 +5,7 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { Button } from '../ui/Button';
 import { Disclosure } from '../ui/Disclosure';
+import { Note } from '../ui/explain';
 import { SegmentedControl } from '../ui/SegmentedControl';
 import type { BoardPalette } from '../theme/boardTokens';
 import { SOUND_WORLDS, SOUND_WORLD_IDS, worldOf, type SoundWorldChoice } from '../../../../audio/worlds/soundWorlds';
@@ -201,14 +202,14 @@ export function SoundTab(p: SoundTabProps): JSX.Element {
             onChange={(g) => { if (g !== 'custom') p.setGroove(GROOVES[g].swing, GROOVES[g].humanize); }}
             options={(Object.keys(GROOVES) as GrooveName[]).map((g) => ({ value: g, label: GROOVES[g].label }))}
           />
-          <span style={NOTE}>
+          <Note>
             {groove === null
               ? `Your own swing (${Math.round(config.swing * 100)}%) and loose timing (${Math.round(config.humanize * 100)}%), set finely on the ${WORDS.timing} tab.`
               : groove === 'straight' ? 'Every note exactly on the beat.'
                 : groove === 'swung' ? 'Off-beats a little late, like jazz or hip-hop.'
                   : 'Swung and loose: a few notes rest, timing breathes.'}
             {groove !== null && ` Sets the swing and loose timing on the ${WORDS.timing} tab in one step.`}
-          </span>
+          </Note>
         </div>
       </section>
 
@@ -238,7 +239,7 @@ export function SoundTab(p: SoundTabProps): JSX.Element {
       {/* ---- what the instrument adds ---- */}
       <section aria-labelledby="sound-helpers" style={SECTION}>
         <h2 id="sound-helpers" style={HEADING}>Helpers</h2>
-        <span style={NOTE}>Each adds to your music. On the board: ● your counters · ◌ extra notes · ▬ the band.</span>
+        <Note>Each adds to your music. On the board: ● your counters · ◌ extra notes · ▬ the band.</Note>
 
         <HelperFold id="band" title="Band" summary={BAND_LEVEL_WORDS[config.band]}>
           <SegmentedControl<BandLevel>
@@ -247,7 +248,7 @@ export function SoundTab(p: SoundTabProps): JSX.Element {
             onChange={(v) => update({ band: v })}
             options={[{ value: 'off', label: 'Off' }, { value: 'gentle', label: 'Quiet' }, { value: 'full', label: 'Full' }]}
           />
-          <span style={NOTE}>
+          <Note>
             {config.band === 'off'
               ? (config.bandJobs.asBefore
                 ? 'Chords, a bass and drums that build up under you as you put counters down.'
@@ -255,7 +256,7 @@ export function SoundTab(p: SoundTabProps): JSX.Element {
               : config.bandJobs.asBefore
                 ? `${config.band === 'gentle' ? 'A held chord, a root bass and a soft pulse.' : 'Chords, a walking bass and the full kit.'} Chords under your first counters, the bass from three, the drums from five. Put down a bass, chord or drum counter and the band hands that part to you.`
                 : `${config.band === 'gentle' ? 'Quiet: soft and simple (held chords, a root bass, a gentle pulse, the counter-melody on the main beats only).' : 'Full: louder and busier (a walking bass, the whole kit, the counter-melody in every gap).'} It comes in on the pass after your first counter.`}
-          </span>
+          </Note>
           {config.band !== 'off' && <BandJobsChoice value={config.bandJobs} onChange={(bandJobs) => update({ bandJobs })} />}
           {config.band !== 'off' && p.running && (
             <span role="status" style={NOTE}>
@@ -282,9 +283,9 @@ export function SoundTab(p: SoundTabProps): JSX.Element {
 
         <HelperFold id="chords" title="Chords" summary={upperFirst(chordWords(config.chords))}>
           <ChordChoice value={config.chords} onChange={(chords) => update({ chords })} />
-          <span style={NOTE}>
+          <Note>
             {`Everything with notes plays to these chords: your counters, your loops, the band and the extra notes. A chord counter changes one chord, from its column until the next chord.${p.running ? ' New chords start at the next pass.' : ''}`}
-          </span>
+          </Note>
           <Switch
             label="Melody and bass fit the chord" checked={config.clashNudge} onChange={(clashNudge) => update({ clashNudge })}
             hint="On the main beats, a melody or bass note that rubs against the chord moves to the nearest chord note. Off: every note plays as placed."
@@ -298,13 +299,11 @@ export function SoundTab(p: SoundTabProps): JSX.Element {
             value={config.fillAmount}
             disabled={p.fill.reason !== null}
             onPick={(v) => update({ fillAmount: v, ...(v === 0 ? { fillKept: null } : {}) })}
-            hint={p.fill.reason}
+            reason={p.fill.reason}
           />
-          <span style={NOTE}>
-            {fillStep === 0
-              ? 'The instrument adds notes around yours: passing notes, echoes, softer drum hits. It never plays over a note you put down.'
-              : `${p.fill.count} extra ${p.fill.count === 1 ? 'note' : 'notes'} now, shown on the board as dotted rings. ${p.fill.frozen ? 'Frozen: they stay as they are, whatever you move.' : 'They follow the board as you move counters.'}`}
-          </span>
+          {fillStep === 0
+            ? <Note>The instrument adds notes around yours: passing notes, echoes, softer drum hits. It never plays over a note you put down.</Note>
+            : <span style={NOTE}>{`${p.fill.count} extra ${p.fill.count === 1 ? 'note' : 'notes'} now, shown on the board as dotted rings. ${p.fill.frozen ? 'Frozen: they stay as they are, whatever you move.' : 'They follow the board as you move counters.'}`}</span>}
           {p.fill.status && <span role="status" aria-live="polite" style={NOTE}>{p.fill.status}</span>}
           <HelperButtons a={p.fill} tryWord={WORDS.newIdea} tryLabel={`${WORDS.newIdea}: other extra notes`} />
         </HelperFold>
@@ -316,15 +315,13 @@ export function SoundTab(p: SoundTabProps): JSX.Element {
             value={config.evolveAmount}
             disabled={p.evolve.reason !== null}
             onPick={(v) => update({ evolveAmount: v })}
-            hint={p.evolve.reason}
+            reason={p.evolve.reason}
           />
-          <span style={NOTE}>
-            {evolveStep === 0
-              ? 'The music keeps moving: one-note counters wander to nearby notes, sounds get brighter or darker, and now and then a colour moves to another instrument or drum pattern.'
-              : p.evolve.frozen
-                ? 'Frozen: the sounds stay as they are now.'
-                : `Notes wander to their neighbours (home again every 4th loop), sounds drift every loop and change every ${config.evolveSceneLoops} loops, one colour at a time. The drums can change pattern too. Turn off "Changes over time" on a card to keep that colour exactly as placed.`}
-          </span>
+          {evolveStep === 0
+            ? <Note>The music keeps moving: one-note counters wander to nearby notes, sounds get brighter or darker, and now and then a colour moves to another instrument or drum pattern.</Note>
+            : <span style={NOTE}>{p.evolve.frozen
+              ? 'Frozen: the sounds stay as they are now.'
+              : `Notes wander to their neighbours (home again every 4th loop), sounds drift every loop and change every ${config.evolveSceneLoops} loops, one colour at a time. The drums can change pattern too. Turn off "Changes over time" on a card to keep that colour exactly as placed.`}</span>}
           {p.evolve.lastChange && <span role="status" style={NOTE}>{p.evolve.lastChange}</span>}
           <HelperButtons a={p.evolve} tryWord={WORDS.newSound} tryLabel={`${WORDS.newSound}: other sounds`} />
         </HelperFold>
@@ -338,19 +335,19 @@ export function SoundTab(p: SoundTabProps): JSX.Element {
             value={config.loopVary}
             onPick={(v) => update({ loopVary: v })}
           />
-          <span style={NOTE}>
+          <Note>
             {config.loopVary <= 0
               ? 'Saved loops play exactly as saved, every pass.'
               : 'Saved loops don\'t repeat exactly: on some passes their notes move to neighbours or add a passing note, tunes play another version and drum loops get busier or sparser. Every 4th pass they are back as saved. Your own counters are not changed.'}
-          </span>
-          <span style={NOTE}>
+          </Note>
+          <Note>
             Layered melodies take turns: one leads each pass and the others answer in its gaps, so loops talk to each other. Your counters always lead. For the AI to add its own notes around everything that is playing, turn up Extra notes.
-          </span>
+          </Note>
         </HelperFold>
       </section>
 
       <Disclosure summary="Advanced: key, scale, note length, mix, AI">
-        {inAbleton && <p style={{ ...NOTE, margin: '0 0 8px' }}>{`${IN_ABLETON}: Studio mix and the mix settings here only change ADMI's own sound. Key, scale and note length still change the notes Ableton plays.`}</p>}
+        {inAbleton && <Note as="p" style={{ margin: '0 0 8px' }}>{`${IN_ABLETON}: Studio mix and the mix settings here only change ADMI's own sound. Key, scale and note length still change the notes Ableton plays.`}</Note>}
         {p.advanced}
       </Disclosure>
     </div>

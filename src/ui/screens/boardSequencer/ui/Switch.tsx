@@ -1,3 +1,5 @@
+import { Note } from './explain';
+
 export interface SwitchProps {
   label: string;
   checked: boolean;
@@ -47,7 +49,7 @@ export function Switch({ label, checked, onChange, disabled = false, hint }: Swi
           </span>
         </span>
       </button>
-      {hint && <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>{hint}</span>}
+      {hint && <Note>{hint}</Note>}
     </div>
   );
 }

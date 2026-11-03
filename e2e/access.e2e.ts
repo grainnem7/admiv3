@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { makePlan, openLaptopBoard, openLaptopSetup, openWelcome, pageErrors, pickColour, pieceStep, place, sceneMore, sessionLog, soundTab } from './app';
+import { headerButton, makePlan, openLaptopBoard, openLaptopSetup, openWelcome, pageErrors, pickColour, pieceStep, place, sceneMore, sessionLog, soundTab } from './app';
 import { nameMismatches } from './names';
 
 /** Batch 5 (audit 2026-10-30): what the owner and a keyboard user meet, checked in a real browser. */
@@ -284,5 +284,44 @@ test('U5: with scenes made, the board keeps its size when play starts; Details s
   expect(await sign()).toBe('"▸"');
   await summary.click();
   expect(await sign()).toBe('"▾"');
+  expect(pageErrors(page)).toEqual([]);
+});
+
+test('U7: notices sit in the side panel and move nothing; Explain the choices under More; Simplify is one line', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openLaptopBoard(page);
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1]]);
+  const grid = page.getByRole('grid', { name: /Laptop board/ });
+  const before = await grid.boundingBox();
+  await page.getByRole('button', { name: 'Clear the board' }).click();
+  const slot = page.locator('[data-notice-slot]');
+  await expect(slot.getByRole('button', { name: 'Undo' })).toBeVisible();
+  // In the panel: to the right of the board, and the board itself has not moved.
+  const s = await slot.boundingBox();
+  expect(s!.x).toBeGreaterThan(before!.x + before!.width);
+  expect(await grid.boundingBox()).toEqual(before);
+  await slot.getByRole('button', { name: 'Undo' }).click();
+  // Explain the choices: on to start with, and off takes the sentences away.
+  await soundTab(page);
+  await expect(page.getByText('How hard everything plays, and how busy the drums are.')).toBeVisible();
+  const explain = (await headerButton(page, 'Explain the choices'));
+  await expect(explain).toHaveAttribute('aria-checked', 'true');
+  await explain.click();
+  await page.keyboard.press('Escape');
+  await expect(page.getByText('How hard everything plays, and how busy the drums are.')).toHaveCount(0);
+  // Still off after a reload.
+  await page.reload();
+  await page.getByRole('button', { name: /Board Sequencer/ }).click().catch(() => undefined);
+  await soundTab(page);
+  await expect(page.getByText('How hard everything plays, and how busy the drums are.')).toHaveCount(0);
+  await expect(await headerButton(page, 'Explain the choices')).toHaveAttribute('aria-checked', 'false');
+  await (await headerButton(page, 'Explain the choices')).click();
+  await page.keyboard.press('Escape');
+  // Simplify: one line, what it does in its tooltip.
+  await page.getByRole('button', { name: '▶ Play the board', exact: true }).click();
+  const simplify = page.getByRole('button', { name: /^Simplify/ }).first();
+  await expect(simplify).toHaveText('Simplify', { timeout: 20_000 });
+  await expect(simplify).toHaveAttribute('title', /only Test and the first loop/);
   expect(pageErrors(page)).toEqual([]);
 });

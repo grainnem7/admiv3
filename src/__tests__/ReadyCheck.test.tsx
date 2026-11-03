@@ -64,7 +64,34 @@ describe('advice is not a warning: the check can reach Ready (B21)', () => {
     ]);
     expect(host.textContent).toContain('Everything is ready.');
     expect(host.textContent).toContain('Board: the laptop board');
+    // Its words wait behind the line (U7).
+    act(() => [...host.querySelectorAll('button')].find((b) => b.textContent?.includes('Not backed up'))?.click());
     expect(host.textContent).toContain('Press Back up to a file below');
     expect(host.textContent).not.toContain('to check');
+  });
+});
+
+describe('U7: advice is one line until opened; problems and things to check are open', () => {
+  it('advice folds: its words come when its line is pressed', () => {
+    render([{ label: 'Board found', state: 'ok' }, boardItem({ laptop: true, cameraOk: false }), backupItem(false)]);
+    expect(host.textContent).toContain('Not backed up to a file yet');
+    expect(host.textContent).not.toContain('Press Back up to a file below');
+    const line = [...host.querySelectorAll('button')].find((b) => b.textContent?.includes('Not backed up to a file yet'))!;
+    expect(line.getAttribute('aria-expanded')).toBe('false');
+    act(() => line.click());
+    expect(line.getAttribute('aria-expanded')).toBe('true');
+    expect(host.textContent).toContain('Press Back up to a file below');
+  });
+
+  it('a problem is open from the start, with its fix and its button', () => {
+    const onClick = vi.fn();
+    render([{ label: 'Open uses Bed, which is empty', state: 'problem', fix: 'Take it out of the scene.', action: { label: 'Take it out', name: 'Take it out: Bed', onClick } }]);
+    expect(host.textContent).toContain('Take it out of the scene.');
+    expect(button('Take it out')).toBeDefined();
+  });
+
+  it('a ✓ line has nothing to open', () => {
+    render([{ label: 'Board found', state: 'ok' }]);
+    expect(host.querySelector('button')).toBeNull();
   });
 });

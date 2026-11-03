@@ -6,6 +6,7 @@ import { useEffect, useId, useRef, useState, type CSSProperties, type MutableRef
 import { Button } from '../ui/Button';
 import { SegmentedControl } from '../ui/SegmentedControl';
 import { Switch } from '../ui/Switch';
+import { Note } from '../ui/explain';
 import { LabeledSlider } from '../ui/LabeledSlider';
 import { Disclosure } from '../ui/Disclosure';
 import {
@@ -303,11 +304,11 @@ function LearnHat(p: CapPanelProps & { showHat: boolean; onShowHat(on: boolean):
   return (
     <div style={CARD} role="group" aria-labelledby={headingId}>
       <span id={headingId} ref={headingRef} tabIndex={-1} style={{ fontWeight: 600 }}>Learn the hat</span>
-      <p style={NOTE}>
+      <Note as="p">
         Teaches the camera this hat in this room, so other red things in the room are not taken
         for it and a change of light doesn&rsquo;t lose it. With the player in their playing
         place: first the room with the hat off, then the hat on. About 10 seconds in all.
-      </p>
+      </Note>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <Button
           ref={roomRef}
@@ -445,11 +446,11 @@ export function CapPanel(p: CapPanelProps): JSX.Element {
   const statusColour = unsure ? 'var(--bs-fg)' : view.seen ? 'var(--bs-ok)' : 'var(--bs-warn)';
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingTop: 10, minWidth: 0 }}>
-      <p style={NOTE}>
+      <Note as="p">
         A red cap, and a camera facing the player. Moving the head side to side and up and down
         moves two controls, within your own range. Small movements are ignored, changes
         glide, and if the cap goes out of sight the controls stay where they are.
-      </p>
+      </Note>
       <Switch label="Control with the red cap" checked={s.enabled} onChange={(enabled) => onChange({ enabled })} />
       {s.enabled && (
         <>

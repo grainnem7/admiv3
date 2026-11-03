@@ -5,6 +5,7 @@ import { LabeledSlider } from '../ui/LabeledSlider';
 import { SegmentedControl } from '../ui/SegmentedControl';
 import { Switch } from '../ui/Switch';
 import { Disclosure } from '../ui/Disclosure';
+import { Note } from '../ui/explain';
 import type { BandLevel } from '../../../../songs/band/band';
 import type { SoundWorldChoice } from '../../../../audio/worlds/soundWorlds';
 import {
@@ -290,7 +291,7 @@ function LoopsStep(p: PieceStepsProps): JSX.Element {
       <h2 id="piece-loops" style={heading}>1 · Loops</h2>
       {p.newLoop ?? (
         <div style={card}>
-          <p style={{ margin: 0 }}>A loop is something the player makes with counters, from silence, that then plays by itself.</p>
+          <Note as="p" style={{ color: 'var(--bs-fg)' }}>A loop is something the player makes with counters, from silence, that then plays by itself.</Note>
           {/* Off while the piece plays (F2), and with no loop left to keep it in: nobody
               clears the board for a loop that can't be kept (R2-T4-04). */}
           <div>
@@ -301,7 +302,7 @@ function LoopsStep(p: PieceStepsProps): JSX.Element {
               New loop
             </Button>
           </div>
-          <p style={note}>Everything stops; only the counters sound. Keep makes the loop.</p>
+          <Note as="p">Everything stops; only the counters sound. Keep makes the loop.</Note>
         </div>
       )}
       {/* A note, not a warning: an empty board is where New loop starts (R2-T1-07). Not with

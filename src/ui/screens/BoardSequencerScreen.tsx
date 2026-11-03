@@ -78,6 +78,7 @@ import { PlayPanel, type PlayTab } from './boardSequencer/play/PlayPanel';
 import { forgetSoundsBefore } from './boardSequencer/play/ColourTable';
 import { WORDS } from './boardSequencer/words';
 import { HeaderMore } from './boardSequencer/ui/HeaderMore';
+import { ExplainSwitch, Note } from './boardSequencer/ui/explain';
 import { CapPanel, CAP_ROLE_LABELS, CAP_PAUSE_TEXT, capHudText, capValueText, hatJobsLine, hatResultText } from './boardSequencer/play/CapPanel';
 import { useCapTracker } from './boardSequencer/useCapTracker';
 import { audienceNoticeText, useAudienceWindow } from '../../audience/useAudienceWindow';
@@ -307,8 +308,6 @@ const endingLeadOf = (c: BoardSequencerStored): number => pieceEndingLeadSec(
 );
 /** The side panel: 400 px, growing with the window to 480 px (A3). */
 const SIDE_PANEL_WIDTH = 'clamp(400px, 30vw, 480px)';
-/** The notices' fixed strip above the board: one notice with its button (A3). */
-const NOTICE_SLOT_HEIGHT = 'calc(var(--bs-target) + 14px)';
 /** The status lines' fixed strip under the board: three short lines (A3). */
 const STATUS_LINES_HEIGHT = 56;
 /** Where Play / Make a piece is remembered. */
@@ -3049,9 +3048,9 @@ export default function BoardSequencerScreen() {
         onChange={(v) => { update({ bpm: v }); holdSpeed(v); engineRef.current?.setBpm(v); /* live, not only on the next start */ }}
       />
       {/* One swing, said once (A2): Sound → Groove sets these two in one step, here they are fine. */}
-      <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>
+      <Note>
         Sound → Overall feel → Groove (Straight, Swung, Lazy) sets Swing and Loose timing in one step. Here they are set finely.
-      </span>
+      </Note>
       <LabeledSlider
         label="Swing" min={0} max={60} value={Math.round(config.swing * 100)} display={`${Math.round(config.swing * 100)}%`}
         onChange={(v) => { update({ swing: v / 100 }); engineRef.current?.setSwing(v / 100); }}
@@ -4087,10 +4086,10 @@ export default function BoardSequencerScreen() {
               silence or speed up the piece (show decision F3). New players start with it. */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
             <span style={{ fontWeight: 600, fontSize: 14 }}>For the show</span>
-            <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>
+            <Note>
               The safe show layout: the iPad shows only the Extra notes strip, New idea and End piece (two taps).
               {`Mute, the loop and scene pads, Next scene, Capture and ${WORDS.stopLoops} are hidden, and Speed is locked.`}
-            </span>
+            </Note>
             <div>
               <Button tone="secondary" onClick={applySafeShowLayout}>
                 Use the safe show layout
@@ -4106,7 +4105,7 @@ export default function BoardSequencerScreen() {
           {/* Fewer, bigger targets: the facilitator chooses what the iPad shows. */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
             <span style={{ fontWeight: 600, fontSize: 14 }}>What the iPad shows</span>
-            <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>Fewer things means bigger things. Untick what this player will not use.</span>
+            <Note>Fewer things means bigger things. Untick what this player will not use.</Note>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
               {REMOTE_CONTROLS.map((n) => (
                 <label key={`show-${n}`} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 14 }}>
@@ -5516,14 +5515,11 @@ export default function BoardSequencerScreen() {
       disabled={!running}
       onClick={toggleSimplify}
       aria-label={simplify === 'on' ? 'Back to full (Shift+S)' : `Simplify: only ${simplifyWho} and the first loop (Shift+S)`}
-      title={running ? undefined : 'Simplify works while playing.'}
-      style={{ flexDirection: 'column', gap: 0, lineHeight: 1.15, padding: '2px 12px' }}
+      // One line, like every other button (U7); what it does is its tooltip, and once on the
+      // line under the board says "Simplified: Tim and Bed" (B23).
+      title={running ? (simplify === 'on' ? 'Back to full from the next pass' : `Simplify: only ${simplifyWho} and the first loop keep playing`) : 'Simplify works while playing.'}
     >
-      <span>{simplify === 'on' ? 'Back to full' : 'Simplify'}</span>
-      {/* What it does, seen and not only in the tooltip (B23). */}
-      <span style={{ fontSize: 14, fontWeight: 400, color: 'var(--bs-fg2)', whiteSpace: 'nowrap' }}>
-        {simplify === 'on' ? 'from the next pass' : `${simplifyWho} and one loop`}
-      </span>
+      {simplify === 'on' ? 'Back to full' : 'Simplify'}
     </Button>
   );
   const keepingTimeView = running && (timeIndicator !== null || simplify !== 'off') ? (
@@ -5648,17 +5644,13 @@ export default function BoardSequencerScreen() {
     }
   };
 
-  const stage = (
-    <div style={{ flex: layout.mode === 'stacked' ? 'none' : '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
-      {/* The notices' one place (A3): on the Board view a strip of fixed height above the
-          board, so a notice coming or going never moves the board. More than fits scroll
-          inside it, the newest kind first as before. */}
-      <div
-        data-notice-slot=""
-        style={view === 'play'
-          ? { height: NOTICE_SLOT_HEIGHT, flexShrink: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }
-          : { display: 'contents' }}
-      >
+  /**
+   * The notices' one place (A3): side by side they go into the side panel's slot of fixed
+   * height (U7), so the board has the strip above it back and a notice still moves nothing;
+   * stacked, and in Set up, they stay above the board as before.
+   */
+  const noticeViews = (
+    <>
       {view !== 'bigBoard' && reloadNoticeView}
       {undoOffer && (
         <div role="status" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', padding: '6px 12px', borderRadius: 'var(--bs-radius-md)', background: 'var(--bs-raised)', border: '1px solid var(--bs-border)' }}>
@@ -5707,6 +5699,14 @@ export default function BoardSequencerScreen() {
           saveReason={emptyLoopSlot ? null : 'Turn the loop bank on and leave a slot free to save it.'}
         />
       )}
+    </>
+  );
+  const noticesInPanel = view === 'play' && layout.mode !== 'stacked';
+  const stage = (
+    <div style={{ flex: layout.mode === 'stacked' ? 'none' : '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
+      {/* Stacked, or in Set up: the notices above the board, as they were. */}
+      <div data-notice-slot-stacked="" style={{ display: 'contents' }}>
+        {noticesInPanel ? null : noticeViews}
       </div>
       {/* In Set up only once there are colours: before that, the step's own Add four colours is the way in. */}
       {laptop && (view === 'play' || (view === 'setup' && config.channels.length > 0)) && laptopBar}
@@ -5731,7 +5731,8 @@ export default function BoardSequencerScreen() {
       {/* In Set up on the laptop board: always there, so starting play never shrinks the
           board (A3). On the Board view it is under Details (U4). */}
       {view !== 'play' && laptop && boardLegend}
-      {(view === 'play' || laptop) && capHud}
+      {/* Not on the laptop board (U7): there is no camera there for the hat to be seen by. */}
+      {view === 'play' && !laptop && capHud}
       <div style={view === 'play' && !laptop
         ? { width: 220, alignSelf: layout.pip === 'bottom-left' ? 'flex-start' : 'flex-end' }
         : undefined}
@@ -6256,6 +6257,8 @@ export default function BoardSequencerScreen() {
                   {armed === 'setup' ? '⚙ Press again to stop and set up' : '⚙ Set up'}
                 </Button>
                 {boardSourceButton}
+                {/* The sentences under the choices, on or off for this laptop (U7). */}
+                <ExplainSwitch />
               </HeaderMore>
             </div>
           )}
@@ -6412,6 +6415,7 @@ export default function BoardSequencerScreen() {
                 sound={soundTab}
                 loops={loopsTab}
                 stacked={layout.mode === 'stacked'}
+                notices={noticesInPanel ? noticeViews : null}
                 transportAlign={layout.transportAlign}
                 tab={playTab}
                 onTab={setPlayTab}

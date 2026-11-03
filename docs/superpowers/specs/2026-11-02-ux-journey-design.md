@@ -188,6 +188,21 @@ Each batch is built, tested and committed on its own, in the order U1, U2, U3, U
 - Clear the board with nothing to clear is greyed, the reason in its tooltip, instead of a
   second line under the bar.
 
+### U7: less to read (owner: "fold the explanations")
+- "Explain the choices", under More: on to start with; off, the sentences under the choices on
+  the Sound, Timing, Board, Connections and Cap tabs and in Make a piece go, and stay gone on
+  this laptop. What is true now (a status, a reason a button is off) always shows.
+- The Ready check: advice is one line until its line is pressed; a problem or a thing to check is
+  open from the start, with its fix and its button.
+- The notices (Undo, the reload offer, keeping time, the camera, the board check, the nudges)
+  sit in a slot of fixed height at the top of the side panel, side by side. The board has the
+  58 px strip above it back, and a notice still moves nothing (A3). Stacked, and in Set up,
+  they stay above the board.
+- Simplify is one line, like every other button; what it does is its tooltip, and once on the
+  line under the board says "Simplified: Tim and Bed" (B23 asked for a visible hint; the result
+  line keeps it).
+- No hat line under the board on the laptop board: there is no camera there for the hat.
+
 ## Decided by the owner (2 Nov 2026)
 - New loop with counters down: "Keep what's on the board" is the main choice, and "Start from
   empty" is always offered beside it, so there is a choice every time.

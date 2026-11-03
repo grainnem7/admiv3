@@ -121,7 +121,7 @@ describe('Help on Show’s two groups (U3)', () => {
 
 describe('Help: More at every width (U4)', () => {
   it('the audience screen, Set up and Camera / Laptop are under More, at the top', () => {
-    expect(entry('Board, Make a piece, Show')).toContain('Open the audience screen, Set up and Camera / Laptop are under More, at the top.');
+    expect(entry('Board, Make a piece, Show')).toContain('Open the audience screen, Set up and Camera / Laptop are under More, at the top, with Explain the choices');
     expect(all()).not.toContain('narrower screen');
   });
 });
@@ -135,5 +135,11 @@ describe('Help: Details under the board (U4)', () => {
 describe('Help: trying the board in Set up (U4)', () => {
   it('says the laptop board can be tried in Set up, silent until Play', () => {
     expect(entry('Setting up')).toContain('the board can be tried straight away: pick a colour above it and click squares. Nothing sounds until ▶ Play the board.');
+  });
+});
+
+describe('Help: Explain the choices (U7)', () => {
+  it('says where the switch is and what off does', () => {
+    expect(entry('Board, Make a piece, Show')).toContain('with Explain the choices: off, the sentences under the choices go and the panels show only the choices.');
   });
 });

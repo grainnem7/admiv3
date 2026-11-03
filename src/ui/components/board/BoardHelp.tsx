@@ -236,7 +236,8 @@ const HELP: HelpEntry[] = [
     title: 'Board, Make a piece, Show',
     body: 'Three buttons at the top. Board: just play the board, with the Sound, Timing, Board '
       + 'and Connections tabs — no loops or scenes needed. Open the audience screen, Set up and '
-      + 'Camera / Laptop are under More, at the top. Under the board, Details opens the key to '
+      + 'Camera / Laptop are under More, at the top, with Explain the choices: off, the sentences '
+      + 'under the choices go and the panels show only the choices. Under the board, Details opens the key to '
       + 'the marks, the AI line, every colour’s sound and count, and Session log. ▶ Play the board plays what is on the '
       + 'board: no clock, no scenes. Make a piece: three steps. '
       + '1 Loops: press New loop, put counters down, then Keep, and give the loop a name. '

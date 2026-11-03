@@ -134,7 +134,9 @@ test('the Sound tab: each helper one line until opened; the Timing tab; New idea
   // The hat's line says Hat, not a cap emoji.
   await page.getByRole('tab', { name: 'Cap' }).click();
   await page.getByRole('switch', { name: 'Control with the red cap' }).click();
-  await expect(page.getByRole('status', { name: 'Red cap' })).toHaveText(/^Hat: /);
+  // On the laptop board there is no camera for the hat, so no hat line under the board (U7);
+  // the word is Hat, not a cap emoji, where it shows (the camera board: capCamera.e2e.ts).
+  await expect(page.getByRole('status', { name: 'Red cap' })).toHaveCount(0);
   expect(pageErrors(page)).toEqual([]);
 });
 
