@@ -70,6 +70,7 @@ import { LoopThumb, PieceSteps, type PieceLoop, type PieceStep } from './boardSe
 import { NowNextStrip } from './boardSequencer/play/NowNextStrip';
 import { nextSceneUndo, nextUndoOffered, type NextSceneUndo } from './boardSequencer/play/nextSceneUndo';
 import { letterKeyAction } from './boardSequencer/letterKeys';
+import { describeEdit, EMPTY_HISTORY, recordEdit, redoEdit, undoEdit, undoKey, type EditHistory } from './boardSequencer/editHistory';
 import { duplicateScene } from '../../songs/performance/sceneTools';
 import { ShowStatusRow } from './boardSequencer/play/ShowStatusRow';
 import {
@@ -1069,12 +1070,44 @@ export default function BoardSequencerScreen() {
   // task); Camera also opens first run so the corner-calibration step is visible.
 
   /** Patch the config and persist it (rig fields and player fields are routed on save). */
+  // Undo and redo for the edits (item 5): recorded as the config changes, in editHistory's terms.
+  const historyRef = useRef<EditHistory>(EMPTY_HISTORY);
   const update = useCallback((patch: Partial<BoardSequencerStored>) => {
     sessionLogRef.current.setting(logActorRef.current, patch as Record<string, unknown>);
     setConfig((prev) => {
       const next = { ...prev, ...patch };
+      historyRef.current = recordEdit(historyRef.current, prev, next, Object.keys(patch), performance.now());
       return next;
     });
+  }, []);
+  const undoLast = (): void => {
+    const r = undoEdit(historyRef.current);
+    if (!r) { announce('Nothing to undo.'); return; }
+    historyRef.current = r.history;
+    setConfig((prev) => ({ ...prev, ...r.patch }));
+    sessionLogRef.current.action(logActorRef.current, `undo ${describeEdit(r.keys)}`);
+    announce(`Undone: ${describeEdit(r.keys)}.`);
+  };
+  const redoLast = (): void => {
+    const r = redoEdit(historyRef.current);
+    if (!r) { announce('Nothing to redo.'); return; }
+    historyRef.current = r.history;
+    setConfig((prev) => ({ ...prev, ...r.patch }));
+    sessionLogRef.current.action(logActorRef.current, `redo ${describeEdit(r.keys)}`);
+    announce(`Done again: ${describeEdit(r.keys)}.`);
+  };
+  const undoKeysRef = useRef({ undo: undoLast, redo: redoLast });
+  undoKeysRef.current = { undo: undoLast, redo: redoLast };
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent): void => {
+      const act = undoKey(e, e.target);
+      if (!act) return;
+      e.preventDefault();
+      if (act === 'undo') undoKeysRef.current.undo();
+      else undoKeysRef.current.redo();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
   // ---- Sound from Ableton: the MIDI port, watched all the time, and the fallback ----
@@ -3623,6 +3656,22 @@ export default function BoardSequencerScreen() {
     const id = window.setTimeout(() => setUndoNext(null), Math.max(0, undoNext.untilMs - performance.now()));
     return () => window.clearTimeout(id);
   }, [undoNext, config.currentScene, running]);
+  // The count in (item 8): once the playhead has moved and comes back to step 1, the piece
+  // begins. Stop (or the board stopping) calls it off.
+  const [countInOn, setCountInOn] = useState(false);
+  const countInRef = useRef<{ seenMoving: boolean } | null>(null);
+  const beginPieceNowRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    const ci = countInRef.current;
+    if (!ci) return;
+    if (!running) { countInRef.current = null; setCountInOn(false); return; }
+    if (playheadCol > 0) { ci.seenMoving = true; return; }
+    if (ci.seenMoving) {
+      countInRef.current = null;
+      setCountInOn(false);
+      beginPieceNowRef.current();
+    }
+  }, [playheadCol, running]);
   /**
    * ▶ Start the piece: always the piece from 0:00. Stopped, the board starts with it.
    * Playing (Tim warming up), the sound carries on with no restart and no gap: a scene
@@ -3633,17 +3682,40 @@ export default function BoardSequencerScreen() {
    * before it (R2-T2-01).
    */
   const startThePiece = (): void => {
+    const countIn = configRef.current.performance.countIn;
     if (!runningRef.current) {
       // As ▶ Play: a press straight after Stop is a bounce (focus lands here after the
       // second press of Stop), never a new start of the piece.
       if (startRefused()) return;
       // The piece and a new loop never run together (F2): starting the piece ends it.
       if (newLoopRef.current) leaveNewLoop();
+      // Count in (item 8): the board starts on its own; the piece comes in at the top of the next pass.
+      if (countIn) {
+        countInRef.current = { seenMoving: false };
+        setCountInOn(true);
+        announce('Counting in: the piece starts at the top of the next pass.');
+        void start();
+        return;
+      }
       void start({ fromSec: 0 });
       return;
     }
     // Already the piece, or an ending still under way: nothing to start.
     if (clockStartRef.current !== null || endingRef.current) return;
+    // Count in while the board plays: wait for the pass. Pressed again, it starts now.
+    if (countIn && countInRef.current === null) {
+      countInRef.current = { seenMoving: false };
+      setCountInOn(true);
+      announce('Counting in: the piece starts at the top of the next pass.');
+      return;
+    }
+    countInRef.current = null;
+    setCountInOn(false);
+    beginPieceNow();
+  };
+  /** The piece, now, over a board already playing: its clock, its opening scene, no gap. */
+  const beginPieceNow = (): void => {
+    if (!runningRef.current || clockStartRef.current !== null || endingRef.current) return;
     if (newLoopRef.current) leaveNewLoop();
     const c = configRef.current;
     // The player's own settings: from before a jump to a scene, if there was one.
@@ -3688,6 +3760,7 @@ export default function BoardSequencerScreen() {
     void focusWhenGone(() => (view === 'bigBoard' ? showNowNextRef.current : document.getElementById(PLAY_STOP_ID)));
   };
   startThePieceRef.current = startThePiece;
+  beginPieceNowRef.current = beginPieceNow;
   /** The chosen ending, now: a fade over the fade passes (or a stop at the end of the pass). */
   const endPiece = (): void => {
     const engine = engineRef.current;
@@ -5319,7 +5392,11 @@ export default function BoardSequencerScreen() {
     if (!ch) { announce('Choose a colour above the board first.'); return; }
     const single = isControlRole(ch.role) || isLoopRole(ch.role);
     // From the latest state, not the last render: two quick clicks must both land.
-    setConfig((prev) => ({ ...prev, laptopBoard: placeLaptopCounter(prev.laptopBoard, row, col, ch.id, single) }));
+    setConfig((prev) => {
+      const next = { ...prev, laptopBoard: placeLaptopCounter(prev.laptopBoard, row, col, ch.id, single) };
+      historyRef.current = recordEdit(historyRef.current, prev, next, ['laptopBoard'], performance.now());
+      return next;
+    });
   };
   const describeLaptopCell = (row: number, col: number): string => {
     const c = config.laptopBoard.find((x) => x.row === row && x.col === col);
@@ -5494,6 +5571,8 @@ export default function BoardSequencerScreen() {
     onUndoNext: undoNextScene,
     onEnd: endPiece,
     onCancelEnding: cancelEnding,
+    // The count in (item 8): steps until the piece comes in on step 1.
+    countIn: countInOn ? Math.max(1, config.cols - playheadCol) : null,
     // No Capture here: a loop is made in New loop, never during the show (F1).
   };
   const nowNextStrip = <NowNextStrip {...nowNextProps} />;

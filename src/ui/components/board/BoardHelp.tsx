@@ -245,7 +245,8 @@ const HELP: HelpEntry[] = [
       + 'loops; tap one to change it (a time can be typed 2:30 or 2.30); ▶ Rehearse from here '
       + 'plays from it, and while the board plays Jump here now (on every scene but the one on '
       + 'now) switches to it at once. How scenes work, above the timeline, explains them. A scene with no loops is silent unless the player plays: tick "alone" in it '
-      + 'only if that is the plan. 3 Ending & check: the length (at most 7:00), how it ends, '
+      + 'only if that is the plan. 3 Ending & check: the length (at most 7:00), how it ends, Count in (on, ▶ Start the piece '
+      + 'waits for the top of the next pass with the board playing on, the strip counting the steps down), '
       + 'and a check of everything (advice, such as the laptop board or no backup yet, is marked i '
       + 'and never stops it saying ready; a fix made elsewhere has a button that goes there). '
       + 'In a scene, its name, time, loops and Energy (Off, Calm, Steady, Lively, Driving, Big) '
@@ -342,7 +343,12 @@ const HELP: HelpEntry[] = [
       + 'while the board plays, N is Next scene and E is End piece while the piece plays, and 1, 2, 3 go to '
       + 'Board, Make a piece and Show. Never while typing, never in Set up. The speed in the transport '
       + '(90 BPM) is a button: the arrow keys change it by one (five with Shift), and pressing it opens a '
-      + 'slider and Tap: tap along four times and the speed follows.',
+      + 'slider and Tap: tap along four times and the speed follows. Ctrl+Z (Cmd+Z on a Mac) undoes the '
+      + 'last edit: a counter put down or lifted on the laptop board, a loop kept, cleared or renamed, a '
+      + 'scene made or changed, the piece\u2019s length and ending, when a colour comes in. Ctrl+Shift+Z '
+      + '(or Ctrl+Y) does it again. Never while typing in a field, where the browser\u2019s own undo works. '
+      + 'The sound\u2019s live settings (the speed, the world, the helpers) are not undone this way: the '
+      + 'helpers have Previous.',
   },
 ];
 

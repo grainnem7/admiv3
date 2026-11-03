@@ -35,9 +35,14 @@ export interface PerformanceSettings {
   fadePasses: number;
   /** Start the clock when Play is pressed, or only when Start clock is pressed. */
   startOn: 'play' | 'manual';
+  /**
+   * Count in (producer flow, item 8): ▶ Start the piece waits for the top of the next pass,
+   * the board playing on, so the player knows when to come in. Off for pieces saved before.
+   */
+  countIn: boolean;
 }
 
-export const DEFAULT_PERFORMANCE: PerformanceSettings = { lengthSec: 7 * 60, ending: 'cue', style: 'fade', fadePasses: 2, startOn: 'play' };
+export const DEFAULT_PERFORMANCE: PerformanceSettings = { lengthSec: 7 * 60, ending: 'cue', style: 'fade', fadePasses: 2, startOn: 'play', countIn: false };
 
 /**
  * The longest a piece can be: the show's slot is 7:00, and a length typed one digit wrong
@@ -216,5 +221,6 @@ export function sanitizePerformance(v: unknown): PerformanceSettings {
     style,
     fadePasses: isNum(o.fadePasses) && [1, 2, 4].includes(o.fadePasses) ? o.fadePasses : d.fadePasses,
     startOn: o.startOn === 'manual' ? 'manual' : 'play',
+    countIn: o.countIn === true,
   };
 }

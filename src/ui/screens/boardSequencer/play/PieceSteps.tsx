@@ -733,6 +733,10 @@ function EndingStep(p: PieceStepsProps): JSX.Element {
         <p style={note}>The clock counts down from the length, with cues at 1 minute, 30 and 10 seconds. The piece never runs over: if End hasn&rsquo;t been pressed, the ending starts by itself in time to finish at {formatClock(p.lengthSec)}.</p>
       </div>
       <LengthField lengthSec={p.lengthSec} scenes={p.scenes} onChange={(lengthSec) => p.onPerformance({ lengthSec })} />
+      <Switch
+        label="Count in" checked={perf.countIn} onChange={(countIn) => p.onPerformance({ countIn })}
+        hint="▶ Start the piece waits for the top of the next pass: the board plays on, the strip counts the steps down, and the piece comes in on step 1."
+      />
       <div role="radiogroup" aria-label="How it ends" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         <span style={{ fontWeight: 700 }}>How it ends</span>
         {ENDINGS.map((e) => {

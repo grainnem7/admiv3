@@ -90,3 +90,31 @@ mint, the card, the well, the chip fills, the joined groups) now pin this one.
 
 **Left for later (my call):** Show's clock and scene name at display sizes larger than today's
 (the mock's 56 and 72 px), and the loop list's name field as an underlined field.
+
+## The producer's walk (3 Nov 2026, after the look)
+A walk through the whole journey as a producer would, from Welcome to the end of a piece,
+found thirteen things. The owner said "Ok" to building them; 1 to 3 change what the players
+have learnt and wait for an explicit yes on each.
+
+1. Six screens before the first sound (waiting).
+2. Capturing a loop stops the music; Keep as loop as one press (waiting).
+3. One piece per player; named pieces with Duplicate (waiting).
+4. **Built.** The speed in the transport: the readout is a button (`SpeedControl`), arrow keys
+   change it by one (five with Shift), a press opens a slider and Tap (`songs/tapTempo.ts`).
+5. **Built.** Undo and redo of the edits: Ctrl+Z, Ctrl+Shift+Z or Ctrl+Y (`editHistory.ts`): the
+   laptop board, the loops, the scenes, the piece's length and ending, when colours come in.
+   Each counter is a step of its own; typing and sliders merge within 0.6 s. Live sound
+   settings are not undone this way.
+6. **Built.** The letter keys M, N, E and 1 2 3 (`letterKeys.ts`), off with "Letter keys" in
+   Advanced, Pressing.
+7. **Built.** Every scene says how long it lasts; Duplicate beside Delete; a scene's mark on the
+   timeline drags (snapped to 5 s, never over a neighbour; `sceneTools.ts`).
+8. **Built.** Count in, a switch in Ending & check: ▶ Start the piece waits for the top of the
+   next pass, the board playing on, the strip counting the steps down; pressed again it starts
+   at once; Stop calls it off.
+9. **Built.** Hear it with is a row of words.
+10. **Built.** The loop row stays one line: a round ▶, a narrower name field.
+11. **Built.** When each colour comes in is folded until there are scenes.
+12. Already so: the development-server warning only shows on the development server.
+13. Left: the Sound tab's colour table and Set up's Colours step both stay; they do different
+    jobs (sounds while playing; jobs before).

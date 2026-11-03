@@ -28,6 +28,8 @@ export interface NowNextStripProps {
   waiting?: string | null;
   /** Show puts focus here once the piece starts (never onto ■ Stop, B3). */
   focusRef?: Ref<HTMLDivElement>;
+  /** Counting in (item 8): how many steps until the piece comes in on step 1. */
+  countIn?: number | null;
 }
 
 /**
@@ -58,6 +60,11 @@ export function NowNextStrip(p: NowNextStripProps): JSX.Element {
           style={{ fontSize: 34 * size, fontWeight: 300, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em', color: clockColour, lineHeight: 1 }}
         >
           {phase === 'ending' ? `ending ${p.clock.text}` : p.clock.text}
+        </span>
+      ) : p.countIn !== null && p.countIn !== undefined ? (
+        // Said once by the screen when the count in began; here it is only seen.
+        <span data-count-in="" style={{ fontSize: 20 * size, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+          {`Starting on step 1 · ${p.countIn} to go`}
         </span>
       ) : (
         <>

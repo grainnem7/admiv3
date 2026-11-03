@@ -131,7 +131,7 @@ describe('the performance clock', () => {
 
   it('stored settings are made safe, and the old endings become a time and a style', () => {
     expect(sanitizePerformance({ lengthSec: 5, ending: 'explode', style: 'bang', fadePasses: 3, startOn: 'manual' }))
-      .toEqual({ lengthSec: 30, ending: 'cue', style: 'fade', fadePasses: 2, startOn: 'manual' });
+      .toEqual({ lengthSec: 30, ending: 'cue', style: 'fade', fadePasses: 2, startOn: 'manual', countIn: false });
     expect(sanitizePerformance(undefined)).toEqual(DEFAULT_PERFORMANCE);
     expect(sanitizePerformance({ ending: 'fade' })).toMatchObject({ ending: 'auto', style: 'fade' });
     expect(sanitizePerformance({ ending: 'stop' })).toMatchObject({ ending: 'auto', style: 'stop' });
@@ -170,5 +170,13 @@ describe('a counter as a loop', () => {
     expect(out[3]).toBe(true);
     expect(out[17]).toBe(true);   // lifted: still on
     expect(out[21]).toBe(false);  // placed again: off
+  });
+});
+
+describe('Count in (producer flow, item 8)', () => {
+  it('is off for pieces saved before it existed, and kept when on', () => {
+    expect(sanitizePerformance({}).countIn).toBe(false);
+    expect(sanitizePerformance({ countIn: true }).countIn).toBe(true);
+    expect(sanitizePerformance({ countIn: 'yes' }).countIn).toBe(false);
   });
 });

@@ -72,3 +72,16 @@ describe('U3: in Show, ▶ Start the piece is the big thing to press', () => {
     expect(named('▶ Start the piece')!.style.fontSize).toBe('');
   });
 });
+
+describe('the count in (producer flow, item 8)', () => {
+  it('while counting in, the strip says the steps to go in place of ▶ Start the piece', () => {
+    view = render(<NowNextStrip {...props({ clock: null, countIn: 5 })} />);
+    expect(view.get('[data-count-in]').textContent).toBe('Starting on step 1 · 5 to go');
+    expect(view.container.querySelector('button')?.textContent ?? '').not.toContain('Start the piece');
+  });
+
+  it('with no count in, ▶ Start the piece is there as before', () => {
+    view = render(<NowNextStrip {...props({ clock: null, countIn: null })} />);
+    expect([...view.container.querySelectorAll('button')].some((b) => b.textContent === '▶ Start the piece')).toBe(true);
+  });
+});
