@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { headerButton, makePlan, openLaptopBoard, openLaptopSetup, openWelcome, pageErrors, pickColour, pieceStep, place, sceneMore, sessionLog, soundTab } from './app';
+import { makePlan, openLaptopBoard, openLaptopSetup, openWelcome, pageErrors, pickColour, pieceStep, place, sceneMore, sessionLog, soundTab } from './app';
 import { nameMismatches } from './names';
 
 /** Batch 5 (audit 2026-10-30): what the owner and a keyboard user meet, checked in a real browser. */
@@ -305,9 +305,14 @@ test('U7: notices sit in the side panel and move nothing; Explain the choices un
   // Explain the choices: on to start with, and off takes the sentences away.
   await soundTab(page);
   await expect(page.getByText('How hard everything plays, and how busy the drums are.')).toBeVisible();
-  const explain = (await headerButton(page, 'Explain the choices'));
-  await expect(explain).toHaveAttribute('aria-checked', 'true');
-  await explain.click();
+  // A switch, under More.
+  const explainSwitch = async (): Promise<ReturnType<Page['getByRole']>> => {
+    const more = page.locator('header').getByRole('button', { name: /^More [▾▴]$/ });
+    if ((await more.getAttribute('aria-expanded')) !== 'true') await more.click();
+    return page.getByRole('group', { name: 'More', exact: true }).getByRole('switch', { name: 'Explain the choices' });
+  };
+  await expect(await explainSwitch()).toHaveAttribute('aria-checked', 'true');
+  await (await explainSwitch()).click();
   await page.keyboard.press('Escape');
   await expect(page.getByText('How hard everything plays, and how busy the drums are.')).toHaveCount(0);
   // Still off after a reload.
@@ -315,8 +320,8 @@ test('U7: notices sit in the side panel and move nothing; Explain the choices un
   await page.getByRole('button', { name: /Board Sequencer/ }).click().catch(() => undefined);
   await soundTab(page);
   await expect(page.getByText('How hard everything plays, and how busy the drums are.')).toHaveCount(0);
-  await expect(await headerButton(page, 'Explain the choices')).toHaveAttribute('aria-checked', 'false');
-  await (await headerButton(page, 'Explain the choices')).click();
+  await expect(await explainSwitch()).toHaveAttribute('aria-checked', 'false');
+  await (await explainSwitch()).click();
   await page.keyboard.press('Escape');
   // Simplify: one line, what it does in its tooltip.
   await page.getByRole('button', { name: '▶ Play the board', exact: true }).click();

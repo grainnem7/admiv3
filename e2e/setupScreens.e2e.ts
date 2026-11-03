@@ -148,6 +148,8 @@ test('the Ready check: a fix made elsewhere has a button that goes there (A14)',
   await expect(page.getByRole('heading', { name: '2 · Scenes' })).toBeVisible();
   await pieceStep(page, 'Ending & check');
   // The laptop board is advice, with the button that changes it, not "press 📷 Camera at the top".
+  // Advice is one line until pressed (U7).
+  await page.getByRole('button', { name: /^Board: the laptop board/ }).click();
   await expect(page.getByText('For the performance with the real board, use the camera board.')).toBeVisible();
   await expect(page.getByRole('button', { name: /^Use the camera board: Board: the laptop board/ })).toBeVisible();
   expect(pageErrors(page)).toEqual([]);
