@@ -107,17 +107,19 @@ export function PlayPanel({
         </Button>
         {running && simplify}
       </div>
+      {/* A readout on the page (L2): the beat as a dot, the words in the quiet colour, the
+          numbers in the text colour. No pill round it. */}
       <span
         style={{
-          display: 'inline-flex', alignItems: 'center', gap: 8, padding: '4px 10px',
-          borderRadius: 999, background: 'var(--bs-elev)', color: 'var(--bs-fg)', fontSize: 14,
+          display: 'inline-flex', alignItems: 'center', gap: 8, minHeight: 24,
+          color: 'var(--bs-fg2)', fontSize: 14, fontVariantNumeric: 'tabular-nums',
         }}
       >
         <span
           aria-hidden="true"
           style={{
-            width: 10, height: 10, borderRadius: '50%',
-            background: running && beatOn ? 'var(--bs-accent)' : 'var(--bs-border-control)',
+            width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+            background: running && beatOn ? 'var(--bs-fg)' : 'var(--bs-border-control)',
           }}
         />
         {/* Only the transport is announced. The step, the lap and the held count change
@@ -125,7 +127,10 @@ export function PlayPanel({
             reader read the pill over and over and nothing else on the screen got through. */}
         <span role="status">{running ? 'Playing' : 'Stopped'}</span>
         <span aria-hidden="true">
-          {running ? ` · ${Math.round(bpm)} BPM · step ${step + 1} of ${cols}` : ` · ${Math.round(bpm)} BPM`}
+          {' · '}
+          <span style={{ color: 'var(--bs-fg)', fontWeight: 600 }}>{Math.round(bpm)}</span>
+          {' BPM'}
+          {running && <>{' · step '}<span style={{ color: 'var(--bs-fg)', fontWeight: 600 }}>{step + 1}</span>{` of ${cols}`}</>}
           {running && bpmTo !== null && Math.round(bpm) !== bpmTo && ` · ${bpmTo > bpm ? 'speeding up' : 'slowing down'} to ${bpmTo} BPM`}
           {variationLap !== null && running && ` · lap ${variationLap ? 'B' : 'A'}`}
           {heldCount > 0 && ` · ✋ holding ${heldCount}`}
@@ -135,10 +140,8 @@ export function PlayPanel({
           <span
             aria-label={`${clock.text} left`}
             style={{
-              marginLeft: 6, padding: '1px 8px', borderRadius: 'var(--bs-radius-sm)', fontWeight: 700,
-              fontVariantNumeric: 'tabular-nums',
-              background: clock.phase === 'running' ? 'var(--bs-elev)' : clock.phase === 'lastMinute' ? 'var(--bs-warn-tint)' : 'var(--bs-warn)',
-              color: clock.phase === 'lastMoments' || clock.phase === 'ending' || clock.phase === 'over' ? 'var(--bs-bg)' : 'inherit',
+              marginLeft: 6, fontWeight: 600, fontVariantNumeric: 'tabular-nums',
+              color: clock.phase === 'running' ? 'var(--bs-fg)' : clock.phase === 'lastMinute' ? 'var(--bs-warn)' : 'var(--bs-danger)',
             }}
           >
             {clock.phase === 'ending' ? `ending · ${clock.text}` : clock.phase === 'over' ? `time ${clock.text}` : `⏱ ${clock.text}`}

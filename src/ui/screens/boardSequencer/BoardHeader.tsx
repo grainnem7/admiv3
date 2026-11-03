@@ -1,4 +1,4 @@
-import { useId, type ReactNode } from 'react';
+import { useId, type CSSProperties, type ReactNode } from 'react';
 import { Button } from './ui/Button';
 import type { BoardMode } from './theme/boardTokens';
 
@@ -30,10 +30,13 @@ export interface BoardHeaderProps {
   hidden?: boolean;
 }
 
+/** A round icon button (L2): ☀, Aa and ?, each still a full target. */
+const ROUND: CSSProperties = { width: 'var(--bs-target)', padding: 0, borderRadius: '50%' };
+
 /**
- * The frame shared by Set up and Play: exit, title, theme, Large UI, help, and the
- * always-present camera status region — a camera problem must be visible on every step,
- * not only on the one that caused it.
+ * The frame shared by Set up and Play: exit, the wordmark and the title, theme, Large UI,
+ * help, and the always-present camera status region — a camera problem must be visible on
+ * every step, not only on the one that caused it.
  */
 export function BoardHeader({
   title, onExit, exitArmed = false, mode, onModeChange, largeUi, onLargeUiChange, onHelp, right,
@@ -47,11 +50,15 @@ export function BoardHeader({
         display: hidden ? 'none' : 'flex', flexDirection: 'column', gap: 8, flexShrink: 0,
       }}
     >
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
         <Button tone="quiet" onClick={onExit} aria-label={exitArmed ? 'Press again to stop the piece and exit' : 'Exit the Board Sequencer'}>
           {exitArmed ? '← Press again to leave' : '← Exit'}
         </Button>
-        <h1 style={{ fontSize: 16, margin: 0, flex: '0 0 auto' }}>{title}</h1>
+        {/* The wordmark, then the screen's name in the quiet colour (L2). */}
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flex: '0 0 auto' }}>
+          <span aria-hidden="true" style={{ fontSize: 14, fontWeight: 700, letterSpacing: '0.2em' }}>ADMI</span>
+          <h1 style={{ fontSize: 14, fontWeight: 500, color: 'var(--bs-fg3)', margin: 0, whiteSpace: 'nowrap' }}>{title}</h1>
+        </div>
         {/* Grows to fill the row; on a phone-narrow window it takes a row of its own rather
             than spilling past the edge (A3: nothing scrolls sideways at 320 px). */}
         <div style={{ flex: '1 1 240px', minWidth: 0 }}>{right}</div>
@@ -61,12 +68,13 @@ export function BoardHeader({
           // reason touched the transport row.
           <>
             <Button
-              tone="secondary"
+              tone="quiet"
               onClick={onSwitchPlayer}
               disabled={switchPlayerDisabledReason !== null}
               title={switchPlayerDisabledReason ?? undefined}
               aria-describedby={switchPlayerDisabledReason ? playerReasonId : undefined}
               aria-label={`Player: ${playerName}. Switch player`}
+              style={{ color: 'var(--bs-fg)' }}
             >
               {`Player: ${playerName}`}
             </Button>
@@ -79,6 +87,7 @@ export function BoardHeader({
         )}
         <Button
           tone="quiet"
+          style={ROUND}
           aria-label={mode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
           onClick={() => onModeChange(mode === 'dark' ? 'light' : 'dark')}
         >
@@ -86,6 +95,7 @@ export function BoardHeader({
         </Button>
         <Button
           tone="quiet"
+          style={ROUND}
           aria-pressed={largeUi}
           aria-label="Aa: larger controls"
           // What Aa does, in words on hover (A14): only screen readers were told.
@@ -94,7 +104,7 @@ export function BoardHeader({
         >
           <span aria-hidden="true">Aa</span>
         </Button>
-        <Button tone="quiet" aria-label="Help" onClick={onHelp}><span aria-hidden="true">?</span></Button>
+        <Button tone="secondary" style={ROUND} aria-label="Help" onClick={onHelp}><span aria-hidden="true">?</span></Button>
       </div>
       {/* Always mounted, so a notice is announced rather than appearing as new content. */}
       <div

@@ -6232,18 +6232,19 @@ export default function BoardSequencerScreen() {
             // wrap as whole buttons; the status word keeps one width. Otherwise pressing Play
             // re-wrapped the header and moved everything under it, Stop included.
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', whiteSpace: 'nowrap' }}>
-              <span style={{ color: 'var(--bs-fg2)', fontSize: 14, minWidth: '4.5em' }}>
+              <span style={{ color: 'var(--bs-fg3)', fontSize: 14, minWidth: '4.5em' }}>
                 {running ? 'Playing' : 'Stopped'}
               </span>
-              <div role="group" aria-label="What you are doing" style={{ display: 'flex' }}>
-                <Button tone={workspace === 'play' ? 'selected' : 'secondary'} aria-pressed={workspace === 'play'} onClick={() => setWorkspace('play')}>
+              {/* The views as words (L2): the one you are in underlined, the others quiet. */}
+              <div role="group" aria-label="What you are doing" style={{ display: 'flex', gap: 4 }}>
+                <Button tone={workspace === 'play' ? 'selected' : 'quiet'} aria-pressed={workspace === 'play'} onClick={() => setWorkspace('play')}>
                   Board
                 </Button>
-                <Button tone={workspace === 'piece' ? 'selected' : 'secondary'} aria-pressed={workspace === 'piece'} onClick={() => setWorkspace('piece')}>
+                <Button tone={workspace === 'piece' ? 'selected' : 'quiet'} aria-pressed={workspace === 'piece'} onClick={() => setWorkspace('piece')}>
                   Make a piece
                 </Button>
               </div>
-              <Button ref={bigBoardButtonRef} tone="secondary" onClick={() => setView('bigBoard')} aria-label="Show: the board, the clock and Now / Next, full screen, for the performance">
+              <Button ref={bigBoardButtonRef} tone="quiet" onClick={() => setView('bigBoard')} aria-label="Show: the board, the clock and Now / Next, full screen, for the performance">
                 Show
               </Button>
               {/* The less-used ones: in a More menu below about 1400 px, so the header stays

@@ -1,8 +1,8 @@
 /**
  * B9 (audit 2026-10-30): the playhead and the tune bands were drawn before the squares, so
- * they showed only in the gaps (1.43:1 in dark, 1.15:1 in light). Now the squares come
- * first; the tune bands and the playhead go on top of them, the playhead as an outline at
- * least 3:1 against the squares in both modes.
+ * they showed only in the gaps (1.43:1 in dark, 1.15:1 in light). Now the squares' dots come
+ * first; the tune bands and the playhead go on top of them, the playhead as a marker along
+ * the top of its column, at least 3:1 against the column's tint in both modes (L3).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, type Rendered } from './helpers/render';
@@ -55,26 +55,30 @@ function draw(mode: BoardMode): void {
 
 describe('the playhead and the tune bands sit on top of the squares (B9)', () => {
   for (const mode of ['dark', 'light'] as BoardMode[]) {
-    it(`${mode}: the playhead is an outline drawn after every square, at least 3:1 against them`, () => {
+    it(`${mode}: the playhead is a marker drawn after every square's dot, at least 3:1 against the column's tint, at least 2 px tall`, () => {
       draw(mode);
       const palette = BOARD_TOKENS.calm[mode];
-      // The squares: a fill in the raised colour, one per square.
-      const lastSquare = ops.map((o, i) => (o.op === 'fill' && o.fillStyle === palette.raised ? i : -1)).reduce((a, b) => Math.max(a, b), -1);
-      expect(lastSquare).toBeGreaterThan(-1);
-      const outline = ops.findIndex((o) => o.op === 'strokeRect');
-      expect(outline).toBeGreaterThan(lastSquare);
-      const o = ops[outline];
-      expect(contrastRatio(o.strokeStyle, palette.raised)).toBeGreaterThanOrEqual(3);
+      // The squares: a dot in the edge colour, one per square.
+      const lastDot = ops.map((o, i) => (o.op === 'fill' && o.fillStyle === palette.borderControl ? i : -1)).reduce((a, b) => Math.max(a, b), -1);
+      expect(lastDot).toBeGreaterThan(-1);
+      // The column's tint comes before the dots, so they show on it.
+      const tint = ops.findIndex((o) => o.op === 'fillRect' && o.fillStyle === palette.raised);
+      expect(tint).toBeGreaterThan(-1);
+      expect(tint).toBeLessThan(lastDot);
+      const marker = ops.findIndex((o) => o.op === 'fillRect' && o.fillStyle === palette.fg);
+      expect(marker).toBeGreaterThan(lastDot);
+      const o = ops[marker];
+      expect(contrastRatio(o.fillStyle, palette.raised)).toBeGreaterThanOrEqual(3);
       expect(o.alpha).toBe(1);
-      expect(o.lineWidth).toBeGreaterThanOrEqual(2);
+      expect(o.args[3]).toBeGreaterThanOrEqual(2);
     });
 
-    it(`${mode}: the tune band is drawn after the squares`, () => {
+    it(`${mode}: the tune band is drawn after the squares' dots`, () => {
       draw(mode);
       const palette = BOARD_TOKENS.calm[mode];
-      const lastSquare = ops.map((o, i) => (o.op === 'fill' && o.fillStyle === palette.raised ? i : -1)).reduce((a, b) => Math.max(a, b), -1);
+      const lastDot = ops.map((o, i) => (o.op === 'fill' && o.fillStyle === palette.borderControl ? i : -1)).reduce((a, b) => Math.max(a, b), -1);
       const band = ops.findIndex((o) => o.op === 'fillRect' && o.fillStyle === '#d03a2c');
-      expect(band).toBeGreaterThan(lastSquare);
+      expect(band).toBeGreaterThan(lastDot);
     });
   }
 });

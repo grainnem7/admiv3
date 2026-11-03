@@ -1,4 +1,4 @@
-import { swatchRingFor, type BoardPalette } from '../theme/boardTokens';
+import { contrastRatio, swatchRingFor, type BoardPalette } from '../theme/boardTokens';
 
 export interface SwatchChipProps {
   swatch: string;
@@ -11,12 +11,14 @@ export interface SwatchChipProps {
 }
 
 /**
- * A counter's real colour, ringed so a black counter on a dark panel (or a white one on
- * a light panel) is still visible, and numbered so colour is never the only way to tell
- * two counters apart.
+ * A counter's real colour as a flat disc (L3), ringed only when it would otherwise vanish:
+ * a black counter on a dark panel, or a white one on a light panel. Numbered, so colour is
+ * never the only way to tell two counters apart.
  */
 export function SwatchChip({ swatch, palette, surface, number, size = 28 }: SwatchChipProps): JSX.Element {
-  const { inner, outer } = swatchRingFor(swatch, surface ?? palette.raised, palette);
+  const on = surface ?? palette.raised;
+  const { inner, outer } = swatchRingFor(swatch, on, palette);
+  const needsRing = contrastRatio(swatch, on) < 3;
   return (
     <span
       aria-hidden="true"
@@ -26,7 +28,7 @@ export function SwatchChip({ swatch, palette, surface, number, size = 28 }: Swat
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
         width: size, height: size, borderRadius: '50%', flexShrink: 0,
         background: swatch,
-        boxShadow: `0 0 0 2px ${inner}, 0 0 0 4px ${outer}`,
+        boxShadow: needsRing ? `0 0 0 2px ${inner}, 0 0 0 4px ${outer}` : undefined,
         color: inner,
         fontSize: Math.round(size * 0.45),
         fontWeight: 700,

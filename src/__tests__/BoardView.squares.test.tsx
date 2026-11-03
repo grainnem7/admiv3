@@ -1,7 +1,7 @@
 /**
  * A4 (audit 2026-10-30): the empty squares were 1.11:1 (dark) and 1.14:1 (light) against the
- * page, with an edge of 1.4:1 (WCAG 1.4.11). Each square now has an edge of at least 3:1
- * (the board's borderControl) against the page and against the square.
+ * page, with an edge of 1.4:1 (WCAG 1.4.11). Each empty square is now a dot of at least 3:1
+ * (the board's borderControl) against the page and against the column's tint (L3).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, type Rendered } from './helpers/render';
@@ -51,30 +51,35 @@ function draw(mode: BoardMode): void {
   );
 }
 
-describe('every empty square has an edge you can see (A4)', () => {
+describe('every empty square is marked by a dot you can see (A4, L3)', () => {
   for (const mode of ['dark', 'light'] as BoardMode[]) {
-    it(`${mode}: each of the 32 squares is outlined at least 3:1 against the page and the square`, () => {
+    it(`${mode}: each of the 32 squares has a dot at least 3:1 against the page and the column's tint`, () => {
       draw(mode);
       const palette = BOARD_TOKENS.calm[mode];
-      const edges = ops.filter((o) => o.op === 'stroke' && o.strokeStyle === palette.borderControl);
-      expect(edges.length).toBe(32);
-      for (const e of edges) {
-        expect(contrastRatio(e.strokeStyle, palette.bg)).toBeGreaterThanOrEqual(3);
-        expect(contrastRatio(e.strokeStyle, palette.raised)).toBeGreaterThanOrEqual(3);
-        expect(e.lineWidth).toBeGreaterThanOrEqual(1);
+      const dots = ops.filter((o) => o.op === 'fill' && o.fillStyle === palette.borderControl);
+      expect(dots.length).toBe(32);
+      for (const d of dots) {
+        expect(contrastRatio(d.fillStyle, palette.bg)).toBeGreaterThanOrEqual(3);
+        expect(contrastRatio(d.fillStyle, palette.raised)).toBeGreaterThanOrEqual(3);
+        expect(d.alpha).toBe(1);
       }
-      // And no square is still drawn with the old faint edge.
+      // No square is drawn as a box: nothing is stroked in the faint edge colour, and nothing
+      // is filled in the raised shade while the board is stopped.
       expect(ops.some((o) => o.op === 'stroke' && o.strokeStyle === palette.border)).toBe(false);
+      expect(ops.some((o) => o.op === 'fill' && o.fillStyle === palette.raised)).toBe(false);
     });
   }
 });
 
-describe('U9: the board sits in a well', () => {
-  it('its stage has a surface of its own, a little darker than the page', () => {
+describe('L3: the board sits on the page', () => {
+  it('its stage has no fill and no well, and the step numbers run above it', () => {
     draw('dark');
-    const well = view!.container.querySelector('[data-board-well]') as HTMLElement;
-    expect(well).not.toBeNull();
-    expect(well.style.background).toBe('var(--bs-well)');
-    expect(parseInt(well.style.padding, 10)).toBeGreaterThanOrEqual(8);
+    const stage = view!.container.querySelector('[data-board-stage]') as HTMLElement;
+    expect(stage).not.toBeNull();
+    expect(stage.style.background).toBe('transparent');
+    expect(view!.container.querySelector('[data-board-well]')).toBeNull();
+    const steps = view!.container.querySelector('[data-board-steps]') as HTMLElement;
+    expect(steps.textContent).toBe('12345678');
+    expect(steps.getAttribute('aria-hidden')).toBe('true');
   });
 });

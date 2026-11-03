@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import type { ActiveCell, PieceColour } from '../../../../tracking/BoardSequencerMode';
 import type { ColourId } from '../../../../tracking/boardColours';
 import { CellGrid } from './CellGrid';
-import { playheadColour, swatchRingFor, type BoardPalette } from '../theme/boardTokens';
+import { contrastRatio, playheadColour, swatchRingFor, type BoardPalette } from '../theme/boardTokens';
 import { boardSummary, type PhraseSpan, type Pop } from './boardViewModel';
 import type { BankSlotState } from '../../../../tracking/boardFrame';
 
@@ -82,15 +82,15 @@ function ghostsBySquare(ghosts: ReadonlyMap<string, ActiveCell> | undefined): Ma
 }
 
 /**
- * The board as the player reads it: one canvas, drawn from the detection frame and the
- * engine's fired notes. Piece states differ by ring style as well as fill, and every
- * swatch carries a two-tone contrast ring, so a black counter on a dark theme (or a
- * white one on light) is still visible.
+ * The board as the player reads it (L3): one canvas, drawn from the detection frame and
+ * the engine's fired notes. Empty squares are small dots; counters are flat discs, ringed
+ * only when they would vanish against the ground; the column playing now is tinted and
+ * marked along its top edge; a sounding counter wears a thin ring in the text colour.
  */
 /** Height of the line kept above the board for a notice. */
-/** Room round the board inside its well (U9). */
-const WELL_PAD = 12;
 const NOTICE_H = 32;
+/** The row of step numbers above the board. */
+const STEP_H = 22;
 
 const CLEAR_CELL = (): CSSProperties => ({ background: 'transparent', border: 'none', borderRadius: 6 });
 
@@ -111,8 +111,8 @@ export function BoardView({
     const el = wrapRef.current;
     if (!el) return;
     const fit = (): void => {
-      const aw = el.clientWidth - 2 * WELL_PAD;
-      const ah = el.clientHeight - noticeH - 2 * WELL_PAD;
+      const aw = el.clientWidth;
+      const ah = el.clientHeight - noticeH - STEP_H;
       if (aw <= 0 || ah <= 0) return;
       const aspect = cols / rows;
       let w = aw;
@@ -140,48 +140,43 @@ export function BoardView({
 
     const cw = w / cols;
     const ch = h / rows;
-    const pad = Math.min(cw, ch) * 0.08;
+    const unit = Math.min(cw, ch);
     const popByKey = new Map(pops.filter((p) => p.origin !== 'fill').map((p) => [keyOf(p.row, p.col), p]));
     const fillPopAt = new Set(pops.filter((p) => p.origin === 'fill').map((p) => keyOf(p.row, p.col)));
     const ghostAt = ghostsBySquare(frame.ghosts);
 
-    // The squares first, all of them: the playhead and the tune bands go on top. Drawn
-    // under the squares they showed only in the gaps, too faint to follow (B9).
+    // The column playing now: one step up from the ground, the whole height. Its marker
+    // comes last, over everything.
+    if (playing) {
+      ctx.fillStyle = palette.raised;
+      ctx.fillRect(playheadCol * cw, 0, cw, h);
+    }
+
+    // Every square, as a dot at its centre: an edge at least 3:1 against the ground (A4),
+    // small enough to read as a place and not a thing.
+    const dotR = Math.max(2, unit * 0.055);
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
-        const cellW = cw - pad * 2;
-        const cellH = ch - pad * 2;
-        roundRect(ctx, c * cw + pad, r * ch + pad, cellW, cellH, Math.min(cellW, cellH) * 0.18);
-        ctx.fillStyle = palette.raised;
+        ctx.beginPath();
+        ctx.arc(c * cw + cw / 2, r * ch + ch / 2, dotR, 0, Math.PI * 2);
+        ctx.fillStyle = palette.borderControl;
         ctx.fill();
-        // An edge at least 3:1 against the page: the squares themselves are 1.1:1 (A4).
-        ctx.lineWidth = 1;
-        ctx.strokeStyle = palette.borderControl;
-        ctx.stroke();
       }
     }
 
-    // The playhead's column: a soft tint over its squares (its outline comes last, over
-    // the counters' edges, so it is never hidden).
-    if (playing) {
-      ctx.fillStyle = palette.fg;
-      ctx.globalAlpha = 0.1;
-      ctx.fillRect(playheadCol * cw, 0, cw, h);
-      ctx.globalAlpha = 1;
-    }
-
-    // Phrase spans: a soft band along the counter's row from its column to the next
-    // counter of its colour, wrapping at the right edge. On the squares, under the pieces.
+    // Phrase spans: a thin band along the counter's row from its column to the next
+    // counter of its colour, wrapping at the right edge. Under the pieces.
     if (spans && spans.length > 0) {
-      const bandH = Math.max(3, ch * 0.16);
+      const bandH = Math.max(2, ch * 0.07);
+      const inset = unit * 0.12;
       for (const s of spans) {
         if (s.row < 0 || s.row >= rows) continue;
-        const y = s.row * ch + ch - pad - bandH;
+        const y = s.row * ch + ch - inset - bandH;
         ctx.fillStyle = swatchFor(s.colour);
-        ctx.globalAlpha = 0.28;
+        ctx.globalAlpha = 0.45;
         const first = Math.min(s.len, cols - s.col);
-        ctx.fillRect(s.col * cw + pad, y, first * cw - pad * 2, bandH);
-        if (s.len > first) ctx.fillRect(pad, y, (s.len - first) * cw - pad * 2, bandH);
+        ctx.fillRect(s.col * cw + inset, y, first * cw - inset * 2, bandH);
+        if (s.len > first) ctx.fillRect(inset, y, (s.len - first) * cw - inset * 2, bandH);
         ctx.globalAlpha = 1;
       }
     }
@@ -189,11 +184,9 @@ export function BoardView({
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
         ctx.globalAlpha = 1;
-        const x = c * cw + pad;
-        const y = r * ch + pad;
-        const cellW = cw - pad * 2;
-        const cellH = ch - pad * 2;
-        const radius = Math.min(cellW, cellH) * 0.18;
+        const cx = c * cw + cw / 2;
+        const cy = r * ch + ch / 2;
+        const base = unit * 0.31;
 
         const key = keyOf(r, c);
         const isHeld = frame.held?.has(key) === true;
@@ -201,17 +194,20 @@ export function BoardView({
         // found by looking for any ghost standing on it.
         const ghost = ghostAt.get(key);
         if (isHeld) {
-          // Hatching: distinct from the unsettled dotted ring and the Variation dashes.
+          // Hatching over the square: distinct from the unsettled dotted ring and the
+          // Variation dashes.
           ctx.save();
           ctx.beginPath();
-          roundRect(ctx, x, y, cellW, cellH, radius);
+          ctx.arc(cx, cy, unit * 0.42, 0, Math.PI * 2);
           ctx.clip();
           ctx.strokeStyle = palette.fg3;
           ctx.lineWidth = 1;
-          for (let d = -cellH; d < cellW; d += 6) {
+          const x0 = cx - unit / 2;
+          const y0 = cy - unit / 2;
+          for (let d = -unit; d < unit; d += 6) {
             ctx.beginPath();
-            ctx.moveTo(x + d, y);
-            ctx.lineTo(x + d + cellH, y + cellH);
+            ctx.moveTo(x0 + d, y0);
+            ctx.lineTo(x0 + d + unit, y0 + unit);
             ctx.stroke();
           }
           ctx.restore();
@@ -227,14 +223,12 @@ export function BoardView({
         if (silent?.has(key) || isWaiting) ctx.globalAlpha = 0.3;
 
         const swatch = swatchFor(colour);
-        const { inner, outer } = swatchRingFor(swatch, palette.raised, palette);
+        const { inner } = swatchRingFor(swatch, palette.bg, palette);
         const pop = popByKey.get(key);
         // A pop grows the piece, unless the player asked for less motion — then it is
         // a static outline for the same length of time.
         const grow = pop && !reducedMotion ? 1 + 0.06 * Math.sin(Math.PI * (1 - pop.progress)) : 1;
-        const cx = x + cellW / 2;
-        const cy = y + cellH / 2;
-        const rr = (Math.min(cellW, cellH) / 2 - 2) * grow;
+        const rr = base * grow;
 
         ctx.beginPath();
         ctx.arc(cx, cy, rr, 0, Math.PI * 2);
@@ -263,18 +257,22 @@ export function BoardView({
           ctx.fillStyle = swatch;
           ctx.fill();
           ctx.globalAlpha = 1;
+          ctx.setLineDash([3, 3]);
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = swatch;
+          ctx.stroke();
+          ctx.setLineDash([]);
         }
 
-        ctx.setLineDash(settledColour ? [] : [3, 3]);
-        ctx.lineWidth = 2;
-        ctx.strokeStyle = inner;
-        ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.beginPath();
-        ctx.arc(cx, cy, rr + 1.75, 0, Math.PI * 2);
-        ctx.lineWidth = 1.5;
-        ctx.strokeStyle = outer;
-        ctx.stroke();
+        // A flat disc, ringed only when it would vanish against the ground (black on dark,
+        // white on light): the ring is the colour that tells them apart.
+        if (contrastRatio(swatch, palette.bg) < 3) {
+          ctx.beginPath();
+          ctx.arc(cx, cy, rr + 1, 0, Math.PI * 2);
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = inner;
+          ctx.stroke();
+        }
 
         if (frame.conditional.has(key)) {
           // Variation: long dashes, in the warning colour, plus its own ring radius.
@@ -293,7 +291,7 @@ export function BoardView({
           const cr = Math.max(4, rr * 0.45);
           ctx.beginPath();
           ctx.arc(cx, cy, cr, 0, Math.PI * 2);
-          ctx.fillStyle = palette.raised;
+          ctx.fillStyle = palette.bg;
           ctx.fill();
           ctx.lineWidth = 2;
           ctx.strokeStyle = palette.fg;
@@ -307,10 +305,11 @@ export function BoardView({
         }
 
         if (pop) {
+          // Sounding now: a thin ring in the text colour, a gap of ground between it and the counter.
           ctx.beginPath();
-          ctx.arc(cx, cy, rr + 6, 0, Math.PI * 2);
+          ctx.arc(cx, cy, rr + Math.max(5, unit * 0.09), 0, Math.PI * 2);
           ctx.lineWidth = 2;
-          ctx.strokeStyle = palette.accent;
+          ctx.strokeStyle = palette.fg;
           ctx.stroke();
         }
       }
@@ -325,11 +324,11 @@ export function BoardView({
         const cx = l.col * cw + cw / 2;
         const cy = l.row * ch + ch / 2;
         const sounding = popByKey.has(key);
-        const r = Math.min(cw, ch) / 2 - pad - 3;
+        const r = unit * 0.29;
         ctx.globalAlpha = sounding ? 1 : 0.7;
         ctx.beginPath();
         ctx.arc(cx, cy, r, 0, Math.PI * 2);
-        ctx.lineWidth = sounding && !reducedMotion ? 4 : 2.5;
+        ctx.lineWidth = sounding && !reducedMotion ? 3 : 2;
         ctx.strokeStyle = swatchFor(l.colour);
         ctx.stroke();
         ctx.beginPath();
@@ -340,12 +339,12 @@ export function BoardView({
       }
     }
 
-    // The band's strip: a bar along the bottom edge, brighter on the beat. The legend
+    // The band's strip: a line along the bottom edge, brighter on the beat. The legend
     // under the board names it, so nothing here covers a counter.
     if (band?.playing) {
-      const barH = 7;
-      ctx.fillStyle = palette.accent;
-      ctx.globalAlpha = band.beatOn || reducedMotion ? 0.6 : 0.25;
+      const barH = 4;
+      ctx.fillStyle = palette.fg;
+      ctx.globalAlpha = band.beatOn || reducedMotion ? 0.7 : 0.25;
       ctx.fillRect(0, h - barH, w, barH);
       ctx.globalAlpha = 1;
     }
@@ -360,7 +359,7 @@ export function BoardView({
         const cy = m.row * ch + ch / 2;
         // Big enough to read from the player's chair: a dotted ring with a faint centre,
         // filling in while its note sounds.
-        const r = Math.min(cw, ch) / 2 - pad - 5;
+        const r = unit * 0.27;
         ctx.beginPath();
         ctx.arc(cx, cy, r, 0, Math.PI * 2);
         ctx.fillStyle = swatchFor(m.colour);
@@ -368,7 +367,7 @@ export function BoardView({
         ctx.fill();
         ctx.globalAlpha = 1;
         ctx.setLineDash([3, 4]);
-        ctx.lineWidth = 3;
+        ctx.lineWidth = 2;
         ctx.strokeStyle = swatchFor(m.colour);
         ctx.stroke();
         ctx.setLineDash([]);
@@ -380,7 +379,7 @@ export function BoardView({
     if (frame.bankCells && frame.bankCells.size > 0) {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.font = `${Math.round(Math.min(cw, ch) * 0.4)}px Inter, system-ui, sans-serif`;
+      ctx.font = `${Math.round(unit * 0.4)}px Inter, system-ui, sans-serif`;
       for (const [key, state] of frame.bankCells) {
         const [row, col] = key.split(',').map(Number);
         if (row < 0 || row >= rows || col < 0 || col >= cols) continue;
@@ -392,23 +391,22 @@ export function BoardView({
       }
     }
 
-    // The playhead's outline, last: at least 3:1 against the squares in both modes (B9),
-    // so the step playing now can be followed from the player's chair.
+    // The playhead's marker, last: a line along the top of its column, at least 3:1 against
+    // the column's tint in both modes (B9), so the step playing now can be followed from the
+    // player's chair.
     if (playing) {
-      const lw = 3;
       ctx.globalAlpha = 1;
-      ctx.lineWidth = lw;
-      ctx.strokeStyle = playheadColour(palette);
-      ctx.strokeRect(playheadCol * cw + lw / 2, lw / 2, cw - lw, h - lw);
+      ctx.fillStyle = playheadColour(palette);
+      ctx.fillRect(playheadCol * cw, 0, cw, 3);
     }
 
     // Ping-pong direction, so the sweep's turn is visible, not only audible.
     if (playing && pingPongDirection !== 0) {
-      ctx.fillStyle = palette.accent;
-      ctx.font = `${Math.round(Math.min(cw, ch) * 0.35)}px Inter, system-ui, sans-serif`;
+      ctx.fillStyle = palette.fg;
+      ctx.font = `${Math.round(unit * 0.35)}px Inter, system-ui, sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
-      ctx.fillText(pingPongDirection > 0 ? '→' : '←', playheadCol * cw + cw / 2, 2);
+      ctx.fillText(pingPongDirection > 0 ? '→' : '←', playheadCol * cw + cw / 2, 6);
     }
   }, [dims, rows, cols, frame, pops, playheadCol, playing, pingPongDirection, swatchFor, palette, reducedMotion, fillMarks, band, spans, notice, loopCells, silent, waiting]);
 
@@ -424,7 +422,7 @@ export function BoardView({
     : '';
   const cellLabel = useCallback((row: number, col: number) => labelsKey.split('\n')[row * cols + col] ?? '', [labelsKey, cols]);
   const gridStyle = useMemo<CSSProperties>(() => ({
-    position: 'absolute', left: '50%', top: `calc(50% + ${noticeH / 2}px)`, transform: 'translate(-50%, -50%)', width: dims.w, height: dims.h,
+    position: 'absolute', left: '50%', top: `calc(50% + ${(noticeH + STEP_H) / 2}px)`, transform: 'translate(-50%, -50%)', width: dims.w, height: dims.h,
   }), [dims.w, dims.h, noticeH]);
 
   const pieces = frame.settled.size;
@@ -433,11 +431,11 @@ export function BoardView({
   return (
     <div
       ref={wrapRef}
-      // The well (U9): the board sits in a surface a little darker than the page.
-      data-board-well=""
+      // The board sits on the page (L3): no well, no edge.
+      data-board-stage=""
       style={{
         position: 'relative', width: '100%', height: '100%', minHeight: 160, display: 'grid', placeItems: 'center',
-        padding: WELL_PAD, paddingTop: noticeH + WELL_PAD, boxSizing: 'border-box', background: 'var(--bs-well)', borderRadius: 'var(--bs-radius-lg)',
+        paddingTop: noticeH, boxSizing: 'border-box', background: 'transparent',
       }}
     >
       {/* A change that was only heard, said above the board for a moment. */}
@@ -447,20 +445,37 @@ export function BoardView({
           style={{ position: 'absolute', top: 0, left: 0, right: 0, height: noticeH, display: 'flex', justifyContent: 'center', alignItems: 'center', pointerEvents: 'none' }}
         >
           {notice && (
-            <span style={{ padding: '3px 14px', borderRadius: 999, background: 'var(--bs-accent)', color: 'var(--bs-bg)', fontWeight: 600, fontSize: 16 }}>
+            <span style={{ padding: '3px 14px', borderRadius: 'var(--bs-radius-pill)', background: 'var(--bs-fg)', color: 'var(--bs-bg)', fontWeight: 600, fontSize: 16 }}>
               {notice}
             </span>
           )}
         </div>
       )}
-      <canvas
-        ref={canvasRef}
-        role="img"
-        aria-label={heldCount > 0
-          ? `${boardSummary(rows, cols, playheadCol, pieces)}, ${heldCount} on hold`
-          : `${boardSummary(rows, cols, playheadCol, pieces)}${loopNotes > 0 ? `, ${loopNotes} loop ${loopNotes === 1 ? 'note' : 'notes'}` : ''}`}
-        style={{ width: dims.w, height: dims.h, borderRadius: 'var(--bs-radius-lg)' }}
-      />
+      <div style={{ width: dims.w, display: 'flex', flexDirection: 'column' }}>
+        {/* The step numbers (L3): the one playing now in the text colour. The canvas's name
+            already says the step, so these are not read out. */}
+        <div aria-hidden="true" data-board-steps="" style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, height: STEP_H, alignItems: 'center' }}>
+          {Array.from({ length: cols }, (_, c) => (
+            <span
+              key={c}
+              style={{
+                textAlign: 'center', fontSize: 14, fontWeight: 600, fontVariantNumeric: 'tabular-nums', letterSpacing: '0.06em',
+                color: playing && c === playheadCol ? 'var(--bs-fg)' : 'var(--bs-fg3)',
+              }}
+            >
+              {c + 1}
+            </span>
+          ))}
+        </div>
+        <canvas
+          ref={canvasRef}
+          role="img"
+          aria-label={heldCount > 0
+            ? `${boardSummary(rows, cols, playheadCol, pieces)}, ${heldCount} on hold`
+            : `${boardSummary(rows, cols, playheadCol, pieces)}${loopNotes > 0 ? `, ${loopNotes} loop ${loopNotes === 1 ? 'note' : 'notes'}` : ''}`}
+          style={{ width: dims.w, height: dims.h, display: 'block' }}
+        />
+      </div>
       {onCellTap && (
         <CellGrid
           rows={rows}
@@ -483,17 +498,6 @@ export function BoardView({
       )}
     </div>
   );
-}
-
-function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
-  const radius = Math.max(0, Math.min(r, Math.min(w, h) / 2));
-  ctx.beginPath();
-  ctx.moveTo(x + radius, y);
-  ctx.arcTo(x + w, y, x + w, y + h, radius);
-  ctx.arcTo(x + w, y + h, x, y + h, radius);
-  ctx.arcTo(x, y + h, x, y, radius);
-  ctx.arcTo(x, y, x + w, y, radius);
-  ctx.closePath();
 }
 
 /** The cells currently settled, as a map, for `BoardViewFrame`. */

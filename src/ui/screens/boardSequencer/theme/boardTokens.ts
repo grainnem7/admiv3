@@ -136,10 +136,9 @@ export function swatchRingFor(
 }
 
 /**
- * The playhead's outline on the board: the secondary text colour, which is well over 3:1
- * against the squares in both modes (B9). Never a counter hue, and never the accent, which
- * already marks a sounding counter.
+ * The playhead's marker on the board: the text colour, well over 3:1 against the column's
+ * tint in both modes (B9). Never a counter hue.
  */
 export function playheadColour(palette: BoardPalette): string {
-  return palette.fg2;
+  return palette.fg;
 }

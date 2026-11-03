@@ -331,29 +331,32 @@ test('U7: notices sit in the side panel and move nothing; Explain the choices un
   expect(pageErrors(page)).toEqual([]);
 });
 
-test('U8: the side panel is a card: its own surface, its controls one shade lighter, the board on the page', async ({ page }) => {
+test('L1: the side panel sits on the page: no card, no fill, its tabs words over a hairline', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await openLaptopBoard(page);
-  const rgb = (hex: string): string => `rgb(${parseInt(hex.slice(1, 3), 16)}, ${parseInt(hex.slice(3, 5), 16)}, ${parseInt(hex.slice(5, 7), 16)})`;
   const panel = page.locator('.bs-panel');
   await expect(panel).toHaveCount(1);
   const bg = (sel: string) => page.locator(sel).first().evaluate((e) => getComputedStyle(e).backgroundColor);
-  // Dark: the panel is the raised shade, a button inside it one shade lighter, the page behind the board the base.
-  expect(await bg('.bs-panel')).toBe(rgb('#262c39'));
-  expect(await panel.getByRole('button', { name: 'Mute' }).evaluate((e) => getComputedStyle(e).backgroundColor)).toBe(rgb('#2f3645'));
-  expect(await bg('.bs-root.board-sequencer-screen')).toBe(rgb('#1f2430'));
-  // Light: a white card on the page, its buttons a light grey.
-  await page.getByRole('button', { name: 'Switch to light mode' }).click();
-  expect(await bg('.bs-panel')).toBe(rgb('#ffffff'));
-  expect(await panel.getByRole('button', { name: 'Mute' }).evaluate((e) => getComputedStyle(e).backgroundColor)).toBe(rgb('#e6eaf0'));
-  // The panel's edge and its padding: the tabs do not touch the card's edge.
+  const none = 'rgba(0, 0, 0, 0)';
+  for (const mode of ['dark', 'light'] as const) {
+    if (mode === 'light') await page.getByRole('button', { name: 'Switch to light mode' }).click();
+    expect(await bg('.bs-panel'), mode).toBe(none);
+    expect(await panel.evaluate((e) => getComputedStyle(e).boxShadow), mode).toBe('none');
+    // Mute: a pill with a hairline edge, no fill; the open tab: words with an underline, no fill.
+    expect(await panel.getByRole('button', { name: 'Mute' }).evaluate((e) => getComputedStyle(e).backgroundColor), mode).toBe(none);
+    expect(await panel.getByRole('button', { name: 'Mute' }).evaluate((e) => getComputedStyle(e).borderTopLeftRadius), mode).toBe('999px');
+    const tab = panel.getByRole('tab', { selected: true });
+    expect(await tab.evaluate((e) => getComputedStyle(e).backgroundColor), mode).toBe(none);
+    expect(await tab.locator('[data-words]').evaluate((e) => getComputedStyle(e).borderBottomWidth), mode).toBe('1px');
+  }
+  // The panel's padding: the tabs do not touch the panel's edge.
   const card = await panel.boundingBox();
   const tabs = await panel.getByRole('tablist').boundingBox();
   expect(tabs!.x - card!.x).toBeGreaterThanOrEqual(12);
   expect(pageErrors(page)).toEqual([]);
 });
 
-test('U9: Inter is the face, bundled, and the board sits in a well', async ({ page }) => {
+test('U9: Inter is the face, bundled; L3: the board sits on the page, not in a well', async ({ page }) => {
   await openLaptopBoard(page);
   const loaded = await page.evaluate(async () => { await document.fonts.ready; return document.fonts.check('600 16px Inter'); });
   expect(loaded).toBe(true);
@@ -363,8 +366,8 @@ test('U9: Inter is the face, bundled, and the board sits in a well', async ({ pa
   const fromElsewhere = await page.evaluate(() => performance.getEntriesByType('resource')
     .map((r) => r.name).filter((n) => /\.woff2?($|\?)/.test(n) && !n.startsWith(location.origin)));
   expect(fromElsewhere).toEqual([]);
-  const well = await page.locator('[data-board-well]').evaluate((e) => getComputedStyle(e).backgroundColor);
-  const pageBg = await page.locator('.bs-root.board-sequencer-screen').evaluate((e) => getComputedStyle(e).backgroundColor);
-  expect(well).not.toBe(pageBg);
+  await expect(page.locator('[data-board-well]')).toHaveCount(0);
+  const stage = await page.locator('[data-board-stage]').evaluate((e) => getComputedStyle(e).backgroundColor);
+  expect(stage).toBe('rgba(0, 0, 0, 0)');
   expect(pageErrors(page)).toEqual([]);
 });

@@ -3,6 +3,7 @@ import { SwatchChip } from '../ui/SwatchChip';
 import { Button } from '../ui/Button';
 import { focusWhenGone } from '../ui/focusNext';
 import type { BoardPalette } from '../theme/boardTokens';
+import { UNDERLINE_OFF, UNDERLINE_ON } from '../ui/text';
 import { describeChannel, ROLE_LABELS, type ColourChannel, type ColourRole } from '../../../../tracking/boardColours';
 
 export interface LaptopBoardBarProps {
@@ -65,29 +66,34 @@ export function LaptopBoardBar({
     );
   }
   return (
-    <div role="group" aria-label="Laptop board" style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-      <div ref={pickerRef} role="radiogroup" aria-label="Counter to put down" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-        {channels.map((c, i) => (
-          <button
-            key={c.id}
-            type="button"
-            role="radio"
-            aria-checked={selected === c.id}
-            onClick={() => onSelect(c.id)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px', minHeight: 'var(--bs-target)',
-              borderRadius: 'var(--bs-radius-md)', border: `2px solid ${selected === c.id ? 'var(--bs-accent)' : 'var(--bs-border-control)'}`,
-              background: selected === c.id ? 'var(--bs-accent-muted)' : 'var(--bs-raised)', color: 'inherit', cursor: 'pointer',
-            }}
-          >
-            <SwatchChip swatch={c.swatch} palette={palette} number={i + 1} size={20} />
-            <span>{describeChannel(c)}</span>
-            <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>{ROLE_LABELS[c.role]}</span>
-          </button>
-        ))}
+    <div role="group" aria-label="Laptop board" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+      {/* The colours as words with a dot (L3): the one a click puts down in the text colour,
+          underlined; the rest quiet. No chips. */}
+      <div ref={pickerRef} role="radiogroup" aria-label="Counter to put down" style={{ display: 'flex', columnGap: 18, flexWrap: 'wrap' }}>
+        {channels.map((c, i) => {
+          const on = selected === c.id;
+          return (
+            <button
+              key={c.id}
+              type="button"
+              role="radio"
+              aria-checked={on}
+              onClick={() => onSelect(c.id)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8, padding: 0, minHeight: 'var(--bs-target)',
+                borderRadius: 0, border: '1px solid transparent', background: 'transparent',
+                color: on ? 'var(--bs-fg)' : 'var(--bs-fg3)', fontWeight: on ? 600 : 500, cursor: 'pointer',
+              }}
+            >
+              <SwatchChip swatch={c.swatch} palette={palette} surface={palette.bg} number={i + 1} size={20} />
+              <span data-words="" style={{ borderBottom: on ? UNDERLINE_ON : UNDERLINE_OFF, paddingBottom: 1 }}>{describeChannel(c)}</span>
+              <span style={{ fontSize: 14, color: 'var(--bs-fg3)', fontWeight: 500 }}>{ROLE_LABELS[c.role]}</span>
+            </button>
+          );
+        })}
       </div>
       <Button
-        tone="secondary"
+        tone="quiet"
         aria-expanded={adding}
         onClick={() => setAdding((a) => !a)}
         reason={onAddColour ? null : 'Every ready-made colour is in use.'}
@@ -105,7 +111,7 @@ export function LaptopBoardBar({
       )}
       {/* Just the count, so the bar stays one row and the board gets the room (U4). How to
           place is in its tooltip, in Set up's Ready step and in Help. */}
-      <span title="Click a square to put a counter down, click it again to lift it." style={{ fontSize: 14, color: 'var(--bs-fg2)', flex: '0 1 auto' }}>
+      <span title="Click a square to put a counter down, click it again to lift it." style={{ fontSize: 14, color: 'var(--bs-fg3)', flex: '0 1 auto', marginLeft: 'auto', fontVariantNumeric: 'tabular-nums' }}>
         {`${count} on the board`}
       </span>
       <Button
