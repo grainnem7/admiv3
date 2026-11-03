@@ -290,3 +290,8 @@ Help; the owner's and Tim's own words after a run.
   "← Piece" are the footers. Kept for now against the design: length, ending and count in stay
   on Check rather than under the grid, and the scene rows stay as the inspector, so the tests
   of both hold; the energy line stays under the grid.
+- **G4, in G2.** The column on now is lit while the piece plays; Rehearse from here and Jump
+  here now stay on the scene rows (the inspector), where their words and tests are.
+- **G5, built (4 Nov).** Help's Make a piece section describes the rail, the grid and the two
+  tabs; the iPad's Loops page numbers the same eight places as the rail, unchanged. Every
+  learnt word stays. The e2e helpers open Piece for the old Loops and Scenes steps.

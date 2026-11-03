@@ -627,7 +627,7 @@ function ScenesStep(p: PieceStepsProps): JSX.Element {
           >
             {`✦ Make my plan: 4 scenes over ${formatClock(p.lengthSec)}`}
           </Button>
-          <p style={note}>Arrival, Build, Open and Home, using {saved.length > 0 ? 'your saved loops' : `no loops yet (make some in step 1 first: a scene without loops is silent unless ${who.name} plays)`}. Every scene can be changed afterwards.</p>
+          <p style={note}>Arrival, Build, Open and Home, using {saved.length > 0 ? 'your saved loops' : `no loops yet (keep some in the rail beside the board first: a scene without loops is silent unless ${who.name} plays)`}. Every scene can be changed afterwards.</p>
         </div>
       ) : (
         <>
