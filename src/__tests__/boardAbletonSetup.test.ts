@@ -80,6 +80,7 @@ describe('the Ready check line about Ableton', () => {
   });
   it('a port chosen but Sound from is ADMI: check', () => {
     expect(abletonReadyItem({ ...base, soundFrom: 'admi' })?.state).toBe('warn');
+    expect(abletonReadyItem({ ...base, soundFrom: 'admi' })?.label).toBe('A MIDI port is chosen but Sound from is Timbo');
   });
   it('Ableton with the port: ok, and it says only "port connected" and points to the test note', () => {
     const item = abletonReadyItem({ ...base, soundFrom: 'ableton' });
@@ -91,9 +92,13 @@ describe('the Ready check line about Ableton', () => {
     const item = abletonReadyItem({ ...base, soundFrom: 'ableton', connected: false });
     expect(item?.state).toBe('problem');
     expect(item?.fix).toContain('loopMIDI');
+    // The port keeps its real name; the app is Timbo.
+    expect(item?.fix).toBe('Open loopMIDI, check the port ADMIOutput is there, then choose it on the Connections tab. Until then Timbo plays its own sound.');
+    expect(abletonReadyItem({ ...base, soundFrom: 'both', connected: false })?.label).toBe('Sound from is Ableton and Timbo, but the MIDI port is missing');
   });
   it('the port is back but ADMI is still playing: check', () => {
     expect(abletonReadyItem({ ...base, soundFrom: 'both', holdOnAdmi: true })?.state).toBe('warn');
+    expect(abletonReadyItem({ ...base, soundFrom: 'both', holdOnAdmi: true })?.label).toBe('Timbo is still playing its own sound');
   });
 });
 

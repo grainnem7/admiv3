@@ -16,7 +16,7 @@ export type AudienceNotice = 'asking' | 'placed' | 'drag' | 'oneScreen' | 'still
 export function audienceNoticeText(n: AudienceNotice): string {
   switch (n) {
     case 'asking':
-      return 'Your browser is asking whether ADMI may manage windows. Choose Allow: then the audience screen goes straight onto the projector.';
+      return 'Your browser is asking whether Timbo may manage windows. Choose Allow: then the audience screen goes straight onto the projector.';
     // Clicking the projector window leaves the keyboard there: Space and Shift+S would go
     // to it, so the notice sends the owner back to the laptop (B5).
     case 'placed':
@@ -28,7 +28,7 @@ export function audienceNoticeText(n: AudienceNotice): string {
     case 'stillOpening':
       return 'Still opening the audience screen…';
     case 'blocked':
-      return 'The audience screen didn’t open: the browser may have blocked it. Allow pop-ups for ADMI, then press Open the audience screen again.';
+      return 'The audience screen didn’t open: the browser may have blocked it. Allow pop-ups for Timbo, then press Open the audience screen again.';
     default:
       return '';
   }

@@ -272,13 +272,13 @@ test('the Cap panel: Learn the hat, the moves and the picture at the top, the re
   expect(await top(more)).toBeGreaterThan(picture);
   await expect(panel.getByRole('combobox', { name: 'Up and down' })).toHaveValue('volume');
   await expect(more).toHaveAttribute('aria-expanded', 'false');
-  await expect(panel.getByRole('button', { name: 'Learn my range' })).toBeHidden();
+  await expect(panel.getByRole('button', { name: 'Learn side to side' })).toBeHidden();
   // Lock is a show-time control: at the top, with the moves. The mouse test stays folded.
   await expect(panel.getByRole('button', { name: /Lock where things are now/ })).toBeVisible();
   expect(await top(panel.getByRole('button', { name: /Lock where things are now/ }))).toBeLessThan(picture);
   await expect(panel.getByRole('button', { name: 'Test with the mouse' })).toBeHidden();
   await more.click();
-  await expect(panel.getByRole('button', { name: 'Learn my range' })).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'Learn side to side' })).toBeVisible();
   // Nothing reaches past the panel's right-hand edge, at 1366 and narrower.
   for (const width of [1366, 1024]) {
     await page.setViewportSize({ width, height: 768 });

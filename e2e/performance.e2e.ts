@@ -1,6 +1,6 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
-import { headerButton, listenToOutput, makePlan, notesPlayed, openAnotherTab, openLaptopBoard, outputLevels, pageErrors, pickColour, pieceStep, place, saveBoardHere, sceneMore, sceneMoreLine, sessionLog, soundTab, startPiece } from './app';
+import { headerButton, listenToOutput, useFullIpadLayout, makePlan, notesPlayed, openAnotherTab, openLaptopBoard, outputLevels, pageErrors, pickColour, pieceStep, place, saveBoardHere, sceneMore, sceneMoreLine, sessionLog, soundTab, startPiece } from './app';
 
 /** Make a piece → Loops: two loops, "Bed" (two yellow counters) and an unnamed one (one blue). */
 async function saveTwoLoops(page: Page): Promise<void> {
@@ -443,6 +443,7 @@ test('the iPad joins with the code, shows the piece, and its End piece reaches t
   await page.getByRole('button', { name: 'Board', exact: true }).click();
   await page.getByRole('tab', { name: 'Connections' }).click();
   await page.getByRole('switch', { name: 'iPad controls' }).click();
+  await useFullIpadLayout(page); // these pads are on the full layout, not the Simple page
   await page.getByRole('checkbox', { name: 'End piece', exact: true }).check();
   const code = await page.evaluate(() => localStorage.getItem('admi-remote-code'));
   expect(code).toMatch(/^\d{4}$/);
@@ -468,7 +469,8 @@ test("a bounce on the iPad's End piece never ends the piece; a second tap after 
   await page.getByRole('button', { name: 'Board', exact: true }).click();
   await page.getByRole('tab', { name: 'Connections' }).click();
   await page.getByRole('switch', { name: 'iPad controls' }).click();
-  // A new player's iPad has the safe show layout: End piece is on the page Tim plays on.
+  await useFullIpadLayout(page); // these pads are on the full layout, not the Simple page
+  // A new player's full layout starts as the old safe show layout: End piece on the page Tim plays on.
   await expect(page.getByRole('checkbox', { name: 'End piece', exact: true })).toBeChecked();
   // The shortest window, so each try can start afresh sooner.
   await page.getByRole('radiogroup', { name: 'Time for the second tap' }).getByRole('radio', { name: '3 seconds' }).click();
@@ -513,6 +515,7 @@ test("a press on the iPad's End piece that chatters at 0, 200, 400 and 600 ms ne
   await page.getByRole('button', { name: 'Board', exact: true }).click();
   await page.getByRole('tab', { name: 'Connections' }).click();
   await page.getByRole('switch', { name: 'iPad controls' }).click();
+  await useFullIpadLayout(page); // these pads are on the full layout, not the Simple page
   // The longest window, so the runner's own pauses can't let it lapse before the last tap.
   await page.getByRole('radiogroup', { name: 'Time for the second tap' }).getByRole('radio', { name: '10 seconds' }).click();
   const code = await page.evaluate(() => localStorage.getItem('admi-remote-code'));
@@ -555,6 +558,7 @@ test('"when the finger lifts": a real touch that slides off a pad before lifting
   await page.getByRole('button', { name: 'Board', exact: true }).click();
   await page.getByRole('tab', { name: 'Connections' }).click();
   await page.getByRole('switch', { name: 'iPad controls' }).click();
+  await useFullIpadLayout(page); // these pads are on the full layout, not the Simple page
   await page.getByRole('radiogroup', { name: 'A pad acts' }).getByRole('radio', { name: 'When the finger lifts' }).click();
   const code = await page.evaluate(() => localStorage.getItem('admi-remote-code'));
 
@@ -601,31 +605,28 @@ test('"when the finger lifts": a real touch that slides off a pad before lifting
   expect(pageErrors(page)).toEqual([]);
 });
 
-test('"Use the safe show layout" sets out the iPad for the show and says what it did', async ({ page }) => {
+test('"Use the simple layout": a new player has it; a box ticked gives the full layout; one button brings it back, keeping the boxes', async ({ page }) => {
   await openLaptopBoard(page);
   await page.getByRole('button', { name: 'Board', exact: true }).click();
   await page.getByRole('tab', { name: 'Connections' }).click();
   await page.getByRole('switch', { name: 'iPad controls' }).click();
   // A new player starts with it.
-  await expect(page.getByText('✓ The iPad has the safe show layout.')).toBeVisible();
-  // Things added back for a rehearsal...
+  await expect(page.getByText('✓ The iPad has the simple layout.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Use the full layout instead' })).toBeVisible();
+  // A box ticked for a rehearsal gives the full layout, with that box.
   await page.getByRole('checkbox', { name: 'Mute', exact: true }).check();
-  // The one tick also brings back Capture, Stop all and End piece, and says so (R2-T3-06).
-  await page.getByRole('checkbox', { name: 'Loops & scenes page (also shows Capture, Stop the loops and End piece)', exact: true }).check();
-  await page.getByRole('checkbox', { name: '🔒 Speed' }).uncheck();
-  await expect(page.getByText('✓ The iPad has the safe show layout.')).toHaveCount(0);
+  await expect(page.getByText('✓ The iPad has the simple layout.')).toHaveCount(0);
+  await expect(page.getByRole('checkbox', { name: 'Mute', exact: true })).toBeChecked();
   // ...and one button for the show.
-  await page.getByRole('button', { name: 'Use the safe show layout' }).click();
-  await expect(page.getByRole('status').filter({ hasText: 'Done: the iPad now shows only the Extra notes strip, New idea and End piece' })).toBeVisible();
-  await expect(page.getByRole('checkbox', { name: 'Mute', exact: true })).not.toBeChecked();
-  await expect(page.getByRole('checkbox', { name: 'Loops & scenes page' })).not.toBeChecked();
+  await page.getByRole('button', { name: 'Use the simple layout' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Done: the iPad now shows the simple layout: New idea, the parts, what the melody plays and the loops.' })).toBeVisible();
+  // The full layout's boxes are kept as they were, for whoever wants them again.
+  await expect(page.getByRole('checkbox', { name: 'Mute', exact: true })).toBeChecked();
   await expect(page.getByRole('checkbox', { name: '🔒 Speed' })).toBeChecked();
-  await expect(page.getByRole('checkbox', { name: 'Extra notes', exact: true })).toBeChecked();
-  await expect(page.getByRole('checkbox', { name: 'End piece', exact: true })).toBeChecked();
   expect(pageErrors(page)).toEqual([]);
 });
 
-test("an iPad page from before an update is named on the laptop, never on the iPad; the check offers the safe show layout", async ({ page, context }) => {
+test("an iPad page from before an update is named on the laptop, never on the iPad; the check offers the simple layout", async ({ page, context }) => {
   await openLaptopBoard(page);
   await page.getByRole('button', { name: 'Board', exact: true }).click();
   await page.getByRole('tab', { name: 'Connections' }).click();
@@ -651,17 +652,19 @@ test("an iPad page from before an update is named on the laptop, never on the iP
   await expect(page.getByText(outOfDate)).toHaveCount(0);
   await expect(ipad.getByText(/out of date|reload/i)).toHaveCount(0);
 
-  // A fuller iPad than the safe show layout: a warning in the check, with the button.
-  const notSafe = page.getByText("Test's iPad is not in the safe show layout");
-  await expect(notSafe).toHaveCount(0);
+  // The full layout rather than the simple one: a warning in the check, with the button.
+  const notSimple = page.getByText("Test's iPad is not in the simple layout");
+  await expect(notSimple).toHaveCount(0);
   await page.getByRole('button', { name: 'Board', exact: true }).click();
   await page.getByRole('tab', { name: 'Connections' }).click();
   await page.getByRole('checkbox', { name: 'Loops & scenes page' }).check();
+  await expect(ipad.getByRole('tab')).not.toHaveCount(0); // the full layout, with its pages
   await pieceStep(page, 'Ending & check');
-  await expect(notSafe).toBeVisible();
-  await page.getByRole('button', { name: "Use the safe show layout on Test's iPad" }).click();
-  await expect(notSafe).toHaveCount(0);
+  await expect(notSimple).toBeVisible();
+  await page.getByRole('button', { name: "Use the simple layout on Test's iPad" }).click();
+  await expect(notSimple).toHaveCount(0);
   await expect(ipad.getByRole('tab')).toHaveCount(0); // the iPad lost its Loops pages
+  await expect(ipad.getByRole('radiogroup', { name: 'Melody plays' })).toBeVisible(); // the Simple page
   expect(pageErrors(page)).toEqual([]);
 });
 
@@ -777,7 +780,7 @@ test('a closed laptop tab, reopened within the piece, offers Carry on; a second 
   await pieceClockRunning(page);
   // A second tab while the first plays the piece: only why it can't save, no Carry on.
   const second = await openAnotherTab(context);
-  await expect(second.getByRole('heading', { name: 'ADMI is open in another tab' })).toBeVisible();
+  await expect(second.getByRole('heading', { name: 'Timbo is open in another tab' })).toBeVisible();
   await expect(second.getByText(/The piece was playing/)).toHaveCount(0);
   await second.close();
   // The laptop's tab closes mid-piece (a slip, or a crash), and ADMI is opened again (T3-08).
@@ -1167,20 +1170,20 @@ test('two tabs: only the first saves; the second says why and saves nothing; whe
     Storage.prototype.removeItem = function (this: Storage, k: string) { if (this === localStorage) w.__writes.push(`-${k}`); return remove.call(this, k); };
   });
   await second.goto('/');
-  await expect(second.getByRole('heading', { name: 'ADMI is open in another tab' })).toBeVisible();
+  await expect(second.getByRole('heading', { name: 'Timbo is open in another tab' })).toBeVisible();
   await expect(second.getByText("This one can't save: close the other tab to save here.")).toBeVisible();
   // Nothing to press: no screen, so no Keep, no Save, no clearing, no player to change.
   await expect(second.getByRole('button')).toHaveCount(0);
   // The first tab knows, and is the one that saves.
-  await expect(page.getByText("ADMI is also open in another tab. That tab can't save: only this one does.")).toBeVisible();
+  await expect(page.getByText("Timbo is also open in another tab. That tab can't save: only this one does.")).toBeVisible();
 
   // The first tab reloads (by mistake, mid-session): it is still the one that saves, and the
   // second still waits, for longer than it would take to replace a tab that had closed.
   await page.reload();
   await page.getByRole('button', { name: /Board Sequencer/ }).click();
-  await expect(page.getByRole('heading', { name: 'ADMI is open in another tab' })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Timbo is open in another tab' })).toHaveCount(0);
   await pause(second, 7000);
-  await expect(second.getByRole('heading', { name: 'ADMI is open in another tab' })).toBeVisible();
+  await expect(second.getByRole('heading', { name: 'Timbo is open in another tab' })).toBeVisible();
   await pieceStep(page, 'Loops');
 
   // A loop kept in the first tab while the second is open.
@@ -1204,7 +1207,7 @@ test('two tabs: only the first saves; the second says why and saves nothing; whe
   await second.getByRole('textbox', { name: 'Name of loop 2' }).press('Tab');
   await pause(second, 800);
   await second.reload();
-  await expect(second.getByRole('heading', { name: 'ADMI is open in another tab' })).toHaveCount(0);
+  await expect(second.getByRole('heading', { name: 'Timbo is open in another tab' })).toHaveCount(0);
   await second.getByRole('button', { name: /Board Sequencer/ }).click();
   await pieceStep(second, 'Loops');
   await expect(second.getByRole('textbox', { name: 'Name of loop 2' })).toHaveValue('Kept in B');
@@ -1990,7 +1993,7 @@ test('keeping time: a page that stalls mid-piece reports late beats, and the val
   await expect(page.getByRole('status').filter({ hasText: 'Stopped' }).first()).toBeVisible();
   await pieceStep(page, 'Ending & check');
   await expect(page.getByText(/^Keeping time: the sound fell \d+\.\d s behind in the last run \(\d+ beats? late/)).toBeVisible();
-  await expect(page.getByText(/To keep up, ADMI paused Extra notes\.$/)).toBeVisible();
+  await expect(page.getByText(/To keep up, Timbo paused Extra notes\.$/)).toBeVisible();
   expect(pageErrors(page)).toEqual([]);
 });
 

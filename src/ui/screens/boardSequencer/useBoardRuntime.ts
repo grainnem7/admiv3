@@ -225,6 +225,11 @@ export function useBoardRuntime(opts: {
    * colour that comes in later stays silent until its time, and only then.
    */
   pieceClockRef?: MutableRefObject<number | null>;
+  /**
+   * The colours the iPad's Board button silenced (spec 2026-11-04), or null for none: silent
+   * by the same filter as a colour waiting for its time, still on the board.
+   */
+  silencedRef?: MutableRefObject<ReadonlySet<string> | null>;
 }): BoardRuntimeRefs {
   const { cameraDeviceId, cameraRetry, calibrated, laptop, configRef, callbacksRef, capValuesRef, boardActivityRef } = opts;
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -598,7 +603,7 @@ export function useBoardRuntime(opts: {
       const clockStart = opts.pieceClockRef?.current ?? null;
       const pieceSec = clockStart === null ? null : (performance.now() - clockStart) / 1000;
       const sounding = playerCellsFor(
-        opts.newLoopRef?.current ?? null, cellsSoundingAt(frame.patternCells, cfg.channels, cfg.colourComesInAt, pieceSec),
+        opts.newLoopRef?.current ?? null, cellsSoundingAt(frame.patternCells, cfg.channels, cfg.colourComesInAt, pieceSec, opts.silencedRef?.current ?? undefined),
       );
       if (running && engine) {
         loopBankRef.current = frame.loopBank;

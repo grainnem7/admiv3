@@ -3,7 +3,7 @@ import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { WebSocket } from 'ws';
 import {
-  CONFIRM_SECONDS, DEFAULT_REMOTE_TOUCH, sanitizeRemoteTouch, SECOND_TAP_MIN_MS, secondTap, TWO_TAP_IDLE, type TwoTapPad,
+  CONFIRM_SECONDS, DEFAULT_REMOTE_TOUCH, sanitizeRemoteTouch, sanitizeSimpleRows, SIMPLE_ROWS, SECOND_TAP_MIN_MS, secondTap, TWO_TAP_IDLE, type TwoTapPad,
 } from '../remote/protocol';
 import {
   dynamicsFromValue, isRemoteCode, makeRemoteCode, parseRemoteMessage, REMOTE_PATH, stripValue,
@@ -69,6 +69,84 @@ describe('messages', () => {
     expect(allowedFrom('remote', 'state')).toBe(false);
     expect(allowedFrom('host', 'state')).toBe(true);
     expect(allowedFrom('host', 'trigger')).toBe(false);
+  });
+});
+
+describe('the Simple page: its messages and its fields, every one checked (spec 2026-11-04)', () => {
+  const base = {
+    values: { tempo: 0.5, dynamics: 0.5, fill: 0, evolve: 0 },
+    labels: { tempo: '100 BPM', dynamics: '50%', fill: 'Off', evolve: 'Off' },
+    kept: false, muted: false, playing: true,
+  };
+  const stateOf = (extra: Record<string, unknown>) => {
+    const m = parseRemoteMessage({ type: 'state', state: { ...base, ...extra } });
+    if (m?.type !== 'state') throw new Error('not a state');
+    return m.state;
+  };
+
+  it('Drums, Calm / Busy, the Board and the melody sound, from the iPad', () => {
+    expect(parseRemoteMessage({ type: 'drumsSound', silent: true })).toEqual({ type: 'drumsSound', silent: true });
+    expect(parseRemoteMessage({ type: 'drumsSound', silent: false })).toEqual({ type: 'drumsSound', silent: false });
+    expect(parseRemoteMessage({ type: 'drumsSound', silent: 1 })).toBeNull();
+    // Earlier pages' messages are gone.
+    expect(parseRemoteMessage({ type: 'keepPlaying' })).toBeNull();
+    expect(parseRemoteMessage({ type: 'feel', feel: 'busy' })).toEqual({ type: 'feel', feel: 'busy' });
+    expect(parseRemoteMessage({ type: 'feel', feel: 'normal' })).toEqual({ type: 'feel', feel: 'normal' });
+    expect(parseRemoteMessage({ type: 'feel', feel: 'loud' })).toBeNull();
+    expect(parseRemoteMessage({ type: 'boardSound', silent: true })).toEqual({ type: 'boardSound', silent: true });
+    expect(parseRemoteMessage({ type: 'boardSound', silent: 'yes' })).toBeNull();
+    expect(parseRemoteMessage({ type: 'melodySound', sound: 'saxophone' })).toEqual({ type: 'melodySound', sound: 'saxophone' });
+    expect(parseRemoteMessage({ type: 'melodySound', sound: 'violin' })).toBeNull();
+    // The first Simple page's "part" message is gone.
+    expect(parseRemoteMessage({ type: 'part', role: 'drums', out: true })).toBeNull();
+  });
+
+  it('only the iPad may send them, and the relay lets them through', () => {
+    for (const t of ['drumsSound', 'feel', 'boardSound', 'melodySound']) {
+      expect(allowedFrom('remote', t)).toBe(true);
+      expect(allowedFrom('host', t)).toBe(false);
+    }
+    expect(allowedFrom('remote', 'part')).toBe(false);
+    expect(allowedFrom('remote', 'keepPlaying')).toBe(false);
+  });
+
+  it("the layout: 'simple' or nothing (the full page, as every laptop before it)", () => {
+    expect(stateOf({ layout: 'simple' }).layout).toBe('simple');
+    expect('layout' in stateOf({ layout: 'custom' })).toBe(false);
+  });
+
+  it('Calm / Busy, the drums silenced and the board silenced', () => {
+    expect(stateOf({ feel: 'calm' }).feel).toBe('calm');
+    expect('feel' in stateOf({ feel: 'loud' })).toBe(false);
+    expect(stateOf({ drumsSilent: true }).drumsSilent).toBe(true);
+    expect('drumsSilent' in stateOf({ drumsSilent: 'yes' })).toBe(false);
+    expect(stateOf({ boardSilent: true }).boardSilent).toBe(true);
+    // The earlier page's fields are gone.
+    expect('instruments' in stateOf({ instruments: [1, null, null, null] })).toBe(false);
+    expect('boardEmpty' in stateOf({ boardEmpty: true })).toBe(false);
+  });
+
+  it('the melody: one of the four sounds, null for something else; no melody colour, no field', () => {
+    expect(stateOf({ melody: { sound: 'trumpet' } }).melody).toEqual({ sound: 'trumpet' });
+    expect(stateOf({ melody: { sound: 'violin' } }).melody).toEqual({ sound: null });
+    expect('melody' in stateOf({})).toBe(false);
+  });
+
+  it('the rows: known rows only, once each, in page order; a choice saved with an earlier page shows Drums and Calm / Busy', () => {
+    expect(SIMPLE_ROWS).toEqual(['drums', 'feel', 'melody', 'board']);
+    expect(stateOf({ rows: ['board', 'drums', 'drums', 'strips', 3] }).rows).toEqual(['drums', 'board']);
+    expect(stateOf({ rows: [] }).rows).toEqual([]);
+    expect(sanitizeSimpleRows(undefined)).toEqual(SIMPLE_ROWS);
+    // Earlier pages' rows: their Melody and Board ticks are kept; Drums and Calm / Busy are shown.
+    expect(sanitizeSimpleRows(['keep', 'feel', 'instruments', 'melody', 'board'])).toEqual(SIMPLE_ROWS);
+    expect(sanitizeSimpleRows(['instruments'])).toEqual(['drums', 'feel']);
+    expect(sanitizeSimpleRows(['newIdea', 'board'])).toEqual(['drums', 'feel', 'board']);
+    // A choice made with today's rows is kept as it is.
+    expect(sanitizeSimpleRows(['melody'])).toEqual(['melody']);
+  });
+
+  it('a loop is its name and state only (the loop pictures are gone)', () => {
+    expect(stateOf({ loops: [{ name: 'Beat', state: 'playing', picture: 'drums' }] }).loops).toEqual([{ name: 'Beat', state: 'playing' }]);
   });
 });
 

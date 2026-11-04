@@ -26,7 +26,36 @@ export const PLAY_PADS: RemoteTriggerName[] = ['newIdea', 'newSound', 'keep', 'm
 /** A launchable loop as the iPad shows it (the same words as performance/launcher). */
 export type RemoteLoopState = 'empty' | 'stopped' | 'playing' | 'starting' | 'stopping';
 export const REMOTE_LOOP_STATES: RemoteLoopState[] = ['empty', 'stopped', 'playing', 'starting', 'stopping'];
+/** The jobs that play notes (an instrument): the ones the Board button silences. */
+export type PartRole = 'drums' | 'bass' | 'chord' | 'melody';
+export const PART_ROLES: PartRole[] = ['drums', 'bass', 'chord', 'melody'];
+/** How much is played, for the whole piece: Calm (the loops on their main beats, no Extra notes), Normal or Busy (Extra notes round everything). */
+export type Feel = 'calm' | 'normal' | 'busy';
+export const FEELS: Feel[] = ['calm', 'normal', 'busy'];
+/** The four sounds the melody can be given from the iPad (keys of the sound catalogue). */
+export type MelodySound = 'piano' | 'flute' | 'trumpet' | 'saxophone';
+export const MELODY_SOUNDS: MelodySound[] = ['piano', 'flute', 'trumpet', 'saxophone'];
+/** A picture on the Simple page: an instrument, or the melody's sound. */
+export type RemotePicture = 'drums' | 'bass' | 'chords' | MelodySound | 'melody';
+
 export interface RemoteLoop { name: string; state: RemoteLoopState }
+
+/** The rows of the Simple page, in page order; the facilitator chooses which are shown. */
+export type SimpleRow = 'drums' | 'feel' | 'melody' | 'board';
+export const SIMPLE_ROWS: SimpleRow[] = ['drums', 'feel', 'melody', 'board'];
+/** Rows of the earlier Simple pages that are gone. Any of them in a saved choice shows Drums, and Calm / Busy. */
+const OLD_ROWS = ['newIdea', 'parts', 'loops', 'keep', 'instruments'];
+/**
+ * Stored or sent rows made safe: known rows only, once each, in page order. Not a list = all.
+ * A choice saved with an earlier page (it names New idea, Parts, Loops, Keep or Instruments)
+ * keeps its Melody and Board ticks and shows Drums and Calm / Busy, which are new to it (my
+ * call: the one big button of every earlier page becomes the one big button now).
+ */
+export function sanitizeSimpleRows(v: unknown): SimpleRow[] {
+  if (!Array.isArray(v)) return [...SIMPLE_ROWS];
+  const old = v.some((r) => typeof r === 'string' && OLD_ROWS.includes(r));
+  return SIMPLE_ROWS.filter((r) => v.includes(r) || (old && (r === 'drums' || r === 'feel')));
+}
 
 /** Pads from the Loops page a facilitator can also put on the Play page, so the player never has to switch page. */
 export type RemotePlayExtra = 'endPiece' | 'nextScene' | 'capture' | 'stopAll';
@@ -163,6 +192,18 @@ export interface RemoteState {
    * Show. Missing = dark, as the page was before.
    */
   theme?: 'dark' | 'light';
+  /** The Simple page (spec 2026-11-04). Missing = the full page, as every laptop before it. */
+  layout?: 'simple';
+  /** Calm, Normal or Busy, for the whole piece. */
+  feel?: Feel;
+  /** The Simple page: no drums anywhere (the board's, the loops', the band's). */
+  drumsSilent?: boolean;
+  /** What the melody colour plays: one of the four, or null for something else. Missing = no melody colour. */
+  melody?: { sound: MelodySound | null };
+  /** The Simple page: the counters on the board are silenced (the loops, band and Extra notes carry on). */
+  boardSilent?: boolean;
+  /** The Simple page's rows, as chosen on the laptop. Missing = all. */
+  rows?: SimpleRow[];
 }
 
 export type RemoteMessage =
@@ -182,6 +223,14 @@ export type RemoteMessage =
    * laptop knows it is reaching (see linkReach).
    */
   | { type: 'hello'; build: string | null; ask: number | null }
+  /** The Simple page: no drums anywhere, or the drums back. The state wanted, not a toggle. */
+  | { type: 'drumsSound'; silent: boolean }
+  /** The Simple page: Calm, Normal or Busy. The state wanted, not a toggle. */
+  | { type: 'feel'; feel: Feel }
+  /** The Simple page: the board's counters silenced, or playing again. The state wanted. */
+  | { type: 'boardSound'; silent: boolean }
+  /** The Simple page: what the melody colour plays. */
+  | { type: 'melodySound'; sound: MelodySound }
   /** The iPad's End piece is waiting for its second tap (on), or no longer is (off). */
   | { type: 'armed'; name: 'endPiece'; on: boolean }
   /** From the relay: how many of each side are in this room. */
@@ -202,6 +251,7 @@ function sanitizeLoops(v: unknown[]): RemoteLoop[] {
     };
   });
 }
+
 
 function sanitizeShown(o: Record<string, unknown>): { strips: RemoteControlName[]; pads: RemoteTriggerName[]; loopsPage: boolean } {
   return {
@@ -255,6 +305,10 @@ export function parseRemoteMessage(raw: unknown): RemoteMessage | null {
   if (o.type === 'peers' && typeof o.hosts === 'number' && typeof o.remotes === 'number') {
     return { type: 'peers', hosts: o.hosts, remotes: o.remotes };
   }
+  if (o.type === 'drumsSound' && typeof o.silent === 'boolean') return { type: 'drumsSound', silent: o.silent };
+  if (o.type === 'feel' && FEELS.includes(o.feel as Feel)) return { type: 'feel', feel: o.feel as Feel };
+  if (o.type === 'boardSound' && typeof o.silent === 'boolean') return { type: 'boardSound', silent: o.silent };
+  if (o.type === 'melodySound' && MELODY_SOUNDS.includes(o.sound as MelodySound)) return { type: 'melodySound', sound: o.sound as MelodySound };
   if (o.type === 'armed' && o.name === 'endPiece' && typeof o.on === 'boolean') return { type: 'armed', name: 'endPiece', on: o.on };
   if (o.type === 'hello') return { type: 'hello', build: isBuildId(o.build) ? o.build : null, ask: isAsk(o.ask) ? o.ask : null };
   if (o.type === 'state' && typeof o.state === 'object' && o.state !== null) {
@@ -289,6 +343,14 @@ export function parseRemoteMessage(raw: unknown): RemoteMessage | null {
         ...(isAsk(s.ask) ? { ask: s.ask } : {}),
         ...(s.carryOnWaiting === true ? { carryOnWaiting: true } : {}),
         ...(s.theme === 'light' || s.theme === 'dark' ? { theme: s.theme } : {}),
+        ...(s.layout === 'simple' ? { layout: 'simple' as const } : {}),
+        ...(FEELS.includes(s.feel as Feel) ? { feel: s.feel as Feel } : {}),
+        ...(typeof s.drumsSilent === 'boolean' ? { drumsSilent: s.drumsSilent } : {}),
+        ...(typeof s.boardSilent === 'boolean' ? { boardSilent: s.boardSilent } : {}),
+        ...(Array.isArray(s.rows) ? { rows: sanitizeSimpleRows(s.rows) } : {}),
+        ...(typeof s.melody === 'object' && s.melody !== null && !Array.isArray(s.melody) ? {
+          melody: { sound: MELODY_SOUNDS.includes((s.melody as Record<string, unknown>).sound as MelodySound) ? (s.melody as Record<string, unknown>).sound as MelodySound : null },
+        } : {}),
       },
     };
   }

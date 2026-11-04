@@ -37,11 +37,17 @@ export function waitingColours(
     .sort((a, b) => (at(a) as number) - (at(b) as number));
 }
 
-/** The player's counters as the engine should hear them: none of a waiting colour's. */
+/**
+ * The player's counters as the engine should hear them: none of a waiting colour's, and none
+ * of a colour silenced by the Board button on the iPad's Simple page (`out`, spec 2026-11-04). A colour out is
+ * silent whether or not the piece's clock runs; it stays on the board.
+ */
 export function cellsSoundingAt<C extends { colour: ColourId }>(
   cells: readonly C[], channels: readonly ColourChannel[], entries: ColourEntries | undefined, pieceSec: number | null,
+  out?: ReadonlySet<ColourId>,
 ): C[] {
   const waiting = new Set(waitingColours(channels, entries, pieceSec).map((ch) => ch.id));
+  if (out) for (const id of out) waiting.add(id);
   return waiting.size === 0 ? [...cells] : cells.filter((c) => !waiting.has(c.colour));
 }
 

@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import {
-  DEFAULT_REMOTE_TOUCH, FULL_REACH, mapReach, REMOTE_CONTROLS, secondTap, shouldReloadFor, stripValue, STRIP_STEP, TAP_REPEAT_MS,
+  DEFAULT_REMOTE_TOUCH, FULL_REACH, mapReach, MELODY_SOUNDS, REMOTE_CONTROLS, SIMPLE_ROWS, secondTap, shouldReloadFor, stripValue, STRIP_STEP, TAP_REPEAT_MS,
   TWO_TAP_IDLE, unmapReach,
-  type RemoteControlName, type RemoteLoopState, type RemoteMessage, type RemoteState, type RemoteTriggerName, type TwoTapPad,
+  type MelodySound, type RemoteControlName, type RemoteLoopState, type RemoteMessage, type RemoteState, type RemoteTriggerName,
+  type SimpleRow, type TwoTapPad,
 } from '../../remote/protocol';
+import { PICTURE_EMOJI } from '../../remote/simplePage';
 import { BUILD_ID, reloadedFor, reloadFor } from '../../remote/buildId';
 import { useRemoteLink } from '../../remote/useRemoteLink';
-import { WORDS } from './boardSequencer/words';
+import { SIMPLE_WORDS, WORDS } from './boardSequencer/words';
 import { BOARD_TOKENS } from './boardSequencer/theme/boardTokens';
 import './boardSequencer/theme/boardTheme.css';
 
@@ -220,12 +222,13 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
   const endTap = (): void => twoTap('endPiece', () => padTap('endPiece', { type: 'trigger', name: 'endPiece' }));
   const stopTap = (): void => twoTap('stopAll', () => padTap('stopAll', { type: 'trigger', name: 'stopAll' }));
   /** A loop or scene pad: acts on touch, repeat taps ignored for a moment. */
-  const padTap = (key: string, msg: RemoteMessage): void => {
-    if (!live) return;
+  const padTap = (key: string, msg: RemoteMessage): boolean => {
+    if (!live) return false;
     const now = performance.now();
-    if (now - (lastPad.current.get(key) ?? -Infinity) < TAP_REPEAT_MS) return;
+    if (now - (lastPad.current.get(key) ?? -Infinity) < TAP_REPEAT_MS) return false;
     lastPad.current.set(key, now);
     link.send(msg);
+    return true;
   };
   // A loop tapped while the laptop is stopped would wait in silence and start by itself
   // with Play, so it is refused, and the iPad says why. Once Play is pressed (the sound
@@ -295,7 +298,10 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
   // What this player's iPad shows, and how its strips behave — chosen on the laptop.
   const shownStrips = state?.shown?.strips ?? REMOTE_CONTROLS;
   const shownPads = PADS.filter((p) => (state?.shown?.pads ?? PADS.map((x) => x.name)).includes(p.name));
-  const loopsPage = state?.shown?.loopsPage !== false;
+  // The Simple page (spec 2026-11-04): New idea, the parts, what the melody plays and the
+  // loops, and nothing else. A laptop that does not say so gets the full page, as before.
+  const simple = state?.layout === 'simple';
+  const loopsPage = !simple && state?.shown?.loopsPage !== false;
   const locked = (name: RemoteControlName): boolean => state?.locked?.includes(name) === true;
   const follow = state?.stripMode === 'follow';
   const big = shownStrips.length <= 2;
@@ -424,6 +430,229 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
         animationName: 'admi-drain', animationDuration: `${confirmMs}ms`, animationTimingFunction: 'linear', animationFillMode: 'forwards',
       }}
     />
+  );
+
+  // ---- the Simple page (spec 2026-11-04): for playing live only -------------------------
+  // Each press flashes the button it pressed, as the pads do.
+  const [flashKey, setFlashKey] = useState<string | null>(null);
+  const flashOn = (key: string): void => {
+    setFlashKey(key);
+    setTimeout(() => setFlashKey((f) => (f === key ? null : f)), 300);
+  };
+  const soundRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const simpleOff = !live || learning;
+  const flashStyle = (key: string): CSSProperties => (flashKey === key
+    ? { outline: '5px solid var(--bs-fg)', outlineOffset: 4 }
+    : { outline: 'none' });
+  /** The edge a pressed button keeps (the stylesheet greys every [aria-pressed] edge otherwise). */
+  const pressedEdge = (colour: string): CSSProperties => ({ ['--bs-pressed-edge' as string]: colour } as CSSProperties);
+  /**
+   * Playing is lit, silent is dark (owner, 4 Nov 2026): one look for Drums, Calm /
+   * Busy and the board. Lit: a strong fill and a soft glow. Silent: the page's ground, a grey
+   * outline and dim words.
+   */
+  const lit = (look: 'playing' | 'silent'): CSSProperties => {
+    if (look === 'playing') {
+      return {
+        background: 'var(--bs-lit)', color: 'var(--bs-lit-fg)', border: '4px solid var(--bs-lit)',
+        boxShadow: '0 0 0 3px var(--bs-bg), 0 0 30px 8px var(--bs-lit-glow)', ...pressedEdge('var(--bs-lit)'),
+      };
+    }
+    return {
+      background: 'var(--bs-bg)', color: 'var(--bs-fg2)', border: '3px solid var(--bs-border-control)',
+      boxShadow: 'none', ...pressedEdge('var(--bs-border-control)'),
+    };
+  };
+  /** ● Playing or ○ Silent: a drawn dot and the word, never colour alone. */
+  const stateWords = (on: boolean, word: string, size: number): JSX.Element => (
+    <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: size, fontWeight: 800, flex: 'none' }}>
+      <span
+        aria-hidden="true"
+        data-dot={on ? '●' : '○'}
+        style={{
+          width: size, height: size, borderRadius: '50%', boxSizing: 'border-box', flex: 'none',
+          background: on ? 'currentColor' : 'transparent', border: '3px solid currentColor',
+        }}
+      />
+      {word}
+    </span>
+  );
+  /** Drums: no drums anywhere, or the drums back; playing or stopped. */
+  const drumsTap = (silent: boolean): void => {
+    if (learning) return;
+    if (padTap('drums', { type: 'drumsSound', silent: !silent })) flashOn('drums');
+  };
+  const feelTap = (f: 'calm' | 'busy'): void => {
+    if (learning) return;
+    // The lit one again: back to normal.
+    if (padTap(`feel-${f}`, { type: 'feel', feel: state?.feel === f ? 'normal' : f })) flashOn(`feel-${f}`);
+  };
+  const boardTap = (silent: boolean): void => {
+    if (learning) return;
+    if (padTap('board', { type: 'boardSound', silent: !silent })) flashOn('board');
+  };
+  const melodyTap = (sound: MelodySound): void => {
+    if (!live || learning) return;
+    // The one already chosen: nothing to change, only the flash.
+    if (state?.melody?.sound === sound) { flashOn(`sound-${sound}`); return; }
+    if (padTap(`sound-${sound}`, { type: 'melodySound', sound })) flashOn(`sound-${sound}`);
+  };
+  const melodySound = state?.melody?.sound ?? null;
+  const boardSilent = state?.boardSilent === true;
+  const drumsSilent = state?.drumsSilent === true;
+  const feel = state?.feel ?? 'normal';
+  // The rows the facilitator chose, and only those with something in them.
+  const rowsChosen = state?.rows ?? SIMPLE_ROWS;
+  const showRow = (r: SimpleRow): boolean => rowsChosen.includes(r) && (r !== 'melody' || state?.melody !== undefined);
+  const rowCount = SIMPLE_ROWS.filter(showRow).length;
+  // One or two rows: everything in them bigger, as they have the page to themselves.
+  const k = rowCount <= 2 ? 1.4 : 1;
+  const caption: CSSProperties = { fontSize: 16, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--bs-fg2)' };
+  // A board with counters on it, drawn: the Board button's picture.
+  const boardPicture = (
+    <span aria-hidden="true" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 5 * k, flex: 'none' }}>
+      {[0, 1, 2, 3].map((i) => (
+        <span key={i} style={{ width: 16 * k, height: 16 * k, borderRadius: '50%', background: i === 1 ? 'transparent' : 'currentColor', border: '3px solid currentColor', boxSizing: 'border-box' }} />
+      ))}
+    </span>
+  );
+  const simplePage = (
+    <div data-simple-page style={{ flex: '1 1 0', minHeight: 0, display: 'flex', flexDirection: 'column', gap: GAP + 4, opacity: simpleOff ? 0.4 : 1 }}>
+      {rowCount === 0 && (
+        <div style={{ flex: '1 1 0', display: 'grid', placeItems: 'center', textAlign: 'center', fontSize: 22, color: 'var(--bs-fg2)', padding: 20 }}>
+          {SIMPLE_WORDS.noRows}
+        </div>
+      )}
+
+      {/* Drums: one big wide toggle. Lit while the drums play; silent = no drums anywhere. */}
+      {showRow('drums') && (
+        <button
+          type="button"
+          aria-label={`${SIMPLE_WORDS.drums}: ${drumsSilent ? SIMPLE_WORDS.silent : SIMPLE_WORDS.playing}`}
+          aria-pressed={!drumsSilent}
+          aria-disabled={simpleOff || undefined}
+          data-flash={flashKey === 'drums' || undefined}
+          data-lit={!drumsSilent}
+          {...padProps('drums', () => drumsTap(drumsSilent))}
+          style={{
+            flex: '1.3 1 0', minHeight: 72, borderRadius: 32, touchAction: 'none',
+            display: 'flex', alignItems: 'center', gap: 24, padding: '0 32px',
+            ...lit(drumsSilent ? 'silent' : 'playing'), ...flashStyle('drums'),
+          }}
+        >
+          <span aria-hidden="true" style={{ fontSize: 56 * k, lineHeight: 1, flex: 'none', opacity: drumsSilent ? 0.45 : 1 }}>{PICTURE_EMOJI.drums}</span>
+          <span style={{ flex: '1 1 auto', textAlign: 'left', fontSize: 36 * k, fontWeight: 800 }}>{SIMPLE_WORDS.drums}</span>
+          {stateWords(!drumsSilent, drumsSilent ? SIMPLE_WORDS.silent : SIMPLE_WORDS.playing, 30 * k)}
+        </button>
+      )}
+
+      {/* Calm / Busy: two halves, the lit one is on; neither lit is normal. */}
+      {showRow('feel') && (
+        <div style={{ flex: '0.9 1 0', minHeight: 0, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: GAP + 4 }}>
+          {(['calm', 'busy'] as const).map((f) => {
+            const on = feel === f;
+            return (
+              <button
+                key={`feel-${f}`}
+                type="button"
+                aria-label={f === 'calm' ? SIMPLE_WORDS.calm : SIMPLE_WORDS.busy}
+                aria-pressed={on}
+                aria-disabled={simpleOff || undefined}
+                data-flash={flashKey === `feel-${f}` || undefined}
+                data-lit={on}
+                {...padProps(`feel-${f}`, () => feelTap(f))}
+                style={{
+                  minHeight: 0, minWidth: 0, borderRadius: 999, touchAction: 'none',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14, padding: '0 20px',
+                  ...lit(on ? 'playing' : 'silent'), ...flashStyle(`feel-${f}`),
+                }}
+              >
+                <span aria-hidden="true" style={{ fontSize: 34 * k, opacity: on ? 1 : 0.6 }}>{f === 'calm' ? '🌊' : '🔥'}</span>
+                <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
+                  <span style={{ fontSize: 26 * k, fontWeight: 800 }}>{f === 'calm' ? SIMPLE_WORDS.calm : SIMPLE_WORDS.busy}</span>
+                  {stateWords(on, f === 'calm' ? SIMPLE_WORDS.calmMeans : SIMPLE_WORDS.busyMeans, 16 * k)}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* What the melody plays: round buttons, the chosen one teal with ✓. */}
+      {showRow('melody') && (
+        <div style={{ flex: '1 1 0', minHeight: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <span aria-hidden="true" style={caption}>{SIMPLE_WORDS.melodyPlays}</span>
+          <div
+            role="radiogroup"
+            aria-label={SIMPLE_WORDS.melodyPlays}
+            style={{ flex: '1 1 0', minHeight: 0, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: GAP }}
+            // One Tab stop: the arrow keys move between the sounds.
+            onKeyDown={(e) => {
+              const focused = soundRefs.current.findIndex((b) => b === document.activeElement);
+              const from = focused >= 0 ? focused : Math.max(0, MELODY_SOUNDS.indexOf(melodySound ?? 'piano'));
+              const to = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? (from + 1) % MELODY_SOUNDS.length
+                : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? (from + MELODY_SOUNDS.length - 1) % MELODY_SOUNDS.length : -1;
+              if (to < 0) return;
+              e.preventDefault();
+              soundRefs.current[to]?.focus();
+            }}
+          >
+            {MELODY_SOUNDS.map((sound, i) => {
+              const chosen = melodySound === sound;
+              const tabbable = melodySound === null ? i === 0 : chosen;
+              return (
+                <button
+                  key={`sound-${sound}`}
+                  ref={(b) => { soundRefs.current[i] = b; }}
+                  type="button"
+                  role="radio"
+                  aria-checked={chosen}
+                  aria-label={SIMPLE_WORDS.sounds[sound]}
+                  aria-disabled={simpleOff || undefined}
+                  tabIndex={tabbable ? 0 : -1}
+                  data-flash={flashKey === `sound-${sound}` || undefined}
+                  {...padProps(`sound-${sound}`, () => melodyTap(sound))}
+                  style={{
+                    minHeight: 0, minWidth: 0, borderRadius: 999, touchAction: 'none',
+                    background: chosen ? 'var(--bs-pick)' : 'var(--bs-raised)', color: chosen ? 'var(--bs-pick-fg)' : 'var(--bs-fg)',
+                    border: `3px solid ${chosen ? 'var(--bs-pick)' : 'var(--bs-border-control)'}`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '0 8px', fontSize: 22 * k, fontWeight: 700,
+                    ...flashStyle(`sound-${sound}`),
+                  }}
+                >
+                  <span aria-hidden="true" style={{ fontSize: 28 * k }}>{PICTURE_EMOJI[sound]}</span>
+                  <span>{SIMPLE_WORDS.sounds[sound]}</span>
+                  {chosen && <span aria-hidden="true" style={{ fontSize: 24 * k, fontWeight: 800 }}>✓</span>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* The board's counters, as one button: lit while they play, dark while silenced. */}
+      {showRow('board') && (
+        <button
+          type="button"
+          aria-label={`${SIMPLE_WORDS.board}: ${boardSilent ? SIMPLE_WORDS.silent : SIMPLE_WORDS.playing}`}
+          aria-pressed={!boardSilent}
+          aria-disabled={simpleOff || undefined}
+          data-flash={flashKey === 'board' || undefined}
+          data-lit={!boardSilent}
+          {...padProps('board', () => boardTap(boardSilent))}
+          style={{
+            // Square corners: never mistaken for the round Drums above it.
+            flex: '0.9 1 0', minHeight: 72, borderRadius: 4, touchAction: 'none',
+            display: 'flex', alignItems: 'center', gap: 20, padding: '0 24px',
+            ...lit(boardSilent ? 'silent' : 'playing'), ...flashStyle('board'),
+          }}
+        >
+          {boardPicture}
+          <span style={{ flex: '1 1 auto', textAlign: 'left', fontSize: 28 * k, fontWeight: 800 }}>{SIMPLE_WORDS.board}</span>
+          {stateWords(!boardSilent, boardSilent ? SIMPLE_WORDS.silent : SIMPLE_WORDS.playing, 26 * k)}
+        </button>
+      )}
+    </div>
   );
 
   const page: CSSProperties = {
@@ -687,7 +916,9 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
         </div>
       )}
 
-      {(tab === 'play' || !loopsPage) && (<>
+      {simple && simplePage}
+
+      {!simple && (tab === 'play' || !loopsPage) && (<>
 
       {shownStrips.length > 0 && (
       <div style={{ flex: '1 1 0', display: 'grid', gridTemplateColumns: `repeat(${shownStrips.length}, 1fr)`, gap: GAP, minHeight: 0, opacity: live ? 1 : 0.4 }}>

@@ -39,7 +39,7 @@ describe('the Show status row (audit 2026-10-30, B1 and B14)', () => {
     });
     const warns = items.filter((x) => x.tone === 'warn').map((x) => x.text);
     expect(warns).toEqual([
-      '! Camera stopped', '! Hat not in sight: holding', '! iPad not reaching', "! Ableton's port has gone, so ADMI is playing its own sound.",
+      '! Camera stopped', '! Hat not in sight: holding', '! iPad not reaching', "! Ableton's port has gone, so Timbo is playing its own sound.",
     ]);
     expect(items.slice(0, 4).every((x) => x.tone === 'warn')).toBe(true);
     // The camera can be tried again from the row.
@@ -82,7 +82,7 @@ describe('the Show status row (audit 2026-10-30, B1 and B14)', () => {
 
   it('Ableton back: said calmly, with Switch to Ableton', () => {
     expect(showStatusItems({ ...QUIET, sound: 'back' })[0]).toMatchObject({
-      tone: 'note', text: 'Ableton is back. ADMI is still playing its own sound until you switch.', actions: ['switchToAbleton'],
+      tone: 'note', text: 'Ableton is back. Timbo is still playing its own sound until you switch.', actions: ['switchToAbleton'],
     });
     expect(showStatusItems({ ...QUIET, sound: 'notFound' })[0]).toMatchObject({ tone: 'warn', text: '! Ableton port not found' });
   });
@@ -139,5 +139,59 @@ describe('Simplify says what is left, by name (B23)', () => {
   });
   it('with no loop playing, the player alone', () => {
     expect(simplifiedLine('Tim', null)).toBe('Simplified: Tim alone');
+  });
+});
+
+describe('Show: what the iPad’s Simple page set (spec 2026-11-04)', () => {
+  it('Calm or Busy: said, with the button back to normal; Normal says nothing', () => {
+    expect(showStatusItems({ ...QUIET, feel: 'calm' })).toEqual([
+      { key: 'feel', tone: 'note', text: 'Calm (from the iPad): the loops play only their main beats, and no Extra notes', actions: ['feelNormal'] },
+    ]);
+    expect(showStatusItems({ ...QUIET, feel: 'busy' })[0]?.text).toBe('Busy (from the iPad): Extra notes round everything');
+    expect(showStatusItems({ ...QUIET, feel: 'normal' })).toEqual([]);
+  });
+
+  it('the drums silenced on the iPad: said, with the button that brings them back', () => {
+    expect(showStatusItems({ ...QUIET, drumsSilent: true })).toEqual([
+      { key: 'drumsSilent', tone: 'note', text: 'Drums silenced on the iPad', actions: ['drumsBack'] },
+    ]);
+    expect(showStatusItems({ ...QUIET, drumsSilent: false })).toEqual([]);
+  });
+
+  it('the board silenced on the iPad: said, with the button that brings the counters back', () => {
+    expect(showStatusItems({ ...QUIET, boardSilent: true })).toEqual([
+      { key: 'boardSilent', tone: 'note', text: 'Board counters silenced on the iPad', actions: ['boardBack'] },
+    ]);
+    expect(showStatusItems({ ...QUIET, boardSilent: false })).toEqual([]);
+  });
+});
+
+describe('how well the hat is seen, in Show\'s row (owner, 4 Nov 2026: the hat felt unreliable and nobody could tell)', () => {
+  const seen = (cap: number) => ({ cap, face: 0, lost: 1, fps: 28, seconds: 10 });
+  const hat = (h: NonNullable<ShowStatusInput['hat']>) => showStatusItems({ ...QUIET, hat: h })[0];
+
+  it('found and seen well: the share beside the tick, so it can be glanced at', () => {
+    const i = hat({ state: 'found', locked: false, values: [], seen: seen(0.96) });
+    expect([i.tone, i.text]).toEqual(['ok', 'Hat ✓ · seen 96%']);
+  });
+
+  it('found now but seen under 90% of the last 10 s: a warning in the row', () => {
+    const i = hat({ state: 'found', locked: false, values: [], seen: seen(0.62) });
+    expect([i.tone, i.text]).toEqual(['warn', '! Hat seen only 62% of the last 10 s']);
+  });
+
+  it('no report yet (the camera just started): as before', () => {
+    expect(hat({ state: 'found', locked: false, values: [], seen: null }).text).toBe('Hat ✓');
+    expect(hat({ state: 'holding', locked: false, values: [], seen: seen(0.5) }).text).toBe('! Hat not in sight: holding');
+  });
+});
+
+describe('following the head, in Show\'s row', () => {
+  const hat = (h: NonNullable<ShowStatusInput['hat']>) => showStatusItems({ ...QUIET, hat: h })[0];
+  it('says Head, not Hat, and a bow in words', () => {
+    expect(hat({ state: 'head', locked: false, values: [] }).text).toBe('Head ✓');
+    expect(hat({ state: 'bow', locked: false, values: [] }).text).toBe('Head ✓ (bowed)');
+    const low = hat({ state: 'head', locked: false, values: [], seen: { cap: 0.6, face: 0, lost: 3, fps: 25, seconds: 10 } });
+    expect([low.tone, low.text]).toEqual(['warn', '! Face seen only 60% of the last 10 s']);
   });
 });

@@ -81,7 +81,8 @@ import {
 import { PLACE_WORDS, type CheckPlace, type ReadyItem } from './boardSequencer/play/ReadyCheck';
 import { PlayPanel, type PlayTab } from './boardSequencer/play/PlayPanel';
 import { forgetSoundsBefore } from './boardSequencer/play/ColourTable';
-import { WORDS } from './boardSequencer/words';
+import { SIMPLE_WORDS, WORDS } from './boardSequencer/words';
+import { soundOptionName } from './boardSequencer/soundCatalogue';
 import { HeaderMore } from './boardSequencer/ui/HeaderMore';
 import { ExplainSwitch, Note } from './boardSequencer/ui/explain';
 import { CapPanel, CAP_ROLE_LABELS, CAP_PAUSE_TEXT, capHudText, capValueText, hatJobsLine, hatResultText } from './boardSequencer/play/CapPanel';
@@ -89,7 +90,8 @@ import { useCapTracker } from './boardSequencer/useCapTracker';
 import { audienceNoticeText, useAudienceWindow } from '../../audience/useAudienceWindow';
 import { audienceHat, audienceNotes, audienceState, drawStalled, dueNotes } from '../../audience/feed';
 import { useEmptyBoardWait } from './boardSequencer/useEmptyBoardWait';
-import type { BoardActivity, CapSettings } from '../../tracking/cap/capTracker';
+import { mergeReach, type BoardActivity, type CapSettings } from '../../tracking/cap/capTracker';
+import { HAT_SEEN_LOW } from '../../tracking/cap/hatSeen';
 import { BoardLegend } from './boardSequencer/components/BoardLegend';
 import { soundNameFor } from './boardSequencer/soundOptions';
 import { SoundTab, type ChannelSoundPatch } from './boardSequencer/play/SoundTab';
@@ -178,8 +180,12 @@ import { useRemoteLink } from '../../remote/useRemoteLink';
 import {
   dynamicsFromValue, fullReachMap, ipadPages, makeRemoteCode, reachFromSamples, REMOTE_CONTROLS, REMOTE_INFO_PATH,
   SECOND_TAP_MIN_MS, tempoFromValue, valueFromTempo, valueFromVelocity,
-  type RemoteControlName, type RemoteMessage, type RemoteState, type RemoteTriggerName,
+  SIMPLE_ROWS, type Feel, type RemoteControlName, type RemoteMessage, type RemoteState, type RemoteTriggerName,
 } from '../../remote/protocol';
+import {
+  melodyChoice, melodyColour, readBoardSilent, readDrumsSilent, readFeel, silencedColourIds, writeBoardSilent, writeDrumsSilent,
+  writeFeel,
+} from '../../remote/simplePage';
 import { BUILD_ID } from '../../remote/buildId';
 import { rotateCorners } from '../../tracking/boardDetect/orientation';
 import { alikePairs, applyDetectedColours } from './boardSequencer/applyDetectedColours';
@@ -222,7 +228,7 @@ import { SCALE_PRESETS, NOTE_NAMES } from '../../songs/boardSequencerScale';
 import { clearLoopSlot, emptyLoopBank, seedLoopBank } from '../../songs/loopBank';
 import {
   CONTROL_RANGE_LIMITS, clampToControl, DEFAULT_BOARD_SEQUENCER_CONFIG, NEW_PLAYER_SOUND, type BoardSequencerStored, type BoardPoint, type StoredLoopCell,
-  isSafeShowLayout, safeShowLayout,
+  isSimpleLayout,
 } from '../../profiles/BoardSequencerConfig';
 import {
   loadActiveBoardConfig as loadBoardSequencerConfig, saveActiveBoardConfig as saveBoardSequencerConfig,
@@ -321,6 +327,10 @@ const WORKSPACE_KEY = 'admi-board-workspace';
 /** How often a take being played is kept (storage/sessionArchive). */
 const TAKE_SAVE_MS = 5000;
 const REMOTE_ENABLED_KEY = 'admi-remote-enabled';
+/** This browser tab's own storage (the iPad's Board and Calm / Busy live here), or null where it is blocked. */
+const tabStore = (): Storage | null => {
+  try { return typeof window !== 'undefined' ? window.sessionStorage : null; } catch { return null; }
+};
 const REMOTE_CODE_KEY = 'admi-remote-code';
 const REMOTE_CONTROL_WORDS: Record<RemoteControlName, string> = {
   // The laptop's words, so the iPad, the laptop and Help say the same thing.
@@ -527,6 +537,22 @@ export default function BoardSequencerScreen() {
   // already set up.
   const [calibrating, setCalibrating] = useState<'tap' | 'review' | null>(null);
 
+  // The iPad's Simple page (spec 2026-11-04). The Board button: the board's counters silenced
+  // (the loops, band and Extra notes carry on). Calm / Busy: how much plays. Both live states,
+  // kept through Stop and a reload, for this browser tab only.
+  const [boardSilent, setBoardSilentState] = useState<boolean>(() => readBoardSilent(tabStore()));
+  const boardSilentRef = useRef(boardSilent);
+  useEffect(() => { writeBoardSilent(tabStore(), boardSilent); }, [boardSilent]);
+  // Drums: no drums anywhere while silent (the board's, the loops', the band's).
+  const [drumsSilent, setDrumsSilentState] = useState<boolean>(() => readDrumsSilent(tabStore()));
+  const drumsSilentRef = useRef(drumsSilent);
+  useEffect(() => { writeDrumsSilent(tabStore(), drumsSilent); }, [drumsSilent]);
+  /** The colours the Board or Drums button silenced, for the runtime's filter before the engine; null = none. */
+  const silencedRef = useRef<ReadonlySet<string> | null>(null);
+  const [feel, setFeelState] = useState<Feel>(() => readFeel(tabStore()));
+  const feelRef = useRef<Feel>(feel);
+  useEffect(() => { writeFeel(tabStore(), feel); }, [feel]);
+
   // The runtime owns the camera, the per-camera-frame detection loop and the rAF draw
   // loop; this screen supplies the callbacks below and drives start/stop through its refs.
   const callbacksRef = useRef<BoardRuntimeCallbacks>(NOOP_RUNTIME_CALLBACKS);
@@ -535,8 +561,17 @@ export default function BoardSequencerScreen() {
     dismiss, letGoGhosts, knockRef, latestFrameRef, lastFrameAtRef,
   } = useBoardRuntime({
     cameraDeviceId: config.cameraDeviceId, cameraRetry, calibrated, laptop, configRef, callbacksRef, capValuesRef, boardActivityRef, newLoopRef,
-    pieceClockRef: clockStartRef,
+    pieceClockRef: clockStartRef, silencedRef,
   });
+  /** The colours silenced on the board now: all that play notes while the Board is silent, the drums while Drums is. */
+  const outIds = useMemo(() => silencedColourIds(config.channels, { board: boardSilent, drums: drumsSilent }), [config.channels, boardSilent, drumsSilent]);
+  const outIdSet = useMemo(() => (outIds.length > 0 ? new Set(outIds) : null), [outIds]);
+  silencedRef.current = outIdSet;
+  /** What the melody plays, for the Simple page, worked out only when the colours change. */
+  const simpleMelody = useMemo(() => {
+    const mel = melodyColour(config.channels);
+    return mel ? { sound: melodyChoice(mel) } : null;
+  }, [config.channels]);
   /** Something else sets the speed now: a Speed counter on the board, or the hat on Speed. */
   const speedOwnedElsewhere = (): boolean =>
     capValuesRef.current.tempo !== undefined || latestFrameRef.current?.controls.values.tempo !== undefined;
@@ -566,9 +601,10 @@ export default function BoardSequencerScreen() {
     mouse: capMouse,
     pointerRef: capPointerRef,
     valuesRef: capValuesRef,
-    onReachLearnt: (reachX, reachY) => {
-      update({ cap: { ...configRef.current.cap, reachX, reachY } });
-      announce(reachX || reachY ? 'Your range is learnt.' : 'The cap hardly moved, so the whole picture stays the range. Try again, moving a little further.');
+    onReachLearnt: (axis, reach) => {
+      const way = axis === 'x' ? 'side to side' : 'up and down';
+      update({ cap: { ...configRef.current.cap, ...mergeReach(configRef.current.cap, axis, reach, configRef.current.cap.follow) } });
+      announce(reach ? `Your ${way} is learnt.` : `The cap hardly moved ${way}, so the whole picture stays the range that way. Try again, moving a little further.`);
     },
     boardCameraId: (!laptop && camInfo?.deviceId) || config.cameraDeviceId,
     activityRef: boardActivityRef,
@@ -943,7 +979,7 @@ export default function BoardSequencerScreen() {
   const [remoteInfo, setRemoteInfo] = useState<{ addresses: string[]; port: number | null; lan: boolean } | null>(null);
   /** The last thing the iPad did, shown on screen for a moment so it is seen, not only heard. */
   const [remoteNote, setRemoteNote] = useState<{ text: string; at: number } | null>(null);
-  /** "Use the safe show layout" was just pressed: say what it did. */
+  /** "Use the simple layout" was just pressed: say what it did. */
   const [safeLayoutSet, setSafeLayoutSet] = useState(false);
   // Learning the player's reach: the strips report raw finger positions until Done.
   const [reachLearning, setReachLearning] = useState(false);
@@ -1043,6 +1079,15 @@ export default function BoardSequencerScreen() {
       ...(resumeFrom !== null && !running ? { carryOnWaiting: true } : {}),
       // The board's light or dark (A11); Show is always dark.
       theme: view === 'bigBoard' ? 'dark' : config.themeMode,
+      // The Simple page (spec 2026-11-04): only when the player has it.
+      ...(isSimpleLayout(config) ? {
+        layout: 'simple' as const,
+        ...(simpleMelody ? { melody: simpleMelody } : {}),
+        feel,
+        drumsSilent,
+        boardSilent,
+        rows: config.remoteSimpleRows,
+      } : {}),
     };
     remoteStateRef.current = state;
     remoteLink.send({ type: 'state', state });
@@ -1050,7 +1095,12 @@ export default function BoardSequencerScreen() {
     config.fillKept, config.evolveHoldLap, muted, running, starting, pieceStarting, config.remoteReach, reachLearning,
     config.loopSlots, config.loopNames, config.scenes, config.currentScene, wantedSlots, appliedSlots,
     config.remoteStrips, config.remotePads, config.remoteLoopsPage, config.remoteLocked, config.remoteStripMode, config.loopFadePasses, clock,
-    config.remoteTouch, beatOn, helloAsk, resumeFrom, view, config.themeMode]);
+    config.remoteTouch, beatOn, helloAsk, resumeFrom, view, config.themeMode, config.remoteLayoutKind, simpleMelody, boardSilent, drumsSilent, feel, config.remoteSimpleRows]);
+  /** Drawn faded on the board: colours waiting for their time in the piece, and those the Board button silenced. */
+  const fadedColours = useMemo((): ReadonlySet<string> | undefined => {
+    const waiting = running ? waitingNow : [];
+    return waiting.length === 0 && outIds.length === 0 ? undefined : new Set([...waiting, ...outIds]);
+  }, [running, waitingNow, outIds]);
   // The iPad's End piece waits for at most its window (and a little for the link); it is
   // over when the piece stops or the iPad goes.
   useEffect(() => {
@@ -1135,8 +1185,8 @@ export default function BoardSequencerScreen() {
       if (running && !midiHold) {
         setMidiHold(true);
         setMidiBanner('lost');
-        sessionLogRef.current.action('laptop', 'Ableton port gone: ADMI plays its own sound');
-        announce("Ableton's port has gone, so ADMI is playing its own sound.");
+        sessionLogRef.current.action('laptop', 'Ableton port gone: Timbo plays its own sound');
+        announce("Ableton's port has gone, so Timbo is playing its own sound.");
       }
       return;
     }
@@ -1188,8 +1238,8 @@ export default function BoardSequencerScreen() {
     <div role="alert" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', padding: '8px 12px', borderRadius: 'var(--bs-radius-md)', background: midiBanner === 'lost' ? 'var(--bs-warn)' : 'var(--bs-elev)', color: midiBanner === 'lost' ? 'var(--bs-bg)' : 'var(--bs-fg)', fontWeight: 600 }}>
       <span style={{ flex: '1 1 240px' }}>
         {midiBanner === 'lost'
-          ? "Ableton's port has gone, so ADMI is playing its own sound."
-          : 'Ableton is back. ADMI is still playing its own sound until you switch.'}
+          ? "Ableton's port has gone, so Timbo is playing its own sound."
+          : 'Ableton is back. Timbo is still playing its own sound until you switch.'}
       </span>
       {midiBanner === 'back' && <Button tone="primary" onClick={switchBackToAbleton}>Switch to Ableton</Button>}
       <Button tone="secondary" onClick={() => setMidiBanner(null)}>{midiBanner === 'lost' ? 'OK' : 'Not now'}</Button>
@@ -2555,6 +2605,10 @@ export default function BoardSequencerScreen() {
     // engine doesn't know which counters are down, and step 1 went by in silence.
     engine.start({ waitForBoard: true });
     engineRef.current = engine;
+    // Calm / Busy from the first beat (spec 2026-11-04).
+    engine.setFeel(feelRef.current);
+    // No drums from the loops or the band from the first beat, while Drums is silent.
+    engine.setSilentParts(drumsSilentRef.current ? ['drums'] : []);
     // One pad per cell of the loop lane — a row of steps or a column of rows.
     loopBankRef.current = seedLoopBank(
       zoneSlotCount(cfg.loopZone, cfg.rows, cfg.cols), cfg.loopSlots, loopBankRef.current,
@@ -3752,7 +3806,7 @@ export default function BoardSequencerScreen() {
     const waiting = waitingColours(c.channels, c.colourComesInAt, 0).map((ch) => ch.id);
     const playing = engineRef.current;
     if (playing && waiting.length > 0) {
-      playing.setActiveCells(cellsSoundingAt(activeCellsRef.current, c.channels, c.colourComesInAt, 0));
+      playing.setActiveCells(cellsSoundingAt(activeCellsRef.current, c.channels, c.colourComesInAt, 0, silencedRef.current ?? undefined));
       playing.silenceColours(waiting);
     }
     waitingIdsRef.current = null;
@@ -3967,7 +4021,7 @@ export default function BoardSequencerScreen() {
     if (!file) return;
     let parsed: BoardBackup | null = null;
     try { parsed = parseBoardBackup(JSON.parse(await file.text())); } catch { parsed = null; }
-    if (!parsed) { setRestoreError(`${file.name} is not an ADMI board backup.`); return; }
+    if (!parsed) { setRestoreError(`${file.name} is not a Timbo board backup.`); return; }
     setRestoreTarget(parsed);
   };
   const confirmRestore = async (b: BoardBackup): Promise<void> => {
@@ -3996,10 +4050,63 @@ export default function BoardSequencerScreen() {
     evolve: c.evolveAmount <= 0 ? 'Off' : `${Math.round(c.evolveAmount * 100)}%`,
   });
 
-  /** One press sets the iPad out for the show (decision F3), from the iPad settings or the check. */
-  const applySafeShowLayout = (): void => {
-    update(safeShowLayout(configRef.current.remoteTouch));
+  /** One press gives the iPad the Simple page for the show (spec 2026-11-04), from the iPad settings or the check. */
+  const applySimpleLayout = (): void => {
+    update({ remoteLayoutKind: 'simple' });
     setSafeLayoutSet(true);
+  };
+  /** A change to what the full layout shows: the iPad has the full layout from now (a box ticked never seems to do nothing). */
+  const updateFullLayout = (patch: Partial<BoardSequencerStored>): void => {
+    update({ ...patch, remoteLayoutKind: 'custom' });
+    setSafeLayoutSet(false);
+  };
+  /**
+   * The Board button: the board's counters silenced or playing again (the loops, band and Extra
+   * notes carry on). Silenced while playing, they go at once: the engine hears it now, and what
+   * they had ringing or queued is cut, as for a colour waiting for its time when the piece starts.
+   */
+  const setBoardSilent = (silent: boolean): void => {
+    boardSilentRef.current = silent;
+    setBoardSilentState(silent);
+    silenceNow();
+    sessionLogRef.current.action(logActorRef.current, silent ? 'board counters silenced' : 'board counters back');
+  };
+  /**
+   * Drums (the iPad's Simple page): silent means no drums anywhere, the board's drum counters
+   * (by the same filter as the Board button), every loop's drum notes and the band's drums (in
+   * the engine). The loops' other parts, the board's other colours and Extra notes carry on.
+   */
+  const setDrumsSilent = (silent: boolean): void => {
+    drumsSilentRef.current = silent;
+    setDrumsSilentState(silent);
+    engineRef.current?.setSilentParts(silent ? ['drums'] : []);
+    silenceNow();
+    sessionLogRef.current.action(logActorRef.current, silent ? 'drums silenced' : 'drums back');
+  };
+  /**
+   * The colours silenced on the board, for the runtime's filter, set at once. Newly silenced
+   * while playing, they go now: the engine hears it, and what they had ringing or queued is cut,
+   * as for a colour waiting for its time when the piece starts.
+   */
+  const silenceNow = (): void => {
+    const c = configRef.current;
+    const before = silencedRef.current;
+    const ids = silencedColourIds(c.channels, { board: boardSilentRef.current, drums: drumsSilentRef.current });
+    silencedRef.current = ids.length > 0 ? new Set(ids) : null;
+    const added = ids.filter((id) => !before?.has(id));
+    const engine = engineRef.current;
+    if (added.length > 0 && engine && runningRef.current && silencedRef.current) {
+      const pieceSec = clockStartRef.current === null ? null : (performance.now() - clockStartRef.current) / 1000;
+      engine.setActiveCells(playerCellsFor(newLoopRef.current, cellsSoundingAt(activeCellsRef.current, c.channels, c.colourComesInAt, pieceSec, silencedRef.current)));
+      engine.silenceColours(added);
+    }
+  };
+  /** Calm, Normal or Busy (the iPad's Simple page): for the whole piece, from the next beat. */
+  const setFeel = (f: Feel): void => {
+    feelRef.current = f;
+    setFeelState(f);
+    engineRef.current?.setFeel(f);
+    sessionLogRef.current.action(logActorRef.current, f);
   };
   /** An iPad page from before an update, in the player's name: said on the laptop only. */
   const ipadOutOfDateText = `${playerWords(activePlayer?.name ?? null).Name}'s iPad page is out of date: reload it on the iPad.`;
@@ -4076,6 +4183,28 @@ export default function BoardSequencerScreen() {
       if (msg.index === 'next') nextScene();
       else goScene(msg.index);
       setRemoteNote({ text: 'iPad: scene', at: performance.now() });
+    } else if (msg.type === 'drumsSound') {
+      // Playing or stopped, as the Board.
+      setDrumsSilent(msg.silent);
+      setRemoteNote({ text: `iPad: ${SIMPLE_WORDS.drums} ${msg.silent ? 'silenced' : 'back'}`, at: performance.now() });
+    } else if (msg.type === 'feel') {
+      // Playing or stopped: it is how the next run plays too.
+      setFeel(msg.feel);
+      setRemoteNote({ text: `iPad: ${msg.feel === 'calm' ? SIMPLE_WORDS.calm : msg.feel === 'busy' ? SIMPLE_WORDS.busy : 'Normal'}`, at: performance.now() });
+    } else if (msg.type === 'boardSound') {
+      // Playing or stopped.
+      setBoardSilent(msg.silent);
+      setRemoteNote({ text: `iPad: ${SIMPLE_WORDS.board} ${msg.silent ? 'silenced' : 'back'}`, at: performance.now() });
+    } else if (msg.type === 'melodySound') {
+      // As choosing it on the Sound tab: the same call, so Ableton follows too.
+      const mel = melodyColour(c.channels);
+      if (!mel) {
+        setRemoteNote({ text: 'iPad: no melody colour to change', at: performance.now() });
+        return;
+      }
+      setChannelSound(mel.id, { instrument: msg.sound });
+      sessionLogRef.current.action(logActorRef.current, `melody plays ${soundOptionName(msg.sound)}`);
+      setRemoteNote({ text: `iPad: Melody plays ${soundOptionName(msg.sound)}`, at: performance.now() });
     } else if (msg.type === 'trigger') {
       if (msg.name === 'newIdea') {
         // Stopped, New idea would switch Extra notes on by itself and change how the piece
@@ -4128,8 +4257,8 @@ export default function BoardSequencerScreen() {
           {ipadOutOfDate && <span role="alert" style={{ fontSize: 14, fontWeight: 600, color: 'var(--bs-warn)' }}>{ipadOutOfDateText}</span>}
           {remoteLink.others > 0 ? null : remoteInfo && !remoteInfo.lan ? (
             <span style={{ fontSize: 14, color: 'var(--bs-warn)' }}>
-              The iPad can&apos;t reach this laptop yet: ADMI was started without the local
-              network. Close ADMI&apos;s server and start it with <code>npm run show</code> (for a
+              The iPad can&apos;t reach this laptop yet: Timbo was started without the local
+              network. Close Timbo&apos;s server and start it with <code>npm run show</code> (for a
               performance) or <code>npm run dev:ipad</code> (for testing), then turn this on again.
             </span>
           ) : (
@@ -4207,36 +4336,58 @@ export default function BoardSequencerScreen() {
               </Button>
             </div>
           </div>
-          {/* For the show: one button sets out the iPad so a stray touch cannot stop, jump,
-              silence or speed up the piece (show decision F3). New players start with it. */}
+          {/* For the show: one button gives the iPad the Simple page, so a stray touch cannot
+              stop, jump, silence or speed up the piece (spec 2026-11-04). New players start with it. */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
             <span style={{ fontWeight: 600, fontSize: 14 }}>For the show</span>
             <Note>
-              The safe show layout: the iPad shows only the Extra notes strip, New idea and End piece (two taps).
-              {`Mute, the loop and scene pads, Next scene, Capture and ${WORDS.stopLoops} are hidden, and Speed is locked.`}
+              The simple layout: one page with New idea, the parts (in or out), what the melody plays and the kept loops.
+              No strips, and no Stop, End piece or Mute: Speed is set by the hat.
             </Note>
             <div>
-              <Button tone="secondary" onClick={applySafeShowLayout}>
-                Use the safe show layout
-              </Button>
+              {isSimpleLayout(config) ? (
+                <Button tone="quiet" onClick={() => updateFullLayout({})}>{SIMPLE_WORDS.useFull}</Button>
+              ) : (
+                <Button tone="secondary" onClick={applySimpleLayout}>{SIMPLE_WORDS.useSimple}</Button>
+              )}
             </div>
+            {isSimpleLayout(config) && (
+              <fieldset style={{ border: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <legend style={{ fontWeight: 600, fontSize: 14, padding: 0 }}>{SIMPLE_WORDS.rowsCaption}</legend>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  {SIMPLE_ROWS.map((r) => (
+                    <label key={`row-${r}`} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 14 }}>
+                      <input
+                        type="checkbox" checked={config.remoteSimpleRows.includes(r)}
+                        onChange={(e) => update({ remoteSimpleRows: SIMPLE_ROWS.filter((x) => (x === r ? e.target.checked : config.remoteSimpleRows.includes(x))) })}
+                      />
+                      {SIMPLE_WORDS.rows[r]}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            )}
             <span role="status" style={{ fontSize: 14, fontWeight: 600, color: 'var(--bs-ok)' }}>
-              {!isSafeShowLayout(config) ? ''
+              {!isSimpleLayout(config) ? ''
                 : safeLayoutSet
-                  ? `Done: the iPad now shows only the Extra notes strip, New idea and End piece. Speed is locked. Mute, the loops, the scenes, Next scene, Capture and ${WORDS.stopLoops} are hidden.`
-                  : '✓ The iPad has the safe show layout.'}
+                  ? 'Done: the iPad now shows the simple layout: New idea, the parts, what the melody plays and the loops.'
+                  : '✓ The iPad has the simple layout.'}
             </span>
           </div>
           {/* Fewer, bigger targets: the facilitator chooses what the iPad shows. */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
-            <span style={{ fontWeight: 600, fontSize: 14 }}>What the iPad shows</span>
-            <Note>Fewer things means bigger things. Untick what this player will not use.</Note>
+            <span style={{ fontWeight: 600, fontSize: 14 }}>What the iPad shows (the full layout)</span>
+            <Note>
+              {isSimpleLayout(config)
+                ? 'Ticking or unticking a box here gives the iPad the full layout instead of the simple one.'
+                : 'Fewer things means bigger things. Untick what this player will not use.'}
+            </Note>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
               {REMOTE_CONTROLS.map((n) => (
                 <label key={`show-${n}`} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 14 }}>
                   <input
                     type="checkbox" checked={config.remoteStrips.includes(n)}
-                    onChange={(e) => update({ remoteStrips: REMOTE_CONTROLS.filter((x) => (x === n ? e.target.checked : config.remoteStrips.includes(x))) })}
+                    onChange={(e) => updateFullLayout({ remoteStrips: REMOTE_CONTROLS.filter((x) => (x === n ? e.target.checked : config.remoteStrips.includes(x))) })}
                   />
                   {REMOTE_CONTROL_WORDS[n]}
                 </label>
@@ -4247,13 +4398,13 @@ export default function BoardSequencerScreen() {
                 <label key={`showpad-${n}`} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 14 }}>
                   <input
                     type="checkbox" checked={config.remotePads.includes(n)}
-                    onChange={(e) => update({ remotePads: (['newIdea', 'newSound', 'keep', 'mute'] as RemoteTriggerName[]).filter((x) => (x === n ? e.target.checked : config.remotePads.includes(x))) })}
+                    onChange={(e) => updateFullLayout({ remotePads: (['newIdea', 'newSound', 'keep', 'mute'] as RemoteTriggerName[]).filter((x) => (x === n ? e.target.checked : config.remotePads.includes(x))) })}
                   />
                   {REMOTE_TRIGGER_WORDS[n]}
                 </label>
               ))}
               <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 14 }}>
-                <input type="checkbox" checked={config.remoteLoopsPage} onChange={(e) => update({ remoteLoopsPage: e.target.checked })} />
+                <input type="checkbox" checked={config.remoteLoopsPage} onChange={(e) => updateFullLayout({ remoteLoopsPage: e.target.checked })} />
                 {/* One tick brings back all of these: said, so it is never a surprise (R2-T3-06). */}
                 {`Loops & scenes page (also shows Capture, ${WORDS.stopLoops} and End piece)`}
               </label>
@@ -4265,7 +4416,7 @@ export default function BoardSequencerScreen() {
                 <label key={`lock-${n}`} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 14 }}>
                   <input
                     type="checkbox" checked={config.remoteLocked.includes(n)}
-                    onChange={(e) => update({ remoteLocked: REMOTE_CONTROLS.filter((x) => (x === n ? e.target.checked : config.remoteLocked.includes(x))) })}
+                    onChange={(e) => updateFullLayout({ remoteLocked: REMOTE_CONTROLS.filter((x) => (x === n ? e.target.checked : config.remoteLocked.includes(x))) })}
                   />
                   {`🔒 ${REMOTE_CONTROL_WORDS[n]}`}
                 </label>
@@ -4323,7 +4474,7 @@ export default function BoardSequencerScreen() {
                   <input
                     type="checkbox"
                     checked={config.remoteTouch.playExtras.includes(x)}
-                    onChange={(e) => update({ remoteTouch: { ...config.remoteTouch, playExtras: e.target.checked ? [...config.remoteTouch.playExtras, x] : config.remoteTouch.playExtras.filter((y) => y !== x) } })}
+                    onChange={(e) => updateFullLayout({ remoteTouch: { ...config.remoteTouch, playExtras: e.target.checked ? [...config.remoteTouch.playExtras, x] : config.remoteTouch.playExtras.filter((y) => y !== x) } })}
                   />
                   {word}
                 </label>
@@ -4333,7 +4484,7 @@ export default function BoardSequencerScreen() {
                   <input
                     type="checkbox"
                     checked={config.remoteTouch.playLoops.includes(slot)}
-                    onChange={(e) => update({ remoteTouch: { ...config.remoteTouch, playLoops: e.target.checked ? [...config.remoteTouch.playLoops, slot].sort((a, b) => a - b) : config.remoteTouch.playLoops.filter((y) => y !== slot) } })}
+                    onChange={(e) => updateFullLayout({ remoteTouch: { ...config.remoteTouch, playLoops: e.target.checked ? [...config.remoteTouch.playLoops, slot].sort((a, b) => a - b) : config.remoteTouch.playLoops.filter((y) => y !== slot) } })}
                   />
                   {loopLabel(config.loopNames, slot)}
                 </label>
@@ -4343,7 +4494,7 @@ export default function BoardSequencerScreen() {
               <input
                 type="checkbox"
                 checked={config.remoteTouch.showNext}
-                onChange={(e) => update({ remoteTouch: { ...config.remoteTouch, showNext: e.target.checked } })}
+                onChange={(e) => updateFullLayout({ remoteTouch: { ...config.remoteTouch, showNext: e.target.checked } })}
               />
               Show Next scene on the iPad (untick if a brush against it could change the whole sound)
             </label>
@@ -4816,6 +4967,10 @@ export default function BoardSequencerScreen() {
         ? { label: 'Red cap: its camera could not be opened', state: 'problem', fix: 'Cap tab: choose the camera facing the player, or switch the cap off.', place: 'cap' }
         : cap.view.camera === 'only-board'
           ? { label: 'Red cap: no camera of its own (the only one is the board’s)', state: 'problem', fix: 'Connect a second camera facing the player, or switch the cap off.', place: 'cap' }
+        : c.cap.follow === 'head'
+          ? (cap.view.seen
+            ? { label: `Red cap: following the way the head points${cap.view.source === 'bow' ? ' (bowed)' : ''}`, state: 'ok' }
+            : { label: 'Red cap: the face is not in sight', state: 'warn', place: 'cap', fix: 'Cap tab: check the camera faces the player and the face is lit.' })
         : cap.view.seen && cap.view.source !== 'face' && !c.cap.learntHat
           // Not learnt, it may be following a red chair (B7): a thing to check, not "found".
           ? { label: 'Red cap: a red thing is found, but the hat is not learnt', state: 'warn', fix: 'Cap tab: Learn the hat, so it is sure it is the hat.', place: 'cap' }
@@ -4824,6 +4979,14 @@ export default function BoardSequencerScreen() {
           : { label: 'Red cap: not in sight', state: 'warn', place: 'cap', fix: c.cap.learntHat
             ? 'Cap tab: check the camera sees the player, or learn the hat again.'
             : 'Cap tab: check the camera sees the player and click the cap to learn its colour.' });
+      // Seen under 90% of the last 10 s: the hat is being lost, even if it is found this moment.
+      const seen = cap.view.seen10s;
+      if (seen && seen.cap < HAT_SEEN_LOW) {
+        items.push({
+          label: `Red cap: seen only ${Math.round(seen.cap * 100)}% of the last ${seen.seconds} s`, state: 'warn', place: 'cap',
+          fix: 'Cap tab: check the light on the player, move other red things out of shot, and learn the hat again in this room.',
+        });
+      }
       // Which job each move does, so the owner can see it before the piece (B8).
       items.push({ label: hatJobsLine(c.cap.xRole, c.cap.yRole), state: 'ok' });
     }
@@ -4852,12 +5015,12 @@ export default function BoardSequencerScreen() {
       ? { report: timeNow.report, running: true, valve: timeNow.valve }
       : { report: lastRunTime?.report ?? null, running: false, valve: lastRunTime?.valve ?? [] }));
     items.push(...ipadCheckItems({
-      enabled: remoteEnabled, connected: remoteLink.others > 0, safeLayout: isSafeShowLayout(c), pageOutOfDate: ipadOutOfDate,
+      enabled: remoteEnabled, connected: remoteLink.others > 0, simpleLayout: isSimpleLayout(c), pageOutOfDate: ipadOutOfDate,
       playerName: activePlayer?.name ?? null,
-      onUseSafeLayout: () => {
-        applySafeShowLayout();
+      onUseSimpleLayout: () => {
+        applySimpleLayout();
         // The line goes from the check; the iPad settings, which say it, are not on screen.
-        announce('Done: the iPad now shows only the Extra notes strip, New idea and End piece.');
+        announce('Done: the iPad now shows the simple layout.');
       },
     }));
     if (c.fillEngine === 'magenta' && typeof navigator !== 'undefined' && navigator.onLine === false) {
@@ -4871,9 +5034,9 @@ export default function BoardSequencerScreen() {
     if (tracks) items.push(tracks);
     items.push(disk.state === 'saved'
       ? { label: 'Saved on this laptop', state: 'ok' }
-      : { label: 'Not saved on this laptop', state: 'warn', fix: 'Open ADMI at http://localhost:3001 from npm run show, or back up to a file.' });
+      : { label: 'Not saved on this laptop', state: 'warn', fix: 'Open Timbo at http://localhost:3001 from npm run show, or back up to a file.' });
     items.push(backupItem(backedUpRef.current));
-    if ((import.meta as { env?: { DEV?: boolean } }).env?.DEV) items.push({ label: 'Running the development server', state: 'warn', fix: 'For the performance start ADMI with npm run show: it cannot reload itself mid-piece.' });
+    if ((import.meta as { env?: { DEV?: boolean } }).env?.DEV) items.push({ label: 'Running the development server', state: 'warn', fix: 'For the performance start Timbo with npm run show: it cannot reload itself mid-piece.' });
     // Each fix that is made somewhere else gets a button that goes straight there (A14).
     return items.map((i) => (i.place && !i.action && i.state !== 'ok'
       ? { ...i, action: { label: PLACE_WORDS[i.place], name: `${PLACE_WORDS[i.place]}: ${i.label}`, onClick: goToPlace(i.place) } }
@@ -5570,7 +5733,9 @@ export default function BoardSequencerScreen() {
     const ch = c ? channelById.get(c.colour) : undefined;
     if (!ch) return 'empty';
     const waits = running && waitingNow.includes(ch.id) ? `, waiting: comes in at ${formatClock(config.colourComesInAt[ch.id] ?? 0)}` : '';
-    return `${describeChannel(ch)}, ${ROLE_LABELS[ch.role]}${silentSquares.has(`${row},${col}`) ? ', past its loop: doesn’t play' : ''}${waits}`;
+    // Its counters silenced by the iPad's Drums or Board button.
+    const out = outIds.includes(ch.id) ? ', silenced on the iPad' : '';
+    return `${describeChannel(ch)}, ${ROLE_LABELS[ch.role]}${silentSquares.has(`${row},${col}`) ? ', past its loop: doesn’t play' : ''}${waits}${out}`;
   };
   const laptopBar = (
     <LaptopBoardBar
@@ -5654,7 +5819,7 @@ export default function BoardSequencerScreen() {
       onCellTap={laptop && (view === 'play' || (view === 'setup' && config.channels.length > 0)) ? tapLaptopCell : undefined}
       describeCell={laptop ? describeLaptopCell : undefined}
       silent={silentSquares}
-      waiting={running && waitingNow.length > 0 ? new Set(waitingNow) : undefined}
+      waiting={fadedColours}
     />
   );
 
@@ -5896,6 +6061,8 @@ export default function BoardSequencerScreen() {
     if (cap.view.paused) return 'paused';
     if (cap.view.camera === 'off' || cap.view.camera === 'starting') return 'starting';
     if (cap.view.camera !== 'running') return 'noCamera';
+    if (cap.view.source === 'head') return 'head';
+    if (cap.view.source === 'bow') return 'bow';
     if (cap.view.seen) return cap.view.source === 'face' ? 'face' : config.cap.learntHat ? 'found' : 'followed';
     return 'holding';
   })();
@@ -5904,6 +6071,7 @@ export default function BoardSequencerScreen() {
     camera: laptop ? null : (cameraStalled && running) || error !== null ? 'stopped' : 'ok',
     hat: config.cap.enabled ? {
       state: hatState,
+      seen: cap.view.seen10s,
       ...(cap.view.paused ? { why: CAP_PAUSE_TEXT[cap.view.paused] } : {}),
       locked: config.cap.locked,
       values: (['xRole', 'yRole'] as const).flatMap((k) => {
@@ -5928,12 +6096,18 @@ export default function BoardSequencerScreen() {
       : resumeFrom !== null ? (resumeAt < resumeFrom.lengthSec ? { kind: 'carryOn', at: formatClock(resumeAt) } : null)
         : endedNotice ? { kind: 'ended' } : null,
     keepInFront,
+    feel,
+    boardSilent,
+    drumsSilent,
   };
   const showStatusAction = (a: ShowStatusAction): JSX.Element => {
     switch (a) {
       case 'retryCamera': return <Button tone="quiet" onClick={() => setCameraRetry((n) => n + 1)}>Try the camera again</Button>;
       case 'switchToAbleton': return <Button tone="quiet" onClick={switchBackToAbleton}>Switch to Ableton</Button>;
       case 'restoreExtras': return <Button tone="quiet" onClick={restoreExtras}>Switch the extras back on</Button>;
+      case 'drumsBack': return <Button tone="quiet" onClick={() => { setDrumsSilent(false); announce('The drums are back.'); }}>{SIMPLE_WORDS.bringDrumsBack}</Button>;
+      case 'boardBack': return <Button tone="quiet" onClick={() => { setBoardSilent(false); announce('The board counters are back.'); }}>{SIMPLE_WORDS.bringBoardBack}</Button>;
+      case 'feelNormal': return <Button tone="quiet" onClick={() => { setFeel('normal'); announce('Back to normal.'); }}>{SIMPLE_WORDS.backToNormal}</Button>;
       case 'carryOn': return <Button ref={carryOnRef} tone="primary" onClick={carryOn}>{`▶ Carry on from ${formatClock(resumeAt)}`}</Button>;
       default: return <Button tone="quiet" onClick={dismissReloadNotice}>{resumeFrom !== null ? 'No' : 'OK'}</Button>;
     }
@@ -6320,6 +6494,26 @@ export default function BoardSequencerScreen() {
       )}
       {view === 'play' && remoteNote && (
         <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'var(--bs-accent)' }}>{remoteNote.text}</p>
+      )}
+      {view === 'play' && drumsSilent && (
+        // Rule 5: no drums anywhere is seen on the laptop, in words, with a way back.
+        <div data-drums-silent style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+          <p role="status" style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>{SIMPLE_WORDS.drumsSilenced}</p>
+          <Button tone="quiet" onClick={() => { setDrumsSilent(false); announce('The drums are back.'); }}>{SIMPLE_WORDS.bringDrumsBack}</Button>
+        </div>
+      )}
+      {view === 'play' && boardSilent && (
+        <div data-board-silent style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+          <p role="status" style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>{SIMPLE_WORDS.boardSilenced}</p>
+          <Button tone="quiet" onClick={() => { setBoardSilent(false); announce('The board counters are back.'); }}>{SIMPLE_WORDS.bringBoardBack}</Button>
+        </div>
+      )}
+      {view === 'play' && feel !== 'normal' && (
+        // Rule 5: Calm or Busy from the iPad is seen on the laptop, in words, with a way back.
+        <div data-feel style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+          <p role="status" style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>{feel === 'calm' ? SIMPLE_WORDS.feelCalm : SIMPLE_WORDS.feelBusy}</p>
+          <Button tone="quiet" onClick={() => { setFeel('normal'); announce('Back to normal.'); }}>{SIMPLE_WORDS.backToNormal}</Button>
+        </div>
       )}
       {view === 'play' && ipadEndArmed && (
         // Until the second tap, or its window runs out (B20).

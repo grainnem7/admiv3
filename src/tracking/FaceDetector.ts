@@ -37,6 +37,8 @@ const DEFAULT_CONFIG: Required<FaceDetectorConfig> = {
 
 export interface FaceDetectionResult {
   face: FaceLandmarks | null;
+  /** Every face found (up to numFaces), mirrored like `face`, for a caller that must choose. */
+  faces?: FaceLandmarks['landmarks'][];
   timestamp: number;
 }
 
@@ -224,7 +226,8 @@ export class FaceDetector {
       transformMatrix,
     };
 
-    return { face, timestamp };
+    const faces = result.faceLandmarks.map((points) => points.map((lm) => ({ ...lm, x: 1 - lm.x })));
+    return { face, faces, timestamp };
   }
 
   /**

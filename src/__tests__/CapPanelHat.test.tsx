@@ -27,7 +27,7 @@ const hat = (() => {
 
 const view = (over: Partial<CapView> = {}): CapView => ({
   camera: 'running', face: 'off', seen: true, source: 'cap', axes: { x: 0.5, y: 0.5 }, values: {}, learning: null,
-  paused: null, hatLearning: null, hatResult: null, roomLearnt: false, ...over,
+  paused: null, hatLearning: null, hatResult: null, roomLearnt: false, seen10s: null, ...over,
 });
 
 function props(settings: Partial<CapSettings> = {}, v: Partial<CapView> = {}): CapPanelProps {
@@ -331,5 +331,80 @@ describe('Slowest and Fastest, in the Cap tab', () => {
     render({ ...p, ranges: { ...p.ranges, tempo: { min: 60, max: 900 } } });
     act(() => { input('Fastest')?.focus(); input('Fastest')?.blur(); });
     expect(p.onRange).toHaveBeenLastCalledWith('tempo', { min: 60, max: 400 });
+  });
+});
+
+describe('how well the hat is seen, on the Cap tab', () => {
+  it('says the share, the times out of sight and the pictures a second, once there is a second of pictures', () => {
+    render(props({ learntHat: hat }, { seen10s: { cap: 0.96, face: 0.03, lost: 1, fps: 28.4, seconds: 10 } }));
+    expect(host.textContent).toContain('Hat seen 96% of the last 10 s · out of sight once · 28 pictures a second');
+    render(props({ learntHat: hat }, { seen10s: null }));
+    expect(host.textContent).not.toContain('Hat seen');
+  });
+});
+
+describe('learning the room, and the range one way at a time (owner, 4 Nov 2026)', () => {
+  it('while the room is learnt, nothing is followed and the panel says so', () => {
+    // The dot on the player's head with the hat off was the old colour rule's guess (hair, skin): not the hat.
+    render(props({}, { hatLearning: { step: 'room', phase: 'watching', seconds: 3, progress: 0.2 } }));
+    expect(host.textContent).toContain('Nothing is followed while the room is learnt.');
+    render(props({}, { hatLearning: null }));
+    expect(host.textContent).not.toContain('Nothing is followed while the room is learnt.');
+  });
+
+  it('side to side and up and down are learnt separately, 10 s each; one learnt does not undo the other', () => {
+    const p = props();
+    render(p);
+    expect(host.textContent).not.toContain('Learn my range');
+    act(() => [...host.querySelectorAll('button')].find((b) => b.textContent === 'Learn side to side')!.click());
+    expect(p.learnReach).toHaveBeenLastCalledWith(10, 'x');
+    act(() => [...host.querySelectorAll('button')].find((b) => b.textContent === 'Learn up and down')!.click());
+    expect(p.learnReach).toHaveBeenLastCalledWith(10, 'y');
+  });
+
+  it('says which of the two is learnt', () => {
+    render(props({ reachX: { min: 0.2, max: 0.8 }, reachY: null }));
+    expect(host.textContent).toContain('Side to side learnt. Up and down not learnt: the whole picture.');
+    render(props({ reachX: { min: 0.2, max: 0.8 }, reachY: { min: 0.3, max: 0.7 } }));
+    expect(host.textContent).toContain('Side to side and up and down learnt (the dashed box).');
+  });
+});
+
+describe('following the way the head points (owner, 4 Nov 2026)', () => {
+  const radio = (name: string): HTMLElement | undefined => [...host.querySelectorAll<HTMLElement>('[role="radio"]')].find((b) => b.textContent === name);
+
+  it('the choice is on the Cap tab, with the hat as the default', () => {
+    const p = props();
+    render(p);
+    expect(host.textContent).toContain('What it follows');
+    expect(radio('The hat')?.getAttribute('aria-checked')).toBe('true');
+    act(() => radio('The way the head points')!.click());
+    expect(p.onChange).toHaveBeenCalledWith({ follow: 'head' });
+  });
+
+  it('says what it is doing in words: the head, a bow, or holding', () => {
+    render(props({ follow: 'head' }, { seen: true, source: 'head' }));
+    expect(host.textContent).toContain('Following the way the head points.');
+    render(props({ follow: 'head' }, { seen: true, source: 'bow' }));
+    expect(host.textContent).toContain('Head bowed: up and down is at the bottom until the face is seen again.');
+    render(props({ follow: 'head' }, { seen: false, source: 'none' }));
+    expect(host.textContent).toContain('The face is not in sight. The controls hold where they are.');
+  });
+
+  it('under the board, in a few words', () => {
+    expect(capHudText({ camera: 'running', paused: null, seen: true, source: 'head' }, true, false)).toBe('following the head');
+    expect(capHudText({ camera: 'running', paused: null, seen: true, source: 'bow' }, true, false)).toBe('head bowed (at the bottom)');
+  });
+
+  it('the range learnt is the head\'s own when following the head', () => {
+    render(props({ follow: 'head', reachX: { min: 0.1, max: 0.9 }, headReachX: null, headReachY: null }));
+    expect(host.textContent).toContain('Not learnt: the whole picture is the range each way.');
+    render(props({ follow: 'head', headReachX: { min: 0.3, max: 0.7 }, headReachY: null }));
+    expect(host.textContent).toContain('Side to side learnt. Up and down not learnt: the whole picture.');
+  });
+
+  it('how well it is seen, said for the head', () => {
+    render(props({ follow: 'head' }, { seen10s: { cap: 0.97, face: 0, lost: 0, fps: 25, seconds: 10 } }));
+    expect(host.textContent).toContain('Face seen 97% of the last 10 s · never out of sight · 25 pictures a second');
   });
 });

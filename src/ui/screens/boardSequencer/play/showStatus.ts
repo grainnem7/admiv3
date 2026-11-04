@@ -9,9 +9,11 @@
  * and the Muted and Simplified states live here too. Pure: the screen gathers the input.
  */
 
+import { SIMPLE_WORDS } from '../words';
+
 export type ShowStatusTone = 'ok' | 'warn' | 'note';
 /** A button an item carries; the screen gives each its words and its work. */
-export type ShowStatusAction = 'retryCamera' | 'switchToAbleton' | 'restoreExtras' | 'carryOn' | 'dismissReload';
+export type ShowStatusAction = 'retryCamera' | 'switchToAbleton' | 'restoreExtras' | 'carryOn' | 'dismissReload' | 'boardBack' | 'feelNormal' | 'drumsBack';
 
 export interface ShowStatusItem {
   key: string;
@@ -25,13 +27,15 @@ export interface ShowStatusItem {
   actions?: ShowStatusAction[];
 }
 
-export type ShowHatState = 'found' | 'followed' | 'face' | 'holding' | 'paused' | 'starting' | 'noCamera' | 'mouse';
+import { HAT_SEEN_LOW, type HatSeenReport } from '../../../../tracking/cap/hatSeen';
+
+export type ShowHatState = 'found' | 'followed' | 'face' | 'head' | 'bow' | 'holding' | 'paused' | 'starting' | 'noCamera' | 'mouse';
 
 export interface ShowStatusInput {
   /** The camera board's camera; null on the laptop board. */
   camera: 'ok' | 'stopped' | null;
   /** The hat, when it is on. `why` is the pause's reason in words; `values` its controls now. */
-  hat: { state: ShowHatState; why?: string; locked: boolean; values: string[] } | null;
+  hat: { state: ShowHatState; why?: string; locked: boolean; values: string[]; seen?: HatSeenReport | null } | null;
   /** The iPad, when its link is on. */
   ipad: { reaching: boolean; endPressedOnce: boolean } | null;
   /** Ableton's port, when the sound comes from Ableton. */
@@ -45,6 +49,12 @@ export interface ShowStatusInput {
   reload: { kind: 'carryOn'; at: string } | { kind: 'ended' } | null;
   /** The audience screen is open: say once to keep this window in front. */
   keepInFront: boolean;
+  /** Calm or Busy, set on the iPad's Simple page (spec 2026-11-04); Normal says nothing. */
+  feel?: 'calm' | 'normal' | 'busy';
+  /** The board's counters silenced on the iPad's Simple page. */
+  boardSilent?: boolean;
+  /** No drums anywhere, from the iPad's Simple page. */
+  drumsSilent?: boolean;
 }
 
 function hatItem(h: NonNullable<ShowStatusInput['hat']>): ShowStatusItem {
@@ -52,10 +62,19 @@ function hatItem(h: NonNullable<ShowStatusInput['hat']>): ShowStatusItem {
   const detail = h.values.length > 0 ? h.values.join(' · ') : undefined;
   const base = { key: 'hat', ...(detail ? { detail } : {}) };
   switch (h.state) {
-    case 'found': return { ...base, tone: 'ok', text: `Hat ✓${locked}` };
+    // Found now, but how much of the last 10 s? Under 90% is a warning: the hat is being
+    // lost, and the music with it, even if this moment is fine.
+    case 'found':
+      if (h.seen && h.seen.cap < HAT_SEEN_LOW) return { ...base, tone: 'warn', text: `! Hat seen only ${Math.round(h.seen.cap * 100)}% of the last ${h.seen.seconds} s${locked}` };
+      return { ...base, tone: 'ok', text: `Hat ✓${h.seen ? ` · seen ${Math.round(h.seen.cap * 100)}%` : ''}${locked}` };
     // Not learnt: a red thing is followed, which may not be the hat (B7). Calm, never a ✓.
     case 'followed': return { ...base, tone: 'note', text: `Hat: not learnt (a red thing is followed)${locked}` };
     case 'face': return { ...base, tone: 'ok', text: `Hat ✓ (following the face)${locked}` };
+    // Following the way the head points: the face is what is seen.
+    case 'head':
+      if (h.seen && h.seen.cap < HAT_SEEN_LOW) return { ...base, tone: 'warn', text: `! Face seen only ${Math.round(h.seen.cap * 100)}% of the last ${h.seen.seconds} s${locked}` };
+      return { ...base, tone: 'ok', text: `Head ✓${h.seen ? ` · seen ${Math.round(h.seen.cap * 100)}%` : ''}${locked}` };
+    case 'bow': return { ...base, tone: 'ok', text: `Head ✓ (bowed)${locked}` };
     case 'mouse': return { ...base, tone: 'ok', text: `Hat ✓ (the mouse)${locked}` };
     case 'holding': return { ...base, tone: 'warn', text: `! Hat not in sight: holding${locked}` };
     case 'paused': return { ...base, tone: 'note', text: `Hat ${h.why ?? 'paused'}${locked}` };
@@ -89,10 +108,10 @@ export function showStatusItems(i: ShowStatusInput): ShowStatusItem[] {
     if (i.ipad.endPressedOnce) out.push({ key: 'ipadEnd', tone: 'note', text: 'iPad: End piece pressed once' });
   }
   if (i.sound === 'ok') out.push({ key: 'sound', tone: 'ok', text: 'Ableton ✓' });
-  else if (i.sound === 'lost') out.push({ key: 'sound', tone: 'warn', text: "! Ableton's port has gone, so ADMI is playing its own sound." });
+  else if (i.sound === 'lost') out.push({ key: 'sound', tone: 'warn', text: "! Ableton's port has gone, so Timbo is playing its own sound." });
   else if (i.sound === 'notFound') out.push({ key: 'sound', tone: 'warn', text: '! Ableton port not found' });
   else if (i.sound === 'back') {
-    out.push({ key: 'sound', tone: 'note', text: 'Ableton is back. ADMI is still playing its own sound until you switch.', actions: ['switchToAbleton'] });
+    out.push({ key: 'sound', tone: 'note', text: 'Ableton is back. Timbo is still playing its own sound until you switch.', actions: ['switchToAbleton'] });
   }
   if (i.keepingTime) {
     out.push({
@@ -101,6 +120,11 @@ export function showStatusItems(i: ShowStatusInput): ShowStatusItem[] {
     });
   }
   if (i.muted) out.push({ key: 'muted', tone: 'note', text: 'Muted: nothing is sounding' });
+  if (i.feel === 'calm' || i.feel === 'busy') {
+    out.push({ key: 'feel', tone: 'note', text: i.feel === 'calm' ? SIMPLE_WORDS.feelCalm : SIMPLE_WORDS.feelBusy, actions: ['feelNormal'] });
+  }
+  if (i.drumsSilent) out.push({ key: 'drumsSilent', tone: 'note', text: SIMPLE_WORDS.drumsSilenced, actions: ['drumsBack'] });
+  if (i.boardSilent) out.push({ key: 'boardSilent', tone: 'note', text: SIMPLE_WORDS.boardSilenced, actions: ['boardBack'] });
   if (i.simplify) out.push({ key: 'simplify', tone: 'note', text: i.simplify, label: 'Simplify' });
   if (i.keepInFront) out.push({ key: 'keepInFront', tone: 'note', text: 'Keep this window in front: covering it pauses the camera.' });
   const rank: Record<ShowStatusTone, number> = { warn: 0, note: 1, ok: 2 };

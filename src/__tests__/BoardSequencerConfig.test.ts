@@ -8,6 +8,7 @@ import {
   referencedChannelIds,
   safeShowLayout,
   isSafeShowLayout,
+  isSimpleLayout,
   type BoardSequencerStored,
 } from '../profiles/BoardSequencerConfig';
 import { DEFAULT_REMOTE_TOUCH } from '../remote/protocol';
@@ -581,8 +582,44 @@ describe("the safe show layout for Tim's iPad", () => {
     expect(isSafeShowLayout({ ...cfg, remoteTouch: { ...cfg.remoteTouch, playExtras: ['endPiece', 'stopAll'] } })).toBe(false);
   });
 
-  it('is where a new player starts', () => {
+  it("is where a new player's full layout starts (the Simple page is shown until a box is ticked)", () => {
     expect(isSafeShowLayout(DEFAULT_BOARD_SEQUENCER_CONFIG)).toBe(true);
+  });
+});
+
+describe("the Simple iPad page (spec 2026-11-04)", () => {
+  it('is where a new player starts', () => {
+    expect(DEFAULT_BOARD_SEQUENCER_CONFIG.remoteLayoutKind).toBe('simple');
+    expect(isSimpleLayout(DEFAULT_BOARD_SEQUENCER_CONFIG)).toBe(true);
+    // Kept through a save and a load.
+    expect(loadWith({ ...DEFAULT_BOARD_SEQUENCER_CONFIG }).remoteLayoutKind).toBe('simple');
+  });
+
+  it('a player saved before it keeps their layout: custom, with exactly what they had', () => {
+    const old = loadWith({ bpm: 96, remoteStrips: ['tempo', 'fill'], remotePads: ['newIdea', 'mute'], remoteLoopsPage: true });
+    expect(old.remoteLayoutKind).toBe('custom');
+    expect(isSimpleLayout(old)).toBe(false);
+    expect(old.remoteStrips).toEqual(['tempo', 'fill']);
+    expect(old.remotePads).toEqual(['newIdea', 'mute']);
+    expect(old.remoteLoopsPage).toBe(true);
+  });
+
+  it('the rows of the Simple page: all for a new player and for one saved before; otherwise as stored, made safe', () => {
+    const all = ['drums', 'feel', 'melody', 'board'];
+    expect(DEFAULT_BOARD_SEQUENCER_CONFIG.remoteSimpleRows).toEqual(all);
+    expect(loadWith({ bpm: 96 }).remoteSimpleRows).toEqual(all);
+    expect(loadWith({ remoteSimpleRows: ['board', 'drums', 'bogus', 'board'] }).remoteSimpleRows).toEqual(['drums', 'board']);
+    expect(loadWith({ remoteSimpleRows: [] }).remoteSimpleRows).toEqual([]);
+    expect(loadWith({ remoteSimpleRows: 'drums' }).remoteSimpleRows).toEqual(all);
+    // Saved with an earlier page's rows: Drums and Calm / Busy shown, Melody and Board as they were.
+    expect(loadWith({ remoteSimpleRows: ['newIdea', 'parts', 'melody'] }).remoteSimpleRows).toEqual(['drums', 'feel', 'melody']);
+  });
+
+  it('anything stored but "simple" is the full layout', () => {
+    expect(loadWith({ remoteLayoutKind: 'custom' }).remoteLayoutKind).toBe('custom');
+    expect(loadWith({ remoteLayoutKind: 'SIMPLE' }).remoteLayoutKind).toBe('custom');
+    expect(loadWith({ remoteLayoutKind: 3 }).remoteLayoutKind).toBe('custom');
+    expect(loadWith({ remoteLayoutKind: 'simple' }).remoteLayoutKind).toBe('simple');
   });
 
   it('leaves a player saved before it exactly as they were', () => {

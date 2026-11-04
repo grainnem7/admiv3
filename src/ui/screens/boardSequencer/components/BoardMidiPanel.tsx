@@ -96,26 +96,26 @@ export function BoardMidiPanel({
         value={soundFrom}
         onChange={(v) => onChange(soundFromToConfig(v))}
         options={[
-          { value: 'admi', label: 'ADMI' },
+          { value: 'admi', label: 'Timbo' },
           { value: 'ableton', label: 'Ableton' },
           { value: 'both', label: 'Both' },
         ]}
       />
       <span style={NOTE}>
-        {soundFrom === 'admi' && "ADMI's own sound. Nothing goes out over MIDI."}
-        {soundFrom === 'ableton' && 'Ableton makes the sound: everything the board plays goes to it, the band and the Extra notes too. ADMI still draws every note. Press ADMI at any time to have ADMI\u2019s own sound back.'}
-        {soundFrom === 'both' && 'ADMI and Ableton play together. Use it to check the timing, or to add Ableton\u2019s sounds to ADMI\u2019s.'}
+        {soundFrom === 'admi' && "Timbo's own sound. Nothing goes out over MIDI."}
+        {soundFrom === 'ableton' && 'Ableton makes the sound: everything the board plays goes to it, the band and the Extra notes too. Timbo still draws every note. Press Timbo at any time to have Timbo\u2019s own sound back.'}
+        {soundFrom === 'both' && 'Timbo and Ableton play together. Use it to check the timing, or to add Ableton\u2019s sounds to Timbo\u2019s.'}
       </span>
 
       {midiOn && <span style={NOTE}>{ABLETON_TRACKS_NOTE}</span>}
       {midiOn && port.support === 'unsupported' && (
         <span role="status" style={{ fontSize: 14, color: 'var(--bs-warn)' }}>
-          This browser has no Web MIDI. Chrome or Edge do; Safari does not. ADMI is playing its own sound.
+          This browser has no Web MIDI. Chrome or Edge do; Safari does not. Timbo is playing its own sound.
         </span>
       )}
       {midiOn && port.support === 'denied' && (
         <span role="status" style={{ fontSize: 14, color: 'var(--bs-warn)' }}>
-          MIDI access was refused. Allow it in the browser&apos;s site settings and try again. ADMI is playing its own sound.
+          MIDI access was refused. Allow it in the browser&apos;s site settings and try again. Timbo is playing its own sound.
         </span>
       )}
 
@@ -136,10 +136,10 @@ export function BoardMidiPanel({
           )}
           <span role="status" style={{ fontSize: 14, fontWeight: 600, color: port.connected && !holdOnAdmi ? 'var(--bs-ok)' : 'var(--bs-warn)' }}>
             {port.connected && !holdOnAdmi && `✓ Sending to ${port.chosenName ?? 'the port'}`}
-            {port.connected && holdOnAdmi && 'The port is back. ADMI is still playing its own sound until you switch.'}
+            {port.connected && holdOnAdmi && 'The port is back. Timbo is still playing its own sound until you switch.'}
             {!port.connected && (config.midiDeviceId
-              ? 'The chosen port is not connected, so ADMI is playing its own sound.'
-              : 'Choose the port. Until then ADMI plays its own sound.')}
+              ? 'The chosen port is not connected, so Timbo is playing its own sound.'
+              : 'Choose the port. Until then Timbo plays its own sound.')}
           </span>
           {port.connected && holdOnAdmi && (
             <div><Button tone="primary" onClick={onSwitchBack}>Switch to Ableton</Button></div>
@@ -218,7 +218,7 @@ export function BoardMidiPanel({
             </span>
           )}
           <span style={NOTE}>
-            Every channel in use also gets CC 11 (Expression): it carries ADMI&apos;s fades and Mute. In Ableton,
+            Every channel in use also gets CC 11 (Expression): it carries Timbo&apos;s fades and Mute. In Ableton,
             map it to a Utility device&apos;s Gain on each track; the setup guide shows how.
           </span>
 
@@ -236,7 +236,7 @@ export function BoardMidiPanel({
             onChange={(v) => onChange({ midiLeadMs: v })}
           />
           <span style={NOTE}>
-            For Both: sends Ableton its notes a little early, so ADMI and Ableton land together. Leave it at 0
+            For Both: sends Ableton its notes a little early, so Timbo and Ableton land together. Leave it at 0
             unless the test note flams.
           </span>
 
@@ -265,7 +265,7 @@ export function BoardMidiPanel({
           </div>
           <ol style={{ ...NOTE, margin: 0, paddingLeft: 18 }}>
             <li>Set Ableton&apos;s buffer size to 128 samples.</li>
-            <li>Choose Both, press Play, then Play test note: ADMI clicks and Ableton plays a note at the same moment.</li>
+            <li>Choose Both, press Play, then Play test note: Timbo clicks and Ableton plays a note at the same moment.</li>
             <li>A double hit (a flam) means they are apart: move Send early by until they land together.</li>
             <li>Then choose Ableton.</li>
             <li>After the first note it plays one note on each channel in turn (1, 2, 3, 10, 11, 12, 13), named here as it goes: a silent one is a track missing in Ableton.</li>

@@ -66,20 +66,24 @@ describe('BoardProfiles', () => {
     expect(p1.channels.map((c) => c.role)).toEqual(['melody', 'drums']);
   });
 
-  it("a new player's iPad starts with the safe show layout; a player already saved keeps theirs", () => {
+  it("a new player's iPad starts with the Simple page; a player already saved keeps theirs", () => {
     const everything = {
       remoteStrips: ['tempo', 'dynamics', 'fill', 'evolve'], remotePads: ['newIdea', 'newSound', 'keep', 'mute'],
       remoteLoopsPage: true, remoteLocked: [], remoteTouch: { actOn: 'lift', confirmSec: 10, playExtras: ['stopAll'], playLoops: [0], showNext: true },
     };
-    localStorage.setItem(LEGACY_KEY, JSON.stringify({ ...withColours(), ...everything }));
+    // Saved before the Simple page: no remoteLayoutKind at all.
+    const { remoteLayoutKind: _none, ...before } = withColours();
+    localStorage.setItem(LEGACY_KEY, JSON.stringify({ ...before, ...everything }));
     const first = loadActiveBoardConfig()!;
+    expect(first.remoteLayoutKind).toBe('custom');
     expect(first).toMatchObject({ ...everything, remoteTouch: { ...everything.remoteTouch, secondTapMinMs: 500 } });
     createBoardPlayer('Tim', 'left');
     const tim = loadActiveBoardConfig()!;
+    expect(tim.remoteLayoutKind).toBe('simple');
     expect(isSafeShowLayout(tim)).toBe(true);
     expect(tim.remoteTouch.secondTapMinMs).toBe(500);
     setActiveBoardPlayer(listBoardPlayers().find((p) => p.name === 'Player 1')!.id);
-    expect(loadActiveBoardConfig()).toMatchObject({ ...everything, remoteTouch: { ...everything.remoteTouch, secondTapMinMs: 500 } });
+    expect(loadActiveBoardConfig()).toMatchObject({ ...everything, remoteLayoutKind: 'custom', remoteTouch: { ...everything.remoteTouch, secondTapMinMs: 500 } });
   });
 
   it('a removed colour disappears for every player', () => {

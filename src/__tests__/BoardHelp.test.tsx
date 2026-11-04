@@ -50,9 +50,20 @@ describe('Help says how things work now', () => {
     expect(entry('Simplify, and keeping time')).toContain('Simplified: Tim and Bed');
   });
 
-  it('the iPad: Mute needs two taps; the safe show layout has three things', () => {
+  it('the iPad: Mute needs two taps; the simple layout and what is on it', () => {
     expect(entry('iPad controls')).toContain('Mute needs two');
-    expect(entry('The iPad for a player without fine control')).toContain('only the Extra notes strip, New idea and End piece, with Speed locked');
+    const simple = entry('The iPad for a player without fine control');
+    expect(simple).toContain('"Use the simple layout"');
+    expect(simple).toContain('one page for playing live: Drums, Calm / Busy, what the melody plays (Piano, Flute, Trumpet, Sax) and the Board');
+    expect(simple).toContain('Loops are made and switched on the laptop, not the iPad');
+    expect(simple).toContain('Drums silent means no drums anywhere: the drum counters on the board (they stay there), the drums in every loop and the band’s drums');
+    expect(simple).toContain('Calm plays the loops on their main beats only, with no Extra notes; Busy adds Extra notes round everything');
+    expect(simple).toContain('"What the simple layout shows"');
+    expect(simple).toContain('"Drums silenced on the iPad"');
+    expect(simple).toContain('"Board counters silenced on the iPad"');
+    expect(simple).not.toMatch(/Keep what|Nothing kept|New idea|Taken out|IN or OUT|ON or OFF/);
+    expect(simple).toContain('Speed is set by the hat alone');
+    expect(simple).not.toContain('safe show layout');
   });
 
   it('the band\'s middle level is Quiet, as on the Sound tab and in a scene (T1-12)', () => {

@@ -47,6 +47,44 @@ export const WORDS = {
 } as const;
 
 /**
+ * The Simple iPad page (spec 2026-11-04) and what the laptop says about it: the same words on
+ * both, and in Help.
+ */
+export const SIMPLE_WORDS = {
+  /** The facilitator's one button for the show (was "Use the safe show layout"). */
+  useSimple: 'Use the simple layout',
+  /** Back to the full layout, with the boxes as they are. */
+  useFull: 'Use the full layout instead',
+  /** What the drums or the board are doing now. */
+  playing: 'Playing',
+  silent: 'Silent',
+  /** The big button: no drums anywhere while silent (the board's, the loops', the band's). */
+  drums: 'Drums',
+  drumsSilenced: 'Drums silenced on the iPad',
+  bringDrumsBack: 'Bring the drums back',
+  /** How much plays, for the whole piece: two halves, the lit one is on; neither lit is normal. */
+  calm: 'Calm',
+  busy: 'Busy',
+  calmMeans: 'Fewer notes',
+  busyMeans: 'More notes',
+  /** The counters on the board, as one button. */
+  board: 'Board',
+  boardSilenced: 'Board counters silenced on the iPad',
+  bringBoardBack: 'Bring them back',
+  /** The laptop's line for Calm / Busy, and its way back. */
+  feelCalm: 'Calm (from the iPad): the loops play only their main beats, and no Extra notes',
+  feelBusy: 'Busy (from the iPad): Extra notes round everything',
+  backToNormal: 'Back to normal',
+  /** The rows the facilitator can show or hide, in page order. */
+  rows: { drums: 'Drums', feel: 'Calm / Busy', melody: 'Melody instrument', board: 'Board' },
+  rowsCaption: 'What the simple layout shows',
+  noRows: 'Nothing is chosen for this page. Choose what it shows on the laptop.',
+  /** The row of melody sounds. */
+  melodyPlays: 'Melody plays',
+  sounds: { piano: 'Piano', flute: 'Flute', trumpet: 'Trumpet', saxophone: 'Sax' },
+} as const;
+
+/**
  * A scene's Energy, and the Sound tab's: the same names in both places. 0 is a scene that
  * doesn't set it.
  */

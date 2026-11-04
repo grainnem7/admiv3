@@ -4,7 +4,9 @@
  * A dark screen with Tim's board, big and simple: his counters in their colours and places,
  * each blooming as it sounds, with a soft light behind them that follows the red hat (side
  * to side, up and down), warms with the Brightness and pulses with the speed. The band is a
- * soft light along the bottom. The scene's name sits small in a corner. Nothing else: no
+ * soft light along the bottom. Over the board, a ring in the cap's red marks where the hat is,
+ * with a short fading trail, so the audience sees Tim steering (hatMarker.ts). The scene's
+ * name sits small in a corner. Nothing else: no
  * grid, buttons, words or cursor, and a lost connection is only the dim board.
  *
  * It draws on its own (requestAnimationFrame) from what the laptop page sends; the numbers
@@ -16,6 +18,10 @@ import {
   counterNeedsRing, DIM_PRESENCE, glideTint, INITIAL_LIGHT, isAwake, lightGlow, pulseHz, pulseLevel, SCENE_NAME,
   stepLight, stepPresence, stepPulse, worldTint, type LightState, type Rgb,
 } from './light';
+import {
+  CORE_ALPHA, CORE_REACH, DOT_RADIUS, INITIAL_MARKER, MARKER_RGB, markerHatMode, markerMode, markerSize, RING_WIDTH, stepMarker,
+  trailSegments, type MarkerState,
+} from './hatMarker';
 import { AUDIENCE_CHANNEL, readLaptopMessage, type AudienceHat, type AudienceMessage, type AudienceState } from './protocol';
 
 /** The laptop says how things are at least once a second: quiet longer than this, it has gone. */
@@ -87,6 +93,8 @@ export default function AudienceScreen(): JSX.Element {
     let bandLastBump = -Infinity;
     let bandLastNote = -Infinity;
     let light: LightState = INITIAL_LIGHT;
+    let marker: MarkerState = INITIAL_MARKER;
+    let markerFrom: AudienceHat['mode'] = 'free';
     let tint: Rgb = worldTint('none');
     let phase = 0;
     let presence = DIM_PRESENCE;
@@ -183,6 +191,8 @@ export default function AudienceScreen(): JSX.Element {
 
       // The numbers for this frame.
       light = stepLight(light, connected && state ? state.hat : LOST_HAT, dt, t);
+      markerFrom = markerHatMode(connected && state ? state.hat.mode : null, markerFrom);
+      marker = stepMarker(marker, markerFrom, light, dt, t, reduced);
       tint = glideTint(tint, worldTint(state?.world ?? 'none'), dt);
       phase = stepPulse(phase, pulseHz(state?.bpm ?? 0, awake), dt);
       presence = stepPresence(presence, awake, dt);
@@ -320,6 +330,49 @@ export default function AudienceScreen(): JSX.Element {
         }
       }
 
+      // The hat's marker, over the counters but hollow, so they show through it: a short
+      // fading trail of where it has just been, a soft red middle with a small solid dot (a
+      // pointer, not a bloom's ripple), and a crisp ring with a thin dark edge (so it reads
+      // over a red counter too). Dashed and dim while held.
+      if (marker.alpha > 0.005) {
+        const S = Math.min(W, H);
+        const R = markerSize(W, H);
+        const a = marker.alpha * (0.6 + 0.4 * wake);
+        const mx = marker.x * W;
+        const my = marker.y * H;
+        // Butt ends: round ones overlap at every joint and bead the line.
+        for (const seg of trailSegments(marker.trail, t, a)) {
+          ctx.beginPath();
+          ctx.moveTo(seg.x0 * W, seg.y0 * H);
+          ctx.lineTo(seg.x1 * W, seg.y1 * H);
+          ctx.strokeStyle = rgba(MARKER_RGB, seg.alpha);
+          ctx.lineWidth = Math.max(1, seg.width * R);
+          ctx.stroke();
+        }
+        const core = ctx.createRadialGradient(mx, my, 0, mx, my, R * CORE_REACH);
+        core.addColorStop(0, rgba(MARKER_RGB, CORE_ALPHA * a));
+        core.addColorStop(1, rgba(MARKER_RGB, 0));
+        ctx.fillStyle = core;
+        ctx.beginPath();
+        ctx.arc(mx, my, R * CORE_REACH, 0, Math.PI * 2);
+        ctx.fill();
+        const held = markerFrom !== 'follow';
+        ctx.setLineDash(held ? [R * 0.32, R * 0.22] : []);
+        ctx.beginPath();
+        ctx.arc(mx, my, R, 0, Math.PI * 2);
+        ctx.strokeStyle = rgba([5, 6, 10], 0.55 * a);
+        ctx.lineWidth = R * RING_WIDTH + Math.max(3, S * 0.004);
+        ctx.stroke();
+        ctx.strokeStyle = rgba(MARKER_RGB, a);
+        ctx.lineWidth = R * RING_WIDTH;
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.arc(mx, my, R * DOT_RADIUS, 0, Math.PI * 2);
+        ctx.fillStyle = rgba(MARKER_RGB, a);
+        ctx.fill();
+      }
+
       // The scene's name fades with the board.
       const so = Math.round(wake * 100) / 100;
       if (so !== sceneOpacity && sceneRef.current) { sceneOpacity = so; sceneRef.current.style.opacity = String(SCENE_NAME.opacity * so); }
@@ -328,6 +381,7 @@ export default function AudienceScreen(): JSX.Element {
       mark('awake', awake ? 'yes' : 'no');
       mark('connected', connected ? 'yes' : 'no');
       mark('light', connected && state ? state.hat.mode : 'lost');
+      mark('hatMarker', marker.alpha > 0.005 ? markerMode(markerFrom) : 'off');
       mark('counters', String(state?.counters.length ?? 0));
       mark('blooms', [...visible].sort().join(' '));
     };

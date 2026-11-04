@@ -246,6 +246,9 @@ function isLoopLayer(layer: string | undefined): boolean {
   return layer !== undefined && (layer.startsWith('slot') || layer.startsWith('bank'));
 }
 
+/** Busy's Extra notes, at the least: the level New idea starts them at. */
+const BUSY_FILL = 0.5;
+
 /** Simplify's bed: the first loop still playing (not one fading out), or none. */
 function bedOf(launched: readonly LaunchedLoop[]): LaunchedLoop[] {
   const bed = launched.find((l) => l.fade?.dir !== 'out');
@@ -313,6 +316,10 @@ export class BoardSequencerEngine {
   private cfg: BoardEngineConfig;
   // One sampled voice per melody/chord/bass channel (keyed by channel id), each
   // with its own gain + reverb/delay sends into the shared buses.
+  /** Calm, Normal or Busy (see setFeel). */
+  private feel: 'calm' | 'normal' | 'busy' = 'normal';
+  /** Jobs silent everywhere, loops and band included (see setSilentParts). */
+  private silentParts: ReadonlySet<ColourRole> = new Set();
   private voiceByChannel = new Map<string, {
     voice: BoardSequencerVoice; gain: GainNode; rev: GainNode; del: GainNode;
     /** The channel's own send/tone settings; control counters scale these, never replace them. */
@@ -914,10 +921,12 @@ export class BoardSequencerEngine {
    * while simplified or dropped by the safety valve.
    */
   private applyAmounts(): void {
-    const fillOff = this.simplify !== 'off' || this.valveTaken.includes('fill');
+    const fillOff = this.simplify !== 'off' || this.valveTaken.includes('fill') || this.feel === 'calm';
     const evolveOff = this.simplify !== 'off' || this.valveTaken.includes('evolve');
     // A scene's Energy makes the extra notes sparser or busier; a counter's amount is its own.
-    this.fillAmount = fillOff ? 0 : Math.max(0, Math.min(1, this.fillOverride ?? energyExtras(this.fillSetting, this.sceneEnergy)));
+    const fill = Math.max(0, Math.min(1, this.fillOverride ?? energyExtras(this.fillSetting, this.sceneEnergy)));
+    // Busy: Extra notes round everything, at least at half (New idea's level).
+    this.fillAmount = fillOff ? 0 : this.feel === 'busy' ? Math.max(BUSY_FILL, fill) : fill;
     this.evolve = { ...this.evolve, amount: evolveOff ? 0 : Math.max(0, Math.min(1, this.evolveOverride ?? this.evolveSetting)) };
   }
 
@@ -1889,6 +1898,37 @@ export class BoardSequencerEngine {
    * the board plays (Tim warming up): a colour that waits for its time must not ring on into
    * it. Its counters have already left the active cells; this only clears what was sent.
    */
+  /**
+   * Calm, Normal or Busy, for the whole piece (the iPad's Simple page, spec 2026-11-04). Calm:
+   * the loops play only their notes on the main beats (the player's own counters are untouched)
+   * and no Extra notes. Busy: Extra notes at least at BUSY_FILL, round everything that plays.
+   * From the next beat; nothing to undo but this setting.
+   */
+  setFeel(feel: 'calm' | 'normal' | 'busy'): void {
+    this.feel = feel;
+    this.applyAmounts();
+  }
+
+  /**
+   * Jobs silent everywhere (the iPad's Drums button, spec 2026-11-04: only drums is offered):
+   * no loop plays a note of them, whichever loop it is (the loop bank's, a launched one, an
+   * older one that plays as the player's colour), and nor does the band, which would otherwise
+   * step in with its own. The player's own counters are left out before they reach here
+   * (cellsSoundingAt). Silenced, the job's loop voices lose what they still had ringing.
+   * Extra notes are not touched.
+   */
+  setSilentParts(roles: readonly ColourRole[]): void {
+    const added = roles.filter((r) => !this.silentParts.has(r));
+    this.silentParts = new Set(roles);
+    if (added.length === 0) return;
+    for (const ch of this.channelById.values()) {
+      if (!added.includes(ch.role)) continue;
+      const e = this.voiceByChannel.get(ch.id);
+      e?.voice.cut?.();
+      e?.pending?.voice.cut?.();
+    }
+  }
+
   silenceColours(ids: readonly ColourId[]): void {
     for (const id of ids) {
       const e = this.voiceByChannel.get(id);
@@ -2656,15 +2696,19 @@ export class BoardSequencerEngine {
     // a note nobody ever placed.
     const onGrid = (c: ActiveCell): boolean =>
       c.row >= 0 && c.row < this.cfg.rows && c.col >= 0 && c.col < this.cfg.cols;
+    // Calm: a loop plays only its notes on the main beats. A job silent everywhere: none of
+    // its notes from any loop. No cost while neither is on.
+    const partIn = (c: ActiveCell): boolean => (this.feel !== 'calm' || isStrongBeat(c.col))
+      && (this.silentParts.size === 0 || !this.silentParts.has(this.roleFor(c.colour)));
     // Each cell knows its layer — the player's board, or which loop — so a loop's phrase
     // plays under the player's instead of being cut into by it (see layerPhraseCells).
     const tagged: { cell: LayeredCell; source: FiredNote['source'] }[] = [
       ...cells.filter(onGrid).map((c) => ({ cell: c, source: liveSource })),
-      ...this.activeLoops.flatMap((loopCells, i) => loopCells.filter(onGrid).map((c) => ({ cell: { ...c, layer: `bank${i}` }, source: 'loop' as const }))),
+      ...this.activeLoops.flatMap((loopCells, i) => loopCells.filter((c) => onGrid(c) && partIn(c)).map((c) => ({ cell: { ...c, layer: `bank${i}` }, source: 'loop' as const }))),
       ...(this.simplify === 'off' ? this.launched : bedOf(this.launched)).flatMap((l) => {
         // A fade is in the loudness of each note, so it works for every part alike.
         const f = this.launchFactor(l, beat);
-        return l.cells.filter(onGrid).map((c) => ({
+        return l.cells.filter((c) => onGrid(c) && partIn(c)).map((c) => ({
           cell: { ...c, layer: `slot${l.slot}`, ...(f < 1 ? { velocity: (c.velocity ?? this.cfg.velocity) * f } : {}) },
           source: 'loop' as const,
         }));
@@ -2911,6 +2955,12 @@ export class BoardSequencerEngine {
   /** One band note (or a lead-in's): played, dipped under the player, and logged. */
   private playBandEvent(ev: BandEvent, cellTime: number, secPerBeat: number, level = 1): void {
     if (!this.bandVoices) return;
+    // A job silent everywhere is silent in the band too: hearing no drums from the player, the
+    // band would otherwise step in and play its own.
+    if (this.silentParts.size > 0) {
+      const job: ColourRole = ev.drum ? 'drums' : ev.part === 'pad' ? 'chord' : ev.part === 'bass' ? 'bass' : 'melody';
+      if (this.silentParts.has(job)) return;
+    }
     try {
       const world = worldOf(this.cfg.soundWorld ?? 'none');
       const swing = Math.min(0.9, this.cfg.swing + (world?.phraseSwing ?? 0));

@@ -109,7 +109,7 @@ export function BoardStep({
           {boardLearnt === 0 && (
             <>
               <p style={{ margin: 0, color: 'var(--bs-fg2)', fontSize: 14 }}>
-                Take every counter off, then press the button. ADMI remembers how the empty
+                Take every counter off, then press the button. Timbo remembers how the empty
                 board looks, so anything new on it is a counter.
               </p>
               <div>

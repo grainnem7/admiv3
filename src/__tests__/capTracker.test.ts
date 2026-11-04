@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-  capColourAt, DEFAULT_CAP_COLOUR, DEFAULT_CAP_SETTINGS, findCap, fitSideArc, fuseWithFace, initialCapState, quantise,
-  sanitizeCapSettings, stepCap, capPauseReason, handOverAxis, hatPosition, hatTempo, withCounterValues, CAP_RESUME_MAX_MS,
+  capColourAt, DEFAULT_CAP_COLOUR, DEFAULT_CAP_SETTINGS, findCap, fitSideArc, fuseWithFace, mergeReach, rangesInForce, pickPlayerFace, initialCapState, quantise,
+  sanitizeCapSettings, stepCap, capPauseReason, handOverAxis, hatPosition, hatTempo, withCounterValues, CAP_RESUME_MAX_MS, CAP_RESUME_MIN_MS, CAP_REST_MIN_MS, CAP_RESPONSE_REV,
   type CapSettings, type Frame,
 } from '../tracking/cap/capTracker';
 import type { ControlRange, FaderRole } from '../profiles/BoardSequencerConfig';
@@ -86,10 +86,16 @@ describe('from where the cap is to the controls', () => {
   });
 
   it('changes glide rather than jump', () => {
-    const at = settle(settings(), { x: 0, y: 0.5 });
-    const next = stepCap(at.state, { x: 1, y: 0.5, area: 0.01 }, settings(), ranges, 33);
+    const steady = settings({ response: 'steady' });
+    const at = settle(steady, { x: 0, y: 0.5 });
+    const next = stepCap(at.state, { x: 1, y: 0.5, area: 0.01 }, steady, ranges, 33);
     expect(next.values.tempo!).toBeGreaterThan(70);
     expect(next.values.tempo!).toBeLessThan(90);
+    // Quickly (the default) still glides: one frame goes part of the way, not all of it.
+    const quick = settings({ response: 'quick' });
+    const q = stepCap(settle(quick, { x: 0, y: 0.5 }).state, { x: 1, y: 0.5, area: 0.01 }, quick, ranges, 33);
+    expect(q.values.tempo!).toBeGreaterThan(next.values.tempo!);
+    expect(q.values.tempo!).toBeLessThan(130);
   });
 
   it('when the cap is lost, the values hold', () => {
@@ -148,6 +154,35 @@ describe('reinforced by the face', () => {
   it('no face (or face tracking off): the cap alone, as before', () => {
     expect(fuseWithFace({ x: 0.9, y: 0.9, area: 0.05 }, null, null).source).toBe('cap');
     expect(fuseWithFace(null, null, null).sighting).toBeNull();
+  });
+});
+
+/**
+ * Someone else in the picture (owner, 4 Nov 2026): the face tracking took the first face it
+ * found, so a person beside the player could become "the head", the real cap was turned down
+ * as not on it, and the music followed the other person's face.
+ */
+describe('the player\'s face, with someone else in the picture', () => {
+  const player = { x: 0.4, y: 0.4, w: 0.2, h: 0.25 };   // centre (0.5, 0.525)
+  const other = { x: 0.75, y: 0.35, w: 0.18, h: 0.22 }; // beside, a little nearer the top
+  const capOnPlayer = { x: 0.5, y: 0.33, area: 0.01 };
+
+  it('the face the cap is on is the player\'s, whichever face came first', () => {
+    expect(pickPlayerFace([other, player], capOnPlayer, null)).toEqual(player);
+    expect(fuseWithFace(capOnPlayer, pickPlayerFace([other, player], capOnPlayer, null), null).source).toBe('cap');
+  });
+
+  it('cap hidden for a moment: the face nearest where the player was, not the other one', () => {
+    expect(pickPlayerFace([other, { ...player, x: 0.42 }], null, player)).toEqual({ ...player, x: 0.42 });
+  });
+
+  it('the player gone and the cap not seen: no face at all (the values hold), never the other person', () => {
+    expect(pickPlayerFace([other], null, player)).toBeNull();
+  });
+
+  it('nothing to go on yet: the biggest face, the one nearest the camera', () => {
+    expect(pickPlayerFace([other, player], null, null)).toEqual(player);
+    expect(pickPlayerFace([], capOnPlayer, player)).toBeNull();
   });
 });
 
@@ -266,11 +301,28 @@ describe('pausing while counters are moved', () => {
   it('keeps the timings within safe limits when loading', () => {
     const d = sanitizeCapSettings({});
     expect(d.pauseOnBoard).toBe(true);
-    const odd = sanitizeCapSettings({ pauseOnBoard: false, resumeAfterMs: 99_999, rewindMs: -5, restMs: 'x' });
+    const odd = sanitizeCapSettings({ pauseOnBoard: false, resumeAfterMs: 99_999, rewindMs: -5, restMs: 'x', responseRev: CAP_RESPONSE_REV });
     expect(odd.pauseOnBoard).toBe(false);
     expect(odd.resumeAfterMs).toBe(CAP_RESUME_MAX_MS);
     expect(odd.rewindMs).toBe(0);
     expect(odd.restMs).toBe(DEFAULT_CAP_SETTINGS.restMs);
+  });
+
+  it('a new hat responds as fast as the settings allow: follows Quickly, back after the shortest quiet and rest', () => {
+    for (const s of [DEFAULT_CAP_SETTINGS, sanitizeCapSettings({})]) {
+      expect(s.response).toBe('quick');
+      expect(s.resumeAfterMs).toBe(CAP_RESUME_MIN_MS);
+      expect(s.restMs).toBe(CAP_REST_MIN_MS);
+    }
+    // A player saved before the quick defaults (no rev, or an older one) is brought up to
+    // them once: nobody has to remember the Cap tab on the day. A choice made on the Cap
+    // tab since (responseCustom) is the player's own and is kept.
+    expect(sanitizeCapSettings({ response: 'steady', resumeAfterMs: 1000, restMs: 3000 }))
+      .toMatchObject({ response: 'quick', resumeAfterMs: CAP_RESUME_MIN_MS, restMs: CAP_REST_MIN_MS, responseRev: CAP_RESPONSE_REV, responseCustom: false });
+    expect(sanitizeCapSettings({ response: 'steady', resumeAfterMs: 1000, restMs: 3000, responseCustom: true }))
+      .toMatchObject({ response: 'steady', resumeAfterMs: 1000, restMs: 3000, responseCustom: true });
+    expect(sanitizeCapSettings({ response: 'medium', resumeAfterMs: 800, restMs: 2000, responseRev: CAP_RESPONSE_REV }))
+      .toMatchObject({ response: 'medium', resumeAfterMs: 800, restMs: 2000 });
   });
 });
 
@@ -359,7 +411,7 @@ describe('the hat moves the speed around the scene’s speed', () => {
  * to where the hat now is.
  */
 describe('the hat lost and found again', () => {
-  const s = settings({ xRole: 'tempo', yRole: 'volume', oneAtATime: true });
+  const s = settings({ xRole: 'tempo', yRole: 'volume', oneAtATime: true, response: 'steady' });
   const run = (st: ReturnType<typeof initialCapState>, at: { x: number; y: number } | null, frames: number) => {
     let r = stepCap(st, at ? { ...at, area: 0.01 } : null, s, ranges, 33);
     for (let i = 1; i < frames; i++) r = stepCap(r.state, at ? { ...at, area: 0.01 } : null, s, ranges, 33);
@@ -400,5 +452,46 @@ describe('the hat lost and found again', () => {
     let st = r.state;
     for (let i = 0; i < 60; i++) { r = stepCap(st, { x: 0.8, y: 0.5, area: 0.01 }, s, ranges, 33, true); st = r.state; }
     expect(r.values.tempo!).toBeCloseTo(70 + 0.2 * 60, 0);
+  });
+});
+
+describe('the range learnt one way at a time', () => {
+  const x = { min: 0.2, max: 0.8 };
+  const y = { min: 0.3, max: 0.7 };
+  it('learning one way keeps the other as it was', () => {
+    expect(mergeReach({ reachX: x, reachY: y }, 'x', { min: 0.1, max: 0.9 })).toEqual({ reachX: { min: 0.1, max: 0.9 }, reachY: y });
+    expect(mergeReach({ reachX: x, reachY: y }, 'y', null)).toEqual({ reachX: x, reachY: null });
+    expect(mergeReach({ reachX: null, reachY: null }, 'y', y)).toEqual({ reachX: null, reachY: y });
+  });
+});
+
+describe('what the cap follows: the hat, or the way the head points', () => {
+  it('a new player follows the hat; the head has its own learnt range, apart from the hat\'s', () => {
+    expect(DEFAULT_CAP_SETTINGS.follow).toBe('hat');
+    expect(DEFAULT_CAP_SETTINGS.headReachX).toBeNull();
+    expect(DEFAULT_CAP_SETTINGS.headReachY).toBeNull();
+    expect(sanitizeCapSettings({}).follow).toBe('hat');
+  });
+
+  it('a saved choice and the head\'s range are kept; anything odd is the hat', () => {
+    const s = sanitizeCapSettings({ follow: 'head', headReachX: { min: 0.2, max: 0.8 }, headReachY: { min: 0.3, max: 0.7 } });
+    expect(s.follow).toBe('head');
+    expect(s.headReachX).toEqual({ min: 0.2, max: 0.8 });
+    expect(s.headReachY).toEqual({ min: 0.3, max: 0.7 });
+    expect(sanitizeCapSettings({ follow: 'nose' }).follow).toBe('hat');
+  });
+
+  it('learning a range while following the head fills the head\'s range, not the hat\'s', () => {
+    const hatOnly = { reachX: { min: 0.1, max: 0.9 }, reachY: null, headReachX: null, headReachY: null };
+    expect(mergeReach(hatOnly, 'y', { min: 0.4, max: 0.6 }, 'head')).toEqual({ headReachX: null, headReachY: { min: 0.4, max: 0.6 } });
+    expect(mergeReach(hatOnly, 'y', { min: 0.4, max: 0.6 }, 'hat')).toEqual({ reachX: { min: 0.1, max: 0.9 }, reachY: { min: 0.4, max: 0.6 } });
+  });
+
+  it('following the head, the head\'s range is the one in force', () => {
+    const s = sanitizeCapSettings({ follow: 'head', reachX: { min: 0.1, max: 0.9 }, headReachX: { min: 0.3, max: 0.7 } });
+    expect(rangesInForce(s).reachX).toEqual({ min: 0.3, max: 0.7 });
+    expect(rangesInForce({ ...s, follow: 'hat' }).reachX).toEqual({ min: 0.1, max: 0.9 });
+    // The side-to-side curve belongs to the hat's place in the picture: not used for the head.
+    expect(rangesInForce({ ...s, sideArc: { a: 0.1, b: 0, c: 0 } }).sideArc).toBeNull();
   });
 });

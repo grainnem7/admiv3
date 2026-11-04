@@ -165,3 +165,89 @@ describe('a launched loop plays through its own loop colours', () => {
     expect(p.channelById.has('green')).toBe(true);
   });
 });
+
+describe('Calm / Busy, for the whole piece (spec 2026-11-04)', () => {
+  const fired = (e: BoardSequencerEngine) => e.drainFiredNotes().map((f) => `${f.colour}@${f.col}`);
+
+  it('Calm: the loops play only their notes on the main beats; the player’s own counters are untouched', () => {
+    const { e, p } = engine();
+    e.setLaunchedLoops([0], [[cell(1, 1, 'loop:melody:violin'), cell(1, 2, 'loop:melody:violin')]], loopChannels);
+    e.setActiveLoops([[cell(2, 1, 'green'), cell(2, 2, 'green')]]);
+    e.setActiveCells([cell(3, 1, 'green')]);
+    e.setFeel('calm');
+    p.fireStep(1, 7.5, 1, null); // step 2 of the bar: between the main beats
+    expect(fired(e)).toEqual(['green@1']); // only the live counter
+    p.fireStep(2, 8.5, 1, null); // step 3: a main beat
+    expect(fired(e).sort()).toEqual(['green@2', 'loop:melody:violin@2']);
+    // Normal again: the loop's note between the main beats plays (alone, so no melody waits its turn).
+    e.setActiveCells([]);
+    e.setActiveLoops([]);
+    e.setFeel('normal');
+    p.fireStep(9, 15.5, 1, null);
+    expect(fired(e)).toEqual(['loop:melody:violin@1']);
+  });
+
+  it('Calm: no Extra notes. Busy: Extra notes at least at half, around everything. Normal: the setting', () => {
+    const { e } = engine();
+    const amount = () => (e as unknown as { fillAmount: number }).fillAmount;
+    e.setFill(0.3, 1, null);
+    expect(amount()).toBeCloseTo(0.3);
+    e.setFeel('calm');
+    expect(amount()).toBe(0);
+    e.setFeel('busy');
+    expect(amount()).toBeCloseTo(0.5);
+    e.setFill(0.8, 1, null);
+    expect(amount()).toBeCloseTo(0.8);
+    e.setFeel('normal');
+    expect(amount()).toBeCloseTo(0.8);
+    e.setFill(0, 1, null);
+    expect(amount()).toBe(0);
+  });
+});
+
+describe('Drums silent on the iPad: no drums from any loop, nor from the band (spec 2026-11-04, "Live only")', () => {
+  it('a launched loop plays no drum note while drums are silent, and the rest of the loop plays on', () => {
+    const { e, p } = engine();
+    e.setLaunchedLoops([0], [[cell(1, 2, 'loop:melody:violin'), cell(3, 2, 'loop:drums:snare')]], loopChannels);
+    e.setSilentParts(['drums']);
+    p.fireStep(2, 7.5, 1, null);
+    expect(e.drainFiredNotes().map((f) => f.colour)).toEqual(['loop:melody:violin']);
+    expect(p.drumKit?.play).not.toHaveBeenCalled();
+    e.setSilentParts([]);
+    p.fireStep(10, 15.5, 1, null);
+    expect(e.drainFiredNotes().map((f) => f.colour).sort()).toEqual(['loop:drums:snare', 'loop:melody:violin']);
+  });
+
+  it("an older loop's drums, by its colour's job, and the loop bank's, are silent the same way", () => {
+    const { e, p } = engine();
+    e.setActiveLoops([[cell(1, 2, 'green'), cell(3, 2, 'black')]]);
+    e.setLaunchedLoops([0], [[cell(2, 2, 'black')]], []);
+    e.setSilentParts(['drums']);
+    p.fireStep(2, 7.5, 1, null);
+    expect(e.drainFiredNotes().map((f) => f.colour)).toEqual(['green']);
+    expect(p.drumKit?.play).not.toHaveBeenCalled();
+  });
+
+  it("the band's drums are not played while drums are silent (it would step in otherwise); its other parts are", () => {
+    const { e, p } = engine();
+    const pad = vi.fn();
+    const priv = p as unknown as Priv & { bandVoices: unknown; playBandEvent(ev: unknown, t: number, spb: number): void };
+    priv.bandVoices = { pad: { play: pad }, bass: { play: vi.fn() }, lead: { play: vi.fn() } };
+    e.setSilentParts(['drums']);
+    priv.playBandEvent({ part: 'groove', offset: 0, dur: 0.25, accent: 0.8, drum: 'kick' }, 1, 0.5);
+    priv.playBandEvent({ part: 'pad', offset: 0, dur: 1, accent: 0.6, midi: 60 }, 1, 0.5);
+    expect(p.drumKit?.play).not.toHaveBeenCalled();
+    expect(pad).toHaveBeenCalled();
+    expect(e.drainFiredNotes().map((f) => f.colour)).toEqual(['band:pad']);
+  });
+
+  it('with Calm as well: the loops thinned to the main beats, and still no drums', () => {
+    const { e, p } = engine();
+    e.setLaunchedLoops([0], [[cell(1, 1, 'loop:melody:violin'), cell(1, 2, 'loop:melody:violin'), cell(3, 2, 'loop:drums:snare')]], loopChannels);
+    e.setSilentParts(['drums']);
+    e.setFeel('calm');
+    p.fireStep(1, 6.5, 1, null);
+    p.fireStep(2, 7.5, 1, null);
+    expect(e.drainFiredNotes().map((f) => `${f.colour}@${f.col}`)).toEqual(['loop:melody:violin@2']);
+  });
+});

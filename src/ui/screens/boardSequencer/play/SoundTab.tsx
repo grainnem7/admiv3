@@ -353,7 +353,7 @@ export function SoundTab(p: SoundTabProps): JSX.Element {
       </section>
 
       <Disclosure summary="Advanced: key, scale, note length, mix, AI">
-        {inAbleton && <Note as="p" style={{ margin: '0 0 8px' }}>{`${IN_ABLETON}: Studio mix and the mix settings here only change ADMI's own sound. Key, scale and note length still change the notes Ableton plays.`}</Note>}
+        {inAbleton && <Note as="p" style={{ margin: '0 0 8px' }}>{`${IN_ABLETON}: Studio mix and the mix settings here only change Timbo's own sound. Key, scale and note length still change the notes Ableton plays.`}</Note>}
         {p.advanced}
       </Disclosure>
     </div>

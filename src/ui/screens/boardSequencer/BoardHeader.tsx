@@ -1,5 +1,6 @@
 import { useId, type CSSProperties, type ReactNode } from 'react';
 import { Button } from './ui/Button';
+import { CapLogo } from '../../components/CapLogo';
 import type { BoardMode } from './theme/boardTokens';
 
 export interface CameraNotice {
@@ -54,9 +55,12 @@ export function BoardHeader({
         <Button tone="quiet" onClick={onExit} style={{ padding: '0 10px' }} aria-label={exitArmed ? 'Press again to stop the piece and exit' : 'Exit the Board Sequencer'}>
           {exitArmed ? '← Press again to leave' : '← Exit'}
         </Button>
-        {/* The wordmark, then the screen's name in the quiet colour (L2). */}
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flex: '0 0 auto' }}>
-          <span aria-hidden="true" style={{ fontSize: 14, fontWeight: 700, letterSpacing: '0.2em' }}>ADMI</span>
+        {/* The wordmark (the red cap, then Timbo), then the screen's name in the quiet colour (L2). */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: '0 0 auto' }}>
+          <span data-wordmark aria-hidden="true" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 16, fontWeight: 700, letterSpacing: '0.04em' }}>
+            <CapLogo size={22} decorative />
+            Timbo
+          </span>
           <h1 style={{ fontSize: 14, fontWeight: 500, color: 'var(--bs-fg3)', margin: 0, whiteSpace: 'nowrap' }}>{title}</h1>
         </div>
         {/* Grows to fill the row; on a phone-narrow window it takes a row of its own rather

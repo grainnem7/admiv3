@@ -188,8 +188,8 @@ const HELP: HelpEntry[] = [
   },
   {
     title: 'iPad controls',
-    body: 'Start ADMI with "npm run show" (or "npm run dev:ipad" for testing), tick iPad controls on the Connections tab, and on an '
-      + 'iPad on the same Wi-Fi point the Camera at the QR code it shows (or type the link into Safari). Four strips (Speed, '
+    body: 'Start Timbo with "npm run show" (or "npm run dev:ipad" for testing), tick iPad controls on the Connections tab, and on an '
+      + 'iPad on the same Wi-Fi point the Camera at the QR code it shows (or type the link into Safari). New players get the simple layout (see "The iPad for a player without fine control"). On the full layout, four strips (Speed, '
       + 'Dynamics, Extra notes, Sounds change) slide: the whole strip is the target, the '
       + 'ends are generous, values move in steps — and four pads (New idea, New sound, Keep, '
       + 'Mute) act on a tap; Mute needs two. Learn reach makes a player’s comfortable slide the '
@@ -199,13 +199,13 @@ const HELP: HelpEntry[] = [
       + 'waits for Carry on.',
   },
   {
-    title: 'Sound from: ADMI, Ableton or Both',
-    body: 'Connections tab → Sound from. ADMI: its own sound. Ableton: everything the board plays '
-      + 'goes to Ableton over MIDI (the loopMIDI port called ADMIOutput) and Ableton makes the sound; ADMI '
+    title: 'Sound from: Timbo, Ableton or Both',
+    body: 'Connections tab → Sound from. Timbo: its own sound. Ableton: everything the board plays '
+      + 'goes to Ableton over MIDI (the loopMIDI port called ADMIOutput) and Ableton makes the sound; Timbo '
       + 'still draws every note. Both: the two together, for checking the timing. Channels: melody 1, '
       + 'bass 2, chords 3, all drums 10, band chords 11, band bass 12, Extra notes 13, or one per colour '
       + '(melody colours 1, 14 and 15 in turn, bass 2, chords 3; shown as "MIDI ch" on each colour card). Fades and Mute go out as CC 11, the Volume counter as '
-      + 'CC 7 on channel 16. If the port goes during a piece, ADMI plays its own sound at once and waits '
+      + 'CC 7 on channel 16. If the port goes during a piece, Timbo plays its own sound at once and waits '
       + 'for "Switch to Ableton". Panic stops any stuck note. Play test note checks Ableton is listening. '
       + 'Chrome and Edge only. Full setup: docs/ableton-setup-guide.html. With Instrument Racks in the '
       + 'template, a card\u2019s sound, the World and Sounds change switch Ableton\u2019s sound too (CC 30), and Loud, '
@@ -308,10 +308,24 @@ const HELP: HelpEntry[] = [
   },
   {
     title: 'The iPad for a player without fine control',
-    body: 'Connections tab → iPad controls. "Use the safe show layout" sets the iPad for the '
-      + 'show: only the Extra notes strip, New idea and End piece, with Speed locked, so a '
-      + 'stray touch cannot stop, jump or silence the piece. New players start with it. '
-      + 'Otherwise, untick the strips and pads this player '
+    body: 'Connections tab → iPad controls. "Use the simple layout" gives the iPad one page for playing '
+      + 'live: Drums, Calm / Busy, what the melody plays (Piano, Flute, Trumpet, Sax) and the Board, each '
+      + 'row a different shape. Loops are made and switched on the laptop, not the iPad. Whatever is '
+      + 'playing is lit up and says "Playing"; whatever is silent is dark and says "Silent". Drums silent '
+      + 'means no drums anywhere: the drum counters on the board (they stay there), the drums in every '
+      + 'loop and the band\u2019s drums; everything else plays on. Calm plays the loops on their main beats '
+      + 'only, with no Extra notes; Busy adds Extra notes round everything; press the lit one again for '
+      + 'normal. Board silences the counters on the board so only the loops play. Drums, Calm, Busy and '
+      + 'Board work playing or stopped and stay after Stop and a reload; closing Timbo brings them back to '
+      + 'normal. The laptop draws silenced counters faded and says "Drums silenced on the iPad", "Calm '
+      + '(from the iPad)", "Busy (from the iPad)" or "Board counters silenced on the iPad" under the board '
+      + 'and in Show, with a button back. Tick which rows the iPad shows under "What the simple layout '
+      + 'shows". There are no strips and no Stop, End piece or Mute, so a stray touch cannot stop, jump or '
+      + 'silence the piece: Speed is set by the hat alone. New players start with it. A melody sound is '
+      + 'the same as choosing it on the Sound '
+      + 'tab, so it works with Ableton too. For more controls, "Use the full layout instead", or '
+      + 'tick what the iPad should show: ticking a box changes the iPad to the full layout. '
+      + 'There, untick the strips and pads this player '
       + 'will not use: fewer things means bigger things. Lock a strip (a speed that must not '
       + 'change mid-piece) and it ignores touch. "A touch on a strip": Jumps to the finger '
       + '(where the finger lands is the value) or Follows the movement (landing changes nothing; sliding moves the '
@@ -332,7 +346,7 @@ const HELP: HelpEntry[] = [
       + 'the scene keeps playing under the player, and the line under the board names them '
       + '("Simplified: Tim and Bed"). The sound world, the speed and the clock '
       + 'carry on, and scenes still come in, with just their first loop. Back to full brings '
-      + 'the scene back from the next pass; Stop ends it. ADMI also watches whether the sound '
+      + 'the scene back from the next pass; Stop ends it. Timbo also watches whether the sound '
       + 'keeps time. If the laptop is too busy and the sound falls behind, it says so on the '
       + 'laptop and pauses the extras, heaviest first (Magenta, then Extra notes, then Sounds '
       + 'change); "Switch the extras back on" undoes it. The Ready check says how the last run '

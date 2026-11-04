@@ -10,7 +10,7 @@
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 'react';
 import {
   capColourAt, capMask, capPatches, capPauseReason, faceBoxFromLandmarks, findLearntHat, handOverAxis, fitSideArc, fuseWithFace,
-  hatPosition, initialCapState, lookAlikes, MIN_REACH, pickCap, stepCap, widenReach,
+  hatPosition, initialCapState, lookAlikes, MIN_REACH, pickCap, pickPlayerFace, rangesInForce, stepCap, widenReach,
   type BoardActivity, type CapColour, type CapOffset, type CapPatch, type CapSettings, type CapSighting, type FaceBox, type Frame,
   type SideArc,
 } from '../../../tracking/cap/capTracker';
@@ -19,6 +19,8 @@ import {
   hatLearner, roomLearner, type HatBox, type HatLearner, type HatOutcome, type LearntRoom, type RoomLearner,
 } from '../../../tracking/cap/learnHat';
 import { FaceDetector } from '../../../tracking/FaceDetector';
+import { hatSeenOver, trimSeen, type HatSeenReport, type SeenSample } from '../../../tracking/cap/hatSeen';
+import { followHead, headBounds, headPoseFromLandmarks, initialHeadFollow, type HeadPose } from '../../../tracking/cap/headFollow';
 import type { AxisRange } from '../../../remix/batonCalibration';
 import type { ControlRange, FaderRole } from '../../../profiles/BoardSequencerConfig';
 
@@ -28,6 +30,8 @@ const FRAME_H = 120;
 const TICK_MS = 40;
 /** Face tracking costs more: every few frames is plenty for checking and bridging. */
 const FACE_EVERY = 3;
+/** Following the head, the face IS the control: looked at more often, so it answers quickly. */
+const FACE_EVERY_HEAD = 2;
 /** A face older than this is no longer where the player is. */
 const FACE_STALE_MS = 400;
 const UI_EVERY_MS = 125;
@@ -77,7 +81,8 @@ export interface CapView {
   face: FaceStatus;
   /** The cap is in sight (or, with face assist, the player's head is). */
   seen: boolean;
-  source: 'cap' | 'face' | 'none';
+  /** 'head': following the way the head points; 'bow': the face lost in a bow (at the bottom). */
+  source: 'cap' | 'face' | 'none' | 'head' | 'bow';
   /** Where each direction is, 0..1, for the bars. */
   axes: { x: number | null; y: number | null };
   values: Partial<Record<FaderRole, number>>;
@@ -91,6 +96,8 @@ export interface CapView {
   hatResult: HatResult | null;
   /** Step 1 has been done this session, so step 2 can be. */
   roomLearnt: boolean;
+  /** How well the hat was seen over the last 10 s, or null until there is a second of pictures. */
+  seen10s: HatSeenReport | null;
 }
 
 /**
@@ -134,7 +141,8 @@ export function useCapTracker(opts: {
   pointerRef: MutableRefObject<{ x: number; y: number } | null>;
   /** The control values for the board runtime to merge. */
   valuesRef: MutableRefObject<Partial<Record<FaderRole, number>>>;
-  onReachLearnt(reachX: AxisRange | null, reachY: AxisRange | null): void;
+  /** One way's reach is learnt (null: the cap hardly moved that way). */
+  onReachLearnt(axis: 'x' | 'y', reach: AxisRange | null): void;
   onSideLearnt(arc: SideArc | null): void;
   /** A step of Learn the hat is done; `learnt` is the hat to keep (null: nothing changes). */
   onHatLearnt(result: HatResult, learnt: StoredLearntHat | null): void;
@@ -152,7 +160,8 @@ export function useCapTracker(opts: {
   previewRef: MutableRefObject<CapPreview>;
   /** The hat now, every frame. */
   liveRef: MutableRefObject<CapLive>;
-  learnReach(seconds: number): void;
+  /** Learn the reach one way: side to side ('x') or up and down ('y'). */
+  learnReach(seconds: number, axis: 'x' | 'y'): void;
   learnSide(seconds: number): void;
   /** Start a step of Learn the hat (ignored while one is under way). */
   learnHatStep(step: HatStep): void;
@@ -198,10 +207,10 @@ export function useCapTracker(opts: {
   const hatResultRef = useRef<HatResult | null>(null);
   // The learnt hat, unpacked once (not every frame) from what is stored.
   const modelRef = useRef<{ stored: StoredLearntHat | null; model: HatModel | null }>({ stored: null, model: null });
-  const learnRef = useRef<{ until: number; x: AxisRange | null; y: AxisRange | null } | null>(null);
+  const learnRef = useRef<{ until: number; axis: 'x' | 'y'; x: AxisRange | null; y: AxisRange | null } | null>(null);
   const handOverRef = useRef(new Map<FaderRole, number>());
   const [view, setView] = useState<CapView>({
-    camera: 'off', face: 'off', seen: false, source: 'none', axes: { x: null, y: null }, values: {}, learning: null,
+    camera: 'off', face: 'off', seen: false, source: 'none', axes: { x: null, y: null }, values: {}, learning: null, seen10s: null,
     paused: null, hatLearning: null, hatResult: null, roomLearnt: false,
   });
   const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
@@ -224,7 +233,7 @@ export function useCapTracker(opts: {
     if (!settings.enabled) {
       valuesRef.current = {};
       liveRef.current = CAP_LIVE_OFF;
-      setView((v) => ({ ...v, camera: 'off', face: 'off', seen: false, source: 'none', hatLearning: null }));
+      setView((v) => ({ ...v, camera: 'off', face: 'off', seen: false, source: 'none', hatLearning: null, seen10s: null }));
       return;
     }
     let stopped = false;
@@ -252,6 +261,11 @@ export function useCapTracker(opts: {
     }
     let offset: CapOffset | null = null;
     let lastFace: { box: FaceBox; at: number } | null = null;
+    // Following the head: its pose when the face was last seen, and the bow state.
+    let lastPose: { pose: HeadPose; at: number } | null = null;
+    let head = initialHeadFollow();
+    // The last 10 s of pictures: what each position came from, for "how well it sees the hat".
+    let seenSamples: SeenSample[] = [];
     let frameNo = 0;
     let lastTick = performance.now();
     let lastUi = 0;
@@ -288,6 +302,10 @@ export function useCapTracker(opts: {
     const startFace = (): void => {
       if (face || faceStatus === 'unavailable') return;
       faceStatus = 'loading';
+      // One face: asking for more makes MediaPipe run its full detector every frame instead of
+      // tracking, and the cap loop starved (the hat e2e lost most of its frames). Someone beside
+      // the player is still told apart (pickPlayerFace): a face the seen cap is not on is not
+      // the player's, nor one far from where the player's was.
       const f = new FaceDetector({ numFaces: 1, outputBlendshapes: false });
       face = f;
       // The model loads from the internet the first time; without it the cap works alone.
@@ -330,25 +348,51 @@ export function useCapTracker(opts: {
           ({ patches } = capPatches(mask, FRAME_W, FRAME_H));
           cap = pickCap(patches, state.last);
         }
-        if (s.faceAssist) {
+        const followingHead = s.follow === 'head';
+        if (s.faceAssist || followingHead) {
           startFace();
-          if (face && faceStatus === 'on' && frameNo % FACE_EVERY === 0) {
+          if (face && faceStatus === 'on' && frameNo % (followingHead ? FACE_EVERY_HEAD : FACE_EVERY) === 0) {
             try {
               const r = face.detectForVideo(video, now);
               // FaceDetector hands back its points ALREADY mirrored (for a selfie view), so they
               // only need flipping when this picture is NOT a mirror. Flipping them again for a
               // mirrored picture put the face on the wrong side: the real cap was rejected as
               // "not on the head" and the cap followed a spot across the room.
-              const box = r.face ? faceBoxFromLandmarks(r.face.landmarks, !s.mirror) : null;
-              if (box) lastFace = { box, at: now };
+              // Every face found, then the player's among them: never just the first one, which
+              // could be someone sitting beside the player.
+              const found = (r.faces ?? (r.face ? [r.face.landmarks] : []))
+                .map((points) => ({ points, box: faceBoxFromLandmarks(points, !s.mirror) }))
+                .filter((f): f is { points: typeof f.points; box: FaceBox } => f.box !== null);
+              const box = pickPlayerFace(found.map((f) => f.box), cap, lastFace?.box ?? null);
+              if (box) {
+                lastFace = { box, at: now };
+                const pose = headPoseFromLandmarks(found.find((f) => f.box === box)!.points, !s.mirror);
+                if (pose) lastPose = { pose, at: now };
+              }
             } catch { /* a missed frame */ }
           }
         }
       }
       frameNo++;
-      const faceBox = s.faceAssist && lastFace && now - lastFace.at < FACE_STALE_MS ? lastFace.box : null;
-      const fused = fuseWithFace(cap, faceBox, offset);
-      offset = fused.offset;
+      const freshFace = lastFace && now - lastFace.at < FACE_STALE_MS ? lastFace.box : null;
+      const faceBox = s.faceAssist ? freshFace : null;
+      const hatFused = fuseWithFace(cap, faceBox, offset);
+      offset = hatFused.offset;
+      // Following the head: the face's pose, the hat only as backup in a deep bow.
+      let fused: { sighting: CapSighting | null; source: CapView['source'] } = hatFused;
+      if (s.follow === 'head' && !mouse) {
+        const pose = lastPose && now - lastPose.at < FACE_STALE_MS ? lastPose.pose : null;
+        const r = followHead(pose, cap, head, headBounds(s.headReachY));
+        head = r.state;
+        fused = r;
+      }
+      if (camera === 'running') {
+        // For "how well it sees": the thing followed counts as seen; the face standing in
+        // for a hidden hat, or the hat for a bowed head, as standing in.
+        const counted = fused.source === 'head' ? 'cap' : fused.source === 'bow' ? 'face' : fused.source;
+        seenSamples.push({ t: now, source: counted });
+        if (seenSamples.length % 60 === 0) seenSamples = trimSeen(seenSamples, now);
+      }
       // Hold still while counters are being moved, and while learning (the player is
       // stretching to the ends on purpose: that must not swing the music about).
       const learning = learnRef.current !== null || sideRef.current !== null || hatRef.current !== null;
@@ -359,13 +403,18 @@ export function useCapTracker(opts: {
         if (s.yRole === role) state = handOverAxis(state, 'y', p);
       }
       handOverRef.current.clear();
-      const reading = stepCap(state, fused.sighting, s, rangesRef.current, dt, paused !== null, tempoCentreRef?.current());
+      const reading = stepCap(state, fused.sighting, rangesInForce(s), rangesRef.current, dt, paused !== null, tempoCentreRef?.current());
       state = reading.state;
       valuesRef.current = reading.values;
       liveRef.current = { camera, seen: reading.seen, axes: reading.axes, paused: paused !== null };
       // What it follows is the cap's patch, unless the face check turned it down.
       const others = lookAlikes(patches, fused.source === 'cap' ? cap : null);
-      previewRef.current = { frame, sighting: fused.sighting, face: faceBox, mask, others };
+      // Following the head, its position is a direction, not a place in the picture: the
+      // picture marks the face that is followed instead (and the hat, when it stands in).
+      const shown = s.follow === 'head' && !mouse
+        ? (fused.source === 'head' && freshFace ? { x: freshFace.x + freshFace.w / 2, y: freshFace.y + freshFace.h / 2, area: 0 } : fused.source === 'bow' ? cap : null)
+        : fused.sighting;
+      previewRef.current = { frame, sighting: shown, face: faceBox ?? (s.follow === 'head' ? freshFace : null), mask, others };
 
       // Learn the hat: a moment to get ready, then a picture taken about every 75 ms and
       // learnt from as it comes, so the end of the step has only a short check left.
@@ -414,7 +463,7 @@ export function useCapTracker(opts: {
         if (now >= learn.until) {
           learnRef.current = null;
           const ok = (r: AxisRange | null): AxisRange | null => (r && r.max - r.min >= MIN_REACH ? r : null);
-          onReachRef.current(ok(learn.x), ok(learn.y));
+          onReachRef.current(learn.axis, ok(learn.axis === 'x' ? learn.x : learn.y));
         }
       }
       // Learning the side-to-side curve: every position seen, as it is in the picture.
@@ -432,6 +481,7 @@ export function useCapTracker(opts: {
         const next: CapView = {
           camera, face: s.faceAssist && !mouse ? faceStatus : 'off', seen: reading.seen, source: fused.source,
           axes: reading.axes, values: reading.values, paused,
+          seen10s: camera === 'running' ? hatSeenOver(seenSamples, now) : null,
           learning: learn && learnRef.current ? Math.max(0, Math.ceil((learn.until - now) / 1000))
             : side && sideRef.current ? Math.max(0, Math.ceil((side.until - now) / 1000)) : null,
           // Once a second, like the countdowns above: every change re-renders the whole screen,
@@ -465,8 +515,8 @@ export function useCapTracker(opts: {
   // The board's camera too, once it is known: the cap may have taken it while it wasn't.
   }, [settings.enabled, settings.cameraId, mouse, pointerRef, valuesRef, activityRef, opts.boardCameraId]);
 
-  const learnReach = useCallback((seconds: number) => {
-    learnRef.current = { until: performance.now() + seconds * 1000, x: null, y: null };
+  const learnReach = useCallback((seconds: number, axis: 'x' | 'y') => {
+    learnRef.current = { until: performance.now() + seconds * 1000, axis, x: null, y: null };
   }, []);
 
   const learnSide = useCallback((seconds: number) => {

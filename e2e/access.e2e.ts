@@ -94,11 +94,11 @@ test('A10: text is 14, 16 or 20 px (or a display size), never smaller; text fiel
     .filter((i) => i.offsetParent !== null).map((i) => parseFloat(getComputedStyle(i).paddingLeft)));
   expect(pads.length).toBeGreaterThan(0);
   for (const p of pads) expect(p).toBeGreaterThanOrEqual(10);
-  // ADMI / Ableton / Both are the same size as every other choice.
+  // Timbo / Ableton / Both are the same size as every other choice.
   await page.getByRole('button', { name: 'Board', exact: true }).click();
   await page.getByRole('tab', { name: 'Connections' }).click();
   const choice = (name: string) => page.getByRole('radio', { name, exact: true }).first().evaluate((e) => getComputedStyle(e).fontSize);
-  expect(await choice('ADMI')).toBe(await choice('Both'));
+  expect(await choice('Timbo')).toBe(await choice('Both'));
 });
 
 test('A7: Time to press again and Space plays and stops live in Advanced, and Space can be switched off', async ({ page }) => {
@@ -144,9 +144,9 @@ test('A18: the Welcome page has one main region and its headings run in order; t
   expect(Math.abs((await centre(/^Player:/)) - (await centre('Help')))).toBeLessThanOrEqual(2);
 });
 
-test('A18: the audience page is called "ADMI – audience"', async ({ page }) => {
+test('A18: the audience page is called "Timbo – audience"', async ({ page }) => {
   await page.goto('/audience.html');
-  await expect(page).toHaveTitle('ADMI – audience');
+  await expect(page).toHaveTitle('Timbo – audience');
 });
 
 test('A4: the squares of the board have an edge (checked in the drawing)', async ({ page }) => {
@@ -241,8 +241,12 @@ test('U4: Welcome wears the board’s colours: the main way in is the board’s 
   const bg = await main.evaluate((e) => getComputedStyle(e).backgroundColor);
   // The board's accent in dark mode: the text colour, #f2f2f2 (L1).
   expect(bg).toBe('rgb(242, 242, 242)');
+  // The logo is Timbo's red cap on the ground, not a letter in a box.
+  await expect(page.getByRole('img', { name: 'Timbo' })).toBeVisible();
   const logo = await page.locator('.welcome-logo').evaluate((e) => getComputedStyle(e).backgroundColor);
-  expect(logo).toBe('rgb(242, 242, 242)');
+  expect(logo).toBe('rgba(0, 0, 0, 0)');
+  await expect(page.getByRole('heading', { name: 'Timbo', level: 1 })).toBeVisible();
+  await expect(page).toHaveTitle('Timbo');
   expect(pageErrors(page)).toEqual([]);
 });
 

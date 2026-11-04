@@ -18,8 +18,8 @@ export interface HeaderNoticeInput {
 }
 
 export const NOT_SAVED_TEXT = 'Changes are not being saved — the browser refused. Use Back up to a file (Make a piece, step 3) now.';
-export const OTHER_TAB_NOTE = "ADMI is also open in another tab. That tab can't save: only this one does.";
-export const OTHER_TAB_WARNING = 'ADMI is open in another tab or window. Close all but one, or they will save over each other.';
+export const OTHER_TAB_NOTE = "Timbo is also open in another tab. That tab can't save: only this one does.";
+export const OTHER_TAB_WARNING = 'Timbo is open in another tab or window. Close all but one, or they will save over each other.';
 
 /**
  * The one notice the header shows, the most urgent first, and whether "Change camera" goes

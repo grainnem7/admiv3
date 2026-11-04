@@ -10,7 +10,7 @@ import {
 import { canSave } from './tabSaving';
 
 /** Said wherever a tab that can't save is asked to (src/storage/tabSaving.ts). */
-export const OTHER_TAB_SAVES = "ADMI is open in another tab. This one can't save: close the other tab to save here.";
+export const OTHER_TAB_SAVES = "Timbo is open in another tab. This one can't save: close the other tab to save here.";
 
 export const STORE_PATH = '/admi-store';
 const SAVE_DELAY_MS = 800;

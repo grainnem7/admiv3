@@ -149,15 +149,15 @@ describe('the check — length and ending', () => {
 
 describe('the check — the iPad', () => {
   function ipad(over: Partial<IpadCheckInput> = {}): IpadCheckInput {
-    return { enabled: true, connected: true, safeLayout: true, pageOutOfDate: false, playerName: 'Tim', onUseSafeLayout: vi.fn(), ...over };
+    return { enabled: true, connected: true, simpleLayout: true, pageOutOfDate: false, playerName: 'Tim', onUseSimpleLayout: vi.fn(), ...over };
   }
   const labels = (p: IpadCheckInput): string[] => ipadCheckItems(p).map((i) => i.label);
 
   it('not in use: one line, and nothing about its layout or its page', () => {
-    expect(ipadCheckItems(ipad({ enabled: false, safeLayout: false, pageOutOfDate: true }))).toEqual([{ label: 'iPad not in use', state: 'ok' }]);
+    expect(ipadCheckItems(ipad({ enabled: false, simpleLayout: false, pageOutOfDate: true }))).toEqual([{ label: 'iPad not in use', state: 'ok' }]);
   });
 
-  it('connected, in the safe show layout and up to date: one line, ready', () => {
+  it('connected, in the simple layout and up to date: one line, ready', () => {
     expect(ipadCheckItems(ipad())).toEqual([{ label: 'iPad connected', state: 'ok' }]);
   });
 
@@ -166,21 +166,21 @@ describe('the check — the iPad', () => {
     expect(item).toMatchObject({ label: 'iPad not connected', state: 'warn' });
   });
 
-  it("not in the safe show layout: a warning that names the player, with the button that sets it", () => {
-    const p = ipad({ safeLayout: false });
-    const item = ipadCheckItems(p).find((i) => i.label === "Tim's iPad is not in the safe show layout");
+  it("not in the simple layout: a warning that names the player, with the button that sets it", () => {
+    const p = ipad({ simpleLayout: false });
+    const item = ipadCheckItems(p).find((i) => i.label === "Tim's iPad is not in the simple layout");
     expect(item?.state).toBe('warn');
     expect(item?.fix).toBe('More on the iPad means one stray touch can do more, such as skip a scene or stop a loop. Fine if you chose it on purpose.');
-    expect(item?.action?.label).toBe('Use the safe show layout');
-    expect(item?.action?.name).toBe("Use the safe show layout on Tim's iPad");
+    expect(item?.action?.label).toBe('Use the simple layout');
+    expect(item?.action?.name).toBe("Use the simple layout on Tim's iPad");
     item?.action?.onClick();
-    expect(p.onUseSafeLayout).toHaveBeenCalledTimes(1);
+    expect(p.onUseSimpleLayout).toHaveBeenCalledTimes(1);
   });
 
   it('the layout warning never stops Ready (a fuller layout may be on purpose), connected or not', () => {
     for (const connected of [true, false]) {
-      const items = ipadCheckItems(ipad({ safeLayout: false, connected }));
-      expect(items.some((i) => i.label.endsWith('is not in the safe show layout'))).toBe(true);
+      const items = ipadCheckItems(ipad({ simpleLayout: false, connected }));
+      expect(items.some((i) => i.label.endsWith('is not in the simple layout'))).toBe(true);
       expect(items.filter((i) => i.state === 'problem')).toEqual([]);
     }
   });
@@ -189,7 +189,7 @@ describe('the check — the iPad', () => {
     const item = ipadCheckItems(ipad({ pageOutOfDate: true })).find((i) => /page is out of date/.test(i.label));
     expect(item?.label).toBe("Tim's iPad page is out of date: reload it on the iPad.");
     expect(item?.state).toBe('problem');
-    expect(item?.fix).toBe("An old page may not have today's protections, such as the bounce guard on End piece. If this stays after the reload, reload ADMI on this laptop too.");
+    expect(item?.fix).toBe("An old page may not have today's protections, such as the bounce guard on End piece. If this stays after the reload, reload Timbo on this laptop too.");
   });
 
   it('an out-of-date page is only said while the iPad is connected', () => {
@@ -197,8 +197,8 @@ describe('the check — the iPad', () => {
   });
 
   it("with no player name, it says \"The player's iPad\"", () => {
-    expect(labels(ipad({ playerName: null, safeLayout: false, pageOutOfDate: true }))).toEqual([
-      'iPad connected', "The player's iPad page is out of date: reload it on the iPad.", "The player's iPad is not in the safe show layout",
+    expect(labels(ipad({ playerName: null, simpleLayout: false, pageOutOfDate: true }))).toEqual([
+      'iPad connected', "The player's iPad page is out of date: reload it on the iPad.", "The player's iPad is not in the simple layout",
     ]);
   });
 });
@@ -263,7 +263,7 @@ describe('the check — keeping time (spec 2026-10-28)', () => {
     const [item] = keepingTimeCheckItems({ report: r, running: false, valve: ['fill'] });
     expect(item.label).toBe('Keeping time: the sound fell 2.4 s behind in the last run (7 beats late, 2 dropped)');
     expect(item.state).toBe('warn');
-    expect(item.fix).toBe('Close other programs, plug the laptop in, and turn Extra notes off (Sound tab). Then run the piece again. To keep up, ADMI paused Extra notes.');
+    expect(item.fix).toBe('Close other programs, plug the laptop in, and turn Extra notes off (Sound tab). Then run the piece again. To keep up, Timbo paused Extra notes.');
   });
 
   it('a clock that drifted: reported, with the advice to check the sound output', () => {

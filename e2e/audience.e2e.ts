@@ -190,6 +190,32 @@ test('the keeping-time meter reads the same with the audience screen open as wit
   expect(pageErrors(page)).toEqual([]);
 });
 
+test("the hat's marker: it follows the hat, holds dimmed when the hat is lost, and is off with no hat", async ({ page, context }) => {
+  await page.goto('/audience.html');
+  const laptop = await context.newPage();
+  await laptop.goto('/favicon.svg');
+  const state = (hat: Record<string, unknown>) => ({
+    kind: 'state', rows: 8, cols: 8, counters: [{ row: 1, col: 0, colour: '#43a047' }], playing: true, scene: 'Arrival', world: 'none', bpm: 100, hat,
+  });
+  /** Says how things are every quarter second until `until` holds (as the laptop does). */
+  const keepUntil = async (hat: Record<string, unknown>, attr: string, value: string) => {
+    await expect.poll(async () => {
+      await laptop.evaluate((m) => { new BroadcastChannel('admi-audience').postMessage(m); }, state(hat));
+      return picture(page).getAttribute(attr);
+    }, { timeout: 15_000, intervals: [250] }).toBe(value);
+  };
+  // No hat in use (the laptop board): no marker.
+  await keepUntil({ mode: 'free', x: null, y: null, warmth: null }, 'data-hat-marker', 'off');
+  await keepUntil({ mode: 'follow', x: 0.2, y: 0.8, warmth: 0.5 }, 'data-hat-marker', 'follow');
+  await keepUntil({ mode: 'lost', x: null, y: null, warmth: null }, 'data-hat-marker', 'lost');
+  // The light holds too (the marker goes where the light is).
+  await expect(picture(page)).toHaveAttribute('data-light', 'lost');
+  await keepUntil({ mode: 'free', x: null, y: null, warmth: null }, 'data-hat-marker', 'off');
+  // Still nothing to read on the projector.
+  expect((await page.locator('body').innerText()).trim()).toBe('Arrival');
+  expect(pageErrors(page)).toEqual([]);
+});
+
 /**
  * Pictures of the audience screen for the owner to look at (not a check): synthetic boards
  * sent straight to an audience window, no people. Only with ADMI_AUDIENCE_SHOTS set to a folder.
@@ -230,6 +256,13 @@ test('pictures of the audience screen', async ({ page, context }) => {
   await send({ kind: 'notes', notes: [{ row: 6, col: 7, colour: '#e53935', band: false }] });
   await page.waitForTimeout(250);
   await page.screenshot({ path: join(dir!, 'a-shot-3-ambient-hat-right-dull.png') });
+  // The hat's marker moving from the left to the right: the trail behind it.
+  await keep({ ...ambient, hat: { mode: 'follow', x: 0.1, y: 0.4, warmth: 0.5 } }, 2500);
+  await send(state({ ...ambient, hat: { mode: 'follow', x: 0.9, y: 0.6, warmth: 0.5 } }));
+  await page.waitForTimeout(350);
+  await page.screenshot({ path: join(dir!, 'a-shot-3b-hat-marker-moving-trail.png') });
+  await keep({ ...ambient, hat: { mode: 'follow', x: 0.9, y: 0.6, warmth: 0.5 } }, 2000);
+  await page.screenshot({ path: join(dir!, 'a-shot-3c-hat-marker-following.png') });
   await keep({ ...ambient, world: 'electronic', scene: 'Build', hat: { mode: 'lost', x: null, y: null, warmth: null } }, 5000, [{ row: 4, col: 6, colour: '#fdd835', band: false }]);
   await page.screenshot({ path: join(dir!, 'a-shot-4-electronic-hat-out-of-sight.png') });
   await keep({}, 10_000);

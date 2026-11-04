@@ -101,6 +101,15 @@ export async function place(page: Page, squares: [row: number, step: number][]):
 }
 
 /**
+ * The iPad's full layout (strips, pads, pages) instead of the Simple page a new player gets
+ * (spec 2026-11-04), from the iPad settings on the Connections tab, already open.
+ */
+export async function useFullIpadLayout(page: Page): Promise<void> {
+  await page.getByRole('button', { name: 'Use the full layout instead' }).click();
+  await expect(page.getByRole('button', { name: 'Use the simple layout' })).toBeVisible();
+}
+
+/**
  * The Sound tab, with every helper open: each folds to one line (A1) and stays as it was
  * left for the session, so this opens the ones still folded.
  */

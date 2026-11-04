@@ -219,6 +219,29 @@ export function onTheHead(c: { x: number; y: number }, f: FaceBox): boolean {
     && c.y >= f.y - f.h * 1.2 && c.y <= f.y + f.h * 0.6;
 }
 
+/**
+ * The player's face among the faces in the picture. Someone beside the player must never
+ * become "the head": the face the cap is on is the player's; with the cap hidden, the face
+ * nearest where the player's was (within a face's size: the face is looked for every few
+ * frames, and someone sitting beside is further than that); with nothing to go on
+ * yet, the biggest face, the one nearest the camera. The player gone and the cap not seen:
+ * none, so the values hold rather than follow someone else.
+ */
+export function pickPlayerFace(faces: readonly FaceBox[], cap: CapSighting | null, last: FaceBox | null): FaceBox | null {
+  if (faces.length === 0) return null;
+  const centre = (f: FaceBox): { x: number; y: number } => ({ x: f.x + f.w / 2, y: f.y + f.h / 2 });
+  const from = last ? centre(last) : null;
+  const away = (f: FaceBox): number => (from ? Math.hypot(centre(f).x - from.x, centre(f).y - from.y) : 0);
+  const nearest = (list: readonly FaceBox[]): FaceBox => list.reduce((a, b) => (away(b) < away(a) ? b : a));
+  const wearing = cap ? faces.filter((f) => onTheHead(cap, f)) : [];
+  if (wearing.length > 0) return nearest(wearing);
+  if (last) {
+    const f = nearest(faces);
+    return away(f) <= Math.max(last.w, last.h) ? f : null;
+  }
+  return faces.reduce((a, b) => (b.w * b.h > a.w * a.h ? b : a));
+}
+
 /** Where the cap sits relative to the face's centre (learnt while both are seen). */
 export interface CapOffset { dx: number; dy: number }
 
@@ -269,6 +292,14 @@ export interface CapSettings {
   /** The player's comfortable reach, learnt; null = the whole picture. */
   reachX: AxisRange | null;
   reachY: AxisRange | null;
+  /**
+   * What is followed: the hat's place in the picture, or the way the head points (from the
+   * face, with the hat as backup in a deep bow: headFollow.ts). The head has its own learnt
+   * range, so switching never spoils either.
+   */
+  follow: 'hat' | 'head';
+  headReachX: AxisRange | null;
+  headReachY: AxisRange | null;
   /** What moving the cap left–right and up–down controls. */
   xRole: CapRole;
   yRole: CapRole;
@@ -306,6 +337,13 @@ export interface CapSettings {
   rewindMs: number;
   /** A hand lying still on the board stops holding the cap after this long. */
   restMs: number;
+  /**
+   * The generation of quick defaults (response, resumeAfterMs, restMs) this player has been
+   * brought up to (CAP_RESPONSE_REV); older saved players are brought up on load, unless
+   * `responseCustom`: one of those three was set on the Cap tab, so it is the player's own.
+   */
+  responseRev: number;
+  responseCustom: boolean;
 }
 
 export interface SideArc { a: number; b: number; c: number }
@@ -317,20 +355,30 @@ export const DEFAULT_CAP_SETTINGS: CapSettings = {
   learntHat: null,
   reachX: null,
   reachY: null,
+  follow: 'hat',
+  headReachX: null,
+  headReachY: null,
   xRole: 'tempo',
   yRole: 'volume',
   steps: 0,
-  response: 'steady',
+  // Quick to answer by default: Steadily, a 1 s quiet and a 3 s rest made a move to speed up
+  // take ages to be heard (owner, 4 Nov 2026). Each can still be slowed on the Cap tab.
+  response: 'quick',
   mirror: true,
   locked: false,
   faceAssist: true,
   oneAtATime: true,
   sideArc: null,
   pauseOnBoard: true,
-  resumeAfterMs: 1000,
+  resumeAfterMs: 300,
   rewindMs: 500,
-  restMs: 3000,
+  restMs: 1000,
+  responseRev: 2,
+  responseCustom: false,
 };
+
+/** The current generation of the quick defaults (see CapSettings.responseRev). */
+export const CAP_RESPONSE_REV = 2;
 
 export const CAP_RESUME_MIN_MS = 300;
 export const CAP_RESUME_MAX_MS = 4000;
@@ -653,6 +701,29 @@ export function widenReach(r: AxisRange | null, v: number): AxisRange {
 /** A reach too small to use (the cap barely moved while learning). */
 export const MIN_REACH = 0.05;
 
+/**
+ * The reach learnt one way at a time (owner, 4 Nov 2026: one short learn for both was too
+ * short): side to side ('x') or up and down ('y'), the other kept as it was.
+ */
+export function mergeReach(
+  current: Pick<CapSettings, 'reachX' | 'reachY'> & Partial<Pick<CapSettings, 'headReachX' | 'headReachY'>>, axis: 'x' | 'y', learnt: AxisRange | null,
+  follow: CapSettings['follow'] = 'hat',
+): Partial<Pick<CapSettings, 'reachX' | 'reachY' | 'headReachX' | 'headReachY'>> {
+  if (follow === 'head') {
+    return axis === 'x' ? { headReachX: learnt, headReachY: current.headReachY ?? null } : { headReachX: current.headReachX ?? null, headReachY: learnt };
+  }
+  return axis === 'x' ? { reachX: learnt, reachY: current.reachY } : { reachX: current.reachX, reachY: learnt };
+}
+
+/**
+ * The settings as the tracker uses them: following the head, the head's own range is the one
+ * in force, and the side-to-side curve (learnt from the hat's place in the picture) is not
+ * used, since the head's turn and nod are already apart.
+ */
+export function rangesInForce(s: CapSettings): CapSettings {
+  return s.follow === 'head' ? { ...s, reachX: s.headReachX, reachY: s.headReachY, sideArc: null } : s;
+}
+
 // ---- storing ---------------------------------------------------------------------------
 
 const ROLES: CapRole[] = ['off', 'volume', 'tempo', 'reverb', 'delay', 'tone', 'fill', 'evolve'];
@@ -688,18 +759,39 @@ export function sanitizeCapSettings(v: unknown): CapSettings {
     learntHat: sanitizeLearntHat(o.learntHat),
     reachX: range(o.reachX),
     reachY: range(o.reachY),
+    follow: o.follow === 'head' ? 'head' : 'hat',
+    headReachX: range(o.headReachX),
+    headReachY: range(o.headReachY),
     xRole: ROLES.includes(o.xRole as CapRole) ? (o.xRole as CapRole) : d.xRole,
     yRole: ROLES.includes(o.yRole as CapRole) ? (o.yRole as CapRole) : d.yRole,
     steps: o.steps === 3 || o.steps === 5 ? o.steps : 0,
-    response: o.response === 'medium' || o.response === 'quick' ? o.response : 'steady',
+    ...responseSettings(o, d),
     mirror: o.mirror !== false,
     locked: o.locked === true,
     faceAssist: o.faceAssist !== false,
     oneAtATime: o.oneAtATime !== false,
     sideArc: sideArc(o.sideArc),
     pauseOnBoard: o.pauseOnBoard !== false,
-    resumeAfterMs: num(o.resumeAfterMs, CAP_RESUME_MIN_MS, CAP_RESUME_MAX_MS, d.resumeAfterMs),
     rewindMs: num(o.rewindMs, 0, CAP_REWIND_MAX_MS, d.rewindMs),
+  };
+}
+
+/**
+ * How the cap responds: the saved choice, or, for a player saved before the quick defaults
+ * who never set these on the Cap tab, the quick defaults (so the hat answers at once on
+ * the day without anyone remembering the Cap tab). The Cap tab sets `responseCustom`.
+ */
+function responseSettings(o: Record<string, unknown>, d: CapSettings): Pick<CapSettings, 'response' | 'resumeAfterMs' | 'restMs' | 'responseRev' | 'responseCustom'> {
+  const custom = o.responseCustom === true;
+  const rev = typeof o.responseRev === 'number' && Number.isFinite(o.responseRev) ? o.responseRev : 1;
+  if (!custom && rev < CAP_RESPONSE_REV) {
+    return { response: d.response, resumeAfterMs: d.resumeAfterMs, restMs: d.restMs, responseRev: CAP_RESPONSE_REV, responseCustom: false };
+  }
+  return {
+    response: o.response === 'steady' || o.response === 'medium' || o.response === 'quick' ? o.response : d.response,
+    resumeAfterMs: num(o.resumeAfterMs, CAP_RESUME_MIN_MS, CAP_RESUME_MAX_MS, d.resumeAfterMs),
     restMs: num(o.restMs, CAP_REST_MIN_MS, CAP_REST_MAX_MS, d.restMs),
+    responseRev: CAP_RESPONSE_REV,
+    responseCustom: custom,
   };
 }

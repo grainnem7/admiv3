@@ -14,6 +14,7 @@ import {
   type CapColour, type CapRole, type CapSettings,
 } from '../../../../tracking/cap/capTracker';
 import { HAT_SURE_MAX, HAT_SURE_MIN } from '../../../../tracking/cap/hatColour';
+import { HAT_SEEN_LOW, hatSeenWords } from '../../../../tracking/cap/hatSeen';
 import type { HatBox } from '../../../../tracking/cap/learnHat';
 import { CONTROL_RANGE_LIMITS, type ControlRange, type FaderRole } from '../../../../profiles/BoardSequencerConfig';
 import { FADER_WORDS } from '../words';
@@ -35,9 +36,19 @@ export function hatJobsLine(xRole: CapRole, yRole: CapRole): string {
  * The hat's state under the board, in a few words. "cap found" only once the hat is learnt:
  * before that, what is followed may be a red chair (B7).
  */
+/** Which of the two ways of the reach is learnt, in words. */
+export function reachWords(x: boolean, y: boolean): string {
+  if (x && y) return 'Side to side and up and down learnt (the dashed box).';
+  if (x) return 'Side to side learnt. Up and down not learnt: the whole picture.';
+  if (y) return 'Up and down learnt. Side to side not learnt: the whole picture.';
+  return 'Not learnt: the whole picture is the range each way.';
+}
+
 export function capHudText(view: Pick<CapView, 'camera' | 'paused' | 'seen' | 'source'>, learnt: boolean, locked: boolean): string {
   const what = view.paused ? CAP_PAUSE_TEXT[view.paused]
     : !view.seen ? 'cap not in sight (holding)'
+      : view.source === 'head' ? 'following the head'
+      : view.source === 'bow' ? 'head bowed (at the bottom)'
       : view.source === 'face' ? 'following the face'
         // The mouse test is the cap on purpose: found.
         : learnt || view.camera === 'mouse' ? 'cap found' : 'a red thing followed · not learnt';
@@ -78,7 +89,7 @@ export function hatResultText(r: HatResult): string {
 function hatLearningText(h: HatLearningView): string {
   const what = h.step === 'room' ? 'the room' : 'the hat';
   if (h.phase === 'ready') return `Learning ${what}: starts in ${h.seconds}…`;
-  return h.step === 'room' ? `Watching the room: ${h.seconds} s. The hat stays off.`
+  return h.step === 'room' ? `Watching the room: ${h.seconds} s. The hat stays off. Nothing is followed while the room is learnt.`
     : `Watching the hat: ${h.seconds} s. Move the head a little, any way.`;
 }
 
@@ -125,7 +136,7 @@ export interface CapPanelProps {
   mouse: boolean;
   onMouse(on: boolean): void;
   cameras: MediaDeviceInfo[];
-  learnReach(seconds: number): void;
+  learnReach(seconds: number, axis: 'x' | 'y'): void;
   learnSide(seconds: number): void;
   /** Learn the hat: start step 1 (the room) or step 2 (the hat). */
   learnHatStep(step: HatStep): void;
@@ -159,6 +170,10 @@ function Preview(p: CapPanelProps & { showHat: boolean; lookAlike: HatBox | null
   settingsRef.current = p.settings;
   const shownRef = useRef({ showHat: p.showHat, lookAlike: p.lookAlike });
   shownRef.current = { showHat: p.showHat, lookAlike: p.lookAlike };
+  // While the room is learnt (hat off), what the old rule takes for the cap (hair, skin) is
+  // not drawn: a red dot on the player's head with no hat on looked like a fault.
+  const learningRoomRef = useRef(false);
+  learningRoomRef.current = p.view.hatLearning?.step === 'room';
   useEffect(() => {
     let raf = 0;
     let last = 0;
@@ -216,7 +231,7 @@ function Preview(p: CapPanelProps & { showHat: boolean; lookAlike: HatBox | null
         ctx.strokeRect(face.x * PREVIEW_W, face.y * PREVIEW_H, face.w * PREVIEW_W, face.h * PREVIEW_H);
         ctx.setLineDash([]);
       }
-      if (sighting) {
+      if (sighting && !learningRoomRef.current) {
         ctx.beginPath();
         ctx.arc(sighting.x * PREVIEW_W, sighting.y * PREVIEW_H, 14, 0, Math.PI * 2);
         ctx.lineWidth = 4;
@@ -434,13 +449,17 @@ export function CapPanel(p: CapPanelProps): JSX.Element {
   // The look-alike from the last Learn the hat, while that hat is in use.
   const lookAlike = s.learntHat && view.hatResult?.step === 'hat' ? view.hatResult.lookAlike : null;
   // Until the hat is learnt, a red thing seen may be a red chair: never "found" in green.
-  const unsure = view.seen && view.source !== 'face' && s.learntHat === null && view.camera !== 'mouse';
+  const head = s.follow === 'head';
+  const unsure = !head && view.seen && view.source !== 'face' && s.learntHat === null && view.camera !== 'mouse';
   const status = !s.enabled ? 'Off.'
     : view.camera === 'mouse' ? 'Mouse test: move the mouse over the picture.'
       : view.camera === 'no-camera' ? 'The camera could not be opened. Choose another below, or check it is plugged in.'
         : view.camera === 'only-board' ? 'The only camera is the board’s. The cap needs its own camera facing the player.'
         : view.camera === 'starting' ? 'Opening the camera…'
           : view.paused ? `Holding still (${CAP_PAUSE_TEXT[view.paused]}).`
+          : head ? (view.source === 'head' ? 'Following the way the head points.'
+            : view.source === 'bow' ? 'Head bowed: up and down is at the bottom until the face is seen again.'
+            : 'The face is not in sight. The controls hold where they are.')
           : view.seen ? (view.source === 'face' ? 'Following the face (the cap is hidden or off the head).'
             : unsure ? CAP_FOUND_UNLEARNT : 'The cap is found.')
             : 'The cap is not in sight. The controls hold where they are.';
@@ -455,6 +474,21 @@ export function CapPanel(p: CapPanelProps): JSX.Element {
       <Switch label="Control with the red cap" checked={s.enabled} onChange={(enabled) => onChange({ enabled })} />
       {s.enabled && (
         <>
+          <div style={CARD}>
+            <span style={{ fontWeight: 600 }}>What it follows</span>
+            <SegmentedControl<CapSettings['follow']>
+              label="What it follows"
+              value={s.follow}
+              onChange={(follow) => onChange({ follow })}
+              options={[{ value: 'hat', label: 'The hat' }, { value: 'head', label: 'The way the head points' }]}
+            />
+            <span style={NOTE}>
+              {head
+                ? 'Turning the head sets side to side and tipping it sets up and down, read from the face: no colour or light to learn. In a deep bow the face is lost, so up and down goes to the bottom. Learn the hat too: it helps tell a bow.'
+                : 'Where the red hat is in the picture.'}
+            </span>
+          </div>
+
           <LearnHat {...p} showHat={showHat} onShowHat={setShowHat} />
 
           <div style={CARD}>
@@ -489,6 +523,10 @@ export function CapPanel(p: CapPanelProps): JSX.Element {
             <Preview {...p} showHat={showHat} lookAlike={lookAlike} />
             <span role="status" aria-live="polite" style={{ fontSize: 14, fontWeight: 600, color: statusColour }}>{status}</span>
             {!p.mouse && <span style={NOTE}>{s.learntHat ? 'Looking for the learnt hat.' : 'Looking for the cap’s colour.'}</span>}
+            {/* How well it is seeing the hat, so a bad camera, light or hat shows as a number, not a feeling. */}
+            {!p.mouse && view.seen10s && (
+              <span style={{ ...NOTE, color: view.seen10s.cap < HAT_SEEN_LOW ? 'var(--bs-warn)' : 'var(--bs-fg2)' }}>{hatSeenWords(view.seen10s, head ? 'Face' : 'Hat')}</span>
+            )}
             {s.faceAssist && !p.mouse && (
               <span style={NOTE}>
                 {view.face === 'on' ? 'Face check on: only a red patch on the head counts, and the face bridges moments when the cap is hidden.'
@@ -529,22 +567,30 @@ export function CapPanel(p: CapPanelProps): JSX.Element {
             <div style={CARD}>
               <span style={{ fontWeight: 600 }}>Your range</span>
               <p style={NOTE}>
-                Press, then move the head comfortably as far as it goes each way for a few
-                seconds. That range becomes the whole of each control, so the ends are easy to reach.
+                One way at a time, 10 seconds each: press, then move the head comfortably as far as it
+                goes that way, and back, a few times. That range becomes the whole of the control,
+                so the ends are easy to reach.
               </p>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                 <Button
                   tone="primary"
-                  onClick={() => { p.learnReach(6); p.announce('Learning your range: move the head comfortably each way.'); }}
+                  onClick={() => { p.learnReach(10, 'x'); p.announce('Learning your side to side: move the head comfortably left and right.'); }}
                   reason={view.learning !== null ? `Learning… ${view.learning} s` : null}
                 >
-                  Learn my range
+                  Learn side to side
+                </Button>
+                <Button
+                  tone="primary"
+                  onClick={() => { p.learnReach(10, 'y'); p.announce('Learning your up and down: move the head comfortably up and down.'); }}
+                  reason={view.learning !== null ? `Learning… ${view.learning} s` : null}
+                >
+                  Learn up and down
                 </Button>
                 {(s.reachX || s.reachY) && (
                   <Button tone="quiet" onClick={() => onChange({ reachX: null, reachY: null })}>Use the whole picture</Button>
                 )}
               </div>
-              <span style={NOTE}>{s.reachX || s.reachY ? 'Range learnt (the dashed box).' : 'Not learnt: the whole picture is the range.'}</span>
+              <span style={NOTE}>{head ? reachWords(s.headReachX !== null, s.headReachY !== null) : reachWords(s.reachX !== null, s.reachY !== null)}</span>
             </div>
 
             <div style={CARD}>
@@ -594,7 +640,7 @@ export function CapPanel(p: CapPanelProps): JSX.Element {
                     label="Starts again after the board is quiet for"
                     min={CAP_RESUME_MIN_MS} max={CAP_RESUME_MAX_MS} step={100}
                     value={s.resumeAfterMs} display={seconds(s.resumeAfterMs)}
-                    onChange={(resumeAfterMs) => onChange({ resumeAfterMs })}
+                    onChange={(resumeAfterMs) => onChange({ resumeAfterMs, responseCustom: true })}
                   />
                   <LabeledSlider
                     label="Slides back by"
@@ -606,7 +652,7 @@ export function CapPanel(p: CapPanelProps): JSX.Element {
                     label="A hand resting on the board stops holding it after"
                     min={CAP_REST_MIN_MS} max={CAP_REST_MAX_MS} step={500}
                     value={s.restMs} display={seconds(s.restMs)}
-                    onChange={(restMs) => onChange({ restMs })}
+                    onChange={(restMs) => onChange({ restMs, responseCustom: true })}
                   />
                 </>
               )}
@@ -625,7 +671,7 @@ export function CapPanel(p: CapPanelProps): JSX.Element {
               <SegmentedControl<CapSettings['response']>
                 label="Follows"
                 value={s.response}
-                onChange={(response) => onChange({ response })}
+                onChange={(response) => onChange({ response, responseCustom: true })}
                 options={[{ value: 'steady', label: 'Steadily' }, { value: 'medium', label: 'Medium' }, { value: 'quick', label: 'Quickly' }]}
               />
               <Switch label="Picture like a mirror" checked={s.mirror} onChange={(mirror) => onChange({ mirror })} hint="On: moving to your right moves right on the screen." />

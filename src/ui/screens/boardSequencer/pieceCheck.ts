@@ -11,6 +11,7 @@ import { loopLabel, type Scene } from '../../../songs/performance/launcher';
 import type { BandLevel } from '../../../songs/band/band';
 import type { ReadyItem } from './play/ReadyCheck';
 import { VALVE_NAMES, type KeepingTimeReport, type ValveStep } from '../../../songs/keepingTime';
+import { SIMPLE_WORDS } from './words';
 
 export interface PieceCheckInput {
   scenes: readonly Scene[];
@@ -173,21 +174,21 @@ export interface IpadCheckInput {
   /** iPad controls are on. */
   enabled: boolean;
   connected: boolean;
-  /** The iPad is set out as the safe show layout (show decision F3). */
-  safeLayout: boolean;
+  /** The iPad shows the Simple page (spec 2026-11-04; it replaced the safe show layout, F3). */
+  simpleLayout: boolean;
   /** The iPad's page is from another build than this laptop's, or too old to say. */
   pageOutOfDate: boolean;
   /** Who plays ("Tim"); null = "the player". */
   playerName: string | null;
-  /** "Use the safe show layout", from the check itself. */
-  onUseSafeLayout(): void;
+  /** "Use the simple layout", from the check itself. */
+  onUseSimpleLayout(): void;
 }
 
 /**
  * The check's lines about the iPad: whether it is connected; whether its page is from
  * before an update (a Safari tab left open from a rehearsal has none of today's
- * protections); and whether it is in the safe show layout. The safe layout is the default
- * only for new players, so a saved player keeps a fuller iPad until it is chosen: only a
+ * protections); and whether it shows the simple layout. The simple layout is the default
+ * only for new players, so a saved player keeps their layout until it is chosen: only a
  * warning, as the fuller layout may be on purpose.
  */
 export function ipadCheckItems(p: IpadCheckInput): ReadyItem[] {
@@ -200,15 +201,15 @@ export function ipadCheckItems(p: IpadCheckInput): ReadyItem[] {
     items.push({
       label: `${who.Name}'s iPad page is out of date: reload it on the iPad.`,
       state: 'problem',
-      fix: "An old page may not have today's protections, such as the bounce guard on End piece. If this stays after the reload, reload ADMI on this laptop too.",
+      fix: "An old page may not have today's protections, such as the bounce guard on End piece. If this stays after the reload, reload Timbo on this laptop too.",
     });
   }
-  if (!p.safeLayout) {
+  if (!p.simpleLayout) {
     items.push({
-      label: `${who.Name}'s iPad is not in the safe show layout`,
+      label: `${who.Name}'s iPad is not in the simple layout`,
       state: 'warn',
       fix: 'More on the iPad means one stray touch can do more, such as skip a scene or stop a loop. Fine if you chose it on purpose.',
-      action: { label: 'Use the safe show layout', name: `Use the safe show layout on ${who.name}'s iPad`, onClick: p.onUseSafeLayout },
+      action: { label: SIMPLE_WORDS.useSimple, name: `${SIMPLE_WORDS.useSimple} on ${who.name}'s iPad`, onClick: p.onUseSimpleLayout },
     });
   }
   return items;
@@ -230,7 +231,7 @@ export function keepingTimeCheckItems(p: { report: KeepingTimeReport | null; run
   const items: ReadyItem[] = [];
   if (r.everBehind) {
     const beats = [`${r.lateBeats} ${r.lateBeats === 1 ? 'beat' : 'beats'} late`, ...(r.skippedBeats > 0 ? [`${r.skippedBeats} dropped`] : [])].join(', ');
-    const paused = p.valve.length > 0 ? ` To keep up, ADMI paused ${listNames(p.valve.map((s) => VALVE_NAMES[s]))}.` : '';
+    const paused = p.valve.length > 0 ? ` To keep up, Timbo paused ${listNames(p.valve.map((s) => VALVE_NAMES[s]))}.` : '';
     items.push({
       label: `Keeping time: the sound fell ${r.lostSec.toFixed(1)} s behind ${when} (${beats})`, state: 'warn',
       fix: `Close other programs, plug the laptop in, and turn Extra notes off (Sound tab). Then run the piece again.${paused}`, place: 'sound',

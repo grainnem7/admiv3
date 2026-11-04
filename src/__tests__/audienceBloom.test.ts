@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
   BLOOM_LIGHT_BUDGET, BLOOM_SEC, bloomAt, bloomColour, bloomShare, boardLayout, canRebloom, contrastRatio, COUNTER_RADIUS,
-  counterNeedsRing, DIM_PRESENCE, REBLOOM_MIN_GAP_SEC, SCENE_NAME, bloomGlowScale, type Rgb,
+  counterNeedsRing, DIM_PRESENCE, INITIAL_LIGHT, REBLOOM_MIN_GAP_SEC, SCENE_NAME, bloomGlowScale, stepLight, type Rgb,
 } from '../audience/light';
+import { INITIAL_MARKER, markerShare, stepMarker } from '../audience/hatMarker';
 
 const sat = (c: Rgb): number => (Math.max(...c) - Math.min(...c)) / Math.max(1, Math.max(...c));
 const lin = (v: number): number => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; };
@@ -89,6 +90,8 @@ function simulate(
   notes: { t: number; cell: Cell }[],
   seconds: number,
   orientation: 'columns' | 'rows',
+  /** The hat's marker as well: the hat swung from side to side and up and down `hatHz` times a second. */
+  hatHz = 0,
 ): number[][] {
   const { cell: size, x0, y0 } = boardLayout(SCREEN.w, SCREEN.h, board.rows, board.cols);
   const r = size * COUNTER_RADIUS;
@@ -104,6 +107,9 @@ function simulate(
   const series: number[][] = [[], [], []];
   let next = 0;
   const sorted = [...notes].sort((a, b) => a.t - b.t);
+  let light = INITIAL_LIGHT;
+  let marker = INITIAL_MARKER;
+  const markerLight = markerShare(SCREEN.w, SCREEN.h);
   for (let t = 0; t < seconds; t += DT) {
     while (next < sorted.length && sorted[next].t <= t) {
       const n = sorted[next++];
@@ -131,6 +137,15 @@ function simulate(
       const disc = 0.4 * g * Math.PI * rr * rr;
       sum[thirdOf(b.cell)] += ((halo + disc) * lum(bloomColour(b.cell.rgb, g))) / thirdArea;
     });
+    if (hatHz > 0) {
+      // The marker, all of it (ring, core and trail) counted in the third that holds the ring.
+      const side = Math.floor(t * hatHz * 2) % 2;
+      const hat = { mode: 'follow' as const, x: side, y: 1 - side, warmth: 0.5 };
+      light = stepLight(light, hat, DT, t);
+      marker = stepMarker(marker, 'follow', light, DT, t, false);
+      const k = Math.min(2, Math.floor((orientation === 'columns' ? marker.x : marker.y) * 3));
+      sum[k] += markerLight * marker.alpha;
+    }
     for (let k = 0; k < 3; k++) series[k].push(Math.min(1, sum[k]));
   }
   return series;
@@ -233,6 +248,31 @@ describe('A6: no third of the screen flashes more than 3 times a second at Speed
       });
     }
   }
+
+  for (const hatHz of [1, 2, 3, 5]) {
+    it(`with the hat's marker swinging across the thirds ${hatHz} times a second, every worst case stays under 3`, () => {
+      const rand = mulberry(11);
+      let worst = 0;
+      for (const orientation of ['columns', 'rows'] as const) {
+        for (const [, make] of worstCases) {
+          for (let i = 0; i < 6; i++) {
+            const board = randomBoard(rand, i % 3 === 0);
+            for (const third of simulate(board, make(board), 6, orientation, hatHz)) worst = Math.max(worst, worstFlashesPerSecond(third, RELATIVE_FLASH / 2));
+          }
+        }
+      }
+      expect(worst).toBeLessThanOrEqual(3);
+    });
+  }
+
+  it('the marker alone, swinging as fast as it can, never flashes: it is far under the threshold', () => {
+    for (const orientation of ['columns', 'rows'] as const) {
+      for (const third of simulate({ rows: 8, cols: 8, cells: [] }, [], 6, orientation, 6)) {
+        expect(Math.max(...third)).toBeLessThan(RELATIVE_FLASH / 5);
+        expect(worstFlashesPerSecond(third, RELATIVE_FLASH / 2)).toBe(0);
+      }
+    }
+  });
 
   it('a full 8x8 board of white counters, all together 4 times a second, is under 3 even at half the threshold', () => {
     const cells: Cell[] = [];

@@ -59,7 +59,7 @@ export function AbletonSoundsPanel({ config, getLive, onSend, connected }: {
     <div role="group" aria-label="Sounds in Ableton" style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 8, borderRadius: 'var(--bs-radius-md)', border: '1px solid var(--bs-border)' }}>
       <span style={{ fontWeight: 600 }}>Sounds in Ableton</span>
       <span style={NOTE}>
-        ADMI picks each track&apos;s Instrument Rack chain with CC 30, so a colour card&apos;s sound, the World, a
+        Timbo picks each track&apos;s Instrument Rack chain with CC 30, so a colour card&apos;s sound, the World, a
         scene&apos;s World and Sounds change switch Ableton&apos;s sound too. A track without a rack ignores it.
       </span>
       <table style={{ fontSize: 14, borderCollapse: 'collapse' }}>
@@ -128,7 +128,7 @@ export function AbletonSoundsPanel({ config, getLive, onSend, connected }: {
             </tbody>
           </table>
         </div>
-        <span style={NOTE}>Placeholder: an empty chain, or Operator with its default sound. ADMI never sends a track to a chain it does not hold. In One per colour mode the melody colours use tracks 1, 14 and 15: build three Melody tracks first. A fader per loop needs the Loop 1 to 6 tracks first.</span>
+        <span style={NOTE}>Placeholder: an empty chain, or Operator with its default sound. Timbo never sends a track to a chain it does not hold. In One per colour mode the melody colours use tracks 1, 14 and 15: build three Melody tracks first. A fader per loop needs the Loop 1 to 6 tracks first.</span>
         <span style={NOTE}>Macros on every chain: 1 Volume (CC 24), 2 Brightness (CC 25), 3 Space (CC 26). Echo is CC 27.</span>
       </Disclosure>
     </div>

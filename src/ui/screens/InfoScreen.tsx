@@ -480,7 +480,7 @@ const TitleSlide = () => (
       marginBottom: '16px',
       letterSpacing: '-2px'
     }}>
-      ADMI
+      Timbo
     </h1>
     <p style={{
       fontSize: '20px',
@@ -899,7 +899,7 @@ const MidiIntegrationDiagram = () => (
   <svg width="700" height="200" viewBox="0 0 700 200">
     {/* ADMI Box */}
     <rect x="10" y="60" width="140" height="80" fill={colors.bgCard} stroke={colors.primary} strokeWidth="2" />
-    <text x="80" y="95" textAnchor="middle" fill={colors.text} fontSize="14" fontWeight="600">ADMI</text>
+    <text x="80" y="95" textAnchor="middle" fill={colors.text} fontSize="14" fontWeight="600">Timbo</text>
     <text x="80" y="115" textAnchor="middle" fill={colors.textTertiary} fontSize="10">Body Tracking</text>
 
     {/* Web MIDI API Box */}
@@ -941,7 +941,7 @@ const AbletonWorkflowDiagram = () => (
   <svg width="600" height="280" viewBox="0 0 600 280">
     {/* ADMI generates */}
     <rect x="20" y="20" width="180" height="100" fill={colors.bgCard} stroke={colors.primary} strokeWidth="2" />
-    <text x="110" y="50" textAnchor="middle" fill={colors.text} fontSize="13" fontWeight="600">ADMI Output</text>
+    <text x="110" y="50" textAnchor="middle" fill={colors.text} fontSize="13" fontWeight="600">Timbo output</text>
     <text x="110" y="75" textAnchor="middle" fill={colors.textTertiary} fontSize="10">MIDI Notes (pitch)</text>
     <text x="110" y="92" textAnchor="middle" fill={colors.textTertiary} fontSize="10">CC Messages (expression)</text>
     <text x="110" y="109" textAnchor="middle" fill={colors.textTertiary} fontSize="10">Velocity (dynamics)</text>
@@ -996,7 +996,7 @@ const FuturePlansSlide = () => (
           <div style={styles.cardText}>
             The Web MIDI API enables direct communication with MIDI devices and virtual ports
             from the browser. Combined with loopMIDI (Windows) or IAC Driver (macOS),
-            ADMI can send MIDI data to any DAW running on the same machine.
+            Timbo can send MIDI data to any DAW running on the same machine.
           </div>
         </div>
       </div>
@@ -1229,7 +1229,7 @@ const AtAGlanceSlide = () => (
   <div>
     {/* Hero header */}
     <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-      <h1 style={{ fontSize: '48px', fontWeight: 800, color: colors.primary, margin: 0, letterSpacing: '-1px' }}>ADMI</h1>
+      <h1 style={{ fontSize: '48px', fontWeight: 800, color: colors.primary, margin: 0, letterSpacing: '-1px' }}>Timbo</h1>
       <p style={{ fontSize: '18px', color: colors.textSecondary, margin: '8px 0 0' }}>
         Accessible Digital Musical Instrument - Complete System Overview
       </p>
@@ -1448,7 +1448,7 @@ function InfoScreen() {
     <div style={styles.container} onKeyDown={handleKeyDown} tabIndex={0}>
       {/* Header */}
       <header style={styles.header}>
-        <div style={styles.logo}>ADMI Technical Documentation</div>
+        <div style={styles.logo}>Timbo Technical Documentation</div>
         <nav style={styles.nav}>
           {slides.map((slide, index) => (
             <button

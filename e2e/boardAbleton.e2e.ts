@@ -41,7 +41,7 @@ const isCc = (m: Sent, cc: number) => (m.d[0] & 0xf0) === 0xb0 && m.d[1] === cc;
 const isOn = (m: Sent) => (m.d[0] & 0xf0) === 0x90 && m.d[2] > 0;
 const isOff = (m: Sent) => (m.d[0] & 0xf0) === 0x80 || ((m.d[0] & 0xf0) === 0x90 && m.d[2] === 0);
 
-async function chooseSoundFrom(page: Page, choice: 'ADMI' | 'Ableton' | 'Both'): Promise<void> {
+async function chooseSoundFrom(page: Page, choice: 'Timbo' | 'Ableton' | 'Both'): Promise<void> {
   await page.getByRole('radiogroup', { name: 'Sound from' }).getByRole('radio', { name: choice, exact: true }).click();
 }
 
@@ -65,9 +65,9 @@ test('Sound from: switching while playing releases every note in Ableton', async
   await setUpAbleton(page);
   await page.getByRole('button', { name: '▶ Play the board' }).first().click();
   await expect.poll(async () => (await sentSince(page, 0)).filter(isOn).length, { timeout: 15_000 }).toBeGreaterThan(0);
-  // Leaving a route that was sending releases it: Ableton to ADMI, and Both to Ableton (a
-  // new route). ADMI to Both has nothing in Ableton to release.
-  for (const [choice, releases] of [['ADMI', true], ['Both', false], ['Ableton', true]] as const) {
+  // Leaving a route that was sending releases it: Ableton to Timbo, and Both to Ableton (a
+  // new route). Timbo to Both has nothing in Ableton to release.
+  for (const [choice, releases] of [['Timbo', true], ['Both', false], ['Ableton', true]] as const) {
     const t = await now(page);
     await chooseSoundFrom(page, choice);
     if (releases) await expect.poll(async () => (await sentSince(page, t)).some((m) => isCc(m, 123)), { timeout: 5_000 }).toBe(true);
@@ -77,7 +77,7 @@ test('Sound from: switching while playing releases every note in Ableton', async
   expect(pageErrors(page)).toEqual([]);
 });
 
-test('the port goes mid-piece: ADMI plays on and says so; when it is back, it waits to be asked', async ({ page }) => {
+test('the port goes mid-piece: Timbo plays on and says so; when it is back, it waits to be asked', async ({ page }) => {
   await openLaptopBoard(page);
   await pickColour(page, 'Red');
   await place(page, [[3, 1], [5, 3]]);
@@ -86,7 +86,7 @@ test('the port goes mid-piece: ADMI plays on and says so; when it is back, it wa
   await expect.poll(async () => (await sentSince(page, 0)).filter(isOn).length, { timeout: 15_000 }).toBeGreaterThan(0);
 
   await page.evaluate(() => (window as unknown as { __midiPort: { remove(): void } }).__midiPort.remove());
-  await expect(page.getByText("Ableton's port has gone, so ADMI is playing its own sound.").first()).toBeVisible();
+  await expect(page.getByText("Ableton's port has gone, so Timbo is playing its own sound.").first()).toBeVisible();
   const before = await notesPlayed(page);
   await expect.poll(() => notesPlayed(page), { timeout: 10_000 }).toBeGreaterThan(before); // the music carries on
 

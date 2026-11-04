@@ -1,7 +1,7 @@
 /**
  * Welcome Screen
  *
- * Landing page for ADMIv3. The Board Sequencer is the main instrument, so it
+ * Landing page for Timbo (the app; ADMIv3 in the code). The Board Sequencer is the main instrument, so it
  * leads: one large button straight into setting up (or playing) the board.
  * The body-movement instrument stays reachable under "Other ways to play".
  * Uses SVG icons, design tokens, no emoji.
@@ -13,6 +13,7 @@ import { useAppStore, useHasCompletedSetup } from '../../state/store';
 import { getAudioEngine } from '../../sound/AudioEngine';
 import { loadActiveBoardConfig } from '../../profiles/BoardProfiles';
 import { requestSetupOnOpen, requestLaptopOnOpen } from './boardSequencer/boardSetupFlow';
+import { CapLogo } from '../components/CapLogo';
 import {
   IconSequencer, IconCamera, IconMusic, IconArrowRight, IconInfo, IconCalibrate, IconBody,
 } from '../design-system/Icons';
@@ -84,8 +85,8 @@ function WelcomeScreen() {
     <div className="welcome-screen bs-root" data-bs-style="calm" data-bs-mode="dark">
       {/* Logo */}
       <div className="welcome-hero">
-        <div className="welcome-logo">A</div>
-        <h1 className="welcome-title">ADMIv3</h1>
+        <div className="welcome-logo"><CapLogo size={88} /></div>
+        <h1 className="welcome-title">Timbo</h1>
         <p className="welcome-subtitle">
           Make music by placing counters on a board
         </p>

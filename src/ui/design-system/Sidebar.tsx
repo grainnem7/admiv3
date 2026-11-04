@@ -70,7 +70,7 @@ export function Sidebar({
       {/* Brand */}
       <div className="sidebar__brand">
         <div className="sidebar__logo">A</div>
-        <span className="sidebar__title">ADMIv3</span>
+        <span className="sidebar__title">Timbo</span>
       </div>
 
       {/* Navigation */}

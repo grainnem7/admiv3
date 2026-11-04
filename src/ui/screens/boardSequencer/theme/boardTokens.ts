@@ -31,6 +31,16 @@ export interface BoardPalette {
   focus: string;
   swatchRingLight: string;
   swatchRingDark: string;
+  /** The Simple iPad page's New idea: a solid blue fill, and its words (spec 2026-11-04). */
+  cue: string;
+  cueFg: string;
+  /** The Simple iPad page's chosen melody sound: a teal fill, and its words. */
+  pick: string;
+  pickFg: string;
+  /** The Simple iPad page: a part, a loop or the board that is playing is lit (a fill and a glow). */
+  lit: string;
+  litFg: string;
+  litGlow: string;
 }
 
 export const BOARD_TOKENS: Record<BoardStyle, Record<BoardMode, BoardPalette>> = {
@@ -58,6 +68,13 @@ export const BOARD_TOKENS: Record<BoardStyle, Record<BoardMode, BoardPalette>> =
       focus: '#f2f2f2',
       swatchRingLight: '#f2f2f2',
       swatchRingDark: '#0e0f11',
+      cue: '#7b96ff',
+      cueFg: '#0e0f11',
+      pick: '#5fd0c0',
+      pickFg: '#0e0f11',
+      lit: '#d4f56b',
+      litFg: '#0e0f11',
+      litGlow: 'rgba(212, 245, 107, 0.55)',
     },
     light: {
       bg: '#f4f4f5',
@@ -80,9 +97,23 @@ export const BOARD_TOKENS: Record<BoardStyle, Record<BoardMode, BoardPalette>> =
       focus: '#141414',
       swatchRingLight: '#ffffff',
       swatchRingDark: '#141414',
+      cue: '#2b4fc7',
+      cueFg: '#ffffff',
+      pick: '#0d6b62',
+      pickFg: '#ffffff',
+      lit: '#4d7c0f',
+      litFg: '#ffffff',
+      litGlow: 'rgba(77, 124, 15, 0.5)',
     },
   },
 };
+
+/**
+ * Timbo's red: the cap in the logo, and the hat's marker on the audience screen. The one
+ * colour the logo has, so it is the same in dark and light, and seen at 3:1 on both grounds
+ * (boardTokens.test.ts).
+ */
+export const CAP_RED = '#e0352b';
 
 /** Surfaces any text or control can sit on. The contrast contract covers all of them. */
 export const SURFACE_KEYS = ['bg', 'raised', 'elev', 'hi', 'warnTint'] as const;

@@ -16,7 +16,7 @@ import { KEEP_ON_TOP_DEFAULT_DB, sanitizeKeepOnTopDb } from '../songs/band/keepO
 import { clampLeadMs, type MidiChannelMode, type MidiSends } from '../midi/boardMidi';
 import {
   fullReachMap, REMOTE_CONTROLS, sanitizeReachMap, type Reach, type RemoteControlName, type RemoteTriggerName,
-  DEFAULT_REMOTE_TOUCH, sanitizeRemoteTouch, type RemoteTouch,
+  DEFAULT_REMOTE_TOUCH, sanitizeRemoteTouch, type RemoteTouch, sanitizeSimpleRows, SIMPLE_ROWS, type SimpleRow,
 } from '../remote/protocol';
 import { sanitizeLoopNames, sanitizeScenes, type Scene } from '../songs/performance/launcher';
 import { sanitizeColourEntries } from '../songs/performance/colourEntries';
@@ -234,6 +234,14 @@ export interface BoardSequencerStored {
   boardSource: 'camera' | 'laptop';
   /** The counters on the laptop board, kept so a plan is still there next time. */
   laptopBoard: StoredLoopCell[];
+  /**
+   * Which iPad page this player has (spec 2026-11-04): the Simple page (New idea, the parts,
+   * what the melody plays, the loops) or the full layout the fields below set out. New
+   * players get 'simple'; a player saved before it loads as 'custom', exactly as they were.
+   */
+  remoteLayoutKind: RemoteLayoutKind;
+  /** Which rows the Simple page shows (New idea, Board, Parts, Melody plays, Loops); all for a new player. */
+  remoteSimpleRows: SimpleRow[];
   /** What the iPad shows: fewer things means bigger things. */
   remoteStrips: RemoteControlName[];
   remotePads: RemoteTriggerName[];
@@ -503,6 +511,14 @@ export const READ_SETTINGS_REV = 2;
  */
 export const NEW_PLAYER_SOUND = { fillAmount: 0, evolveAmount: 0 } as const;
 
+/** The iPad's page: the Simple page, or the full layout set out by the remote fields. */
+export type RemoteLayoutKind = 'simple' | 'custom';
+
+/** Whether the player's iPad shows the Simple page. */
+export function isSimpleLayout(c: Pick<BoardSequencerStored, 'remoteLayoutKind'>): boolean {
+  return c.remoteLayoutKind === 'simple';
+}
+
 /** What the iPad shows and how it behaves for a player: the settings the safe show layout sets. */
 export type RemoteLayout = Pick<BoardSequencerStored, 'remoteStrips' | 'remotePads' | 'remoteLoopsPage' | 'remoteLocked' | 'remoteTouch'>;
 
@@ -611,8 +627,11 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   autoStart: false,
   boardSource: 'camera',
   laptopBoard: [],
-  // New players start with the safe show layout on the iPad. A player saved before it keeps
-  // what they had (sanitize fills a missing field with "everything shown").
+  // New players start with the Simple page on the iPad (spec 2026-11-04); their full layout,
+  // should a box be ticked, starts as the safe show layout. A player saved before either keeps
+  // what they had (sanitize fills a missing field with "everything shown", and 'custom').
+  remoteLayoutKind: 'simple',
+  remoteSimpleRows: [...SIMPLE_ROWS],
   ...safeShowLayout(DEFAULT_REMOTE_TOUCH),
   remoteStripMode: 'jump',
   loopStepsRed: 0,
@@ -998,6 +1017,9 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     autoStart: o.autoStart === true,
     boardSource: o.boardSource === 'laptop' ? 'laptop' : 'camera',
     laptopBoard: Array.isArray(o.laptopBoard) ? (sanitizeLoopSlots([o.laptopBoard])[0] ?? []) : [],
+    remoteLayoutKind: o.remoteLayoutKind === 'simple' ? 'simple' : 'custom',
+    // A player saved before the rows could be chosen sees them all.
+    remoteSimpleRows: sanitizeSimpleRows(o.remoteSimpleRows),
     remoteStrips: Array.isArray(o.remoteStrips)
       ? REMOTE_CONTROLS.filter((n) => (o.remoteStrips as unknown[]).includes(n))
       : [...REMOTE_CONTROLS],

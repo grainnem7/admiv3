@@ -13,29 +13,29 @@ export function abletonReadyItem(p: {
   portName: string | null;
   holdOnAdmi: boolean;
 }): ReadyItem | null {
-  const name = p.portName ?? 'ADMI';
+  const name = p.portName ?? 'ADMIOutput';
   if (p.soundFrom === 'admi') {
     return p.deviceId === ''
       ? null
-      : { label: 'A MIDI port is chosen but Sound from is ADMI', state: 'warn', fix: 'If Ableton should play, choose Ableton or Both under Sound from on the Connections tab.', place: 'connections' };
+      : { label: 'A MIDI port is chosen but Sound from is Timbo', state: 'warn', fix: 'If Ableton should play, choose Ableton or Both under Sound from on the Connections tab.', place: 'connections' };
   }
-  const who = p.soundFrom === 'both' ? 'Ableton and ADMI' : 'Ableton';
+  const who = p.soundFrom === 'both' ? 'Ableton and Timbo' : 'Ableton';
   if (p.deviceId === '' || !p.connected) {
     return {
       label: `Sound from is ${who}, but the MIDI port is missing`,
       state: 'problem',
-      fix: 'Open loopMIDI, check the ADMI port is there, then choose it on the Connections tab. Until then ADMI plays its own sound.',
+      fix: 'Open loopMIDI, check the port ADMIOutput is there, then choose it on the Connections tab. Until then Timbo plays its own sound.',
       place: 'connections',
     };
   }
   if (p.holdOnAdmi) {
-    return { label: 'ADMI is still playing its own sound', state: 'warn', fix: 'The port is back: press "Switch to Ableton" in the banner, or on the Connections tab.', place: 'connections' };
+    return { label: 'Timbo is still playing its own sound', state: 'warn', fix: 'The port is back: press "Switch to Ableton" in the banner, or on the Connections tab.', place: 'connections' };
   }
   return { label: `MIDI port ${name} connected (play the test note on the Connections tab to hear Ableton)`, state: 'ok' };
 }
 
 /** What every Ableton Set needs for the band and the AI: said whenever Ableton plays. */
-export const ABLETON_TRACKS_NOTE = 'Extra notes play on channel 13 and the band on 11 and 12. Check Ableton has a track on each (MIDI From = the ADMI port, that channel, Monitor In).';
+export const ABLETON_TRACKS_NOTE = 'Extra notes play on channel 13 and the band on 11 and 12. Check Ableton has a track on each (MIDI From = the port ADMIOutput, that channel, Monitor In).';
 
 /**
  * ADMI can't see Ableton's tracks (MIDI only goes one way), so this is always "check":

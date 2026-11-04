@@ -1,5 +1,5 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { headerButton, makePlan, openLaptopBoard, pageErrors, pickColour, place, soundTab } from './app';
+import { headerButton, makePlan, useFullIpadLayout, openLaptopBoard, pageErrors, pickColour, place, soundTab } from './app';
 
 /**
  * Show safety (audit 2026-10-30, batch 1): the status row in Show, the iPad link that
@@ -27,6 +27,7 @@ test('the iPad link: a heartbeat each second, a stall shown on both sides in 3â€
   await boardWithPlan(page);
   await page.getByRole('tab', { name: 'Connections' }).click();
   await page.getByRole('switch', { name: 'iPad controls' }).click();
+  await useFullIpadLayout(page); // the strip and End piece are on the full layout
   const code = await page.evaluate(() => localStorage.getItem('admi-remote-code'));
 
   // The iPad in a browser of its own, its Wi-Fi in our hands: while `stalled`, nothing gets
@@ -135,6 +136,7 @@ test('after a reload mid-piece, the iPad waits for Carry on and its touches are 
   await boardWithPlan(page);
   await page.getByRole('tab', { name: 'Connections' }).click();
   await page.getByRole('switch', { name: 'iPad controls' }).click();
+  await useFullIpadLayout(page); // the strip and End piece are on the full layout
   const code = await page.evaluate(() => localStorage.getItem('admi-remote-code'));
   const ipad = await context.newPage();
   await ipad.setViewportSize({ width: 810, height: 1080 });

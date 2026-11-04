@@ -299,7 +299,7 @@ describe('A14: each Ready-check fix made elsewhere has a place, and the list sho
     expect(boardItem({ laptop: true, cameraOk: false })).toMatchObject({ state: 'note', place: 'cameraBoard' });
     expect(boardItem({ laptop: true, cameraOk: false }).fix).not.toContain('📷');
     expect(boardItem({ laptop: false, cameraOk: false }).place).toBe('setupCamera');
-    expect(ipadCheckItems({ enabled: true, connected: false, safeLayout: true, pageOutOfDate: false, playerName: 'Tim', onUseSafeLayout: vi.fn() })[0].place).toBe('connections');
+    expect(ipadCheckItems({ enabled: true, connected: false, simpleLayout: true, pageOutOfDate: false, playerName: 'Tim', onUseSimpleLayout: vi.fn() })[0].place).toBe('connections');
     expect(keepingTimeCheckItems({ report: null, running: false, valve: [] })[0].place).toBeUndefined();
     const items = pieceCheckItems({
       scenes: [scene('Build', 90)], loopSlots: [[{ row: 0, col: 0, colour: 'm' }]], loopNames: [], performance: { ...DEFAULT_PERFORMANCE }, passSec: 5,

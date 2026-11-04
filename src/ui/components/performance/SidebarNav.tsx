@@ -108,7 +108,7 @@ export default function SidebarNav({
         }}>A</div>
         {!collapsed && (
           <span style={{ fontSize: 15, fontWeight: 700, color: '#e4e4ef', letterSpacing: '-0.02em' }}>
-            ADMIv3
+            Timbo
           </span>
         )}
       </div>

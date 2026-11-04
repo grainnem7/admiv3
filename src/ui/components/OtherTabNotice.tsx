@@ -28,11 +28,11 @@ export default function OtherTabNotice() {
       style={{ maxWidth: 640, margin: '0 auto', padding: '15vh 24px', display: 'flex', flexDirection: 'column', gap: 16 }}
     >
       <div role="alert" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <h1 style={{ margin: 0 }}>ADMI is open in another tab</h1>
+        <h1 style={{ margin: 0 }}>Timbo is open in another tab</h1>
         <p style={{ margin: 0, fontSize: '1.25rem' }}>This one can&apos;t save: close the other tab to save here.</p>
       </div>
       <p style={{ margin: 0 }}>
-        Once the other tab is closed, this one opens ADMI by itself, with everything saved there.
+        Once the other tab is closed, this one opens Timbo by itself, with everything saved there.
       </p>
     </main>
   );

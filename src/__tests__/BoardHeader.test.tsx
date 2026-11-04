@@ -39,3 +39,16 @@ describe('the Player button while the board plays (U6)', () => {
     expect(player.hasAttribute('aria-describedby')).toBe(false);
   });
 });
+
+describe('the wordmark: the red cap, then Timbo', () => {
+  it('shows the cap and the word Timbo, and no ADMI', () => {
+    view = render(header(null));
+    const mark = view.container.querySelector('[data-wordmark]') as HTMLElement;
+    expect(mark).not.toBeNull();
+    expect(mark.textContent).toBe('Timbo');
+    expect(mark.querySelector('svg')).not.toBeNull();
+    // Beside the screen's own name, so screen readers are not told it twice.
+    expect(mark.getAttribute('aria-hidden')).toBe('true');
+    expect(view.container.textContent).not.toMatch(/ADMI/);
+  });
+});

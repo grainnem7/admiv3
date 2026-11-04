@@ -34,3 +34,13 @@ describe('U4: Welcome in the board’s look (owner)', () => {
     expect(host.querySelectorAll('[role="main"], main')).toHaveLength(0);
   });
 });
+
+describe('Timbo (owner, 4 Nov 2026)', () => {
+  it('is called Timbo, with the red cap as its logo, and no ADMI', () => {
+    act(() => root.render(<WelcomeScreen />));
+    expect(host.querySelector('h1')?.textContent).toBe('Timbo');
+    const logo = host.querySelector('.welcome-logo svg[role="img"]');
+    expect(logo?.getAttribute('aria-label')).toBe('Timbo');
+    expect(host.textContent).not.toMatch(/ADMI/);
+  });
+});

@@ -59,6 +59,15 @@
   --bs-swatch-ring-light: #f2f2f2;
   --bs-swatch-ring-dark: #0e0f11;
   --bs-well: #16181b;
+  /* The Simple iPad page: New idea's blue and the chosen sound's teal (spec 2026-11-04). */
+  --bs-cue: #7b96ff;
+  --bs-cue-fg: #0e0f11;
+  --bs-pick: #5fd0c0;
+  --bs-pick-fg: #0e0f11;
+  /* Playing is lit: a fill and a glow (parts, loops, the board). */
+  --bs-lit: #d4f56b;
+  --bs-lit-fg: #0e0f11;
+  --bs-lit-glow: rgba(212, 245, 107, 0.55);
 }
 
 .bs-root[data-bs-style='calm'][data-bs-mode='light'] {
@@ -85,6 +94,13 @@
   --bs-swatch-ring-light: #ffffff;
   --bs-swatch-ring-dark: #141414;
   --bs-well: #ebebed;
+  --bs-cue: #2b4fc7;
+  --bs-cue-fg: #ffffff;
+  --bs-pick: #0d6b62;
+  --bs-pick-fg: #ffffff;
+  --bs-lit: #4d7c0f;
+  --bs-lit-fg: #ffffff;
+  --bs-lit-glow: rgba(77, 124, 15, 0.5);
 }
 
 /* Focus is never only a colour change: a 2px outline with an offset, everywhere. */
@@ -284,8 +300,10 @@
   background-image: none;
 }
 .bs-root.welcome-screen .welcome-logo {
-  background: var(--bs-accent);
-  color: var(--bs-accent-fg);
+  /* Timbo's red cap on the ground: no box. */
+  width: auto;
+  height: auto;
+  background: none;
   box-shadow: none;
 }
 .bs-root.welcome-screen .welcome-title { color: var(--bs-fg); }
