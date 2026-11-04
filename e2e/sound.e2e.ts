@@ -235,7 +235,7 @@ test('after saving the board as a loop, its name is ready to type', async ({ pag
   await expect(page.getByRole('textbox', { name: 'Name of loop 1' })).toHaveValue('Intro');
 });
 
-test('Play on the laptop from Welcome: the laptop board, and a two-step set-up with no camera', async ({ page }) => {
+test('Play on the laptop from Welcome: a new player lands on the laptop board with four colours, no Set up', async ({ page }) => {
   await page.route('**/admi-store**', (route) => (route.request().method() === 'GET'
     ? route.fulfill({ status: 404, body: '' })
     : route.fulfill({ status: 204, body: '' })));
@@ -245,22 +245,15 @@ test('Play on the laptop from Welcome: the laptop board, and a two-step set-up w
   await page.getByRole('region', { name: "Who's playing?" }).getByRole('textbox', { name: 'Name' }).fill('Test');
   await page.getByRole('button', { name: 'Create' }).click();
   await expect(await headerButton(page, /Laptop board: play on the laptop/)).toHaveAttribute('aria-pressed', 'true');
-  // A new player starts at the colours: no camera, no board to find.
-  await expect(page.getByRole('region', { name: 'Set up, step 1 of 2' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Choose the colours' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Find colours' })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: '← Back' })).toHaveCount(0);
-  await page.getByRole('button', { name: 'Add four colours' }).click();
-  await expect(page.getByRole('combobox', { name: 'Red: plays' })).toBeVisible();
-  // With colours, the board can be tried in set-up (U4): the picker is above it, and nothing
-  // plays until Play.
+  // Item 1 of the producer's walk: four ready-made colours and the board, straight away, with
+  // nothing to set up (no camera, no board to find). Set up stays under More for later.
+  await expect(page.getByRole('region', { name: /^Set up, step/ })).toHaveCount(0);
   await expect(page.getByRole('grid', { name: /Laptop board/ })).toBeVisible();
   await expect(page.getByRole('radiogroup', { name: 'Counter to put down' })).toBeVisible();
-  await expect(page.locator('#bs-play-stop')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Continue' }).click();
-  await expect(page.getByRole('region', { name: 'Set up, step 2 of 2' })).toBeVisible();
-  await page.getByRole('button', { name: /Play/ }).filter({ hasText: '▶' }).first().click();
-  await expect(page.getByRole('grid', { name: /Laptop board/ })).toBeVisible();
+  await expect(page.getByRole('radio', { name: /^Red/ })).toBeVisible();
+  await expect(page.getByRole('radio', { name: /^Green/ })).toBeVisible();
+  // Nothing plays until a counter goes down or Play is pressed.
+  await expect(page.locator('#bs-play-stop')).toHaveText('▶ Play the board');
 });
 
 test('each new instrument loads and plays with ▶ Hear', async ({ page }) => {
