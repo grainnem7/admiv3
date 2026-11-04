@@ -113,7 +113,7 @@ export function LoopRail(p: LoopRailProps): JSX.Element {
       <span style={{ ...CAPTION_STYLE, padding: column ? '0 0 2px 4px' : '0 4px 10px 0' }}>Loops</span>
       <div
         role="group"
-        aria-label="Loops: press an empty place to keep the board there, a kept one to play or stop it"
+        aria-label="Loops: press an empty place to keep the board there, a place with a loop in it to play or stop that loop"
         style={{ display: 'flex', flexDirection: column ? 'column' : 'row', gap: 4, flexWrap: column ? 'nowrap' : 'wrap' }}
         onKeyDown={(e) => {
           if (e.key === (column ? 'ArrowDown' : 'ArrowRight')) { e.preventDefault(); move(1); }
