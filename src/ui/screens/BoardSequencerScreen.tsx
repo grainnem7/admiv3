@@ -6039,9 +6039,10 @@ export default function BoardSequencerScreen() {
       {/* In Set up on the laptop board: always there, so starting play never shrinks the
           board (A3). On the Board view it is under Details (U4). */}
       {view !== 'play' && laptop && boardLegend}
-      {/* Not on the laptop board (U7): there is no camera there for the hat to be seen by,
-          unless the mouse is standing in for it (Test with the mouse). */}
-      {view === 'play' && (!laptop || cap.view.camera === 'mouse') && capHud}
+      {/* On the laptop board (U7) only when something can see the hat: the cap's own camera
+          running (or starting), or the mouse standing in for it (Test with the mouse). With no
+          camera at all there is nothing for the line to say. */}
+      {view === 'play' && (!laptop || cap.view.camera === 'mouse' || cap.view.camera === 'running' || cap.view.camera === 'starting') && capHud}
       <div style={view === 'play' && !laptop
         ? { width: 220, alignSelf: layout.pip === 'bottom-left' ? 'flex-start' : 'flex-end' }
         : undefined}

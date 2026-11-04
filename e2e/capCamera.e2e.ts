@@ -229,8 +229,9 @@ test('the hat on Speed moves the speed around the player’s own: in the middle 
       const out: number[] = [];
       const end = performance.now() + 8000;
       while (performance.now() < end) {
-        const pill = [...document.querySelectorAll('span[aria-hidden="true"]')]
-          .map((el) => /· (\d+) BPM · step/.exec(el.textContent ?? '')).find((m) => m !== null);
+        // The speed is its own control since item 4 (SpeedControl), the step its own span.
+        const stepSpan = [...document.querySelectorAll('span[aria-hidden="true"]')].find((el) => /^ · step /.test(el.textContent ?? ''));
+        const pill = stepSpan ? [...document.querySelectorAll('button, span')].map((el) => /^(\d+) BPM/.exec((el.textContent ?? '').trim())).find((m) => m !== null) : null;
         if (pill) out.push(Number(pill[1]));
         await new Promise((r) => setTimeout(r, 100));
       }
@@ -323,8 +324,9 @@ test('the hat lost and found again elsewhere: the speed glides to where it now i
       const out: number[] = [];
       const end = performance.now() + 24_000;
       while (performance.now() < end) {
-        const pill = [...document.querySelectorAll('span[aria-hidden="true"]')]
-          .map((el) => /· (\d+) BPM · step/.exec(el.textContent ?? '')).find((m) => m !== null);
+        // The speed is its own control since item 4 (SpeedControl), the step its own span.
+        const stepSpan = [...document.querySelectorAll('span[aria-hidden="true"]')].find((el) => /^ · step /.test(el.textContent ?? ''));
+        const pill = stepSpan ? [...document.querySelectorAll('button, span')].map((el) => /^(\d+) BPM/.exec((el.textContent ?? '').trim())).find((m) => m !== null) : null;
         if (pill) out.push(Number(pill[1]));
         await new Promise((r) => setTimeout(r, 100));
       }
@@ -415,8 +417,9 @@ async function startProbe(page: Page): Promise<void> {
           }
         }
       }
-      const pill = [...document.querySelectorAll('span[aria-hidden="true"]')]
-        .map((s) => /· (\d+) BPM · step/.exec(s.textContent ?? '')).find((m) => m !== null);
+      // The speed is its own control since item 4 (SpeedControl), the step its own span.
+      const stepSpan = [...document.querySelectorAll('span[aria-hidden="true"]')].find((el) => /^ · step /.test(el.textContent ?? ''));
+      const pill = stepSpan ? [...document.querySelectorAll('button, span')].map((el) => /^(\d+) BPM/.exec((el.textContent ?? '').trim())).find((m) => m !== null) : null;
       const group = [...document.querySelectorAll('[role="group"]')]
         .find((g) => document.getElementById(g.getAttribute('aria-labelledby') ?? '')?.textContent === 'Learn the hat');
       const bar = group?.querySelector('[role="progressbar"]');
