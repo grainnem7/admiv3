@@ -16,6 +16,7 @@ import { humanFactor, shapedVelocity } from './dynamics';
 import { admitLoopNote, admitPlayerNote, LANE_TOP, loopLaneShift, loopNoteCap, newStepTally, type StepTally } from './density';
 import { breathGain, breathPhase, breathRest } from './breath';
 import { developCells } from './development';
+import { contourByInterval, legatoLength } from './phrasing';
 import * as Tone from 'tone';
 import { BoardSequencerVoice } from './voices/BoardSequencerVoice';
 import { voicingForCells, degreeMidi, chordDegreeMidi, drumForRow, DEFAULT_DRUM_ROWS, loopLen, lapIndex, strictlyAfter, firesThisLap, firesThisLapPaged, sweepAt, type PingPongPages, type Sweep } from './boardSequencerScale';
@@ -261,6 +262,9 @@ function bedOf(launched: readonly LaunchedLoop[]): LaunchedLoop[] {
 
 /** A loop launched without a pad, and the fade it is in, if any. */
 /** A cell on its way to being played, with the layer it belongs to (absent = the player's board). */
+/** The bass counters play this many octaves under the melody's row: C2 on the bottom row. */
+const BASS_OCTAVES = 2;
+
 type LayeredCell = ActiveCell & { layer?: string; /** A loop answering the leading melody: an octave up (S2). */ answerUp?: boolean };
 
 interface LaunchedLoop {
@@ -527,6 +531,8 @@ export class BoardSequencerEngine {
   private stepLoopCap = 6;
   /** The player's melody is on the board this pass: a loop's melody plays an octave up (the lane). */
   private stepLaneUp = false;
+  /** This step's counters by layer and colour, for the contour of each line (phrasing, S2). */
+  private stepCellsByColour = new Map<string, LayeredCell[]>();
   /** CC 7: the last Volume value sent (-1 = none yet). */
   private volumeSent = -1;
   /** False when the player wants MIDI only: the built-in sound is silenced, the log and the lights carry on. */
@@ -2841,6 +2847,12 @@ export class BoardSequencerEngine {
           }
         }
       };
+      // Each line's counters, by layer and colour, for the contour (phrasing, S2).
+      this.stepCellsByColour = new Map();
+      for (const t of noteTagged) {
+        const key = `${t.cell.layer ?? ''}|${t.cell.colour}`;
+        this.stepCellsByColour.set(key, [...(this.stepCellsByColour.get(key) ?? []), t.cell]);
+      }
       fireAll(noteTagged.filter((t) => t.source !== 'loop'));
       loopPhrases?.();
       // The loops' notes under the cap (density, S2): the foundation first, chords then bass,
@@ -3417,7 +3429,17 @@ export class BoardSequencerEngine {
         if (!this.studioOn() || this.cfg.pingPong) return durSec;
         const cols = colsByColour.get(cell.colour) ?? [];
         const beats = legatoBeats(cell.col, cols, loop, DEFAULT_BOARD_MIX.legatoMaxBeats);
-        return Math.max(durSec, beats * secPerBeat);
+        // Legato (phrasing, S2): a note that leads to the next overlaps it a little, so a
+        // sampled instrument plays the transition instead of restarting.
+        return legatoLength(Math.max(durSec, beats * secPerBeat), beats, loop, secPerBeat);
+      };
+      // The contour of the line (phrasing, S2): up a touch stronger, down a touch softer,
+      // read from the colour's previous counter in this pass (rows count from the top), so it
+      // is the figure's own shape and never depends on what played before.
+      const contour = (): number => {
+        const key = `${(cell as LayeredCell).layer ?? ''}|${cell.colour}`;
+        const prev = (this.stepCellsByColour.get(key) ?? []).filter((c) => c.col < cell.col).sort((a, b) => b.col - a.col)[0];
+        return prev ? contourByInterval((prev.row - cell.row) * 2) : 1;
       };
       if (role === 'bass') {
         // Bass pitch follows the row like melody (bottom = low), an octave down.
@@ -3427,11 +3449,15 @@ export class BoardSequencerEngine {
           ? chordDegreeMidi(degree, chord.notes)
           : degreeMidi(degree, this.cfg.scaleRootMidi, this.cfg.scaleSemitones), beat, drift !== 0);
         const dur = ringSec(loopLen(this.rawLoop('bass'), this.cfg.cols)) * this.evoFor(ch.id).length;
-        if (!this.admit(source, [base - 12 + oct])) return;
-        if (this.internalSound) voice.play(base - 12 + oct, vel, dur, stepTime);
+        // Two octaves under the melody's row (C2 on the bottom row): where a bass lives. One
+        // octave under put it at C3 to E4, which on a double bass is its top strings (S2).
+        const bassMidi = base - BASS_OCTAVES * 12 + oct;
+        if (!this.admit(source, [bassMidi])) return;
+        const bassVel = Math.min(1, vel * contour());
+        if (this.internalSound) voice.play(bassMidi, bassVel, dur, stepTime);
         this.recordFired({
           row: cell.row, col: cell.col, colour: cell.colour, role, audioTime: stepTime, durSec: dur, source,
-          origin: 'placed', midi: base - 12 + oct, velocity: vel,
+          origin: 'placed', midi: bassMidi, velocity: bassVel,
         });
       } else if (role === 'chord' || ch.instrument === 'chord') {
         // Chord stab: play a stack (the song chord, or a scale triad) at once.
@@ -3465,10 +3491,11 @@ export class BoardSequencerEngine {
           const answer = (cell as LayeredCell).answerUp && base12 + 12 <= LANE_TOP ? 12 : 0;
           const laned = base12 + answer + (source === 'loop' && answer === 0 ? loopLaneShift('melody', this.stepLaneUp, base12) : 0);
           if (!this.admit(source, [laned])) return;
-          if (this.internalSound) voice.play(laned, vel, dur, stepTime);
+          const lineVel = Math.min(1, vel * contour());
+          if (this.internalSound) voice.play(laned, lineVel, dur, stepTime);
           this.recordFired({
             row: cell.row, col: cell.col, colour: cell.colour, role, audioTime: stepTime, durSec: dur, source,
-            origin: 'placed', midi: laned, velocity: vel,
+            origin: 'placed', midi: laned, velocity: lineVel,
           });
           const orn = this.loopOrnament(cell, beat);
           if (orn !== null) {

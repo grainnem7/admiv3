@@ -258,3 +258,11 @@ plus download and licence time. S4 in hand. S5 an afternoon with four listeners.
   never touched; the pass count is the engine's own. Magenta's variation model (MusicVAE,
   already loaded for the fills) is the natural next source of a cycle's figure: a
   "similar" sequence fitted to the rows, kept per scene as the fills are. Not built yet.
+- **S2, sixth part built (5 Nov): register and phrasing.** A bass counter now plays two
+  octaves under the melody's row (C2 on the bottom row) instead of one (C3 to E4, a
+  double bass's top strings, which the owner heard as a violin). `songs/phrasing.ts`: a
+  note that leads to the colour's next note overlaps it by 60 ms, so a sampled "Solo
+  Legato" instrument plays the transition instead of restarting every note; and a note
+  that goes up from the colour's previous counter in the pass is a touch stronger, down a
+  touch softer, more for a leap, read from the figure itself so a scene plays the same
+  however it is reached. Ableton side: every chain's pitch to be checked by a Tuner.
