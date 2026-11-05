@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { LEGATO_OVERLAP_SEC } from '../songs/phrasing';
 import { fakeVoiceEntry } from './helpers/fakeVoiceEntry';
 
 vi.mock('tone', () => ({
@@ -112,9 +113,10 @@ describe('studio mix in the engine', () => {
     const { e, p, play } = engine();
     e.setActiveCells([{ row: 0, col: 1, colour: 'm' }, { row: 1, col: 4, colour: 'm' }]);
     p.fireStep(1, 0, 1, null);
-    expect(lastDur(play)).toBeCloseTo(3, 6);
+    // To the next note and a little over it, so a legato instrument plays the join (phrasing, S2).
+    expect(lastDur(play)).toBeCloseTo(3 + LEGATO_OVERLAP_SEC, 6);
     // And the fired-note log, which draws the note, agrees with what sounds.
-    expect(e.drainFiredNotes()[0].durSec).toBeCloseTo(3, 6);
+    expect(e.drainFiredNotes()[0].durSec).toBeCloseTo(3 + LEGATO_OVERLAP_SEC, 6);
   });
 
   it('the original mix keeps Note length exactly', () => {
