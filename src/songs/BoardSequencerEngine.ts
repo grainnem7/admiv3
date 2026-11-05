@@ -2529,14 +2529,17 @@ export class BoardSequencerEngine {
    * Notes for a chord-stab cell: the song chord (when locked), else the one current chord —
    * its own where it names it, the player's over a loop's — voiced near where the row sits.
    */
-  private chordStack(cell: ActiveCell, chord: BoardChord | null, axis: 'row' | 'col'): number[] {
+  private chordStack(cell: ActiveCell, chord: BoardChord | null, axis: 'row' | 'col', plain = false): number[] {
     if (chord && chord.notes.length > 0) return chord.notes;
     const degree = axis === 'row' ? this.cfg.rows - 1 - cell.row : cell.col;
     const root = this.cfg.scaleRootMidi;
     const semis = this.cfg.scaleSemitones;
     const note = degreeMidi(degree, root, semis);
     const now = this.chordNow.harmony;
-    if (now) return voiceNear({ pcs: [...new Set(now.tones.map((t) => ((t % 12) + 12) % 12))] }, note);
+    // A loop's chord is plain (root, third, fifth): the colour tones, the ninths and sevenths
+    // that reach up into the melody's octave, belong to the player's own chords (density, S2).
+    const tones = plain ? now?.tones.slice(0, 3) : now?.tones;
+    if (now && tones) return voiceNear({ pcs: [...new Set(tones.map((t) => ((t % 12) + 12) % 12))] }, note);
     // A real chord of the key on the row's note.
     const style = worldOf(this.cfg.soundWorld ?? 'none')?.id ?? 'warm';
     return voiceNear(chordOnDegree(degreeOfNote(note, root, semis), root, semis, style), note);
@@ -3221,6 +3224,11 @@ export class BoardSequencerEngine {
           // above them, and a loop's note that doubles the player's, or that the step has no
           // room for, is not played.
           const loopNote = tag?.source === 'loop';
+          // A loop's chord is plain (root, third, fifth), as in chordStack: its colour tones are the player's.
+          if (loopNote && ev.role === 'chord' && this.chordNow.harmony) {
+            const plain = new Set(this.chordNow.harmony.tones.slice(0, 3).map((t) => ((t % 12) + 12) % 12));
+            if (!plain.has(((midi % 12) + 12) % 12)) continue;
+          }
           if (loopNote) midi += loopLaneShift(ev.role, this.stepLaneUp, midi);
           // A chord's notes arrive one by one here: the same owner at the same moment is one chord, counted once.
           if (!this.admit(loopNote ? 'loop' : 'live', [midi], ev.role === 'chord' ? `${ev.layer ?? ''}|${ev.owner.row},${ev.owner.col}@${time}` : undefined)) continue;
@@ -3344,7 +3352,7 @@ export class BoardSequencerEngine {
       } else if (role === 'chord' || ch.instrument === 'chord') {
         // Chord stab: play a stack (the song chord, or a scale triad) at once.
         const evo = this.evoFor(ch.id);
-        const midis = this.chordStack(cell, chord, 'row').map((n) => n + oct + 12 * evo.octave);
+        const midis = this.chordStack(cell, chord, 'row', source === 'loop').map((n) => n + oct + 12 * evo.octave);
         if (!this.admit(source, midis)) return;
         if (this.internalSound) for (const n of midis) voice.play(n, vel, durSec * evo.length, stepTime);
         this.recordFired({
