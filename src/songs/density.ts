@@ -5,8 +5,10 @@
  * twelve to fifteen a second, and nothing breathed. Two rules, both pure, keep the texture
  * open without ever touching the player's own notes:
  *  - a cap on the loops' pitched notes per step, set by Energy: Calm lets two through,
- *    Steady three, Lively four, Driving six. The player's notes are never counted against
- *    it and never dropped; a chord counts as one;
+ *    Steady three, Lively four, Driving six. It makes room for the player, so it applies
+ *    only while the player has counters on the board; with the board empty the loops play
+ *    whole. The player's notes are never counted against it and never dropped; a chord
+ *    counts as one, and the loops' chords and bass are admitted before their melodies;
  *  - a loop's note that doubles a pitch the player is already playing on the same step is
  *    not played: the player has it, and two of the same note at once only muddies.
  * And one lane rule: while the player's melody is sounding, a loop's melody plays an octave
@@ -26,9 +28,11 @@ export function loopNoteCap(energy: number): number {
 export interface StepTally {
   playerPitches: Set<number>;
   loopPitched: number;
+  /** Chords that arrive one note at a time: a group admitted once counts once. */
+  groups: Set<string>;
 }
 
-export const newStepTally = (): StepTally => ({ playerPitches: new Set(), loopPitched: 0 });
+export const newStepTally = (): StepTally => ({ playerPitches: new Set(), loopPitched: 0, groups: new Set() });
 
 /** The player's note: always admitted, and remembered so a loop never doubles it. */
 export function admitPlayerNote(tally: StepTally, midis: readonly number[]): void {
@@ -41,10 +45,13 @@ export function admitPlayerNote(tally: StepTally, midis: readonly number[]): voi
  * when the player already plays every note of it, since a chord sharing one tone with the
  * melody is ordinary harmony), or the step already carries the cap. Counted when admitted.
  */
-export function admitLoopNote(tally: StepTally, midis: readonly number[], cap: number): boolean {
+export function admitLoopNote(tally: StepTally, midis: readonly number[], cap: number, group?: string): boolean {
+  // The rest of a chord already admitted note by note: in, and not counted again.
+  if (group !== undefined && tally.groups.has(group)) return true;
   if (midis.length > 0 && midis.every((m) => tally.playerPitches.has(m))) return false;
   if (tally.loopPitched >= cap) return false;
   tally.loopPitched += 1;
+  if (group !== undefined) tally.groups.add(group);
   return true;
 }
 

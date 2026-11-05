@@ -30,6 +30,15 @@ describe('density: how much may sound at once (S2)', () => {
     expect(admitLoopNote(t, [76], 6)).toBe(true); // the octave is another note
     expect(t.loopPitched).toBe(2);
   });
+  it('a chord that arrives one note at a time counts once', () => {
+    const t = newStepTally();
+    expect(admitLoopNote(t, [59], 2, 'loop2|4,0')).toBe(true);
+    expect(admitLoopNote(t, [62], 2, 'loop2|4,0')).toBe(true);
+    expect(admitLoopNote(t, [65], 2, 'loop2|4,0')).toBe(true);
+    expect(t.loopPitched).toBe(1);
+    expect(admitLoopNote(t, [72], 2, 'loop3|1,0')).toBe(true);
+    expect(admitLoopNote(t, [74], 2, 'loop1|2,0')).toBe(false); // the cap, counted by chord and note
+  });
   it("a loop's melody sits an octave above the player's melody while it sounds, within reach", () => {
     expect(loopLaneShift('melody', true, 64)).toBe(12);
     expect(loopLaneShift('melody', false, 64)).toBe(0);

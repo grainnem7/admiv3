@@ -1006,9 +1006,9 @@ export class BoardSequencerEngine {
    * Density (S2): the player's note is always admitted and remembered; a loop's note is
    * admitted unless it doubles the player's or the step already carries the cap.
    */
-  private admit(source: FiredNote['source'], midis: readonly number[]): boolean {
+  private admit(source: FiredNote['source'], midis: readonly number[], group?: string): boolean {
     if (source !== 'loop') { admitPlayerNote(this.stepTally, midis); return true; }
-    return admitLoopNote(this.stepTally, midis, this.stepLoopCap);
+    return admitLoopNote(this.stepTally, midis, this.stepLoopCap, group);
   }
   /** How hard notes play at this Energy: 0.7 at the bottom, 1 at the middle, 1.3 at the top. */
   private energyGain(): number {
@@ -2699,7 +2699,10 @@ export class BoardSequencerEngine {
     // Density (S2): a fresh tally for the step, the loops' cap from Energy, and whether the
     // player's melody is on the board, so loops' melodies take the octave above.
     this.stepTally = newStepTally();
-    this.stepLoopCap = loopNoteCap(this.energy);
+    // The cap makes room for the player: with the player's counters on the board the loops
+    // keep to it; with the board empty the loops play whole, so a loop that is on is heard.
+    const playerOn = tagged.some((t) => t.source !== 'loop');
+    this.stepLoopCap = playerOn ? loopNoteCap(this.energy) : Number.POSITIVE_INFINITY;
     this.stepLaneUp = tagged.some((t) => t.source !== 'loop' && this.roleFor(t.cell.colour) === 'melody');
     const loopPhrases = tuneTagged.length > 0 ? this.firePhrases(beat, cellTime, secPerBeat, chord, tuneTagged) : null;
     let noteTagged = tuneTagged.length === 0 ? tagged : tagged.filter((t) => !this.playsTune(t.cell.colour));
@@ -2766,7 +2769,10 @@ export class BoardSequencerEngine {
       };
       fireAll(noteTagged.filter((t) => t.source !== 'loop'));
       loopPhrases?.();
-      fireAll(noteTagged.filter((t) => t.source === 'loop'));
+      // The loops' notes under the cap (density, S2): the foundation first, chords then bass,
+      // so when a step is full it is a third melody line that waits, never the harmony.
+      const order: Record<string, number> = { chord: 0, bass: 1, drums: 2, melody: 3 };
+      fireAll(noteTagged.filter((t) => t.source === 'loop').sort((a, b) => (order[this.roleFor(a.cell.colour) ?? ''] ?? 4) - (order[this.roleFor(b.cell.colour) ?? ''] ?? 4)));
     } else {
       loopPhrases?.();
     }
@@ -3216,7 +3222,8 @@ export class BoardSequencerEngine {
           // room for, is not played.
           const loopNote = tag?.source === 'loop';
           if (loopNote) midi += loopLaneShift(ev.role, this.stepLaneUp, midi);
-          if (!this.admit(loopNote ? 'loop' : 'live', [midi])) continue;
+          // A chord's notes arrive one by one here: the same owner at the same moment is one chord, counted once.
+          if (!this.admit(loopNote ? 'loop' : 'live', [midi], ev.role === 'chord' ? `${ev.layer ?? ''}|${ev.owner.row},${ev.owner.col}@${time}` : undefined)) continue;
           // The same note on the same instrument at the same moment from two layers (a
           // loop just captured from counters still on the board) is one note, not a
           // doubled, louder one.
@@ -3240,6 +3247,9 @@ export class BoardSequencerEngine {
     const own: typeof events = [];
     const loops: typeof events = [];
     for (const ev of events) (tagOf(ev)?.source === 'loop' ? loops : own).push(ev);
+    // The loops' notes under the cap (density, S2): chords and bass before melodies.
+    const order: Record<string, number> = { chord: 0, bass: 1, drums: 2, melody: 3 };
+    loops.sort((a, b) => (order[a.role] ?? 4) - (order[b.role] ?? 4));
     playAll(own);
     return loops.length > 0 ? () => playAll(loops) : null;
   }
