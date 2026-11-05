@@ -22,6 +22,7 @@ import HarmonicBlendingScreen from './screens/HarmonicBlendingScreen';
 import SongPresetScreen from './screens/SongPresetScreen';
 import RemixScreen from './screens/RemixScreen';
 import SurfaceKeyboardScreen from './screens/SurfaceKeyboardScreen';
+import ChessMusicScreen from './screens/ChessMusicScreen';
 import { ScreenErrorBoundary } from './components/ScreenErrorBoundary';
 import BoardSequencerScreen from './screens/BoardSequencerScreen';
 import InfoScreen from './screens/InfoScreen';
@@ -128,6 +129,8 @@ function AppScreens() {
         return <SurfaceKeyboardScreen />;
       case 'boardSequencer':
         return <BoardSequencerScreen />;
+      case 'chessMusic':
+        return <ChessMusicScreen />;
       case 'info':
         return <InfoScreen />;
       default:

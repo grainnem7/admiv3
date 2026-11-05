@@ -1,0 +1,20 @@
+import { test, expect } from '@playwright/test';
+import { listenToOutput, openWelcome, outputLevels, pageErrors } from './app';
+
+/** Chess music: the built in game is heard, move by move. */
+test('Chess music plays the built in game: a move is heard, Pause stops, Restart goes back', async ({ page }) => {
+  await listenToOutput(page);
+  await openWelcome(page);
+  await page.getByRole('button', { name: 'Chess music' }).click();
+  await expect(page.getByRole('heading', { name: 'Chess music' })).toBeVisible();
+  const quiet = Math.max(...await outputLevels(page, 2, 200));
+  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await expect(page.getByText(/Move 1: e4/)).toBeVisible();
+  const levels = await outputLevels(page, 12, 250);
+  expect(Math.max(...levels)).toBeGreaterThan(Math.max(0.005, quiet * 4));
+  await expect.poll(() => page.getByRole('listitem').count()).toBeGreaterThanOrEqual(3); // a move a second
+  await page.getByRole('button', { name: 'Pause' }).click();
+  await page.getByRole('button', { name: 'Restart' }).click();
+  await expect(page.getByText('Press Play to hear the game.')).toBeVisible();
+  expect(pageErrors(page)).toEqual([]);
+});

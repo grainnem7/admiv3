@@ -147,6 +147,9 @@ function WelcomeScreen() {
       <section className="welcome-other" aria-labelledby="welcome-other-title">
         <h2 id="welcome-other-title" className="welcome-other__title">Other ways to play</h2>
         <div className="welcome-other__actions">
+          <button className="btn btn--ghost btn--sm" style={{ minHeight: 44 }} onClick={() => setCurrentScreen('chessMusic')}>
+            Chess music
+          </button>
           {hasCompletedSetup ? (
             <>
               <button
