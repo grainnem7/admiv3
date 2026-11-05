@@ -13,7 +13,7 @@ import { SIMPLE_WORDS } from '../words';
 
 export type ShowStatusTone = 'ok' | 'warn' | 'note';
 /** A button an item carries; the screen gives each its words and its work. */
-export type ShowStatusAction = 'retryCamera' | 'switchToAbleton' | 'restoreExtras' | 'carryOn' | 'dismissReload' | 'boardBack' | 'feelNormal' | 'drumsBack';
+export type ShowStatusAction = 'retryCamera' | 'switchToAbleton' | 'restoreExtras' | 'carryOn' | 'dismissReload' | 'boardBack' | 'feelNormal' | 'drumsBack' | 'countersBack';
 
 export interface ShowStatusItem {
   key: string;
@@ -55,6 +55,8 @@ export interface ShowStatusInput {
   boardSilent?: boolean;
   /** No drums anywhere, from the iPad's Simple page. */
   drumsSilent?: boolean;
+  /** The colours silenced on their own pads (K4), by name; empty or missing = none. */
+  silentColours?: string[];
 }
 
 function hatItem(h: NonNullable<ShowStatusInput['hat']>): ShowStatusItem {
@@ -125,6 +127,7 @@ export function showStatusItems(i: ShowStatusInput): ShowStatusItem[] {
   }
   if (i.drumsSilent) out.push({ key: 'drumsSilent', tone: 'note', text: SIMPLE_WORDS.drumsSilenced, actions: ['drumsBack'] });
   if (i.boardSilent) out.push({ key: 'boardSilent', tone: 'note', text: SIMPLE_WORDS.boardSilenced, actions: ['boardBack'] });
+  if (i.silentColours && i.silentColours.length > 0) out.push({ key: 'silentColours', tone: 'note', text: SIMPLE_WORDS.countersSilenced(i.silentColours), actions: ['countersBack'] });
   if (i.simplify) out.push({ key: 'simplify', tone: 'note', text: i.simplify, label: 'Simplify' });
   if (i.keepInFront) out.push({ key: 'keepInFront', tone: 'note', text: 'Keep this window in front: covering it pauses the camera.' });
   const rank: Record<ShowStatusTone, number> = { warn: 0, note: 1, ok: 2 };

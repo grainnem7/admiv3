@@ -70,31 +70,32 @@ test('the names on stage: Board, ▶ Play the board (no clock), Show, Next scene
   expect(pageErrors(page)).toEqual([]);
 });
 
-test('scene chips: numbered, each in a list item, readable in both modes, no counter colour; pressed buttons have no orange ring; paragraphs readable', async ({ page }) => {
+test('scene cards: numbered, in the storyboard list, readable in both modes, no counter colour; pressed buttons have no orange ring; paragraphs readable', async ({ page }) => {
   await openLaptopBoard(page);
   await makePlan(page);
-  const timeline = page.getByRole('list', { name: 'Timeline of the scenes' });
+  const cards = page.getByRole('listbox', { name: 'The piece: its scenes in order' }).getByRole('option');
   for (const mode of ['dark', 'light'] as const) {
     if (mode === 'light') await page.getByRole('button', { name: 'Switch to light mode' }).click();
-    await expect(timeline.getByRole('listitem').getByRole('button')).toHaveCount(4);
-    const chips = await contrastIn(page, '[aria-label="Timeline of the scenes"] button');
-    // Whole words only, never cut: each chip shows what fits, its title has them all.
-    const titles = await timeline.getByRole('button').evaluateAll((bs) => bs.map((b) => b.getAttribute('title')));
-    expect(titles).toEqual(['1 · Arrival 0:00', '2 · Build 1:30', '3 · Open 3:30', '4 · Home 6:00']);
-    chips.forEach((c, i) => {
-      const [n, , name] = (titles[i] ?? '').split(' ');
-      expect([titles[i], `${n} · ${name}`, n, '']).toContain(c.text);
-    });
-    // Nothing overflows its chip (a cut word would).
-    const overflow = await timeline.getByRole('button').evaluateAll((bs) => bs.filter((b) => b.scrollWidth > b.clientWidth + 1).map((b) => b.textContent));
+    await pieceStep(page, 'Scenes');
+    await expect(cards).toHaveCount(4);
+    // Each card: its number and time, then its name, in the words a screen reader hears first.
+    const firstLines = await cards.evaluateAll((bs) => bs.map((b) => `${b.children[0]?.textContent ?? ''} ${b.children[1]?.textContent ?? ''}`));
+    expect(firstLines).toEqual(['Scene 1 · 0:00 Arrival', 'Scene 2 · 1:30 Build', 'Scene 3 · 3:30 Open', 'Scene 4 · 6:00 Home']);
+    await expect(cards.first()).toHaveAttribute('aria-label', /^Scene 1 · 0:00 Arrival /);
+    // Nothing overflows its card (a cut word would).
+    const overflow = await cards.evaluateAll((bs) => bs.filter((b) => b.scrollWidth > b.clientWidth + 1).map((b) => b.textContent));
     expect(overflow).toEqual([]);
-    for (const c of chips) expect(c.ratio, `${mode} ${c.text}`).toBeGreaterThanOrEqual(4.5);
+    // Readable, and in the text colours, never a counter's colour.
+    const words = await contrastIn(page, '[data-scene-card] > span');
+    expect(words.length).toBeGreaterThan(0);
+    for (const c of words) expect(c.ratio, `${mode} ${c.text}`).toBeGreaterThanOrEqual(4.5);
     // The base stylesheet's orange (#f97316) ring is gone from pressed buttons.
     const pressed = await page.locator('.bs-root [aria-pressed="true"]').evaluateAll((els) => els.map((e) => `${getComputedStyle(e).borderTopColor} ${getComputedStyle(e).boxShadow}`));
     expect(pressed.length).toBeGreaterThan(0);
     for (const p of pressed) expect(p).not.toContain('249, 115, 22');
-    // Paragraphs take the board's text colour: no pale grey on light cards.
-    const para = await page.locator('.bs-root p', { hasText: 'A scene says which loops play' }).evaluate((p) => {
+    // Paragraphs take the board's text colour: no pale grey on light cards (Check's).
+    await pieceStep(page, 'Ending & check');
+    const para = await page.locator('.bs-root p', { hasText: 'The piece starts from' }).evaluate((p) => {
       let el: HTMLElement | null = p as HTMLElement; let bg = 'rgba(0, 0, 0, 0)';
       while (el && bg === 'rgba(0, 0, 0, 0)') { bg = getComputedStyle(el).backgroundColor; el = el.parentElement; }
       return { color: getComputedStyle(p).color, bg };
@@ -110,13 +111,15 @@ test('scene chips: numbered, each in a list item, readable in both modes, no cou
     }, para);
     expect(ratio, `${mode} paragraph`).toBeGreaterThanOrEqual(4.5);
   }
-  // The old ways to make a loop are folded, and the empty name says Keep.
+  // One way to make a loop (K1): the rail's dashed place (and, on the Board, Keep as loop
+  // beside ▶ Play, where Make a piece has Keep as scene). The old ways are gone.
   await pieceStep(page, 'Loops');
+  await expect(page.getByRole('button', { name: /Other ways/ })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Keep the board as this loop' })).toHaveCount(0);
-  await page.getByRole('button', { name: /Other ways to make a loop/ }).click();
-  await expect(page.getByRole('button', { name: 'Keep the board as this loop' }).first()).toBeVisible();
-  // The empty places are listed here (U1), and an empty name says Keep.
-  await expect(page.getByRole('textbox', { name: 'Name of loop 1' })).toHaveAttribute('placeholder', 'name (after Keep)');
+  await expect(page.getByRole('button', { name: /^Keep as scene: keep what is playing/ })).toBeVisible();
+  await expect(page.locator('[data-loop-rail] [data-loop-place="0"]')).toHaveText('+ Keep as loop');
+  await page.getByRole('button', { name: 'Board', exact: true }).click();
+  await expect(page.getByRole('button', { name: /^Keep as loop: keep the counters/ })).toBeVisible();
   expect(pageErrors(page)).toEqual([]);
 });
 

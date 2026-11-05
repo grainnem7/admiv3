@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { makePlan, openLaptopBoard, openLaptopSetup, pageErrors, pickColour, pieceStep, place, sceneMore } from './app';
+import { makePlan, openLaptopBoard, openLaptopSetup, pageErrors, pickColour, pieceStep, place, sceneMore, selectScene } from './app';
 
 /**
  * The set-up screens (audit 2026-10-30, batch 4): the folds (A1), one word list (A2), the
@@ -73,16 +73,19 @@ test('the header: one row, the less-used buttons under More at every width, and 
   expect(pageErrors(page)).toEqual([]);
 });
 
-test('Make a piece: a scene shows its name, time, loops and Energy, the rest under More for this scene, which still edits it and is remembered (A1, A2)', async ({ page }) => {
+test("Make a piece: a scene's editor shows its name, time, loops and Energy, the rest under change ▾, which still edits it and is remembered (A1, A2)", async ({ page }) => {
   await openLaptopBoard(page);
   await makePlan(page);
-  await page.getByRole('button', { name: /^1:30 · Build/ }).click();
-  // Folded: Energy by the Sound tab's names, in view; More says the rest in one line.
+  await selectScene(page, 'Build');
+  await expect(page.getByRole('textbox', { name: 'Scene name' })).toHaveValue('Build');
+  await expect(page.getByText('1:30 → 3:30')).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Loops in this scene' })).toBeVisible();
+  // Folded: Energy by the Sound tab's names, in view; a line says the rest.
   const energy = page.getByRole('radiogroup', { name: 'Energy of this scene' });
   await expect(energy.getByRole('radio')).toHaveText(['Off', 'Calm', 'Steady', 'Lively', 'Driving', 'Big']);
-  const more = page.getByRole('button', { name: /More for this scene/ });
+  const more = page.getByRole('button', { name: /^change [▾▴]/ });
   await expect(more).toHaveAttribute('aria-expanded', 'false');
-  await expect(more).toContainText('90 BPM');
+  await expect(more.locator('..')).toContainText('90 BPM');
   await expect(page.getByRole('radiogroup', { name: 'Sound world' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Delete scene' })).toBeVisible();
   // Open: everything it set, and a change is kept.
@@ -94,9 +97,9 @@ test('Make a piece: a scene shows its name, time, loops and Energy, the rest und
   await page.reload();
   await page.getByRole('button', { name: /Board Sequencer/ }).click();
   await pieceStep(page, 'Scenes');
-  await page.getByRole('button', { name: /^1:30 · Build/ }).click();
-  // Remembered for the session: More is still open after the reload.
-  await expect(page.getByRole('button', { name: /More for this scene/ })).toHaveAttribute('aria-expanded', 'true');
+  await selectScene(page, 'Build');
+  // Remembered for the session: change ▾ is still open after the reload.
+  await expect(page.getByRole('button', { name: /^change [▾▴]/ })).toHaveAttribute('aria-expanded', 'true');
   await expect(page.getByRole('radiogroup', { name: 'Sound world' }).getByRole('radio', { name: 'Lo-fi' })).toHaveAttribute('aria-checked', 'true');
   await expect(page.getByRole('slider', { name: /^Speed/ })).toHaveValue('120');
   await expect(page.getByRole('radiogroup', { name: 'Extra notes' }).getByRole('radio', { name: 'Some', exact: true })).toHaveAttribute('aria-checked', 'true');
@@ -142,7 +145,7 @@ test('the Ready check: a fix made elsewhere has a button that goes there (A14)',
   await pieceStep(page, 'Ending & check');
   // No scenes yet: Go to Scenes opens step 2.
   await page.getByRole('button', { name: /^Go to Scenes: No scenes yet/ }).click();
-  await expect(page.getByRole('heading', { name: 'Scenes' })).toBeVisible();
+  await expect(page.getByText('No scenes yet: see under the board.')).toBeVisible();
   await pieceStep(page, 'Ending & check');
   // The laptop board is advice, with the button that changes it, not "press 📷 Camera at the top".
   // Advice is one line until pressed (U7).

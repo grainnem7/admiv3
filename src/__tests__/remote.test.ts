@@ -102,7 +102,7 @@ describe('the Simple page: its messages and its fields, every one checked (spec 
   });
 
   it('only the iPad may send them, and the relay lets them through', () => {
-    for (const t of ['drumsSound', 'feel', 'boardSound', 'melodySound']) {
+    for (const t of ['drumsSound', 'feel', 'boardSound', 'melodySound', 'colourSound']) {
       expect(allowedFrom('remote', t)).toBe(true);
       expect(allowedFrom('host', t)).toBe(false);
     }
@@ -133,14 +133,14 @@ describe('the Simple page: its messages and its fields, every one checked (spec 
   });
 
   it('the rows: known rows only, once each, in page order; a choice saved with an earlier page shows Drums and Calm / Busy', () => {
-    expect(SIMPLE_ROWS).toEqual(['drums', 'feel', 'melody', 'board']);
-    expect(stateOf({ rows: ['board', 'drums', 'drums', 'strips', 3] }).rows).toEqual(['drums', 'board']);
+    expect(SIMPLE_ROWS).toEqual(['drums', 'feel', 'melody', 'counters']);
+    expect(stateOf({ rows: ['board', 'drums', 'drums', 'strips', 3] }).rows).toEqual(['drums', 'counters']);
     expect(stateOf({ rows: [] }).rows).toEqual([]);
     expect(sanitizeSimpleRows(undefined)).toEqual(SIMPLE_ROWS);
     // Earlier pages' rows: their Melody and Board ticks are kept; Drums and Calm / Busy are shown.
     expect(sanitizeSimpleRows(['keep', 'feel', 'instruments', 'melody', 'board'])).toEqual(SIMPLE_ROWS);
     expect(sanitizeSimpleRows(['instruments'])).toEqual(['drums', 'feel']);
-    expect(sanitizeSimpleRows(['newIdea', 'board'])).toEqual(['drums', 'feel', 'board']);
+    expect(sanitizeSimpleRows(['newIdea', 'board'])).toEqual(['drums', 'feel', 'counters']);
     // A choice made with today's rows is kept as it is.
     expect(sanitizeSimpleRows(['melody'])).toEqual(['melody']);
   });
@@ -566,5 +566,31 @@ describe('show safety over the link (audit 2026-10-30: B2, B19, B20)', () => {
 
   it('the iPad heartbeat (a hello that answers no question) is a well-formed hello, so a laptop of any build ignores it', () => {
     expect(parseRemoteMessage({ type: 'hello', build: 'abc-1', ask: null })).toEqual({ type: 'hello', build: 'abc-1', ask: null });
+  });
+});
+
+describe('the Counters row (K4): one pad per colour, each silencing its own counters', () => {
+  const base = { values: { tempo: 0.5, dynamics: 0.5, fill: 0, evolve: 0 }, labels: { tempo: '100 BPM', dynamics: '50%', fill: 'Off', evolve: 'Off' }, kept: false, muted: false, playing: true };
+  const stateOf = (over: Record<string, unknown>) => { const m = parseRemoteMessage({ type: 'state', state: { ...base, ...over } }); if (m?.type !== 'state') throw new Error('not a state'); return m.state; };
+  it('colourSound: the colour and the state wanted; anything else dropped', () => {
+    expect(parseRemoteMessage({ type: 'colourSound', id: 'c1', silent: true })).toEqual({ type: 'colourSound', id: 'c1', silent: true });
+    expect(parseRemoteMessage({ type: 'colourSound', id: 'c1', silent: 'yes' })).toBeNull();
+    expect(parseRemoteMessage({ type: 'colourSound', id: 7, silent: true })).toBeNull();
+    expect(parseRemoteMessage({ type: 'colourSound', id: '', silent: true })).toBeNull();
+  });
+
+  it('the state carries which colours are silent, and the colours themselves (number, name, swatch, words)', () => {
+    expect(stateOf({ silentColours: ['c1', 3, 'c2'] }).silentColours).toEqual(['c1', 'c2']);
+    expect(stateOf({}).silentColours).toBeUndefined();
+    const colours = [{ id: 'c1', number: 1, name: 'Red', swatch: '#ff0000', role: 'melody', words: 'Melody · Piano' }, { id: 7 }, { id: 'c2', number: 2, name: 'Blue', swatch: '#0000ff', role: 'bass', words: 'Bass' }];
+    expect(stateOf({ colours }).colours).toEqual([{ ...colours[0], picture: '🎵' }, { ...colours[2], picture: '🎸' }]); // an older laptop sent none: the job's picture
+    const drawn = [{ ...colours[0], picture: '🎺' }];
+    expect(stateOf({ colours: drawn }).colours).toEqual(drawn);
+    expect(stateOf({}).colours).toBeUndefined();
+  });
+
+  it("a saved row 'board' reads as 'counters'", () => {
+    expect(sanitizeSimpleRows(['board'])).toEqual(['counters']);
+    expect(sanitizeSimpleRows(['counters', 'drums'])).toEqual(['drums', 'counters']);
   });
 });

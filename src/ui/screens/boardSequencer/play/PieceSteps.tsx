@@ -1,36 +1,24 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { Button } from '../ui/Button';
-import { CAPTION_STYLE, UNDERLINE_OFF, UNDERLINE_ON } from '../ui/text';
-import { dragTime } from '../../../../songs/performance/sceneTools';
 import { MAX_PIECES } from '../../../../songs/performance/pieces';
-import { PieceGrid } from './PieceGrid';
-import { focusDropped, focusWhenGone, PLAY_STOP_ID } from '../ui/focusNext';
-import { LabeledSlider } from '../ui/LabeledSlider';
+import { focusWhenGone } from '../ui/focusNext';
+import { SceneEditor } from './SceneEditor';
 import { SegmentedControl } from '../ui/SegmentedControl';
 import { Switch } from '../ui/Switch';
-import { Disclosure } from '../ui/Disclosure';
 import { Note } from '../ui/explain';
-import type { BandLevel } from '../../../../songs/band/band';
 import type { SoundWorldChoice } from '../../../../audio/worlds/soundWorlds';
 import {
   describeEnding, endingTooLong, formatClock, MAX_PIECE_SEC, parseClock, pieceLengthProblem, plainNumberProblem,
   type ClockView, type EndingMode, type EndingStyle, type PerformanceSettings,
 } from '../../../../songs/performance/clock';
-import { MAX_SCENES, type LoopSlotState, type Scene } from '../../../../songs/performance/launcher';
-import { sceneTimeProblem, type ScenePatch } from '../../../../songs/performance/piece';
-import { placesFreeLine } from '../../../../songs/performance/newLoop';
-import { bandJobsWords, LEAD_INS, LEAD_IN_WORDS, type LeadIn } from '../../../../songs/band/bandJobs';
+import type { LoopSlotState, Scene } from '../../../../songs/performance/launcher';
+import type { ScenePatch } from '../../../../songs/performance/piece';
 import { colourEntryProblem } from '../../../../songs/performance/colourEntries';
-import { GLIDE_DEFAULT_SEC, GLIDE_MAX_SEC, GLIDE_MIN_SEC } from '../../../../songs/performance/speedGlide';
-import { BAND_WORDS, listNames, playerWords } from '../pieceCheck';
 import { ReadyList, type ReadyItem } from './ReadyCheck';
-import { ChordChoice, chordWords } from './ChordChoice';
-import { BandJobsChoice } from './BandJobsChoice';
-import { ENERGY_LEVELS, ENERGY_WORDS, energyLine, type SceneEnergy } from '../../../../songs/performance/energy';
-import { ENERGY_NAMES, WORDS } from '../words';
+import { WORDS } from '../words';
+import { listNames } from '../pieceCheck';
 import { SwatchChip } from '../ui/SwatchChip';
 import type { BoardPalette } from '../theme/boardTokens';
-import { useSessionFold } from '../ui/useSessionFold';
 
 export interface PieceLoop {
   slot: number;
@@ -56,6 +44,13 @@ export interface PieceColourTime {
 
 export interface PieceStepsProps {
   step: PieceStep;
+  /** The scene selected in the storyboard (by id), shown in the editor here. */
+  selectedScene: string | null;
+  onSelectScene(id: string | null): void;
+  /** A scene's length typed: the later scenes move (see storyboard.withLength). */
+  onLength(i: number, sec: number): void;
+  /** Why nothing can be changed now (the piece plays from Show), or null. */
+  locked: string | null;
   onStep(step: PieceStep): void;
   running: boolean;
   lengthSec: number;
@@ -68,10 +63,6 @@ export interface PieceStepsProps {
   loopFadePasses: number;
   performance: PerformanceSettings;
   respectPlayer: boolean;
-  /** Counters are on the board now, so there is something to save. */
-  canSaveBoard: boolean;
-  /** Every loop is full: Keep would have nowhere to put a new one. */
-  loopsFull: boolean;
   deletedSceneName: string | null;
   diskLine: string;
   restoreError: string | null;
@@ -87,17 +78,10 @@ export interface PieceStepsProps {
   palette: BoardPalette;
   /** New loop: composing from silence. Shown in place of the list while it is on. */
   newLoop: ReactNode;
-  /** The loop New loop has just kept and is naming: its row shows the name as words (U5). */
-  namingSlot?: number | null;
   /** The colours that play notes, each with when it comes in (Scenes: When each colour comes in). */
   colours: PieceColourTime[];
   /** A colour's time set, or cleared (null = from the start). */
   onColourEntry(id: string, at: number | null): void;
-  onNewLoop(): void;
-  /** Keep what is on the board now as the next loop, in one press, while it plays (item 2). */
-  onKeepAsLoop(): void;
-  /** Why Keep as loop can't be pressed now, or null. */
-  keepReason: string | null;
   /** The player's pieces (item 3): the one open now, and the rest. */
   pieces: { id: string; name: string; scenes: number; lengthSec: number }[];
   pieceId: string;
@@ -108,14 +92,9 @@ export interface PieceStepsProps {
   onDuplicatePiece(id: string): void;
   onDeletePiece(id: string): void;
   onRenamePiece(id: string, name: string): void;
-  onToggleLoop(slot: number): void;
-  onSaveBoardToLoop(slot: number): void;
-  onDrawLoop(slot: number): void;
-  onClearLoop(slot: number): void;
-  onRenameLoop(slot: number, name: string): void;
-  onLoopFade(passes: number): void;
   onGoScene(i: number): void;
-  onRehearseFrom(sec: number): void;
+  /** Hear from here: play the piece from scene i (two passes before it, when a scene comes before). */
+  onRehearseFrom(i: number): void;
   onSaveSceneFromNow(name: string): void;
   onUpdateSceneFromNow(i: number): void;
   onEditScene(i: number, patch: ScenePatch): void;
@@ -123,7 +102,6 @@ export interface PieceStepsProps {
   /** A copy of a scene, right after it, with no time yet (item 7). */
   onDuplicateScene(i: number): void;
   onUndoDelete(): void;
-  onMakePlan(): void;
   onRespectPlayer(on: boolean): void;
   /** New ideas for one scene: the band, the extra notes and Sounds change play differently. */
   onNewIdeasScene(i: number): void;
@@ -138,7 +116,6 @@ export interface PieceStepsProps {
   onShow(): void;
 }
 
-const loopName = (l: PieceLoop): string => (l.name.length > 0 ? l.name : `Loop ${l.slot + 1}`);
 
 /** A loop at a glance: its counters on a tiny board, so loops are told apart by eye. */
 export function LoopThumb({ cells, rows, cols, swatchFor, width = 64 }: {
@@ -160,14 +137,6 @@ export function LoopThumb({ cells, rows, cols, swatchFor, width = 64 }: {
   );
 }
 
-/** Scene amounts as named steps: the same words as the Sound tab's helpers. */
-const FILL_STEPS = [{ label: 'Off', value: 0 }, { label: 'A few', value: 0.25 }, { label: 'Some', value: 0.5 }, { label: 'Lots', value: 0.8 }];
-const EVOLVE_STEPS = [{ label: 'Off', value: 0 }, { label: 'Slowly', value: 0.35 }, { label: 'More', value: 0.7 }];
-function nearestStep(steps: { label: string; value: number }[], v: number): number {
-  let best = 0;
-  for (let i = 1; i < steps.length; i++) if (Math.abs(steps[i].value - v) < Math.abs(steps[best].value - v)) best = i;
-  return best;
-}
 
 export function loopStateText(l: PieceLoop, running: boolean, fades: boolean): string {
   if (l.state === 'empty') return 'empty';
@@ -184,39 +153,8 @@ export function loopStateText(l: PieceLoop, running: boolean, fades: boolean): s
  * Neighbours on the timeline alternate two neutral surfaces, with the board's text colour.
  */
 
-/** A chip's padding and edges, either side: what its words never get. */
-const CHIP_EDGES_PX = 18;
-const CHIP_FONT = "700 14px Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
-let chipCanvas: CanvasRenderingContext2D | null | undefined;
-/** How wide the chip's words are drawn; without a canvas (tests), 8 px a character. */
-function chipTextWidth(text: string): number {
-  if (chipCanvas === undefined) {
-    // jsdom (the unit tests) has no canvas: it says so loudly, so it is not asked.
-    const jsdom = typeof navigator !== 'undefined' && navigator.userAgent.includes('jsdom');
-    try { chipCanvas = jsdom ? null : document.createElement('canvas').getContext('2d') ?? null; } catch { chipCanvas = null; }
-    if (chipCanvas) chipCanvas.font = CHIP_FONT;
-  }
-  return chipCanvas ? chipCanvas.measureText(text).width : text.length * 8;
-}
 
-/**
- * What a scene's chip on the timeline says, in the room it has: the whole label, then
- * without the time, then the number alone, else nothing. Never a word cut in half (a short
- * last scene read "4 · Home 6:"); the whole label stays in the chip's name and tooltip.
- * `widthPx` null: not measured yet, so the whole label.
- */
-export function sceneChipLabel(
-  n: number, name: string, time: string, widthPx: number | null, measure: (t: string) => number = chipTextWidth,
-): string {
-  if (widthPx === null) return `${n} · ${name} ${time}`;
-  // Then as much of the name as fits, marked with … (U2): at least two letters of it.
-  const shortened = [...Array(Math.max(0, name.length - 2)).keys()].map((k) => `${n} · ${name.slice(0, name.length - 1 - k)}…`);
-  const options = [`${n} · ${name} ${time}`, `${n} · ${name}`, ...shortened, String(n)];
-  return options.find((o) => measure(o) <= widthPx) ?? '';
-}
 
-/** "Other ways to make a loop" stays open for the rest of the session once opened. */
-let otherWaysOpen = false;
 
 const heading = { margin: 0, fontSize: 20, fontWeight: 600 } as const;
 const note = { fontSize: 14, color: 'var(--bs-fg2)', margin: 0 } as const;
@@ -232,554 +170,103 @@ const ENDINGS: { value: EndingStyle; label: string; what: string }[] = [
 ];
 
 /**
- * Making a piece, in three steps that can be taken in order or opened any time: the
- * loops, the scenes, then the ending and a check. Each step shows only what it needs and
- * says in one line what it is for — and each is optional: with no loops and no scenes the
- * board still plays, and the clock still ends the piece.
+ * Make a piece (Keep design, 5 Nov 2026, K2): the panel beside the board holds the editor of
+ * the scene selected in the storyboard under the board, or Check (the length, the ending,
+ * the whole piece's settings and the ready check). New loop's own panel shows here while it
+ * is open. The step ids stay: 'loops' and 'scenes' are the editor, 'ending' is Check.
  */
 export function PieceSteps(p: PieceStepsProps): JSX.Element {
-  const saved = p.loops.filter((l) => l.state !== 'empty');
-  // Two tabs (G3): Piece holds the grid, the scenes and the loops; Check the length, the
-  // ending and the ready check. The steps' ids stay as they were underneath.
-  const steps: { id: PieceStep; label: string; status: string }[] = [
-    { id: 'scenes', label: 'Piece', status: p.scenes.length === 0 ? (saved.length === 0 ? 'empty' : `${saved.length} ${saved.length === 1 ? 'loop' : 'loops'}`) : `${p.scenes.length} ${p.scenes.length === 1 ? 'scene' : 'scenes'} · ${saved.length} ${saved.length === 1 ? 'loop' : 'loops'}` },
-    { id: 'ending', label: 'Check', status: formatClock(p.lengthSec) },
-  ];
-  const onPiece = p.step === 'loops' || p.step === 'scenes';
+  const i = p.scenes.findIndex((s) => s.id === p.selectedScene);
+  const s = i >= 0 ? p.scenes[i] : null;
+  const undoRef = useRef<HTMLButtonElement>(null);
+  const nextAt = s ? (p.scenes.slice(i + 1).map((x) => x.at).find((at): at is number => typeof at === 'number') ?? null) : null;
+  // The editor is remade only when its scene or the board changes, not on every tick of the clock.
+  const editor = useMemo(() => (s ? (
+    <SceneEditor
+      key={s.id} number={i + 1} scene={s} current={p.currentScene === i} running={p.running} lengthSec={p.lengthSec} passSec={p.passSec} nextAt={nextAt}
+      loops={p.loops} worldOptions={p.worldOptions} playerName={p.playerName} loopFadePasses={p.loopFadePasses} locked={p.locked}
+      onEdit={(patch) => p.onEditScene(i, patch)}
+      onLength={(sec) => p.onLength(i, sec)}
+      onHear={!p.running && typeof s.at === 'number' ? () => p.onRehearseFrom(i) : undefined}
+      onGo={p.running ? () => p.onGoScene(i) : undefined}
+      onUpdateFromNow={p.running ? () => p.onUpdateSceneFromNow(i) : undefined}
+      onNewIdeas={() => p.onNewIdeasScene(i)}
+      onDuplicate={() => p.onDuplicateScene(i)}
+      onDelete={(pressed) => {
+        p.onSelectScene(null);
+        p.onDeleteScene(i);
+        // Onto Undo, its opposite (T4-09); when Undo goes, onto the storyboard's first card.
+        void focusWhenGone(() => undoRef.current ?? document.querySelector<HTMLElement>('[role="listbox"][aria-label^="The piece"] [data-scene-card]'), pressed);
+      }}
+      onCheck={() => p.onStep('ending')}
+    />
+  ) : null), [s, i, p.currentScene, p.running, p.lengthSec, p.passSec, nextAt, p.loops, p.worldOptions, p.playerName, p.loopFadePasses, p.locked]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14, paddingTop: 10 }}>
-      <PiecePicker {...p} />
-      {/* The tabs as words (L5): the one you are on in the text colour, underlined. */}
-      <nav aria-label="Make a piece: steps" style={{ display: 'flex', columnGap: 18, flexWrap: 'wrap', borderBottom: '1px solid var(--bs-border)' }}>
-        {steps.map((s) => {
-          const on = s.id === 'scenes' ? onPiece : p.step === s.id;
-          return (
-            // The word is the button; its status line sits under it, outside the name (A9).
-            <div key={s.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-              <button
-                type="button"
-                aria-current={on ? 'step' : undefined}
-                onClick={() => p.onStep(s.id)}
-                style={{
-                  minHeight: 'var(--bs-target)', padding: '4px 0', textAlign: 'left', cursor: 'pointer',
-                  borderRadius: 0, border: '1px solid transparent', background: 'transparent',
-                  color: on ? 'var(--bs-fg)' : 'var(--bs-fg3)', fontWeight: on ? 600 : 500,
-                }}
+      {p.step === 'ending' ? <CheckPanel {...p} /> : editor ?? (
+        <p style={note}>{p.scenes.length === 0 ? 'No scenes yet: see under the board.' : 'Press a scene under the board to change it here.'}</p>
+      )}
+      {p.step !== 'ending' && p.deletedSceneName && (
+        <div role="status" style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 14 }}>
+          <span>{`Deleted “${p.deletedSceneName}”.`}</span>
+          {/* Undo puts the scene back under the board: focus goes to its row's first card, never the page (T4-09). */}
+          <Button ref={undoRef} tone="secondary" onClick={(e) => { p.onUndoDelete(); void focusWhenGone(() => document.querySelector<HTMLElement>('[role="listbox"][aria-label^="The piece"] [data-scene-card]'), e.currentTarget); }}>Undo</Button>
+        </div>
+      )}
+      {/* New loop's panel (from silence), while it is open: the second way (K1). */}
+      {p.step !== 'ending' && p.newLoop}
+    </div>
+  );
+}
+
+
+
+/**
+ * The piece open now, and the player's other pieces (item 3), under the storyboard's ▾ (K2):
+ * every piece with Open, Duplicate and Delete, a Rename field for the one open now, and New
+ * piece. The loops are shared, so they are not here.
+ */
+export type PiecePickerProps = Pick<PieceStepsProps, 'pieces' | 'pieceId' | 'pieceLocked' | 'onOpenPiece' | 'onNewPiece' | 'onDuplicatePiece' | 'onDeletePiece' | 'onRenamePiece'>;
+export function PiecePicker(p: PiecePickerProps): JSX.Element {
+  return (
+    <div role="group" aria-label="Pieces" data-piece-picker="" style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingBottom: 6, borderBottom: '1px solid var(--bs-border)' }}>
+        <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column' }}>
+          {p.pieces.map((x) => {
+            const isCurrent = x.id === p.pieceId;
+            return (
+              <li
+                key={x.id}
+                aria-label={`${x.name}: ${x.scenes} ${x.scenes === 1 ? 'scene' : 'scenes'}, ${formatClock(x.lengthSec)}${isCurrent ? ', open now' : ''}`}
+                style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '6px 0', borderTop: '1px solid var(--bs-border)' }}
               >
-                <span data-words="" style={{ display: 'inline-block', borderBottom: on ? UNDERLINE_ON : UNDERLINE_OFF, paddingBottom: 1 }}>{s.label}</span>
-              </button>
-              <span aria-hidden="true" style={{ fontSize: 14, color: 'var(--bs-fg3)', fontWeight: 500, paddingBottom: 6 }}>{s.status}</span>
-            </div>
-          );
-        })}
-      </nav>
-      {/* The piece's picture first, the loops under it, always in this order: New loop's panel
-          takes focus when it opens and the page follows it there. */}
-      {onPiece && p.scenes.length === 0 && <FirstPiece {...p} />}
-      {onPiece && <ScenesStep {...p} />}
-      {onPiece && <LoopsStep {...p} />}
-      {p.step === 'ending' && <EndingStep {...p} />}
-    </div>
-  );
-}
-
-/**
- * An empty piece teaches itself (G3): three lines, each ticked as it is done, in place of
- * the paragraphs. They go once there are scenes.
- */
-function FirstPiece(p: PieceStepsProps): JSX.Element {
-  const kept = p.loops.filter((l) => l.state !== 'empty').length;
-  const lines: { done: boolean; text: string }[] = [
-    { done: kept >= 1, text: 'Play something, then press an empty place in the loop rail beside the board. Two or three loops is plenty.' },
-    { done: false, text: 'Press Make my plan: four scenes across the piece, with your loops in them.' },
-    { done: false, text: 'Go to Show and press Start the piece.' },
-  ];
-  return (
-    <ol data-first-piece="" aria-label="Your first piece, in three steps" style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 6 }}>
-      {lines.map((l, i) => (
-        <li key={i} style={{ display: 'flex', gap: 10, alignItems: 'baseline', color: l.done ? 'var(--bs-fg3)' : 'var(--bs-fg)' }}>
-          <span aria-hidden="true" style={{ width: 18, flexShrink: 0, fontWeight: 700, textAlign: 'center' }}>{l.done ? '✓' : String(i + 1)}</span>
-          <span>{l.done ? <><span style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>Done: </span>{l.text}</> : l.text}</span>
-        </li>
-      ))}
-    </ol>
-  );
-}
-
-function StepFooter({ back, next }: { back?: { label: string; onClick(): void }; next?: { label: string; onClick(): void; primary?: boolean } }): JSX.Element {
-  return (
-    <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', flexWrap: 'wrap', borderTop: '1px solid var(--bs-border)', paddingTop: 10 }}>
-      {back ? <Button tone="secondary" onClick={back.onClick}>{`← ${back.label}`}</Button> : <span />}
-      {next && <Button tone={next.primary ? 'primary' : 'secondary'} onClick={next.onClick}>{`${next.label} →`}</Button>}
-    </div>
-  );
-}
-
-/**
- * The piece open now, and the player's other pieces (item 3): a fold at the top of Make a
- * piece. Open, it lists every piece with Open, Duplicate and Delete, a Rename field for the
- * one open now, and New piece. The loops are shared, so they are not here.
- */
-function PiecePicker(p: PieceStepsProps): JSX.Element {
-  const [open, setOpen] = useState(false);
-  const current = p.pieces.find((x) => x.id === p.pieceId) ?? null;
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <button
-        type="button" aria-expanded={open} onClick={() => setOpen((o) => !o)} data-piece-picker=""
-        style={{ display: 'flex', alignItems: 'center', gap: 8, alignSelf: 'flex-start', background: 'transparent', border: 'none', color: 'var(--bs-fg)', minHeight: 'var(--bs-target)', padding: 0, cursor: 'pointer' }}
-      >
-        <span aria-hidden="true" style={{ color: 'var(--bs-fg2)' }}>{open ? '▾' : '▸'}</span>
-        <span style={CAPTION_STYLE}>Piece</span>
-        <span style={{ fontWeight: 600 }}>{current?.name ?? 'Piece 1'}</span>
-        {p.pieces.length > 1 && <span style={{ fontSize: 14, color: 'var(--bs-fg3)' }}>{`· ${p.pieces.length} pieces`}</span>}
-      </button>
-      {open && (
-        <div role="group" aria-label="Pieces" style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingBottom: 6, borderBottom: '1px solid var(--bs-border)' }}>
-          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column' }}>
-            {p.pieces.map((x) => {
-              const isCurrent = x.id === p.pieceId;
-              return (
-                <li
-                  key={x.id}
-                  aria-label={`${x.name}: ${x.scenes} ${x.scenes === 1 ? 'scene' : 'scenes'}, ${formatClock(x.lengthSec)}${isCurrent ? ', open now' : ''}`}
-                  style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '6px 0', borderTop: '1px solid var(--bs-border)' }}
-                >
-                  {isCurrent ? (
-                    <input
-                      type="text" value={x.name} aria-label="Name of this piece"
-                      onChange={(e) => p.onRenamePiece(x.id, e.target.value)}
-                      style={{ width: 140, minHeight: 'var(--bs-target)', fontWeight: 600 }}
-                    />
-                  ) : (
-                    <span style={{ width: 140, fontWeight: 500 }}>{x.name}</span>
-                  )}
-                  <span style={{ fontSize: 14, color: 'var(--bs-fg2)', flex: '1 1 80px' }}>{`${x.scenes} ${x.scenes === 1 ? 'scene' : 'scenes'} · ${formatClock(x.lengthSec)}${isCurrent ? ' · open now' : ''}`}</span>
-                  <span style={{ display: 'flex', gap: 4, marginLeft: 'auto' }}>
-                    {!isCurrent && <Button tone="secondary" onClick={() => p.onOpenPiece(x.id)} aria-label={`Open: ${x.name}`} reason={p.pieceLocked}>Open</Button>}
-                    <Button tone="quiet" onClick={() => p.onDuplicatePiece(x.id)} aria-label={`Duplicate: ${x.name}`} reason={p.pieceLocked ?? (p.pieces.length >= MAX_PIECES ? 'Twelve pieces is the most.' : null)}>Duplicate</Button>
-                    {p.pieces.length > 1 && <Button tone="quiet" onClick={() => p.onDeletePiece(x.id)} aria-label={`Delete: ${x.name}`} reason={p.pieceLocked}>Delete</Button>}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-          <div>
-            <Button tone="secondary" onClick={p.onNewPiece} reason={p.pieceLocked ?? (p.pieces.length >= MAX_PIECES ? 'Twelve pieces is the most.' : null)}>New piece</Button>
-          </div>
-          <Note as="p">A piece is its scenes, its length and its ending, and when each colour comes in. The loops are the player&rsquo;s, shared by every piece.</Note>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** Step 1: the loops — a board saved once, that then plays by itself. */
-function LoopsStep(p: PieceStepsProps): JSX.Element {
-  const [replaceArmed, setReplaceArmed] = useState<number | null>(null);
-  const nameRefs = useRef(new Map<number, HTMLInputElement>());
-  const [more, setMore] = useState(false);
-  // The old ways, folded (B17): remembered while the page is open, so a second loop made
-  // the old way doesn't need the fold opened again.
-  const [otherWays, setOtherWays] = useState(otherWaysOpen);
-  const toggleOtherWays = (): void => setOtherWays((o) => { otherWaysOpen = !o; return !o; });
-  // While the piece clock runs, the piece is playing: no loop is made then (F2).
-  const pieceOn = p.clock !== null && p.clock.phase !== 'idle';
-  const making = p.newLoop !== null && p.newLoop !== undefined;
-  // The old ways to make a loop (Save the board here, Overwrite, Edit notes) stay for now,
-  // but never inside New loop or during the piece, where they made a second, different
-  // loop under the New loop heading (F1).
-  const oldWaysAllowed = !making && !pieceOn;
-  const oldWays = oldWaysAllowed && otherWays;
-  // Done or Leave closes New loop: focus goes back to New loop, one Enter from the next
-  // loop, never to the page (T1-04). (Opening it, the panel takes focus itself.)
-  const newLoopRef = useRef<HTMLButtonElement>(null);
-  const wasMaking = useRef(making);
-  useEffect(() => {
-    if (wasMaking.current && !making && focusDropped()) newLoopRef.current?.focus();
-    wasMaking.current = making;
-  }, [making]);
-  return (
-    <section aria-labelledby="piece-loops" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <h2 id="piece-loops" style={heading}>Loops</h2>
-      {p.newLoop ?? (
-        <div style={card}>
-          <Note as="p" style={{ color: 'var(--bs-fg)' }}>A loop is a board that then plays by itself: what is on the board now, kept in one press, or one made from silence.</Note>
-          {/* Keep as loop (item 2): the producer's move, while it plays. New loop, from silence,
-              is off while the piece plays (F2), and with no loop left to keep it in: nobody
-              clears the board for a loop that can't be kept (R2-T4-04). */}
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-            <Button tone="primary" onClick={p.onKeepAsLoop} reason={p.keepReason}>Keep as loop</Button>
-            <Button
-              ref={newLoopRef} tone="secondary" onClick={p.onNewLoop}
-              reason={pieceOn ? 'Stop the piece to make a loop' : p.loopsFull ? 'Every loop is full: clear one first' : null}
-            >
-              New loop
-            </Button>
-          </div>
-          <Note as="p">Keep as loop keeps the counters on the board as the next loop, while the music plays on. New loop starts from silence: everything stops, only the counters sound, and Keep makes the loop.</Note>
-        </div>
-      )}
-      {/* A note, not a warning: an empty board is where New loop starts (R2-T1-07). Not with
-          every loop full: New loop is off then, and says why (R3-TB-03). */}
-      {!p.canSaveBoard && oldWaysAllowed && !p.loopsFull && <p style={note}>To make a loop, press New loop.</p>}
-      {oldWaysAllowed && (
-        <button
-          type="button" aria-expanded={otherWays} onClick={toggleOtherWays}
-          style={{ alignSelf: 'flex-start', background: 'transparent', border: 'none', color: 'var(--bs-fg2)', minHeight: 'var(--bs-target)', cursor: 'pointer' }}
-        >
-          {otherWays ? '▾' : '▸'} Other ways to make a loop
-        </button>
-      )}
-      {oldWays && <p style={note}>{`${WORDS.keepBoardAsLoop} keeps the counters on the board as that loop. ✎ Edit notes changes a loop square by square.`}</p>}
-      <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {/* Only the loops kept (U1): the empty places come back under Other ways, where
-            Keep the board as this loop fills one. */}
-        {p.loops.filter((l) => oldWays || l.state !== 'empty').map((l) => {
-          const empty = l.state === 'empty';
-          const on = l.state === 'playing' || l.state === 'starting';
-          return (
-            <li
-              key={l.slot}
-              aria-label={`Loop ${l.slot + 1}: ${loopName(l)}, ${loopStateText(l, p.running, p.loopFadePasses > 0)}`}
-              // A row under a hairline (L5), never a box: a loop that plays says so in bold.
-              style={{
-                display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', padding: '8px 0',
-                borderTop: '1px solid var(--bs-border)', background: 'transparent',
-              }}
-            >
-              <span style={{ fontWeight: 600, width: 18, textAlign: 'right', color: 'var(--bs-fg3)', fontVariantNumeric: 'tabular-nums' }}>{l.slot + 1}</span>
-              {!empty && <LoopThumb cells={l.cells} rows={p.rows} cols={p.cols} swatchFor={p.swatchFor} width={56} />}
-              {/* Named in one place (U5): while New loop's own name box is open, the row says the name. */}
-              {p.namingSlot === l.slot ? (
-                <span style={{ width: 120, fontWeight: 600 }}>{l.name || `Loop ${l.slot + 1}`}</span>
-              ) : (
-                <input
-                  ref={(el) => { if (el) nameRefs.current.set(l.slot, el); else nameRefs.current.delete(l.slot); }}
-                  type="text" value={l.name} placeholder={empty ? 'name (after Keep)' : `Loop ${l.slot + 1}`}
-                  aria-label={`Name of loop ${l.slot + 1}`}
-                  onChange={(e) => p.onRenameLoop(l.slot, e.target.value)}
-                  style={{ width: 88, minHeight: 'var(--bs-target)' }}
-                />
-              )}
-              <span style={{ fontSize: 14, color: on ? 'var(--bs-fg)' : 'var(--bs-fg2)', fontWeight: on ? 600 : 400, minWidth: 0, flex: '1 1 40px' }}>{loopStateText(l, p.running, p.loopFadePasses > 0)}</span>
-              {empty ? (oldWays && (
-                <Button
-                  tone="secondary"
-                  onClick={() => {
-                    p.onSaveBoardToLoop(l.slot);
-                    // Next comes its name: focus goes there, rather than dropping to the page.
-                    requestAnimationFrame(() => nameRefs.current.get(l.slot)?.focus());
-                  }}
-                  reason={p.canSaveBoard ? null : 'Put counters on the board first.'}
-                >
-                  {WORDS.keepBoardAsLoop}
-                </Button>
-              )) : (
-                <>
-                  {oldWays && <Button
-                    tone="secondary"
-                    disabled={!p.canSaveBoard}
-                    title={p.canSaveBoard ? 'Replace this loop with the counters on the board now' : 'Put counters on the board first.'}
-                    onClick={() => {
-                      if (replaceArmed !== l.slot) { setReplaceArmed(l.slot); return; }
-                      setReplaceArmed(null);
-                      p.onSaveBoardToLoop(l.slot);
-                    }}
-                    onBlur={() => setReplaceArmed((r) => (r === l.slot ? null : r))}
-                  >
-                    {replaceArmed === l.slot ? 'Press again to replace it' : WORDS.keepBoardAsLoop}
-                  </Button>}
-                </>
-              )}
-              {oldWays && <Button tone="quiet" onClick={() => p.onDrawLoop(l.slot)} aria-label={`Edit notes: loop ${l.slot + 1}`} title="See and change this loop's notes">✎ Edit notes</Button>}
-              {/* ▶ Play and ✕ together at the end (U6): apart, a narrow panel left ✕ alone on a
-                  line under the picture. Inside New loop a loop is heard with "Hear it with…", so
-                  no ▶ Play there (T1-10). */}
-              {!empty && (
-                <span data-loop-actions style={{ display: 'flex', gap: 6, flexWrap: 'nowrap', marginLeft: 'auto' }}>
-                  {/* A round button with the sign only (item 10): the row stays one line. */}
-                  {!making && <Button tone={on ? 'selected' : 'secondary'} aria-pressed={on} aria-label={on ? '■ Stop' : '▶ Play'} title={on ? 'Stop this loop' : 'Play this loop'} onClick={() => p.onToggleLoop(l.slot)} style={{ width: 'var(--bs-target)', padding: 0, borderRadius: '50%' }}>{on ? '■' : '▶'}</Button>}
-                  <Button tone="quiet" onClick={() => p.onClearLoop(l.slot)} aria-label={`Clear loop ${l.slot + 1}`} title="Clear this loop">✕</Button>
+                {isCurrent ? (
+                  <input
+                    type="text" value={x.name} aria-label="Name of this piece"
+                    onChange={(e) => p.onRenamePiece(x.id, e.target.value)}
+                    style={{ width: 140, minHeight: 'var(--bs-target)', fontWeight: 600 }}
+                  />
+                ) : (
+                  <span style={{ width: 140, fontWeight: 500 }}>{x.name}</span>
+                )}
+                <span style={{ fontSize: 14, color: 'var(--bs-fg2)', flex: '1 1 80px' }}>{`${x.scenes} ${x.scenes === 1 ? 'scene' : 'scenes'} · ${formatClock(x.lengthSec)}${isCurrent ? ' · open now' : ''}`}</span>
+                <span style={{ display: 'flex', gap: 4, marginLeft: 'auto' }}>
+                  {!isCurrent && <Button tone="secondary" onClick={() => p.onOpenPiece(x.id)} aria-label={`Open: ${x.name}`} reason={p.pieceLocked}>Open</Button>}
+                  <Button tone="quiet" onClick={() => p.onDuplicatePiece(x.id)} aria-label={`Duplicate: ${x.name}`} reason={p.pieceLocked ?? (p.pieces.length >= MAX_PIECES ? 'Twelve pieces is the most.' : null)}>Duplicate</Button>
+                  {p.pieces.length > 1 && <Button tone="quiet" onClick={() => p.onDeletePiece(x.id)} aria-label={`Delete: ${x.name}`} reason={p.pieceLocked}>Delete</Button>}
                 </span>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-      <p style={note}>{placesFreeLine(p.loops.filter((l) => l.state === 'empty').length, p.loops.length)}</p>
-      <button
-        type="button" aria-expanded={more} onClick={() => setMore((m) => !m)}
-        style={{ alignSelf: 'flex-start', background: 'transparent', border: 'none', color: 'var(--bs-fg2)', minHeight: 'var(--bs-target)', cursor: 'pointer' }}
-      >
-        {more ? '▾' : '▸'} More: fades
-      </button>
-      {more && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <SegmentedControl<number>
-            label="Loops fade in and out over" showLabel
-            value={p.loopFadePasses}
-            onChange={p.onLoopFade}
-            options={[{ value: 0, label: 'At once' }, { value: 0.5, label: 'Half a pass' }, { value: 1, label: '1 pass' }, { value: 2, label: '2 passes' }]}
-          />
+              </li>
+            );
+          })}
+        </ul>
+        <div>
+          <Button tone="secondary" onClick={p.onNewPiece} reason={p.pieceLocked ?? (p.pieces.length >= MAX_PIECES ? 'Twelve pieces is the most.' : null)}>New piece</Button>
         </div>
-      )}
-    </section>
-  );
-}
-
-/**
- * The line of Energy across the piece: each scene's level held until the next scene, drawn
- * under the timeline (higher = more energy; a dashed floor where a scene has it off).
- */
-function EnergyGraph({ scenes, lengthSec }: { scenes: readonly Scene[]; lengthSec: number }): JSX.Element | null {
-  const line = energyLine(scenes).filter((x) => x.at < lengthSec);
-  if (line.length === 0) return null;
-  const words = line.map((x) => `${x.name} ${ENERGY_NAMES[x.energy]}`);
-  const y = (e: SceneEnergy): number => 46 - e * 8;
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <svg
-        role="img" aria-label={`Energy across the piece: ${words.join(', ')}`} viewBox="0 0 100 50" preserveAspectRatio="none"
-        style={{ width: '100%', height: 48 }}
-      >
-        {ENERGY_LEVELS.map((e) => <line key={e} x1={0} x2={100} y1={y(e)} y2={y(e)} stroke="var(--bs-border)" strokeWidth={0.5} vectorEffect="non-scaling-stroke" />)}
-        {line.map((x, k) => {
-          const x1 = (x.at / lengthSec) * 100;
-          const x2 = ((k + 1 < line.length ? line[k + 1].at : lengthSec) / lengthSec) * 100;
-          const next = k + 1 < line.length ? line[k + 1].energy : null;
-          return (
-            <g key={k}>
-              <line
-                x1={x1} x2={x2} y1={y(x.energy)} y2={y(x.energy)} stroke={x.energy === 0 ? 'var(--bs-fg2)' : 'var(--bs-accent)'}
-                strokeWidth={3} strokeDasharray={x.energy === 0 ? '4 3' : undefined} vectorEffect="non-scaling-stroke"
-              />
-              {next !== null && <line x1={x2} x2={x2} y1={y(x.energy)} y2={y(next)} stroke="var(--bs-accent)" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />}
-            </g>
-          );
-        })}
-      </svg>
-      <span aria-hidden="true" style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>{`Energy: ${words.join(' · ')}`}</span>
+        <Note as="p">A piece is its scenes, its length and its ending, and when each colour comes in. The loops are the player&rsquo;s, shared by every piece.</Note>
     </div>
   );
 }
 
-/** Step 2: the scenes — the loops and the sound, changing at set times. */
-function ScenesStep(p: PieceStepsProps): JSX.Element {
-  // The open scene, by its id: a new time re-sorts the list, and the panel must stay on
-  // the scene being edited, not on whichever scene moves into its place (T2-02).
-  const [selected, setSelected] = useState<string | null>(null);
-  // The timeline's width, so each chip says only what fits (whole words, never cut).
-  const timelineRef = useRef<HTMLUListElement>(null);
-  const [timelinePx, setTimelinePx] = useState<number | null>(null);
-  const hasTimeline = p.scenes.length > 0;
-  useEffect(() => {
-    const el = timelineRef.current;
-    if (!el || typeof ResizeObserver === 'undefined') return undefined;
-    const look = (): void => setTimelinePx(el.clientWidth > 0 ? el.clientWidth : null);
-    const ro = new ResizeObserver(look);
-    ro.observe(el);
-    look();
-    return () => ro.disconnect();
-  }, [hasTimeline]);
-  const elapsed = p.clock && p.clock.phase !== 'idle' ? p.clock.elapsedSec : null;
-  // Dragging a scene's mark along the timeline (item 7): the time it lands on is shown as
-  // it moves and kept on release. A press that hardly moves is a click, as before.
-  const dragRef = useRef<{ i: number; startX: number; moved: boolean; at: number | null } | null>(null);
-  const [dragAt, setDragAt] = useState<{ i: number; at: number } | null>(null);
-  const timedAt = (i: number): number | null => (typeof p.scenes[i]?.at === 'number' ? (p.scenes[i].at as number) : null);
-  const neighbourTimes = (i: number): { prev: number | null; next: number | null } => {
-    const before = p.scenes.slice(0, i).map((x) => x.at).filter((t): t is number => typeof t === 'number');
-    const after = p.scenes.slice(i + 1).map((x) => x.at).filter((t): t is number => typeof t === 'number');
-    return { prev: before.length > 0 ? before[before.length - 1] : null, next: after.length > 0 ? after[0] : null };
-  };
-  const saved = p.loops.filter((l) => l.state !== 'empty');
-  const who = playerWords(p.playerName);
-  // Focus never drops to the page when a pressed button goes (T4-09): these are where it goes.
-  const sectionRef = useRef<HTMLElement>(null);
-  const headingRef = useRef<HTMLHeadingElement>(null);
-  const undoRef = useRef<HTMLButtonElement>(null);
-  const scenesIntro = (
-    <div style={card}>
-      <p style={{ margin: 0 }}>A scene says which loops play and how it sounds. The clock brings each scene in at its time while the player plays on top.</p>
-      <p style={note}>Optional: without scenes, the piece doesn&rsquo;t change by itself.</p>
-      {p.scenes.length > 0 && (
-        <p style={note}>{`Tap a scene to change it. ▶ Rehearse from here plays the piece from that moment. While the board plays, Jump here now switches to a scene straight away; Stop gives ${who.name} their own sound back. 1 pass = ${p.passSec.toFixed(1)} s.`}</p>
-      )}
-    </div>
-  );
-  const sceneRow = (id?: string): HTMLElement | null => [...(sectionRef.current?.querySelectorAll<HTMLElement>('[data-scene-row]') ?? [])]
-    .find((b) => id === undefined || b.dataset.sceneRow === id) ?? null;
-  return (
-    <section ref={sectionRef} aria-labelledby="piece-scenes" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <h2 id="piece-scenes" ref={headingRef} tabIndex={-1} style={heading}>Scenes</h2>
-      {/* Read first while there are no scenes; once there are, one line that opens it (U2). */}
-      {p.scenes.length === 0 ? scenesIntro : (
-        <Disclosure summary="How scenes work">{scenesIntro}</Disclosure>
-      )}
-      {p.scenes.length === 0 ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-start' }}>
-          <Button
-            tone="primary"
-            // The plan's scenes take its place: focus goes to the first of them.
-            onClick={(e) => { p.onMakePlan(); void focusWhenGone(() => sceneRow(), e.currentTarget); }}
-          >
-            {`✦ Make my plan: 4 scenes over ${formatClock(p.lengthSec)}`}
-          </Button>
-          <Button
-            tone="secondary"
-            title="The loops playing now and the sound as it is now, as the first scene"
-            onClick={() => p.onSaveSceneFromNow('')}
-          >
-            + Keep what plays now as scene 1
-          </Button>
-          <p style={note}>Arrival, Build, Open and Home, using {saved.length > 0 ? 'your saved loops' : `no loops yet (keep some in the rail beside the board first: a scene without loops is silent unless ${who.name} plays)`}. Every scene can be changed afterwards.</p>
-        </div>
-      ) : (
-        <>
-          <ul ref={timelineRef} aria-label="Timeline of the scenes" style={{ listStyle: 'none', margin: 0, padding: 0, position: 'relative', height: 44, borderBottom: '1px solid var(--bs-border-control)', overflow: 'hidden' }}>
-            {p.scenes.map((s, i) => {
-              if (typeof s.at !== 'number' || s.at >= p.lengthSec) return null;
-              const nextAt = p.scenes.slice(i + 1).find((x) => typeof x.at === 'number')?.at ?? p.lengthSec;
-              const words = `${i + 1} · ${s.name} ${formatClock(s.at)}`;
-              const share = Math.max(2, ((Math.min(p.lengthSec, nextAt as number) - s.at) / p.lengthSec) * 100);
-              const shownAt = dragAt && dragAt.i === i ? dragAt.at : s.at;
-              const label = sceneChipLabel(i + 1, s.name, formatClock(shownAt), timelinePx === null ? null : (timelinePx * share) / 100 - CHIP_EDGES_PX);
-              return (
-                <li
-                  key={s.id}
-                  style={{ position: 'absolute', top: 0, bottom: 0, left: `${(s.at / p.lengthSec) * 100}%`, width: `${share}%` }}
-                >
-                  <button
-                    type="button"
-                    onClick={() => {
-                      // A drag that moved is not a click.
-                      if (dragRef.current?.moved) { dragRef.current = null; return; }
-                      setSelected(s.id);
-                    }}
-                    onPointerDown={(e) => {
-                      if (e.button !== 0 || i === 0 || timedAt(i) === null) return;
-                      dragRef.current = { i, startX: e.clientX, moved: false, at: null };
-                      e.currentTarget.setPointerCapture?.(e.pointerId);
-                    }}
-                    onPointerMove={(e) => {
-                      const d = dragRef.current;
-                      if (!d || d.i !== i) return;
-                      if (Math.abs(e.clientX - d.startX) > 4) d.moved = true;
-                      if (!d.moved) return;
-                      const rect = timelineRef.current?.getBoundingClientRect();
-                      if (!rect || rect.width <= 0) return;
-                      const { prev, next } = neighbourTimes(i);
-                      const at = dragTime(e.clientX - rect.left, rect.width, p.lengthSec, prev, next);
-                      d.at = at;
-                      setDragAt({ i, at });
-                    }}
-                    onPointerUp={() => {
-                      const d = dragRef.current;
-                      setDragAt(null);
-                      if (!d || !d.moved) { dragRef.current = null; return; }
-                      if (d.at !== null && d.at !== s.at) p.onEditScene(i, { at: d.at });
-                      // Left for the click that follows the release, which then does nothing.
-                    }}
-                    onPointerCancel={() => { dragRef.current = null; setDragAt(null); }}
-                    aria-label={`${words}${p.currentScene === i ? ', on now' : ''}`}
-                    title={words}
-                    // A mark on a line (L5): each scene starts at a tick, the one on now at a
-                    // thicker one, in the text colour.
-                    style={{
-                      width: '100%', height: '100%', minHeight: 0, minWidth: 0, borderRadius: 0,
-                      background: 'transparent', color: p.currentScene === i ? 'var(--bs-fg)' : 'var(--bs-fg2)',
-                      border: 'none', borderLeft: p.currentScene === i ? '3px solid var(--bs-fg)' : '1px solid var(--bs-border-control)',
-                      padding: '2px 6px', textAlign: 'left', font: CHIP_FONT, overflow: 'hidden', whiteSpace: 'nowrap',
-                      cursor: i === 0 ? 'pointer' : 'ew-resize', touchAction: 'none',
-                    }}
-                  >
-                    {label}
-                  </button>
-                </li>
-              );
-            })}
-            {elapsed !== null && <li aria-hidden="true" style={{ position: 'absolute', top: 0, bottom: 0, width: 3, left: `${Math.min(100, (elapsed / p.lengthSec) * 100)}%`, background: 'var(--bs-fg)' }} />}
-          </ul>
-          {/* The piece as one picture (G2): the kept loops by the scenes, under the ruler. */}
-          <PieceGrid
-            scenes={p.scenes} loops={p.loops} lengthSec={p.lengthSec} currentScene={p.currentScene} running={p.running}
-            onToggle={(i, loops) => p.onEditScene(i, { loops })}
-            onSelectScene={(id) => setSelected(id)}
-            onToggleLoop={p.onToggleLoop}
-          />
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-            <Button
-              tone="secondary" disabled={p.scenes.length >= MAX_SCENES}
-              title={p.scenes.length >= MAX_SCENES ? 'Twelve scenes is the most.' : 'The loops playing now and the sound as it is now, at the next moment free'}
-              onClick={() => p.onSaveSceneFromNow('')}
-            >
-              + Keep what plays now as a scene
-            </Button>
-            <Button tone="quiet" onClick={p.onMakePlan}>✦ Start again from the plan</Button>
-          </div>
-          <EnergyGraph scenes={p.scenes} lengthSec={p.lengthSec} />
-          {p.scenes.map((s, i) => (
-            <SceneRow
-              key={s.id} number={i + 1} scene={s} open={selected === s.id} current={p.currentScene === i}
-              lengthSec={p.lengthSec} otherTimes={p.scenes.filter((_, k) => k !== i).map((x) => x.at)}
-              loops={p.loops} worldOptions={p.worldOptions} playerName={p.playerName}
-              onToggleOpen={() => setSelected(selected === s.id ? null : s.id)}
-              onGo={p.running ? () => p.onGoScene(i) : undefined}
-              onRehearse={!p.running && typeof s.at === 'number' ? () => p.onRehearseFrom(s.at as number) : undefined}
-              onUpdateFromNow={p.running ? () => p.onUpdateSceneFromNow(i) : undefined}
-              onEdit={(patch) => p.onEditScene(i, patch)}
-              onNewIdeas={() => p.onNewIdeasScene(i)}
-              onDuplicate={() => p.onDuplicateScene(i)}
-              onDelete={(pressed) => {
-                setSelected(null);
-                p.onDeleteScene(i);
-                // Onto Undo, its opposite (or the heading, with no scene left to show it
-                // beside). When Undo goes, pressed or after its time, onto the scene if it
-                // came back, else the heading.
-                void focusWhenGone(() => undoRef.current ?? headingRef.current, pressed).then((undo) => {
-                  if (undo !== null && undo === undoRef.current) void focusWhenGone(() => sceneRow(s.id) ?? headingRef.current, undo, 20_000);
-                });
-              }}
-            />
-          ))}
-          {p.deletedSceneName && (
-            <div role="status" style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 14 }}>
-              <span>{`Deleted “${p.deletedSceneName}”.`}</span>
-              <Button ref={undoRef} tone="secondary" onClick={p.onUndoDelete}>Undo</Button>
-            </div>
-          )}
-          <div role="group" aria-label="The same ideas each rehearsal" style={card}>
-            <span style={{ fontWeight: 800 }}>The same ideas each rehearsal</span>
-            <p style={note}>
-              {p.surpriseMe
-                ? 'Surprise me is on: the band, the extra notes and Sounds change come out differently every time the piece plays, and the AI\u2019s ideas are not kept.'
-                : 'The band, the extra notes and Sounds change play the same every time the piece plays, so a rehearsal is the piece. The AI\u2019s ideas are kept with each scene once made. ▶ Play the board on its own also repeats, but keeps no AI ideas.'}
-            </p>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              <Button tone="secondary" onClick={p.onNewIdeasPiece} reason={p.surpriseMe ? 'Surprise me already gives new ideas every time.' : null}>↻ New ideas for the whole piece</Button>
-            </div>
-            <Switch
-              label="Surprise me each time" checked={p.surpriseMe} onChange={p.onSurpriseMe}
-              hint="On: different ideas every time, as before. Off: every rehearsal plays the same."
-            />
-          </div>
-          <Switch
-            label="Scenes leave the player's strips alone"
-            checked={p.respectPlayer}
-            onChange={p.onRespectPlayer}
-            hint={`If the player moved ${WORDS.speed}, ${WORDS.extraNotes} or ${WORDS.soundsChange} on the iPad since the last scene, the next scene keeps their setting.`}
-          />
-        </>
-      )}
-      {/* Before there are scenes it is folded (item 11): the first thing to do here is the plan. */}
-      {p.colours.length > 0 && (p.scenes.length === 0
-        ? <Disclosure summary="When each colour comes in"><ColourTimes colours={p.colours} lengthSec={p.lengthSec} palette={p.palette} onChange={p.onColourEntry} /></Disclosure>
-        : <ColourTimes colours={p.colours} lengthSec={p.lengthSec} palette={p.palette} onChange={p.onColourEntry} />)}
-      <StepFooter next={{ label: 'Next: Check', onClick: () => p.onStep('ending'), primary: true }} />
-    </section>
-  );
-}
+
 
 /**
  * When each colour comes in: a colour's counters stay silent until its time in the piece,
@@ -838,7 +325,7 @@ function ColourTimeRow({ colour: c, lengthSec, palette, onChange }: { colour: Pi
 }
 
 /** Step 3: how long, how it ends, and whether everything is ready. */
-function EndingStep(p: PieceStepsProps): JSX.Element {
+function CheckPanel(p: PieceStepsProps): JSX.Element {
   const perf = p.performance;
   return (
     <section aria-labelledby="piece-ending" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -893,9 +380,33 @@ function EndingStep(p: PieceStepsProps): JSX.Element {
         <span role="alert" style={{ fontSize: 14, color: 'var(--bs-warn)' }}>The ending takes as long as half the piece at this tempo. Choose fewer passes or a longer length.</span>
       )}
       <p style={note}>
-        The piece starts from <b>Show → ▶ Start the piece</b>, or <b>Rehearse from here</b> on a
+        The piece starts from <b>Show → ▶ Start the piece</b>, or <b>Hear from here</b> on a
         scene. <b>▶ Play the board</b> on its own just plays what is on the board: no clock, no scenes.
       </p>
+      {/* The whole piece (K2): what belongs to no scene, here with the length and the ending. */}
+      <span style={{ fontWeight: 700, marginTop: 6 }}>The whole piece</span>
+      {p.colours.length > 0 && <ColourTimes colours={p.colours} lengthSec={p.lengthSec} palette={p.palette} onChange={p.onColourEntry} />}
+      <div role="group" aria-label="The same ideas each rehearsal" style={card}>
+        <span style={{ fontWeight: 800 }}>The same ideas each rehearsal</span>
+        <p style={note}>
+          {p.surpriseMe
+            ? 'Surprise me is on: the band, the extra notes and Sounds change come out differently every time the piece plays, and the AI\u2019s ideas are not kept.'
+            : 'The band, the extra notes and Sounds change play the same every time the piece plays, so a rehearsal is the piece. The AI\u2019s ideas are kept with each scene once made. ▶ Play the board on its own also repeats, but keeps no AI ideas.'}
+        </p>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <Button tone="secondary" onClick={p.onNewIdeasPiece} reason={p.surpriseMe ? 'Surprise me already gives new ideas every time.' : null}>↻ New ideas for the whole piece</Button>
+        </div>
+        <Switch
+          label="Surprise me each time" checked={p.surpriseMe} onChange={p.onSurpriseMe}
+          hint="On: different ideas every time, as before. Off: every rehearsal plays the same."
+        />
+      </div>
+      <Switch
+        label="Scenes leave the player's strips alone"
+        checked={p.respectPlayer}
+        onChange={p.onRespectPlayer}
+        hint={`If the player moved ${WORDS.speed}, ${WORDS.extraNotes} or ${WORDS.soundsChange} on the iPad since the last scene, the next scene keeps their setting.`}
+      />
       <span style={{ fontWeight: 700, marginTop: 6 }}>Ready check</span>
       <ReadyList items={p.readyItems} />
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -904,7 +415,10 @@ function EndingStep(p: PieceStepsProps): JSX.Element {
       </div>
       <p role="status" style={note}>{p.diskLine}</p>
       {p.restoreError && <span role="alert" style={{ fontSize: 14, color: 'var(--bs-danger)' }}>{p.restoreError}</span>}
-      <StepFooter back={{ label: 'Piece', onClick: () => p.onStep('scenes') }} next={{ label: 'Go to Show', onClick: p.onShow, primary: true }} />
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        <Button tone="quiet" onClick={() => p.onStep('scenes')}>‹ Back to the scene</Button>
+        <Button tone="primary" onClick={p.onShow}>Go to Show</Button>
+      </div>
     </section>
   );
 }
@@ -941,273 +455,11 @@ function LengthField({ lengthSec, scenes, onChange }: { lengthSec: number; scene
         <p role="status" style={note}>
           {`The scenes keep their times.${late.length > 0
             ? ` ${listNames(late)} now ${late.length === 1 ? 'comes' : 'come'} in at or after the end: see the check below.`
-            : ' Change them in Scenes if they should move.'}`}
+            : ' Change a scene’s length under the board if they should move.'}`}
         </p>
       )}
     </div>
   );
 }
 
-interface SceneRowProps {
-  /** The scene's number, the same as on its block on the timeline. */
-  number: number;
-  scene: Scene;
-  open: boolean;
-  current: boolean;
-  lengthSec: number;
-  otherTimes: (number | null | undefined)[];
-  /** Every loop slot, saved or empty. */
-  loops: PieceLoop[];
-  worldOptions: { value: SoundWorldChoice; label: string }[];
-  playerName: string | null;
-  onToggleOpen(): void;
-  /**
-   * Switch to this scene now (only while the board plays). A scene's settings are for the
-   * run: while stopped there was nothing to hear, and the jump changed the player's own
-   * sound, band, Extra notes and tempo for good (T2-05).
-   */
-  onGo?(): void;
-  /** Play from this scene's time (only while stopped). */
-  onRehearse?(): void;
-  /**
-   * Copy what is playing into this scene (only while the board plays). Stopped, it copied
-   * nothing into the scene's loops and the player's own sound into its settings (R2-T2-02).
-   */
-  onUpdateFromNow?(): void;
-  onEdit(patch: ScenePatch): void;
-  /** New ideas for this scene. */
-  onNewIdeas(): void;
-  /** A copy of this scene, right after it (item 7). */
-  onDuplicate(): void;
-  /** Delete it; `pressed` is the Delete button, for where focus goes next. */
-  onDelete(pressed: HTMLElement): void;
-}
 
-/** One scene: a line saying what it is, opening into everything it sets, editable there. */
-function SceneRow(r: SceneRowProps): JSX.Element {
-  const s = r.scene;
-  const who = playerWords(r.playerName);
-  const [timeText, setTimeText] = useState(typeof s.at === 'number' ? formatClock(s.at) : '');
-  const parsed = timeText.trim() === '' ? null : parseClock(timeText);
-  const typo = timeText.trim() !== '' && parsed === null;
-  const problem = typo
-    ? (plainNumberProblem(timeText) ?? 'Type a time as minutes:seconds, like 2:30.')
-    : sceneTimeProblem(parsed, r.lengthSec, r.otherTimes);
-  const saved = r.loops.filter((l) => l.state !== 'empty');
-  // A loop the scene uses that holds nothing still shows, marked, so it can be taken out (T2-06).
-  const emptyInScene = r.loops.filter((l) => l.state === 'empty' && s.loops.includes(l.slot));
-  const loopNames = s.loops.map((slot) => r.loops.find((l) => l.slot === slot)).filter((l): l is PieceLoop => l !== undefined)
-    .map((l) => (l.state === 'empty' ? `${loopName(l)} (empty)` : loopName(l)));
-  const world = r.worldOptions.find((w) => w.value === s.settings.soundWorld)?.label ?? s.settings.soundWorld;
-  // How it reaches its speed: 0 = at once.
-  const glide = typeof s.glideSec === 'number' && s.glideSec > 0 ? s.glideSec : 0;
-  const fill = FILL_STEPS[nearestStep(FILL_STEPS, s.settings.fillAmount)].label.toLowerCase();
-  const evolve = EVOLVE_STEPS[nearestStep(EVOLVE_STEPS, s.settings.evolveAmount)].label.toLowerCase();
-  // The line under the scene: what A1 keeps in view, its loops and its Energy.
-  // How long it lasts (item 7): until the next timed scene, or the end of the piece.
-  const after = r.otherTimes.filter((t): t is number => typeof t === 'number' && typeof s.at === 'number' && t > s.at);
-  const lengthOf = typeof s.at === 'number' ? (after.length > 0 ? Math.min(...after) : r.lengthSec) - s.at : null;
-  const summary = [
-    loopNames.length > 0 ? loopNames.join(', ') : s.alone ? `${who.Name} alone` : 'no loops',
-    `Energy: ${ENERGY_NAMES[s.settings.sceneEnergy]}`,
-    ...(lengthOf !== null ? [`${formatClock(lengthOf)} long`] : []),
-  ].join(' · ');
-  // The rest, said on "More for this scene" while it is folded, so nothing set is hidden.
-  const moreSummary = [
-    world,
-    BAND_WORDS[s.settings.band],
-    ...(s.settings.band !== 'off' ? [bandJobsWords(s.settings.bandJobs)] : []),
-    fill === 'off' ? 'no extra notes' : `${fill} extra notes`,
-    evolve === 'off' ? 'sounds stay' : `sounds change ${evolve === 'more' ? 'a lot' : 'slowly'}`,
-    `${s.settings.bpm} BPM${glide > 0 ? `, reached over ${glide} s` : ''}`,
-    chordWords(s.settings.chords),
-    ...(s.leadIn ? [`${LEAD_IN_WORDS[s.leadIn].label.toLowerCase()} before it`] : []),
-  ].join(' · ');
-  const set = (patch: Partial<Scene['settings']>): void => r.onEdit({ settings: { ...s.settings, ...patch } });
-  const kept = s.aiIdeas?.length ?? 0;
-  // One fold for every scene, remembered for the session (A1).
-  const [more, toggleMore] = useSessionFold('scene-more');
-
-  return (
-    <div
-      // A row under a hairline (L5): the scene on now has a thick stripe in the text colour
-      // on its left, never a colour of its own (B10). The number says which.
-      style={{
-        padding: '6px 0 6px 10px', display: 'flex', flexDirection: 'column', gap: 6,
-        borderTop: '1px solid var(--bs-border)',
-        borderLeft: `3px solid ${r.current ? 'var(--bs-fg)' : 'transparent'}`,
-      }}
-    >
-      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-        <span aria-hidden="true" style={{ minWidth: 20, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, fontSize: 14, color: 'var(--bs-fg3)', fontVariantNumeric: 'tabular-nums' }}>{r.number}</span>
-        <button
-          type="button" aria-expanded={r.open} onClick={r.onToggleOpen} data-scene-row={s.id}
-          style={{ flex: '1 1 200px', minHeight: 'var(--bs-target)', textAlign: 'left', background: 'transparent', border: 'none', color: 'inherit', cursor: 'pointer' }}
-        >
-          <span style={{ fontWeight: 700 }}>{`${typeof s.at === 'number' ? formatClock(s.at) : 'by hand'} · ${s.name}${r.current ? ' · on now' : ''}`}</span>
-          <span style={{ display: 'block', fontSize: 14, color: 'var(--bs-fg2)' }}>{summary}</span>
-        </button>
-        {r.onRehearse && (
-          <Button
-            tone="secondary"
-            // It goes once the rehearsal plays: focus goes to ■ Stop, one press from stopping it.
-            onClick={(e) => { r.onRehearse?.(); void focusWhenGone(() => document.getElementById(PLAY_STOP_ID), e.currentTarget, 20_000); }}
-            aria-label={`Rehearse from here: ${s.name}, play the piece from ${typeof s.at === 'number' ? formatClock(s.at) : ''}`}
-          >
-            ▶ Rehearse from here
-          </Button>
-        )}
-        {/* Only where it would do something (U2): the scene on now says so in its own line. */}
-        {r.onGo && !r.current && (
-          <Button tone="secondary" onClick={r.onGo} aria-label={`Jump here now: ${s.name}`}>Jump here now</Button>
-        )}
-      </div>
-      {r.open && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingLeft: 4 }}>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4, fontSize: 14 }}>
-              Name
-              <input
-                type="text" defaultValue={s.name} aria-label="Scene name"
-                onBlur={(e) => { const name = e.target.value.trim(); if (name && name !== s.name) r.onEdit({ name }); }}
-                style={{ width: 140, minHeight: 'var(--bs-target)' }}
-              />
-            </label>
-            <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4, fontSize: 14 }}>
-              Comes in at
-              <input
-                type="text" value={timeText} placeholder="m:ss" aria-invalid={problem !== null} aria-label={`When ${s.name} comes in (minutes:seconds)`}
-                onChange={(e) => setTimeText(e.target.value)}
-                onBlur={() => {
-                  // Unreadable: refused beside the field, and not saved.
-                  if (typo) return;
-                  // Shown back as it was read ("2.30" → 2:30, "0" → 0:00), so a misreading is seen.
-                  setTimeText(parsed === null ? '' : formatClock(parsed));
-                  if (parsed !== (typeof s.at === 'number' ? s.at : null)) r.onEdit({ at: parsed });
-                }}
-                style={{ width: 80, minHeight: 'var(--bs-target)' }}
-              />
-            </label>
-          </div>
-          {problem && <span role="alert" style={{ fontSize: 14, color: 'var(--bs-warn)' }}>{problem}</span>}
-          <div role="group" aria-label="Loops in this scene" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {saved.length === 0 && <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>No loops saved yet.</span>}
-            {emptyInScene.map((l) => (
-              <button
-                key={`empty${l.slot}`} type="button"
-                onClick={() => r.onEdit({ loops: s.loops.filter((x) => x !== l.slot) })}
-                title="This loop holds nothing, so nothing plays from it"
-                style={{
-                  minHeight: 'var(--bs-target)', padding: '4px 12px', borderRadius: 999, cursor: 'pointer', color: 'inherit',
-                  border: '1px dashed var(--bs-warn)', background: 'transparent',
-                }}
-              >
-                {`${loopName(l)}: empty, take it out`}
-              </button>
-            ))}
-            {saved.map((l) => {
-              const inScene = s.loops.includes(l.slot);
-              return (
-                <button
-                  key={l.slot} type="button" aria-pressed={inScene}
-                  onClick={() => r.onEdit({ loops: inScene ? s.loops.filter((x) => x !== l.slot) : [...s.loops, l.slot].sort((a, b) => a - b) })}
-                  // In the scene: a pill in the text colour, semibold, with its ✓ (L5).
-                  style={{
-                    minHeight: 'var(--bs-target)', padding: '4px 12px', borderRadius: 999, cursor: 'pointer',
-                    color: inScene ? 'var(--bs-fg)' : 'var(--bs-fg2)', fontWeight: inScene ? 600 : 500,
-                    border: `1px solid ${inScene ? 'var(--bs-fg)' : 'var(--bs-border-control)'}`, background: 'transparent',
-                  }}
-                >
-                  {`${inScene ? '✓ ' : ''}${loopName(l)}`}
-                </button>
-              );
-            })}
-          </div>
-          {/* A scene with no loops is silence unless the player plays: only on purpose (F4). */}
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, minHeight: 'var(--bs-target)', cursor: 'pointer' }}>
-            <input
-              type="checkbox" checked={s.alone === true}
-              onChange={(e) => r.onEdit({ alone: e.target.checked })}
-              style={{ width: 20, height: 20 }}
-            />
-            <span>{`${who.Name} alone: no loops, only what ${who.name} plays`}</span>
-          </label>
-          <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>Energy</span>
-          <SegmentedControl<number>
-            label="Energy of this scene" value={s.settings.sceneEnergy} onChange={(e) => set({ sceneEnergy: e as SceneEnergy })}
-            options={[{ value: 0, label: ENERGY_NAMES[0] }, ...ENERGY_LEVELS.map((e) => ({ value: e, label: ENERGY_NAMES[e] }))]}
-          />
-          <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>{ENERGY_WORDS[s.settings.sceneEnergy]}</span>
-          <button
-            type="button" aria-expanded={more} onClick={toggleMore}
-            style={{ alignSelf: 'stretch', textAlign: 'left', background: 'transparent', border: 'none', borderTop: '1px solid var(--bs-border)', color: 'inherit', minHeight: 'var(--bs-target)', cursor: 'pointer', padding: '6px 0' }}
-          >
-            <span style={{ fontWeight: 700 }}>{`${more ? '▾' : '▸'} More for this scene`}</span>
-            {!more && <span style={{ display: 'block', fontSize: 14, color: 'var(--bs-fg2)' }}>{moreSummary}</span>}
-          </button>
-          {more && (<>
-          <SegmentedControl<SoundWorldChoice> label="Sound world" showLabel value={s.settings.soundWorld} onChange={(soundWorld) => set({ soundWorld })} options={r.worldOptions} />
-          <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>Band</span>
-          <SegmentedControl<BandLevel>
-            label="Band" value={s.settings.band} onChange={(band) => set({ band })}
-            options={[{ value: 'off', label: 'Off' }, { value: 'gentle', label: 'Quiet' }, { value: 'full', label: 'Full' }]}
-          />
-          {s.settings.band !== 'off' && <BandJobsChoice value={s.settings.bandJobs} onChange={(bandJobs) => set({ bandJobs })} />}
-          <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>Lead-in</span>
-          <SegmentedControl<LeadIn>
-            label="Lead-in" value={s.leadIn ?? 'none'} onChange={(leadIn) => r.onEdit({ leadIn })}
-            options={LEAD_INS.map((l) => ({ value: l, label: LEAD_IN_WORDS[l].label, hint: LEAD_IN_WORDS[l].what }))}
-          />
-          <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>{`${LEAD_IN_WORDS[s.leadIn ?? 'none'].what}${s.leadIn ? ' Brought in by hand, it plays in what is left of that pass.' : ''}`}</span>
-          <ChordChoice value={s.settings.chords} onChange={(chords) => set({ chords })} />
-          <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>Extra notes</span>
-          <SegmentedControl<number>
-            label="Extra notes" value={nearestStep(FILL_STEPS, s.settings.fillAmount)}
-            onChange={(k) => set({ fillAmount: FILL_STEPS[k].value })}
-            options={FILL_STEPS.map((x, k) => ({ value: k, label: x.label }))}
-          />
-          <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>Sounds change</span>
-          <SegmentedControl<number>
-            label="Sounds change" value={nearestStep(EVOLVE_STEPS, s.settings.evolveAmount)}
-            onChange={(k) => set({ evolveAmount: EVOLVE_STEPS[k].value })}
-            options={EVOLVE_STEPS.map((x, k) => ({ value: k, label: x.label }))}
-          />
-          <LabeledSlider label={WORDS.speed} min={40} max={240} value={s.settings.bpm} display={`${s.settings.bpm} BPM`} onChange={(v) => set({ bpm: Math.round(v) })} />
-          {/* Gradually: when it comes in while the board plays, from the speed then to this one. */}
-          <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>Reach this speed</span>
-          <SegmentedControl<'once' | 'gradually'>
-            label="Reach this speed" value={glide > 0 ? 'gradually' : 'once'}
-            onChange={(v) => {
-              if (v === (glide > 0 ? 'gradually' : 'once')) return;
-              r.onEdit({ glideSec: v === 'once' ? 0 : GLIDE_DEFAULT_SEC });
-            }}
-            options={[{ value: 'once', label: 'At once' }, { value: 'gradually', label: 'Gradually' }]}
-          />
-          {glide > 0 && (
-            <LabeledSlider
-              label="Over" min={GLIDE_MIN_SEC} max={GLIDE_MAX_SEC} step={1} value={glide} display={`${glide} seconds`}
-              onChange={(v) => r.onEdit({ glideSec: Math.round(v) })}
-            />
-          )}
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <Button tone="secondary" onClick={r.onNewIdeas} aria-label={`New ideas: ${s.name}`}>↻ New ideas</Button>
-            <span style={{ fontSize: 14, color: 'var(--bs-fg2)', flex: '1 1 200px' }}>
-              {`This scene plays the same ideas every rehearsal.${kept > 0 ? ` ${kept} AI ${kept === 1 ? 'idea is' : 'ideas are'} kept for it.` : ''} New ideas gives it different ones.`}
-            </span>
-          </div>
-          {!r.onUpdateFromNow && <p style={note}>While the board plays, Update from now copies what is playing into this scene.</p>}
-          {r.onUpdateFromNow && (
-            <div><Button tone="secondary" onClick={r.onUpdateFromNow} title="Replace this scene's loops and sound with what is playing now">Update from now</Button></div>
-          )}
-          </>)}
-          {/* Not settings: always in reach, folded or not. Duplicate (item 7) makes a copy after
-              this scene with no time yet; Delete takes it out, with Undo. */}
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            <Button tone="quiet" onClick={r.onDuplicate} aria-label={`Duplicate: ${s.name}`} title="A copy of this scene, after it, for you to give a time">Duplicate</Button>
-            <Button tone="quiet" onClick={(e) => r.onDelete(e.currentTarget)}>Delete scene</Button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}

@@ -66,8 +66,13 @@ import { learnBoardReference, loadBoardReference, orientSquareGrid, storeBoardRe
 import { findCounterBlobs } from '../../tracking/boardReference/findCounters';
 import { captureReaderFrames, READER_DOWNSCALE } from './boardSequencer/captureReaderFrames';
 import { detectionSetup } from '../../tracking/boardReference/detectionSetup';
-import { LoopThumb, PieceSteps, type PieceLoop, type PieceStep } from './boardSequencer/play/PieceSteps';
+import { LoopThumb, PiecePicker, PieceSteps, type PieceLoop, type PieceStep } from './boardSequencer/play/PieceSteps';
 import { LoopRail, RAIL_MIN_HEIGHT } from './boardSequencer/play/LoopRail';
+import { Storyboard } from './boardSequencer/play/Storyboard';
+import { freeSceneName, waySteps, withFirstAtZero, withLength } from '../../songs/performance/storyboard';
+
+/** A new scene's way in (K3): a fade of a pass, as its join and its editor show from the start. */
+const NEW_SCENE_WAY: WayIn = { kind: 'fade', passes: 1 };
 import { NowNextStrip } from './boardSequencer/play/NowNextStrip';
 import { nextSceneUndo, nextUndoOffered, type NextSceneUndo } from './boardSequencer/play/nextSceneUndo';
 import { letterKeyAction } from './boardSequencer/letterKeys';
@@ -123,7 +128,7 @@ import {
 } from '../../tracking/boardColourDetect/squareModel';
 import { bandKeeps, coloursFromBlobs, fitSafeBand } from '../../tracking/boardColourDetect/detectColours';
 import { detectColours, type DetectedColour } from '../../tracking/boardColourDetect/detectColours';
-import type { FiredNote } from '../../songs/BoardSequencerEngine';
+import type { FiredNote, LaunchWay } from '../../songs/BoardSequencerEngine';
 import {
   setupSteps, canOpenStep, canPlay, resolveEntry, stepIndicator,
   setupRequestedOnOpen, clearSetupRequest, laptopRequestedOnOpen, stepOnBoard, configForNewPlayer, askWhoIsPlaying, openingView, viewAfterPick, shouldCheckBoard,
@@ -156,7 +161,7 @@ import { MIDIManager } from '../../midi/MIDIManager';
 import { previewChainCc, previewNotesFor, previewRoute, SoundAuditioner } from '../../audio/soundPreview';
 import { LoopEditor } from './boardSequencer/components/LoopEditor';
 import {
-  LAUNCH_SLOTS, MAX_SCENES, loopLabel, nextSceneIndex, sceneFromNow, sceneSettingsOf, sceneSettingsToApply, slotState, stoppedConfig, toggleSlot, withOwnSettings,
+  LAUNCH_SLOTS, MAX_SCENES, loopLabel, nextSceneIndex, sceneFromNow, sceneSettingsOf, sceneSettingsToApply, slotState, stoppedConfig, toggleSlot, withOwnSettings, type WayIn,
   type PlayerStrip, type Scene, type SceneSettings,
 } from '../../songs/performance/launcher';
 import { freshIdeas, ideasFor, keepIdea } from '../../songs/performance/ideas';
@@ -183,8 +188,8 @@ import {
   SIMPLE_ROWS, type Feel, type RemoteControlName, type RemoteMessage, type RemoteState, type RemoteTriggerName,
 } from '../../remote/protocol';
 import {
-  melodyChoice, melodyColour, readBoardSilent, readDrumsSilent, readFeel, silencedColourIds, writeBoardSilent, writeDrumsSilent,
-  writeFeel,
+  clearBoardSilent, colourBack, melodyChoice, melodyColour, readBoardSilent, readDrumsSilent, readFeel, readSilentColours, remoteColours,
+  silencedColourIds, writeBoardSilent, writeDrumsSilent, writeFeel, writeSilentColours,
 } from '../../remote/simplePage';
 import { BUILD_ID } from '../../remote/buildId';
 import { rotateCorners } from '../../tracking/boardDetect/orientation';
@@ -547,7 +552,15 @@ export default function BoardSequencerScreen() {
   const [drumsSilent, setDrumsSilentState] = useState<boolean>(() => readDrumsSilent(tabStore()));
   const drumsSilentRef = useRef(drumsSilent);
   useEffect(() => { writeDrumsSilent(tabStore(), drumsSilent); }, [drumsSilent]);
-  /** The colours the Board or Drums button silenced, for the runtime's filter before the engine; null = none. */
+  // The Counters row (K4): each colour silenced on its own pad, kept for the tab like the rest.
+  const [silentColours, setSilentColoursState] = useState<string[]>(() => readSilentColours(tabStore()).filter((id) => config.channels.some((ch) => ch.id === id)));
+  const silentColoursRef = useRef(silentColours);
+  useEffect(() => { writeSilentColours(tabStore(), silentColours); }, [silentColours]);
+  // The Board pad is not shown any more: a silence it left in the tab would have no pad to lift it.
+  useEffect(() => {
+    if (config.remoteSimpleRows.includes('counters') && boardSilentRef.current) { clearBoardSilent(tabStore()); boardSilentRef.current = false; setBoardSilentState(false); }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  /** The colours the Board or Drums button, or a colour's own pad, silenced, for the runtime's filter before the engine; null = none. */
   const silencedRef = useRef<ReadonlySet<string> | null>(null);
   const [feel, setFeelState] = useState<Feel>(() => readFeel(tabStore()));
   const feelRef = useRef<Feel>(feel);
@@ -564,8 +577,13 @@ export default function BoardSequencerScreen() {
     pieceClockRef: clockStartRef, silencedRef,
   });
   /** The colours silenced on the board now: all that play notes while the Board is silent, the drums while Drums is. */
-  const outIds = useMemo(() => silencedColourIds(config.channels, { board: boardSilent, drums: drumsSilent }), [config.channels, boardSilent, drumsSilent]);
+  const outIds = useMemo(() => silencedColourIds(config.channels, { board: boardSilent, drums: drumsSilent, colours: new Set(silentColours) }), [config.channels, boardSilent, drumsSilent, silentColours]);
   const outIdSet = useMemo(() => (outIds.length > 0 ? new Set(outIds) : null), [outIds]);
+  /** A colour's job and instrument as the laptop names them ("Chords · Piano"), for its pad on the iPad (K4). */
+  const colourWords = (ch: ColourChannel): string => {
+    const sound = soundNameFor(ch, config.soundWorld);
+    return sound && sound !== ROLE_LABELS[ch.role] ? `${ROLE_LABELS[ch.role]} · ${sound}` : ROLE_LABELS[ch.role];
+  };
   silencedRef.current = outIdSet;
   /** What the melody plays, for the Simple page, worked out only when the colours change. */
   const simpleMelody = useMemo(() => {
@@ -938,7 +956,7 @@ export default function BoardSequencerScreen() {
     return true;
   };
   /**
-   * A start of the piece is loading (▶ Start the piece, ▶ Rehearse from here, Carry on): its
+   * A start of the piece is loading (▶ Start the piece, ▶ Hear from here, Carry on): its
    * clock runs only once the sound is ready, and no loop is made meanwhile either (F2).
    */
   const pieceStartingRef = useRef(false);
@@ -1087,6 +1105,9 @@ export default function BoardSequencerScreen() {
         drumsSilent,
         boardSilent,
         rows: config.remoteSimpleRows,
+        // The Counters row (K4): the colours as the laptop names them, and which are silent.
+        colours: remoteColours(config.channels, colourWords, describeChannel),
+        silentColours,
       } : {}),
     };
     remoteStateRef.current = state;
@@ -1095,7 +1116,7 @@ export default function BoardSequencerScreen() {
     config.fillKept, config.evolveHoldLap, muted, running, starting, pieceStarting, config.remoteReach, reachLearning,
     config.loopSlots, config.loopNames, config.scenes, config.currentScene, wantedSlots, appliedSlots,
     config.remoteStrips, config.remotePads, config.remoteLoopsPage, config.remoteLocked, config.remoteStripMode, config.loopFadePasses, clock,
-    config.remoteTouch, beatOn, helloAsk, resumeFrom, view, config.themeMode, config.remoteLayoutKind, simpleMelody, boardSilent, drumsSilent, feel, config.remoteSimpleRows]);
+    config.remoteTouch, beatOn, helloAsk, resumeFrom, view, config.themeMode, config.remoteLayoutKind, simpleMelody, boardSilent, drumsSilent, feel, config.remoteSimpleRows, silentColours, config.channels, config.soundWorld]);
   /** Drawn faded on the board: colours waiting for their time in the piece, and those the Board button silenced. */
   const fadedColours = useMemo((): ReadonlySet<string> | undefined => {
     const waiting = running ? waitingNow : [];
@@ -2504,7 +2525,7 @@ export default function BoardSequencerScreen() {
     // is built with. Applied on the first clock tick instead, its loops waited a whole pass.
     const home = configRef.current;
     // ▶ Play just plays: the piece (its clock, scenes, band and loops) starts only from
-    // Show's "Start the piece", "Rehearse from here" or Carry on — each of which passes
+    // Show's "Start the piece", "Hear from here" or Carry on — each of which passes
     // `piece`. Play used to start the piece whenever one existed, so making a loop or trying
     // drums alone got the opening scene's band and loops, and loops changing at 1:30.
     // Rehearsing from a scene, or carrying on, the clock starts part-way.
@@ -2631,7 +2652,7 @@ export default function BoardSequencerScreen() {
     startSecRef.current = Tone.now();
     // The speed starts where the engine is built: the opening scene's, at once (there is
     // nothing to glide from). Which colours wait is looked at afresh on the first tick, so
-    // one already in at the start (Rehearse from here) is never said to come in.
+    // one already in at the start (Hear from here) is never said to come in.
     speedGlideRef.current = startGlide(cfg.bpm, cfg.bpm, 0, performance.now());
     glideLandedRef.current = true;
     waitingIdsRef.current = null;
@@ -3176,6 +3197,14 @@ export default function BoardSequencerScreen() {
         label={WORDS.looseTiming} min={0} max={100} value={Math.round(config.humanize * 100)} display={`${Math.round(config.humanize * 100)}%`}
         onChange={(v) => { update({ humanize: v / 100 }); engineRef.current?.setHumanize(v / 100); }}
       />
+      {/* The fade for loops started or stopped by hand (the rail, the iPad). A scene's own way in
+          is set on the scene (K3); this was under "More: fades" in Make a piece's Loops section. */}
+      <SegmentedControl<number>
+        label="Loops started or stopped by hand fade over" showLabel
+        value={config.loopFadePasses}
+        onChange={(loopFadePasses) => update({ loopFadePasses })}
+        options={[{ value: 0, label: 'At once' }, { value: 0.5, label: 'Half a pass' }, { value: 1, label: '1 pass' }, { value: 2, label: '2 passes' }]}
+      />
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         <span style={{ fontWeight: 600 }}>Loop length per part</span>
@@ -3348,7 +3377,7 @@ export default function BoardSequencerScreen() {
   // ---- performing: loops launched without a pad, and scenes ----
 
   /** Tell the engine which loops are wanted; it brings them in at the next pass. */
-  const pushLaunch = (extra?: { slot: number; cells: StoredLoopCell[] }, nl: NewLoopState | null = newLoopRef.current): void => {
+  const pushLaunch = (extra?: { slot: number; cells: StoredLoopCell[] }, nl: NewLoopState | null = newLoopRef.current, way?: LaunchWay): void => {
     const cfg = configRef.current;
     const want = new Set(loopsToPlay(nl, [...wantedRef.current, ...counterWantedRef.current, ...(extra ? [extra.slot] : [])], cfg));
     const cellsOf = (s: number): StoredLoopCell[] | null => (extra && extra.slot === s ? extra.cells : (cfg.loopSlots[s] ?? null));
@@ -3357,7 +3386,8 @@ export default function BoardSequencerScreen() {
     // Each loop plays through its own loop colours (what it was kept as), beside the player's.
     const played = slots.map((s) => loopChannelsFor(cellsOf(s) ?? [], cfg.channels));
     const loopColours = [...new Map(played.flatMap((l) => l.channels).map((c) => [c.id, c])).values()];
-    engineRef.current?.setLaunchedLoops(slots, played.map((l) => l.cells), loopColours);
+    // A scene's way in (K3) rides with its launch; a hand press has none and uses the player's fade.
+    engineRef.current?.setLaunchedLoops(slots, played.map((l) => l.cells), loopColours, way);
   };
   pushLaunchRef.current = pushLaunch;
   // Entering, leaving and "Hear it with…" all change what plays through this one effect,
@@ -3412,16 +3442,19 @@ export default function BoardSequencerScreen() {
     const c = configRef.current;
     // Storage keeps twelve; a thirteenth would play now and vanish on the next reload.
     if (c.scenes.length >= MAX_SCENES) { announce('Twelve scenes is the most. Delete one first.'); return; }
-    const made = sceneFromNow(name || `Scene ${c.scenes.length + 1}`, wantedRef.current, sceneSettingsNow(c));
-    // Its time, so it lands on the timeline and in the grid at once: now while the piece
-    // runs, else after the last scene (G7).
-    const at = nextSceneTime(c.scenes, c.performance.lengthSec, clock && clock.phase !== 'idle' ? clock.elapsedSec : null);
-    const scene = at === null ? made : { ...made, at };
+    const made = sceneFromNow(name || freeSceneName(c.scenes), wantedRef.current, sceneSettingsNow(c));
+    // Its time: always after the last scene, by the same gap as before (K2); a scene for the
+    // middle is made with Duplicate. No room: refused, said.
+    const at = nextSceneTime(c.scenes, c.performance.lengthSec, null);
+    if (at === null) { announce('No room before the end: shorten a scene first.'); return; }
+    // Its way in from the start (K3): a fade of a pass, as the join and the editor show it.
+    const scene = { ...made, at, wayIn: NEW_SCENE_WAY };
     // Never marked on now: that made the next piece open in it (R2-T2-01).
     const added = withSceneAdded(c.scenes, c.currentScene, scene);
     update({ scenes: added.scenes, currentScene: added.current });
+    setSelectedScene(scene.id);
     sessionLogRef.current.action(logActorRef.current, `save scene ${scene.name}`);
-    announce(at === null ? `Scene saved: ${scene.name}. Give it a time in its row.` : `Scene saved: ${scene.name}, at ${formatClock(at)}.`);
+    announce(`Scene kept: ${scene.name}, at ${formatClock(at)}. Press it under the board to change it.`);
   };
   /** The scenes in time order, with the scene that is on still pointed at. */
   const scenesInOrder = (scenes: BoardSequencerStored['scenes'], current: number | null): Pick<BoardSequencerStored, 'scenes' | 'currentScene'> => {
@@ -3629,7 +3662,7 @@ export default function BoardSequencerScreen() {
   /** "Make my plan": the four-scene plan across the piece's length, from the saved loops. */
   const makePlan = (): void => {
     const c = configRef.current;
-    const scenes = planScenes(c.performance.lengthSec, c.loopSlots, sceneSettingsNow(c));
+    const scenes = planScenes(c.performance.lengthSec, c.loopSlots, sceneSettingsNow(c)).map((s) => ({ ...s, wayIn: NEW_SCENE_WAY }));
     const before = { scenes: c.scenes, currentScene: c.currentScene };
     update({ scenes, currentScene: null });
     if (before.scenes.length > 0) setUndoOffer({ text: `Plan made: your ${before.scenes.length} ${before.scenes.length === 1 ? 'scene was' : 'scenes were'} replaced.`, restore: () => update(before) });
@@ -3677,7 +3710,15 @@ export default function BoardSequencerScreen() {
       : '';
     if (kept.length > 0) sessionLogRef.current.action(logActorRef.current, `scene ${scene.name} left the player's ${kept.join(', ')}`);
     wantedRef.current = new Set(scene.loops.filter((s) => (c.loopSlots[s] ?? null) !== null));
-    pushLaunch();
+    // Its way in (K3): fade, overlap or cut, by whichever path the scene is entered. An
+    // overlap's hold never runs past the next scene's time.
+    const stepsPerPass = c.cols * Math.max(1, c.numPages);
+    const way = waySteps(scene.wayIn ?? NEW_SCENE_WAY, stepsPerPass);
+    const nextAt = c.scenes.slice(i + 1).map((x) => x.at).find((at): at is number => typeof at === 'number');
+    if (nextAt !== undefined && typeof scene.at === 'number' && way.holdOutSteps > 0) {
+      way.holdOutSteps = Math.max(0, Math.min(way.holdOutSteps, Math.floor(((nextAt - scene.at) / passSecNow) * stepsPerPass)));
+    }
+    pushLaunch(undefined, undefined, way);
     setBoardNotice(`Scene: ${scene.name}`);
     sessionLogRef.current.action(logActorRef.current, `scene ${scene.name}`);
     announce(`Scene ${scene.name}: ${scene.loops.length} ${scene.loops.length === 1 ? 'loop' : 'loops'} and its sound, from the next pass.${glideWords}`);
@@ -3963,23 +4004,25 @@ export default function BoardSequencerScreen() {
     }
   };
 
-  /** A copy of a scene, after it, with no time yet (item 7): the owner gives it one. */
+  /** A copy of a scene, after it, halfway through it (K2): the original gives up its second half. */
   const duplicateSceneAt = (i: number): void => {
     const c = configRef.current;
     const original = c.scenes[i];
     if (!original) return;
-    const scenes = duplicateScene(c.scenes, i, `${original.id}-copy-${Date.now().toString(36)}`);
-    if (!scenes) { announce('The piece is full: no room for another scene.'); return; }
+    if (c.scenes.length >= MAX_SCENES) { announce('The piece is full: no room for another scene.'); return; }
+    const scenes = duplicateScene(c.scenes, i, `${original.id}-copy-${Date.now().toString(36)}`, c.performance.lengthSec, passSecNow);
+    if (!scenes) { announce(`${original.name} is too short to split: make it at least two passes long first.`); return; }
     update(scenesInOrder(scenes, c.currentScene !== null && c.currentScene > i ? c.currentScene + 1 : c.currentScene));
     sessionLogRef.current.action(logActorRef.current, `duplicate scene ${original.name}`);
-    announce(`${scenes[i + 1].name} added after ${original.name}, with no time yet.`);
+    announce(`${scenes[i + 1].name} added after ${original.name}, at ${formatClock(scenes[i + 1].at as number)}.`);
   };
   const deleteScene = (i: number): void => {
     const c = configRef.current;
     const gone = c.scenes[i];
     if (gone) setDeletedScene({ scene: gone, index: i, wasCurrent: c.currentScene === i });
     update({
-      scenes: c.scenes.filter((_, k) => k !== i),
+      // The piece always has an opening scene: the earliest left moves to 0:00 (K2).
+      scenes: withFirstAtZero(c.scenes.filter((_, k) => k !== i)),
       currentScene: c.currentScene === null ? null : c.currentScene === i ? null : c.currentScene > i ? c.currentScene - 1 : c.currentScene,
     });
   };
@@ -4084,6 +4127,27 @@ export default function BoardSequencerScreen() {
     sessionLogRef.current.action(logActorRef.current, silent ? 'drums silenced' : 'drums back');
   };
   /**
+   * One colour's counters silenced, or back, from its pad on the iPad (K4). A drum colour
+   * brought back while Drums are off brings Drums back too: a press on a colour means "I
+   * want this to sound".
+   */
+  const setColourSilent = (id: string, silent: boolean): void => {
+    const c = configRef.current;
+    const ch = c.channels.find((x) => x.id === id);
+    if (!ch) return;
+    const next = silent ? [...new Set([...silentColoursRef.current, id])] : silentColoursRef.current.filter((x) => x !== id);
+    silentColoursRef.current = next;
+    setSilentColoursState(next);
+    if (!silent && colourBack(ch.role, drumsSilentRef.current).drums) setDrumsSilent(false);
+    silenceNow();
+    sessionLogRef.current.action(logActorRef.current, `${describeChannel(ch)} ${silent ? 'silenced' : 'back'} (iPad)`);
+  };
+  const clearSilentColours = (): void => {
+    silentColoursRef.current = [];
+    setSilentColoursState([]);
+    silenceNow();
+  };
+  /**
    * The colours silenced on the board, for the runtime's filter, set at once. Newly silenced
    * while playing, they go now: the engine hears it, and what they had ringing or queued is cut,
    * as for a colour waiting for its time when the piece starts.
@@ -4091,7 +4155,7 @@ export default function BoardSequencerScreen() {
   const silenceNow = (): void => {
     const c = configRef.current;
     const before = silencedRef.current;
-    const ids = silencedColourIds(c.channels, { board: boardSilentRef.current, drums: drumsSilentRef.current });
+    const ids = silencedColourIds(c.channels, { board: boardSilentRef.current, drums: drumsSilentRef.current, colours: new Set(silentColoursRef.current) });
     silencedRef.current = ids.length > 0 ? new Set(ids) : null;
     const added = ids.filter((id) => !before?.has(id));
     const engine = engineRef.current;
@@ -4195,6 +4259,11 @@ export default function BoardSequencerScreen() {
       // Playing or stopped.
       setBoardSilent(msg.silent);
       setRemoteNote({ text: `iPad: ${SIMPLE_WORDS.board} ${msg.silent ? 'silenced' : 'back'}`, at: performance.now() });
+    } else if (msg.type === 'colourSound') {
+      // One colour's counters (K4), playing or stopped.
+      setColourSilent(msg.id, msg.silent);
+      const ch = c.channels.find((x) => x.id === msg.id);
+      setRemoteNote({ text: `iPad: ${ch ? describeChannel(ch) : 'a colour'} ${msg.silent ? 'silenced' : 'back'}`, at: performance.now() });
     } else if (msg.type === 'melodySound') {
       // As choosing it on the Sound tab: the same call, so Ableton follows too.
       const mel = melodyColour(c.channels);
@@ -4927,17 +4996,20 @@ export default function BoardSequencerScreen() {
 
   // ---- the Perform tab: the whole piece in one place ----
   const passSecNow = (config.cols * Math.max(1, config.numPages) * 60) / Math.max(20, config.bpm);
-  const performLoops: PieceLoop[] = Array.from({ length: LAUNCH_SLOTS }, (_, slot) => {
+  // Built only when a loop changes, not on every tick of the clock: the rail, the storyboard
+  // and the editor draw from it, and a fresh list each render redrew every loop picture.
+  const performLoops: PieceLoop[] = useMemo(() => Array.from({ length: LAUNCH_SLOTS }, (_, slot) => {
     const cells = config.loopSlots[slot] ?? null;
     return {
       slot, name: config.loopNames[slot] ?? '', notes: cells?.length ?? 0, cells: drawCells(cells ?? []),
       state: slotState(slot, cells !== null && cells.length > 0, new Set(wantedSlots), new Set(appliedSlots)),
     };
-  });
-  const worldOptions: { value: BoardSequencerStored['soundWorld']; label: string }[] = [
+  }), [config.loopSlots, config.loopNames, wantedSlots, appliedSlots]);
+  // One list for the life of the screen: a fresh one each render undid the storyboard's and the editor's memo.
+  const worldOptions: { value: BoardSequencerStored['soundWorld']; label: string }[] = useMemo(() => [
     ...SOUND_WORLD_IDS.map((id) => ({ value: id, label: SOUND_WORLDS[id].name })),
     { value: 'none', label: 'My picks' },
-  ];
+  ], []);
   /** Where a Ready-check fix is made, as the press that goes there. */
   const goToPlace = (place: CheckPlace) => (): void => {
     const tab = (t: PlayTab): void => { setWorkspace('play'); setPlayTab(t); };
@@ -5044,20 +5116,7 @@ export default function BoardSequencerScreen() {
   };
 
   const keepSlotNow = slotForKeep(config.loopSlots, config.scenes);
-  // Keep as loop (item 2): what is on the board now, as the next loop, in one press, while it
-  // plays. Never during the piece (F2), never inside New loop (Keep is there), never with
-  // nothing to keep or nowhere to put it.
   const pieceOnNow = (clock !== null && clock.phase !== 'idle') || pieceStarting || ending;
-  const keepReasonNow = pieceOnNow ? 'Stop the piece to make a loop.'
-    : newLoop ? 'New loop is open: press Keep there.'
-      : countersNow === 0 ? 'Put counters down first.'
-        : keepSlotNow === null ? 'Every loop is full: clear one first.' : null;
-  const keepAsLoop = (): void => {
-    const c = configRef.current;
-    const slot = slotForKeep(c.loopSlots, c.scenes);
-    if (keepReasonNow !== null || slot === null) { announce(keepReasonNow ?? 'Every loop is full: clear one first.'); return; }
-    saveBoardToSlot(slot);
-  };
   // The rail (G1): the board kept into the place the owner pressed.
   const keepReasonForPlace = pieceOnNow ? 'Stop the piece to change the loops.'
     : newLoop ? 'New loop is open: press Keep there.'
@@ -5071,6 +5130,7 @@ export default function BoardSequencerScreen() {
   const handoverRef = useRef<{ slot: number; until: number } | null>(null);
   const keepAsLoopAt = (slot: number): void => {
     if (keepReasonForPlace !== null) { announce(keepReasonForPlace); return; }
+    if (slot < 0) { announce('Every loop is full: clear one first.'); return; }
     const cells = saveBoardToSlot(slot);
     if (cells === null) return;
     const c = configRef.current;
@@ -5113,8 +5173,53 @@ export default function BoardSequencerScreen() {
     if (railHintedRef.current || view !== 'play' || countersNow === 0 || workspace === 'piece') return;
     if (config.loopSlots.some((l) => l !== null && l.length > 0)) return;
     railHintedRef.current = true;
-    announce('To keep this as a loop, press an empty place in the loop rail beside the board.');
+    announce('To keep this as a loop, press Keep as loop beside Play.');
   }, [countersNow, view, workspace, config.loopSlots, announce]);
+  // The one making move (K1), beside ▶ Play: the board kept as the next loop, as the rail's
+  // dashed place does it (started, the board cleared, Undo offered).
+  const keepButton = (
+    <Button
+      tone="primary"
+      onClick={() => keepAsLoopAt(keepSlotNow ?? -1)}
+      reason={keepReasonForPlace ?? (keepSlotNow === null ? 'Every loop is full: clear one first.' : null)}
+      aria-label="Keep as loop: keep the counters on the board as the next loop"
+      title="Keeps the counters on the board as the next loop. It plays on, and the board is cleared."
+    >
+      Keep as loop
+    </Button>
+  );
+  // The scene selected in the storyboard (K2): the panel shows its editor.
+  const [selectedScene, setSelectedScene] = useState<string | null>(null);
+  const keepSceneReason = pieceOnNow ? 'Stop the piece to change it.'
+    : config.scenes.length >= MAX_SCENES ? 'Twelve scenes is the most. Delete one first.'
+      : nextSceneTime(config.scenes, config.performance.lengthSec, null) === null ? 'No room before the end: shorten a scene first.'
+        : wantedSlots.length === 0 && !running ? 'Play a loop first.' : null;
+  const keepSceneButton = (
+    <Button
+      tone="primary"
+      onClick={() => saveScene('')}
+      reason={keepSceneReason}
+      aria-label="Keep as scene: keep what is playing now as the next scene"
+      title="Keeps the loops playing now, with the sound as it is now, as the next scene."
+    >
+      Keep as scene
+    </Button>
+  );
+  /** A scene's length typed in the editor: the later scenes move with it (K2). */
+  const setSceneLength = (i: number, sec: number): void => {
+    const c = configRef.current;
+    const r = withLength(c.scenes, i, sec, c.performance.lengthSec, passSecNow);
+    update({ scenes: r.scenes, performance: { ...c.performance, lengthSec: r.lengthSec } });
+    if (r.said) announce(r.said);
+  };
+  /** Hear from here: the piece from scene i, two passes before it when a scene comes before, so the way in is heard. */
+  const hearFromScene = (i: number): void => {
+    const c = configRef.current;
+    const s = c.scenes[i];
+    if (!s || typeof s.at !== 'number') return;
+    const before = c.scenes.slice(0, i).some((x) => typeof x.at === 'number');
+    rehearseFrom(before ? Math.max(0, s.at - 2 * passSecNow) : s.at);
+  };
   const loopRail = (
     <LoopRail
       loops={performLoops}
@@ -5123,6 +5228,7 @@ export default function BoardSequencerScreen() {
       swatchFor={swatchFor}
       running={running}
       keepReason={keepReasonForPlace}
+      keepSlot={keepSlotNow}
       locked={pieceOnNow ? 'Stop the piece to change the loops.' : null}
       newLoopReason={pieceOnNow ? 'Stop the piece to make a loop.' : newLoop ? 'New loop is already open.' : keepSlotNow === null ? 'Every loop is full: clear one first.' : null}
       onKeep={keepAsLoopAt}
@@ -5133,6 +5239,7 @@ export default function BoardSequencerScreen() {
       onEditNotes={(slot) => setEditSlot(slot)}
       onClear={(slot) => setClearSlotTarget(slot)}
       onNewLoop={() => { setWorkspace('piece'); setPieceStep('loops'); beginNewLoop(); }}
+      newLoopOpen={newLoop !== null}
       direction={layout.mode === 'stacked' ? 'row' : 'column'}
     />
   );
@@ -5197,10 +5304,6 @@ export default function BoardSequencerScreen() {
       loopFadePasses={config.loopFadePasses}
       performance={config.performance}
       respectPlayer={config.sceneRespectsPlayer}
-      canSaveBoard={countersNow > 0}
-      loopsFull={keepSlotNow === null}
-      onKeepAsLoop={keepAsLoop}
-      keepReason={keepReasonNow}
       pieces={config.pieces.map((x) => ({ id: x.id, name: x.name, scenes: x.scenes.length, lengthSec: x.performance.lengthSec }))}
       pieceId={config.pieceId}
       pieceLocked={pieceLockedNow}
@@ -5219,8 +5322,6 @@ export default function BoardSequencerScreen() {
         id: ch.id, name: describeChannel(ch), swatch: ch.swatch, job: ROLE_LABELS[ch.role], at: config.colourComesInAt[ch.id] ?? null,
       }))}
       onColourEntry={(id, at) => update({ colourComesInAt: withColourEntry(configRef.current.colourComesInAt, id, at) })}
-      onNewLoop={beginNewLoop}
-      namingSlot={newLoop && keptLoop ? keptLoop.slot : null}
       newLoop={newLoop ? (
         <NewLoopPanel
           state={newLoop}
@@ -5251,21 +5352,18 @@ export default function BoardSequencerScreen() {
           onPlay={() => { if (!startRefused()) void start(); }}
         />
       ) : null}
-      onToggleLoop={toggleLoop}
-      onSaveBoardToLoop={saveBoardToSlot}
-      onDrawLoop={(slot) => setEditSlot(slot)}
-      onClearLoop={(slot) => setClearSlotTarget(slot)}
-      onRenameLoop={renameLoop}
-      onLoopFade={(loopFadePasses) => update({ loopFadePasses })}
       onGoScene={goScene}
-      onRehearseFrom={rehearseFrom}
+      onRehearseFrom={hearFromScene}
       onSaveSceneFromNow={saveScene}
+      selectedScene={selectedScene}
+      onSelectScene={setSelectedScene}
+      onLength={setSceneLength}
+      locked={pieceOnNow ? 'Stop the piece to change it.' : null}
       onUpdateSceneFromNow={updateSceneFromNow}
       onEditScene={editScene}
       onDeleteScene={deleteScene}
       onDuplicateScene={duplicateSceneAt}
       onUndoDelete={undoDeleteScene}
-      onMakePlan={() => { if (configRef.current.scenes.length > 0) setPlanConfirm(true); else makePlan(); }}
       onRespectPlayer={(on) => update({ sceneRespectsPlayer: on })}
       onNewIdeasScene={newIdeasForScene}
       onNewIdeasPiece={newIdeasForPiece}
@@ -6099,6 +6197,7 @@ export default function BoardSequencerScreen() {
     feel,
     boardSilent,
     drumsSilent,
+    silentColours: silentColours.map((id) => { const ch = config.channels.find((x) => x.id === id); return ch ? describeChannel(ch) : id; }),
   };
   const showStatusAction = (a: ShowStatusAction): JSX.Element => {
     switch (a) {
@@ -6107,6 +6206,7 @@ export default function BoardSequencerScreen() {
       case 'restoreExtras': return <Button tone="quiet" onClick={restoreExtras}>Switch the extras back on</Button>;
       case 'drumsBack': return <Button tone="quiet" onClick={() => { setDrumsSilent(false); announce('The drums are back.'); }}>{SIMPLE_WORDS.bringDrumsBack}</Button>;
       case 'boardBack': return <Button tone="quiet" onClick={() => { setBoardSilent(false); announce('The board counters are back.'); }}>{SIMPLE_WORDS.bringBoardBack}</Button>;
+      case 'countersBack': return <Button tone="quiet" onClick={() => { clearSilentColours(); announce('Every colour is back.'); }}>{SIMPLE_WORDS.bringBoardBack}</Button>;
       case 'feelNormal': return <Button tone="quiet" onClick={() => { setFeel('normal'); announce('Back to normal.'); }}>{SIMPLE_WORDS.backToNormal}</Button>;
       case 'carryOn': return <Button ref={carryOnRef} tone="primary" onClick={carryOn}>{`▶ Carry on from ${formatClock(resumeAt)}`}</Button>;
       default: return <Button tone="quiet" onClick={dismissReloadNotice}>{resumeFrom !== null ? 'No' : 'OK'}</Button>;
@@ -6171,8 +6271,48 @@ export default function BoardSequencerScreen() {
     </>
   );
   const noticesInPanel = view === 'play' && layout.mode !== 'stacked';
+  // The storyboard (K2) is remade only when what it shows changes, not on every tick of the clock
+  // (a tick redrew every card, and the piece fell behind while the band played).
+  const storyboardElapsed = clock && clock.phase !== 'idle' ? Math.floor(clock.elapsedSec) : null;
+  const storyboard = useMemo(() => (
+      <Storyboard
+        scenes={config.scenes}
+        loops={performLoops}
+        lengthSec={config.performance.lengthSec}
+        performance={config.performance}
+        currentScene={config.currentScene}
+        running={running}
+        elapsedSec={storyboardElapsed}
+        selected={selectedScene}
+        pieceName={config.pieces.find((x) => x.id === config.pieceId)?.name ?? 'Piece 1'}
+        pieceMenu={(
+          <PiecePicker
+            pieces={config.pieces.map((x) => ({ id: x.id, name: x.name, scenes: x.scenes.length, lengthSec: x.performance.lengthSec }))}
+            pieceId={config.pieceId} pieceLocked={pieceLockedNow}
+            onOpenPiece={openPieceById} onNewPiece={newPiece} onDuplicatePiece={duplicatePieceById} onDeletePiece={deletePieceById} onRenamePiece={renamePieceById}
+          />
+        )}
+        worldLabel={(w) => worldOptions.find((o) => o.value === w)?.label ?? w}
+        rows={config.rows}
+        cols={config.cols}
+        swatchFor={swatchFor}
+        locked={pieceOnNow ? 'Stop the piece to change it.' : null}
+        // A card pressed always shows its editor, even from Check.
+        onSelect={(id) => { setSelectedScene(id); if (id !== null) setPieceStep('scenes'); }}
+        onKeepScene={() => saveScene('')}
+        keepSceneReason={keepSceneReason}
+        // With scenes made, Make my plan asks first (it replaces them; Undo stays).
+    onMakePlan={() => { if (configRef.current.scenes.length > 0) setPlanConfirm(true); else makePlan(); }}
+        onCheck={() => setPieceStep('ending')}
+        onJoinPress={(i) => { const id = config.scenes[i]?.id ?? null; setSelectedScene(id); setPieceStep('scenes'); }}
+      />
+  ), [config.scenes, performLoops, config.performance, config.currentScene, running, storyboardElapsed, selectedScene, config.pieces, config.pieceId,
+    pieceLockedNow, config.rows, config.cols, pieceOnNow, keepSceneReason, worldOptions]); // eslint-disable-line react-hooks/exhaustive-deps
   const stage = (
-    <div style={{ flex: layout.mode === 'stacked' ? 'none' : '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
+    <div style={{ flex: layout.mode === 'stacked' ? 'none' : '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0,
+      // With the storyboard under it (K2), the stage keeps the board at its size and scrolls what is left under the board on a short screen.
+      overflowY: view === 'play' && workspace === 'piece' && layout.mode !== 'stacked' ? 'auto' : undefined }}
+    >
       {/* Stacked, or in Set up: the notices above the board, as they were. */}
       <div data-notice-slot-stacked="" style={{ display: 'contents' }}>
         {noticesInPanel ? null : noticeViews}
@@ -6506,6 +6646,13 @@ export default function BoardSequencerScreen() {
         <div data-board-silent style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
           <p role="status" style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>{SIMPLE_WORDS.boardSilenced}</p>
           <Button tone="quiet" onClick={() => { setBoardSilent(false); announce('The board counters are back.'); }}>{SIMPLE_WORDS.bringBoardBack}</Button>
+        </div>
+      )}
+      {/* The colours silenced on their own pads (K4), by name, with the way back. */}
+      {view === 'play' && silentColours.length > 0 && (
+        <div data-colours-silent style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+          <p role="status" style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>{SIMPLE_WORDS.countersSilenced(silentColours.map((id) => { const ch = config.channels.find((x) => x.id === id); return ch ? describeChannel(ch) : id; }))}</p>
+          <Button tone="quiet" onClick={() => { clearSilentColours(); announce('Every colour is back.'); }}>{SIMPLE_WORDS.bringBoardBack}</Button>
         </div>
       )}
       {view === 'play' && feel !== 'normal' && (
@@ -6914,6 +7061,7 @@ export default function BoardSequencerScreen() {
                 stopArmed={stopArmed}
                 onToggleMute={toggleMuted}
                 simplify={simplifyButton}
+                keep={workspace === 'piece' ? keepSceneButton : keepButton}
                 bpm={liveBpm}
                 onBpm={(v) => { update({ bpm: v }); holdSpeed(v); engineRef.current?.setBpm(v); }}
                 bpmReason={tempoReason}
@@ -6940,6 +7088,8 @@ export default function BoardSequencerScreen() {
             )}
           </div>
         </div>
+        {/* The storyboard (K2): the piece as a row of scene cards, under the board and the panel. */}
+        {view === 'play' && workspace === 'piece' && storyboard}
       {bigBoardOverlay}
     </div>
   );

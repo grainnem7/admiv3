@@ -82,13 +82,13 @@ export function pieceCheckItems(p: PieceCheckInput): ReadyItem[] {
     items.push({
       label: `No loop plays in ${names(silent)}`,
       state: 'problem',
-      fix: `The room will be silent there unless ${who.name} plays: in Scenes, add a loop or tick “${who.Name} alone”.`, place: 'scenes',
+      fix: `The room will be silent there unless ${who.name} plays: press its card under the board, add a loop or tick “${who.Name} alone”.`, place: 'scenes',
     });
   }
 
   const timed = scenes.filter((s) => typeof s.at === 'number');
   items.push(scenes.length === 0
-    ? { label: 'No scenes yet', state: 'warn', fix: 'Optional. Make a piece, step 2: Make my plan. Without scenes the piece does not change by itself.', place: 'scenes' }
+    ? { label: 'No scenes yet', state: 'warn', fix: 'Optional. Make a piece: Keep as scene, or Make my plan. Without scenes the piece does not change by itself.', place: 'scenes' }
     : timed.some((s) => s.at === 0)
       ? { label: `${timed.length} ${timed.length === 1 ? 'scene comes' : 'scenes come'} in on the clock, one at 0:00`, state: 'ok' }
       : { label: 'No scene at 0:00', state: 'warn', fix: 'Give the opening scene the time 0:00, so the piece starts in it.', place: 'scenes' });
@@ -100,7 +100,7 @@ export function pieceCheckItems(p: PieceCheckInput): ReadyItem[] {
     items.push({
       label: `${names(byHand)} ${one ? 'has' : 'have'} no time`,
       state: 'problem',
-      fix: `${one ? 'It only comes' : 'They only come'} in if someone presses Next: give ${one ? 'it' : 'each'} a time in Scenes, or delete ${one ? 'it' : 'them'}.`, place: 'scenes',
+      fix: `${one ? 'It only comes' : 'They only come'} in if someone presses Next: delete ${one ? 'it' : 'them'}, or shorten a scene and keep ${one ? 'it' : 'them'} again.`, place: 'scenes',
     });
   }
 
@@ -111,7 +111,7 @@ export function pieceCheckItems(p: PieceCheckInput): ReadyItem[] {
     items.push({
       label: `${names(late)} ${one ? 'comes' : 'come'} in at or after the end (${formatClock(len)})`,
       state: 'problem',
-      fix: `${one ? 'It is' : 'They are'} never heard: give ${one ? 'it' : 'each'} an earlier time in Scenes${len < MAX_PIECE_SEC ? ', or make the piece longer' : ''}.`, place: 'scenes',
+      fix: `${one ? 'It is' : 'They are'} never heard: shorten the scene before ${one ? 'it' : 'each'}${len < MAX_PIECE_SEC ? ', or make the piece longer' : ''}.`, place: 'scenes',
     });
   }
 
@@ -123,7 +123,7 @@ export function pieceCheckItems(p: PieceCheckInput): ReadyItem[] {
       items.push({
         label: `${names(same)} come in at the same moment (${formatClock(moment)})`,
         state: 'problem',
-        fix: 'Only one of them is heard: give each its own time in Scenes.', place: 'scenes',
+        fix: 'Only one of them is heard: change a scene’s length under the board so each has its own time.', place: 'scenes',
       });
     }
   }
@@ -138,7 +138,7 @@ export function pieceCheckItems(p: PieceCheckInput): ReadyItem[] {
       items.push({
         label: `${names(afterEnding)} ${one ? 'comes' : 'come'} in after the ending has begun (about ${formatClock(endingFrom)})`,
         state: 'warn',
-        fix: `The piece is ending by then, so ${one ? 'it is' : 'they are'} not heard: give ${one ? 'it' : 'each'} an earlier time, or choose a shorter ending.`, place: 'scenes',
+        fix: `The piece is ending by then, so ${one ? 'it is' : 'they are'} not heard: shorten the scene before ${one ? 'it' : 'each'}, or choose a shorter ending.`, place: 'scenes',
       });
     }
   }
@@ -150,7 +150,7 @@ export function pieceCheckItems(p: PieceCheckInput): ReadyItem[] {
     items.push({
       label: `${c.name} comes in at ${formatClock(c.at)}, after the piece ends.`,
       state: 'warn',
-      fix: `${c.name}'s counters stay silent for the whole piece: in Scenes → When each colour comes in, give it an earlier time, or clear it to play from the start.`, place: 'scenes',
+      fix: `${c.name}'s counters stay silent for the whole piece: in Check → The whole piece → When each colour comes in, give it an earlier time, or clear it to play from the start.`, place: 'scenes',
     });
   }
 

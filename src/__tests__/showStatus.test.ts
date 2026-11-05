@@ -195,3 +195,13 @@ describe('following the head, in Show\'s row', () => {
     expect([low.tone, low.text]).toEqual(['warn', '! Face seen only 60% of the last 10 s']);
   });
 });
+
+describe('the colours silenced on the iPad (K4)', () => {
+  it('names them, with a button to bring them back; none, nothing', () => {
+    expect(showStatusItems({ ...QUIET, silentColours: ['Red', 'Green'] })).toEqual([
+      { key: 'silentColours', tone: 'note', text: 'Red and Green silenced on the iPad', actions: ['countersBack'] },
+    ]);
+    expect(showStatusItems({ ...QUIET, silentColours: ['Red', 'Blue', 'Green'] })[0].text).toBe('Red, Blue and Green silenced on the iPad');
+    expect(showStatusItems({ ...QUIET, silentColours: [] })).toEqual([]);
+  });
+});

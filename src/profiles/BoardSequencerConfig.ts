@@ -18,7 +18,8 @@ import {
   fullReachMap, REMOTE_CONTROLS, sanitizeReachMap, type Reach, type RemoteControlName, type RemoteTriggerName,
   DEFAULT_REMOTE_TOUCH, sanitizeRemoteTouch, type RemoteTouch, sanitizeSimpleRows, SIMPLE_ROWS, type SimpleRow,
 } from '../remote/protocol';
-import { sanitizeLoopNames, sanitizeScenes, type Scene } from '../songs/performance/launcher';
+import { sanitizeLoopNames, sanitizeScenes, withWayIn, type Scene } from '../songs/performance/launcher';
+import { giveTimes } from '../songs/performance/storyboard';
 import { sanitizeColourEntries } from '../songs/performance/colourEntries';
 import { sanitizePieces, type SavedPiece } from '../songs/performance/pieces';
 import { sanitizeSceneEnergy, type SceneEnergy } from '../songs/performance/energy';
@@ -939,8 +940,11 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     soundWorld: d.soundWorld, band: d.band, phrases: d.phrases, fillAmount: d.fillAmount, evolveAmount: d.evolveAmount, bpm: d.bpm,
     chords: d.chords, bandJobs: d.bandJobs, sceneEnergy: 0 as const,
   };
-  const scenes = sanitizeScenes(o.scenes, sceneDefaults);
   const performance = sanitizePerformance(o.performance);
+  const loopFadePasses = [0, 0.5, 1, 2].includes(num(o.loopFadePasses, 1)) ? num(o.loopFadePasses, 1) : 1;
+  // Every scene has a time (K2): one saved without is given the next free one. And a way in
+  // (K3): one saved without reads the player's Loop fade, so the show sounds as it did.
+  const scenes = withWayIn(giveTimes(sanitizeScenes(o.scenes, sceneDefaults), performance.lengthSec), loopFadePasses);
   const channelIds = new Set(channels.map((c) => c.id));
   // Only for colours that still exist: a time left behind would land on a new colour.
   const colourComesInAt = sanitizeColourEntries(o.colourComesInAt, channelIds);
@@ -1008,12 +1012,12 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     // marked (a scene added while stopped, a save from before) made the next piece open in
     // it and skip every scene before it (R2-T2-01). A reload carries on from pieceRunning.
     currentScene: null,
-    loopFadePasses: [0, 0.5, 1, 2].includes(num(o.loopFadePasses, 1)) ? num(o.loopFadePasses, 1) : 1,
+    loopFadePasses,
     sceneRespectsPlayer: o.sceneRespectsPlayer !== false,
     // Only for colours that still exist: a time left behind would land on a new colour.
     colourComesInAt,
     performance,
-    ...sanitizePieces(o.pieces, o.pieceId, { scenes, performance, colourComesInAt }, sceneDefaults, channelIds),
+    ...sanitizePieces(o.pieces, o.pieceId, { scenes, performance, colourComesInAt }, sceneDefaults, channelIds, loopFadePasses),
     autoStart: o.autoStart === true,
     boardSource: o.boardSource === 'laptop' ? 'laptop' : 'camera',
     laptopBoard: Array.isArray(o.laptopBoard) ? (sanitizeLoopSlots([o.laptopBoard])[0] ?? []) : [],

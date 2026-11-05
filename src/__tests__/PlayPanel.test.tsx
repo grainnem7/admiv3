@@ -85,3 +85,15 @@ describe('the speed in the transport (producer flow, item 4)', () => {
     expect(view.container.textContent).toContain('90 BPM');
   });
 });
+
+describe('Keep beside Play (K1)', () => {
+  it('the keep slot sits in the button row after Mute, stacked or not', () => {
+    view = render(<PlayPanel {...props({ keep: <button type="button">Keep as loop</button> })} />);
+    const row = view.get('#bs-play-stop').parentElement as HTMLElement;
+    expect([...row.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['▶ Play the board', 'Mute', 'Keep as loop']);
+    view.unmount();
+    view = render(<PlayPanel {...props({ stacked: true, keep: <button type="button">Keep as scene</button> })} />);
+    const rowStacked = view.get('#bs-play-stop').parentElement as HTMLElement;
+    expect([...rowStacked.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['▶ Play the board', 'Mute', 'Keep as scene']);
+  });
+});

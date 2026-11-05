@@ -124,6 +124,36 @@ export interface Scene {
   ideas?: number;
   /** Magenta's ideas, kept once made and played again on the next run (the newest few). */
   aiIdeas?: KeptIdea[];
+  /**
+   * How the piece gets into this scene (K3): loops leaving fade out as the arriving ones
+   * fade in; or the arriving ones start at full and the leaving ones carry on for the passes
+   * (overlap); or a cut at the pass. Absent on scenes saved before it existed: the piece
+   * gives them the player's Loop fade when it loads (withWayIn), so the show sounds as it did.
+   */
+  wayIn?: WayIn;
+}
+
+/** The way into a scene (K3). A loop in both scenes carries on untouched whatever the way. */
+export type WayIn = { kind: 'fade'; passes: 1 | 2 } | { kind: 'overlap'; passes: 1 | 2 } | { kind: 'cut' };
+
+/** A stored way in made safe, or null. */
+export function sanitizeWayIn(v: unknown): WayIn | null {
+  if (typeof v !== 'object' || v === null) return null;
+  const o = v as Record<string, unknown>;
+  if (o.kind === 'cut') return { kind: 'cut' };
+  if ((o.kind === 'fade' || o.kind === 'overlap') && (o.passes === 1 || o.passes === 2)) return { kind: o.kind, passes: o.passes };
+  return null;
+}
+
+/** The way in that sounds as the player's Loop fade did on every scene change before K3. */
+export function wayInFromFade(loopFadePasses: number): WayIn {
+  if (loopFadePasses <= 0) return { kind: 'cut' };
+  return { kind: 'fade', passes: loopFadePasses >= 2 ? 2 : 1 };
+}
+
+/** Every scene with a way in: one saved without reads the player's Loop fade. */
+export function withWayIn(scenes: readonly Scene[], loopFadePasses: number): Scene[] {
+  return scenes.map((s) => (s.wayIn ? s : { ...s, wayIn: wayInFromFade(loopFadePasses) }));
 }
 
 export const MAX_SCENES = 12;
@@ -210,6 +240,7 @@ export function sanitizeScenes(v: unknown, defaults: SceneSettings): Scene[] {
     const leadIn = sanitizeLeadIn(o.leadIn);
     const ideas = sanitizeIdeas(o.ideas);
     const aiIdeas = sanitizeKeptIdeas(o.aiIdeas);
+    const wayIn = sanitizeWayIn(o.wayIn);
     out.push({
       id, name: cleanName(o.name) || `Scene ${out.length + 1}`, loops, settings: sanitizeSceneSettings(o.settings, defaults),
       ...(isNum(o.at) && o.at >= 0 ? { at: Math.round(o.at) } : {}),
@@ -219,6 +250,7 @@ export function sanitizeScenes(v: unknown, defaults: SceneSettings): Scene[] {
       ...(leadIn !== 'none' ? { leadIn } : {}),
       ...(ideas !== 0 ? { ideas } : {}),
       ...(aiIdeas.length > 0 ? { aiIdeas } : {}),
+      ...(wayIn ? { wayIn } : {}),
     });
   }
   return out;

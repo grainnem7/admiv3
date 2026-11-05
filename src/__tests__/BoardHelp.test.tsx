@@ -30,6 +30,13 @@ describe('Help says how things work now', () => {
     expect(entry('Using saved loops live')).toContain('Not while the piece plays: stop it first.');
   });
 
+  it('loops are kept with Keep as loop beside ▶ Play; the old ways are gone (K1)', () => {
+    expect(entry('Using saved loops live')).toContain('press Keep as loop beside ▶ Play');
+    expect(entry('Using saved loops live')).toContain('… more holds Rename, Edit notes, Clear, and New loop from silence');
+    expect(all()).not.toContain('Other ways to make a loop');
+    expect(all()).not.toContain('Keep the board as this loop');
+  });
+
   it('Stop needs two presses only while the piece plays', () => {
     expect(entry('Board, Make a piece, Show')).toContain('while the piece plays, Stop needs two presses');
   });
@@ -111,16 +118,19 @@ describe('Help says how New loop asks first (U1)', () => {
   it('Keep what’s on the board, or Start from empty, and only kept loops listed', () => {
     const live = entry('Using saved loops live');
     expect(live).toContain('New loop asks first: Keep what’s on the board makes the loop from them at once; Start from empty');
-    expect(live).toContain('Only the loops you have kept are listed, with how many places are free');
+    expect(live).toContain('The rail beside the board shows the loops you have');
     expect(live).not.toContain('Start with these');
   });
 });
 
 describe('Help on scenes (U2)', () => {
-  it('Jump here now is on every scene but the one on now; How scenes work explains them', () => {
+  it('Jump here now is on every scene but the one on now; the storyboard and Keep as scene are how scenes are made (K2)', () => {
     const steps = entry('Board, Make a piece, Show');
     expect(steps).toContain('Jump here now (on every scene but the one on now) switches to it at once');
-    expect(steps).toContain('How scenes work, above the timeline, explains them.');
+    expect(steps).toContain('Keep as scene');
+    expect(steps).toContain('Into this scene');
+    expect(steps).not.toContain('How scenes work');
+    expect(steps).not.toContain('grid');
   });
 });
 

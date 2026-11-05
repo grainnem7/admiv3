@@ -30,7 +30,8 @@ after it were left to the builder and are marked **(my call)**.
    order, only the jobs some colour has). A press takes the part out: its counters stay on the
    board but are silent. Another press brings it back in. Works stopped or playing.
 3. **Melody plays**: four round buttons (Piano, Flute, Trumpet, Sax: catalogue keys `piano`,
-   `flute`, `trumpet`, `saxophone`). A press sets the instrument of the first melody colour, by
+   `flute`, `trumpet`, `saxophone`), each the instrument’s picture alone, no words (owner, 5 Nov
+   2026); the name is the spoken label. A press sets the instrument of the first melody colour, by
    the same call as the Sound tab's sound list (`setChannelSound(id, { instrument })`), so it
    works with Ableton as well. The chosen one is lit with ✓; none is lit if the melody colour
    plays something else; no row if there is no melody colour.
@@ -240,3 +241,10 @@ the earlier Keep, named Drums, Bass, Chords or Melody, stay as ordinary loops on
 **Looks (my call, from the screenshots).** Both lit, Drums and Board were alike but for their picture
 and word, so Drums has round corners (32 px) and Board square ones (4 px); "lit = playing" keeps one
 colour for both, as the owner asked.
+
+## 5 Nov: the Board pad became the Counters row
+The owner (5 Nov): the iPad switches Tim's own counters on and off, one pad per colour, each
+showing the colour and its instrument. Built as K4 of
+`2026-11-05-keep-loops-scenes-storyboard-design.md`: the Counters row (`group "Counters"`)
+replaces the Board pad; a saved rows choice of `board` reads as `counters`; the `boardSound`
+message and the laptop's Board handling stay in the code for one release, unshown.

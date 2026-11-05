@@ -41,20 +41,51 @@ export type RemotePicture = 'drums' | 'bass' | 'chords' | MelodySound | 'melody'
 export interface RemoteLoop { name: string; state: RemoteLoopState }
 
 /** The rows of the Simple page, in page order; the facilitator chooses which are shown. */
-export type SimpleRow = 'drums' | 'feel' | 'melody' | 'board';
-export const SIMPLE_ROWS: SimpleRow[] = ['drums', 'feel', 'melody', 'board'];
+export type SimpleRow = 'drums' | 'feel' | 'melody' | 'counters';
+export const SIMPLE_ROWS: SimpleRow[] = ['drums', 'feel', 'melody', 'counters'];
 /** Rows of the earlier Simple pages that are gone. Any of them in a saved choice shows Drums, and Calm / Busy. */
 const OLD_ROWS = ['newIdea', 'parts', 'loops', 'keep', 'instruments'];
 /**
  * Stored or sent rows made safe: known rows only, once each, in page order. Not a list = all.
  * A choice saved with an earlier page (it names New idea, Parts, Loops, Keep or Instruments)
  * keeps its Melody and Board ticks and shows Drums and Calm / Busy, which are new to it (my
- * call: the one big button of every earlier page becomes the one big button now).
+ * call: the one big button of every earlier page becomes the one big button now). The Board
+ * row of 4 Nov is the Counters row now (K4): one pad per colour.
  */
 export function sanitizeSimpleRows(v: unknown): SimpleRow[] {
   if (!Array.isArray(v)) return [...SIMPLE_ROWS];
   const old = v.some((r) => typeof r === 'string' && OLD_ROWS.includes(r));
-  return SIMPLE_ROWS.filter((r) => v.includes(r) || (old && (r === 'drums' || r === 'feel')));
+  return SIMPLE_ROWS.filter((r) => v.includes(r) || (r === 'counters' && v.includes('board')) || (old && (r === 'drums' || r === 'feel')));
+}
+
+/** A colour on the player's board, as the Counters row draws its pad (K4). */
+export interface RemoteColour {
+  id: string;
+  /** Its number on the laptop's colour words. */
+  number: number;
+  name: string;
+  swatch: string;
+  /** Its job, so a drum colour's pad can say "Drums are off". */
+  role: string;
+  /** Its job and instrument as the laptop names them ("Chords · Piano"), for the pad's spoken name. */
+  words: string;
+  /** The picture drawn on its pad in place of the instrument's words (owner, 5 Nov 2026). */
+  picture: string;
+}
+
+/** The picture a job gets when the laptop sent none (an older build). */
+const ROLE_PICTURE: Record<string, string> = { drums: '🥁', bass: '🎸', chord: '🎹', melody: '🎵' };
+
+function sanitizeColours(v: unknown[]): RemoteColour[] {
+  const out: RemoteColour[] = [];
+  for (const raw of v.slice(0, 16)) {
+    if (typeof raw !== 'object' || raw === null) continue;
+    const o = raw as Record<string, unknown>;
+    if (typeof o.id !== 'string' || o.id.length === 0 || typeof o.number !== 'number' || typeof o.name !== 'string' || typeof o.swatch !== 'string' || typeof o.role !== 'string' || typeof o.words !== 'string') continue;
+    const picture = typeof o.picture === 'string' && o.picture.length > 0 ? o.picture.slice(0, 8) : ROLE_PICTURE[o.role] ?? '🎵';
+    out.push({ id: o.id, number: o.number, name: o.name.slice(0, 40), swatch: o.swatch.slice(0, 40), role: o.role, words: o.words.slice(0, 80), picture });
+  }
+  return out;
 }
 
 /** Pads from the Loops page a facilitator can also put on the Play page, so the player never has to switch page. */
@@ -204,6 +235,10 @@ export interface RemoteState {
   boardSilent?: boolean;
   /** The Simple page's rows, as chosen on the laptop. Missing = all. */
   rows?: SimpleRow[];
+  /** The Counters row (K4): the player's colours that play notes, in board order, one pad each. */
+  colours?: RemoteColour[];
+  /** The colours whose counters are silenced from the iPad, by id. */
+  silentColours?: string[];
 }
 
 export type RemoteMessage =
@@ -229,6 +264,8 @@ export type RemoteMessage =
   | { type: 'feel'; feel: Feel }
   /** The Simple page: the board's counters silenced, or playing again. The state wanted. */
   | { type: 'boardSound'; silent: boolean }
+  /** The Counters row (K4): one colour's counters silenced, or playing again. The state wanted. */
+  | { type: 'colourSound'; id: string; silent: boolean }
   /** The Simple page: what the melody colour plays. */
   | { type: 'melodySound'; sound: MelodySound }
   /** The iPad's End piece is waiting for its second tap (on), or no longer is (off). */
@@ -308,6 +345,7 @@ export function parseRemoteMessage(raw: unknown): RemoteMessage | null {
   if (o.type === 'drumsSound' && typeof o.silent === 'boolean') return { type: 'drumsSound', silent: o.silent };
   if (o.type === 'feel' && FEELS.includes(o.feel as Feel)) return { type: 'feel', feel: o.feel as Feel };
   if (o.type === 'boardSound' && typeof o.silent === 'boolean') return { type: 'boardSound', silent: o.silent };
+  if (o.type === 'colourSound' && typeof o.id === 'string' && o.id.length > 0 && o.id.length < 64 && typeof o.silent === 'boolean') return { type: 'colourSound', id: o.id, silent: o.silent };
   if (o.type === 'melodySound' && MELODY_SOUNDS.includes(o.sound as MelodySound)) return { type: 'melodySound', sound: o.sound as MelodySound };
   if (o.type === 'armed' && o.name === 'endPiece' && typeof o.on === 'boolean') return { type: 'armed', name: 'endPiece', on: o.on };
   if (o.type === 'hello') return { type: 'hello', build: isBuildId(o.build) ? o.build : null, ask: isAsk(o.ask) ? o.ask : null };
@@ -348,6 +386,8 @@ export function parseRemoteMessage(raw: unknown): RemoteMessage | null {
         ...(typeof s.drumsSilent === 'boolean' ? { drumsSilent: s.drumsSilent } : {}),
         ...(typeof s.boardSilent === 'boolean' ? { boardSilent: s.boardSilent } : {}),
         ...(Array.isArray(s.rows) ? { rows: sanitizeSimpleRows(s.rows) } : {}),
+        ...(Array.isArray(s.colours) ? { colours: sanitizeColours(s.colours) } : {}),
+        ...(Array.isArray(s.silentColours) ? { silentColours: s.silentColours.filter((x): x is string => typeof x === 'string').slice(0, 16) } : {}),
         ...(typeof s.melody === 'object' && s.melody !== null && !Array.isArray(s.melody) ? {
           melody: { sound: MELODY_SOUNDS.includes((s.melody as Record<string, unknown>).sound as MelodySound) ? (s.melody as Record<string, unknown>).sound as MelodySound : null },
         } : {}),

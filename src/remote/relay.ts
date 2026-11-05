@@ -30,13 +30,13 @@ const HEARTBEAT_MS = 5000;
 
 /**
  * Who may send what: the iPad sends controls, taps, which build it is (also its heartbeat),
- * whether End piece waits for its second tap, and the Simple page's Drums, Calm / Busy, Board and melody sound;
- * the laptop sends state.
+ * whether End piece waits for its second tap, and the Simple page's Drums, Calm / Busy, Board, a colour's
+ * counters (K4) and melody sound; the laptop sends state.
  */
 export function allowedFrom(role: Role, type: string): boolean {
   return role === 'remote'
     ? type === 'control' || type === 'trigger' || type === 'reach' || type === 'loop' || type === 'scene' || type === 'hello'
-      || type === 'armed' || type === 'drumsSound' || type === 'feel' || type === 'melodySound' || type === 'boardSound'
+      || type === 'armed' || type === 'drumsSound' || type === 'feel' || type === 'melodySound' || type === 'boardSound' || type === 'colourSound'
     : type === 'state';
 }
 

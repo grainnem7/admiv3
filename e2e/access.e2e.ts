@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { makePlan, openLaptopBoard, openLaptopSetup, openWelcome, pageErrors, pickColour, pieceStep, place, sceneMore, sessionLog, soundTab } from './app';
+import { makePlan, openLaptopBoard, openLaptopSetup, openWelcome, pageErrors, pickColour, pieceStep, place, sceneMore, selectScene, sessionLog, soundTab } from './app';
 import { nameMismatches } from './names';
 
 /** Batch 5 (audit 2026-10-30): what the owner and a keyboard user meet, checked in a real browser. */
@@ -31,9 +31,11 @@ test('A9: the same on the board, the tabs, Make a piece and Show', async ({ page
   await makePlan(page);
   for (const s of ['Loops', 'Scenes', 'Ending & check'] as const) {
     await pieceStep(page, s);
-    if (s === 'Scenes' && await page.getByRole('button', { name: /More for this scene/ }).count() > 0) await sceneMore(page);
+    // A scene's editor, with its finer settings open.
+    if (s === 'Scenes') { await selectScene(page, 'Build'); await sceneMore(page); }
     await openAllFolds(page);
-    expect(await nameMismatches(page), s).toEqual([]);
+    // Soft: each place of Make a piece is checked and named, so one run shows them all.
+    expect.soft(await nameMismatches(page), s).toEqual([]);
   }
   await page.getByRole('button', { name: /^Show: the board, the clock/ }).click();
   expect(await nameMismatches(page)).toEqual([]);
@@ -89,6 +91,7 @@ test('A10: text is 14, 16 or 20 px (or a display size), never smaller; text fiel
   await check('Sound');
   await makePlan(page);
   await pieceStep(page, 'Scenes');
+  await selectScene(page, 'Build');
   await check('Scenes');
   const pads = await page.evaluate(() => [...document.querySelectorAll<HTMLInputElement>('.bs-root input[type="text"]')]
     .filter((i) => i.offsetParent !== null).map((i) => parseFloat(getComputedStyle(i).paddingLeft)));
@@ -380,15 +383,15 @@ test('P2: Keep as loop keeps the board as the next loop in one press, while it p
   await place(page, [[3, 1], [5, 3]]);
   await page.getByRole('button', { name: '▶ Play the board', exact: true }).click();
   await expect(page.locator('#bs-play-stop')).toHaveText('■ Stop', { timeout: 20_000 });
-  // The loop rail (G1): an empty place keeps the board there.
-  await page.getByRole('button', { name: /^Loop 1: empty/ }).click();
+  // Keep as loop beside Play (K1): the one button.
+  await page.getByRole('button', { name: /^Keep as loop: keep the counters/ }).click();
   // One press: kept, started, the board cleared; the music never stopped.
   await expect(page.getByRole('status').filter({ hasText: 'Kept as Loop 1: it plays on, and the board is clear.' }).first()).toBeVisible();
   await expect(page.getByRole('button', { name: /^Loop 1: 2 notes, (starting|playing)/ })).toBeVisible();
   await expect(page.locator('#bs-play-stop')).toHaveText('■ Stop');
-  await pieceStep(page, 'Loops');
-  await expect(page.getByRole('listitem', { name: /^Loop 1:/ })).toBeVisible();
-  await expect(page.getByText('7 of 8 places free')).toBeVisible();
+  // The rail: the kept loop, then the one dashed place for the next.
+  await expect(page.locator('[data-loop-rail] [data-loop-place]')).toHaveCount(2);
+  await expect(page.locator('[data-loop-rail] [data-loop-place="1"]')).toHaveText('+ Keep as loop');
   expect(pageErrors(page)).toEqual([]);
 });
 
@@ -409,22 +412,27 @@ test('P1: Play on the laptop: the board with four colours straight after the nam
 test('P3: pieces: New piece starts empty, Open brings the first piece back with its scenes', async ({ page }) => {
   await openLaptopBoard(page);
   await makePlan(page);
-  await expect(page.getByRole('list', { name: 'Timeline of the scenes' })).toBeVisible();
-  const fold = page.locator('[data-piece-picker]');
-  await expect(fold).toContainText('Piece 1');
-  await fold.click();
-  await page.getByRole('button', { name: 'New piece' }).click();
-  await expect(fold).toContainText('Piece 2');
-  await expect(page.getByRole('list', { name: 'Timeline of the scenes' })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /Make my plan/ })).toBeVisible();
-  if ((await fold.getAttribute('aria-expanded')) !== 'true') await fold.click();
-  await page.getByRole('button', { name: 'Open: Piece 1' }).click();
-  await expect(fold).toContainText('Piece 1');
-  await expect(page.getByRole('list', { name: 'Timeline of the scenes' }).getByRole('button')).toHaveCount(4);
+  const cards = page.getByRole('listbox', { name: 'The piece: its scenes in order' }).getByRole('option');
+  await expect(cards).toHaveCount(4);
+  // The storyboard's heading names the piece; its ▾ opens the pieces.
+  const piece = page.getByRole('region', { name: 'The piece', exact: true }).getByRole('button', { name: / ▾: your pieces$/ });
+  await expect(piece).toHaveAccessibleName('Piece 1 ▾: your pieces');
+  const pieces = page.getByRole('group', { name: 'Pieces' });
+  await piece.click();
+  await pieces.getByRole('button', { name: 'New piece' }).click();
+  await expect(piece).toHaveAccessibleName('Piece 2 ▾: your pieces');
+  await expect(cards).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^✦ Make my plan: 4 scenes/ })).toBeVisible();
+  if (!(await pieces.isVisible())) await piece.click();
+  await pieces.getByRole('button', { name: 'Open: Piece 1' }).click();
+  await expect(piece).toHaveAccessibleName('Piece 1 ▾: your pieces');
+  await expect(cards).toHaveCount(4);
   // A reload keeps both pieces and which one is open.
   await page.reload();
   await page.getByRole('button', { name: /Play my board/ }).click();
   await page.getByRole('button', { name: 'Make a piece', exact: true }).click();
-  await expect(page.locator('[data-piece-picker]')).toContainText('2 pieces');
+  await expect(piece).toHaveAccessibleName('Piece 1 ▾: your pieces');
+  if (!(await pieces.isVisible())) await piece.click();
+  await expect(pieces.locator('[aria-label*=" scene"]')).toHaveCount(2);
   expect(pageErrors(page)).toEqual([]);
 });

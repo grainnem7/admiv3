@@ -4,7 +4,7 @@
  * all placed before the piece starts; this is how the opening is the loops alone and his
  * colours come in later.
  *
- * Only while the piece's clock runs (the piece from 0:00, Rehearse from here, Carry on):
+ * Only while the piece's clock runs (the piece from 0:00, Hear from here, Carry on):
  * ▶ Play, the warm-up and the board after Stop play every colour. Only colours that play
  * notes are held back; a control colour (Speed, volume, the toggles…) never is. Loops play
  * as they always do, including loops made from a waiting colour. Pure: the screen keeps the

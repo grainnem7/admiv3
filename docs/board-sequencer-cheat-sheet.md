@@ -12,15 +12,13 @@
 6. At the 30-second cue: **End piece** on the iPad (two taps) or **⏹ End**. Afterwards: **Save session** and **CSV**.
 
 ## Three buttons at the top
-**Play** = just play (Sound, Groove, Board, Connections tabs; no loops or scenes needed) · **Make a piece** = steps 1 Loops, 2 Scenes, 3 Ending & check (each optional) · **▶ Show** = the board full screen for the performance.
+**Play** = just play (Sound, Timing, Board, Connections tabs; no loops or scenes needed) · **Make a piece** = the scenes, then Check (each optional) · **▶ Show** = the board full screen for the performance.
 
 ## Making a piece
-- **1 · Loops:** counters down → **Save the board here** on an empty loop → type a name. A saved loop has ▶ Play, **Overwrite with board** (press twice), ✎ draw, ✕ clear (with Undo). Fades are under More.
-- **2 · Scenes → ✦ Make my plan:** Arrival 0:00, Build 1:30, Open 3:30, Home 6:00, from your saved loops.
-- **Scenes:** tap one to edit it where it is: time, loops, world, band, Extra notes, Sounds change, tempo. **Update from now**, **+ Add a scene from what's playing**, **Jump here now**. Undo a delete for 15 s.
-- **3 · Ending & check:** length; how it ends (each described); Fade, Final chord, Slow down, Thin out or Stop; over 1, 2 or 4 passes; *When I press End* or *At the time*.
-- **▶ Rehearse from here** on a scene rehearses from that moment.
-- **Scenes leave the player's strips alone** (on): a strip Tim moved on the iPad keeps his setting.
+- **Loops:** counters down → **Keep as loop** (beside ▶ Play). The loop plays on and the board clears (Undo puts it back). The rail beside the board shows your loops: press one to play or stop it; **… more** renames it, edits its notes, clears it, or starts a **New loop** from silence. How hand-started loops fade is on the Timing tab.
+- **Scenes:** in Make a piece, play the loops you want together, set the feel, press **Keep as scene** (beside ▶ Play). The piece is the row of cards under the board; each card shows its time, name, which loops play (lit) and its energy. **✦ Make my plan** gives a four-scene start (Arrival 0:00, Build 1:30, Open 3:30, Home 6:00).
+- **Changing a scene:** press its card. The panel shows its name, loops, Energy, **Into this scene** (Fade 1 or 2 passes, Overlap 1 or 2, Cut), **change ▾** for the finer settings (world, chords, band, Extra notes, Sounds change, speed, lead-in, alone, New ideas, **Update from now**), its **Length** (the later scenes move with it), **▶ Hear from here** (starts two passes early so you hear the way in), **Jump here now** while playing, **Duplicate** (a copy halfway through it), **Delete scene** (Undo for 15 s).
+- **Check ›** (on the card's panel or the row's heading): length; how it ends (Fade, Final chord, Slow down, Thin out or Stop; over 1, 2 or 4 passes); *When I press End* or *At the time*; the whole piece's settings (when each colour comes in, the same ideas each rehearsal, **Scenes leave the player's strips alone**); the Ready check.
 
 ## During the piece (Show)
 - **Now / Next strip:** time left, the scene now, the next scene and when, loops playing, **Next ▶** and **⏹ End**. Cues at 1:00, 0:30 and 0:10 show large.

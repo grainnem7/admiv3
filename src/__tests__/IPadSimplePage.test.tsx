@@ -33,6 +33,11 @@ const SIMPLE = {
   feel: 'normal',
   drumsSilent: false,
   melody: { sound: 'trumpet' },
+  colours: [
+    { id: 'c1', number: 1, name: 'Red', swatch: '#ff0000', role: 'melody', words: 'Melody · Trumpet', picture: '🎺' },
+    { id: 'c4', number: 4, name: 'Green', swatch: '#00ff00', role: 'drums', words: 'Drums', picture: '🥁' },
+  ],
+  silentColours: [],
   loops: [{ name: 'Bed', state: 'playing' }, { name: 'Pulse', state: 'stopped' }],
   scenes: [{ name: 'Arrival', active: true }],
   // A full layout's settings underneath: the Simple page ignores them.
@@ -82,12 +87,12 @@ const press = async (b: Element, width = 40): Promise<void> => { await act(async
 const sentOf = (type: string) => sent.filter((m) => (m as { type: string }).type === type);
 
 describe('the Simple page: what is on it', () => {
-  it('Drums, Calm / Busy, the melody’s sounds and the Board; nothing else (no loops, no Keep)', () => {
+  it('Drums, Calm / Busy, the melody’s sounds and the Counters, one per colour; nothing else (no loops, no Keep)', () => {
     expect(labels()).toEqual([
       'Drums: Playing',
       'Calm', 'Busy',
       'Piano', 'Flute', 'Trumpet', 'Sax',
-      'Board: Playing',
+      'Red, Melody · Trumpet: Playing', 'Green, Drums: Playing',
     ]);
     expect(el.querySelectorAll('[role="slider"]')).toHaveLength(0);
     expect(el.querySelectorAll('[role="tab"]')).toHaveLength(0);
@@ -155,20 +160,54 @@ describe('the Simple page: each button sends its message', () => {
     expect(sent).toContainEqual({ type: 'feel', feel: 'calm' });
   });
 
-  it('the Board button and the melody sounds, as before', async () => {
-    await press(named('Board'));
-    expect(sent).toEqual([{ type: 'boardSound', silent: true }]);
+  it('a colour’s pad silences that colour (the state wanted), and the melody sounds work as before', async () => {
+    await press(named('Red'));
+    expect(sent).toEqual([{ type: 'colourSound', id: 'c1', silent: true }]);
+    await act(async () => { onMsg?.(stateWith({ silentColours: ['c1'] })); });
+    expect(named('Red').getAttribute('aria-label')).toBe('Red, Melody · Trumpet: Silent');
+    expect(named('Red').getAttribute('aria-pressed')).toBe('false');
+    now += 1000;
+    await press(named('Red'));
+    expect(sent).toContainEqual({ type: 'colourSound', id: 'c1', silent: false });
     await press(named('Flute'));
     expect(sent).toContainEqual({ type: 'melodySound', sound: 'flute' });
     now += 1000;
     await press(named('Trumpet'));
     expect(sentOf('melodySound')).toHaveLength(1);
   });
+
+  it('the melody\u2019s sound buttons are the picture alone, no words (owner, 5 Nov); the name is their spoken label', () => {
+    for (const [name, pic] of [['Piano', '🎹'], ['Flute', '🪈'], ['Trumpet', '🎺'], ['Sax', '🎷']] as const) {
+      const b = named(name);
+      expect(b.querySelector('[data-picture]')?.textContent).toBe(pic);
+      expect(b.textContent?.replace(/[^A-Za-z]/g, '')).toBe('');
+    }
+  });
+
+  it('a pad is filled with its colour, with the instrument’s picture and the colour’s name, no instrument words (owner, 5 Nov); a drum colour while Drums are off says so', async () => {
+    const green = named('Green');
+    expect(green.style.background).toBe('rgb(0, 255, 0)');
+    expect(green.style.color).toBe('rgb(17, 17, 17)'); // dark ink on a light colour
+    expect(green.querySelector('[data-picture]')?.textContent).toBe('🥁');
+    expect(green.textContent).toContain('Green');
+    expect(green.textContent).not.toContain('4');
+    expect(green.textContent).not.toMatch(/Drums(?! are off)/);
+    expect(green.textContent).toContain('Playing');
+    const red = named('Red');
+    expect(red.style.color).toBe('rgb(255, 255, 255)'); // light ink on a dark colour
+    expect(red.textContent).not.toContain('Trumpet');
+    expect(red.querySelector('[data-picture]')?.textContent).toBe('🎺');
+    await act(async () => { onMsg?.(stateWith({ drumsSilent: true })); });
+    expect(named('Green').textContent).toContain('Drums are off');
+    expect(named('Green').textContent).not.toContain('Silent');
+    await press(named('Green'));
+    expect(sent).toContainEqual({ type: 'colourSound', id: 'c4', silent: false });
+  });
 });
 
 describe('the Simple page keeps every touch guard', () => {
   it('a resting palm presses nothing', async () => {
-    for (const b of [named('Drums'), named('Calm'), named('Flute'), named('Board')]) await press(b, 400);
+    for (const b of [named('Drums'), named('Calm'), named('Flute'), named('Red')]) await press(b, 400);
     expect(sent).toEqual([]);
   });
 
@@ -185,13 +224,13 @@ describe('the Simple page keeps every touch guard', () => {
     linkReaching = false;
     await act(async () => { onMsg?.(stateWith()); });
     expect(el.querySelector('[role="status"]')?.textContent).toBe('Not reaching the laptop');
-    for (const b of [named('Drums'), named('Busy'), named('Board')]) await press(b);
+    for (const b of [named('Drums'), named('Busy'), named('Red')]) await press(b);
     expect(sent).toEqual([]);
     expect(named('Drums').getAttribute('aria-disabled')).toBe('true');
     linkReaching = true;
     await act(async () => { onMsg?.(stateWith({ playing: false, carryOnWaiting: true })); });
     now += 1000;
-    for (const b of [named('Drums'), named('Busy'), named('Board')]) await press(b);
+    for (const b of [named('Drums'), named('Busy'), named('Red')]) await press(b);
     expect(sent).toEqual([]);
   });
 
@@ -202,9 +241,9 @@ describe('the Simple page keeps every touch guard', () => {
 });
 
 describe('the Simple page shows the rows the laptop chose', () => {
-  it('only Drums and the Board: two big buttons, bigger words', async () => {
-    await act(async () => { onMsg?.(stateWith({ rows: ['drums', 'board'] })); });
-    expect(labels()).toEqual(['Drums: Playing', 'Board: Playing']);
+  it('only Drums and the Counters: bigger words', async () => {
+    await act(async () => { onMsg?.(stateWith({ rows: ['drums', 'counters'] })); });
+    expect(labels()).toEqual(['Drums: Playing', 'Red, Melody · Trumpet: Playing', 'Green, Drums: Playing']);
     const name = [...named('Drums').querySelectorAll('span')].find((x) => x.textContent === 'Drums') as HTMLElement;
     expect(parseFloat(name.style.fontSize)).toBeGreaterThan(36);
   });

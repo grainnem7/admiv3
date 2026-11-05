@@ -13,16 +13,21 @@ export function sceneLengthSec(scenes: readonly Scene[], i: number, lengthSec: n
 }
 
 /**
- * A copy of scene `i`, placed right after it with no time of its own (the owner gives it
- * one), named after the original. Its own ideas and Magenta's kept ideas are not copied:
+ * A copy of scene `i`, placed right after it, halfway through it (K2: every scene has a
+ * time, so the original gives up its second half, on a 5 s step, and nothing after them
+ * moves), named after the original. Its own ideas and Magenta's kept ideas are not copied:
  * a copy that played exactly the same would be the same scene twice. Null when the piece
- * is full.
+ * is full, the scene has no time, or it is under two passes long (`minSec` = one pass).
  */
-export function duplicateScene(scenes: readonly Scene[], i: number, id: string): Scene[] | null {
+export function duplicateScene(scenes: readonly Scene[], i: number, id: string, lengthSec: number, minSec: number): Scene[] | null {
   const s = scenes[i];
-  if (!s || scenes.length >= MAX_SCENES) return null;
+  if (!s || scenes.length >= MAX_SCENES || typeof s.at !== 'number') return null;
+  const length = sceneLengthSec(scenes, i, lengthSec) ?? 0;
+  if (length < 2 * minSec) return null;
+  const half = Math.floor(length / 2 / DRAG_SNAP_SEC) * DRAG_SNAP_SEC;
+  if (half <= 0) return null;
   const { ideas: _ideas, aiIdeas: _ai, ...rest } = s;
-  const copy: Scene = { ...rest, id, name: copyName(s.name, scenes.map((x) => x.name)), at: null, loops: [...s.loops], settings: { ...s.settings } };
+  const copy: Scene = { ...rest, id, name: copyName(s.name, scenes.map((x) => x.name)), at: s.at + half, loops: [...s.loops], settings: { ...s.settings } };
   return [...scenes.slice(0, i + 1), copy, ...scenes.slice(i + 1)];
 }
 

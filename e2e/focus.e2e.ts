@@ -1,5 +1,5 @@
 import { chromium, test, expect, type Locator, type Page } from '@playwright/test';
-import { makePlan, openEmptyLaptopBoard, openLaptopBoard, openLaptopSetup, openWelcome, pageErrors, pickColour, pieceStep, place, saveBoardHere } from './app';
+import { keepAsLoop, loopMenu, makePlan, openEmptyLaptopBoard, openLaptopBoard, openLaptopSetup, openNewLoop, openWelcome, pageErrors, pickColour, pieceStep, place, sceneCard } from './app';
 
 /**
  * Keyboard only: after each main button, focus lands on what took its place, never on the
@@ -42,7 +42,11 @@ test('loops: New loop, Keep what\'s on the board, Start from empty, Start with t
   await pickColour(page, 'Red');
   await place(page, [[3, 1], [5, 3]]);
   await pieceStep(page, 'Loops');
-  const newLoop = page.getByRole('button', { name: 'New loop', exact: true });
+  // New loop is in the rail's … more menu (K1): … more, then New loop.
+  const rail = page.locator('[data-loop-rail]');
+  const more = rail.getByRole('button', { name: /^More( for |: new loop)/ });
+  const newLoop = rail.getByRole('button', { name: 'New loop: from silence' });
+  await enter(page, more);
   await enter(page, newLoop);
   const heading = page.getByRole('heading', { name: /^New loop 1/ });
   await focusIsOn(heading);
@@ -54,39 +58,44 @@ test('loops: New loop, Keep what\'s on the board, Start from empty, Start with t
   await enter(page, page.getByRole('button', { name: 'Keep', exact: true }));
   await focusIsOn(page.getByRole('textbox', { name: 'Name of the new loop' }));
   await enter(page, page.getByRole('button', { name: 'Done', exact: true }));
-  await focusIsOn(newLoop);
+  expect.soft(await focusNow(page), 'Done must put focus somewhere, never drop it to the page (T1-04)').not.toBe('BODY');
   // The quick way: Keep what's on the board makes the loop at once, and focus goes to its name.
+  await enter(page, more);
   await enter(page, newLoop);
   await enter(page, page.getByRole('button', { name: "Keep what's on the board" }));
   await focusIsOn(page.getByRole('textbox', { name: 'Name of the new loop' }));
   await expect(page.getByRole('heading', { name: 'New loop 2 · kept' })).toBeVisible();
-  // Done: back on New loop, so the next loop is one Enter away.
+  // Done: focus must not drop to the page.
   await enter(page, page.getByRole('button', { name: 'Done', exact: true }));
-  await focusIsOn(newLoop);
-  await page.keyboard.press('Enter');
+  expect.soft(await focusNow(page), 'Done must put focus somewhere, never drop it to the page (T1-04)').not.toBe('BODY');
+  await enter(page, more);
+  await enter(page, newLoop);
   await focusIsOn(page.getByRole('heading', { name: /^New loop 3/ }));
   // Leave: the same.
   await enter(page, page.getByRole('button', { name: 'Leave', exact: true }));
-  await focusIsOn(newLoop);
+  expect.soft(await focusNow(page), 'Leave must put focus somewhere, never drop it to the page (T1-04)').not.toBe('BODY');
   expect(pageErrors(page)).toEqual([]);
 });
 
-test('the piece: Make my plan, Delete scene, Undo and Rehearse from here each leave focus where the next step is', async ({ page }) => {
+test('the piece: Make my plan, Delete scene, Undo and Hear from here each leave focus where the next step is', async ({ page }) => {
   await openLaptopBoard(page);
   await pickColour(page, 'Red');
   await place(page, [[3, 1]]);
   await pieceStep(page, 'Scenes');
-  // Make my plan: onto the first scene.
-  await enter(page, page.getByRole('button', { name: /Make my plan/ }));
-  await focusIsOn(page.getByRole('button', { name: /^0:00 · Arrival/ }));
-  // Delete scene: onto Undo, its opposite; Undo: onto the scene that came back.
-  await enter(page, page.getByRole('button', { name: /^1:30 · Build/ }));
+  // Make my plan: never onto the page.
+  await enter(page, page.getByRole('button', { name: /^✦ Make my plan/ }));
+  await expect(sceneCard(page, 'Arrival')).toBeVisible();
+  expect(await focusLater(page), 'after Make my plan').not.toBe('BODY');
+  // A card, by Enter: its editor. Delete scene: onto Undo, its opposite; Undo: onto a scene's card.
+  await enter(page, sceneCard(page, 'Build'));
   await enter(page, page.getByRole('button', { name: 'Delete scene' }));
   await focusIsOn(page.getByRole('button', { name: 'Undo', exact: true }));
   await page.keyboard.press('Enter');
-  await focusIsOn(page.getByRole('button', { name: /^1:30 · Build/ }));
-  // Rehearse from here: onto ■ Stop once the rehearsal plays, one press from stopping it.
-  await enter(page, page.getByRole('button', { name: /^Rehearse from here: Home/ }));
+  await expect(sceneCard(page, 'Build')).toBeVisible();
+  expect.soft(await focusLater(page), 'Undo must put focus on a scene card, never drop it to the page (T1-04)').toMatch(/^option:/);
+  // Hear from here: onto ■ Stop once the piece plays, one press from stopping it.
+  await enter(page, sceneCard(page, 'Home'));
+  await enter(page, page.getByRole('button', { name: /^Hear from here: Home/ }));
   await focusIsOn(page.getByRole('button', { name: '■ Stop', exact: true }), 20_000);
   expect(pageErrors(page)).toEqual([]);
 });
@@ -145,7 +154,7 @@ test('Clear the board, by Enter, Space or a click, outside and inside New loop: 
   }
   // Inside New loop the same.
   await pieceStep(page, 'Loops');
-  await page.getByRole('button', { name: 'New loop', exact: true }).click();
+  await openNewLoop(page);
   await place(page, [[3, 1]]);
   await enter(page, clear);
   expect(await focusNow(page)).not.toBe('BODY');
@@ -159,8 +168,8 @@ test('Clear it, in the question about clearing a loop: focus goes to Undo, not t
   await pickColour(page, 'Red');
   await place(page, [[3, 1]]);
   await pieceStep(page, 'Loops');
-  await saveBoardHere(page);
-  await enter(page, page.getByRole('button', { name: 'Clear loop 1' }));
+  await keepAsLoop(page);
+  await enter(page, (await loopMenu(page, 0)).getByRole('button', { name: 'Clear loop 1' }));
   const ask = page.getByRole('dialog', { name: 'Clear Loop 1?' });
   await enter(page, ask.getByRole('button', { name: 'Clear it' }));
   await expect(ask).toHaveCount(0);
@@ -182,8 +191,8 @@ test('Undo on the line under the board: the line goes, and focus goes to ▶ Pla
   await focusIsOn(play);
   expect(await focusLater(page)).toBe('BUTTON:▶ Play the board');
   await pieceStep(page, 'Loops');
-  await saveBoardHere(page);
-  await enter(page, page.getByRole('button', { name: 'Clear loop 1' }));
+  await keepAsLoop(page);
+  await enter(page, (await loopMenu(page, 0)).getByRole('button', { name: 'Clear loop 1' }));
   await enter(page, page.getByRole('dialog', { name: 'Clear Loop 1?' }).getByRole('button', { name: 'Clear it' }));
   await focusIsOn(page.getByRole('button', { name: 'Undo', exact: true }));
   await page.keyboard.press('Enter');

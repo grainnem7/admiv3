@@ -294,7 +294,7 @@ test('the Cap panel: Learn the hat, the moves and the picture at the top, the re
   // The Ready check says which job each move does, and that a red thing is not yet the hat (B8, B7).
   await page.setViewportSize({ width: 1366, height: 768 });
   await page.getByRole('button', { name: 'Make a piece' }).click();
-  await page.getByRole('navigation', { name: 'Make a piece: steps' }).getByRole('button', { name: 'Check', exact: true }).click();
+  await page.getByRole('region', { name: 'The piece', exact: true }).getByRole('button', { name: /^Check/ }).click();
   await expect(page.getByText('Hat: side to side Speed · up and down Volume')).toBeVisible();
   await expect(page.getByText('Red cap: a red thing is found, but the hat is not learnt')).toBeVisible();
   expect(pageErrors(page)).toEqual([]);

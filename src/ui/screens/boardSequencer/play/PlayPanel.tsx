@@ -15,6 +15,8 @@ export interface PlayPanelProps {
   onToggleMute(): void;
   /** The owner's Simplify button, beside Mute while playing (laptop only). */
   simplify?: ReactNode;
+  /** Keep as loop (the Board) or Keep as scene (Make a piece): the one making move, beside Play (K1). */
+  keep?: ReactNode;
   /** The tempo actually in effect: the engine's while playing, the saved one when stopped. */
   bpm: number;
   /** Change the speed from the transport (item 4): arrow keys, a slider, tap tempo. */
@@ -70,7 +72,7 @@ export type PlayTab = 'sound' | 'groove' | 'loops' | 'connections' | 'cap';
  * room for it, so a focused control is never hidden behind the bar.
  */
 export function PlayPanel({
-  running, muted, onStart, onStop, stopArmed = false, onToggleMute, simplify = null, bpm, onBpm, bpmReason = null, bpmTo = null, step, cols, variationLap, beatOn, clock = null,
+  running, muted, onStart, onStop, stopArmed = false, onToggleMute, simplify = null, keep = null, bpm, onBpm, bpmReason = null, bpmTo = null, step, cols, variationLap, beatOn, clock = null,
   heldCount, handGuardWaiting, piece, connections, cap, groove, sound, loops, stacked, transportAlign, tab: shownTab, onTab, notices = null,
 }: PlayPanelProps): JSX.Element {
   const [ownTab, setOwnTab] = useState<PlayTab>('sound');
@@ -110,6 +112,7 @@ export function PlayPanel({
         <Button tone="secondary" aria-pressed={muted} onClick={onToggleMute} disabled={!running} title={running ? undefined : 'Mute works while playing.'}>
           {muted ? 'Muted' : 'Mute'}
         </Button>
+        {keep}
         {running && simplify}
       </div>
       {/* A readout on the page (L2): the beat as a dot, the words in the quiet colour, the

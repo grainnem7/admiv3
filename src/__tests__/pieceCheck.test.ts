@@ -44,7 +44,7 @@ describe('the check — a scene that would be silent', () => {
     const p = input({ scenes: [scene('Arrival', 0, [0]), scene('Open', 210, [])] });
     const item = find(p, 'No loop plays in Open');
     expect(item?.state).toBe('problem');
-    expect(item?.fix).toBe('The room will be silent there unless Tim plays: in Scenes, add a loop or tick “Tim alone”.');
+    expect(item?.fix).toBe('The room will be silent there unless Tim plays: press its card under the board, add a loop or tick “Tim alone”.');
   });
 
   it('several such scenes are named together', () => {
@@ -59,7 +59,7 @@ describe('the check — a scene that would be silent', () => {
 
   it('with no player name, it says "the player"', () => {
     const p = input({ playerName: null, scenes: [scene('Open', 0, [])] });
-    expect(find(p, 'No loop plays in Open')?.fix).toBe('The room will be silent there unless the player plays: in Scenes, add a loop or tick “The player alone”.');
+    expect(find(p, 'No loop plays in Open')?.fix).toBe('The room will be silent there unless the player plays: press its card under the board, add a loop or tick “The player alone”.');
   });
 });
 
@@ -95,7 +95,7 @@ describe('the check — times', () => {
     const p = input({ scenes: [scene('Arrival', 0, [0]), scene('Open', null, [0])] });
     const item = find(p, 'Open has no time');
     expect(item?.state).toBe('problem');
-    expect(item?.fix).toBe('It only comes in if someone presses Next: give it a time in Scenes, or delete it.');
+    expect(item?.fix).toBe('It only comes in if someone presses Next: delete it, or shorten a scene and keep it again.');
     expect(find(p, '1 scene comes in on the clock, one at 0:00')?.state).toBe('ok');
   });
 
@@ -103,17 +103,17 @@ describe('the check — times', () => {
     const p = input({ performance: { ...input().performance, lengthSec: 360 } });
     const item = find(p, 'Home comes in at or after the end (6:00)');
     expect(item?.state).toBe('problem');
-    expect(item?.fix).toBe('It is never heard: give it an earlier time in Scenes, or make the piece longer.');
+    expect(item?.fix).toBe('It is never heard: shorten the scene before it, or make the piece longer.');
     // At 7:00 the piece cannot be made longer, so that is not offered.
     const at7 = input({ scenes: [scene('Arrival', 0, [0]), scene('Late', 420, [0])] });
-    expect(find(at7, 'Late comes in at or after the end (7:00)')?.fix).toBe('It is never heard: give it an earlier time in Scenes.');
+    expect(find(at7, 'Late comes in at or after the end (7:00)')?.fix).toBe('It is never heard: shorten the scene before it.');
   });
 
   it('two scenes at the same moment: only one is heard', () => {
     const p = input({ scenes: [scene('Arrival', 0, [0]), scene('Build', 105, [0]), scene('Open', 105, [1])] });
     const item = find(p, 'Build and Open come in at the same moment (1:45)');
     expect(item?.state).toBe('problem');
-    expect(item?.fix).toBe('Only one of them is heard: give each its own time in Scenes.');
+    expect(item?.fix).toBe('Only one of them is heard: change a scene’s length under the board so each has its own time.');
   });
 
   it('a scene that comes in after the ending has begun is not heard (a warning)', () => {
@@ -122,7 +122,7 @@ describe('the check — times', () => {
     const item = find(p, /^Last comes in after the ending has begun/);
     expect(item?.label).toBe('Last comes in after the ending has begun (about 6:43)');
     expect(item?.state).toBe('warn');
-    expect(item?.fix).toBe('The piece is ending by then, so it is not heard: give it an earlier time, or choose a shorter ending.');
+    expect(item?.fix).toBe('The piece is ending by then, so it is not heard: shorten the scene before it, or choose a shorter ending.');
     expect(problems(p)).toEqual([]);
   });
 });

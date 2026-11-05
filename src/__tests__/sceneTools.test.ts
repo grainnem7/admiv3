@@ -19,21 +19,29 @@ describe('a scene’s length (item 7)', () => {
 });
 
 describe('Duplicate scene (item 7)', () => {
-  it('puts a copy right after the original, with no time and a numbered name, its ideas not copied', () => {
-    const out = duplicateScene(scenes, 2, 'c2')!;
+  it('puts a copy right after the original, halfway through it (K2), with a numbered name, its ideas not copied', () => {
+    const out = duplicateScene(scenes, 2, 'c2', 420, 10)!;
     expect(out.map((s) => s.name)).toEqual(['Arrival', 'Build', 'Open', 'Open 2', 'Home']);
     const copy = out[3];
     expect(copy.id).toBe('c2');
-    expect(copy.at).toBeNull();
+    // Open runs 210 to 360: the copy takes its second half.
+    expect(copy.at).toBe(285);
     expect(copy.loops).toEqual([0]);
     expect(copy.loops).not.toBe(scenes[2].loops);
     expect(copy.ideas).toBeUndefined();
     expect(copy.aiIdeas).toBeUndefined();
   });
 
+  it('the copy lands on a 5 s step; a scene under two passes long, or one with no time, is not split', () => {
+    expect(duplicateScene([scene('a', 'A', 0), scene('b', 'B', 15)], 0, 'x', 420, 5)!.map((s) => s.at)).toEqual([0, 5, 15]);
+    expect(duplicateScene([scene('a', 'A', 0), scene('b', 'B', 20)], 0, 'x', 420, 10)!.map((s) => s.at)).toEqual([0, 10, 20]);
+    expect(duplicateScene([scene('a', 'A', 0), scene('b', 'B', 12)], 0, 'x', 420, 10)).toBeNull();
+    expect(duplicateScene([scene('a', 'A', null)], 0, 'x', 420, 10)).toBeNull();
+  });
+
   it('a full piece takes no more', () => {
     const full = Array.from({ length: MAX_SCENES }, (_, i) => scene(`s${i}`, `S${i}`, i * 10));
-    expect(duplicateScene(full, 0, 'x')).toBeNull();
+    expect(duplicateScene(full, 0, 'x', 420, 1)).toBeNull();
   });
 
   it('names never collide and never run past 24 letters', () => {

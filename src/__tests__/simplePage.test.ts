@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-  melodyChoice, melodyColour, PICTURE_EMOJI, readBoardSilent, readDrumsSilent, readFeel, silencedColourIds, writeBoardSilent,
+  colourPicture, inkOn,
+  clearBoardSilent, colourBack, melodyChoice, melodyColour, PICTURE_EMOJI, readBoardSilent, readDrumsSilent, readFeel, readSilentColours, remoteColours, silencedColourIds, writeBoardSilent, writeSilentColours,
   writeDrumsSilent, writeFeel,
 } from '../remote/simplePage';
 import { cellsSoundingAt } from '../songs/performance/colourEntries';
@@ -81,5 +82,69 @@ describe('the live states, kept for the browser tab', () => {
     expect(readFeel(s)).toBe('normal');
     expect(readFeel(broken)).toBe('normal');
     expect(() => writeFeel(broken, 'busy')).not.toThrow();
+  });
+});
+
+describe('the Counters row (K4): one colour at a time', () => {
+  it('a colour in the silent set is out, playing or stopped; a control colour never; Drums and the Board still count', () => {
+    expect(silencedColourIds(five, { board: false, drums: false, colours: new Set(['c1', 'c5']) })).toEqual(['c1']);
+    expect(silencedColourIds(five, { board: false, drums: true, colours: new Set(['c2']) })).toEqual(['c2', 'c4', 'c6']);
+    expect(silencedColourIds(five, { board: false, drums: false })).toEqual([]);
+  });
+
+  it('the colours the iPad draws: the note-playing ones in board order, numbered, with their job and instrument words', () => {
+    const words = (c: ColourChannel): string => `${c.role}${c.instrument ? ` · ${c.instrument}` : ''}`;
+    expect(remoteColours(five, words, (c) => c.id)).toEqual([
+      { id: 'c1', number: 1, name: 'c1', swatch: '#888888', role: 'melody', words: 'melody · flute', picture: '🪈' },
+      { id: 'c2', number: 2, name: 'c2', swatch: '#888888', role: 'bass', words: 'bass', picture: '🎸' },
+      { id: 'c3', number: 3, name: 'c3', swatch: '#888888', role: 'chord', words: 'chord', picture: '🎹' },
+      { id: 'c4', number: 4, name: 'c4', swatch: '#888888', role: 'drums', words: 'drums', picture: '🥁' },
+      { id: 'c6', number: 6, name: 'c6', swatch: '#888888', role: 'drums', words: 'drums', picture: '🥁' },
+    ]);
+  });
+
+  it('a colour’s picture (owner, 5 Nov: pictures, not instrument words): from the instrument’s name, else its job', () => {
+    expect(colourPicture('melody', 'Melody · Flute')).toBe('🪈');
+    expect(colourPicture('melody', 'Melody · Clarinet')).toBe('🪈');
+    expect(colourPicture('melody', 'Melody · Trumpet')).toBe('🎺');
+    expect(colourPicture('melody', 'Melody · French horn')).toBe('🎺');
+    expect(colourPicture('melody', 'Melody · Saxophone')).toBe('🎷');
+    expect(colourPicture('chord', 'Chords · Piano')).toBe('🎹');
+    expect(colourPicture('chord', 'Chords · Organ')).toBe('🎹');
+    expect(colourPicture('melody', 'Melody · Cello')).toBe('🎻');
+    expect(colourPicture('melody', 'Melody · Nylon guitar')).toBe('🎸');
+    expect(colourPicture('bass', 'Bass · Upright bass + sub bass')).toBe('🎸');
+    expect(colourPicture('melody', 'Melody · Bells')).toBe('🔔');
+    expect(colourPicture('melody', 'Melody · Harp')).toBe('🎶');
+    expect(colourPicture('drums', 'Drums · Warm kit: kick')).toBe('🥁');
+    expect(colourPicture('melody', 'Melody')).toBe('🎵');
+    expect(colourPicture('chord', 'Chords')).toBe('🎹');
+    expect(colourPicture('bass', 'Bass')).toBe('🎸');
+  });
+
+  it('the ink that reads on a swatch: dark on a light colour, light on a dark one; white when the colour cannot be read', () => {
+    expect(inkOn('#ffff00')).toBe('#111111');
+    expect(inkOn('#00ff00')).toBe('#111111');
+    expect(inkOn('#0000ff')).toBe('#ffffff');
+    expect(inkOn('#ff0000')).toBe('#ffffff');
+    expect(inkOn('rgb(255, 255, 255)')).toBe('#111111');
+    expect(inkOn('hsl(60 100% 50%)')).toBe('#ffffff');
+  });
+
+  it('a press that brings a drum colour back while Drums are off brings Drums back too; any other press is only its colour', () => {
+    expect(colourBack('drums', true)).toEqual({ drums: true });
+    expect(colourBack('drums', false)).toEqual({ drums: false });
+    expect(colourBack('melody', true)).toEqual({ drums: false });
+  });
+
+  it('the silent colours are kept for the browser tab; a leftover Board silence is cleared', () => {
+    const store = new Map<string, string>();
+    const tab = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => { store.set(k, v); } };
+    expect(readSilentColours(tab)).toEqual([]);
+    writeSilentColours(tab, ['c1', 'c3']);
+    expect(readSilentColours(tab)).toEqual(['c1', 'c3']);
+    writeBoardSilent(tab, true);
+    clearBoardSilent(tab);
+    expect(readBoardSilent(tab)).toBe(false);
   });
 });

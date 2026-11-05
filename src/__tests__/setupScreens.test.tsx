@@ -47,102 +47,26 @@ const scene = (id: string, at: number, extra: Partial<Scene> = {}): Scene => ({ 
 const loop = (slot: number, name: string, empty = false): PieceLoop => ({ slot, name, notes: empty ? 0 : 2, state: empty ? 'empty' : 'stopped', cells: [] });
 function pieceProps(over: Partial<PieceStepsProps> = {}): PieceStepsProps {
   return {
-    step: 'scenes', onStep: vi.fn(), running: false, lengthSec: 420, passSec: 5, clock: null,
+    step: 'scenes', onStep: vi.fn(), selectedScene: null, onSelectScene: vi.fn(), onLength: vi.fn(), locked: null, running: false, lengthSec: 420, passSec: 5, clock: null,
     scenes: [scene('Arrival', 0), scene('Build', 90), scene('Open', 210)], currentScene: null,
     loops: [loop(0, 'Bed'), loop(1, 'Pulse'), ...[2, 3, 4, 5, 6, 7].map((s) => loop(s, '', true))],
-    loopFadePasses: 1, performance: { ...DEFAULT_PERFORMANCE }, respectPlayer: true, canSaveBoard: true, loopsFull: false,
+    loopFadePasses: 1, performance: { ...DEFAULT_PERFORMANCE }, respectPlayer: true, 
     deletedSceneName: null, diskLine: '', restoreError: null, worldOptions: [{ value: 'warm', label: 'Warm' }, { value: 'lofi', label: 'Lo-fi' }],
     readyItems: [], rows: 8, cols: 8, swatchFor: () => '#000', palette: BOARD_TOKENS.calm.dark, newLoop: null, playerName: 'Tim',
     colours: [{ id: 'c1', name: 'Black', swatch: '#111111', job: 'Melody', at: null }],
-    onColourEntry: vi.fn(), onNewLoop: vi.fn(), onToggleLoop: vi.fn(), onSaveBoardToLoop: vi.fn(), onDrawLoop: vi.fn(), onClearLoop: vi.fn(),
-    onRenameLoop: vi.fn(), onLoopFade: vi.fn(), onGoScene: vi.fn(), onRehearseFrom: vi.fn(), onSaveSceneFromNow: vi.fn(),
-    onUpdateSceneFromNow: vi.fn(), onEditScene: vi.fn(), onDeleteScene: vi.fn(), onDuplicateScene: vi.fn(), onKeepAsLoop: vi.fn(), keepReason: null, pieces: [{ id: 'piece-1', name: 'Piece 1', scenes: 3, lengthSec: 420 }], pieceId: 'piece-1', pieceLocked: null, onOpenPiece: vi.fn(), onNewPiece: vi.fn(), onDuplicatePiece: vi.fn(), onDeletePiece: vi.fn(), onRenamePiece: vi.fn(), onUndoDelete: vi.fn(), onMakePlan: vi.fn(),
+    onColourEntry: vi.fn(), onGoScene: vi.fn(), onRehearseFrom: vi.fn(), onSaveSceneFromNow: vi.fn(),
+    onUpdateSceneFromNow: vi.fn(), onEditScene: vi.fn(), onDeleteScene: vi.fn(), onDuplicateScene: vi.fn(), pieces: [{ id: 'piece-1', name: 'Piece 1', scenes: 3, lengthSec: 420 }], pieceId: 'piece-1', pieceLocked: null, onOpenPiece: vi.fn(), onNewPiece: vi.fn(), onDuplicatePiece: vi.fn(), onDeletePiece: vi.fn(), onRenamePiece: vi.fn(), onUndoDelete: vi.fn(),
     onRespectPlayer: vi.fn(), onNewIdeasScene: vi.fn(), onNewIdeasPiece: vi.fn(), surpriseMe: false, onSurpriseMe: vi.fn(),
     onPerformance: vi.fn(), onBackup: vi.fn(), onRestore: vi.fn(), onShow: vi.fn(),
     ...over,
   };
 }
 const renderPiece = (p: PieceStepsProps): void => { act(() => root.render(<PieceSteps {...p} />)); };
-const more = (): HTMLButtonElement | undefined => button(/More for this scene/);
-/** A scene's editor, from the line after its row to Delete scene. */
-const sceneGroups = (): string[] => [...host.querySelectorAll('[role="radiogroup"]')].map((g) => g.getAttribute('aria-label') ?? '');
 
-describe('A1: a scene shows its name, time, loops and Energy; the rest folds under More for this scene', () => {
-  it('folded: the name, the time, the loops (and alone), Energy and Delete; nothing else to read through', () => {
-    renderPiece(pieceProps());
-    act(() => button(/^1:30 · Build/)?.click());
-    expect(host.querySelector('input[aria-label="Scene name"]')).not.toBeNull();
-    expect(host.querySelector('input[aria-label^="When Build comes in"]')).not.toBeNull();
-    expect(button('✓ Bed')).toBeDefined();
-    expect(text()).toContain('Tim alone: no loops, only what Tim plays');
-    expect(sceneGroups()).toEqual(['Energy of this scene']);
-    expect(button('Delete scene')).toBeDefined();
-    expect(more()?.getAttribute('aria-expanded')).toBe('false');
-    // What is folded is still said, in one line.
-    expect(more()?.textContent).toBe('▸ More for this sceneWarm · quiet band · band parts as before · no extra notes · sounds stay · 90 BPM · chords as before');
-  });
-
-  it('More for this scene still edits everything it did: each control changes the scene', () => {
-    const p = pieceProps({ running: true, scenes: [scene('Arrival', 0), scene('Build', 90, { leadIn: undefined }), scene('Open', 210)] });
-    renderPiece(p);
-    act(() => button(/^1:30 · Build/)?.click());
-    act(() => more()?.click());
-    expect(sceneGroups()).toEqual([
-      'Energy of this scene', 'Sound world', 'Band', 'Band parts', 'Lead-in', 'Chords', 'Extra notes', 'Sounds change', 'Reach this speed',
-    ]);
-    const edit = p.onEditScene as ReturnType<typeof vi.fn>;
-    const last = (): unknown => edit.mock.calls[edit.mock.calls.length - 1];
-    act(() => radio('Sound world', 'Lo-fi')?.click());
-    expect(last()).toEqual([1, { settings: { ...settings, soundWorld: 'lofi' } }]);
-    act(() => radio('Band', 'Full')?.click());
-    expect(last()).toEqual([1, { settings: { ...settings, band: 'full' } }]);
-    act(() => radio('Band parts', 'Choose parts')?.click());
-    expect(last()).toEqual([1, { settings: { ...settings, bandJobs: { ...settings.bandJobs, asBefore: false } } }]);
-    act(() => radio('Lead-in', 'Drum fill')?.click());
-    expect(last()).toEqual([1, { leadIn: 'drumFill' }]);
-    act(() => radio('Chords', 'Rising')?.click());
-    expect(last()).toEqual([1, { settings: { ...settings, chords: { sequence: 'rising', bars: 2 } } }]);
-    act(() => radio('Extra notes', 'Some')?.click());
-    expect(last()).toEqual([1, { settings: { ...settings, fillAmount: 0.5 } }]);
-    act(() => radio('Sounds change', 'Slowly')?.click());
-    expect(last()).toEqual([1, { settings: { ...settings, evolveAmount: 0.35 } }]);
-    act(() => radio('Reach this speed', 'Gradually')?.click());
-    expect(last()).toEqual([1, { glideSec: 8 }]);
-    act(() => radio('Energy of this scene', 'Driving')?.click());
-    expect(last()).toEqual([1, { settings: { ...settings, sceneEnergy: 4 } }]);
-    // The speed: a slider named Speed (not Tempo), 40 to 240.
-    const speed = [...host.querySelectorAll('label')].find((l) => /^Speed/.test(l.textContent ?? ''));
-    const slider = speed?.htmlFor ? document.getElementById(speed.htmlFor) as HTMLInputElement : null;
-    expect(slider?.min).toBe('40');
-    expect(slider?.max).toBe('240');
-    act(() => button('↻ New ideas')?.click());
-    expect(p.onNewIdeasScene).toHaveBeenCalledWith(1);
-    act(() => button('Update from now')?.click());
-    expect(p.onUpdateSceneFromNow).toHaveBeenCalledWith(1);
-    act(() => button('Delete scene')?.click());
-    expect(p.onDeleteScene).toHaveBeenCalledWith(1);
-  });
-
-  it('the fold is remembered: open on one scene, open on the next, and after the editor comes back', () => {
-    renderPiece(pieceProps());
-    act(() => button(/^1:30 · Build/)?.click());
-    act(() => more()?.click());
-    act(() => button(/^3:30 · Open/)?.click());
-    expect(more()?.getAttribute('aria-expanded')).toBe('true');
-    expect(sceneGroups()).toContain('Sound world');
-    act(() => root.unmount());
-    root = createRoot(host);
-    renderPiece(pieceProps());
-    act(() => button(/^0:00 · Arrival/)?.click());
-    expect(more()?.getAttribute('aria-expanded')).toBe('true');
-    act(() => more()?.click());
-    expect(sceneGroups()).toEqual(['Energy of this scene']);
-  });
-});
 
 describe('A16: the "comes in" swatches are the counters\' two-tone ring', () => {
   it('a black counter has its light inner ring and a ring against the card', () => {
-    renderPiece(pieceProps());
+    renderPiece(pieceProps({ step: 'ending' }));
     const card = host.querySelector('[role="group"][aria-labelledby="piece-colours"]');
     const chip = card?.querySelector<HTMLElement>('span[aria-hidden="true"]');
     // Two rings: 2 px against the counter, 4 px against the card (SwatchChip), not a 1 px border.
@@ -253,14 +177,14 @@ describe('A2: one word list, the same on the laptop, the iPad and in Help', () =
   it('none is in Make a piece, every step, with a scene and its More open', () => {
     for (const step of ['loops', 'scenes', 'ending'] as const) {
       forgetFolds();
-      renderPiece(pieceProps({ step }));
-      if (step === 'loops') act(() => button(/Other ways to make a loop/)?.click());
-      if (step === 'scenes') { act(() => button(/^1:30 · Build/)?.click()); act(() => more()?.click()); }
+      renderPiece(pieceProps({ step, selectedScene: 'Build' }));
+      if (step === 'scenes') act(() => button(/^change/)?.click());
       expect(retiredWordsIn(text()), step).toEqual([]);
     }
-    // The old way of keeping a loop is named by the list's words.
+    // The old ways of keeping a loop are gone from Make a piece (K1): Keep as loop is beside ▶ Play.
     renderPiece(pieceProps({ step: 'loops' }));
-    expect(button(WORDS.keepBoardAsLoop)).toBeDefined();
+    expect(button(/Other ways to make a loop/)).toBeUndefined();
+    expect(button(WORDS.keepAsLoop)).toBeUndefined();
   });
 
   it('none is on the Sound tab with every helper open', () => {

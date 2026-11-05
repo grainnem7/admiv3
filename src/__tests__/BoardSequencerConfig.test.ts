@@ -521,7 +521,7 @@ describe('a piece saved before the 7:00 limit and "alone" scenes', () => {
     expect(cfg.performance).toMatchObject({ ending: 'cue', style: 'fade', fadePasses: 2 });
     // As they were: a scene saved before chord sequences, band jobs and Energy plays all three
     // as before (Energy off).
-    expect(cfg.scenes).toEqual([{ ...scene, settings: { ...scene.settings, chords: { sequence: 'asBefore', bars: 2 }, bandJobs: { asBefore: true, pads: true, bass: true, drums: true, counter: false }, sceneEnergy: 0 } }]);
+    expect(cfg.scenes).toEqual([{ ...scene, settings: { ...scene.settings, chords: { sequence: 'asBefore', bars: 2 }, bandJobs: { asBefore: true, pads: true, bass: true, drums: true, counter: false }, sceneEnergy: 0 }, wayIn: { kind: 'fade', passes: 1 } }]);
   });
 });
 
@@ -605,10 +605,11 @@ describe("the Simple iPad page (spec 2026-11-04)", () => {
   });
 
   it('the rows of the Simple page: all for a new player and for one saved before; otherwise as stored, made safe', () => {
-    const all = ['drums', 'feel', 'melody', 'board'];
+    const all = ['drums', 'feel', 'melody', 'counters'];
     expect(DEFAULT_BOARD_SEQUENCER_CONFIG.remoteSimpleRows).toEqual(all);
     expect(loadWith({ bpm: 96 }).remoteSimpleRows).toEqual(all);
-    expect(loadWith({ remoteSimpleRows: ['board', 'drums', 'bogus', 'board'] }).remoteSimpleRows).toEqual(['drums', 'board']);
+    // A choice saved with the 4 Nov page's Board row reads as the Counters row (K4).
+    expect(loadWith({ remoteSimpleRows: ['board', 'drums', 'bogus', 'board'] }).remoteSimpleRows).toEqual(['drums', 'counters']);
     expect(loadWith({ remoteSimpleRows: [] }).remoteSimpleRows).toEqual([]);
     expect(loadWith({ remoteSimpleRows: 'drums' }).remoteSimpleRows).toEqual(all);
     // Saved with an earlier page's rows: Drums and Calm / Busy shown, Melody and Board as they were.

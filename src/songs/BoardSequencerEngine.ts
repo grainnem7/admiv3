@@ -267,6 +267,13 @@ interface LaunchedLoop {
   colours?: ColourChannel[];
 }
 
+/**
+ * The way a launch lands (K3): how many beats the arriving loops fade in and the leaving
+ * ones fade out (0 = at once), and how many beats the leaving ones are held at full first
+ * (an overlap). A scene's way in; a launch without one uses the player's own fade.
+ */
+export interface LaunchWay { fadeSteps: number; holdOutSteps: number }
+
 /** How long a replaced voice is kept so its last notes ring out. */
 const VOICE_RETIRE_MS = 4000;
 /** silenceNow: how fast what is ringing falls away (time constant, s), quick but without a click. */
@@ -366,7 +373,7 @@ export class BoardSequencerEngine {
   // holds what is wanted until then.
   private launched: LaunchedLoop[] = [];
   private launchedSlots: number[] = [];
-  private pendingLaunch: { slots: number[]; loops: ActiveCell[][]; colours: ColourChannel[] } | null = null;
+  private pendingLaunch: { slots: number[]; loops: ActiveCell[][]; colours: ColourChannel[]; way?: LaunchWay | null } | null = null;
   /** How many beats a launched loop takes to fade in or out; 0 = it starts and stops dead. */
   private launchFadeBeats = 0;
   // The ending: everything fades over `beats` from the pass boundary after `finish()` is
@@ -1801,7 +1808,7 @@ export class BoardSequencerEngine {
    * the next pass (starting and stopping alike); while stopped, at once, so Play begins
    * with them.
    */
-  setLaunchedLoops(slots: number[], loops: ActiveCell[][], loopColours: ColourChannel[] = []): void {
+  setLaunchedLoops(slots: number[], loops: ActiveCell[][], loopColours: ColourChannel[] = [], way?: LaunchWay): void {
     for (const ch of loopColours) this.buildVoice(ch);
     // A drums loop needs the kit, which init builds only when the player has drums or a band.
     if (!this.drumKit && loopColours.some((c) => c.role === 'drums')) void this.buildDrumKit();
@@ -1814,7 +1821,9 @@ export class BoardSequencerEngine {
     }
     const playing = this.launched.filter((l) => l.fade?.dir !== 'out').map((l) => l.slot);
     const same = slots.length === playing.length && slots.every((s, i) => s === playing[i]);
-    this.pendingLaunch = same ? null : { slots, loops, colours: loopColours };
+    // A scene's way in (K3) is kept until it lands: a hand press in the same pass inherits it,
+    // so a cut is never softened into the player's fade by a counter in the loop zone.
+    this.pendingLaunch = same ? null : { slots, loops, colours: loopColours, way: way ?? this.pendingLaunch?.way ?? null };
     // A loop still fading out keeps its colours; the ones coming in need theirs now.
     this.rebuildChannelIndex();
   }
@@ -2030,7 +2039,9 @@ export class BoardSequencerEngine {
   private applyPendingLaunch(beat: number, atTime = Tone.now(), secPerBeat = 60 / this.cfg.bpm): void {
     const next = this.pendingLaunch;
     if (!next) return;
-    const fade = this.launchFadeBeats;
+    // The launch's own way (a scene's, K3), else the player's fade for hand starts and stops.
+    const fade = next.way ? Math.max(0, Math.round(next.way.fadeSteps)) : this.launchFadeBeats;
+    const hold = next.way ? Math.max(0, Math.round(next.way.holdOutSteps)) : 0;
     const out: LaunchedLoop[] = [];
     const stopped: number[] = [];
     // A loop's fade over time, for its own channel's CC 11 (velocity fades the notes too).
@@ -2040,10 +2051,20 @@ export class BoardSequencerEngine {
       g.linearRampToValueAtTime(dir === 'out' ? 0 : 1, atTime + fade * secPerBeat);
       return g;
     };
+    // An overlap: held at full for the beats, then let go on the last of them.
+    const holdTrack = (): GainTrack => {
+      const g = new GainTrack(1);
+      g.setValueAtTime(1, atTime + (hold - 1) * secPerBeat);
+      g.linearRampToValueAtTime(0, atTime + hold * secPerBeat);
+      return g;
+    };
     for (const l of this.launched) {
       if (next.slots.includes(l.slot)) continue;
       if (l.fade?.dir === 'out') out.push(l); // already going: let it finish
-      else if (fade > 0) {
+      else if (hold > 0) {
+        out.push({ slot: l.slot, cells: l.cells, colours: l.colours, fade: { dir: 'out', start: beat + hold - 1, beats: 1 } });
+        this.loopFades.set(l.slot, holdTrack());
+      } else if (fade > 0) {
         out.push({ slot: l.slot, cells: l.cells, colours: l.colours, fade: { dir: 'out', start: beat, beats: fade } });
         this.loopFades.set(l.slot, fadeTrack('out'));
       } else stopped.push(l.slot);
@@ -2079,7 +2100,8 @@ export class BoardSequencerEngine {
   private launchFactor(l: LaunchedLoop, beat: number): number {
     if (!l.fade) return 1;
     const k = beat - l.fade.start;
-    if (l.fade.dir === 'out') return Math.max(0, 1 - k / l.fade.beats);
+    // Held at full before its fade starts (an overlap, K3).
+    if (l.fade.dir === 'out') return Math.min(1, Math.max(0, 1 - k / l.fade.beats));
     return Math.min(1, (k + 1) / l.fade.beats);
   }
 

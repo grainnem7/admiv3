@@ -55,7 +55,7 @@ export function withSceneAdded(scenes: readonly Scene[], current: number | null,
 }
 
 /** Scene times are kept to these steps, as the timeline's drag is. */
-const SCENE_TIME_STEP_SEC = 5;
+export const SCENE_TIME_STEP_SEC = 5;
 
 /**
  * When a scene kept from what is playing now should come in, so it lands on the timeline

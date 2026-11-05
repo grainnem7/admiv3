@@ -86,7 +86,8 @@ describe('saved loops, scenes and names survive a reload', () => {
     const back = loadActiveBoardConfig()!;
     expect(back.loopSlots).toEqual(cfg.loopSlots);
     expect(back.loopNames).toEqual(cfg.loopNames);
-    expect(back.scenes).toEqual(cfg.scenes);
+    // A scene saved without a way in reads the player's Loop fade when it loads (K3): 2 passes here.
+    expect(back.scenes).toEqual(cfg.scenes.map((s) => ({ ...s, wayIn: { kind: 'fade', passes: 2 } })));
     expect(back.loopFadePasses).toBe(2);
     expect(back.performance).toEqual(cfg.performance);
   });

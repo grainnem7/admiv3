@@ -5,7 +5,7 @@ import {
   type MelodySound, type RemoteControlName, type RemoteLoopState, type RemoteMessage, type RemoteState, type RemoteTriggerName,
   type SimpleRow, type TwoTapPad,
 } from '../../remote/protocol';
-import { PICTURE_EMOJI } from '../../remote/simplePage';
+import { inkOn, PICTURE_EMOJI } from '../../remote/simplePage';
 import { BUILD_ID, reloadedFor, reloadFor } from '../../remote/buildId';
 import { useRemoteLink } from '../../remote/useRemoteLink';
 import { SIMPLE_WORDS, WORDS } from './boardSequencer/words';
@@ -45,6 +45,28 @@ const SEND_EVERY_MS = 40;
  * a tap that is thrown away is far worse than a palm that is not.
  */
 const PALM_PX = 160;
+/**
+ * The biggest circle that fits `cols` × `rows` of them in the measured box, with `gap`
+ * between; 0 until the box has been measured (then the caller falls back to a stretch).
+ */
+function useCircleSize(el: HTMLDivElement | null, cols: number, rows: number, gap: number): number {
+  const [size, setSize] = useState(0);
+  useEffect(() => {
+    // The row is given as state, not a ref: it comes and goes with the laptop's state, and
+    // the measuring must start again each time it appears.
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const measure = (): void => {
+      const r = el.getBoundingClientRect();
+      setSize(Math.max(0, Math.floor(Math.min((r.width - gap * (cols - 1)) / cols, (r.height - gap * (rows - 1)) / rows))));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [el, cols, rows, gap]);
+  return size;
+}
+
 const isPalm = (e: React.PointerEvent<Element>): boolean => e.pointerType === 'touch' && e.width > PALM_PX && e.height > PALM_PX;
 /** How long the "touch seen" mark stays in the status row. */
 const TOUCH_MARK_MS = 700;
@@ -440,6 +462,16 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
     setTimeout(() => setFlashKey((f) => (f === key ? null : f)), 300);
   };
   const soundRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  // The instrument and Counters rows: round buttons, each the biggest circle its row allows
+  // (owner, 5 Nov 2026: the counters the same shape and size as the instruments).
+  const [soundRow, setSoundRow] = useState<HTMLDivElement | null>(null);
+  const [countersRow, setCountersRow] = useState<HTMLDivElement | null>(null);
+  const colourCount = state?.colours?.length ?? 0;
+  const counterCols = Math.min(4, Math.max(2, colourCount));
+  const soundSize = useCircleSize(soundRow, MELODY_SOUNDS.length, 1, GAP);
+  const counterSize = useCircleSize(countersRow, counterCols, Math.max(1, Math.ceil(colourCount / counterCols)), GAP);
+  /** A circle of the measured size; before any measurement, a stretch of the cell. */
+  const circle = (size: number): CSSProperties => (size > 0 ? { width: size, height: size } : { width: '100%', minHeight: 120 });
   const simpleOff = !live || learning;
   const flashStyle = (key: string): CSSProperties => (flashKey === key
     ? { outline: '5px solid var(--bs-fg)', outlineOffset: 4 }
@@ -487,9 +519,10 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
     // The lit one again: back to normal.
     if (padTap(`feel-${f}`, { type: 'feel', feel: state?.feel === f ? 'normal' : f })) flashOn(`feel-${f}`);
   };
-  const boardTap = (silent: boolean): void => {
+  // A colour's pad (K4): its counters silenced, or back (the laptop brings Drums back too when a drum colour is wanted).
+  const colourTap = (id: string, silent: boolean): void => {
     if (learning) return;
-    if (padTap('board', { type: 'boardSound', silent: !silent })) flashOn('board');
+    if (padTap(`colour-${id}`, { type: 'colourSound', id, silent: !silent })) flashOn(`colour-${id}`);
   };
   const melodyTap = (sound: MelodySound): void => {
     if (!live || learning) return;
@@ -498,24 +531,18 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
     if (padTap(`sound-${sound}`, { type: 'melodySound', sound })) flashOn(`sound-${sound}`);
   };
   const melodySound = state?.melody?.sound ?? null;
-  const boardSilent = state?.boardSilent === true;
+  // The Counters row (K4): the player's colours, and the ones silenced on their pads.
+  const colours = state?.colours ?? [];
+  const silentColours = new Set(state?.silentColours ?? []);
   const drumsSilent = state?.drumsSilent === true;
   const feel = state?.feel ?? 'normal';
   // The rows the facilitator chose, and only those with something in them.
   const rowsChosen = state?.rows ?? SIMPLE_ROWS;
-  const showRow = (r: SimpleRow): boolean => rowsChosen.includes(r) && (r !== 'melody' || state?.melody !== undefined);
+  const showRow = (r: SimpleRow): boolean => rowsChosen.includes(r) && (r !== 'melody' || state?.melody !== undefined) && (r !== 'counters' || (state?.colours?.length ?? 0) > 0);
   const rowCount = SIMPLE_ROWS.filter(showRow).length;
   // One or two rows: everything in them bigger, as they have the page to themselves.
   const k = rowCount <= 2 ? 1.4 : 1;
   const caption: CSSProperties = { fontSize: 16, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--bs-fg2)' };
-  // A board with counters on it, drawn: the Board button's picture.
-  const boardPicture = (
-    <span aria-hidden="true" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 5 * k, flex: 'none' }}>
-      {[0, 1, 2, 3].map((i) => (
-        <span key={i} style={{ width: 16 * k, height: 16 * k, borderRadius: '50%', background: i === 1 ? 'transparent' : 'currentColor', border: '3px solid currentColor', boxSizing: 'border-box' }} />
-      ))}
-    </span>
-  );
   const simplePage = (
     <div data-simple-page style={{ flex: '1 1 0', minHeight: 0, display: 'flex', flexDirection: 'column', gap: GAP + 4, opacity: simpleOff ? 0.4 : 1 }}>
       {rowCount === 0 && (
@@ -524,7 +551,8 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
         </div>
       )}
 
-      {/* Drums: one big wide toggle. Lit while the drums play; silent = no drums anywhere. */}
+      {/* Drums: one wide toggle, a band across the top (owner, 5 Nov 2026: not so much of the
+          page). Lit while the drums play; silent = no drums anywhere. */}
       {showRow('drums') && (
         <button
           type="button"
@@ -535,14 +563,14 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
           data-lit={!drumsSilent}
           {...padProps('drums', () => drumsTap(drumsSilent))}
           style={{
-            flex: '1.3 1 0', minHeight: 72, borderRadius: 32, touchAction: 'none',
+            flex: '0.55 1 0', minHeight: 88, borderRadius: 32, touchAction: 'none',
             display: 'flex', alignItems: 'center', gap: 24, padding: '0 32px',
             ...lit(drumsSilent ? 'silent' : 'playing'), ...flashStyle('drums'),
           }}
         >
-          <span aria-hidden="true" style={{ fontSize: 56 * k, lineHeight: 1, flex: 'none', opacity: drumsSilent ? 0.45 : 1 }}>{PICTURE_EMOJI.drums}</span>
-          <span style={{ flex: '1 1 auto', textAlign: 'left', fontSize: 36 * k, fontWeight: 800 }}>{SIMPLE_WORDS.drums}</span>
-          {stateWords(!drumsSilent, drumsSilent ? SIMPLE_WORDS.silent : SIMPLE_WORDS.playing, 30 * k)}
+          <span aria-hidden="true" style={{ fontSize: 44 * k, lineHeight: 1, flex: 'none', opacity: drumsSilent ? 0.45 : 1 }}>{PICTURE_EMOJI.drums}</span>
+          <span style={{ flex: '1 1 auto', textAlign: 'left', fontSize: 30 * k, fontWeight: 800 }}>{SIMPLE_WORDS.drums}</span>
+          {stateWords(!drumsSilent, drumsSilent ? SIMPLE_WORDS.silent : SIMPLE_WORDS.playing, 24 * k)}
         </button>
       )}
 
@@ -578,14 +606,17 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
         </div>
       )}
 
-      {/* What the melody plays: round buttons, the chosen one teal with ✓. */}
+      {/* What the melody plays: round buttons, each the instrument's picture alone (owner, 5 Nov
+          2026: no words; the name is the spoken label), the chosen one teal with ✓. The row gets the
+          bigger share and the Counters the smaller (owner, 5 Nov: the instruments bigger, flat or upright). */}
       {showRow('melody') && (
-        <div style={{ flex: '1 1 0', minHeight: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ flex: '1.3 1 0', minHeight: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <span aria-hidden="true" style={caption}>{SIMPLE_WORDS.melodyPlays}</span>
           <div
+            ref={setSoundRow}
             role="radiogroup"
             aria-label={SIMPLE_WORDS.melodyPlays}
-            style={{ flex: '1 1 0', minHeight: 0, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: GAP }}
+            style={{ flex: '1 1 0', minHeight: 0, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: GAP, placeItems: 'center' }}
             // One Tab stop: the arrow keys move between the sounds.
             onKeyDown={(e) => {
               const focused = soundRefs.current.findIndex((b) => b === document.activeElement);
@@ -613,16 +644,16 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
                   data-flash={flashKey === `sound-${sound}` || undefined}
                   {...padProps(`sound-${sound}`, () => melodyTap(sound))}
                   style={{
-                    minHeight: 0, minWidth: 0, borderRadius: 999, touchAction: 'none',
+                    ...circle(soundSize), minWidth: 0, borderRadius: 999, touchAction: 'none',
                     background: chosen ? 'var(--bs-pick)' : 'var(--bs-raised)', color: chosen ? 'var(--bs-pick-fg)' : 'var(--bs-fg)',
                     border: `3px solid ${chosen ? 'var(--bs-pick)' : 'var(--bs-border-control)'}`,
                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '0 8px', fontSize: 22 * k, fontWeight: 700,
                     ...flashStyle(`sound-${sound}`),
                   }}
                 >
-                  <span aria-hidden="true" style={{ fontSize: 28 * k }}>{PICTURE_EMOJI[sound]}</span>
-                  <span>{SIMPLE_WORDS.sounds[sound]}</span>
-                  {chosen && <span aria-hidden="true" style={{ fontSize: 24 * k, fontWeight: 800 }}>✓</span>}
+                  {/* The picture fills most of the circle (owner, 5 Nov: bigger pictures). */}
+                  <span aria-hidden="true" data-picture="" style={{ fontSize: soundSize > 0 ? Math.round(soundSize * 0.56) : 48 * k, lineHeight: 1 }}>{PICTURE_EMOJI[sound]}</span>
+                  {chosen && <span aria-hidden="true" style={{ fontSize: 26 * k, fontWeight: 800 }}>✓</span>}
                 </button>
               );
             })}
@@ -630,27 +661,49 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
         </div>
       )}
 
-      {/* The board's counters, as one button: lit while they play, dark while silenced. */}
-      {showRow('board') && (
-        <button
-          type="button"
-          aria-label={`${SIMPLE_WORDS.board}: ${boardSilent ? SIMPLE_WORDS.silent : SIMPLE_WORDS.playing}`}
-          aria-pressed={!boardSilent}
-          aria-disabled={simpleOff || undefined}
-          data-flash={flashKey === 'board' || undefined}
-          data-lit={!boardSilent}
-          {...padProps('board', () => boardTap(boardSilent))}
-          style={{
-            // Square corners: never mistaken for the round Drums above it.
-            flex: '0.9 1 0', minHeight: 72, borderRadius: 4, touchAction: 'none',
-            display: 'flex', alignItems: 'center', gap: 20, padding: '0 24px',
-            ...lit(boardSilent ? 'silent' : 'playing'), ...flashStyle('board'),
-          }}
+      {/* The Counters (K4; owner, 5 Nov 2026): one round pad per colour, the shape and size of
+          the instrument buttons (up to four to a row, the biggest row on the page), filled with
+          the colour itself, the instrument as a picture (no words), the colour's name, and
+          ● Playing or ○ Silent. Silenced, the pad is dimmed and outlined dashed: never colour alone. */}
+      {showRow('counters') && colours.length > 0 && (
+        <div
+          ref={setCountersRow}
+          role="group" aria-label={SIMPLE_WORDS.counters}
+          style={{ flex: `${colourCount > 4 ? 1.7 : 0.85} 1 0`, minHeight: 0, display: 'grid', gridTemplateColumns: `repeat(${counterCols}, 1fr)`, gap: GAP, placeItems: 'center' }}
         >
-          {boardPicture}
-          <span style={{ flex: '1 1 auto', textAlign: 'left', fontSize: 28 * k, fontWeight: 800 }}>{SIMPLE_WORDS.board}</span>
-          {stateWords(!boardSilent, boardSilent ? SIMPLE_WORDS.silent : SIMPLE_WORDS.playing, 26 * k)}
-        </button>
+          {colours.map((c) => {
+            const silent = silentColours.has(c.id);
+            const drumsOff = c.role === 'drums' && drumsSilent;
+            const off = silent || drumsOff;
+            const ink = inkOn(c.swatch);
+            return (
+              <button
+                key={`colour-${c.id}`}
+                type="button"
+                aria-label={`${c.name}, ${c.words}: ${off ? SIMPLE_WORDS.silent : SIMPLE_WORDS.playing}`}
+                aria-pressed={!silent && !drumsOff}
+                aria-disabled={simpleOff || undefined}
+                data-flash={flashKey === `colour-${c.id}` || undefined}
+                data-lit={!silent && !drumsOff}
+                {...padProps(`colour-${c.id}`, () => colourTap(c.id, silent || drumsOff))}
+                style={{
+                  ...circle(counterSize), minWidth: 0, borderRadius: 999, touchAction: 'none', boxSizing: 'border-box',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px 12px',
+                  background: c.swatch, color: ink,
+                  // Silenced: the colour dimmed and the edge dashed; playing: a firm edge in the page's ink.
+                  border: off ? `3px dashed ${ink}` : '4px solid var(--bs-fg)',
+                  boxShadow: off ? 'none' : `0 0 0 3px var(--bs-bg), 0 0 24px 6px ${c.swatch}`,
+                  filter: off ? 'saturate(0.45) brightness(0.55)' : 'none',
+                  ...pressedEdge(off ? ink : 'var(--bs-fg)'), ...flashStyle(`colour-${c.id}`),
+                }}
+              >
+                <span aria-hidden="true" data-picture="" style={{ fontSize: 48 * k, lineHeight: 1, flex: 'none' }}>{c.picture}</span>
+                <span style={{ maxWidth: '100%', fontSize: 22 * k, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</span>
+                {stateWords(!off, drumsOff ? SIMPLE_WORDS.drumsAreOff : off ? SIMPLE_WORDS.silent : SIMPLE_WORDS.playing, 14 * k)}
+              </button>
+            );
+          })}
+        </div>
       )}
     </div>
   );

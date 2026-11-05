@@ -5,7 +5,8 @@
  * are the piece open now (the working copy, which everything else already reads); every
  * change to them is mirrored into the list, so switching pieces loses nothing.
  */
-import { cleanName, sanitizeScenes, type Scene, type SceneSettings } from './launcher';
+import { cleanName, sanitizeScenes, withWayIn, type Scene, type SceneSettings } from './launcher';
+import { giveTimes } from './storyboard';
 import { DEFAULT_PERFORMANCE, sanitizePerformance, type PerformanceSettings } from './clock';
 import { sanitizeColourEntries } from './colourEntries';
 
@@ -118,7 +119,7 @@ export function renamePiece<T extends WithPieces>(c: T, id: string, name: string
  * the working copy; the working copy is always the truth for the piece open now.
  */
 export function sanitizePieces(
-  v: unknown, pieceIdV: unknown, working: PieceFields, defaults: SceneSettings, channelIds: ReadonlySet<string>,
+  v: unknown, pieceIdV: unknown, working: PieceFields, defaults: SceneSettings, channelIds: ReadonlySet<string>, loopFadePasses = 1,
 ): { pieces: SavedPiece[]; pieceId: string } {
   const raw = Array.isArray(v) ? v : [];
   const pieces: SavedPiece[] = [];
@@ -129,7 +130,8 @@ export function sanitizePieces(
     pieces.push({
       id,
       name: cleanName(o.name) || freePieceName(pieces.map((p) => p.name)),
-      scenes: sanitizeScenes(o.scenes, defaults),
+      // Every scene has a time (K2) and a way in (K3), as the piece open now gets them.
+      scenes: withWayIn(giveTimes(sanitizeScenes(o.scenes, defaults), sanitizePerformance(o.performance).lengthSec), loopFadePasses),
       performance: sanitizePerformance(o.performance),
       colourComesInAt: sanitizeColourEntries(o.colourComesInAt, channelIds),
     });

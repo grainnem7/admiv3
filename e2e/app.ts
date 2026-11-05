@@ -119,20 +119,22 @@ export async function soundTab(page: Page): Promise<void> {
   while (await folded.count() > 0) await folded.first().click();
 }
 
-/** The open scene's "More for this scene" (A1), opened if folded. Remembered for the session. */
+/**
+ * The selected scene's finer settings (world, chords, band, Extra notes, speed, lead-in, the
+ * player alone, ideas, Update from now): the editor's "change ▾", opened if folded.
+ * Remembered for the session.
+ */
 export async function sceneMore(page: Page): Promise<void> {
-  const more = page.getByRole('button', { name: /More for this scene/ });
+  const more = page.getByRole('button', { name: /^change [▾▴]/ });
   if ((await more.getAttribute('aria-expanded')) === 'false') await more.click();
 }
 
 /**
- * What the open scene's More says folded: one line with all it holds (A1). Folds it first,
- * so the line shows; sceneMore opens it again.
+ * The editor's line of words for the finer settings, beside "change ▾": all they hold, in
+ * one line (A1). Returns the line with its button; sceneMore opens them.
  */
 export async function sceneMoreLine(page: Page): Promise<Locator> {
-  const more = page.getByRole('button', { name: /More for this scene/ });
-  if ((await more.getAttribute('aria-expanded')) === 'true') await more.click();
-  return more;
+  return page.getByRole('button', { name: /^change [▾▴]/ }).locator('..');
 }
 
 /** The research tools under the board, folded under "Session log" (A15): opened if shut. */
@@ -162,18 +164,53 @@ export function pageErrors(page: Page): string[] {
 }
 
 /**
- * Open Make a piece at a step. Since G3 there are two tabs: Piece (the grid, the scenes and
- * the loops, so 'Loops' and 'Scenes' both open it) and Check ('Ending & check').
+ * Open Make a piece (K2, 5 Nov 2026: no steps). 'Loops' and 'Scenes' are the board, the rail,
+ * the storyboard under them and the selected scene's editor in the panel (from Check, its
+ * ‹ Back to the scene); 'Ending & check' is Check, from the storyboard heading's Check ›.
  */
 export async function pieceStep(page: Page, step: 'Loops' | 'Scenes' | 'Ending & check'): Promise<void> {
   await page.getByRole('button', { name: 'Make a piece', exact: true }).click();
-  await page.getByRole('navigation', { name: 'Make a piece: steps' }).getByRole('button', { name: step === 'Ending & check' ? 'Check' : 'Piece', exact: true }).click();
+  const piece = page.getByRole('region', { name: 'The piece', exact: true });
+  await expect(piece).toBeVisible();
+  if (step === 'Ending & check') {
+    await piece.getByRole('button', { name: /^Check/ }).click();
+    return;
+  }
+  const back = page.getByRole('button', { name: '‹ Back to the scene' });
+  if (await back.isVisible()) await back.click();
 }
 
-/** Make a piece → Scenes → Make my plan (four scenes over the length). */
+/** Make a piece → ✦ Make my plan (four scenes over the length; it replaces any scenes, with Undo). */
 export async function makePlan(page: Page): Promise<void> {
   await pieceStep(page, 'Scenes');
-  await page.getByRole('button', { name: /Make my plan/ }).click();
+  await page.getByRole('button', { name: /^✦ Make my plan/ }).click();
+  // With scenes already made it asks first (they are replaced, with Undo): say yes.
+  const ask = page.getByRole('dialog', { name: 'Make my plan?' });
+  if (await ask.waitFor({ timeout: 1500 }).then(() => true, () => false)) await ask.getByRole('button', { name: 'Make the plan' }).click();
+}
+
+/** The storyboard's card for a scene, by name: an option named "Scene N · m:ss <name> …". */
+export function sceneCard(page: Page, name: string): Locator {
+  return page.getByRole('listbox', { name: 'The piece: its scenes in order' }).getByRole('option', { name: new RegExp(`^Scene \\d+ · \\d+:\\d\\d ${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} `) });
+}
+
+/** Press a scene's card under the board: its editor opens in the panel. */
+export async function selectScene(page: Page, name: string): Promise<void> {
+  await sceneCard(page, name).click();
+}
+
+/**
+ * ▶ Hear from here on a scene (K2, was Rehearse from here): its card, then the editor's
+ * button. The piece starts two passes before the scene when a scene comes before it.
+ */
+export async function hearFrom(page: Page, name: string): Promise<void> {
+  await selectScene(page, name);
+  await page.getByRole('button', { name: new RegExp(`^Hear from here: ${name},`) }).click();
+}
+
+/** Keep as scene (K2): beside ▶ Play in Make a piece; what plays now becomes the next scene, after the last. */
+export async function keepAsScene(page: Page): Promise<void> {
+  await page.getByRole('button', { name: /^Keep as scene: keep what is playing/ }).click();
 }
 
 
@@ -259,12 +296,59 @@ export async function pressAndListen(page: Page, buttonText: string, bins = 40, 
 }
 
 /**
- * The old way to make a loop: Make a piece → Loops → "Other ways to make a loop" (folded,
- * B17) → Keep the board as this loop (A2), on the first empty loop. The fold stays open once opened.
+ * Keep as loop (K1, 5 Nov 2026), the one way to make a loop: on the Board, the side panel's
+ * button beside ▶ Play; in Make a piece (where that place holds Keep as scene, K2), the
+ * rail's dashed "+ Keep as loop" place, which does the same. The counters on the board become
+ * the next free loop, that loop starts (stopped: it comes in on ▶ Play) and the laptop board
+ * is cleared.
  */
-export async function saveBoardHere(page: Page): Promise<void> {
-  const fold = page.getByRole('button', { name: /Other ways to make a loop/ });
-  if ((await fold.getAttribute('aria-expanded')) === 'false') await fold.click();
-  // On an empty loop: a kept loop's button of the same name replaces it (after a second press).
-  await page.getByRole('listitem', { name: /, empty$/ }).first().getByRole('button', { name: 'Keep the board as this loop' }).click();
+export async function keepAsLoop(page: Page): Promise<void> {
+  const panel = page.getByRole('button', { name: /^Keep as loop: keep the counters/ });
+  if (await panel.count() > 0) await panel.click();
+  else await page.locator('[data-loop-rail]').getByRole('button', { name: /^Keep as loop: keep the board as loop/ }).click();
+}
+
+/** A place in the loop rail: a kept loop, or the one dashed "+ Keep as loop" place. Slots count from 0. */
+export function loopPlace(page: Page, slot: number): Locator {
+  return page.locator(`[data-loop-rail] [data-loop-place="${slot}"]`);
+}
+
+/**
+ * A kept loop's menu, opened by right-clicking its place in the rail: Rename, Replace with
+ * the board, Edit notes, Clear and New loop. Returns the menu (a group named "<Name>: more").
+ */
+export async function loopMenu(page: Page, slot: number): Promise<Locator> {
+  await loopPlace(page, slot).click({ button: 'right' });
+  const menu = page.locator('[data-loop-rail]').getByRole('group', { name: /: more$/ });
+  await expect(menu).toBeVisible();
+  return menu;
+}
+
+/** Name a kept loop: its menu → Rename, type the name, Enter (which closes the menu). */
+export async function renameLoop(page: Page, slot: number, name: string): Promise<void> {
+  const menu = await loopMenu(page, slot);
+  await menu.getByRole('button', { name: 'Rename', exact: true }).click();
+  const box = page.getByRole('textbox', { name: `Name of loop ${slot + 1}` });
+  await box.fill(name);
+  await box.press('Enter');
+  await expect(menu).toHaveCount(0);
+}
+
+/**
+ * New loop from silence, from the rail's … more menu (it has no button of its own since K1).
+ * … more is named for the kept loop last pressed ("More for Bed"), or "More: new loop from
+ * silence" when there is none.
+ */
+export async function openNewLoop(page: Page): Promise<void> {
+  const rail = page.locator('[data-loop-rail]');
+  await rail.getByRole('button', { name: /^More( for |: new loop)/ }).click();
+  await rail.getByRole('group', { name: /: more$/ }).getByRole('button', { name: 'New loop: from silence' }).click();
+}
+
+/**
+ * Stop a kept loop that is on (Keep as loop starts it): a press on its place. While the
+ * board is stopped this takes it out of what comes in on ▶ Play.
+ */
+export async function stopLoop(page: Page, slot: number): Promise<void> {
+  await loopPlace(page, slot).click();
 }

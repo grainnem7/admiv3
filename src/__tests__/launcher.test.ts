@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { fakeVoiceEntry } from './helpers/fakeVoiceEntry';
 import {
   LAUNCH_SLOTS, loopLabel, nextSceneIndex, sanitizeLoopNames, sanitizeScenes, sceneFromNow, sceneSettingsOf, sceneSettingsToApply,
-  SCENE_SETTING_KEYS, slotState, stoppedConfig, toggleSlot, withOwnSettings, type SceneSettings,
+  SCENE_SETTING_KEYS, sanitizeWayIn, slotState, stoppedConfig, toggleSlot, wayInFromFade, withOwnSettings, withWayIn, type SceneSettings,
 } from '../songs/performance/launcher';
 import { AS_BEFORE_CHORDS } from '../songs/harmony/currentChord';
 
@@ -476,5 +476,28 @@ describe('scenes: band jobs and a lead-in', () => {
     expect('leadIn' in one({ leadIn: 'none' })).toBe(false);
     expect('leadIn' in one({ leadIn: 'gong' })).toBe(false);
     expect('leadIn' in one({})).toBe(false);
+  });
+});
+
+describe('the way into a scene (K3)', () => {
+  const old = { id: 'w', name: 'W', loops: [0], settings, at: 30 };
+  it('a stored way in survives sanitising; a bad one is dropped', () => {
+    expect(sanitizeScenes([{ ...old, wayIn: { kind: 'fade', passes: 2 } }], settings)[0].wayIn).toEqual({ kind: 'fade', passes: 2 });
+    expect(sanitizeScenes([{ ...old, wayIn: { kind: 'overlap', passes: 1 } }], settings)[0].wayIn).toEqual({ kind: 'overlap', passes: 1 });
+    expect(sanitizeScenes([{ ...old, wayIn: { kind: 'cut' } }], settings)[0].wayIn).toEqual({ kind: 'cut' });
+    expect('wayIn' in sanitizeScenes([{ ...old, wayIn: { kind: 'fade', passes: 3 } }], settings)[0]).toBe(false);
+    expect('wayIn' in sanitizeScenes([{ ...old, wayIn: 'cut' }], settings)[0]).toBe(false);
+    expect(sanitizeWayIn({ kind: 'cut', passes: 2 })).toEqual({ kind: 'cut' });
+    expect(sanitizeWayIn(null)).toBeNull();
+  });
+
+  it('a scene saved before the way in existed reads the player’s Loop fade: 0 cut, ½ or 1 fade 1, 2 fade 2 (so the show sounds as it did)', () => {
+    expect(wayInFromFade(0)).toEqual({ kind: 'cut' });
+    expect(wayInFromFade(0.5)).toEqual({ kind: 'fade', passes: 1 });
+    expect(wayInFromFade(1)).toEqual({ kind: 'fade', passes: 1 });
+    expect(wayInFromFade(2)).toEqual({ kind: 'fade', passes: 2 });
+    const given = withWayIn([old, { ...old, id: 'x', wayIn: { kind: 'cut' } }], 2);
+    expect(given[0].wayIn).toEqual({ kind: 'fade', passes: 2 });
+    expect(given[1].wayIn).toEqual({ kind: 'cut' });
   });
 });

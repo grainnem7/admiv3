@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { headerButton, listenToOutput, makePlan, notesPlayed, oneNote, openLaptopBoard, outputLevels, pageErrors, pickColour, pieceStep, place, pressAndListen, saveBoardHere, soundTab } from './app';
+import { headerButton, listenToOutput, makePlan, notesPlayed, oneNote, openLaptopBoard, outputLevels, pageErrors, pickColour, pieceStep, place, pressAndListen, keepAsLoop, loopMenu, loopPlace, soundTab } from './app';
 
 /**
  * The Sound tab and the loop edit window, as a musician uses them: each colour's own
@@ -65,11 +65,10 @@ test('the loop edit window shows the board beside the loop, and copies one into 
   await pieceStep(page, 'Loops');
   await pickColour(page, 'Red');
   await place(page, [[3, 1]]);
-  await saveBoardHere(page);
-  await page.getByRole('button', { name: 'Clear the board' }).click();
+  await keepAsLoop(page); // the board is cleared
   await place(page, [[2, 2], [6, 4]]);
 
-  await page.getByRole('button', { name: 'Edit notes: loop 1' }).click();
+  await (await loopMenu(page, 0)).getByRole('button', { name: 'Edit notes: loop 1' }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByRole('heading', { name: /The board now · 2 counters/ })).toBeVisible();
   await expect(dialog.getByRole('heading', { name: 'Loop 1 as saved' })).toBeVisible();
@@ -78,7 +77,7 @@ test('the loop edit window shows the board beside the loop, and copies one into 
   await copy.click();
   await dialog.getByRole('button', { name: /Press again/ }).click();
   await dialog.getByRole('button', { name: 'Done', exact: true }).click();
-  await expect(page.getByRole('listitem', { name: /^Loop 1: .*2 notes/ })).toBeVisible();
+  await expect(loopPlace(page, 0)).toHaveAttribute('aria-label', /^Loop 1: 2 notes, /);
   expect(pageErrors(page)).toEqual([]);
 });
 
@@ -224,15 +223,29 @@ test('a player can be renamed and their hand changed', async ({ page }) => {
   expect(pageErrors(page)).toEqual([]);
 });
 
-test('after saving the board as a loop, its name is ready to type', async ({ page }) => {
+test("after Keep as loop, Rename in the rail's menu names it", async ({ page }) => {
   await openLaptopBoard(page);
   await pickColour(page, 'Red');
   await place(page, [[3, 1]]);
-  await pieceStep(page, 'Loops');
-  await saveBoardHere(page);
-  await expect(page.getByRole('textbox', { name: 'Name of loop 1' })).toBeFocused();
+  await keepAsLoop(page);
+  // A right-click on the kept loop's place opens its menu.
+  const menu = await loopMenu(page, 0);
+  await expect(menu).toHaveAccessibleName('Loop 1: more');
+  await menu.getByRole('button', { name: 'Rename', exact: true }).click();
+  // The name is ready to type; Enter closes the menu and goes back to the loop's place.
+  const name = page.getByRole('textbox', { name: 'Name of loop 1' });
+  await expect(name).toBeFocused();
   await page.keyboard.type('Intro');
-  await expect(page.getByRole('textbox', { name: 'Name of loop 1' })).toHaveValue('Intro');
+  await expect(name).toHaveValue('Intro');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('[data-loop-rail]').getByRole('group', { name: /: more$/ })).toHaveCount(0);
+  await expect(loopPlace(page, 0)).toHaveAttribute('aria-label', /^Intro: loop 1, 1 note, /);
+  await expect(loopPlace(page, 0)).toHaveText(/Intro/);
+  await expect(loopPlace(page, 0)).toBeFocused();
+  // Enter only names it: the loop Keep as loop started still comes in with ▶ Play.
+  await page.getByRole('button', { name: '▶ Play the board' }).first().click();
+  await expect(loopPlace(page, 0)).toHaveAttribute('aria-label', /^Intro: loop 1, 1 note, (starting|playing)/, { timeout: 20_000 });
+  expect(pageErrors(page)).toEqual([]);
 });
 
 test('Play on the laptop from Welcome: a new player lands on the laptop board with four colours, no Set up', async ({ page }) => {
@@ -279,16 +292,13 @@ test('Stop silences a launched loop; it does not come back on Play', async ({ pa
   await pieceStep(page, 'Loops');
   await pickColour(page, 'Red');
   await place(page, [[3, 1], [5, 3]]);
-  await saveBoardHere(page);
-  await page.getByRole('button', { name: 'Clear the board' }).click();
-  // Launch the loop with the board empty, so every note comes from the loop.
-  await page.getByRole('listitem', { name: /^Loop 1:/ }).getByRole('button', { name: '▶ Play' }).click();
+  // Keep as loop: the loop comes in with ▶ Play and the board is clear, so every note comes from the loop.
+  await keepAsLoop(page);
   await page.getByRole('button', { name: '▶ Play the board' }).first().click();
   await expect.poll(() => notesPlayed(page), { timeout: 15_000 }).toBeGreaterThan(0);
   await page.getByRole('button', { name: '■ Stop' }).first().click();
-  // Stop means silence: the loop is stopped, not "ready · starts with Play".
-  await expect(page.getByRole('listitem', { name: /^Loop 1:/ })).not.toHaveAttribute('aria-label', /ready/);
-  await expect(page.getByRole('listitem', { name: /^Loop 1: .*2 notes/ })).toBeVisible();
+  // Stop means silence: the loop is stopped.
+  await expect(loopPlace(page, 0)).toHaveAttribute('aria-label', 'Loop 1: 2 notes, stopped');
   // Play again with the board still empty: the loop stays stopped, so nothing plays.
   await page.waitForTimeout(600); // ▶ Play ignores a press straight after Stop (a bounce)
   await page.getByRole('button', { name: '▶ Play the board' }).first().click();
@@ -305,16 +315,15 @@ test('New loop starts from silence, Keep names it, Leave restores the player’s
   await pieceStep(page, 'Loops');
   await pickColour(page, 'Red');
   await place(page, [[3, 1]]);
-  await saveBoardHere(page);
-  await page.getByRole('button', { name: 'Clear the board' }).click();
-  await page.getByRole('listitem', { name: /^Loop 1:/ }).getByRole('button', { name: '▶ Play' }).click();
+  await keepAsLoop(page); // Loop 1, which comes in with ▶ Play; the board is clear
   await page.getByRole('button', { name: '▶ Play the board' }).first().click();
   await expect.poll(() => notesPlayed(page), { timeout: 15_000 }).toBeGreaterThan(0);
 
-  // New loop: everything stops; the board is empty, so it is ready to compose (nothing kept yet).
-  await page.getByRole('button', { name: 'New loop', exact: true }).click();
+  // New loop, from the loop's menu: everything stops; the board is empty, so it is ready to
+  // compose (nothing kept yet).
+  await (await loopMenu(page, 0)).getByRole('button', { name: 'New loop: from silence' }).click();
   await expect(page.getByRole('heading', { name: 'New loop 2 · not kept yet' })).toBeVisible();
-  await expect(page.getByRole('listitem', { name: /^Loop 1: .*1 note$/ })).toBeVisible();
+  await expect(loopPlace(page, 0)).toHaveAttribute('aria-label', /^Loop 1: 1 note, (stopping|stopped)/);
   const quiet = await notesPlayed(page);
   await page.waitForTimeout(2500);
   expect(await notesPlayed(page)).toBe(quiet);
@@ -330,7 +339,7 @@ test('New loop starts from silence, Keep names it, Leave restores the player’s
   await page.getByRole('button', { name: 'Bed', exact: true }).click();
   await expect(name).toHaveValue('Bed');
   await page.getByRole('button', { name: 'Done', exact: true }).click();
-  await expect(page.getByRole('listitem', { name: /^Loop 2: Bed, 2 notes/ })).toBeVisible();
+  await expect(loopPlace(page, 1)).toHaveAttribute('aria-label', /^Bed: loop 2, 2 notes/);
 
   // Leaving gave the player's own settings back.
   await page.getByRole('button', { name: 'Board', exact: true }).click();

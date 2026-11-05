@@ -20,8 +20,8 @@ export const WORDS = {
   brightness: 'Brightness',
   /** Making a loop: New loop, counters, then Keep. */
   keep: 'Keep',
-  /** The old way, under "Other ways to make a loop" (was Save the board here / Overwrite with board). */
-  keepBoardAsLoop: 'Keep the board as this loop',
+  /** The one way to make a loop (K1, 5 Nov 2026): beside ▶ Play, and the rail's dashed place. */
+  keepAsLoop: 'Keep as loop',
   /** The fade at the end of the piece (was End). */
   endPiece: 'End piece',
   /** Silence now (was Stop all). */
@@ -46,6 +46,12 @@ export const WORDS = {
   pages: 'Boards in turn',
 } as const;
 
+/** "Red", "Red and Green", "Red, Blue and Green". */
+function listOf(names: readonly string[]): string {
+  if (names.length <= 1) return names[0] ?? '';
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
 /**
  * The Simple iPad page (spec 2026-11-04) and what the laptop says about it: the same words on
  * both, and in Help.
@@ -67,16 +73,22 @@ export const SIMPLE_WORDS = {
   busy: 'Busy',
   calmMeans: 'Fewer notes',
   busyMeans: 'More notes',
-  /** The counters on the board, as one button. */
+  /** The counters on the board, as one button (the 4 Nov page; kept in the code for one release, not shown). */
   board: 'Board',
   boardSilenced: 'Board counters silenced on the iPad',
   bringBoardBack: 'Bring them back',
+  /** The Counters row (K4): one pad per colour, silencing that colour's counters. */
+  counters: 'Counters',
+  /** The laptop's line for the colours silenced on the iPad: "Red and Green silenced on the iPad". */
+  countersSilenced: (names: readonly string[]): string => `${listOf(names)} silenced on the iPad`,
+  /** A drum colour's pad while Drums are off everywhere. */
+  drumsAreOff: 'Drums are off',
   /** The laptop's line for Calm / Busy, and its way back. */
   feelCalm: 'Calm (from the iPad): the loops play only their main beats, and no Extra notes',
   feelBusy: 'Busy (from the iPad): Extra notes round everything',
   backToNormal: 'Back to normal',
   /** The rows the facilitator can show or hide, in page order. */
-  rows: { drums: 'Drums', feel: 'Calm / Busy', melody: 'Melody instrument', board: 'Board' },
+  rows: { drums: 'Drums', feel: 'Calm / Busy', melody: 'Melody instrument', counters: 'Counters, one per colour' },
   rowsCaption: 'What the simple layout shows',
   noRows: 'Nothing is chosen for this page. Choose what it shows on the laptop.',
   /** The row of melody sounds. */
@@ -111,7 +123,7 @@ export const RETIRED_WORDS: readonly { old: RegExp; use: string }[] = [
   { old: /\bEvolve\b/, use: WORDS.soundsChange },
   { old: /\bTempo\b/, use: WORDS.speed },
   { old: /\bDelay\b/, use: WORDS.echo },
-  { old: /\bSave the board here\b|\bOverwrite with board\b/, use: WORDS.keepBoardAsLoop },
+  { old: /\bSave the board here\b|\bOverwrite with board\b|\bKeep the board as this loop\b|\bOther ways to make a loop\b/, use: WORDS.keepAsLoop },
   { old: /\bStop all\b/, use: `${WORDS.stop} / ${WORDS.stopLoops}` },
   { old: /\bTry another\b/, use: WORDS.newIdea },
   { old: /\bHumanize\b/, use: WORDS.looseTiming },
