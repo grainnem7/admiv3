@@ -121,7 +121,10 @@ describe('engine — MIDI out', () => {
     p.fireStep(4, 4, 1, null);
     const notes = port.send.mock.calls.map((c) => c[0] as number[]);
     expect(notes.some((d) => (d[0] & 0xf0) === 0x90 && d[1] === 69)).toBe(true);
-    expect(notes.some((d) => (d[0] & 0xf0) === 0x80 && d[1] === 69)).toBe(true);
+    // Its note off waits until shortly before it is due; a stop sends it at once.
+    e.stop();
+    const after = port.send.mock.calls.map((c) => c[0] as number[]);
+    expect(after.some((d) => (d[0] & 0xf0) === 0x80 && d[1] === 69)).toBe(true);
   });
 
   it('muted: no notes go out, and the receiving instrument is told to stop', () => {

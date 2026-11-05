@@ -184,7 +184,8 @@ describe('releasing notes', () => {
       port.send.mockClear();
       s.releaseAll([1]);
       const first = port.send.mock.calls.map((c) => c[0] as number[]);
-      expect(first.filter((d) => status(d) === NOTE_OFF && d[1] === 69)).toHaveLength(1);
+      // Its own note off (which was waiting) and the release's: at least one, now.
+      expect(first.filter((d) => status(d) === NOTE_OFF && d[1] === 69).length).toBeGreaterThanOrEqual(1);
       expect(first.some((d) => d[1] === 123)).toBe(true);
       expect(first.some((d) => d[1] === 120)).toBe(true);
       port.send.mockClear();
@@ -195,6 +196,37 @@ describe('releasing notes', () => {
       port.send.mockClear();
       s.releaseAll([1]);
       expect(port.send.mock.calls.some((c) => status(c[0] as number[]) === NOTE_OFF)).toBe(false);
+    });
+
+    it('the same note struck again while still held ends the old one just before, and no late note off cuts the new one', () => {
+      const s = new BoardMidiSender({ currentTime: 0 });
+      const opts = { enabled: true, sends: 'all' as const };
+      // A held G2, 2 s long, then G2 again 1 s in: the old one must end before the new strike.
+      s.send({ role: 'bass', origin: 'placed', audioTime: 0.1, durSec: 2, midi: 43, velocity: 0.6 }, false, opts);
+      s.send({ role: 'bass', origin: 'placed', audioTime: 1.1, durSec: 0.5, midi: 43, velocity: 0.6 }, false, opts);
+      const calls = port.send.mock.calls.map((c) => ({ d: c[0] as number[], at: c[1] as number }));
+      const ons = calls.filter((c) => status(c.d) === NOTE_ON && c.d[1] === 43);
+      const offs = calls.filter((c) => status(c.d) === NOTE_OFF && c.d[1] === 43);
+      expect(ons).toHaveLength(2);
+      // The old note's off is sent now, timed just before the second strike.
+      expect(offs).toHaveLength(1);
+      expect(offs[0].at).toBeLessThan(ons[1].at);
+      // And the release later sends the new note's own off, not a stray one in between.
+      port.send.mockClear();
+      s.releaseAll([2]);
+      const rel = port.send.mock.calls.map((c) => ({ d: c[0] as number[], at: c[1] as number })).filter((c) => status(c.d) === NOTE_OFF && c.d[1] === 43);
+      expect(rel.length).toBeGreaterThan(0);
+      expect(rel.every((c) => c.at >= ons[1].at || c.at <= performance.now() + 5)).toBe(true);
+    });
+
+    it('the same drum twice within a few ms is one hit; a sixteenth later is two', () => {
+      const s = new BoardMidiSender({ currentTime: 0 });
+      const opts = { enabled: true, sends: 'all' as const };
+      s.send({ role: 'drums', origin: 'band', audioTime: 0.2, durSec: 0.1, drum: 'hat', velocity: 0.3 }, false, opts);
+      s.send({ role: 'drums', origin: 'fill', audioTime: 0.2001, durSec: 0.1, drum: 'hat', velocity: 0.2 }, false, opts);
+      s.send({ role: 'drums', origin: 'band', audioTime: 0.37, durSec: 0.1, drum: 'hat', velocity: 0.3 }, false, opts);
+      const hats = port.send.mock.calls.map((c) => c[0] as number[]).filter((d) => status(d) === NOTE_ON && d[1] === 42);
+      expect(hats).toHaveLength(2);
     });
 
     it('"Send early by" moves each message earlier, never before now', () => {

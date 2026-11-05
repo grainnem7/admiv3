@@ -21,7 +21,7 @@
 import type { KitDrum } from '../../audio/instruments/RoundRobinDrumKit';
 import type { SoundWorldId } from '../../audio/worlds/soundWorlds';
 import { degreeMidi } from '../boardSequencerScale';
-import { chordOnDegree, degreeOfNote, voiceNear, type Harmony } from '../harmony/harmony';
+import { chordOnDegree, degreeOfNote, leftHand, type Harmony } from '../harmony/harmony';
 import { currentChord } from '../harmony/currentChord';
 
 export type PhraseRole = 'melody' | 'bass' | 'drums' | 'chord';
@@ -420,11 +420,13 @@ export function phraseEventsAtStep(input: PhraseInput): PhraseEvent[] {
           ? [...input.songChord].map((t) => intoOctave(t, 55)).sort((x, y) => x - y)
           // The one current chord (the counter's own where it names it), so a loop's chords
           // under the player's, and the comp before the first counter, never clash.
-          : harmony ? [...harmony.tones]
-          : voiceNear(chordOnDegree(
+          // A left hand under the melody, open (sound design pass): voiced at the middle of
+          // the keyboard the chords went straight through the melody's range.
+          : harmony ? leftHand(harmony.tones)
+          : leftHand(chordOnDegree(
             degreeOfNote(degreeMidi(degree, input.rootMidi, [...input.semitones]), input.rootMidi, input.semitones),
             input.rootMidi, input.semitones, input.style,
-          ), 62);
+          ).pcs);
         for (const hit of inBeat(COMP[input.style][alt], k)) {
           for (const midi of voiced) out.push({ ...base, offset: hit.t % 1, dur: hit.d, accent: hit.accent * under, midi });
         }

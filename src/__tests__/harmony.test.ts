@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { ChordSymbols } from '@magenta/music/esm/core/chords';
-import { openVoicing, bassNote, chordOnDegree, degreeOfNote, parentScale, voiceLead, voiceNear } from '../songs/harmony/harmony';
+import { leftHand, LEFT_HAND_TOP, openVoicing, bassNote, chordOnDegree, degreeOfNote, parentScale, voiceLead, voiceNear } from '../songs/harmony/harmony';
 
 const MAJ_PENT = [0, 2, 4, 7, 9];
 const MIN_PENT = [0, 3, 5, 7, 10];
@@ -80,6 +80,20 @@ describe('harmony — real chords from the board\'s scale', () => {
         const v = voiceNear(ch, 62);
         for (let i = 1; i < v.length; i++) expect(v[i] - v[i - 1]).toBeGreaterThan(2);
         expect(new Set(v.map((n) => n % 12))).toEqual(new Set(ch.pcs));
+      }
+    }
+  });
+
+  it('a left hand: under the melody (nothing above A4), open, the chord pitch classes kept where they fit (sound design pass)', () => {
+    for (const world of ['warm', 'lofi', 'ambient', 'electronic'] as const) {
+      for (let d = 0; d < 7; d++) {
+        const ch = chordOnDegree(d, C, MAJ_PENT, world);
+        const v = leftHand(ch.pcs);
+        expect(v.length).toBeGreaterThanOrEqual(3);
+        expect(Math.max(...v)).toBeLessThanOrEqual(LEFT_HAND_TOP);
+        for (let i = 1; i < v.length; i++) expect(v[i] - v[i - 1]).toBeGreaterThan(2);
+        // The triad is always there.
+        for (const pc of ch.pcs.slice(0, 3)) expect(v.map((n) => n % 12)).toContain(pc);
       }
     }
   });

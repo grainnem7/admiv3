@@ -132,6 +132,19 @@ const CC_ALL_NOTES_OFF = 123;
 const DRUM_OFF_MS = 60;
 /** The shortest a note off waits, so a very short note still registers. */
 const MIN_NOTE_MS = 30;
+/** A pitched extra note's least MIDI velocity, as a fraction of 127. */
+export const FILL_MIDI_FLOOR = 0.38;
+/**
+ * Note offs are sent this far ahead of when they are due; until then they wait (see
+ * BoardMidiSender). Shorter than the engine's look ahead (notes are handed over at least
+ * about 75 ms before they sound), so by the time an off goes out, every note that could
+ * restrike its pitch before it has already been seen.
+ */
+export const OFF_SEND_AHEAD_MS = 50;
+/** How often the waiting note offs are looked at between notes. */
+export const OFF_FLUSH_EVERY_MS = 20;
+/** Two hits of the same drum closer than this are one hit. */
+export const DRUM_FLAM_MS = 15;
 /** The test note: a C an octave above middle C on the melody channel. */
 const TEST_NOTE = 72;
 const TEST_NOTE_MS = 250;
@@ -322,7 +335,12 @@ export function midiEventsFor(
   const channel = channelFor(note, opts);
   if (channel === null) return [];
   const ch = (channel - 1) & 0x0f;
-  const vel = Math.max(1, Math.min(127, Math.round((note.velocity ?? 0.7) * (opts.velocityScale ?? 1) * 127)));
+  // A pitched extra note is soft in ADMI's own mix by its gain, but a sampled instrument
+  // hears velocity, and 0.15 of 127 is a note nobody hears (sound design pass): extra notes
+  // go out between about 48 and 127, their own level then set by the Extra notes fader.
+  const raw = note.velocity ?? 0.7;
+  const shaped = note.origin === 'fill' && note.drum === undefined ? FILL_MIDI_FLOOR + (1 - FILL_MIDI_FLOOR) * raw : raw;
+  const vel = Math.max(1, Math.min(127, Math.round(shaped * (opts.velocityScale ?? 1) * 127)));
   const onMs = toMs(note.audioTime);
   const out: MidiEvent[] = [];
   if (note.role === 'drums') {
@@ -424,8 +442,40 @@ export function testSequenceEvents(atMs: number, channels: readonly number[] = T
 /** Sends the board's notes to the chosen MIDI output, while it is connected. */
 export class BoardMidiSender {
   private readonly held = new Map<string, HeldNote>();
+  /**
+   * Note offs that are not yet due, by channel and pitch. A note off queued at once could
+   * not be taken back: when the same note was struck again before it, the old note off
+   * arrived later and cut the new note short (the bass and the held chords' common tones,
+   * sound design pass). So an off waits here until shortly before it is due, and a note
+   * struck again ends the old one a moment before its own start instead.
+   */
+  private readonly pendingOffs = new Map<string, { ev: MidiEvent; leadMs?: number }>();
+  /** The note ons recently sent for each channel and pitch (a few), so a note sent later but timed earlier never runs into one. */
+  private readonly recentOns = new Map<string, number[]>();
+  private offTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(private readonly ctx: AudibleClockSource) {}
+
+  /** Send the waiting note offs due within the next moment (with their own times). */
+  private flushOffs(nowMs: number): void {
+    for (const [key, p] of this.pendingOffs) {
+      if (p.ev.atMs - (p.leadMs ?? 0) <= nowMs + OFF_SEND_AHEAD_MS) {
+        this.emit([p.ev], nowMs, p.leadMs);
+        this.pendingOffs.delete(key);
+      }
+    }
+    if (this.pendingOffs.size === 0 && this.offTimer !== null) { clearInterval(this.offTimer); this.offTimer = null; }
+  }
+
+  /** On a release: every waiting note off goes out now, at its own time, so no note queued ahead is left without one. */
+  private sendPendingOffs(channels?: readonly number[]): void {
+    const now = performance.now();
+    for (const [key, p] of this.pendingOffs) {
+      if (channels && !channels.includes((p.ev.data[0] & 0x0f) + 1)) continue;
+      this.emit([p.ev], now, p.leadMs);
+      this.pendingOffs.delete(key);
+    }
+  }
 
   private emit(events: readonly MidiEvent[], nowMs: number, leadMs?: number): void {
     const out = MIDIManager.getConnectedSelectedOutput();
@@ -449,7 +499,41 @@ export class BoardMidiSender {
     const events = midiEventsFor(note, opts, (t) => this.toMs(t, now));
     if (events.length === 0) return;
     trackHeld(this.held, events, now);
-    this.emit(events, now, opts.leadMs);
+    const keyOf = (ev: MidiEvent): string => `${(ev.data[0] & 0x0f) + 1}:${ev.data[1]}`;
+    const isOff = (ev: MidiEvent): boolean => (ev.data[0] & 0xf0) === NOTE_OFF;
+    const isOn = (ev: MidiEvent): boolean => (ev.data[0] & 0xf0) === NOTE_ON && (ev.data[2] ?? 0) > 0;
+    // The same drum hit twice within a few ms (the groove's hat and an extra ghost hat on
+    // the same sixteenth) is one hit, a flam otherwise (sound design pass).
+    if (note.drum !== undefined && events.some((ev) => isOn(ev) && (this.recentOns.get(keyOf(ev)) ?? []).some((t) => Math.abs(t - ev.atMs) < DRUM_FLAM_MS))) return;
+    for (const ev of events) {
+      if (!isOn(ev)) continue;
+      const waiting = this.pendingOffs.get(keyOf(ev));
+      if (!waiting) continue;
+      // The same note again: the old one ends a moment before the new strike, or at its own
+      // time if that comes first, and never later.
+      this.emit([{ data: waiting.ev.data, atMs: Math.min(waiting.ev.atMs, ev.atMs - 1) }], now, waiting.leadMs);
+      this.pendingOffs.delete(keyOf(ev));
+    }
+    this.emit(events.filter((ev) => !isOff(ev)), now, opts.leadMs);
+    const onAt = new Map<string, number>();
+    for (const ev of events) if (isOn(ev)) onAt.set(keyOf(ev), ev.atMs);
+    for (const ev of events) {
+      if (!isOff(ev)) continue;
+      const key = keyOf(ev);
+      // A strike of the same pitch already sent, timed after this note starts and before it
+      // ends (a note handed over later but timed earlier): this one ends just before it.
+      const start = onAt.get(key);
+      const later = start === undefined ? undefined
+        : (this.recentOns.get(key) ?? []).filter((t) => t > start && t < ev.atMs).sort((a, b) => a - b)[0];
+      const off = later !== undefined ? { ...ev, atMs: later - 1 } : ev;
+      this.pendingOffs.set(key, { ev: off, leadMs: opts.leadMs });
+    }
+    for (const [key, at] of onAt) this.recentOns.set(key, [...(this.recentOns.get(key) ?? []), at].slice(-8));
+    if (this.recentOns.size > 256) for (const [key, list] of this.recentOns) if (Math.max(...list) < now - 2000) this.recentOns.delete(key);
+    this.flushOffs(now);
+    if (this.pendingOffs.size > 0 && this.offTimer === null) {
+      this.offTimer = setInterval(() => this.flushOffs(performance.now()), OFF_FLUSH_EVERY_MS);
+    }
   }
 
   /** A controller value on each channel, at an audio time (default: now). */
@@ -495,6 +579,7 @@ export class BoardMidiSender {
 
   /** Only these channels' notes: a loop that has stopped, without touching the rest. */
   releaseChannels(channels: readonly number[]): void {
+    this.sendPendingOffs(channels);
     const held: HeldNote[] = [];
     for (const [key, h] of this.held) {
       if (!channels.includes(h.channel)) continue;
@@ -521,6 +606,7 @@ export class BoardMidiSender {
   }
 
   private releaseWith(make: (held: HeldNote[], atMs: number) => MidiEvent[]): void {
+    this.sendPendingOffs();
     const held = [...this.held.values()];
     this.held.clear();
     this.emit(make(held, performance.now()), performance.now());

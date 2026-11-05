@@ -57,7 +57,7 @@ import {
 import type { NamedVoice } from '../audio/evolve/evolve';
 import { GainTrack } from './gainTrack';
 import type { EndingStyle } from './performance/clock';
-import { bassNote, chordOnDegree, degreeOfNote, voiceNear } from './harmony/harmony';
+import { bassNote, chordOnDegree, degreeOfNote, leftHand, voiceNear } from './harmony/harmony';
 import {
   LATE_TOLERANCE_SEC, nextValveStep, TimeKeeper, type KeepingTimeLimits, type KeepingTimeReport, type ValveStep,
 } from './keepingTime';
@@ -2606,14 +2606,17 @@ export class BoardSequencerEngine {
     const semis = this.cfg.scaleSemitones;
     const note = degreeMidi(degree, root, semis);
     const now = this.chordNow.harmony;
-    // A loop's chord is plain (root, third, fifth): the colour tones, the ninths and sevenths
-    // that reach up into the melody's octave, belong to the player's own chords (density, S2).
+    // A loop's chord is plain (root, third, fifth): the colour tones, the ninths and sevenths,
+    // belong to the player's own chords (density, S2). Voiced as a left hand under the melody
+    // (sound design pass): the row picks the chord, not its register.
     const tones = plain ? now?.tones.slice(0, 3) : now?.tones;
-    if (now && tones) return voiceNear({ pcs: [...new Set(tones.map((t) => ((t % 12) + 12) % 12))] }, note);
+    if (now && tones) return leftHand(tones);
     // A real chord of the key on the row's note.
     const style = worldOf(this.cfg.soundWorld ?? 'none')?.id ?? 'warm';
-    return voiceNear(chordOnDegree(degreeOfNote(note, root, semis), root, semis, style), note);
+    const ch = chordOnDegree(degreeOfNote(note, root, semis), root, semis, style);
+    return leftHand(plain ? ch.pcs.slice(0, 3) : ch.pcs);
   }
+
 
   /** A role's configured polyrhythm loop-length setting (0 = full grid width). */
   private rawLoop(role: 'melodic' | 'drum' | 'bass'): number {

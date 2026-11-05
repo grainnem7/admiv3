@@ -148,6 +148,42 @@ export function openVoicing(sorted: readonly number[]): number[] {
   return kept;
 }
 
+/** Where a chord colour is voiced: a pianist's left hand, under the melody (sound design pass). */
+export const LEFT_HAND_CENTRE = 57;
+/** The highest note of a left-hand voicing: the melody's register starts above it. */
+export const LEFT_HAND_TOP = 69;
+
+/**
+ * A chord voiced as a left hand: near A3, open (no two tones a tone or less apart), and
+ * nothing above A4, so the chords sit under the melody instead of through it. A tone above
+ * folds down an octave; where two tones then rub, a colour tone (a seventh, a ninth) gives
+ * way, never the root, third or fifth (the first three pitch classes given). Pure.
+ */
+export function leftHand(pcs: readonly number[]): number[] {
+  const all = [...new Set(pcs.map((p) => ((p % 12) + 12) % 12))];
+  const triad = new Set(all.slice(0, 3));
+  let notes = openVoicing(voiceNear({ pcs: all }, LEFT_HAND_CENTRE)).map((n) => (n > LEFT_HAND_TOP ? n - 12 : n));
+  notes = [...new Set(notes)].sort((a, b) => a - b);
+  for (let i = 1; i < notes.length;) {
+    if (notes[i] - notes[i - 1] > 2) { i++; continue; }
+    const lower = triad.has(notes[i - 1] % 12);
+    const upper = triad.has(notes[i] % 12);
+    // A colour tone gives way. Two of the chord's own tones (a sus2's root and second) keep
+    // both: the higher goes an octave down if it has room above C3, else up if it stays
+    // under the top, else it goes (Csus2 becomes D3 G3 C4, a quartal left hand).
+    if (!upper) { notes.splice(i, 1); continue; }
+    if (!lower) { notes.splice(i - 1, 1); continue; }
+    const n = notes[i];
+    const free = (m: number): boolean => notes.every((o) => o === n || Math.abs(o - m) > 2);
+    notes.splice(i, 1);
+    if (n - 12 >= 48 && free(n - 12)) notes.push(n - 12);
+    else if (n + 12 <= LEFT_HAND_TOP && free(n + 12)) notes.push(n + 12);
+    notes.sort((a, b) => a - b);
+    i = 1;
+  }
+  return notes;
+}
+
 /**
  * The voicing of `chord` that moves least from `previous` (each note of the previous
  * voicing to its nearest note of the new chord), within a register.

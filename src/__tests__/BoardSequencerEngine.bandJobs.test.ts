@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { LEFT_HAND_TOP } from '../songs/harmony/harmony';
 import { fakeVoiceEntry } from './helpers/fakeVoiceEntry';
 
 vi.mock('tone', () => ({
@@ -113,16 +114,17 @@ describe('band jobs at Full, with Tim on bass, chords and drums', () => {
     expect(notes.some((n) => n.colour === 'b')).toBe(true);
   });
 
-  it('pads sit away from Tim’s chords', () => {
+  it('pads layer under Tim’s chords in unison, in the left hand, never above the melody', () => {
     const { e, p } = engine();
     e.setActiveCells(TIM_THREE);
     const notes = [...play(e, p, 0, 48).values()].flatMap((h) => h.notes);
     const tim = notes.filter((n) => n.colour === 'c').flatMap((n) => n.midis ?? []);
-    const lo = Math.min(...tim);
-    const hi = Math.max(...tim);
     const pads = band(notes, 'pad').map((n) => n.midi!);
     expect(pads.length).toBeGreaterThan(0);
-    for (const m of pads) expect(m < lo || m > hi, `pad ${m} inside Tim's chords ${lo}–${hi}`).toBe(true);
+    // The same register as his chords, a layer under them, not a second chord up at E6.
+    expect(tim.length).toBeGreaterThan(0);
+    for (const m of pads) expect(m).toBeLessThanOrEqual(LEFT_HAND_TOP + 12);
+    for (const m of pads) expect(m).toBeGreaterThanOrEqual(48);
   });
 
   it('saved before jobs ("As before"): the band hands Tim every part he takes, as it did', () => {

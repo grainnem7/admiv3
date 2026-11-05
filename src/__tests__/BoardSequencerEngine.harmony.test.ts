@@ -105,7 +105,9 @@ describe('the band plays the one current chord', () => {
     e.setActiveLoops([[{ row: rowOf(3), col: 2, colour: 'c' }]]); // a loop's F in the same column
     const heard = play(e, p, 0, 4);
     const stabs = (heard.get(2) ?? []).filter((n) => n.colour === 'c');
-    expect(stabs).toHaveLength(2);
+    // Both voiced the same left hand, the loop's would be the player's note for note, so it
+    // is played once (density, S2); what sounds is the player's chord, not the loop's F.
+    expect(stabs).toHaveLength(1);
     for (const s of stabs) expect(pcs(s.midis ?? [])).toEqual(Dm);
   });
 });

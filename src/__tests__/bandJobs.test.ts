@@ -74,12 +74,10 @@ describe('band jobs: the band keeps its jobs whatever Tim plays', () => {
     expect(bandParts('gentle', new Set(['melody']), 1, AS_BEFORE_JOBS, false)).toEqual(['pad']);
   });
 
-  it('pads sound under Tim’s chords, thinned to the root and the fifth and voiced away from them', () => {
-    const pads = bandEventsAtStep(input({ chordRegister: { lo: 60, hi: 72 } })).filter((e) => e.part === 'pad');
-    // A bed under his chord, not a second copy of it (density, S2).
-    expect(pads.length).toBe(2);
-    expect(pads.map((e) => pc(e.midi!)).sort((a, b) => a - b)).toEqual([0, 7]);
-    for (const e of pads) expect(e.midi! < 60 || e.midi! > 72).toBe(true);
+  it('pads sound under Tim’s chords in unison, the plain triad in the left hand (sound design pass)', () => {
+    const pads = bandEventsAtStep(input({ chordRegister: { lo: 52, hi: 69 } })).filter((e) => e.part === 'pad');
+    expect(pads.map((e) => pc(e.midi!)).sort((a, b) => a - b)).toEqual([0, 4, 7]);
+    for (const e of pads) expect(e.midi!).toBeLessThanOrEqual(69);
   });
 
   it('pad register: below chord parts that sit high, above ones that sit low, the middle with none', () => {

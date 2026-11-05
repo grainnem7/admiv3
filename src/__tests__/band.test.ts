@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { leftHand } from '../songs/harmony/harmony';
 import {
   BAND_GAIN, bandEventsAtStep, bandParts, defaultHarmonyAt, type BandInput,
 } from '../songs/band/band';
@@ -41,12 +42,12 @@ describe('what the band plays', () => {
     expect(bandEventsAtStep(input({ chordChange: false })).filter((e) => e.part === 'pad')).toEqual([]);
   });
 
-  it('while a chord colour sounds, the pad thins to the root and the fifth under it (density, S2)', () => {
+  it('while a chord colour sounds, the pad layers in unison under it, as a left hand (sound design pass)', () => {
     const jobs = { asBefore: false, pads: true, bass: true, drums: true, counter: false };
     const alone = bandEventsAtStep(input({ jobs, chordRegister: null })).filter((e) => e.part === 'pad');
     expect(alone.map((e) => e.midi! % 12).sort()).toEqual([0, 4, 7]);
-    const under = bandEventsAtStep(input({ jobs, chordRegister: { lo: 60, hi: 72 } })).filter((e) => e.part === 'pad');
-    expect(under.map((e) => e.midi! % 12).sort()).toEqual([0, 7]);
+    const under = bandEventsAtStep(input({ jobs, chordRegister: { lo: 52, hi: 69 } })).filter((e) => e.part === 'pad');
+    expect(under.map((e) => e.midi!)).toEqual(leftHand([60, 64, 67]));
   });
 
   it('the bass lands on the root under each chord', () => {
