@@ -3435,9 +3435,14 @@ export class BoardSequencerEngine {
         const evo = this.evoFor(ch.id);
         const midis = this.chordStack(cell, chord, 'row', source === 'loop').map((n) => n + oct + 12 * evo.octave);
         if (!this.admit(source, midis)) return;
-        if (this.internalSound) for (const n of midis) voice.play(n, vel, durSec * evo.length, stepTime);
+        // A chord counter holds its chord towards the colour's next counter, as the band's
+        // pad holds its chord, instead of stabbing it for one note length: on a sustained
+        // instrument a stab every bar was the "stabby" the owner heard (S2). Note length
+        // stays the floor, so a chosen short length still plays short.
+        const chordDur = ringSec(loopLen(this.rawLoop('melodic'), this.cfg.cols)) * evo.length;
+        if (this.internalSound) for (const n of midis) voice.play(n, vel, chordDur, stepTime);
         this.recordFired({
-          row: cell.row, col: cell.col, colour: cell.colour, role, audioTime: stepTime, durSec: durSec * evo.length, source,
+          row: cell.row, col: cell.col, colour: cell.colour, role, audioTime: stepTime, durSec: chordDur, source,
           origin: 'placed', midis, velocity: vel,
         });
       } else {
