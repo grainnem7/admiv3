@@ -134,7 +134,7 @@ const HELP: HelpEntry[] = [
   },
   {
     title: 'The Sound tab',
-    body: 'Overall feel (the world, Energy, Space and Groove) and Your colours are always open. '
+    body: 'Overall feel (the world, Energy, Space and Groove) and Your colours are always open. Liveliness, at the top of the Sound tab, sets Loops vary, Extra notes, Sounds change and the Band in one press: As saved (only your counters and loops, as kept), Alive, or Wild. '
       + 'Each helper below them (Band, Keep my notes on top, Chords, Extra notes, Sounds change, '
       + 'Loops vary) is one line that says how it is set: press it to open it. Groove (Straight, '
       + 'Swung, Lazy) sets the swing and the loose timing in one step; the Timing tab sets them '

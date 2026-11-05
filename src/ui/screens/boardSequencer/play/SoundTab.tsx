@@ -15,6 +15,7 @@ import { ColourTable } from './ColourTable';
 import type { BoardSequencerStored } from '../../../../profiles/BoardSequencerConfig';
 import { ENERGY, nearest, SPACE_ALL, type Step } from '../../../../audio/soundSteps';
 import { StepRow } from './StepRow';
+import { LIVELINESS_LEVELS, livelinessOf, livelinessPatch, type Liveliness } from '../../../../songs/liveliness';
 import { ChordChoice, chordWords } from './ChordChoice';
 import { BandJobsChoice } from './BandJobsChoice';
 import { LabeledSlider } from '../ui/LabeledSlider';
@@ -164,6 +165,22 @@ export function SoundTab(p: SoundTabProps): JSX.Element {
       {/* ---- the whole instrument ---- */}
       <section aria-labelledby="sound-feel" style={SECTION}>
         <h2 id="sound-feel" style={HEADING}>Overall feel</h2>
+        {/* One press for how alive it is: Loops vary, Extra notes, Sounds change and the Band together (S2). */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <span style={CAPTION}>Liveliness</span>
+          <SegmentedControl<Liveliness | 'custom'>
+            label="Liveliness"
+            value={livelinessOf(config) ?? 'custom'}
+            onChange={(l) => { if (l !== 'custom') update(livelinessPatch(l)); }}
+            options={LIVELINESS_LEVELS.map((l) => ({ value: l.id, label: l.label }))}
+          />
+          <Note>
+            {livelinessOf(config) === null
+              ? 'Your own mix of Loops vary, Extra notes, Sounds change and the Band, set below.'
+              : LIVELINESS_LEVELS.find((l) => l.id === livelinessOf(config))?.words}
+            {livelinessOf(config) !== null && ' Sets Loops vary, Extra notes, Sounds change and the Band below in one press.'}
+          </Note>
+        </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <span style={CAPTION}>World</span>
           <SegmentedControl<SoundWorldChoice>
