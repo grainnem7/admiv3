@@ -8,6 +8,7 @@ import { Chess } from 'chess.js';
 import { useAppStore } from '../../state/store';
 import { useChessStore, fenAfter } from '../../songs/chess/chessStore';
 import { ChessSoundEngine, chessEvents, parseChessNoteId } from '../../songs/chess/ChessSoundEngine';
+import { chessVoiceSpecs, voiceLabel, PIECE_TYPES } from '../../songs/chess/chessVoices';
 
 const MOVE_MS = 1000;
 const LIGHT_MS = 450;
@@ -27,7 +28,7 @@ function ChessMusicScreen() {
 
   // The engine lives as long as the screen.
   useEffect(() => {
-    const engine = new ChessSoundEngine();
+    const engine = new ChessSoundEngine(chessVoiceSpecs());
     engineRef.current = engine;
     return () => { engine.dispose(); engineRef.current = null; useChessStore.getState().setPlaying(false); };
   }, []);
@@ -68,7 +69,7 @@ function ChessMusicScreen() {
         <button className="btn btn--ghost" style={bigButton} onClick={() => setCurrentScreen('welcome')}>← Back</button>
         <h1 style={{ margin: 0, fontSize: 28 }}>Chess music</h1>
       </div>
-      <p style={{ fontSize: 18 }}>A game of chess played as music. Each move is a note; taking a piece adds a drum.</p>
+      <p style={{ fontSize: 18 }}>A game of chess played as music. Each piece has its own sound; the square it lands on is the note. Taking a piece adds a drum, check adds a cymbal.</p>
 
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', margin: '16px 0' }}>
         {playing
@@ -99,7 +100,13 @@ function ChessMusicScreen() {
           <p style={{ fontSize: 18, margin: '0 0 8px' }} aria-live="polite">
             {done ? 'The game is over.' : last ? `Move ${played}: ${last.san}` : 'Press Play to hear the game.'}
           </p>
-          <ol style={{ fontSize: 16, columns: 2, margin: 0, paddingLeft: 24 }}>
+          <details style={{ fontSize: 16, margin: '0 0 12px' }}>
+            <summary style={{ minHeight: 44, display: 'flex', alignItems: 'center', cursor: 'pointer' }}>Which sound each piece plays</summary>
+            <ul style={{ margin: 0, paddingLeft: 20 }}>
+              {(['w', 'b'] as const).flatMap((side) => PIECE_TYPES.map((p) => <li key={side + p}>{voiceLabel(side + p)}</li>))}
+            </ul>
+          </details>
+          <ol aria-label="Moves" style={{ fontSize: 16, columns: 2, margin: 0, paddingLeft: 24 }}>
             {moves.slice(0, played).map((m, i) => <li key={i}>{m.san}</li>)}
           </ol>
         </div>

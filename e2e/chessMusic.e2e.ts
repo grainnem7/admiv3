@@ -12,7 +12,7 @@ test('Chess music plays the built in game: a move is heard, Pause stops, Restart
   await expect(page.getByText(/Move 1: e4/)).toBeVisible();
   const levels = await outputLevels(page, 12, 250);
   expect(Math.max(...levels)).toBeGreaterThan(Math.max(0.005, quiet * 4));
-  await expect.poll(() => page.getByRole('listitem').count()).toBeGreaterThanOrEqual(3); // a move a second
+  await expect.poll(() => page.getByRole('list', { name: 'Moves' }).getByRole('listitem').count()).toBeGreaterThanOrEqual(3); // a move a second
   await page.getByRole('button', { name: 'Pause' }).click();
   await page.getByRole('button', { name: 'Restart' }).click();
   await expect(page.getByText('Press Play to hear the game.')).toBeVisible();

@@ -34,7 +34,7 @@ const hzToMidi = (f: number): number => Math.round(69 + 12 * Math.log2(f / 440))
 export function sendChessSounds(sounds: readonly ChessSound[], bus: MusicEventEmitter = chessEvents): void {
   for (const s of sounds) {
     const fire = (): void => {
-      if (s.drum) bus.emit({ type: 'trigger', triggerId: `chess|drum:${s.drum}|${s.square}`, timestamp: Date.now() });
+      if (s.drum) bus.emit({ type: 'trigger', triggerId: `chess|drum:${s.drum}|${s.square}|${s.velocity}`, timestamp: Date.now() });
       else bus.emit({ type: 'noteOn', noteId: chessNoteId(s.voice, s.square), frequency: midiToHz(s.midi), velocity: s.velocity, timestamp: Date.now() });
     };
     if (s.delaySec > 0) setTimeout(fire, s.delaySec * 1000);
@@ -66,6 +66,8 @@ export class ChessSoundEngine {
       this.kit = new RoundRobinDrumKit(Tone.getContext().rawContext as AudioContext, 'studio-kit');
       if (this.dest) this.kit.connect(this.dest);
     }
+    // Every voice starts loading its samples now, so the first moves are heard.
+    for (const name of Object.keys(this.specs)) this.voiceFor(name);
     if (!this.unsubscribe) this.unsubscribe = this.bus.onAny((e) => this.onEvent(e));
   }
 
@@ -93,8 +95,8 @@ export class ChessSoundEngine {
       if (!id) return;
       this.voiceFor(id.voice).play(hzToMidi(e.frequency), e.velocity, NOTE_SEC, t);
     } else if (e.type === 'trigger' && e.triggerId.startsWith('chess|drum:')) {
-      const drum = e.triggerId.split('|')[1].slice('drum:'.length) as Drum;
-      this.kit?.play(drum, 0.85, t);
+      const [, kind, , vel] = e.triggerId.split('|');
+      this.kit?.play(kind.slice('drum:'.length) as Drum, Number(vel) || 0.85, t);
     }
   }
 
