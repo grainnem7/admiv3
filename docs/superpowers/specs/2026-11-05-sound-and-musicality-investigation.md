@@ -230,5 +230,12 @@ plus download and licence time. S4 in hand. S5 an afternoon with four listeners.
   (four notes) and the loops' chord (four notes) together: the next lever is the pad
   standing aside while a chord colour sounds, which the "as before" jobs do and the
   default jobs do not. The band starts Quiet for a new player already, and Extra notes
-  at 0. Still to do: that pad rule, ducking of pads under the melody in ADMI's own sound,
-  and the listening test (S5).
+  at 0.
+- **S2, third part built (5 Nov): the bed under the chords.** While a chord colour sounds
+  (the player's or a loop's), the band's pad thins to the root and the fifth, a bed under
+  their chord rather than a second copy of it; and a loop's chord is a plain triad (root,
+  third, fifth), its colour tones, the ninths and sevenths that reached up into the
+  melody's octave, left to the player's own chords. Measured with three loops under the
+  player at Steady: notes a second 14.0 to 12.7, the busiest moment 11 notes to 8, clashes
+  inside an octave 15% to 10% of moments. Still to do: ducking of pads under the melody in
+  ADMI's own sound, and the listening test (S5).
