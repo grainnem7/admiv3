@@ -241,6 +241,17 @@ a:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
       <li>Save the Set as <strong>ADMI template</strong>.</li>
     </ol>
 
+    <h3>The mix (set on 5 November 2026, saved in the template)</h3>
+    <p>So the Suite's instruments, which are loud by design, do not crowd each other. All of it lives in the Set and needs no mapping:</p>
+    <ul>
+      <li>Every MIDI track's fader at <strong>&minus;6 dB</strong>.</li>
+      <li>On the Main: a <strong>Glue Compressor</strong> (threshold &minus;20 dB, ratio 2, attack 10 ms, release Auto, makeup 2 dB) then a <strong>Limiter</strong> at &minus;1 dB.</li>
+      <li>On Chords and Band chords, after the Utility: a <strong>Compressor</strong> with Sidechain from the Melody track (Post FX), threshold &minus;30 dB, ratio 4, attack 5 ms, release 200 ms, so the bed dips under the tune. If it pumps, release 400 ms.</li>
+      <li>Return A's reverb: pre delay 20 ms, decay 2.4 s. Send A at &minus;12 dB on the pitched tracks, &minus;20 dB on Drums, and off on Bass, whose CC 26 mapping is removed so ADMI never brings it back.</li>
+      <li>On Melody, Bass and Chords, after the Rack: the Utility for the fades (CC 11), then a second Utility named <strong>Loud</strong> (CC 24, &minus;18 to 0 dB) and an Auto Filter named <strong>Bright</strong> (low pass, CC 25, 600 Hz to 20 kHz).</li>
+    </ul>
+    <p class="note">ADMI sets Loud, Bright and the sends from each colour's settings on Play, and Energy (CC 21) and Groove (CC 23) are left unmapped on purpose.</p>
+
     <h3>The Melody check (before building the rest)</h3>
     <p>One Melody rack with all 33 real is the heaviest one track can be. Check it on the laptop you will perform on:</p>
     <ol>
