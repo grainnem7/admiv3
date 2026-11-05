@@ -8,6 +8,11 @@ describe('density: how much may sound at once (S2)', () => {
     expect(loopNoteCap(0.5)).toBe(3);
     expect(loopNoteCap(0.7)).toBe(4);
     expect(loopNoteCap(1)).toBe(6);
+    // The World moves it: Ambient one fewer, Electronic one more, never below one.
+    expect(loopNoteCap(0.5, -1)).toBe(2);
+    expect(loopNoteCap(0.5, 1)).toBe(4);
+    expect(loopNoteCap(0, -1)).toBe(1);
+    expect(loopNoteCap(0, -3)).toBe(1);
   });
   it("the player's notes are always in, and never counted against the loops", () => {
     const t = newStepTally();

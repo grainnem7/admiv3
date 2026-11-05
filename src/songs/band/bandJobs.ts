@@ -125,6 +125,23 @@ const RISING_MAX_BEATS = 16;
  *    in the last bar.
  */
 export function leadInEvents(kind: LeadIn, left: number, cycle: number, harmony: Harmony | null): BandEvent[] {
+  // On the last beat before the scene lands, whatever the lead in, the bass steps up to the
+  // fifth below the root: an approach the ear hears as an arrival (cadences, S2).
+  const approach: BandEvent[] = kind !== 'none' && left === 1 && harmony
+    ? [{ part: 'leadIn', offset: 0.5, dur: 0.45, accent: 0.75, midi: bassApproach(harmony) }]
+    : [];
+  return [...approach, ...leadInKindEvents(kind, left, cycle, harmony)];
+}
+
+/** The fifth below the root, in the bass register: the note that leads into the root. */
+export function bassApproach(harmony: Harmony): number {
+  const root = ((harmony.root % 12) + 12) % 12;
+  let n = 36 + ((root + 7 - 36) % 12 + 12) % 12;
+  if (n >= 48) n -= 12;
+  return n;
+}
+
+function leadInKindEvents(kind: LeadIn, left: number, cycle: number, harmony: Harmony | null): BandEvent[] {
   if (kind === 'drumFill') {
     const hit = (offset: number, drum: 'snare' | 'tom' | 'crash' | 'kick', accent: number): BandEvent =>
       ({ part: 'leadIn', offset, dur: 0.25, accent, drum });

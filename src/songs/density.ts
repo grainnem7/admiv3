@@ -15,13 +15,14 @@
  * up, so the two lines sit apart instead of blurring into one busy line.
  */
 
-/** The most pitched loop notes a step may carry at this Energy (0 to 1). */
-export function loopNoteCap(energy: number): number {
+/**
+ * The most pitched loop notes a step may carry at this Energy (0 to 1), moved by the World's
+ * own density (Ambient one fewer, Electronic one more), never below one.
+ */
+export function loopNoteCap(energy: number, worldDensity = 0): number {
   const e = Math.max(0, Math.min(1, energy));
-  if (e <= 0.3) return 2;
-  if (e <= 0.6) return 3;
-  if (e <= 0.85) return 4;
-  return 6;
+  const base = e <= 0.3 ? 2 : e <= 0.6 ? 3 : e <= 0.85 ? 4 : 6;
+  return Math.max(1, base + Math.round(worldDensity));
 }
 
 /** What has sounded on this step so far: the player's pitches and the loops' count. Make one per step. */

@@ -239,3 +239,13 @@ plus download and licence time. S4 in hand. S5 an afternoon with four listeners.
   player at Steady: notes a second 14.0 to 12.7, the busiest moment 11 notes to 8, clashes
   inside an octave 15% to 10% of moments. Still to do: ducking of pads under the melody in
   ADMI's own sound, and the listening test (S5).
+- **S2, fourth part built (5 Nov): the loops as a player delivers them.** `songs/breath.ts`:
+  over four passes a kept loop plays as kept, a little louder, the peak, then softer with
+  its melody's last note lifted (and, with a lot of variation, the one before the middle),
+  the amount being Loops vary, so 0 is exactly as saved; the phase is the engine's own pass
+  count, so a scene plays the same however it is reached. A loop answering the leading
+  melody (the turn taking that already exists) now sits an octave above it. Each World has
+  a density step: Ambient one loop note fewer per step, Electronic one more. On the last
+  beat of any lead in, the bass steps up to the fifth below the root, an approach the ear
+  hears as an arrival. New players keep Loops vary at 0 by the project's own rule (they
+  hear only their counters), so the breathing is heard once Loops vary is turned up.

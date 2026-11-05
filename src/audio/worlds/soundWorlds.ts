@@ -63,6 +63,11 @@ export interface SoundWorld {
    * see e2e/loudness.e2e.ts for the method and the numbers.
    */
   levelDb: number;
+  /**
+   * How much may sound at once in this World, as a step on the loops' density cap: Ambient
+   * is sparser by one, Electronic busier by one, the others as Energy says (S2).
+   */
+  density: number;
 }
 
 export const SOUND_WORLDS: Record<SoundWorldId, SoundWorld> = {
@@ -84,6 +89,7 @@ export const SOUND_WORLDS: Record<SoundWorldId, SoundWorld> = {
     duck: 0.2,
     phraseSwing: 0.08,
     levelDb: 0, // measured -19.4 LUFS: the reference
+    density: 0,
   },
   lofi: {
     id: 'lofi',
@@ -103,6 +109,7 @@ export const SOUND_WORLDS: Record<SoundWorldId, SoundWorld> = {
     duck: 0.35,
     phraseSwing: 0.3,
     levelDb: -9, // measured -10.5 LUFS
+    density: 0,
   },
   ambient: {
     id: 'ambient',
@@ -122,6 +129,7 @@ export const SOUND_WORLDS: Record<SoundWorldId, SoundWorld> = {
     duck: 0.15,
     phraseSwing: 0,
     levelDb: -4.5, // measured -14.7 LUFS
+    density: -1,
   },
   electronic: {
     id: 'electronic',
@@ -141,6 +149,7 @@ export const SOUND_WORLDS: Record<SoundWorldId, SoundWorld> = {
     duck: 0.5,
     phraseSwing: 0,
     levelDb: 5, // measured -24.6 LUFS
+    density: 1,
   },
 };
 

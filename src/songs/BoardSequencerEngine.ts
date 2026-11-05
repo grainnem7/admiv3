@@ -13,7 +13,8 @@
 
 import { playsTune } from './beyondLoop';
 import { humanFactor, shapedVelocity } from './dynamics';
-import { admitLoopNote, admitPlayerNote, loopLaneShift, loopNoteCap, newStepTally, type StepTally } from './density';
+import { admitLoopNote, admitPlayerNote, LANE_TOP, loopLaneShift, loopNoteCap, newStepTally, type StepTally } from './density';
+import { breathGain, breathPhase, breathRest } from './breath';
 import * as Tone from 'tone';
 import { BoardSequencerVoice } from './voices/BoardSequencerVoice';
 import { voicingForCells, degreeMidi, chordDegreeMidi, drumForRow, DEFAULT_DRUM_ROWS, loopLen, lapIndex, strictlyAfter, firesThisLap, firesThisLapPaged, sweepAt, type PingPongPages, type Sweep } from './boardSequencerScale';
@@ -259,7 +260,7 @@ function bedOf(launched: readonly LaunchedLoop[]): LaunchedLoop[] {
 
 /** A loop launched without a pad, and the fade it is in, if any. */
 /** A cell on its way to being played, with the layer it belongs to (absent = the player's board). */
-type LayeredCell = ActiveCell & { layer?: string };
+type LayeredCell = ActiveCell & { layer?: string; /** A loop answering the leading melody: an octave up (S2). */ answerUp?: boolean };
 
 interface LaunchedLoop {
   slot: number;
@@ -2771,7 +2772,7 @@ export class BoardSequencerEngine {
     // The cap makes room for the player: with the player's counters on the board the loops
     // keep to it; with the board empty the loops play whole, so a loop that is on is heard.
     const playerOn = tagged.some((t) => t.source !== 'loop');
-    this.stepLoopCap = playerOn ? loopNoteCap(this.energy) : Number.POSITIVE_INFINITY;
+    this.stepLoopCap = playerOn ? loopNoteCap(this.energy, worldOf(this.cfg.soundWorld ?? 'none')?.density ?? 0) : Number.POSITIVE_INFINITY;
     this.stepLaneUp = tagged.some((t) => t.source !== 'loop' && this.roleFor(t.cell.colour) === 'melody');
     const loopPhrases = tuneTagged.length > 0 ? this.firePhrases(beat, cellTime, secPerBeat, chord, tuneTagged) : null;
     let noteTagged = tuneTagged.length === 0 ? tagged : tagged.filter((t) => !this.playsTune(t.cell.colour));
@@ -2787,8 +2788,9 @@ export class BoardSequencerEngine {
         const leaderHere = noteTagged.some((t) => isMelody(t.cell) && layerOf(t.cell) === leader && t.cell.col === step);
         noteTagged = noteTagged
           .filter((t) => !(leaderHere && isMelody(t.cell) && layerOf(t.cell) !== leader && t.cell.col === step))
+          // The answer is softer, and a loop's answer sits an octave above the leader (S2).
           .map((t) => (isMelody(t.cell) && layerOf(t.cell) !== leader
-            ? { ...t, cell: { ...t.cell, velocity: (t.cell.velocity ?? this.cfg.velocity) * ANSWER_LEVEL } }
+            ? { ...t, cell: { ...t.cell, velocity: (t.cell.velocity ?? this.cfg.velocity) * ANSWER_LEVEL, answerUp: t.source === 'loop' } }
             : t));
       }
     }
@@ -3277,7 +3279,11 @@ export class BoardSequencerEngine {
         // A loop's note dips while the player's own sound (keep him on top).
         const top = tag?.source === 'loop' ? this.topFactor(time) : 1;
         const loose = h > 0 ? this.looseChance(beat, ev.owner.row, ev.owner.col, `p|${ev.layer ?? ''}|${ev.colour}|${ev.offset}`) : 0;
-        const vel = Math.max(0, Math.min(1, base * ev.accent * top * (h > 0 ? 1 - loose * h * 0.3 : 1)));
+        // A loop's tune breathes over four passes too, and lifts its last note on pass four (S2).
+        const lapP = lapIndex(beat, Math.max(1, this.cfg.cols * Math.max(1, this.cfg.numPages)));
+        const breathP = tag?.source === 'loop' ? breathGain(breathPhase(lapP), this.loopVary) : 1;
+        if (tag?.source === 'loop' && breathRest(breathPhase(lapP), ((beat % this.cfg.cols) + this.cfg.cols) % this.cfg.cols, this.cfg.cols, this.loopVary, ev.role)) continue;
+        const vel = Math.max(0, Math.min(1, base * ev.accent * top * (h > 0 ? 1 - loose * h * 0.3 : 1) * breathP));
         let durSec = ev.dur * secPerBeat;
         let midi: number | undefined;
         if (ev.drum) {
@@ -3375,7 +3381,10 @@ export class BoardSequencerEngine {
         : cellTime;
       // A loop's note dips while the player's own sound (keep him on top).
       const top = source === 'loop' ? this.topFactor(stepTime) : 1;
-      const vel = (h > 0 ? base * (1 - this.looseChance(beat, cell.row, cell.col, `vel|${looseName}`) * h * 0.4) : base) * top;
+      // A loop breathes over four passes (S2): a little louder, the peak, softer, as kept.
+      const lap = lapIndex(beat, Math.max(1, this.cfg.cols * Math.max(1, this.cfg.numPages)));
+      const breath = source === 'loop' ? breathGain(breathPhase(lap), this.loopVary) : 1;
+      const vel = (h > 0 ? base * (1 - this.looseChance(beat, cell.row, cell.col, `vel|${looseName}`) * h * 0.4) : base) * top * breath;
       if (role === 'drums') {
         // The drum varies by row (kick→…→crash bottom→top), unless the channel
         // pins a specific kit piece.
@@ -3442,7 +3451,11 @@ export class BoardSequencerEngine {
           const dur = (ch.instrument === 'pad' ? secPerBeat * melodicLoop : ringSec(melodicLoop)) * evo.length;
           // Density (S2): a loop's melody takes the lane above the player's, and is not played
           // where it doubles the player's note or the step is full.
-          const laned = midi + oct + 12 * evo.octave + (source === 'loop' ? loopLaneShift('melody', this.stepLaneUp, midi + oct + 12 * evo.octave) : 0);
+          // The breath: on pass four a loop's melody lifts a note (S2).
+          if (source === 'loop' && breathRest(breathPhase(lap), cell.col, this.cfg.cols, this.loopVary, 'melody')) return;
+          const base12 = midi + oct + 12 * evo.octave;
+          const answer = (cell as LayeredCell).answerUp && base12 + 12 <= LANE_TOP ? 12 : 0;
+          const laned = base12 + answer + (source === 'loop' && answer === 0 ? loopLaneShift('melody', this.stepLaneUp, base12) : 0);
           if (!this.admit(source, [laned])) return;
           if (this.internalSound) voice.play(laned, vel, dur, stepTime);
           this.recordFired({

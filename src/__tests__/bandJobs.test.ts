@@ -151,8 +151,20 @@ describe('lead-in into a scene', () => {
     for (let left = 0; left <= 16; left++) expect(leadInEvents('none', left, 16, C)).toEqual([]);
   });
 
+  it('on the last beat of any lead in the bass steps up to the fifth, the approach into the root', () => {
+    for (const kind of ['drumFill', 'rising'] as const) {
+      const bass = leadInEvents(kind, 1, 8, C).filter((e) => e.midi !== undefined && e.midi < 48);
+      expect(bass).toHaveLength(1);
+      expect(pc(bass[0].midi!)).toBe(7); // G under C
+      expect(leadInEvents(kind, 2, 8, C).filter((e) => e.midi !== undefined && e.midi < 48)).toEqual([]);
+    }
+    expect(leadInEvents('none', 1, 8, C)).toEqual([]);
+    expect(leadInEvents('drumFill', 1, 8, null).filter((e) => e.midi !== undefined)).toEqual([]);
+  });
+
   it('Drum fill: the last bar before the scene, louder towards it, and a crash as it lands', () => {
-    const hits = (left: number) => leadInEvents('drumFill', left, 16, C);
+    // The drums of the fill; the bass approach on the last beat is its own test.
+    const hits = (left: number) => leadInEvents('drumFill', left, 16, C).filter((e) => e.drum !== undefined);
     expect(hits(5)).toEqual([]);
     expect(hits(4).length).toBeGreaterThan(0);
     expect(hits(1).length).toBeGreaterThanOrEqual(hits(4).length);
@@ -162,7 +174,7 @@ describe('lead-in into a scene', () => {
   });
 
   it('Rising: notes of the chord that climb and grow over the last pass', () => {
-    const notes = Array.from({ length: 8 }, (_, i) => leadInEvents('rising', 8 - i, 8, C)).flat();
+    const notes = Array.from({ length: 8 }, (_, i) => leadInEvents('rising', 8 - i, 8, C)).flat().filter((e) => e.midi! >= 48);
     expect(notes.length).toBeGreaterThanOrEqual(8);
     for (const n of notes) expect(C.tones.map(pc)).toContain(pc(n.midi!));
     for (let i = 1; i < notes.length; i++) {

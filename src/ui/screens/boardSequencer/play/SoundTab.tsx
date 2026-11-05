@@ -344,7 +344,7 @@ export function SoundTab(p: SoundTabProps): JSX.Element {
           <Note>
             {config.loopVary <= 0
               ? 'Saved loops play exactly as saved, every pass.'
-              : 'Saved loops don\'t repeat exactly: on some passes their notes move to neighbours or add a passing note, tunes play another version and drum loops get busier or sparser. Every 4th pass they are back as saved. Your own counters are not changed.'}
+              : 'Saved loops breathe over four passes (a little louder, the peak, softer, with a note lifted on the fourth) and don\'t repeat exactly: on some passes their notes move to neighbours or add a passing note, tunes play another version and drum loops get busier or sparser. Every 4th pass they are back as saved. Your own counters are not changed.'}
           </Note>
           <Note>
             Layered melodies take turns: one leads each pass and the others answer in its gaps, so loops talk to each other. Your counters always lead. For the AI to add its own notes around everything that is playing, turn up Extra notes.
