@@ -266,3 +266,44 @@ plus download and licence time. S4 in hand. S5 an afternoon with four listeners.
   that goes up from the colour's previous counter in the pass is a touch stronger, down a
   touch softer, more for a leap, read from the figure itself so a scene plays the same
   however it is reached. Ableton side: every chain's pitch to be checked by a Tuner.
+
+## Sound design pass (5 Nov, evening)
+
+**Method.** Not by ear and not by guess: the MIDI ADMI sends to Ableton was captured through
+a fake ADMIOutput port for three boards (four colours alone; a busy board with the band at
+Full; four colours with Liveliness on Alive) and audited per track: register, velocities,
+note lengths, notes struck again while still held, controller values.
+
+**Found and fixed (ADMI).**
+
+| | Before | After |
+|---|---|---|
+| Notes cut short by an older note off (15 s) | up to 9 per board | 0 on every board |
+| Chord track register | B3 to G5, through the melody | E3 to G4, under it |
+| Band pad on a busy board | B5 to A6, above the melody | E3 to D4, in unison with the chords |
+| Pitched extra notes, MIDI velocity | 16 to 19 (silent) | 58 |
+
+- The sender (`midi/boardMidi.ts`) holds each note off until 50 ms before it is due (less
+  than the engine's look ahead), ends an old note 1 ms before the same pitch is struck
+  again, never lets a note handed over later but timed earlier run into a strike already
+  sent, and treats two hits of the same drum within 15 ms as one. A release still sends
+  every waiting note off at its own time.
+- `harmony.ts` `leftHand`: chord counters and chord tunes voiced near A3, open, nothing
+  above A4, the triad always kept and a colour tone giving way; a sus2 becomes quartal.
+- `band.ts`: while a chord colour sounds, the pad plays the plain triad in the same left
+  hand voicing, a layer under the chords.
+- `boardMidi.ts`: pitched extra notes go out at 0.38 + 0.62 of their loudness, so about 48
+  and up; drums and ghost notes keep their own velocities.
+
+**Recommended in Ableton (the mix; a Claude Desktop prompt).** High pass filters to clear
+the low end each part does not own (Melody 150 Hz, Chords 120 Hz, Band chords 150 Hz,
+Extra notes 200 Hz, Bass 35 Hz), a gentle cut at 300 Hz on Chords, the pad behind
+(Band chords fader 3 dB under the rest, a low pass at 8 kHz), the reverb kept out of the
+extremes (its input filtered 300 Hz to 6 kHz), and the parts placed across the stereo
+field (Melody, Bass and Drums centre, Chords 15 left, Band chords 20 right, Extra notes
+30 right). And the Tuner check of every chain's pitch.
+
+**Next, not built.** A swell on long held notes through CC 1 mapped to each orchestral
+rack's Volume macro, so a sustained string or horn note grows and falls as a player's
+would. Magenta's variation model supplying a loop's development cycles in place of the
+rule based lift and turn. The listening test (S5).
