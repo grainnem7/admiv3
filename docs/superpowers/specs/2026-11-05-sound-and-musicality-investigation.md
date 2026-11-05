@@ -197,3 +197,19 @@ plus download and licence time. S4 in hand. S5 an afternoon with four listeners.
 - Lyria RealTime and live music models, summaries. https://www.emergentmind.com/topics/lyria-realtime
 - sfizz as a WebAudio library. https://github.com/sfztools/sfizz-webaudio
 - sfz web player (CC0). https://github.com/sfzlab/sfz-web-player
+
+## Status
+- **Measured (5 Nov).** The MIDI ADMI sends for four typical boards, captured through a fake
+  Ableton port, read as notes: 9 to 15 notes a second; only 4 to 7 distinct velocity values
+  in fifteen seconds, most notes at the same loudness; the chord track and the band's pad
+  each sent two notes a tone apart in one octave (the add9 and sus2 colours voiced close)
+  in a quarter of the moments. Since the sound is Ableton's, this stream is what matters.
+- **S2, first part built (5 Nov).** `songs/dynamics.ts`: a metric accent (the first step of
+  the pass strongest, the middle next, on-beats, off-beats) and a small repeatable variation
+  from pass to pass, on every counter's and loop's note, in ADMI's sound and in the MIDI
+  velocities; a phrase keeps its own accents and only varies. `harmony.ts` `openVoicing`:
+  no two chord tones a tone or less apart in one octave, on the chord colours and the
+  band's pad (also after the pad is folded into its range). Captured again: 18 to 29
+  distinct velocities per board, the chord track's own clashes gone; what remains is a
+  melody note a tone from a chord tone now and then, which is music. Not yet: the density
+  cap, register lanes, ducking under the melody.

@@ -12,6 +12,7 @@
  */
 
 import { playsTune } from './beyondLoop';
+import { humanFactor, shapedVelocity } from './dynamics';
 import * as Tone from 'tone';
 import { BoardSequencerVoice } from './voices/BoardSequencerVoice';
 import { voicingForCells, degreeMidi, chordDegreeMidi, drumForRow, DEFAULT_DRUM_ROWS, loopLen, lapIndex, strictlyAfter, firesThisLap, firesThisLapPaged, sweepAt, type PingPongPages, type Sweep } from './boardSequencerScale';
@@ -3166,7 +3167,9 @@ export class BoardSequencerEngine {
         const varies = ev.owner.conditional && this.cfg.variationEnabled !== false;
         if (!firesThisLapPaged(varies, beat, this.cfg.cols, this.cfg.numPages, this.cfg.pingPong ?? false)) continue;
         const tag = tagOf(ev);
-        const base = (tag?.cell.velocity ?? this.cfg.velocity) * this.energyGain();
+        // A phrase has its own accents; it only varies a little from pass to pass (S2).
+        const base = (tag?.cell.velocity ?? this.cfg.velocity) * this.energyGain()
+          * humanFactor(Math.floor(beat / Math.max(1, this.cfg.cols)), ev.owner.row, ev.owner.col, `${ev.layer ?? ''}|${ev.colour}`);
         const shifted = ev.offset === 0.5 ? ev.offset + swing / 6
           : (ev.offset === 0.25 || ev.offset === 0.75) ? ev.offset + swing / 12 : ev.offset;
         const time = Math.max(Tone.now(), cellTime + (shifted + (tag?.cell.timingBeats ?? 0)) * secPerBeat);
@@ -3244,7 +3247,12 @@ export class BoardSequencerEngine {
       if (h > 0 && this.looseChance(beat, cell.row, cell.col, `rest|${looseName}`) < h * 0.5) return;
       // Box detail: where the counter sits gives it its own loudness and timing. The
       // shift can never reach into the past — a late note is fine, a missed one is not.
-      const base = Math.min(1, (cell.velocity ?? this.cfg.velocity) * this.energyGain());
+      // The first step of the pass is the strongest, off-beats softer, and each pass varies a
+      // little, so a counter's note is not a machine's (S2). Never moved in time.
+      const base = shapedVelocity(
+        Math.min(1, (cell.velocity ?? this.cfg.velocity) * this.energyGain()), cell.col, this.cfg.cols,
+        Math.floor(beat / Math.max(1, this.cfg.cols)), cell.row, `${(cell as LayeredCell).layer ?? ''}|${cell.colour}`,
+      );
       const stepTime = cell.timingBeats
         ? Math.max(Tone.now(), cellTime + cell.timingBeats * secPerBeat)
         : cellTime;

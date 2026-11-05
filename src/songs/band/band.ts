@@ -18,7 +18,7 @@
  */
 
 import { grooveFor, harmonyFromChord, type DrumHit, type Harmony as PhraseHarmony } from '../phrases/phrases';
-import { bassNote, chordOnDegree, voiceLead } from '../harmony/harmony';
+import { bassNote, chordOnDegree, openVoicing, voiceLead } from '../harmony/harmony';
 import { WORLD_PROGRESSION, isStrongBeat } from '../harmony/currentChord';
 import { counterRange, notesIn, padRangeAway, PAD_RANGE, type BandJobs, type Register } from './bandJobs';
 import type { SoundWorldId } from '../../audio/worlds/soundWorlds';
@@ -172,7 +172,8 @@ export function bandEventsAtStep(input: BandInput): BandEvent[] {
     const pcs = [...new Set(h.tones.map((t) => ((t % 12) + 12) % 12))];
     const [lo, hi] = withJobs ? padRangeAway(input.chordRegister ?? null) : PAD_RANGE;
     const led = voiceLead({ pcs }, input.previousPad ?? null, lo, hi);
-    const voiced = withJobs ? intoRange(led, lo, hi) : led;
+    // Folded into its range the voicing can close up again (a ninth back beside its root), so it is opened once more (S2).
+    const voiced = withJobs ? openVoicing(intoRange(led, lo, hi)) : led;
     for (const midi of voiced) out.push({ part: 'pad', offset: 0, dur: span - 0.05, accent: full ? 0.7 : 0.55, midi, voicing: voiced });
   }
 
