@@ -13,6 +13,8 @@ test('Chess music plays the built in game: a move is heard, Pause stops, Restart
   const levels = await outputLevels(page, 12, 250);
   expect(Math.max(...levels)).toBeGreaterThan(Math.max(0.005, quiet * 4));
   await expect.poll(() => page.getByRole('list', { name: 'Moves' }).getByRole('listitem').count()).toBeGreaterThanOrEqual(3); // a move a second
+  // The tension comes from Stockfish, in a worker in the page.
+  await expect(page.getByTestId('tension')).toContainText('tension from Stockfish', { timeout: 20_000 });
   await page.getByRole('button', { name: 'Pause' }).click();
   await page.getByRole('button', { name: 'Restart' }).click();
   await expect(page.getByText('Press Play to hear the game.')).toBeVisible();

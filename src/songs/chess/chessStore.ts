@@ -7,6 +7,8 @@ import { Chess, type Move } from 'chess.js';
 import { soundsForMove } from './chessNotes';
 import { sendChessSounds } from './ChessSoundEngine';
 import { OPERA_GAME_PGN } from './games';
+import { endingSounds, shapeSounds } from './chessMusic';
+import { onPosition, resetTension, useChessTension } from './chessTension';
 
 export interface ChessReplayState {
   moves: Move[];
@@ -30,17 +32,19 @@ export const useChessStore = create<ChessReplayState>((set, get) => ({
   moves: movesOf(OPERA_GAME_PGN),
   played: 0,
   playing: false,
-  load: (pgn) => set({ moves: movesOf(pgn), played: 0, playing: false }),
+  load: (pgn) => { resetTension(); set({ moves: movesOf(pgn), played: 0, playing: false }); },
   step: () => {
     const { moves, played } = get();
     const move = moves[played];
     if (!move) { set({ playing: false }); return false; }
     set({ played: played + 1 });
-    sendChessSounds(soundsForMove(move));
-    if (played + 1 >= moves.length) set({ playing: false });
+    sendChessSounds(shapeSounds(soundsForMove(move), useChessTension.getState().energy));
+    void onPosition(move.after, played + 1);
+    // The last move (checkmate or not): the chord ending.
+    if (played + 1 >= moves.length) { set({ playing: false }); sendChessSounds(endingSounds(move.after)); }
     return true;
   },
-  restart: () => set({ played: 0, playing: false }),
+  restart: () => { resetTension(); set({ played: 0, playing: false }); },
   setPlaying: (on) => set({ playing: on }),
 }));
 

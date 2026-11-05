@@ -12,6 +12,8 @@ import { ChessSoundEngine } from '../../songs/chess/ChessSoundEngine';
 import { chessVoiceSpecs, voiceLabel, PIECE_TYPES, PIECE_NAMES } from '../../songs/chess/chessVoices';
 import type { PieceType } from '../../songs/chess/chessNotes';
 import { ChessBoardView } from './chess/ChessBoardView';
+import { useChessTension } from '../../songs/chess/chessTension';
+import { SOUND_WORLDS } from '../../audio/worlds/soundWorlds';
 import { LiveBoardPanel } from './chess/LiveBoardPanel';
 
 const MOVE_MS = 1000;
@@ -19,12 +21,16 @@ const bigButton: React.CSSProperties = { minHeight: 44, minWidth: 44, padding: '
 
 type Source = 'built-in' | 'board';
 
+const PHASE_WORDS = { opening: 'Opening', middlegame: 'Middlegame', endgame: 'Endgame' } as const;
+const energyWords = (e: number): string => (e < 0.4 ? 'calm' : e < 0.7 ? 'building' : 'lively');
+
 function ChessMusicScreen() {
   const setCurrentScreen = useAppStore((s) => s.setCurrentScreen);
   const replay = useChessStore();
   const live = useLiveChessStore();
   const engineRef = useRef<ChessSoundEngine | null>(null);
   const [source, setSource] = useState<Source>('built-in');
+  const tension = useChessTension();
 
   // The engine lives as long as the screen.
   useEffect(() => {
@@ -51,6 +57,8 @@ function ChessMusicScreen() {
 
   const choose = (s: Source): void => {
     replay.setPlaying(false);
+    replay.restart();
+    useLiveChessStore.getState().newGame();
     setSource(s);
   };
 
@@ -100,6 +108,10 @@ function ChessMusicScreen() {
           )}
           <p style={{ fontSize: 18, margin: '0 0 8px' }} aria-live="polite">
             {done ? 'The game is over.' : last ? `Move ${moves.length}: ${last.san}` : source === 'built-in' ? 'Press Play to hear the game.' : 'No moves yet.'}
+          </p>
+          <p style={{ fontSize: 16, margin: '0 0 8px' }} data-testid="tension">
+            {PHASE_WORDS[tension.phase]} · World: {SOUND_WORLDS[tension.world].name} · Energy: {energyWords(tension.energy)}
+            {tension.source && <> · {tension.source === 'stockfish' ? 'tension from Stockfish' : 'tension from the pieces left and checks'}</>}
           </p>
           <details style={{ fontSize: 16, margin: '0 0 12px' }}>
             <summary style={{ minHeight: 44, display: 'flex', alignItems: 'center', cursor: 'pointer' }}>Which sound each piece plays</summary>

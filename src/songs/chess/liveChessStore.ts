@@ -9,6 +9,8 @@ import type { Occupancy } from '../../tracking/chess/chessOccupancy';
 import { moveFromBoard, NOT_A_MOVE } from './moveFromBoard';
 import { soundsForMove } from './chessNotes';
 import { sendChessSounds } from './ChessSoundEngine';
+import { endingSounds, shapeSounds } from './chessMusic';
+import { onPosition, resetTension, useChessTension } from './chessTension';
 
 /** A second quick move is heard a little after the first. */
 const SECOND_MOVE_SEC = 0.4;
@@ -43,8 +45,11 @@ export const useLiveChessStore = create<LiveChessState>((set, get) => {
   const play = (moves: Move[]): void => {
     moves.forEach((m, i) => {
       const done = game.move(m.san);
-      sendChessSounds(soundsForMove(done).map((s) => ({ ...s, delaySec: s.delaySec + i * SECOND_MOVE_SEC })));
+      const sounds = shapeSounds(soundsForMove(done), useChessTension.getState().energy);
+      sendChessSounds(sounds.map((s) => ({ ...s, delaySec: s.delaySec + i * SECOND_MOVE_SEC })));
     });
+    void onPosition(game.fen(), game.history().length);
+    if (game.isGameOver()) sendChessSounds(endingSounds(game.fen()));
     set({ history: game.history({ verbose: true }), fen: game.fen(), question: null, message: endWords() });
   };
   return {
@@ -52,7 +57,7 @@ export const useLiveChessStore = create<LiveChessState>((set, get) => {
     fen: game.fen(),
     message: null,
     question: null,
-    newGame: () => { game.reset(); set({ history: [], fen: game.fen(), message: null, question: null }); },
+    newGame: () => { game.reset(); resetTension(); set({ history: [], fen: game.fen(), message: null, question: null }); },
     seen: (occ) => {
       if (get().question) return; // waiting for an answer on screen
       const r = moveFromBoard(game, occ);
@@ -63,6 +68,7 @@ export const useLiveChessStore = create<LiveChessState>((set, get) => {
         case 'choose': set({ question: { kind: 'choose', options: r.options }, message: null }); return;
         case 'takeBack': {
           const undone = game.undo();
+          void onPosition(game.fen(), game.history().length);
           set({ history: game.history({ verbose: true }), fen: game.fen(), message: undone ? `Took back ${undone.san}.` : null });
           return;
         }

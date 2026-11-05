@@ -8,7 +8,7 @@ import { getEffectChainManager } from '../../effects';
 import { MusicEventEmitter, type MusicEvent } from '../../mapping/MusicEventEmitter';
 import { BoardSequencerVoice } from '../voices/BoardSequencerVoice';
 import { RoundRobinDrumKit } from '../../audio/instruments/RoundRobinDrumKit';
-import type { LayeredVoiceSpec } from '../../audio/worlds/soundWorlds';
+import type { LayeredVoiceSpec, SoundWorldId } from '../../audio/worlds/soundWorlds';
 import type { ChessSound } from './chessNotes';
 
 /** The chess bus: every chess sound is an event here first. */
@@ -43,6 +43,9 @@ export function sendChessSounds(sounds: readonly ChessSound[], bus: MusicEventEm
 }
 
 const NOTE_SEC = 0.6;
+
+/** The effects each World plays through. */
+const PRESET_FOR_WORLD: Record<SoundWorldId, string> = { warm: 'warm', lofi: 'lofi', electronic: 'synthwave', ambient: 'space' };
 
 export class ChessSoundEngine {
   private readonly voices = new Map<string, BoardSequencerVoice>();
@@ -94,6 +97,9 @@ export class ChessSoundEngine {
       const id = parseChessNoteId(e.noteId);
       if (!id) return;
       this.voiceFor(id.voice).play(hzToMidi(e.frequency), e.velocity, NOTE_SEC, t);
+    } else if (e.type === 'effectChange' && e.effectId === 'chess' && e.parameter.startsWith('world:')) {
+      const world = e.parameter.slice('world:'.length) as SoundWorldId;
+      void getEffectChainManager().applyPreset(PRESET_FOR_WORLD[world]);
     } else if (e.type === 'trigger' && e.triggerId.startsWith('chess|drum:')) {
       const [, kind, , vel] = e.triggerId.split('|');
       this.kit?.play(kind.slice('drum:'.length) as Drum, Number(vel) || 0.85, t);
