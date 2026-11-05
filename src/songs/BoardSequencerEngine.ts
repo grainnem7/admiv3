@@ -15,6 +15,7 @@ import { playsTune } from './beyondLoop';
 import { humanFactor, shapedVelocity } from './dynamics';
 import { admitLoopNote, admitPlayerNote, LANE_TOP, loopLaneShift, loopNoteCap, newStepTally, type StepTally } from './density';
 import { breathGain, breathPhase, breathRest } from './breath';
+import { developCells } from './development';
 import * as Tone from 'tone';
 import { BoardSequencerVoice } from './voices/BoardSequencerVoice';
 import { voicingForCells, degreeMidi, chordDegreeMidi, drumForRow, DEFAULT_DRUM_ROWS, loopLen, lapIndex, strictlyAfter, firesThisLap, firesThisLapPaged, sweepAt, type PingPongPages, type Sweep } from './boardSequencerScale';
@@ -2750,7 +2751,9 @@ export class BoardSequencerEngine {
       ...(this.simplify === 'off' ? this.launched : bedOf(this.launched)).flatMap((l) => {
         // A fade is in the loudness of each note, so it works for every part alike.
         const f = this.launchFactor(l, beat);
-        return l.cells.filter((c) => onGrid(c) && partIn(c)).map((c) => ({
+        // Development (S2): the loop as this pass plays it, over a sixteen pass arc.
+        const developed = developCells(l.cells, this.ideaLap(beat), this.loopVary, this.cfg.rows, this.cfg.cols, (colour) => this.roleFor(colour) === 'melody');
+        return developed.filter((c) => onGrid(c) && partIn(c)).map((c) => ({
           cell: { ...c, layer: `slot${l.slot}`, ...(f < 1 ? { velocity: (c.velocity ?? this.cfg.velocity) * f } : {}) },
           source: 'loop' as const,
         }));

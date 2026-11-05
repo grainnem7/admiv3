@@ -249,3 +249,12 @@ plus download and licence time. S4 in hand. S5 an afternoon with four listeners.
   beat of any lead in, the bass steps up to the fifth below the root, an approach the ear
   hears as an arrival. New players keep Loops vary at 0 by the project's own rule (they
   hear only their counters), so the breathing is heard once Loops vary is turned up.
+- **S2, fifth part built (5 Nov): development.** `songs/development.ts`: a kept loop has a
+  sixteen pass arc, four cycles of four: as kept; the lift (the melody one row higher in
+  the second half of the pass); the turn (the melody mirrored around its own middle row);
+  the thinning (the melody on the on-beats only, the bass and chords whole, the whole
+  figure home on the last pass). The amount is Loops vary: under a quarter nothing, up to
+  six tenths the lift and the thinning, above that all three. The player's counters are
+  never touched; the pass count is the engine's own. Magenta's variation model (MusicVAE,
+  already loaded for the fills) is the natural next source of a cycle's figure: a
+  "similar" sequence fitted to the rows, kept per scene as the fills are. Not built yet.
