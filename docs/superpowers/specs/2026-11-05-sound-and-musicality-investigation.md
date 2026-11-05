@@ -214,3 +214,11 @@ plus download and licence time. S4 in hand. S5 an afternoon with four listeners.
   track's own clashes gone; what remains is a
   melody note a tone from a chord tone now and then, which is music. Not yet: the density
   cap, register lanes, ducking under the melody.
+- **S2, second part built (5 Nov): density.** `songs/density.ts`: a cap on the loops' pitched
+  notes per step from Energy (Calm 2, Steady 3, Lively 4, Driving 6; the player's notes
+  never counted, never dropped; a chord counts as one); a loop's note that doubles a pitch
+  the player plays on the same step is not played; and a lane: while the player's melody is
+  on the board, a loop's melody plays an octave up. Wired into the step for one-note
+  counters, chords, bass and the tunes. The band starts Quiet for a new player already,
+  and Extra notes at 0. Still to do: ducking of pads under the melody in ADMI's own sound,
+  and the listening test (S5).
