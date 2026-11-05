@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { humanFactor } from '../songs/dynamics';
 
 vi.mock('tone', () => ({
   getContext: vi.fn(() => ({ rawContext: { currentTime: 0 } })),
@@ -283,7 +284,8 @@ describe('Energy', () => {
   };
 
   it('the middle leaves notes as set; up is louder, down is softer', () => {
-    expect(velocityAt(0.5)).toBeCloseTo(0.5, 6);
+    // The square's own slight loudness (S2) is the only thing between the setting and the note.
+    expect(velocityAt(0.5)).toBeCloseTo(0.5 * humanFactor(3, 0, '|m'), 6);
     expect(velocityAt(1)).toBeGreaterThan(velocityAt(0.5));
     expect(velocityAt(0)).toBeLessThan(velocityAt(0.5));
     expect(velocityAt(1)).toBeLessThanOrEqual(1);

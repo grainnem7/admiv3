@@ -205,8 +205,8 @@ plus download and licence time. S4 in hand. S5 an afternoon with four listeners.
   each sent two notes a tone apart in one octave (the add9 and sus2 colours voiced close)
   in a quarter of the moments. Since the sound is Ableton's, this stream is what matters.
 - **S2, first part built (5 Nov).** `songs/dynamics.ts`: a metric accent (the first step of
-  the pass strongest, the middle next, on-beats, off-beats) and a small repeatable variation
-  from pass to pass, on every counter's and loop's note, in ADMI's sound and in the MIDI
+  the pass strongest, the middle next, on-beats, off-beats) and a small fixed variation per square
+  (not per pass: a scene must play the same however it is reached), on every counter's and loop's note, in ADMI's sound and in the MIDI
   velocities; a phrase keeps its own accents and only varies. `harmony.ts` `openVoicing`:
   no two chord tones a tone or less apart in one octave, on the chord colours and the
   band's pad (also after the pad is folded into its range). Captured again: 18 to 29

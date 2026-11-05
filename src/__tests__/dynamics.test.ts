@@ -18,22 +18,24 @@ describe('dynamics: the counters breathe (S2)', () => {
     for (let c = 0; c < 7; c++) expect(metricAccent(c, 7)).toBeGreaterThanOrEqual(ACCENT_OFF_BEAT);
     expect(metricAccent(3, 7)).toBe(ACCENT_OFF_BEAT);
   });
-  it('the variation is small, within its spread, and the same for the same pass, square and name', () => {
+  it('the variation is small, within its spread, differs between squares, and is the same every time for a square', () => {
     const seen = new Set<number>();
-    for (let pass = 0; pass < 40; pass++) {
-      const f = humanFactor(pass, 3, 5, 'red');
+    for (let row = 0; row < 8; row++) for (let col = 0; col < 8; col++) {
+      const f = humanFactor(row, col, 'red');
       expect(f).toBeGreaterThanOrEqual(1 - HUMAN_SPREAD);
       expect(f).toBeLessThanOrEqual(1 + HUMAN_SPREAD);
       seen.add(f);
-      expect(humanFactor(pass, 3, 5, 'red')).toBe(f);
+      expect(humanFactor(row, col, 'red')).toBe(f);
     }
-    // Alive: many different values over the passes, not one.
-    expect(seen.size).toBeGreaterThan(20);
+    // Alive: many different values across the board, not one.
+    expect(seen.size).toBeGreaterThan(30);
+    // Never from pass to pass: a scene plays the same however it is reached.
+    expect(humanFactor(3, 5, 'red')).toBe(humanFactor(3, 5, 'red'));
   });
   it('shapes a velocity without ever leaving 0 to 1, and a downbeat is louder than the off-beat beside it on average', () => {
-    expect(shapedVelocity(1, 0, 8, 0, 0)).toBeLessThanOrEqual(1);
-    expect(shapedVelocity(0, 3, 8, 2, 1)).toBe(0);
-    const avg = (col: number): number => [...Array(30).keys()].reduce((s, p) => s + shapedVelocity(0.7, col, 8, p, 2), 0) / 30;
+    expect(shapedVelocity(1, 0, 8, 0)).toBeLessThanOrEqual(1);
+    expect(shapedVelocity(0, 3, 8, 2)).toBe(0);
+    const avg = (col: number): number => [...Array(8).keys()].reduce((s, row) => s + shapedVelocity(0.7, col, 8, row), 0) / 8;
     expect(avg(0)).toBeGreaterThan(avg(1));
     expect(avg(4)).toBeGreaterThan(avg(5));
   });
