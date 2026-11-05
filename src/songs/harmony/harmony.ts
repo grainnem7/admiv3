@@ -120,7 +120,32 @@ export function voiceNear(chord: Pick<Chord, 'pcs'>, centre: number): number[] {
     const base = centre - ((centre - pc) % 12 + 12) % 12; // the pc at or below the centre
     return centre - base <= 6 ? base : base + 12;
   });
-  return [...new Set(notes)].sort((a, b) => a - b);
+  return openVoicing([...new Set(notes)].sort((a, b) => a - b));
+}
+
+/**
+ * An open voicing (sound investigation, S2): a ninth, a sus2 or a seventh sat a tone or a
+ * semitone from the chord tone under it, in the same octave, and on a pad or a wide
+ * sound that rubbed. Any note within two semitones of the one below it goes up an octave,
+ * so add9 is voiced F A C G rather than F G A C. Pure; the pitch classes are unchanged.
+ */
+export function openVoicing(sorted: readonly number[]): number[] {
+  // From the bottom up: a note within two semitones of the last note kept goes up an octave
+  // and waits its turn again higher up, so F G A C becomes F A C G and C D G becomes C G D.
+  const pending = [...sorted].sort((a, b) => a - b);
+  const kept: number[] = [];
+  let raises = 0;
+  while (pending.length > 0) {
+    const n = pending.shift() as number;
+    if (kept.length > 0 && n - kept[kept.length - 1] <= 2 && raises < 8) {
+      raises += 1;
+      pending.push(n + 12);
+      pending.sort((a, b) => a - b);
+    } else if (!kept.includes(n)) {
+      kept.push(n);
+    }
+  }
+  return kept;
 }
 
 /**

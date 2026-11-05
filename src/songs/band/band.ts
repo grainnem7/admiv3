@@ -18,7 +18,7 @@
  */
 
 import { grooveFor, harmonyFromChord, type DrumHit, type Harmony as PhraseHarmony } from '../phrases/phrases';
-import { bassNote, chordOnDegree, voiceLead } from '../harmony/harmony';
+import { bassNote, chordOnDegree, openVoicing, voiceLead } from '../harmony/harmony';
 import { WORLD_PROGRESSION, isStrongBeat } from '../harmony/currentChord';
 import { counterRange, notesIn, padRangeAway, PAD_RANGE, type BandJobs, type Register } from './bandJobs';
 import type { SoundWorldId } from '../../audio/worlds/soundWorlds';
@@ -169,10 +169,16 @@ export function bandEventsAtStep(input: BandInput): BandEvent[] {
   if (h && parts.includes('pad') && input.chordChange) {
     // Led from the last voicing, so the pad moves by small steps and never jumps; with
     // jobs, away from where the chord parts sit.
-    const pcs = [...new Set(h.tones.map((t) => ((t % 12) + 12) % 12))];
+    // While a chord colour is sounding (the player's or a loop's), the pad thins to the
+    // root and the fifth: a bed under their chord, not a second copy of it (density, S2).
+    const rootPc = ((h.root % 12) + 12) % 12;
+    const allPcs = [...new Set(h.tones.map((t) => ((t % 12) + 12) % 12))];
+    const thin = [rootPc, (rootPc + 7) % 12].filter((pc) => allPcs.includes(pc));
+    const pcs = withJobs && input.chordRegister && thin.length === 2 ? thin : allPcs;
     const [lo, hi] = withJobs ? padRangeAway(input.chordRegister ?? null) : PAD_RANGE;
     const led = voiceLead({ pcs }, input.previousPad ?? null, lo, hi);
-    const voiced = withJobs ? intoRange(led, lo, hi) : led;
+    // Folded into its range the voicing can close up again (a ninth back beside its root), so it is opened once more (S2).
+    const voiced = withJobs ? openVoicing(intoRange(led, lo, hi)) : led;
     for (const midi of voiced) out.push({ part: 'pad', offset: 0, dur: span - 0.05, accent: full ? 0.7 : 0.55, midi, voicing: voiced });
   }
 

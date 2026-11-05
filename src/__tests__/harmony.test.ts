@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { ChordSymbols } from '@magenta/music/esm/core/chords';
-import { bassNote, chordOnDegree, degreeOfNote, parentScale, voiceLead, voiceNear } from '../songs/harmony/harmony';
+import { openVoicing, bassNote, chordOnDegree, degreeOfNote, parentScale, voiceLead, voiceNear } from '../songs/harmony/harmony';
 
 const MAJ_PENT = [0, 2, 4, 7, 9];
 const MIN_PENT = [0, 3, 5, 7, 10];
@@ -64,5 +64,23 @@ describe('harmony — real chords from the board\'s scale', () => {
     expect(bassNote({ rootPc: 0 })).toBe(36);
     expect(bassNote({ rootPc: 9 })).toBe(45);
     expect(bassNote({ rootPc: 11 }, 40)).toBe(47);
+  });
+
+  it('voices chords open: no two chord tones a tone or less apart in one octave, the pitch classes kept (S2)', () => {
+    // F add9 close: F G A C. Open: F A C G.
+    expect(openVoicing([65, 67, 69, 72])).toEqual([65, 69, 72, 79]);
+    // C sus2 close: C D G. Open: C G D.
+    expect(openVoicing([60, 62, 67])).toEqual([60, 67, 74]);
+    // A plain triad is untouched.
+    expect(openVoicing([60, 64, 67])).toEqual([60, 64, 67]);
+    // Every chord the worlds make, on every degree, comes out open with the same pitch classes.
+    for (const world of ['warm', 'lofi', 'ambient', 'electronic'] as const) {
+      for (let d = 0; d < 7; d++) {
+        const ch = chordOnDegree(d, C, MAJ_PENT, world);
+        const v = voiceNear(ch, 62);
+        for (let i = 1; i < v.length; i++) expect(v[i] - v[i - 1]).toBeGreaterThan(2);
+        expect(new Set(v.map((n) => n % 12))).toEqual(new Set(ch.pcs));
+      }
+    }
   });
 });

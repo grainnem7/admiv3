@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Making a piece and doing a show</title>
+<meta name="description" content="How to make loops, build a piece from scenes, use the red cap, and run a show on the Board Sequencer, with or without the iPad.">
+<style>
+:root {
+  --bg: #eef1f4; --surface: #ffffff; --ink: #15202c; --ink2: #4a5868; --line: #d3dae2; --accent: #1f4fd8; --warn: #b8322a; --ok: #2f9a62;
+  --font-body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --font-mono: ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #0f151c; --surface: #17202a; --ink: #e6ebf1; --ink2: #9fb0c2; --line: #2a3644; --accent: #7fa2ff; --warn: #ff7a66; --ok: #4fc287; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --bg: #0f151c; --surface: #17202a; --ink: #e6ebf1; --ink2: #9fb0c2; --line: #2a3644; --accent: #7fa2ff; --warn: #ff7a66; --ok: #4fc287; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 17px; line-height: 1.55; }
+.wrap { max-width: 900px; margin: 0 auto; padding: 40px 16px 80px; display: grid; gap: 36px; }
+h1, h2, h3 { line-height: 1.2; margin: 0; }
+h1 { font-size: clamp(1.9rem, 5vw, 2.6rem); }
+h2 { font-size: 1.5rem; }
+h3 { font-size: 1.1rem; }
+p { margin: 0; max-width: 68ch; }
+ol, ul { margin: 0; padding-left: 1.3em; display: grid; gap: 6px; }
+section { display: grid; gap: 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 20px; }
+.lede { color: var(--ink2); font-size: 1.08rem; }
+code, kbd { font-family: var(--font-mono); font-size: 0.88em; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
+.btn { font-weight: 700; border: 1.5px solid var(--ink2); border-radius: 6px; padding: 0 6px; white-space: nowrap; }
+.note { border-left: 4px solid var(--accent); padding: 8px 12px; background: var(--bg); border-radius: 6px; }
+.warn { border-left: 4px solid var(--warn); padding: 8px 12px; background: var(--bg); border-radius: 6px; }
+table { border-collapse: collapse; width: 100%; font-size: 0.95rem; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.scroll { overflow-x: auto; }
+nav ul { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 16px; }
+nav a, a { color: var(--accent); }
+a:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.checklist li::marker { content: "☐  "; }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header style="display:grid;gap:10px">
+    <h1>Making a piece and doing a show</h1>
+    <p class="lede">The Board Sequencer in five parts: the board, the loops beside it, the piece made of scenes, the red cap, and the show itself. The iPad is optional and has its own section. Every word in <span class="btn">this style</span> is a button on the screen.</p>
+    <p class="note">The short version: play the board, press an empty place in the loop rail to keep what you played, press <span class="btn">Make my plan</span> in Make a piece, then <span class="btn">Show</span> and <span class="btn">▶ Start the piece</span>. Everything else is polish.</p>
+    <nav aria-label="Contents"><ul>
+      <li><a href="#board">1. The board</a></li>
+      <li><a href="#loops">2. Loops</a></li>
+      <li><a href="#piece">3. The piece</a></li>
+      <li><a href="#check">4. Check</a></li>
+      <li><a href="#cap">5. The red cap</a></li>
+      <li><a href="#show">6. The show</a></li>
+      <li><a href="#ipad">7. The iPad</a></li>
+      <li><a href="#keys">8. Keys and the words on screen</a></li>
+      <li><a href="#trouble">9. When something goes wrong</a></li>
+      <li><a href="#showday">10. Show day list</a></li>
+    </ul></nav>
+  </header>
+
+  <section id="board" aria-labelledby="h-board">
+    <h2 id="h-board">1. The board</h2>
+    <p>Open ADMI (<code>npm run show</code>, then <code>http://localhost:3001/</code> in Edge). On the Welcome screen press <span class="btn">Play my board</span> for a saved player, or <span class="btn">Play on the laptop</span> for a new one: that gives four ready made colours and the board straight away, nothing to set up.</p>
+    <ul>
+      <li><strong>Two boards.</strong> Under <span class="btn">More ▾</span> at the top, <strong>Camera</strong> is the real board seen by the camera; <strong>Laptop</strong> is a board on the screen, where a click puts a counter down. The laptop board is for making loops at a desk and for a show with no camera.</li>
+      <li><strong>Three views</strong> along the top: <span class="btn">Board</span>, <span class="btn">Make a piece</span> and <span class="btn">Show</span>. The board keeps its place and size between them.</li>
+      <li><strong>Play and Stop.</strong> <span class="btn">▶ Play the board</span> plays what is on the board, round and round. On the laptop board for a player who began with Play on the laptop, the first counter starts the board by itself. <span class="btn">■ Stop</span> stops; while a piece's clock runs it asks for a second press.</li>
+      <li><strong>Each colour has a job</strong> (melody, bass, chords, drums) and a sound. The Sound tab beside the board sets the World (Warm, Lo-fi, Ambient, Electronic), the energy, the space, the groove and each colour's sound, with <span class="btn">Hear</span> to try one.</li>
+      <li><strong>The speed</strong> is the readout beside Playing: arrow keys change it by one, a press opens a slider and Tap.</li>
+    </ul>
+  </section>
+
+  <section id="loops" aria-labelledby="h-loops">
+    <h2 id="h-loops">2. Loops: the rail beside the board</h2>
+    <p>A loop is the board as it was at one moment, kept so it can play on its own. The eight slots beside the board, called places, each hold one loop. An empty place is dashed and says Loop 1, Loop 2 and so on; a place with a loop in it shows a small picture of that loop's counters and its name.</p>
+    <ol>
+      <li><strong>Play something.</strong> Put counters down and press <span class="btn">▶ Play the board</span>. Listen until it sounds right.</li>
+      <li><strong>Press an empty place.</strong> The board is kept there as that loop, the loop starts, and on the laptop board the board is cleared in the same press, so the music never stops. On the camera board the counters cannot vanish, so lift them: the loop starts by itself as they come up. The notice offers <span class="btn">Undo</span>.</li>
+      <li><strong>Press a place with a loop in it</strong> to play or stop that loop. A loop changes over on the next pass: the place says <em>in 4</em>, the steps to go.</li>
+      <li><strong>The … button</strong> (or Shift+Enter on a place) opens Rename, Replace with the board, Edit notes and Clear for the place last pressed. A loop a scene uses asks before it is cleared.</li>
+      <li><strong>New loop</strong> starts from silence: only the counters sound until you press Keep inside it. Use it when you want to build a loop without the one playing in your ears.</li>
+    </ol>
+    <p class="note">Two or three loops is plenty for a piece. The loops are shared by every piece a player has; the scenes are not.</p>
+  </section>
+
+  <section id="piece" aria-labelledby="h-piece">
+    <h2 id="h-piece">3. The piece: scenes on a clock</h2>
+    <p>A scene says which loops play and how it sounds. The clock brings each scene in at its time while the player plays on top. Open <span class="btn">Make a piece</span>; the Piece tab holds the scenes and the grid, the Check tab the length and ending.</p>
+    <h3>Two ways to make scenes</h3>
+    <ul>
+      <li><span class="btn">✦ Make my plan</span>: four scenes across the piece, Arrival, Build, Open and Home, with the kept loops placed in them and the energy rising then settling. Press it, then change what you like.</li>
+      <li><span class="btn">+ Keep what plays now as a scene</span>: the loops playing now and the sound as it is, as a scene. It lands at the next sensible time: where the clock is if the piece is running, otherwise after the last scene by the same gap as before. For the first scene it is <span class="btn">+ Keep what plays now as scene 1</span>, beside Make my plan. This is the performer's way: play until it sounds right, then keep it.</li>
+    </ul>
+    <h3>The timeline and the grid</h3>
+    <ul>
+      <li><strong>The timeline</strong> is a row of chips, one per scene, each as wide as the scene is long. Drag a chip to move its time (it snaps to 5 seconds). Press a chip to open that scene's row below.</li>
+      <li><strong>The grid</strong> under it is the whole piece as one picture: a row for each kept loop, a column for each scene, a dot where the loop plays in the scene. Press a cell to turn a loop on or off in that scene. Press a row's name to hear that loop. While the piece plays, the column on now is lit.</li>
+      <li><strong>A scene's row</strong> has its Name, when it comes in, the loops in it, Energy, and under More its World, speed and sounds. <span class="btn">▶ Rehearse from here</span> plays the piece from that moment; while the board plays, <span class="btn">Jump here now</span> switches to the scene at once for this run only. <span class="btn">Duplicate</span> copies a scene, <span class="btn">Delete</span> asks first and offers Undo.</li>
+      <li><strong>Several pieces.</strong> At the top of Make a piece the piece open now is named; the fold holds <span class="btn">New piece</span>, <span class="btn">Duplicate</span>, <span class="btn">Open</span>, Rename and <span class="btn">Delete</span>. Each piece has its own scenes, length and ending; the loops are shared.</li>
+    </ul>
+    <p class="note">Undo works everywhere in Make a piece: Ctrl+Z, and Ctrl+Shift+Z to redo.</p>
+  </section>
+
+  <section id="check" aria-labelledby="h-check">
+    <h2 id="h-check">4. Check: length, ending, count in, and what is ready</h2>
+    <ul>
+      <li><strong>Length of the piece</strong>: 7:00 at most. The clock counts down from it, with cues at one minute, 30 and 10 seconds, and the piece never runs over: if End has not been pressed, the ending starts by itself in time to finish on the length.</li>
+      <li><strong>How it ends</strong>: a fade, a stop, a slow down, a thin out, or a final chord with a crash the audience hears, over 1, 2 or 4 passes. The ending runs when you press <span class="btn">↘ End piece</span> in Show, or by itself at the length.</li>
+      <li><strong>Count in</strong>: on, <span class="btn">▶ Start the piece</span> waits for the top of the next pass, the strip counts the steps down, and the piece comes in on step 1.</li>
+      <li><strong>The ready list</strong> says what is missing before a show: a loop a scene uses that is empty, no scene at 0:00, the camera or board not ready, the hat's jobs, the iPad, whether keeping time was measured, whether the player's work is backed up to a file. Each line says where to fix it.</li>
+    </ul>
+  </section>
+
+  <section id="cap" aria-labelledby="h-cap">
+    <h2 id="h-cap">5. The red cap</h2>
+    <p>A red cap on the player's head, and a camera facing them. Moving the head side to side and up and down moves two controls, within the player's own range. Small movements are ignored, changes glide, and the cap holds still while counters are moved. Everything is on the Cap tab beside the board.</p>
+    <ol>
+      <li><strong>Switch on</strong> <span class="btn">Control with the red cap</span>. The camera picture shows what it sees; the line under the board says what the hat is doing: <em>Hat: a red thing followed</em>, <em>cap found</em>, <em>cap not in sight (holding)</em>.</li>
+      <li><strong>Learn the hat</strong>, in the room and the light of the show, with the player in their playing place. Two short steps: the room first, with the hat off, then the hat. After that the camera knows this hat in this room: another red thing is outlined and never taken for it, and a change of light does not lose it. <span class="btn">Forget</span> goes back to plain red.</li>
+      <li><strong>Moves.</strong> Side to side and Up and down each do a job: Nothing, Volume, Speed, Reverb, Delay, Tone, Fill or Evolve. Speed is the usual one for side to side: in the middle of the range the player's own speed, moved fully one way near Fastest.</li>
+      <li><strong>More hat settings</strong> holds the finer things: Picture like a mirror, Check it is on the head (face tracking, needs the player's face in shot), One direction at a time, how long a hand resting on the board stops the hold, and how sure the camera must be before a move counts.</li>
+      <li><strong>Test with the mouse</strong> stands in for the hat at a desk: the mouse moves the controls as the head would.</li>
+    </ol>
+    <p class="warn">Learn the hat again if the lights change or the player sits somewhere else. The Check tab's ready list names the hat's jobs so you can see them at a glance.</p>
+  </section>
+
+  <section id="show" aria-labelledby="h-show">
+    <h2 id="h-show">6. The show</h2>
+    <p><span class="btn">Show</span> is the board, the clock and Now / Next full screen, for the performance. It is the only place a piece is started from, so a rehearsal and a show begin the same way.</p>
+    <ol>
+      <li><strong>Before the player sits down:</strong> Check tab green, Sound from set (ADMI, or Ableton with the test note heard), the hat learnt if it is in use, the loops the scenes need all kept.</li>
+      <li><strong>Press <span class="btn">Show</span>.</strong> The strip shows the clock, the scene on now, the next scene and how long until it, and the loops playing. The hat's status row sits with it when the cap is on.</li>
+      <li><strong><span class="btn">▶ Start the piece</span></strong> starts the clock in the opening scene. With Count in on, it waits for the top of the next pass. Space does the same from the keyboard.</li>
+      <li><strong>During the piece</strong> the player plays on the board on top of the scenes. The scenes come in by themselves at their times. <span class="btn">Next scene ▶</span> brings the next one in early. <span class="btn">Mute</span> (or M) mutes. <span class="btn">Simplify</span> (Shift+S) keeps only the player and the first loop while something is sorted out, and Back to full brings the rest back on the next pass.</li>
+      <li><strong>The end.</strong> <span class="btn">↘ End piece</span> (or E) runs the ending you chose; or the ending runs by itself in time to finish on the length. The strip says <em>Ended</em>, the sound stops, and nothing starts again by accident for a few seconds.</li>
+      <li><strong>Afterwards</strong> <span class="btn">Leave Show</span>. The player's work is saved as they go; Back up to a file on the Check tab keeps a copy off the laptop.</li>
+    </ol>
+    <p class="note">A full run of the whole piece in the room, with the camera, the cap and the sound you will use, at least once before the show. Watch the clock and the Now / Next strip: that is what you will watch on the night.</p>
+  </section>
+
+  <section id="ipad" aria-labelledby="h-ipad">
+    <h2 id="h-ipad">7. The iPad (optional)</h2>
+    <p>The iPad is a second screen for the facilitator or the player: big pads for the loops, the scenes, Next and End piece, and the clock. Nothing needs it; a show runs from the laptop alone.</p>
+    <ol>
+      <li>On the Connections tab switch on <span class="btn">iPad controls</span>. ADMI shows a link and a code. On the iPad, on the same Wi Fi, open the link in Safari.</li>
+      <li>Tick <strong>Loops &amp; scenes page</strong> if the iPad should show the loops and scenes; otherwise it shows only the show controls.</li>
+      <li><span class="btn">Use the safe show layout</span> sets the iPad out for a show: the big things big, nothing that can go wrong by a brush of the hand. The Check tab offers it when the layout is not safe.</li>
+      <li>On the iPad, End piece needs a second tap: one tap cannot end a show. A loop tapped joins on the next pass, as a place in the rail does.</li>
+    </ol>
+    <p class="note">If the iPad is behind or loses the link, the laptop carries on; the iPad says "Press Play on the laptop first" until it catches up.</p>
+  </section>
+
+  <section id="keys" aria-labelledby="h-keys">
+    <h2 id="h-keys">8. Keys and the words on screen</h2>
+    <div class="scroll"><table>
+      <thead><tr><th>Key</th><th>Does</th></tr></thead>
+      <tbody>
+        <tr><td>Space</td><td>Play or Stop the board; in Show, start the piece</td></tr>
+        <tr><td>M</td><td>Mute on and off</td></tr>
+        <tr><td>N</td><td>Next scene</td></tr>
+        <tr><td>E</td><td>End piece</td></tr>
+        <tr><td>1, 2, 3</td><td>Board, Make a piece, Show</td></tr>
+        <tr><td>Shift+S</td><td>Simplify and Back to full</td></tr>
+        <tr><td>Ctrl+Z, Ctrl+Shift+Z</td><td>Undo and redo in the board and Make a piece</td></tr>
+        <tr><td>Arrows, Enter, in the rail</td><td>Move between places and press one; Shift+Enter opens its menu</td></tr>
+        <tr><td>Arrows, Enter, in the grid</td><td>Move between cells and press one</td></tr>
+        <tr><td>Arrows on the speed readout</td><td>One BPM; five with Shift</td></tr>
+      </tbody>
+    </table></div>
+    <p>The letter keys never fire while typing in a box, and they can be switched off under Advanced, Pressing, if a switch box sends letters.</p>
+  </section>
+
+  <section id="trouble" aria-labelledby="h-trouble">
+    <h2 id="h-trouble">9. When something goes wrong</h2>
+    <ul>
+      <li><strong>The sound stops but the board moves:</strong> press <span class="btn">Mute</span> once in case it is on; then on the Connections tab press ADMI under Sound from, which brings ADMI's own sound back at once if Ableton has gone quiet. A stuck note in Ableton: <span class="btn">Panic</span>.</li>
+      <li><strong>Everything is too much:</strong> <span class="btn">Simplify</span>. Only the player and the first loop keep playing; Back to full when ready.</li>
+      <li><strong>A scene came in wrong:</strong> <span class="btn">Next scene ▶</span> to move on, or Jump here now in Make a piece to any scene. Nothing you do during a run is saved into the scenes.</li>
+      <li><strong>The camera lost the board:</strong> the board plays on with the counters it last saw, and a notice beside the board says the camera is not seeing it. Fix the light or the camera; nothing has stopped. If it will not come back, switch to the laptop board under More and play on from the screen.</li>
+      <li><strong>The hat is lost:</strong> the controls hold where they were; the row says holding. Step back into shot and they glide to where the head now is.</li>
+      <li><strong>The page was reloaded mid piece:</strong> it offers <span class="btn">▶ Carry on</span> from where the clock would be.</li>
+      <li><strong>The laptop slept:</strong> close Edge completely, restart loopMIDI, open Edge and ADMI again.</li>
+    </ul>
+  </section>
+
+  <section id="showday" aria-labelledby="h-showday">
+    <h2 id="h-showday">10. Show day list</h2>
+    <ul class="checklist">
+      <li>Laptop plugged in, sleep off, Visual Studio Code closed, OneDrive paused, nothing else big open.</li>
+      <li>If Ableton makes the sound: loopMIDI running with ADMIOutput before Edge; Ableton open with the ADMI template Set from its local folder; the audio device and buffer the timing check settled on. See the Ableton guide.</li>
+      <li><code>npm run show</code>, then <code>http://localhost:3001/</code> in Edge, Play my board.</li>
+      <li>Connections tab: Sound from ADMI or Ableton; with Ableton, Play then Play test note, and listen for every channel.</li>
+      <li>Camera board chosen, the board found, three counters tried and heard.</li>
+      <li>Cap tab: Control with the red cap on, Learn the hat in the playing place, the row says cap found, a nod moves the speed.</li>
+      <li>Make a piece, Check tab: every line green or a note you have read; the piece's length and ending as you want them; Back up to a file.</li>
+      <li>iPad, if used: linked, Loops &amp; scenes page as wanted, the safe show layout on.</li>
+      <li>One full run of the piece from Show in the room, start to Ended.</li>
+      <li>Then Show, and wait for the player.</li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>

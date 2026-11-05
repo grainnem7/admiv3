@@ -41,6 +41,14 @@ describe('what the band plays', () => {
     expect(bandEventsAtStep(input({ chordChange: false })).filter((e) => e.part === 'pad')).toEqual([]);
   });
 
+  it('while a chord colour sounds, the pad thins to the root and the fifth under it (density, S2)', () => {
+    const jobs = { asBefore: false, pads: true, bass: true, drums: true, counter: false };
+    const alone = bandEventsAtStep(input({ jobs, chordRegister: null })).filter((e) => e.part === 'pad');
+    expect(alone.map((e) => e.midi! % 12).sort()).toEqual([0, 4, 7]);
+    const under = bandEventsAtStep(input({ jobs, chordRegister: { lo: 60, hi: 72 } })).filter((e) => e.part === 'pad');
+    expect(under.map((e) => e.midi! % 12).sort()).toEqual([0, 7]);
+  });
+
   it('the bass lands on the root under each chord', () => {
     const bass = bandEventsAtStep(input()).filter((e) => e.part === 'bass');
     expect(bass).toHaveLength(1);

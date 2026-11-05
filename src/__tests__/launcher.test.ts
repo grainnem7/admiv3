@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { shapedVelocity } from '../songs/dynamics';
 import { fakeVoiceEntry } from './helpers/fakeVoiceEntry';
 import {
   LAUNCH_SLOTS, loopLabel, nextSceneIndex, sanitizeLoopNames, sanitizeScenes, sceneFromNow, sceneSettingsOf, sceneSettingsToApply,
@@ -169,6 +170,10 @@ describe('engine — launched loops', () => {
 describe('engine — launched loops fade', () => {
   const four = [0, 1, 2, 3].map((col) => ({ row: 2, col, colour: 'm' }));
   const vels = (p: Priv) => p.voiceByChannel.get('m')!.voice.play.mock.calls.map((c) => c[1] as number);
+  // Each step's loudness is shaped by its place in the pass and its square (S2): the fade
+  // multiplies that, so the expected values are the shaped ones times the fade.
+  const shaped = (fades: number[]): number[] => fades.map((f, col) => shapedVelocity(0.8 * f, col, 4, 2, 'slot0|m'));
+  const r2 = (v: number[]): number[] => v.map((x) => Math.round(x * 100) / 100);
 
   it('a stopped loop fades out over the fade length, then leaves', () => {
     const { e, p } = engine();
@@ -181,10 +186,10 @@ describe('engine — launched loops fade', () => {
     p.fireStep(4, 4, 1, null);
     e.setLaunchedLoops([], []);                       // stop asked for mid-pass
     for (let b = 5; b < 8; b++) p.fireStep(b, b, 1, null);
-    expect(vels(p)).toEqual([0.8, 0.8, 0.8, 0.8]);    // the pass it was stopped in: full
+    expect(r2(vels(p))).toEqual(r2(shaped([1, 1, 1, 1])));    // the pass it was stopped in: full
     p.voiceByChannel.get('m')!.voice.play.mockClear();
     for (let b = 8; b < 12; b++) p.fireStep(b, b, 1, null);
-    expect(vels(p).map((v) => Math.round(v * 100) / 100)).toEqual([0.8, 0.6, 0.4, 0.2]);
+    expect(r2(vels(p))).toEqual(r2(shaped([1, 0.75, 0.5, 0.25])));
     expect(e.getLaunchedSlots()).toEqual([0]);        // still "stopping" while it fades
     p.voiceByChannel.get('m')!.voice.play.mockClear();
     for (let b = 12; b < 16; b++) p.fireStep(b, b, 1, null);
@@ -200,17 +205,17 @@ describe('engine — launched loops fade', () => {
     for (let b = 1; b < 4; b++) p.fireStep(b, b, 1, null);
     p.voiceByChannel.get('m')!.voice.play.mockClear();
     for (let b = 4; b < 8; b++) p.fireStep(b, b, 1, null);
-    expect(vels(p).map((v) => Math.round(v * 100) / 100)).toEqual([0.2, 0.4, 0.6, 0.8]);
+    expect(r2(vels(p))).toEqual(r2(shaped([0.25, 0.5, 0.75, 1])));
     p.voiceByChannel.get('m')!.voice.play.mockClear();
     for (let b = 8; b < 12; b++) p.fireStep(b, b, 1, null);
-    expect(vels(p)).toEqual([0.8, 0.8, 0.8, 0.8]);
+    expect(r2(vels(p))).toEqual(r2(shaped([1, 1, 1, 1])));
 
     const dead = engine();
     dead.e.setLaunchFade(0);
     dead.p.fireStep(0, 0, 1, null);
     dead.e.setLaunchedLoops([0], [four]);
     for (let b = 1; b < 8; b++) dead.p.fireStep(b, b, 1, null);
-    expect(vels(dead.p).slice(-4)).toEqual([0.8, 0.8, 0.8, 0.8]);
+    expect(r2(vels(dead.p).slice(-4))).toEqual(r2(shaped([1, 1, 1, 1])));
   });
 
   it('a loop wanted again while fading out comes straight back to full', () => {
@@ -226,7 +231,7 @@ describe('engine — launched loops fade', () => {
     for (let b = 9; b < 12; b++) p.fireStep(b, b, 1, null);
     p.voiceByChannel.get('m')!.voice.play.mockClear();
     for (let b = 12; b < 16; b++) p.fireStep(b, b, 1, null);
-    expect(vels(p)).toEqual([0.8, 0.8, 0.8, 0.8]);
+    expect(r2(vels(p))).toEqual(r2(shaped([1, 1, 1, 1])));
   });
 });
 

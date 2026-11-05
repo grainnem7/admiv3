@@ -12,6 +12,8 @@
  */
 
 import { playsTune } from './beyondLoop';
+import { humanFactor, shapedVelocity } from './dynamics';
+import { admitLoopNote, admitPlayerNote, loopLaneShift, loopNoteCap, newStepTally, type StepTally } from './density';
 import * as Tone from 'tone';
 import { BoardSequencerVoice } from './voices/BoardSequencerVoice';
 import { voicingForCells, degreeMidi, chordDegreeMidi, drumForRow, DEFAULT_DRUM_ROWS, loopLen, lapIndex, strictlyAfter, firesThisLap, firesThisLapPaged, sweepAt, type PingPongPages, type Sweep } from './boardSequencerScale';
@@ -517,6 +519,12 @@ export class BoardSequencerEngine {
   private loopFades = new Map<number, GainTrack>();
   /** The layer of the cell being played, so its notes know which loop they belong to. */
   private firingLayer: string | undefined = undefined;
+  /** This step's tally of what has sounded (density, S2): the player's pitches and the loops' count. */
+  private stepTally: StepTally = newStepTally();
+  /** The most pitched loop notes this step may carry, from Energy. */
+  private stepLoopCap = 6;
+  /** The player's melody is on the board this pass: a loop's melody plays an octave up (the lane). */
+  private stepLaneUp = false;
   /** CC 7: the last Volume value sent (-1 = none yet). */
   private volumeSent = -1;
   /** False when the player wants MIDI only: the built-in sound is silenced, the log and the lights carry on. */
@@ -1009,6 +1017,14 @@ export class BoardSequencerEngine {
   setEnergy(e: number): void {
     this.energy = Math.max(0, Math.min(1, e));
     this.syncAbleton();
+  }
+  /**
+   * Density (S2): the player's note is always admitted and remembered; a loop's note is
+   * admitted unless it doubles the player's or the step already carries the cap.
+   */
+  private admit(source: FiredNote['source'], midis: readonly number[], group?: string): boolean {
+    if (source !== 'loop') { admitPlayerNote(this.stepTally, midis); return true; }
+    return admitLoopNote(this.stepTally, midis, this.stepLoopCap, group);
   }
   /** How hard notes play at this Energy: 0.7 at the bottom, 1 at the middle, 1.3 at the top. */
   private energyGain(): number {
@@ -2575,14 +2591,17 @@ export class BoardSequencerEngine {
    * Notes for a chord-stab cell: the song chord (when locked), else the one current chord —
    * its own where it names it, the player's over a loop's — voiced near where the row sits.
    */
-  private chordStack(cell: ActiveCell, chord: BoardChord | null, axis: 'row' | 'col'): number[] {
+  private chordStack(cell: ActiveCell, chord: BoardChord | null, axis: 'row' | 'col', plain = false): number[] {
     if (chord && chord.notes.length > 0) return chord.notes;
     const degree = axis === 'row' ? this.cfg.rows - 1 - cell.row : cell.col;
     const root = this.cfg.scaleRootMidi;
     const semis = this.cfg.scaleSemitones;
     const note = degreeMidi(degree, root, semis);
     const now = this.chordNow.harmony;
-    if (now) return voiceNear({ pcs: [...new Set(now.tones.map((t) => ((t % 12) + 12) % 12))] }, note);
+    // A loop's chord is plain (root, third, fifth): the colour tones, the ninths and sevenths
+    // that reach up into the melody's octave, belong to the player's own chords (density, S2).
+    const tones = plain ? now?.tones.slice(0, 3) : now?.tones;
+    if (now && tones) return voiceNear({ pcs: [...new Set(tones.map((t) => ((t % 12) + 12) % 12))] }, note);
     // A real chord of the key on the row's note.
     const style = worldOf(this.cfg.soundWorld ?? 'none')?.id ?? 'warm';
     return voiceNear(chordOnDegree(degreeOfNote(note, root, semis), root, semis, style), note);
@@ -2746,6 +2765,14 @@ export class BoardSequencerEngine {
     this.beginHearing(beat, cellTime);
     // Each colour plays a tune (a phrase) or one note per counter — its own choice.
     const tuneTagged = tagged.filter((t) => this.playsTune(t.cell.colour));
+    // Density (S2): a fresh tally for the step, the loops' cap from Energy, and whether the
+    // player's melody is on the board, so loops' melodies take the octave above.
+    this.stepTally = newStepTally();
+    // The cap makes room for the player: with the player's counters on the board the loops
+    // keep to it; with the board empty the loops play whole, so a loop that is on is heard.
+    const playerOn = tagged.some((t) => t.source !== 'loop');
+    this.stepLoopCap = playerOn ? loopNoteCap(this.energy) : Number.POSITIVE_INFINITY;
+    this.stepLaneUp = tagged.some((t) => t.source !== 'loop' && this.roleFor(t.cell.colour) === 'melody');
     const loopPhrases = tuneTagged.length > 0 ? this.firePhrases(beat, cellTime, secPerBeat, chord, tuneTagged) : null;
     let noteTagged = tuneTagged.length === 0 ? tagged : tagged.filter((t) => !this.playsTune(t.cell.colour));
     // Layered one-note melodies take turns too: the one leading this pass plays its note,
@@ -2811,7 +2838,10 @@ export class BoardSequencerEngine {
       };
       fireAll(noteTagged.filter((t) => t.source !== 'loop'));
       loopPhrases?.();
-      fireAll(noteTagged.filter((t) => t.source === 'loop'));
+      // The loops' notes under the cap (density, S2): the foundation first, chords then bass,
+      // so when a step is full it is a third melody line that waits, never the harmony.
+      const order: Record<string, number> = { chord: 0, bass: 1, drums: 2, melody: 3 };
+      fireAll(noteTagged.filter((t) => t.source === 'loop').sort((a, b) => (order[this.roleFor(a.cell.colour) ?? ''] ?? 4) - (order[this.roleFor(b.cell.colour) ?? ''] ?? 4)));
     } else {
       loopPhrases?.();
     }
@@ -3238,7 +3268,9 @@ export class BoardSequencerEngine {
         const varies = ev.owner.conditional && this.cfg.variationEnabled !== false;
         if (!firesThisLapPaged(varies, beat, this.cfg.cols, this.cfg.numPages, this.cfg.pingPong ?? false)) continue;
         const tag = tagOf(ev);
-        const base = (tag?.cell.velocity ?? this.cfg.velocity) * this.energyGain();
+        // A phrase has its own accents; its counter only adds its own slight loudness (S2).
+        const base = (tag?.cell.velocity ?? this.cfg.velocity) * this.energyGain()
+          * humanFactor(ev.owner.row, ev.owner.col, `${ev.layer ?? ''}|${ev.colour}`);
         const shifted = ev.offset === 0.5 ? ev.offset + swing / 6
           : (ev.offset === 0.25 || ev.offset === 0.75) ? ev.offset + swing / 12 : ev.offset;
         const time = Math.max(Tone.now(), cellTime + (shifted + (tag?.cell.timingBeats ?? 0)) * secPerBeat);
@@ -3260,6 +3292,18 @@ export class BoardSequencerEngine {
           if (!voice) continue;
           const evo = this.evoFor(ev.colour);
           midi = ev.midi + oct + 12 * evo.octave;
+          // Density (S2): the player's pitches are remembered; a loop's melody takes the lane
+          // above them, and a loop's note that doubles the player's, or that the step has no
+          // room for, is not played.
+          const loopNote = tag?.source === 'loop';
+          // A loop's chord is plain (root, third, fifth), as in chordStack: its colour tones are the player's.
+          if (loopNote && ev.role === 'chord' && this.chordNow.harmony) {
+            const plain = new Set(this.chordNow.harmony.tones.slice(0, 3).map((t) => ((t % 12) + 12) % 12));
+            if (!plain.has(((midi % 12) + 12) % 12)) continue;
+          }
+          if (loopNote) midi += loopLaneShift(ev.role, this.stepLaneUp, midi);
+          // A chord's notes arrive one by one here: the same owner at the same moment is one chord, counted once.
+          if (!this.admit(loopNote ? 'loop' : 'live', [midi], ev.role === 'chord' ? `${ev.layer ?? ''}|${ev.owner.row},${ev.owner.col}@${time}` : undefined)) continue;
           // The same note on the same instrument at the same moment from two layers (a
           // loop just captured from counters still on the board) is one note, not a
           // doubled, louder one.
@@ -3283,6 +3327,9 @@ export class BoardSequencerEngine {
     const own: typeof events = [];
     const loops: typeof events = [];
     for (const ev of events) (tagOf(ev)?.source === 'loop' ? loops : own).push(ev);
+    // The loops' notes under the cap (density, S2): chords and bass before melodies.
+    const order: Record<string, number> = { chord: 0, bass: 1, drums: 2, melody: 3 };
+    loops.sort((a, b) => (order[a.role] ?? 4) - (order[b.role] ?? 4));
     playAll(own);
     return loops.length > 0 ? () => playAll(loops) : null;
   }
@@ -3316,7 +3363,13 @@ export class BoardSequencerEngine {
       if (h > 0 && this.looseChance(beat, cell.row, cell.col, `rest|${looseName}`) < h * 0.5) return;
       // Box detail: where the counter sits gives it its own loudness and timing. The
       // shift can never reach into the past — a late note is fine, a missed one is not.
-      const base = Math.min(1, (cell.velocity ?? this.cfg.velocity) * this.energyGain());
+      // The first step of the pass is the strongest, off-beats softer, and each square has its
+      // own slight loudness, so a counter's note is not a machine's (S2). Never moved in time,
+      // and never different from pass to pass: a scene plays the same however it is reached.
+      const base = shapedVelocity(
+        Math.min(1, (cell.velocity ?? this.cfg.velocity) * this.energyGain()), cell.col, this.cfg.cols,
+        cell.row, `${(cell as LayeredCell).layer ?? ''}|${cell.colour}`,
+      );
       const stepTime = cell.timingBeats
         ? Math.max(Tone.now(), cellTime + cell.timingBeats * secPerBeat)
         : cellTime;
@@ -3362,6 +3415,7 @@ export class BoardSequencerEngine {
           ? chordDegreeMidi(degree, chord.notes)
           : degreeMidi(degree, this.cfg.scaleRootMidi, this.cfg.scaleSemitones), beat, drift !== 0);
         const dur = ringSec(loopLen(this.rawLoop('bass'), this.cfg.cols)) * this.evoFor(ch.id).length;
+        if (!this.admit(source, [base - 12 + oct])) return;
         if (this.internalSound) voice.play(base - 12 + oct, vel, dur, stepTime);
         this.recordFired({
           row: cell.row, col: cell.col, colour: cell.colour, role, audioTime: stepTime, durSec: dur, source,
@@ -3370,7 +3424,8 @@ export class BoardSequencerEngine {
       } else if (role === 'chord' || ch.instrument === 'chord') {
         // Chord stab: play a stack (the song chord, or a scale triad) at once.
         const evo = this.evoFor(ch.id);
-        const midis = this.chordStack(cell, chord, 'row').map((n) => n + oct + 12 * evo.octave);
+        const midis = this.chordStack(cell, chord, 'row', source === 'loop').map((n) => n + oct + 12 * evo.octave);
+        if (!this.admit(source, midis)) return;
         if (this.internalSound) for (const n of midis) voice.play(n, vel, durSec * evo.length, stepTime);
         this.recordFired({
           row: cell.row, col: cell.col, colour: cell.colour, role, audioTime: stepTime, durSec: durSec * evo.length, source,
@@ -3385,10 +3440,14 @@ export class BoardSequencerEngine {
           // held harmonic bed; others play the short note length.
           const evo = this.evoFor(ch.id);
           const dur = (ch.instrument === 'pad' ? secPerBeat * melodicLoop : ringSec(melodicLoop)) * evo.length;
-          if (this.internalSound) voice.play(midi + oct + 12 * evo.octave, vel, dur, stepTime);
+          // Density (S2): a loop's melody takes the lane above the player's, and is not played
+          // where it doubles the player's note or the step is full.
+          const laned = midi + oct + 12 * evo.octave + (source === 'loop' ? loopLaneShift('melody', this.stepLaneUp, midi + oct + 12 * evo.octave) : 0);
+          if (!this.admit(source, [laned])) return;
+          if (this.internalSound) voice.play(laned, vel, dur, stepTime);
           this.recordFired({
             row: cell.row, col: cell.col, colour: cell.colour, role, audioTime: stepTime, durSec: dur, source,
-            origin: 'placed', midi: midi + oct + 12 * evo.octave, velocity: vel,
+            origin: 'placed', midi: laned, velocity: vel,
           });
           const orn = this.loopOrnament(cell, beat);
           if (orn !== null) {
