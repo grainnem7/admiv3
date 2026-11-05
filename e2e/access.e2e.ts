@@ -240,10 +240,13 @@ test('U4: the board fills its side, the page fits the screen, and one Details li
 
 test('U4: Welcome wears the board’s colours: the main way in is the board’s accent, not orange', async ({ page }) => {
   await openWelcome(page);
-  const main = page.locator('.welcome-board-btn').first();
-  const bg = await main.evaluate((e) => getComputedStyle(e).backgroundColor);
-  // The board's accent in dark mode: the text colour, #f2f2f2 (L1).
-  expect(bg).toBe('rgb(242, 242, 242)');
+  // The board's accent in dark mode: the text colour, #f2f2f2 (L1). Read in one go and
+  // polled: once the camera check settles, the main way in moves from the board button to
+  // the laptop one, and a locator resolved before that re-render read a ghost button.
+  await expect.poll(() => page.evaluate(() => {
+    const b = document.querySelector('.welcome-board-btn');
+    return b ? getComputedStyle(b).backgroundColor : null;
+  })).toBe('rgb(242, 242, 242)');
   // The logo is Timbo's red cap on the ground, not a letter in a box.
   await expect(page.getByRole('img', { name: 'Timbo' })).toBeVisible();
   const logo = await page.locator('.welcome-logo').evaluate((e) => getComputedStyle(e).backgroundColor);
