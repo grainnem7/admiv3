@@ -209,7 +209,8 @@ plus download and licence time. S4 in hand. S5 an afternoon with four listeners.
   (not per pass: a scene must play the same however it is reached), on every counter's and loop's note, in ADMI's sound and in the MIDI
   velocities; a phrase keeps its own accents and only varies. `harmony.ts` `openVoicing`:
   no two chord tones a tone or less apart in one octave, on the chord colours and the
-  band's pad (also after the pad is folded into its range). Captured again: 18 to 29
-  distinct velocities per board, the chord track's own clashes gone; what remains is a
+  band's pad (also after the pad is folded into its range). Captured again with the
+  per square variation: 15 to 16 distinct velocities per board (4 to 7 before), the chord
+  track's own clashes gone; what remains is a
   melody note a tone from a chord tone now and then, which is music. Not yet: the density
   cap, register lanes, ducking under the melody.
