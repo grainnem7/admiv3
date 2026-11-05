@@ -10,6 +10,7 @@ import { BoardSequencerVoice } from '../voices/BoardSequencerVoice';
 import { RoundRobinDrumKit } from '../../audio/instruments/RoundRobinDrumKit';
 import type { LayeredVoiceSpec, SoundWorldId } from '../../audio/worlds/soundWorlds';
 import type { ChessSound } from './chessNotes';
+import { useChessVoices } from './chessVoiceStore';
 
 /** The chess bus: every chess sound is an event here first. */
 export const chessEvents = new MusicEventEmitter();
@@ -32,7 +33,9 @@ const hzToMidi = (f: number): number => Math.round(69 + 12 * Math.log2(f / 440))
 
 /** Sends sounds on the bus, each at its own delay. */
 export function sendChessSounds(sounds: readonly ChessSound[], bus: MusicEventEmitter = chessEvents): void {
+  const muted = useChessVoices.getState().muted;
   for (const s of sounds) {
+    if (muted.has(s.voice)) continue; // a muted voice is neither heard nor drawn
     const fire = (): void => {
       if (s.drum) bus.emit({ type: 'trigger', triggerId: `chess|drum:${s.drum}|${s.square}|${s.velocity}`, timestamp: Date.now() });
       else bus.emit({ type: 'noteOn', noteId: chessNoteId(s.voice, s.square), frequency: midiToHz(s.midi), velocity: s.velocity, timestamp: Date.now() });

@@ -15,7 +15,14 @@ test('Chess music plays the built in game: a move is heard, Pause stops, Restart
   await expect.poll(() => page.getByRole('list', { name: 'Moves' }).getByRole('listitem').count()).toBeGreaterThanOrEqual(3); // a move a second
   // The tension comes from Stockfish, in a worker in the page.
   await expect(page.getByTestId('tension')).toContainText('tension from Stockfish', { timeout: 20_000 });
+  await expect(page.getByRole('img', { name: /^Evaluation: / })).toBeVisible();
   await page.getByRole('button', { name: 'Pause' }).click();
+  // Sounds for each piece: change one, mute one.
+  await page.getByText('Sounds for each piece').click();
+  await page.getByRole('combobox', { name: 'Sound for White queen' }).selectOption('violin');
+  const mute = page.getByRole('button', { name: 'Mute White pawns' });
+  await mute.click();
+  await expect(mute).toHaveAttribute('aria-pressed', 'true');
   await page.getByRole('button', { name: 'Restart' }).click();
   await expect(page.getByText('Press Play to hear the game.')).toBeVisible();
   expect(pageErrors(page)).toEqual([]);

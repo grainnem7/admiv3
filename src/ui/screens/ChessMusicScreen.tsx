@@ -9,7 +9,10 @@ import { useAppStore } from '../../state/store';
 import { useChessStore, fenAfter } from '../../songs/chess/chessStore';
 import { useLiveChessStore } from '../../songs/chess/liveChessStore';
 import { ChessSoundEngine } from '../../songs/chess/ChessSoundEngine';
-import { chessVoiceSpecs, voiceLabel, PIECE_TYPES, PIECE_NAMES } from '../../songs/chess/chessVoices';
+import { chessVoiceSpecs, specForSound, PIECE_NAMES } from '../../songs/chess/chessVoices';
+import { useChessVoices } from '../../songs/chess/chessVoiceStore';
+import { VoiceTable } from './chess/VoiceTable';
+import { EvalLine } from './chess/EvalLine';
 import type { PieceType } from '../../songs/chess/chessNotes';
 import { ChessBoardView } from './chess/ChessBoardView';
 import { useChessTension } from '../../songs/chess/chessTension';
@@ -34,10 +37,20 @@ function ChessMusicScreen() {
 
   // The engine lives as long as the screen.
   useEffect(() => {
-    const engine = new ChessSoundEngine(chessVoiceSpecs());
+    const engine = new ChessSoundEngine(chessVoiceSpecs(useChessVoices.getState().sounds));
     engineRef.current = engine;
     return () => { engine.dispose(); engineRef.current = null; useChessStore.getState().setPlaying(false); };
   }, []);
+
+  // A sound changed on screen: that voice is rebuilt with it.
+  const sounds = useChessVoices((v) => v.sounds);
+  const shown = useRef(sounds);
+  useEffect(() => {
+    for (const [voice, key] of Object.entries(sounds)) {
+      if (shown.current[voice] !== key) engineRef.current?.setSpec(voice, specForSound(key));
+    }
+    shown.current = sounds;
+  }, [sounds]);
 
   // One move a second while the built in game plays.
   useEffect(() => {
@@ -109,21 +122,43 @@ function ChessMusicScreen() {
           <p style={{ fontSize: 18, margin: '0 0 8px' }} aria-live="polite">
             {done ? 'The game is over.' : last ? `Move ${moves.length}: ${last.san}` : source === 'built-in' ? 'Press Play to hear the game.' : 'No moves yet.'}
           </p>
+          <ol aria-label="Moves" style={{ fontSize: 16, columns: 2, margin: '0 0 12px', paddingLeft: 24 }}>
+            {moves.map((m, i) => <li key={i}>{m.san}</li>)}
+          </ol>
           <p style={{ fontSize: 16, margin: '0 0 8px' }} data-testid="tension">
             {PHASE_WORDS[tension.phase]} · World: {SOUND_WORLDS[tension.world].name} · Energy: {energyWords(tension.energy)}
             {tension.source && <> · {tension.source === 'stockfish' ? 'tension from Stockfish' : 'tension from the pieces left and checks'}</>}
           </p>
+          <EvalLine evals={tension.evals} />
           <details style={{ fontSize: 16, margin: '0 0 12px' }}>
-            <summary style={{ minHeight: 44, display: 'flex', alignItems: 'center', cursor: 'pointer' }}>Which sound each piece plays</summary>
-            <ul style={{ margin: 0, paddingLeft: 20 }}>
-              {(['w', 'b'] as const).flatMap((side) => PIECE_TYPES.map((p) => <li key={side + p}>{voiceLabel(side + p)}</li>))}
-            </ul>
+            <summary style={{ minHeight: 44, display: 'flex', alignItems: 'center', cursor: 'pointer' }}>Sounds for each piece</summary>
+            <VoiceTable />
           </details>
-          <ol aria-label="Moves" style={{ fontSize: 16, columns: 2, margin: 0, paddingLeft: 24 }}>
-            {moves.map((m, i) => <li key={i}>{m.san}</li>)}
-          </ol>
+          <details style={{ fontSize: 16, margin: '0 0 12px' }}>
+            <summary style={{ minHeight: 44, display: 'flex', alignItems: 'center', cursor: 'pointer' }}>Help</summary>
+            <HelpText />
+          </details>
         </div>
       </div>
+    </div>
+  );
+}
+
+function HelpText() {
+  return (
+    <div style={{ maxWidth: 520 }}>
+      <h2 style={{ fontSize: 18 }}>What you hear</h2>
+      <p>Each piece has its own sound. When a piece moves, it plays one note: the column it lands on (a to h) is the note, the row (1 to 8) is how high. Black plays lower than White. Taking a piece adds a drum. Check adds a cymbal. Castling plays the king, then the rook. A piece that is taken is not heard again.</p>
+      <p>The line shows who is ahead. A close game is calm; when one side gets ahead, or the game suddenly turns, the music gets livelier. The sound changes at the opening, the middle of the game and the end. At checkmate every piece left on the board plays together.</p>
+      <h2 style={{ fontSize: 18 }}>Playing on the real board</h2>
+      <ol>
+        <li>Put the camera straight above the board, so the whole board is in the picture.</li>
+        <li>Set up the pieces at the start. Press The real board, then Start the camera.</li>
+        <li>Press Find the board. If it is not found, press Tap the corners and tap the four outer corners of the board.</li>
+        <li>Press Learn the start position, then Play.</li>
+        <li>Play chess. Take your hand away after each move: the move is heard when the board is still.</li>
+      </ol>
+      <p>If a move is not understood, the screen says so: put the pieces back as they were. To take a move back, put the pieces back where they were before it. When a pawn reaches the far side, choose what it becomes on the screen.</p>
     </div>
   );
 }
