@@ -73,11 +73,11 @@ export function loopChannelsFor(
       const match = todaysMatch(c.job, sound, today);
       channels.set(id, {
         id, kind: 'hue', role: c.job, swatch: match?.swatch ?? LOOP_GREY, changes: false,
-        plays: match?.plays ?? 'note',
+        plays: c.plays ?? match?.plays ?? 'note',
         ...(c.job === 'drums' ? { drum: sound } : { instrument: sound }),
       });
     }
-    const { job: _job, sound: _sound, ...rest } = c;
+    const { job: _job, sound: _sound, plays: _plays, ...rest } = c;
     return { ...rest, colour: id };
   });
   return { cells: out, channels: [...channels.values()] };

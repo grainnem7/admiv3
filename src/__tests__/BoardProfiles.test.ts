@@ -208,3 +208,49 @@ describe('the player remembered from last time', () => {
     expect(rememberedBoardPlayerId()).toBe('gone');
   });
 });
+
+describe('the demo piece’s player', () => {
+  beforeEach(() => localStorage.clear());
+
+  it('takes the colours, the cap, the iPad and the hand of the player chosen last; the music is the demo’s', async () => {
+    const { openDemoPlayer } = await import('../profiles/BoardProfiles');
+    const { DEMO_PLAYER_ID, DEMO_PIECE_ID, demoMusic } = await import('../songs/demo/demoPiece');
+    const tim = {
+      ...withColours(), handedness: 'left' as const, remoteStrips: ['tempo' as const], remoteLayoutKind: 'custom' as const,
+      cap: { ...DEFAULT_BOARD_SEQUENCER_CONFIG.cap, enabled: true },
+      loopSlots: [[{ row: 1, col: 1, colour: 'c1' }]], scaleName: 'Major pentatonic',
+    };
+    saveActiveBoardConfig(tim);
+    const timId = getActiveBoardPlayer()?.id;
+    const demo = openDemoPlayer();
+    expect(demo.id).toBe(DEMO_PLAYER_ID);
+    expect(demo.madeFrom).toBe(timId);
+    expect(getActiveBoardPlayer()?.id).toBe(DEMO_PLAYER_ID);
+    const cfg = loadActiveBoardConfig();
+    expect(cfg?.handedness).toBe('left');
+    expect(cfg?.remoteStrips).toEqual(['tempo']);
+    expect(cfg?.cap).toEqual(tim.cap);
+    expect(cfg?.channels.find((c) => c.id === 'c1')).toMatchObject({ role: 'melody', instrument: 'harp' });
+    expect(cfg?.loopSlots).toEqual(demoMusic().loopSlots);
+    expect(cfg?.pieceId).toBe(DEMO_PIECE_ID);
+    expect(cfg?.scaleName).toBe('Major');
+    // Tim's own player is untouched.
+    expect(listBoardPlayers().find((p) => p.id === timId)?.settings.loopSlots).toEqual(tim.loopSlots);
+  });
+
+  it('opened again, from the demo itself: the music written afresh, the same player’s colours and settings', async () => {
+    const { openDemoPlayer } = await import('../profiles/BoardProfiles');
+    const { demoMusic } = await import('../songs/demo/demoPiece');
+    saveActiveBoardConfig({ ...withColours(), handedness: 'left' });
+    openDemoPlayer();
+    const changed = loadActiveBoardConfig();
+    if (!changed) throw new Error('no config');
+    saveActiveBoardConfig({ ...changed, loopSlots: [], bpm: 140 });
+    openDemoPlayer();
+    const again = loadActiveBoardConfig();
+    expect(again?.loopSlots).toEqual(demoMusic().loopSlots);
+    expect(again?.bpm).toBe(demoMusic().bpm);
+    expect(again?.handedness).toBe('left');
+    expect(listBoardPlayers().filter((p) => p.name === 'Demo piece')).toHaveLength(1);
+  });
+});

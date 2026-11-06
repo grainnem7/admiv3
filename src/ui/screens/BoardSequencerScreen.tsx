@@ -134,8 +134,9 @@ import {
   setupRequestedOnOpen, clearSetupRequest, laptopRequestedOnOpen, stepOnBoard, configForNewPlayer, askWhoIsPlaying, openingView, viewAfterPick, shouldCheckBoard,
   type CameraStatus, type SetupStep,
 } from './boardSequencer/boardSetupFlow';
+import { DEMO_PLAYER_ID } from '../../songs/demo/demoPiece';
 import {
-  listBoardPlayers, getActiveBoardPlayer, rememberedBoardPlayerId, createBoardPlayer, updateBoardPlayer, setActiveBoardPlayer,
+  listBoardPlayers, getActiveBoardPlayer, rememberedBoardPlayerId, createBoardPlayer, openDemoPlayer, updateBoardPlayer, setActiveBoardPlayer,
   type BoardPlayerProfile,
 } from '../../profiles/BoardProfiles';
 import { layoutFor } from './boardSequencer/layout';
@@ -161,7 +162,7 @@ import { MIDIManager } from '../../midi/MIDIManager';
 import { previewChainCc, previewNotesFor, previewRoute, SoundAuditioner } from '../../audio/soundPreview';
 import { LoopEditor } from './boardSequencer/components/LoopEditor';
 import {
-  LAUNCH_SLOTS, MAX_SCENES, loopLabel, nextSceneIndex, sceneFromNow, sceneSettingsOf, sceneSettingsToApply, slotState, stoppedConfig, toggleSlot, withOwnSettings, type WayIn,
+  LAUNCH_SLOTS, MAX_SCENES, keyAt, keyFields, keyOf, type SceneKey, withOwnKey, withSceneKey, loopLabel, nextSceneIndex, sceneFromNow, sceneSettingsOf, sceneSettingsToApply, slotState, stoppedConfig, toggleSlot, withOwnSettings, type WayIn,
   type PlayerStrip, type Scene, type SceneSettings,
 } from '../../songs/performance/launcher';
 import { freshIdeas, ideasFor, keepIdea } from '../../songs/performance/ideas';
@@ -478,7 +479,7 @@ export default function BoardSequencerScreen() {
     // A change for a different player (a switch) writes the last one's first.
     if (pendingSaveRef.current && pendingSaveRef.current.playerId !== playerId) flushSave();
     // While a run holds the player's own settings, theirs are saved, never the scene's.
-    pendingSaveRef.current = { config: withOwnSettings(config, homeSettingsRef.current), playerId };
+    pendingSaveRef.current = { config: withOwnKey(withOwnSettings(config, homeSettingsRef.current), homeKeyRef.current), playerId };
     if (saveTimerRef.current === null) saveTimerRef.current = window.setTimeout(flushSave, SAVE_GATHER_MS);
   }, [config, flushSave]);
   // Another tab of ADMI is open. Only one tab saves (src/storage/tabSaving.ts): any other
@@ -966,6 +967,9 @@ export default function BoardSequencerScreen() {
   // rehearsal never leaves the player's settings wherever the last scene put them. While
   // it is set, these are what is saved (withOwnSettings), so a reload or a crash can't either.
   const homeSettingsRef = useRef<SceneSettings | null>(null);
+  // The player's own key, the same way: a scene can change the key (the demo goes from A
+  // major to A minor and up to B major), and it comes back when the piece is over.
+  const homeKeyRef = useRef<SceneKey | null>(null);
   const [ending, setEnding] = useState(false);
   const clockTickRef = useRef<() => void>(() => {});
   // Counters as loops: the debounced view of each loop colour, and the slots they want.
@@ -2405,7 +2409,9 @@ export default function BoardSequencerScreen() {
     // on now, whatever put one there (R2-T2-01).
     const home = homeSettingsRef.current;
     homeSettingsRef.current = null;
-    setConfig((prev) => stoppedConfig(prev, home));
+    const homeKey = homeKeyRef.current;
+    homeKeyRef.current = null;
+    setConfig((prev) => withOwnKey(stoppedConfig(prev, home), homeKey));
     // Stop means silence: no loop is left waiting to start with Play.
     stopAllLoopsRef.current();
     setWantedSlots([]);
@@ -2535,7 +2541,8 @@ export default function BoardSequencerScreen() {
     // on, the scene that was on wins when it is later than the plan's.
     const openingIndex = piece !== null ? openingScene(home.scenes, startSec, piece.scene ?? null) : null;
     const opening = openingIndex !== null ? home.scenes[openingIndex] ?? null : null;
-    const cfg: BoardSequencerStored = opening ? { ...home, ...opening.settings, currentScene: openingIndex }
+    const cfg: BoardSequencerStored = opening
+      ? withSceneKey({ ...home, ...opening.settings, currentScene: openingIndex }, { key: keyAt(home.scenes, openingIndex) ?? undefined })
       : clockOn ? { ...home, currentScene: null } : home;
     if (opening) {
       // Wanted and shown together, before the sound loads: the iPad (and the loop list) show
@@ -2663,7 +2670,10 @@ export default function BoardSequencerScreen() {
     clockStartRef.current = clockOn ? performance.now() - (Date.now() - firstStart) : null;
     if (clockOn) pieceStartedAtRef.current = performance.now();
     if (clockOn) rememberPieceRunning(firstStart, home.performance.lengthSec);
-    if (clockStartRef.current !== null) homeSettingsRef.current = sceneSettingsOf(home);
+    if (clockStartRef.current !== null) {
+      homeSettingsRef.current = sceneSettingsOf(home);
+      homeKeyRef.current = keyOf(home);
+    }
     // The opening scene sets everything: a strip the player moved before the piece is no
     // longer theirs to keep from the next scene.
     if (clockOn) stripsTouchedRef.current = new Set();
@@ -2674,7 +2684,7 @@ export default function BoardSequencerScreen() {
       ? { remaining: home.performance.lengthSec - startSec, elapsed: startSec }
       : { remaining: Infinity, elapsed: opening ? 0 : CLOCK_NOT_STARTED };
     if (opening) {
-      setConfig((prev) => ({ ...prev, ...opening.settings, currentScene: openingIndex }));
+      setConfig((prev) => withSceneKey({ ...prev, ...opening.settings, currentScene: openingIndex }, { key: keyAt(home.scenes, openingIndex) ?? undefined }));
       setBoardNotice(`Scene: ${opening.name}`);
     } else if (clockOn) setConfig((prev) => (prev.currentScene === null ? prev : { ...prev, currentScene: null }));
     autoEndedRef.current = false;
@@ -3691,7 +3701,10 @@ export default function BoardSequencerScreen() {
     if (!scene) return;
     // The player's own settings, kept for Stop (and saved meanwhile in place of the scene's).
     if (homeSettingsRef.current === null) homeSettingsRef.current = sceneSettingsOf(c);
+    if (homeKeyRef.current === null) homeKeyRef.current = keyOf(c);
     const apply = sceneSettingsToApply(scene.settings, stripsTouchedRef.current, c.sceneRespectsPlayer);
+    // Its key (its own, or the one the piece is in by then), on the pass with its loops.
+    const key = keyAt(c.scenes, i);
     const kept = [...stripsTouchedRef.current].filter(() => c.sceneRespectsPlayer);
     stripsTouchedRef.current = new Set();
     // The scene's sound lands on the pass, with its loops (the speed glides as before).
@@ -3699,10 +3712,11 @@ export default function BoardSequencerScreen() {
       soundWorld: apply.soundWorld, band: apply.band, phrases: apply.phrases,
       fillAmount: apply.fillAmount, evolveAmount: apply.evolveAmount, chords: apply.chords, bandJobs: apply.bandJobs,
       sceneEnergy: apply.sceneEnergy, ideas: ideasFor({ ...c, currentScene: i }),
+      ...(key ? { key: { rootMidi: key.rootMidi, semitones: key.semitones } } : {}),
     });
     // Its lead-in, into that same pass (a scene with none clears one waiting).
     engineRef.current?.cueLeadIn(scene.leadIn ?? 'none');
-    update({ ...apply, currentScene: i });
+    update({ ...apply, ...(key ? keyFields(key) : {}), currentScene: i });
     if (apply.bpm !== undefined) setSceneSpeed(apply.bpm, scene.glideSec);
     const glide = apply.bpm !== undefined ? speedGlideRef.current : null;
     const glideWords = glide && glide.durMs > 0 && Math.round(glide.from) !== Math.round(glide.to)
@@ -3831,11 +3845,14 @@ export default function BoardSequencerScreen() {
     // The player's own settings: from before a jump to a scene, if there was one.
     const own = homeSettingsRef.current ?? sceneSettingsOf(c);
     homeSettingsRef.current = own;
+    if (homeKeyRef.current === null) homeKeyRef.current = keyOf(c);
     const openingIndex = openingScene(c.scenes, 0);
     const opening = openingIndex !== null ? c.scenes[openingIndex] ?? null : null;
     const settings = opening ? { ...own, ...opening.settings } : own;
+    const openingKey = keyAt(c.scenes, openingIndex);
     stripsTouchedRef.current = new Set();
-    update({ ...settings, currentScene: openingIndex });
+    if (openingKey) engineRef.current?.landOnNextPass({ key: { rootMidi: openingKey.rootMidi, semitones: openingKey.semitones } });
+    update({ ...settings, ...(openingKey ? keyFields(openingKey) : {}), currentScene: openingIndex });
     setSceneSpeed(settings.bpm, 0);
     wantedRef.current = new Set((opening?.loops ?? []).filter((sl) => (c.loopSlots[sl] ?? null) !== null));
     pushLaunch();
@@ -6770,6 +6787,31 @@ export default function BoardSequencerScreen() {
     </div>
   ) : null;
 
+  const pickPlayer = (id: string): void => {
+    setActiveBoardPlayer(id);
+    const loaded = loadBoardSequencerConfig();
+    if (loaded) setConfig(loaded);
+    setActivePlayerState(getActiveBoardPlayer());
+    // Their loops, not the last player's: the bank keeps the pad latches across a
+    // re-seed so a cleared slot stays cleared, and carrying those into another
+    // profile started their loops with nothing on the board.
+    loopBankRef.current = emptyLoopBank(0);
+    storedRef.current = loadBoardSequencerConfig();
+    setChooserOpen(false);
+    // ↶ offers this player's sounds before, never the last player's (A16).
+    forgetSoundsBefore();
+    // Their board, not the last player's: checked afresh, and set-up if theirs
+    // isn't ready (stopped only — playing, nothing moves).
+    boardCheckAbortRef.current?.abort();
+    setBoardCheck(null);
+    boardCheckedRef.current = false;
+    const next = viewAfterPick(loaded, runningRef.current, view === 'setup' ? 'setup' : 'play');
+    if (view !== 'bigBoard' && next !== view) {
+      setView(next);
+      if (next === 'setup') setStep(resolveEntry({ enabled: loaded?.enabled ?? false, channels: loaded?.channels ?? [] }, loaded !== null));
+    }
+  };
+
   return (
     <div
       className="bs-root board-sequencer-screen"
@@ -6796,29 +6838,14 @@ export default function BoardSequencerScreen() {
         >
         <PlayerChooser
           players={players}
-          onPick={(id) => {
-            setActiveBoardPlayer(id);
-            const loaded = loadBoardSequencerConfig();
-            if (loaded) setConfig(loaded);
-            setActivePlayerState(getActiveBoardPlayer());
-            // Their loops, not the last player's: the bank keeps the pad latches across a
-            // re-seed so a cleared slot stays cleared, and carrying those into another
-            // profile started their loops with nothing on the board.
-            loopBankRef.current = emptyLoopBank(0);
-            storedRef.current = loadBoardSequencerConfig();
-            setChooserOpen(false);
-            // ↶ offers this player's sounds before, never the last player's (A16).
-            forgetSoundsBefore();
-            // Their board, not the last player's: checked afresh, and set-up if theirs
-            // isn't ready (stopped only — playing, nothing moves).
-            boardCheckAbortRef.current?.abort();
-            setBoardCheck(null);
-            boardCheckedRef.current = false;
-            const next = viewAfterPick(loaded, runningRef.current, view === 'setup' ? 'setup' : 'play');
-            if (view !== 'bigBoard' && next !== view) {
-              setView(next);
-              if (next === 'setup') setStep(resolveEntry({ enabled: loaded?.enabled ?? false, channels: loaded?.channels ?? [] }, loaded !== null));
-            }
+          onPick={(id) => pickPlayer(id)}
+          onDemo={() => {
+            // The last player's newest changes first: the demo takes their colours, cap and iPad.
+            flushSave();
+            openDemoPlayer();
+            setPlayers(listBoardPlayers());
+            pickPlayer(DEMO_PLAYER_ID);
+            announce('The demo piece is ready. Press Start the piece to hear it.');
           }}
           onCreate={(name, handedness) => {
             createBoardPlayer(name, handedness);

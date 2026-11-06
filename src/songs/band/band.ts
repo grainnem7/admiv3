@@ -18,7 +18,7 @@
  */
 
 import { grooveFor, harmonyFromChord, type DrumHit, type Harmony as PhraseHarmony } from '../phrases/phrases';
-import { bassNote, chordOnDegree, leftHand, openVoicing, voiceLead } from '../harmony/harmony';
+import { bassNote, chordOnDegree, leftHand, openVoicing, triadPcs, voiceLead } from '../harmony/harmony';
 import { WORLD_PROGRESSION, isStrongBeat } from '../harmony/currentChord';
 import { counterRange, notesIn, padRangeAway, PAD_RANGE, type BandJobs, type Register } from './bandJobs';
 import type { SoundWorldId } from '../../audio/worlds/soundWorlds';
@@ -176,7 +176,7 @@ export function bandEventsAtStep(input: BandInput): BandEvent[] {
     // warmth and sustain without a register of its own. Placed away from the chords it ended
     // up at E6 on a busy board, shrill and above the melody (sound design pass).
     const allPcs = [...new Set(h.tones.map((t) => ((t % 12) + 12) % 12))];
-    const layered = withJobs && input.chordRegister ? leftHand(h.tones.slice(0, 3)) : null;
+    const layered = withJobs && input.chordRegister ? leftHand(triadPcs(h)) : null;
     const [lo, hi] = withJobs ? padRangeAway(input.chordRegister ?? null) : PAD_RANGE;
     const led = layered ?? voiceLead({ pcs: allPcs }, input.previousPad ?? null, lo, hi);
     // Folded into its range the voicing can close up again (a ninth back beside its root), so it is opened once more (S2).

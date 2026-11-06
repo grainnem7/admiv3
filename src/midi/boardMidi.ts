@@ -474,6 +474,9 @@ export function testSequenceEvents(atMs: number, channels: readonly number[] = T
 }
 
 /** Sends the board's notes to the chosen MIDI output, while it is connected. */
+/** CC 30: the Rack chain (see abletonSounds CHAIN_CC; kept here so this file needs nothing from there). */
+const CHAIN_SELECT_CC = 30;
+
 export class BoardMidiSender {
   private readonly held = new Map<string, HeldNote>();
   /**
@@ -604,6 +607,26 @@ export class BoardMidiSender {
       ...controlEvents([target.channel], target.cc, 64, now),
       ...controlEvents([target.channel], target.cc, end, now + 150),
     ], now);
+  }
+
+  /**
+   * Controller values at an audio time: a loop's instrument switching on a pass boundary.
+   * Where the chain changes, a note on that channel still waiting for its note off ends a
+   * moment before the switch, so it is never left sounding on the old instrument (its note
+   * off would go to the new one).
+   */
+  sendControlsAt(list: readonly { channel: number; cc: number; value: number }[], audioTime: number): void {
+    if (list.length === 0) return;
+    const now = performance.now();
+    const at = Math.max(now, this.toMs(audioTime, now));
+    const switching = new Set(list.filter((c) => c.cc === CHAIN_SELECT_CC).map((c) => c.channel));
+    for (const [key, p] of this.pendingOffs) {
+      const channel = (p.ev.data[0] & 0x0f) + 1;
+      if (!switching.has(channel) || p.ev.atMs < at - 1) continue;
+      this.emit([{ data: p.ev.data, atMs: at - 1 }], now, p.leadMs);
+      this.pendingOffs.delete(key);
+    }
+    this.emit(list.flatMap((c) => controlEvents([c.channel], c.cc, c.value, at)), now);
   }
 
   /** Controller values on their channels, now (Phase 2: chains and macros). */

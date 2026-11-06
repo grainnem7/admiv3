@@ -127,6 +127,22 @@ const HELP: HelpEntry[] = [
       + 'board or the colours again.',
   },
   {
+    title: 'The demo piece',
+    body: 'Player button → ▶ Open the demo piece: a ready-made piece of about four minutes, as a '
+      + 'player of its own called Demo piece. The drums start alone; the trombone, the guitar and the '
+      + 'harp come in one by one; the clarinet takes over the tune; everything but the guitar and the '
+      + 'harp drops away for a breakdown; the drums and the trombone come back with a fill; and it '
+      + 'ends with everything playing, into the Big finish. It begins in A major, moves to A '
+      + 'mixolydian for the clarinet and A minor for the breakdown, and goes up a tone to B major '
+      + 'for the end. It plays the same every time: the extra notes and the band come from the rules '
+      + 'with fixed ideas. It uses the colours, the cap and the iPad of the player chosen before it, '
+      + 'so the hat and the iPad work as in your own pieces, and your counters still play on top. '
+      + 'Press ▶ Start the piece in Show to hear it. Opening it again writes the music afresh, so a '
+      + 'change made in it is put back. With Ableton, each part\u2019s track plays the loop\u2019s own '
+      + 'instrument (the trombone, the harp) while none of your counters for that part is on the '
+      + 'board; put one down and your own sound comes back.',
+  },
+  {
     title: 'Hints',
     body: 'If the pieces stop lining up, or a colour starts matching the board itself, a hint '
       + 'appears above the board. Hints never change anything on their own, and "Not now" '

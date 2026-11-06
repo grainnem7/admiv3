@@ -20,6 +20,7 @@ export const SCALE_PRESETS: { name: string; semitones: number[] }[] = [
   { name: 'Major', semitones: [0, 2, 4, 5, 7, 9, 11] },
   { name: 'Minor', semitones: [0, 2, 3, 5, 7, 8, 10] },
   { name: 'Dorian', semitones: [0, 2, 3, 5, 7, 9, 10] },
+  { name: 'Mixolydian', semitones: [0, 2, 4, 5, 7, 9, 10] },
 ];
 
 /** Note names for the 12 semitones from C, for the key picker. */

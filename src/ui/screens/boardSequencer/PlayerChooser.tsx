@@ -11,6 +11,8 @@ export interface PlayerChooserProps {
   onEdit(id: string, name: string, handedness: 'left' | 'right'): void;
   /** Shown when the chooser was opened from the header rather than at start-up. */
   onCancel?(): void;
+  /** Open the ready-made demo piece (as its own player, with the last player's colours, cap and iPad). */
+  onDemo?(): void;
 }
 
 /**
@@ -18,7 +20,7 @@ export interface PlayerChooserProps {
  * wrong one quietly changes the instrument under them. Names are personal data, so the
  * hint suggests initials or a code rather than a full name.
  */
-export function PlayerChooser({ players, onPick, onCreate, onEdit, onCancel }: PlayerChooserProps): JSX.Element {
+export function PlayerChooser({ players, onPick, onCreate, onEdit, onCancel, onDemo }: PlayerChooserProps): JSX.Element {
   const [creating, setCreating] = useState(players.length === 0);
   // The player being edited, or null.
   const [editing, setEditing] = useState<BoardPlayerProfile | null>(null);
@@ -57,6 +59,16 @@ export function PlayerChooser({ players, onPick, onCreate, onEdit, onCancel }: P
             <Button tone="primary" onClick={() => setCreating(true)}>New player</Button>
             {onCancel && <Button tone="quiet" onClick={onCancel}>Cancel</Button>}
           </div>
+          {onDemo && players.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>
+              <Button tone="secondary" onClick={onDemo}>▶ Open the demo piece</Button>
+              <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>
+                A ready-made piece of about four minutes: drums, then trombone, guitar, harp and clarinet,
+                from A major through A minor and up to B major, with a big ending. It plays the same every
+                time, and uses your colours, cap and iPad.
+              </span>
+            </div>
+          )}
         </>
       )}
 

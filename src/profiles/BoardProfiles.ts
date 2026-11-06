@@ -11,6 +11,7 @@ import {
 } from './BoardSequencerConfig';
 import { applyGridChange } from '../tracking/boardGrid';
 import { canSave } from '../storage/tabSaving';
+import { DEMO_PLAYER_ID, DEMO_PLAYER_NAME, demoMusic } from '../songs/demo/demoPiece';
 
 export const RIG_KEY = 'admi-board-rig';
 export const PLAYERS_KEY = 'admi-board-players';
@@ -33,6 +34,8 @@ export interface BoardPlayerProfile {
   name: string;
   settings: Partial<BoardSequencerStored>;
   channelSettings: Record<string, ChannelPlayerSettings>;
+  /** The demo piece's player only: the player whose colours, cap and iPad it took. */
+  madeFrom?: string;
 }
 
 function readJson(key: string): unknown {
@@ -123,6 +126,7 @@ function sanitizePlayer(v: unknown): BoardPlayerProfile | null {
     channelSettings: typeof o.channelSettings === 'object' && o.channelSettings !== null
       ? (o.channelSettings as Record<string, ChannelPlayerSettings>)
       : {},
+    ...(typeof o.madeFrom === 'string' && o.madeFrom ? { madeFrom: o.madeFrom } : {}),
   };
 }
 
@@ -220,6 +224,44 @@ export function createBoardPlayer(name: string, handedness: 'left' | 'right'): B
   const { settings } = splitBoardConfig(applyGridChange(base, {}));
   const player: BoardPlayerProfile = { id: freshPlayerId(players), name: name.trim() || 'Player', settings, channelSettings: {} };
   savePlayers([...players, player]);
+  setActiveId(player.id);
+  return player;
+}
+
+/**
+ * The demo piece, ready to play, as its own player ("Demo piece"), opened. Its music is
+ * written afresh every time (src/songs/demo/demoPiece.ts), so it always plays as written,
+ * whatever was changed in it since. Everything that is not the music comes from the player
+ * chosen last (or, from the demo itself, the player it was made from): their colours and
+ * what each plays, the cap, the iPad, the hand, the control ranges, the keys. The board,
+ * camera and MIDI are the rig's, as for every player.
+ */
+export function openDemoPlayer(): BoardPlayerProfile {
+  migrateLegacy();
+  const players = listBoardPlayers();
+  const existing = players.find((p) => p.id === DEMO_PLAYER_ID) ?? null;
+  const activeId = localStorage.getItem(ACTIVE_PLAYER_KEY);
+  const others = players.filter((p) => p.id !== DEMO_PLAYER_ID);
+  const fromId = activeId && activeId !== DEMO_PLAYER_ID ? activeId : existing?.madeFrom;
+  const from = others.find((p) => p.id === fromId) ?? (existing ? null : others[0] ?? null);
+  const rig = loadRig();
+  const boardSquares = rig?.fields.boardSquares ?? DEFAULT_BOARD_SEQUENCER_CONFIG.boardSquares;
+  const own = from?.settings ?? existing?.settings ?? {};
+  const merged = applyGridChange(
+    { ...DEFAULT_BOARD_SEQUENCER_CONFIG, ...NEW_PLAYER_SOUND, ...own, boardSquares, channels: [], ...demoMusic() },
+    { rows: 8, cols: 8 },
+  );
+  const clean = sanitizeBoardSequencerConfig(merged) ?? merged;
+  const { settings } = splitBoardConfig(clean);
+  const madeFrom = from?.id ?? existing?.madeFrom;
+  const player: BoardPlayerProfile = {
+    id: DEMO_PLAYER_ID,
+    name: DEMO_PLAYER_NAME,
+    settings,
+    channelSettings: { ...(from?.channelSettings ?? existing?.channelSettings ?? {}) },
+    ...(madeFrom ? { madeFrom } : {}),
+  };
+  savePlayers(existing ? players.map((p) => (p.id === DEMO_PLAYER_ID ? player : p)) : [...players, player]);
   setActiveId(player.id);
   return player;
 }

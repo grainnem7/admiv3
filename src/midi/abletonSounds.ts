@@ -252,6 +252,21 @@ export interface AbletonPlanInput {
   swing: number;
   /** Loops on their own channels: those follow the World too. */
   loopChannels?: boolean;
+  /**
+   * The sounds of the loops playing now (a loop colour each, the latest last). A part's track
+   * plays a loop's own instrument (the demo's trombone, the harp) while none of the player's
+   * counters for that track is on the board; the player's sound comes back with a counter.
+   */
+  loopSounds?: readonly LoopSound[];
+  /** The player's colours with a counter on the board now. */
+  coloursOnBoard?: ReadonlySet<string>;
+}
+
+/** A playing loop's instrument for one job, under its loop colour. */
+export interface LoopSound {
+  colour: string;
+  role: 'melody' | 'bass' | 'chord';
+  instrument: string;
 }
 
 export interface AbletonPlan {
@@ -305,12 +320,37 @@ export function abletonPlan(input: AbletonPlanInput): AbletonPlan {
     // Shape rests at full between notes; melody and chords only (the bass keeps its own level).
     if (ch.role === 'melody' || ch.role === 'chord') set(channel, CC_SHAPE, 127);
   }
+  // A loop's own instrument on its track, while the player has no counter there: the track
+  // plays what the loop was made with, not the player's colour's sound. The latest loop wins.
+  const byLoop = new Set<number>();
+  if (!input.loopChannels) {
+    const latest = new Map<number, LoopSound>();
+    for (const l of input.loopSounds ?? []) {
+      const channel = channelFor({ role: l.role, origin: 'placed', colour: l.colour }, opts);
+      if (channel !== null) latest.set(channel, l);
+    }
+    for (const [channel, l] of latest) {
+      const playerThere = input.channels.some((c) => hasColourChannel(c.role) && input.coloursOnBoard?.has(c.id)
+        && channelFor({ role: c.role, origin: 'placed', colour: c.id }, opts) === channel);
+      if (playerThere) continue;
+      const chain = chainFor({ role: l.role, instrument: l.instrument || undefined }, input.world);
+      if (chain === null || !filledChains(channel, { channelMode: input.channelMode, loopChannels: input.loopChannels }).has(chain)) continue;
+      byLoop.add(channel);
+      chains.set(channel, chain);
+      set(channel, CHAIN_CC, chainCcValue(chain, channel));
+      if (owner.has(channel)) continue;
+      set(channel, CC_LOUD, stepCc(LOUD, 1));
+      set(channel, CC_BRIGHT, stepCc(BRIGHT, 1));
+      set(channel, CC_SPACE, stepCc(SPACE_SEND, world?.reverbSend ?? 0.18));
+      if (l.role === 'melody' || l.role === 'chord') set(channel, CC_SHAPE, 127);
+    }
+  }
   // One per colour: a job's track with no colour on it today still gets the World's sound and
   // the usual Loud, Bright and Space, so it is ready (and listed for mapping) when a colour
   // arrives on it, in this session or a later one with fresh colours.
   if (input.channelMode === 'colour') {
     for (const channel of Object.values(COLOUR_JOB_CHANNELS).flat()) {
-      if (owner.has(channel)) continue;
+      if (owner.has(channel) || byLoop.has(channel)) continue;
       const wc = worldChain(input.world);
       chains.set(channel, wc);
       set(channel, CHAIN_CC, chainCcValue(wc, channel));

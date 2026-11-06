@@ -51,13 +51,13 @@ import {
   BoardMidiSender, channelsInUse, EXPRESSION_STEP_SEC, gainToCc, loopChannel, loopSlotOf, LOOP_CHANNELS, type BoardMidiOptions,
 } from '../midi/boardMidi';
 import {
-  abletonPlan, changedControls, controlKey, counterControls, CC_BRIGHT, CC_SPACE,
+  abletonPlan, changedControls, type LoopSound, controlKey, counterControls, CC_BRIGHT, CC_SPACE,
   type AbletonControl, type AbletonPlan,
 } from '../midi/abletonSounds';
 import type { NamedVoice } from '../audio/evolve/evolve';
 import { GainTrack } from './gainTrack';
 import { BIG_RIT, type EndingStyle } from './performance/clock';
-import { bassNote, chordOnDegree, degreeOfNote, leftHand, voiceNear } from './harmony/harmony';
+import { bassNote, chordOnDegree, chordPcs, degreeOfNote, leftHand, triadPcs, voiceNear } from './harmony/harmony';
 import {
   LATE_TOLERANCE_SEC, nextValveStep, TimeKeeper, type KeepingTimeLimits, type KeepingTimeReport, type ValveStep,
 } from './keepingTime';
@@ -212,6 +212,8 @@ export interface PassSettings {
   bandJobs?: BandJobs;
   sceneEnergy?: number;
   ideas?: IdeasSetting;
+  /** A scene's key: the key note and the scale's steps, from the pass it lands on. */
+  key?: { rootMidi: number; semitones: number[] };
 }
 
 /** Evolve: how each colour's sound keeps changing as it plays (see audio/evolve). */
@@ -238,10 +240,11 @@ function sameChords(a: ChordSetting, b: ChordSetting): boolean {
 
 /** Two values of one scene setting are the same (chords and jobs compared by what they are). */
 function passValueEqual(a: unknown, b: unknown): boolean {
+  if (Array.isArray(a) && Array.isArray(b)) return a.length === b.length && a.every((v, i) => passValueEqual(v, b[i]));
   if (typeof a === 'object' && a !== null && typeof b === 'object' && b !== null) {
     const x = a as Record<string, unknown>;
     const y = b as Record<string, unknown>;
-    for (const k of new Set([...Object.keys(x), ...Object.keys(y)])) if (x[k] !== y[k]) return false;
+    for (const k of new Set([...Object.keys(x), ...Object.keys(y)])) if (!passValueEqual(x[k], y[k])) return false;
     return true;
   }
   return a === b;
@@ -1429,6 +1432,7 @@ export class BoardSequencerEngine {
       soundWorld: this.cfg.soundWorld ?? 'none', band: this.bandSetting, phrases: this.cfg.phrases ?? false,
       fillAmount: this.fillSetting, evolveAmount: this.evolveSetting, chords: this.cfg.chords ?? AS_BEFORE_CHORDS,
       bandJobs: this.bandJobs, sceneEnergy: this.sceneEnergy, ideas: this.ideas,
+      key: { rootMidi: this.cfg.scaleRootMidi, semitones: this.cfg.scaleSemitones },
     };
     const next: PassSettings = { ...(this.passPending ?? {}) };
     for (const k of Object.keys(p) as (keyof PassSettings)[]) {
@@ -1468,6 +1472,7 @@ export class BoardSequencerEngine {
     }
     if (p.sceneEnergy !== undefined) this.setSceneEnergy(p.sceneEnergy);
     if (p.ideas !== undefined) this.applyIdeas(p.ideas, beat);
+    if (p.key !== undefined) this.setScale(p.key.rootMidi, [...p.key.semitones]);
   }
 
   private studioOn(): boolean {
@@ -1545,7 +1550,7 @@ export class BoardSequencerEngine {
    * values that changed go out; `full` sends everything (Play, a new route, the button).
    * A control counter on the board owns its macro while it is there.
    */
-  private syncAbleton(full = false): void {
+  private syncAbleton(full = false, atTime?: number): void {
     if (!this.midiOpts.enabled || !this.midi) return;
     const evolveVoices = new Map<string, NamedVoice | null>();
     this.voiceByChannel.forEach((e, id) => evolveVoices.set(id, e.evo?.voice ?? null));
@@ -1559,18 +1564,21 @@ export class BoardSequencerEngine {
       space: this.spaceSetting,
       swing: this.cfg.swing,
       loopChannels: this.midiOpts.loopChannels,
+      loopSounds: this.loopSounds(),
+      coloursOnBoard: new Set(this.coloursOnBoard()),
     });
     this.abletonLast = plan;
     const owned = new Set<number>([
       ...(this.counterOwns.tone ? [CC_BRIGHT] : []), ...(this.counterOwns.reverb ? [CC_SPACE] : []),
     ]);
     const mine = new Map([...plan.controls].filter(([, c]) => !owned.has(c.cc)));
-    this.sendAbleton(changedControls(mine, this.abletonSent, full));
+    this.sendAbleton(changedControls(mine, this.abletonSent, full), atTime);
   }
 
-  private sendAbleton(list: readonly AbletonControl[]): void {
+  private sendAbleton(list: readonly AbletonControl[], atTime?: number): void {
     if (list.length === 0 || !this.midi || !this.midiOpts.enabled) return;
-    this.midi.sendControls(list);
+    if (atTime !== undefined) this.midi.sendControlsAt(list, atTime);
+    else this.midi.sendControls(list);
     for (const c of list) this.abletonSent.set(controlKey(c.channel, c.cc), c.value);
   }
 
@@ -1827,6 +1835,37 @@ export class BoardSequencerEngine {
   setActiveCells(cells: ActiveCell[]): void {
     this.active = cells;
     this.boardArrived = true;
+    // Ableton: a counter for a part going down, or its last one coming off, hands that part's
+    // track between the player's sound and a playing loop's own (see abletonPlan).
+    if (this.midiOpts.enabled && this.launched.length > 0) {
+      const key = this.coloursOnBoard(cells).join('|');
+      if (key !== this.onBoardKey) {
+        this.onBoardKey = key;
+        this.syncAbleton();
+      }
+    }
+  }
+
+  private onBoardKey = '';
+
+  /** The player's colours with a counter on the board, in order. */
+  private coloursOnBoard(cells: readonly ActiveCell[] = this.active): string[] {
+    return [...new Set(cells.map((c) => c.colour))].sort();
+  }
+
+  /** The instruments of the loops playing now (not those fading out), by loop colour, the latest last. */
+  private loopSounds(): LoopSound[] {
+    const out = new Map<string, LoopSound>();
+    for (const l of this.launched) {
+      if (l.fade?.dir === 'out') continue;
+      for (const c of l.cells) {
+        const ch = this.channelById.get(c.colour);
+        if (!ch || (ch.role !== 'melody' && ch.role !== 'bass' && ch.role !== 'chord')) continue;
+        out.delete(c.colour);
+        out.set(c.colour, { colour: c.colour, role: ch.role, instrument: ch.instrument ?? '' });
+      }
+    }
+    return [...out.values()];
   }
 
   /** Set the layered loops (from the loop bank) that play atop the live pattern. */
@@ -2158,6 +2197,8 @@ export class BoardSequencerEngine {
     this.pendingLaunch = null;
     this.rebuildChannelIndex();
     this.releaseLoopChannels(stopped);
+    // Ableton: a part's track takes the arriving loop's instrument on the pass, with its first note.
+    this.syncAbleton(false, atTime);
   }
 
   /** Loops that have stopped: their own channels' notes end now, unless another loop still plays there. */
@@ -2381,6 +2422,14 @@ export class BoardSequencerEngine {
   }
 
   setScale(rootMidi: number, semitones: number[]): void {
+    if (this.passPending?.key) {
+      // A scene's key waiting for the pass: the same key again changes nothing yet; another
+      // is the player's own choice, which wins at once.
+      if (passValueEqual({ rootMidi, semitones }, this.passPending.key)) return;
+      if (rootMidi === this.cfg.scaleRootMidi && passValueEqual(semitones, this.cfg.scaleSemitones)) return;
+      delete this.passPending.key;
+      if (Object.keys(this.passPending).length === 0) this.passPending = null;
+    }
     this.cfg.scaleRootMidi = rootMidi;
     this.cfg.scaleSemitones = semitones;
   }
@@ -2657,8 +2706,7 @@ export class BoardSequencerEngine {
     // A loop's chord is plain (root, third, fifth): the colour tones, the ninths and sevenths,
     // belong to the player's own chords (density, S2). Voiced as a left hand under the melody
     // (sound design pass): the row picks the chord, not its register.
-    const tones = plain ? now?.tones.slice(0, 3) : now?.tones;
-    if (now && tones) return leftHand(tones);
+    if (now) return leftHand(plain ? triadPcs(now) : chordPcs(now));
     // A real chord of the key on the row's note.
     const style = worldOf(this.cfg.soundWorld ?? 'none')?.id ?? 'warm';
     const ch = chordOnDegree(degreeOfNote(note, root, semis), root, semis, style);
@@ -3399,7 +3447,7 @@ export class BoardSequencerEngine {
           const loopNote = tag?.source === 'loop';
           // A loop's chord is plain (root, third, fifth), as in chordStack: its colour tones are the player's.
           if (loopNote && ev.role === 'chord' && this.chordNow.harmony) {
-            const plain = new Set(this.chordNow.harmony.tones.slice(0, 3).map((t) => ((t % 12) + 12) % 12));
+            const plain = new Set(triadPcs(this.chordNow.harmony));
             if (!plain.has(((midi % 12) + 12) % 12)) continue;
           }
           if (loopNote) midi += loopLaneShift(ev.role, this.stepLaneUp, midi);

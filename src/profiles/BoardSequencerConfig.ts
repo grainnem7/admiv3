@@ -75,6 +75,11 @@ export interface StoredLoopCell extends StoredBoardCell {
   job?: 'melody' | 'bass' | 'chord' | 'drums';
   /** The colour's instrument (melodic jobs) or kit piece (drums); '' = the default. */
   sound?: string;
+  /**
+   * One note per counter or a tune, fixed for this loop (the demo piece's drums play the
+   * groove, its tunes one note each). Absent: as today's colour of that sound plays.
+   */
+  plays?: 'note' | 'tune';
 }
 
 const LOOP_JOBS = new Set(['melody', 'bass', 'chord', 'drums']);
@@ -815,6 +820,7 @@ function sanitizeLoopSlots(v: unknown): (StoredLoopCell[] | null)[] {
       if (typeof o.job === 'string' && LOOP_JOBS.has(o.job)) {
         cell.job = o.job as StoredLoopCell['job'];
         cell.sound = typeof o.sound === 'string' ? o.sound : '';
+        if (o.plays === 'note' || o.plays === 'tune') cell.plays = o.plays;
       }
       return [cell];
     });

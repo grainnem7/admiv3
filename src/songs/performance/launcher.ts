@@ -133,6 +133,67 @@ export interface Scene {
    * gives them the player's Loop fade when it loads (withWayIn), so the show sounds as it did.
    */
   wayIn?: WayIn;
+  /**
+   * The key and mode this scene plays in (a piece can move from A major to A minor and up to
+   * B major). It lands on the pass with the loops; the loops' notes are steps of the scale,
+   * so they follow it. Absent = the key stays as it is, as every scene saved before.
+   */
+  key?: SceneKey;
+}
+
+/** A scene's key: the key note (the melody's bottom row) and the scale. */
+export interface SceneKey {
+  rootMidi: number;
+  scaleName: string;
+  semitones: number[];
+}
+
+/** The config's own key fields. */
+export interface KeyFields {
+  scaleRootMidi: number;
+  scaleName: string;
+  scaleSemitones: number[];
+}
+
+export function keyOf(c: KeyFields): SceneKey {
+  return { rootMidi: c.scaleRootMidi, scaleName: c.scaleName, semitones: [...c.scaleSemitones] };
+}
+
+export function keyFields(k: SceneKey): KeyFields {
+  return { scaleRootMidi: k.rootMidi, scaleName: k.scaleName, scaleSemitones: [...k.semitones] };
+}
+
+/** The config with a scene's key, or as it is when the scene has none. */
+export function withSceneKey<T extends KeyFields>(c: T, scene: { key?: SceneKey } | null | undefined): T {
+  return scene?.key ? { ...c, ...keyFields(scene.key) } : c;
+}
+
+/** The player's own key back (when a run held it), as withOwnSettings does for the rest. */
+export function withOwnKey<T extends KeyFields>(c: T, own: SceneKey | null): T {
+  return own ? { ...c, ...keyFields(own) } : c;
+}
+
+/** The key in force in scene `i`: its own, else the nearest earlier scene's; null = none set. */
+export function keyAt(scenes: readonly { key?: SceneKey }[], i: number | null): SceneKey | null {
+  if (i === null) return null;
+  for (let k = Math.min(i, scenes.length - 1); k >= 0; k--) {
+    const key = scenes[k]?.key;
+    if (key) return key;
+  }
+  return null;
+}
+
+/** A stored key made safe, or null: a key note in reach, and a scale that starts on it. */
+export function sanitizeSceneKey(v: unknown): SceneKey | null {
+  if (typeof v !== 'object' || v === null) return null;
+  const o = v as Record<string, unknown>;
+  if (!isNum(o.rootMidi) || !Number.isInteger(o.rootMidi) || o.rootMidi < 36 || o.rootMidi > 84) return null;
+  if (typeof o.scaleName !== 'string' || o.scaleName.length === 0 || o.scaleName.length > 40) return null;
+  if (!Array.isArray(o.semitones)) return null;
+  const semis = o.semitones.filter((x): x is number => isNum(x) && Number.isInteger(x) && x >= 0 && x < 12);
+  const clean = [...new Set(semis)].sort((a, b) => a - b);
+  if (clean.length < 5 || clean.length !== o.semitones.length || clean[0] !== 0) return null;
+  return { rootMidi: o.rootMidi, scaleName: o.scaleName, semitones: clean };
 }
 
 /** The way into a scene (K3). A loop in both scenes carries on untouched whatever the way. */
@@ -243,6 +304,7 @@ export function sanitizeScenes(v: unknown, defaults: SceneSettings): Scene[] {
     const ideas = sanitizeIdeas(o.ideas);
     const aiIdeas = sanitizeKeptIdeas(o.aiIdeas);
     const wayIn = sanitizeWayIn(o.wayIn);
+    const key = sanitizeSceneKey(o.key);
     out.push({
       id, name: cleanName(o.name) || `Scene ${out.length + 1}`, loops, settings: sanitizeSceneSettings(o.settings, defaults),
       ...(isNum(o.at) && o.at >= 0 ? { at: Math.round(o.at) } : {}),
@@ -253,6 +315,7 @@ export function sanitizeScenes(v: unknown, defaults: SceneSettings): Scene[] {
       ...(ideas !== 0 ? { ideas } : {}),
       ...(aiIdeas.length > 0 ? { aiIdeas } : {}),
       ...(wayIn ? { wayIn } : {}),
+      ...(key ? { key } : {}),
     });
   }
   return out;

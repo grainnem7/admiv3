@@ -219,10 +219,26 @@ export interface Harmony {
   root: number;
   tones: number[];
   symbol?: string;
+  /**
+   * The chord's pitch classes in chord order: root, third, fifth, then its colour tones.
+   * `tones` are in keyboard order, so their first three are not the triad when the root is
+   * not the lowest (E7 voiced near D4 is G#3 B3 D4 E4). Absent for a backing song's chord.
+   */
+  pcs?: number[];
 }
 
 /** A Harmony from a chord of the key, voiced in the middle of the keyboard. */
 export function harmonyFromChord(chord: Chord): Harmony {
   const tones = voiceNear(chord, 62);
-  return { root: bassNote(chord, 48), tones, symbol: chord.symbol };
+  return { root: bassNote(chord, 48), tones, symbol: chord.symbol, pcs: [...chord.pcs] };
+}
+
+/** A harmony's pitch classes in chord order (root, third, fifth, colours); a song's chord as it is. */
+export function chordPcs(h: Harmony): number[] {
+  return h.pcs ? [...h.pcs] : h.tones.map((t) => ((t % 12) + 12) % 12);
+}
+
+/** A harmony's plain triad: root, third and fifth (a song's chord: its lowest three). */
+export function triadPcs(h: Harmony): number[] {
+  return chordPcs(h).slice(0, 3);
 }
