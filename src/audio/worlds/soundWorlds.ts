@@ -108,7 +108,7 @@ export const SOUND_WORLDS: Record<SoundWorldId, SoundWorld> = {
     delaySend: 0.1,
     duck: 0.35,
     phraseSwing: 0.3,
-    levelDb: -9, // measured -10.5 LUFS
+    levelDb: -9.4, // measured -10.5 LUFS; -0.4 dB after the left-hand chords and the layered pad (6 Nov)
     density: 0,
   },
   ambient: {
@@ -128,7 +128,7 @@ export const SOUND_WORLDS: Record<SoundWorldId, SoundWorld> = {
     delaySend: 0.25,
     duck: 0.15,
     phraseSwing: 0,
-    levelDb: -4.5, // measured -14.7 LUFS
+    levelDb: -5.4, // measured -14.7 LUFS; -0.9 dB after the held left-hand chords and the layered pad (6 Nov)
     density: -1,
   },
   electronic: {

@@ -25,6 +25,8 @@ import type { SoundWorldId } from '../../audio/worlds/soundWorlds';
 import type { KitDrum } from '../../audio/instruments/RoundRobinDrumKit';
 
 export type BandLevel = 'off' | 'gentle' | 'full';
+/** The pad's level when it layers in unison under a chord colour (sound design pass). */
+export const PAD_LAYER_GAIN = 0.62;
 /** The band's parts; 'counter' only with jobs, 'leadIn' only into a scene. */
 export type BandPart = 'pad' | 'bass' | 'groove' | 'counter' | 'leadIn';
 export const BAND_PARTS: BandPart[] = ['pad', 'bass', 'groove'];
@@ -179,7 +181,9 @@ export function bandEventsAtStep(input: BandInput): BandEvent[] {
     const led = layered ?? voiceLead({ pcs: allPcs }, input.previousPad ?? null, lo, hi);
     // Folded into its range the voicing can close up again (a ninth back beside its root), so it is opened once more (S2).
     const voiced = layered ?? (withJobs ? openVoicing(intoRange(led, lo, hi)) : led);
-    for (const midi of voiced) out.push({ part: 'pad', offset: 0, dur: span - 0.05, accent: full ? 0.7 : 0.55, midi, voicing: voiced });
+    // A layer sits under what it layers: about 4 dB down when it doubles the chords in unison.
+    const padAccent = (full ? 0.7 : 0.55) * (layered ? PAD_LAYER_GAIN : 1);
+    for (const midi of voiced) out.push({ part: 'pad', offset: 0, dur: span - 0.05, accent: padAccent, midi, voicing: voiced });
   }
 
   if (h && parts.includes('bass')) {
