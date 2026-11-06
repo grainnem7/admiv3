@@ -36,6 +36,8 @@
 }
 
 .bs-root[data-bs-style='calm'][data-bs-mode='dark'] {
+  /* The browser draws its own parts (a drop-down's list, scroll bars) dark too. */
+  color-scheme: dark;
   --bs-bg: #0e0f11;
   --bs-raised: #16181b;
   --bs-elev: #1c1e22;
@@ -71,6 +73,8 @@
 }
 
 .bs-root[data-bs-style='calm'][data-bs-mode='light'] {
+  /* The browser draws its own parts (a drop-down's list, scroll bars) light too. */
+  color-scheme: light;
   --bs-bg: #f4f4f5;
   --bs-raised: #ebebed;
   --bs-elev: #e2e3e6;
@@ -123,6 +127,23 @@
   background: transparent;
   border: 1px solid var(--bs-border-control);
   border-radius: var(--bs-radius-sm);
+}
+
+/*
+ * Drop-down lists: the box sits on the page's own ground, and the list the browser opens
+ * gets the theme's colours. With a see-through box and the dark theme's light text, Windows
+ * opened the list white with light grey words, impossible to read.
+ */
+.bs-root select {
+  background-color: var(--bs-bg);
+}
+.bs-root select option,
+.bs-root select optgroup {
+  background-color: var(--bs-elev);
+  color: var(--bs-fg);
+}
+.bs-root select option:disabled {
+  color: var(--bs-fg3);
 }
 
 .bs-root button {

@@ -2,6 +2,8 @@
 /* Redesigned for cleaner, production-ready UX */
 
 :root {
+  /* The app is dark: the browser draws its own parts (a drop-down's list, scroll bars) dark too. */
+  color-scheme: dark;
   /* Colors - High contrast accessible palette (warm coral/orange) */
   --color-bg: #0f0a0a;
   --color-bg-secondary: #1a1210;

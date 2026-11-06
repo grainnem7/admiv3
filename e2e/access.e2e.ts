@@ -439,3 +439,38 @@ test('P3: pieces: New piece starts empty, Open brings the first piece back with 
   await expect(pieces.locator('[aria-label*=" scene"]')).toHaveCount(2);
   expect(pageErrors(page)).toEqual([]);
 });
+
+test('drop-down lists are readable: every option at least 4.5:1, in the dark and the light theme, and the list drawn in the theme', async ({ page }) => {
+  await openLaptopBoard(page);
+  await soundTab(page);
+  const ratio = (fg: string, bg: string): number => {
+    const lum = (c: string): number => {
+      const [r, g, b] = (c.match(/[\d.]+/g) ?? ['0', '0', '0']).slice(0, 3).map(Number).map((v) => {
+        const x = v / 255;
+        return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+      });
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    const [a, b] = [lum(fg), lum(bg)].sort((x, y) => y - x);
+    return (a + 0.05) / (b + 0.05);
+  };
+  const check = async (mode: string): Promise<void> => {
+    const found = await page.evaluate(() => [...document.querySelectorAll('.bs-root select')].map((sel) => ({
+      scheme: getComputedStyle(sel).colorScheme,
+      options: [...sel.querySelectorAll('option')].map((o) => ({ fg: getComputedStyle(o).color, bg: getComputedStyle(o).backgroundColor, text: o.textContent ?? '' })),
+    })));
+    expect(found.length, `${mode}: no drop-down found`).toBeGreaterThan(0);
+    for (const sel of found) {
+      expect(sel.scheme, mode).toContain(mode);
+      for (const o of sel.options) {
+        // A see-through list is drawn white by the browser whatever the page's colour.
+        expect(o.bg, `${mode}: "${o.text}" has no background of its own`).not.toMatch(/^rgba\(.*,\s*0\)$|^transparent$/);
+        expect(ratio(o.fg, o.bg), `${mode}: "${o.text}" ${o.fg} on ${o.bg}`).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  };
+  await check('dark');
+  await page.getByRole('button', { name: 'Switch to light mode' }).click();
+  await check('light');
+  expect(pageErrors(page)).toEqual([]);
+});

@@ -180,6 +180,13 @@ textarea {
               box-shadow var(--duration-fast) var(--ease-default);
 }
 
+/* A drop-down's list in the app's own colours, never white with light words. */
+select option,
+select optgroup {
+  background-color: var(--color-surface, #261a18);
+  color: var(--color-text, #f8fafc);
+}
+
 input:focus,
 select:focus,
 textarea:focus {
