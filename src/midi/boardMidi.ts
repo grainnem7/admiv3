@@ -24,6 +24,7 @@
  * once more a moment later for the notes that were queued and have only just begun.
  */
 
+import { strumOffsets } from '../songs/strum';
 import { MIDIManager } from './MIDIManager';
 import { DEFAULT_CHANNEL_ASSIGNMENT } from './types';
 import { KIT_GM_NOTE } from './gmDrums';
@@ -111,7 +112,7 @@ export interface MidiEvent {
 }
 
 /** A note as the engine logs it: what is needed to say it in MIDI. */
-export type MidiNoteLike = Pick<FiredNote, 'role' | 'origin' | 'audioTime' | 'durSec' | 'velocity' | 'midi' | 'midis' | 'drum'> & {
+export type MidiNoteLike = Pick<FiredNote, 'role' | 'origin' | 'audioTime' | 'durSec' | 'velocity' | 'midi' | 'midis' | 'drum' | 'strumSec'> & {
   colour?: string;
   loopSlot?: number;
 };
@@ -388,11 +389,13 @@ export function midiEventsFor(
   const swells = opts.shape === true && (note.role === 'melody' || note.role === 'chord')
     && note.origin !== 'band' && note.origin !== 'fill' && pitches.length > 0;
   if (swells) out.push(...swellEvents(channel, onMs - 1, offMs));
-  for (const p of pitches) {
+  // A strummed chord's strings one after another (see songs/strum), all ending together.
+  const offsets = strumOffsets(pitches, note.strumSec ?? 0);
+  pitches.forEach((p, i) => {
     const n = Math.max(0, Math.min(127, Math.round(p)));
-    out.push({ data: [NOTE_ON | ch, n, vel], atMs: onMs });
+    out.push({ data: [NOTE_ON | ch, n, vel], atMs: onMs + offsets[i] * 1000 });
     out.push({ data: [NOTE_OFF | ch, n, 0], atMs: offMs });
-  }
+  });
   return out;
 }
 

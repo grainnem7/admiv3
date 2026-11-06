@@ -27,6 +27,8 @@ import type { KitDrum } from '../../audio/instruments/RoundRobinDrumKit';
 export type BandLevel = 'off' | 'gentle' | 'full';
 /** The pad's level when it layers in unison under a chord colour (sound design pass). */
 export const PAD_LAYER_GAIN = 0.62;
+/** The wide pads' upper layer: from A3 to A4, over the chords' left hand and under the melody. */
+export const WIDE_PAD_RANGE: [number, number] = [57, 69];
 /** The band's parts; 'counter' only with jobs, 'leadIn' only into a scene. */
 export type BandPart = 'pad' | 'bass' | 'groove' | 'counter' | 'leadIn';
 export const BAND_PARTS: BandPart[] = ['pad', 'bass', 'groove'];
@@ -51,6 +53,14 @@ export interface BandInput {
   playerCounters?: number;
   /** The pad's last voicing, so this chord moves to it by small steps. */
   previousPad?: readonly number[] | null;
+  /**
+   * Wide pads (the demo piece): while the pad layers under a chord colour, a second layer
+   * sustains the chord above it, between the chords and the melody, so the instruments sit
+   * inside one wide bed instead of over a thin one.
+   */
+  widePads?: boolean;
+  /** The upper layer's last voicing, to lead the next one from. */
+  previousUpper?: readonly number[] | null;
   // ---- with jobs (absent, or "As before": the band as it was) ----
   /** Which parts the band keeps, whatever the player plays. */
   jobs?: BandJobs;
@@ -88,6 +98,8 @@ export interface BandEvent {
   part: BandPart;
   /** For the pad: the voicing this chord took, to lead the next one from. */
   voicing?: number[];
+  /** The wide pads' upper layer (see `widePads`), led from its own last voicing. */
+  upper?: true;
   /** Beats after the step starts (0 ≤ offset < 1). */
   offset: number;
   /** Length in beats. */
@@ -184,6 +196,12 @@ export function bandEventsAtStep(input: BandInput): BandEvent[] {
     // A layer sits under what it layers: about 4 dB down when it doubles the chords in unison.
     const padAccent = (full ? 0.7 : 0.55) * (layered ? PAD_LAYER_GAIN : 1);
     for (const midi of voiced) out.push({ part: 'pad', offset: 0, dur: span - 0.05, accent: padAccent, midi, voicing: voiced });
+    if (layered && input.widePads) {
+      // Between the chords' left hand and the melody, moving by the smallest steps.
+      const upper = openVoicing(voiceLead({ pcs: triadPcs(h) }, input.previousUpper ?? null, WIDE_PAD_RANGE[0], WIDE_PAD_RANGE[1]));
+      const accent = full ? 0.7 : 0.55;
+      for (const midi of upper) out.push({ part: 'pad', offset: 0, dur: span - 0.05, accent, midi, voicing: upper, upper: true });
+    }
   }
 
   if (h && parts.includes('bass')) {

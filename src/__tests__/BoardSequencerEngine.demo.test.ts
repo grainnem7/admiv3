@@ -73,10 +73,20 @@ describe('the demo through the engine', () => {
     expect(chordAt(6)).toEqual(new Set([2, 6, 9]));
   });
 
-  it('the trombone starts on the low A (A2), under the guitar', () => {
+  it('the trombone sings an octave above the bass’s register: its first note is C#4', () => {
     const { e, p } = engineWith(['Trombone']);
     const first = (play(e, p, 0, 1).get(0) ?? []).find((n) => n.role === 'bass');
-    expect(first?.midi).toBe(45);
+    expect(first?.midi).toBe(61);
+  });
+
+  it('the guitar strums: down on the beat (low string first), up between (high first, softer)', () => {
+    const { e, p } = engineWith(['Guitar Drive'.replace('Drive', 'drive')]);
+    const fired = play(e, p, 0, 2);
+    const down = (fired.get(0) ?? []).find((n) => n.role === 'chord');
+    const up = (fired.get(1) ?? []).find((n) => n.role === 'chord');
+    expect(down?.strumSec ?? 0).toBeGreaterThan(0);
+    expect(up?.strumSec ?? 0).toBeLessThan(0);
+    expect(up?.velocity ?? 1).toBeLessThan(down?.velocity ?? 0);
   });
 
   it('the drums loop plays the groove (hats between the kick and snare), not one hit', () => {
@@ -137,6 +147,29 @@ describe('the band with the loops', () => {
       e.setBand('gentle');
       const fired = [...play(e, p, 0, 24).values()].flat();
       expect(fired.some((n) => n.origin === 'band'), String(withLoops)).toBe(withLoops);
+      if (withLoops) {
+        // A bass loop lifted an octave (the trombone) is not the bass: the band's bass plays under it.
+        const t = engineWith(['Trombone', 'Guitar'], { bandWithLoops: true, band: 'gentle', bandJobs: { asBefore: false, pads: true, bass: true, drums: false, counter: false } });
+        (t.p as unknown as { bandVoices: unknown }).bandVoices = bp.bandVoices;
+        t.e.setBand('gentle');
+        const notes = [...play(t.e, t.p, 0, 24).values()].flat();
+        expect(notes.some((n) => n.origin === 'band' && n.role === 'bass')).toBe(true);
+      }
+    }
+  });
+});
+
+describe('wide pads', () => {
+  it('under a chord loop: one layer in unison with its chords, a second above them, under the melody', () => {
+    for (const wide of [false, true]) {
+      const { e, p } = engineWith(['Guitar'], { bandWithLoops: true, widePads: wide, band: 'full', bandJobs: { asBefore: false, pads: true, bass: false, drums: false, counter: false } });
+      const g = () => ({ gain: { value: 1, setTargetAtTime: vi.fn() }, connect: vi.fn(), disconnect: vi.fn() });
+      (p as unknown as { bandVoices: unknown }).bandVoices = { pad: { play: vi.fn(), dispose: vi.fn() }, bass: { play: vi.fn(), dispose: vi.fn() }, gain: g(), rev: g() };
+      e.setBand('full');
+      const pads = (play(e, p, 0, 9).get(8) ?? []).filter((n) => n.origin === 'band' && n.role === 'chord').map((n) => n.midi ?? 0);
+      const high = pads.filter((m) => m >= 62);
+      expect(high.length > 0, String(wide)).toBe(wide);
+      for (const m of pads) expect(m).toBeLessThanOrEqual(69);
     }
   });
 });

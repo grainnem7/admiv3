@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  A_MAJOR, B_MAJOR, DEMO_END_PASS, DEMO_LOOPS, DEMO_PASS_SEC, DEMO_PERFORMANCE, DEMO_PIECE_ID, DEMO_SCENES, demoDueAt, demoMusic, demoScenes,
+  A_MAJOR, B_MAJOR, DEMO_BPM, DEMO_END_PASS, DEMO_LOOPS, DEMO_PASS_SEC, DEMO_PERFORMANCE, DEMO_PIECE_ID, DEMO_SCENES, demoDueAt, demoMusic, demoScenes,
 } from '../songs/demo/demoPiece';
 import { DEFAULT_BOARD_SEQUENCER_CONFIG, sanitizeBoardSequencerConfig } from '../profiles/BoardSequencerConfig';
 import { counterChord } from '../songs/harmony/currentChord';
@@ -105,7 +105,7 @@ describe('the demo piece', () => {
         if (col % 2 !== 0 || chord.length === 0) continue;
         for (const c of cells) {
           if (c.job !== 'melody' && c.job !== 'bass') continue;
-          const midi = degreeMidi(7 - c.row, key.rootMidi, key.semitones);
+          const midi = degreeMidi(7 - c.row, key.rootMidi, key.semitones) + 12 * (c.octave ?? 0);
           expect(chord, `${s.name}, beat ${col + 1}: ${c.sound}`).toContain(pc(midi));
         }
       }
@@ -159,6 +159,43 @@ describe('the demo piece', () => {
   it('the drums play the groove; every other loop one note per counter', () => {
     for (const l of DEMO_LOOPS) {
       for (const c of l.cells) expect(c.plays, l.name).toBe(c.job === 'drums' ? 'tune' : 'note');
+    }
+  });
+
+  it('the trombone sings in its tenor register (A3 to E4), soft, never as the bass; the band’s bass is under it', () => {
+    const trombone = DEMO_LOOPS.filter((l) => l.name.startsWith('Trombone')).flatMap((l) => l.cells);
+    for (const c of trombone) {
+      for (const key of [A_MAJOR, B_MAJOR]) {
+        const midi = degreeMidi(7 - c.row, key.rootMidi, key.semitones) - 24 + 12 * (c.octave ?? 0);
+        expect(midi).toBeGreaterThanOrEqual(57);
+        expect(midi).toBeLessThanOrEqual(64);
+      }
+      expect(c.velocity ?? 1).toBeLessThanOrEqual(0.6);
+    }
+    for (const s of demoScenes()) {
+      if (s.loops.some((l) => DEMO_LOOPS[l].name === 'Trombone')) expect(s.settings.bandJobs.bass, s.name).toBe(true);
+    }
+  });
+
+  it('is full within a minute: pads and bass arrive with the trombone, a new part every four passes until the harp', () => {
+    const scenes = demoScenes();
+    expect(scenes[1].settings.band).not.toBe('off');
+    expect(DEMO_SCENES[1].pass).toBe(4);
+    expect(DEMO_SCENES[2].pass).toBe(8);
+    expect(DEMO_SCENES[3].pass).toBe(12);
+    const music = demoMusic();
+    expect(music.widePads).toBe(true);
+    expect(music.bandWithLoops).toBe(true);
+    expect(music.space ?? 0).toBeGreaterThan(0.6);
+  });
+
+  it('every part but the drums sits a touch behind the beat, the same every time, never by more than 30 ms', () => {
+    const msPerBeat = 60000 / DEMO_BPM;
+    const late = DEMO_LOOPS.flatMap((l) => l.cells).filter((c) => c.timingBeats !== undefined);
+    expect(late.length).toBeGreaterThan(10);
+    for (const c of late) {
+      expect(c.timingBeats ?? 0).toBeGreaterThan(0);
+      expect((c.timingBeats ?? 0) * msPerBeat).toBeLessThanOrEqual(30);
     }
   });
 });

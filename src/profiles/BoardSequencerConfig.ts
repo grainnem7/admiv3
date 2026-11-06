@@ -80,6 +80,8 @@ export interface StoredLoopCell extends StoredBoardCell {
    * groove, its tunes one note each). Absent: as today's colour of that sound plays.
    */
   plays?: 'note' | 'tune';
+  /** An octave or two away from its row's note (the demo's trombone, up in its tenor register). */
+  octave?: number;
 }
 
 const LOOP_JOBS = new Set(['melody', 'bass', 'chord', 'drums']);
@@ -186,6 +188,8 @@ export interface BoardSequencerStored {
   keepOnTop: boolean;
   /** The band joins the loops too, not only the player's counters (on for the demo piece). */
   bandWithLoops: boolean;
+  /** Wide pads: a second pad layer above the chords, under the melody (on for the demo piece). */
+  widePads: boolean;
   /** How far they dip, in dB. */
   keepOnTopDb: number;
   /**
@@ -618,6 +622,7 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   bandJobs: { ...DEFAULT_JOBS },
   keepOnTop: true,
   bandWithLoops: false,
+  widePads: false,
   keepOnTopDb: KEEP_ON_TOP_DEFAULT_DB,
   sceneEnergy: 0,
   pieceIdeas: 0,
@@ -824,6 +829,7 @@ function sanitizeLoopSlots(v: unknown): (StoredLoopCell[] | null)[] {
         cell.job = o.job as StoredLoopCell['job'];
         cell.sound = typeof o.sound === 'string' ? o.sound : '';
         if (o.plays === 'note' || o.plays === 'tune') cell.plays = o.plays;
+        if (isNum(o.octave) && Number.isInteger(o.octave) && o.octave !== 0 && Math.abs(o.octave) <= 2) cell.octave = o.octave;
       }
       return [cell];
     });
@@ -1009,6 +1015,7 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     // On by default (owner), for every player: a dip of a few dB, and a switch to turn it off.
     keepOnTop: o.keepOnTop !== false,
     bandWithLoops: o.bandWithLoops === true,
+    widePads: o.widePads === true,
     keepOnTopDb: sanitizeKeepOnTopDb(o.keepOnTopDb),
     sceneEnergy: sanitizeSceneEnergy(o.sceneEnergy),
     pieceIdeas: sanitizeIdeas(o.pieceIdeas),

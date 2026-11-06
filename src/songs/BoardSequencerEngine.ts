@@ -18,6 +18,7 @@ import { breathGain, breathPhase, breathRest } from './breath';
 import { developCells } from './development';
 import { contourByInterval, legatoLength } from './phrasing';
 import * as Tone from 'tone';
+import { strumFor, strumOffsets, STRUM_UP_GAIN } from './strum';
 import { BoardSequencerVoice } from './voices/BoardSequencerVoice';
 import { voicingForCells, degreeMidi, chordDegreeMidi, drumForRow, DEFAULT_DRUM_ROWS, loopLen, lapIndex, strictlyAfter, firesThisLap, firesThisLapPaged, sweepAt, type PingPongPages, type Sweep } from './boardSequencerScale';
 import type { ActiveCell } from '../tracking/BoardSequencerMode';
@@ -81,6 +82,8 @@ export interface FiredNote {
   /** What sounded, for MIDI out and the session log. A chord stab lists all its notes. */
   midi?: number;
   midis?: number[];
+  /** A strummed chord: seconds between its strings, + low to high, − high to low (see strum). */
+  strumSec?: number;
   drum?: KitDrum;
   velocity?: number;
   /** A saved loop's note: which loop (0 based), so MIDI can give each loop its own channel and fader. */
@@ -180,6 +183,8 @@ export interface BoardEngineConfig {
   band?: BandLevel;
   /** The band joins the loops too, not only the player's counters (the demo piece: no counter needed). */
   bandWithLoops?: boolean;
+  /** Wide pads: a second pad layer above the chords, under the melody (the demo piece). */
+  widePads?: boolean;
   /** The chord sequence every pitched part plays to (absent = "As before"). */
   chords?: ChordSetting;
   /** One-note melody and bass: a note rubbing against the chord on a strong beat moves to it. */
@@ -474,6 +479,7 @@ export class BoardSequencerEngine {
   private bandPartsNow: BandPart[] = [];
   private bandPrevHarmonyKey = '';
   /** The band pad's last voicing, so each chord is led from the one before. */
+  private bandUpperVoicing: number[] | null = null;
   private bandPadVoicing: number[] | null = null;
   // Band jobs (band/bandJobs): what it keeps, its counter-melody's last note, and a
   // scene's lead-in, waiting for the beat its scene lands on.
@@ -3122,7 +3128,8 @@ export class BoardSequencerEngine {
     }
     const jobs = this.bandJobs;
     // One bass at a time: the player's or a loop's bass counter, while it is down.
-    const bassTaken = !jobs.asBefore && cells.some((c) => this.roleFor(c.colour) === 'bass');
+    // A bass loop lifted an octave or more (the demo's trombone) is a tenor line, not the bass.
+    const bassTaken = !jobs.asBefore && cells.some((c) => this.roleFor(c.colour) === 'bass' && (c.octave ?? 0) <= 0);
     const playing = this.band !== 'off' && !this.thinning && this.bandFromLap !== null && lap >= this.bandFromLap;
     this.bandPlaying = playing;
     this.bandPartsNow = playing ? bandParts(this.band, roles, counters, jobs, bassTaken) : [];
@@ -3143,15 +3150,17 @@ export class BoardSequencerEngine {
       : [];
     const events = bandEventsAtStep({
       level: this.band, step, loop, style: worldOf(this.cfg.soundWorld ?? 'none')?.id ?? 'warm',
-      harmony, chordChange, chordSpan, playerRoles: roles, playerCounters: counters, previousPad: this.bandPadVoicing,
+      harmony, chordChange, chordSpan, playerRoles: roles, playerCounters: counters, previousPad: this.bandPadVoicing, widePads: this.cfg.widePads === true, previousUpper: this.bandUpperVoicing,
       jobs, bassTaken, drumsHere: this.heardDrums, chordRegister: this.registerOf('chord'),
       melodyHere: this.heardMelody, melodyRegister: this.registerOf('melody'), avoidPcs,
       strong: this.strongBeat(beat), previousCounter: this.bandCounterLast,
       busy: energyShape(this.sceneEnergy)?.drumsBusy ?? 0,
       vary: this.bandVary(beat, step),
     });
-    const padEvent = events.find((ev) => ev.part === 'pad' && ev.voicing);
+    const padEvent = events.find((ev) => ev.part === 'pad' && ev.voicing && !ev.upper);
     if (padEvent?.voicing) this.bandPadVoicing = padEvent.voicing;
+    const upperEvent = events.find((ev) => ev.part === 'pad' && ev.upper && ev.voicing);
+    if (upperEvent?.voicing) this.bandUpperVoicing = upperEvent.voicing;
     const counterEvent = events.find((ev) => ev.part === 'counter');
     if (counterEvent?.midi !== undefined) this.bandCounterLast = counterEvent.midi;
     // The counter-melody's voice has a level of its own: its notes carry the band's.
@@ -3589,7 +3598,7 @@ export class BoardSequencerEngine {
         const dur = ringSec(loopLen(this.rawLoop('bass'), this.cfg.cols)) * this.evoFor(ch.id).length;
         // Two octaves under the melody's row (C2 on the bottom row): where a bass lives. One
         // octave under put it at C3 to E4, which on a double bass is its top strings (S2).
-        const bassMidi = base - BASS_OCTAVES * 12 + oct;
+        const bassMidi = base - BASS_OCTAVES * 12 + oct + 12 * (cell.octave ?? 0);
         if (!this.admit(source, [bassMidi])) return;
         const bassVel = Math.min(1, vel * contour());
         if (this.internalSound) voice.play(bassMidi, bassVel, dur, stepTime);
@@ -3607,10 +3616,14 @@ export class BoardSequencerEngine {
         // instrument a stab every bar was the "stabby" the owner heard (S2). Note length
         // stays the floor, so a chosen short length still plays short.
         const chordDur = ringSec(loopLen(this.rawLoop('melodic'), this.cfg.cols)) * evo.length;
-        if (this.internalSound) for (const n of midis) voice.play(n, vel, chordDur, stepTime);
+        // A guitar strums (down on the beat, up between) and a harp rolls its chord.
+        const strum = strumFor(ch.instrument, cell.col);
+        const chordVel = strum < 0 ? vel * STRUM_UP_GAIN : vel;
+        const offsets = strumOffsets(midis, strum);
+        if (this.internalSound) midis.forEach((n, i) => voice.play(n, chordVel, chordDur - offsets[i], stepTime + offsets[i]));
         this.recordFired({
           row: cell.row, col: cell.col, colour: cell.colour, role, audioTime: stepTime, durSec: chordDur, source,
-          origin: 'placed', midis, velocity: vel,
+          origin: 'placed', midis, velocity: chordVel, ...(strum !== 0 ? { strumSec: strum } : {}),
         });
       } else {
         const placed = voicing.get(`${cell.row},${cell.col}`);
@@ -3625,7 +3638,7 @@ export class BoardSequencerEngine {
           // where it doubles the player's note or the step is full.
           // The breath: on pass four a loop's melody lifts a note (S2).
           if (source === 'loop' && breathRest(breathPhase(lap), cell.col, this.cfg.cols, this.loopVary, 'melody')) return;
-          const base12 = midi + oct + 12 * evo.octave;
+          const base12 = midi + oct + 12 * evo.octave + 12 * (cell.octave ?? 0);
           const answer = (cell as LayeredCell).answerUp && base12 + 12 <= LANE_TOP ? 12 : 0;
           const laned = base12 + answer + (source === 'loop' && answer === 0 ? loopLaneShift('melody', this.stepLaneUp, base12) : 0);
           if (!this.admit(source, [laned])) return;

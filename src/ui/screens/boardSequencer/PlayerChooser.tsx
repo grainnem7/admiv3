@@ -63,9 +63,9 @@ export function PlayerChooser({ players, onPick, onCreate, onEdit, onCancel, onD
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>
               <Button tone="secondary" onClick={onDemo}>▶ Open the demo piece</Button>
               <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>
-                A ready-made piece of seven minutes: drums, then trombone, guitar, harp and clarinet, moving
-                from A major through a pentatonic shimmer, a mixolydian clarinet and an A minor lament, up to
-                B major, with a big ending. It plays the same every time, and uses your colours, cap and iPad.
+                A ready-made piece of seven minutes: drums, then trombone, guitar, harp and clarinet over warm
+                pads, moving from A major through a mixolydian clarinet, a pentatonic shimmer and an A minor
+                lament, up to B major, with a big ending. It plays the same every time, and uses your colours, cap and iPad.
               </span>
             </div>
           )}
