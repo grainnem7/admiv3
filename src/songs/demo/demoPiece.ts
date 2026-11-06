@@ -5,9 +5,9 @@
  *
  * The sound (the owner's listening, 2026-11-06: the first version's pop chords and tunes
  * were cheesy and twee; the shimmer, a drone with the harp in the pentatonic scale, was the
- * best of it; more pads, quieter instruments): the pads lead. The harmony is the scenes'
- * chords, slow (one chord a pass or two), open and suspended rather than I V vi IV, held by
- * two layers of pads and the band's bass. Every tune is in the pentatonic scale, so it sits
+ * best of it; more pads, quieter instruments; no pop progression, no plain triads): the pads
+ * lead. The harmony is a drone or a pair of colour chords (ninths, suspensions) per scene,
+ * each held two or four bars, held by two layers of pads and the band's bass. Every tune is in the pentatonic scale, so it sits
  * in any of those chords as colour (a ninth, a sixth, a major seventh) and never rubs. The
  * guitar strums whatever chord the pads hold; the trombone plays long soft notes; the harp
  * and the clarinet take turns with the tune; all of them quiet, inside the pads.
@@ -169,12 +169,18 @@ export const DEMO_PASS_SEC = (COLS * 60) / DEMO_BPM;
 const PADS_AND_BASS = { asBefore: false, pads: true, bass: true, drums: false, counter: false };
 const PADS_ONLY = { asBefore: false, pads: true, bass: false, drums: false, counter: false };
 
-/** The scenes' chords: a drone; I and IV; open, suspended chords from the vi. */
+/**
+ * The scenes' chords, slow and never a pop progression (the owner, 2026-11-06: I V vi IV,
+ * and the same four reordered, were cheesy and boring): a drone, or a pair of colour chords
+ * (with ninths, suspended), each held two or four bars. Lift: the key note suspended, then ii.
+ * Float: home, then vi. Shade: vi, then ii, wistful. In A minor only Float (ii is diminished).
+ */
 const DRONE: ChordSetting = { sequence: 'still', bars: 2 };
-const SWAY: ChordSetting = { sequence: 'calm', bars: 2 };
-const SLOW_SWAY: ChordSetting = { sequence: 'calm', bars: 4 };
-const OPEN: ChordSetting = { sequence: 'tense', bars: 2 };
-const OPEN_MOVING: ChordSetting = { sequence: 'tense', bars: 1 };
+const LIFT: ChordSetting = { sequence: 'lift', bars: 4 };
+const LIFT_MOVING: ChordSetting = { sequence: 'lift', bars: 2 };
+const FLOAT: ChordSetting = { sequence: 'float', bars: 4 };
+const FLOAT_MOVING: ChordSetting = { sequence: 'float', bars: 2 };
+const SHADE: ChordSetting = { sequence: 'shade', bars: 2 };
 
 const BASE: SceneSettings = {
   soundWorld: 'warm',
@@ -201,60 +207,60 @@ interface SceneSpec {
 
 /** The plan, in passes (a pass is about 5.5 s): twelve scenes, seven minutes. */
 export const DEMO_SCENES: readonly SceneSpec[] = [
-  // The drums and the pads: the pads swaying slowly between A and D, alone with the groove
-  // for eight passes.
-  { name: 'Drums and pads', pass: 0, loops: slots('Drums'), key: A_MAJOR, settings: { chords: SLOW_SWAY }, wayIn: { kind: 'cut' } },
-  // The trombone's long notes, inside the pads.
-  { name: 'Trombone', pass: 8, loops: slots('Drums', 'Trombone'), key: A_MAJOR, settings: { chords: SWAY }, wayIn: { kind: 'cut' } },
-  // The guitar strums the pads' chords, which open out into suspended ones.
+  // The drums and the pads: the pads lifting slowly between A (suspended) and B minor, alone
+  // with the groove for eight passes.
+  { name: 'Drums and pads', pass: 0, loops: slots('Drums'), key: A_MAJOR, settings: { chords: LIFT }, wayIn: { kind: 'cut' } },
+  // The trombone's long notes over the pads' drone.
+  { name: 'Trombone', pass: 8, loops: slots('Drums', 'Trombone'), key: A_MAJOR, settings: { chords: DRONE }, wayIn: { kind: 'cut' } },
+  // The guitar strums the pads' chords, which float between A and F# minor.
   {
     name: 'Guitar', pass: 12, loops: slots('Drums busier', 'Trombone', 'Guitar'), key: A_MAJOR,
-    settings: { chords: OPEN, sceneEnergy: 3 }, wayIn: { kind: 'fade', passes: 1 },
+    settings: { chords: FLOAT, sceneEnergy: 3 }, wayIn: { kind: 'fade', passes: 1 },
   },
   // The harp drifts in over a pass, a few extra notes around it.
   {
     name: 'Harp', pass: 16, loops: slots('Drums busier', 'Trombone', 'Guitar', 'Harp'), key: A_MAJOR,
-    settings: { chords: OPEN, sceneEnergy: 3, fillAmount: 0.08 }, wayIn: { kind: 'fade', passes: 1 },
+    settings: { chords: FLOAT, sceneEnergy: 3, fillAmount: 0.08 }, wayIn: { kind: 'fade', passes: 1 },
   },
   // A shimmer: the harp over the trombone's held note and the pads' drone.
   { name: 'Shimmer', pass: 24, loops: slots('Harp', 'Trombone pedal'), key: A_MAJOR, settings: { chords: DRONE, sceneEnergy: 1 }, wayIn: { kind: 'cut' } },
-  // A fill, and the clarinet takes the tune over the swaying chords.
+  // A fill, and the clarinet takes the tune over the lifting chords.
   {
     name: 'Clarinet', pass: 28, loops: slots('Drums busier', 'Trombone', 'Guitar', 'Clarinet'), key: A_MAJOR,
-    settings: { chords: SWAY, sceneEnergy: 3, fillAmount: 0.1 }, wayIn: { kind: 'cut' }, leadIn: 'drumFill',
+    settings: { chords: LIFT, sceneEnergy: 3, fillAmount: 0.1 }, wayIn: { kind: 'cut' }, leadIn: 'drumFill',
   },
-  // The clarinet rises, an octave up, over the guitar strumming every beat and chords that
-  // move every bar: the build before the breakdown.
+  // The clarinet rises, an octave up, over the guitar strumming every beat and the two minor
+  // chords: the build before the breakdown.
   {
     name: 'Clarinet rises', pass: 36, loops: slots('Drums busier', 'Trombone', 'Guitar drive', 'Clarinet answer'), key: A_MAJOR,
-    settings: { chords: OPEN_MOVING, sceneEnergy: 4, fillAmount: 0.12 }, wayIn: { kind: 'cut' },
+    settings: { chords: SHADE, sceneEnergy: 4, fillAmount: 0.12 }, wayIn: { kind: 'cut' },
   },
   // The breakdown: the guitar and the harp in A minor over the pads' drone.
   {
     name: 'Breakdown', pass: 40, loops: slots('Guitar', 'Harp'), key: A_MINOR,
     settings: { chords: DRONE, sceneEnergy: 1, band: 'gentle', bandJobs: PADS_ONLY }, wayIn: { kind: 'cut' },
   },
-  // A lament: the clarinet in A minor over A minor and D minor, the trombone's held A under
-  // it (its E would rub against D minor's F), the softest groove.
+  // A lament: the clarinet in A minor over A minor and F, the trombone's held A under it, the
+  // softest groove.
   {
     name: 'Lament', pass: 44, loops: slots('Drums soft', 'Trombone pedal', 'Guitar', 'Clarinet'), key: A_MINOR,
-    settings: { chords: SWAY, sceneEnergy: 2 }, wayIn: { kind: 'cut' },
+    settings: { chords: FLOAT, sceneEnergy: 2 }, wayIn: { kind: 'cut' },
   },
-  // A fill, and home to A major from D minor (the minor iv into I), the harp again.
+  // A fill, and home to A major, the harp again.
   {
     name: 'Home', pass: 48, loops: slots('Drums', 'Trombone', 'Guitar', 'Harp'), key: A_MAJOR,
-    settings: { chords: SWAY, sceneEnergy: 3, fillAmount: 0.08 }, wayIn: { kind: 'cut' }, leadIn: 'drumFill',
+    settings: { chords: LIFT, sceneEnergy: 3, fillAmount: 0.08 }, wayIn: { kind: 'cut' }, leadIn: 'drumFill',
   },
   // Up a tone to B major after a fill, the biggest drums, the guitar driving, the harp
-  // ringing over chords that open out.
+  // ringing over the floating chords.
   {
     name: 'Up to B major', pass: 56, loops: slots('Big drums', 'Trombone', 'Guitar drive', 'Harp'), key: B_MAJOR,
-    settings: { chords: OPEN, sceneEnergy: 4, fillAmount: 0.15 }, wayIn: { kind: 'cut' }, leadIn: 'drumFill',
+    settings: { chords: FLOAT_MOVING, sceneEnergy: 4, fillAmount: 0.15 }, wayIn: { kind: 'cut' }, leadIn: 'drumFill',
   },
-  // The clarinet soars over the full band and the open chords, into the Big finish.
+  // The clarinet soars over the full band and the lifting chords, into the Big finish.
   {
     name: 'Clarinet soars', pass: 64, loops: slots('Big drums', 'Trombone', 'Guitar drive', 'Clarinet soars'), key: B_MAJOR,
-    settings: { chords: OPEN, sceneEnergy: 5, fillAmount: 0.2 }, wayIn: { kind: 'cut' },
+    settings: { chords: LIFT_MOVING, sceneEnergy: 5, fillAmount: 0.2 }, wayIn: { kind: 'cut' },
   },
 ];
 
@@ -351,7 +357,7 @@ export function demoMusic(): Partial<BoardSequencerStored> {
     bandWithLoops: true,
     // Two pad layers, louder than usual: the pads lead.
     widePads: true,
-    chords: { ...SLOW_SWAY },
+    chords: { ...LIFT },
     // The written notes are played as written: pentatonic, they sit in every chord.
     clashNudge: false,
     bandJobs: { ...PADS_AND_BASS },

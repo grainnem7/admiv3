@@ -22,8 +22,8 @@ import type { SoundWorldId } from '../../audio/worlds/soundWorlds';
 import { degreeMidi } from '../boardSequencerScale';
 import { chordOnDegree, degreeOfNote, harmonyFromChord, parentScale, symbolFor, type Chord, type Harmony } from './harmony';
 
-export type ChordSequenceId = 'asBefore' | 'world' | 'calm' | 'rising' | 'dreamy' | 'tense' | 'home' | 'still';
-export const CHORD_SEQUENCE_IDS: ChordSequenceId[] = ['asBefore', 'world', 'calm', 'rising', 'dreamy', 'tense', 'home', 'still'];
+export type ChordSequenceId = 'asBefore' | 'world' | 'calm' | 'rising' | 'dreamy' | 'tense' | 'home' | 'still' | 'lift' | 'float' | 'shade';
+export const CHORD_SEQUENCE_IDS: ChordSequenceId[] = ['asBefore', 'world', 'calm', 'rising', 'dreamy', 'tense', 'home', 'still', 'lift', 'float', 'shade'];
 export type ChordBars = 1 | 2 | 4;
 export const CHORD_BARS: ChordBars[] = [1, 2, 4];
 export const BEATS_PER_BAR = 4;
@@ -57,9 +57,12 @@ export const CHORD_SEQUENCE_WORDS: Record<ChordSequenceId, { label: string; what
   tense: { label: 'Tense', what: 'Starts away from home, with open sus chords: vi–IV–I–V.' },
   home: { label: 'Home', what: 'Leads home every time: IV–V–I.' },
   still: { label: 'Still', what: 'One open chord on the key note that never moves: a drone.' },
+  lift: { label: 'Lift', what: 'Two open chords that float, film-like: the key note suspended, then ii with a ninth.' },
+  float: { label: 'Float', what: 'Two chords, gently: home with a ninth, then vi with a ninth.' },
+  shade: { label: 'Shade', what: 'Two minor chords, wistful: vi and ii, each with a ninth.' },
 };
 
-type Kind = 'plain' | 'sus2' | 'sus4' | 'minor' | 'drone';
+type Kind = 'plain' | 'sus2' | 'sus4' | 'minor' | 'drone' | 'add9';
 interface SeqChord { degree: number; kind: Kind }
 const sc = (degree: number, kind: Kind = 'plain'): SeqChord => ({ degree, kind });
 
@@ -71,6 +74,10 @@ const NAMED: Record<Exclude<ChordSequenceId, 'asBefore' | 'world'>, SeqChord[]> 
   tense: [sc(5), sc(3, 'sus2'), sc(0, 'sus2'), sc(4, 'sus4')],
   home: [sc(3), sc(4), sc(0)],
   still: [sc(0, 'drone')],
+  // Ambient pairs, no pop progression (the owner, 2026-11-06): colour chords, slow.
+  lift: [sc(0, 'sus2'), sc(1, 'add9')],
+  float: [sc(0, 'add9'), sc(5, 'add9')],
+  shade: [sc(5, 'add9'), sc(1, 'add9')],
 };
 
 /**
@@ -108,6 +115,12 @@ export function sequenceChord(spec: SeqChord, rootMidi: number, semitones: reado
   });
   if (spec.kind === 'drone') return make([0, 7], symbolFor(r, [0, 7]));
   if (spec.kind === 'minor') return make([0, 3, 7], symbolFor(r, [0, 3, 7]));
+  if (spec.kind === 'add9') {
+    // The chord with its ninth, where the key has it a whole tone above the root.
+    if (rel(1) !== 2) return base;
+    const triad = [0, (((base.pcs[1] ?? r) - r) % 12 + 12) % 12, (((base.pcs[2] ?? r) - r) % 12 + 12) % 12];
+    return make([...triad, 2], symbolFor(r, [...triad, 14]));
+  }
   if (rel(4) !== 7) return base;
   if (spec.kind === 'sus2' && rel(1) === 2) return make([0, 2, 7], symbolFor(r, [0, 2, 7]));
   if (spec.kind === 'sus4' && rel(3) === 5) return make([0, 5, 7], symbolFor(r, [0, 5, 7]));

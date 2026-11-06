@@ -3815,7 +3815,8 @@ export class BoardSequencerEngine {
       } else if (role === 'chord' || ch.instrument === 'chord') {
         // Chord stab: play a stack (the song chord, or a scale triad) at once.
         const evo = this.evoFor(ch.id);
-        const midis = this.chordStack(cell, chord, 'row', source === 'loop').map((n) => n + oct + 12 * evo.octave);
+        // A loop's chord is plain, unless it follows the pads' chord: then it plays its colours too.
+        const midis = this.chordStack(cell, chord, 'row', source === 'loop' && !cell.follows).map((n) => n + oct + 12 * evo.octave);
         if (!this.admit(source, midis)) return;
         // A chord counter holds its chord towards the colour's next counter, as the band's
         // pad holds its chord, instead of stabbing it for one note length: on a sustained

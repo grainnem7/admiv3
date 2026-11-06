@@ -18,7 +18,7 @@
  */
 
 import { grooveFor, harmonyFromChord, type DrumHit, type Harmony as PhraseHarmony } from '../phrases/phrases';
-import { bassNote, chordOnDegree, leftHand, openVoicing, triadPcs, voiceLead } from '../harmony/harmony';
+import { bassNote, chordOnDegree, chordPcs, leftHand, openVoicing, triadPcs, voiceLead } from '../harmony/harmony';
 import { WORLD_PROGRESSION, isStrongBeat } from '../harmony/currentChord';
 import { counterRange, notesIn, padRangeAway, PAD_RANGE, type BandJobs, type Register } from './bandJobs';
 import type { SoundWorldId } from '../../audio/worlds/soundWorlds';
@@ -188,7 +188,9 @@ export function bandEventsAtStep(input: BandInput): BandEvent[] {
     // warmth and sustain without a register of its own. Placed away from the chords it ended
     // up at E6 on a busy board, shrill and above the melody (sound design pass).
     const allPcs = [...new Set(h.tones.map((t) => ((t % 12) + 12) % 12))];
-    const layered = withJobs && input.chordRegister ? leftHand(triadPcs(h)) : null;
+    // Wide pads (the demo) layer the chord with its colours (a ninth, a suspension): a plain
+    // triad under everything was what sounded cheesy.
+    const layered = withJobs && input.chordRegister ? leftHand(input.widePads ? chordPcs(h) : triadPcs(h)) : null;
     const [lo, hi] = withJobs ? padRangeAway(input.chordRegister ?? null) : PAD_RANGE;
     const led = layered ?? voiceLead({ pcs: allPcs }, input.previousPad ?? null, lo, hi);
     // Folded into its range the voicing can close up again (a ninth back beside its root), so it is opened once more (S2).
@@ -202,7 +204,7 @@ export function bandEventsAtStep(input: BandInput): BandEvent[] {
       // Opened (no two notes a tone apart) then folded back into its range, so it never
       // wanders into the melody's register or down into the bass, chord after chord.
       const [lo, hi] = WIDE_PAD_RANGE;
-      const upper = [...new Set(intoRange(openVoicing(voiceLead({ pcs: triadPcs(h) }, input.previousUpper ?? null, lo, hi)), lo, hi))];
+      const upper = [...new Set(intoRange(openVoicing(voiceLead({ pcs: chordPcs(h) }, input.previousUpper ?? null, lo, hi)), lo, hi))];
       const accent = full ? 0.9 : 0.75;
       for (const midi of upper) out.push({ part: 'pad', offset: 0, dur: span - 0.05, accent, midi, voicing: upper, upper: true });
     }

@@ -212,4 +212,20 @@ describe('the demo piece', () => {
       expect((c.timingBeats ?? 0) * msPerBeat).toBeLessThanOrEqual(30);
     }
   });
+
+  it('never a pop progression: every scene holds a drone or a pair of colour chords, slow', () => {
+    for (const sc of demoScenes()) {
+      expect(['still', 'lift', 'float', 'shade'], sc.name).toContain(sc.settings.chords.sequence);
+      expect(sc.settings.chords.bars, sc.name).toBeGreaterThanOrEqual(2);
+    }
+  });
+
+  it('the new pairs are colour chords: Lift is A suspended then B minor with a ninth; Float A with a ninth then F# minor with a ninth; Shade F# minor then B minor, both with ninths', () => {
+    const names = (sequence: 'lift' | 'float' | 'shade'): string[] => [0, 1].map((i) => sequenceAt({
+      setting: { sequence, bars: 1 }, style: 'warm', rootMidi: 69, semitones: A_MAJOR.semitones, beatsIn: i * 4, step: 0, loop: 8, bandOn: true,
+    }).harmony?.symbol ?? '');
+    expect(names('lift')).toEqual(['Asus2', 'Bmadd9']);
+    expect(names('float')).toEqual(['Aadd9', 'F#madd9']);
+    expect(names('shade')).toEqual(['F#madd9', 'Bmadd9']);
+  });
 });
