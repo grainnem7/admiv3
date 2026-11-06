@@ -4,8 +4,8 @@
  *
  * On the usual 8 by 8 board at 87 BPM a pass is two bars of 4/4 (8 beats, about 5.5 s).
  * The chords are I V vi IV, two beats each (in A major: A, E, F sharp minor, D): the guitar
- * strums them, the trombone sings a soft horn line in its tenor register, the band's bass and
- * two layers of pads hold everything together, and the harp and the clarinet take turns with
+ * strums them, the trombone plays a soft horn line of long notes, the band's bass and two
+ * layers of pads hold everything together, and the harp and the clarinet take turns with
  * the tune. Every note is a step of the scale, so when a scene changes the key the same loops
  * sing in the new mode.
  *
@@ -21,7 +21,8 @@
  * soaring over the full band into the Big finish. Something new arrives every 22 seconds at
  * the start, so the piece is full within a minute.
  *
- * Sound (owner's listening, 2026-11-06: fake, thin, the trombone bad): the guitar strums
+ * Sound (owner's listening, 2026-11-06: fake, thin, the trombone bad): the trombone plays
+ * long soft notes instead of a busy bass line, the guitar strums
  * rather than striking every string at once, every part sits a few milliseconds behind the
  * beat as players do, the instruments play softer inside a bigger shared room, and two
  * layers of pads sustain under and around them.
@@ -76,8 +77,8 @@ type Written = readonly [col: number, degree: number];
 
 /** How a loop is played, beyond its notes. */
 interface Feel {
-  /** An octave or two away from the row's note (the trombone, up in its tenor register). */
-  octave?: number;
+  /** A bass loop playing a line over the band's bass, which keeps the roots under it. */
+  overBass?: boolean;
   /** How far behind the beat it sits, in beats (a player is never exactly on the grid). */
   layBack?: number;
 }
@@ -95,7 +96,7 @@ function notes(
   const cell = (col: number, degree: number, v: number, conditional: boolean): StoredLoopCell => ({
     row: ROWS - 1 - degree, col, colour, job, sound, plays: 'note', velocity: v,
     ...(conditional ? { conditional: true } : {}),
-    ...(feel.octave ? { octave: feel.octave } : {}),
+    ...(feel.overBass ? { overBass: true as const } : {}),
     ...(lay > 0 && col > 0 ? { timingBeats: Math.round((col % 2 === 0 ? lay * 0.5 : lay) * 1000) / 1000 } : {}),
   });
   return [
@@ -121,9 +122,8 @@ const GUITAR_ANSWER: Written[] = [[1, I], [5, VI]];
 /** The driving guitar: a strum on every beat. */
 const GUITAR_DRIVE: Written[] = [[0, I], [1, I], [2, V], [3, V], [4, VI], [5, VI], [6, IV], [7, IV]];
 /**
- * The trombone: a horn line in its tenor register (an octave above the bass's), long soft
- * notes falling 3, 2, 1 through the A, E and F# minor chords and lifting to the D: C#, B, A,
- * D. The band's bass carries the low notes under it.
+ * The trombone: a horn line of long soft notes, falling 3, 2, 1 through the A, E and F#
+ * minor chords and lifting to the D: C#, B, A, D. The band's bass plays the roots under it.
  */
 const TROMBONE_LINE: Written[] = [[0, III], [2, II], [4, I], [6, IV]];
 /** ...answered with a neighbour note and a step up into the D. */
@@ -147,7 +147,8 @@ const CLARINET_SOARS: Written[] = [[0, VIII], [2, VII], [3, V], [4, VI], [5, VII
 /** ...answered with the leading note pulling up to the top again. */
 const CLARINET_SOARS_ANSWER: Written[] = [[1, VI], [7, VII]];
 
-const HORN: Feel = { octave: 1, layBack: 0.03 };
+/** The trombone: over the band's bass, a little behind the beat. */
+const HORN: Feel = { overBass: true, layBack: 0.03 };
 
 /** The loops, by slot, with their names. */
 export const DEMO_LOOPS: readonly { name: string; cells: StoredLoopCell[] }[] = [

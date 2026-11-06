@@ -73,10 +73,16 @@ describe('the demo through the engine', () => {
     expect(chordAt(6)).toEqual(new Set([2, 6, 9]));
   });
 
-  it('the trombone sings an octave above the bass’s register: its first note is C#4', () => {
+  it('the trombone plays where it always did (its first note C#3), a loop note with an octave an octave up', () => {
     const { e, p } = engineWith(['Trombone']);
     const first = (play(e, p, 0, 1).get(0) ?? []).find((n) => n.role === 'bass');
-    expect(first?.midi).toBe(61);
+    expect(first?.midi).toBe(49);
+    const lifted = new BoardSequencerEngine(cfg());
+    const lp = lifted as unknown as Priv;
+    const cells = loopChannelsFor(loop('Trombone').map((c) => ({ ...c, octave: 1 })), []);
+    lp.voiceByChannel = new Map(cells.channels.map((c: ColourChannel) => [c.id, fakeVoiceEntry()]));
+    lifted.setLaunchedLoops([0], [cells.cells], cells.channels);
+    expect((play(lifted, lp, 0, 1).get(0) ?? []).find((n) => n.role === 'bass')?.midi).toBe(61);
   });
 
   it('the guitar strums: down on the beat (low string first), up between (high first, softer)', () => {
@@ -148,7 +154,7 @@ describe('the band with the loops', () => {
       const fired = [...play(e, p, 0, 24).values()].flat();
       expect(fired.some((n) => n.origin === 'band'), String(withLoops)).toBe(withLoops);
       if (withLoops) {
-        // A bass loop lifted an octave (the trombone) is not the bass: the band's bass plays under it.
+        // A bass loop over the bass (the trombone) is not the bass: the band's bass plays under it.
         const t = engineWith(['Trombone', 'Guitar'], { bandWithLoops: true, band: 'gentle', bandJobs: { asBefore: false, pads: true, bass: true, drums: false, counter: false } });
         (t.p as unknown as { bandVoices: unknown }).bandVoices = bp.bandVoices;
         t.e.setBand('gentle');

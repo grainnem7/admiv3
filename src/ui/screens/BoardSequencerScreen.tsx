@@ -2598,6 +2598,13 @@ export default function BoardSequencerScreen() {
         return { ...prev, scenes: prev.scenes.map((sc) => (sc.id === owner ? { ...sc, aiIdeas: keepIdea(sc.aiIdeas ?? [], idea) } : sc)) };
       });
     });
+    // A piece: every loop its scenes bring in, and the band if any scene has it, loaded with
+    // the opening's, so no scene's new sound loads mid-piece (the sound fell behind there).
+    if (clockOn) {
+      const used = [...new Set(home.scenes.flatMap((sc) => sc.loops))];
+      const cells = used.flatMap((sl) => home.loopSlots[sl] ?? []);
+      engine.preload(loopChannelsFor(cells, cfg.channels).channels, home.scenes.some((sc) => sc.settings.band !== 'off'));
+    }
     await engine.init();
     // Stop — or Stop then Play again — may have been pressed while the samples loaded. This
     // start is then no longer wanted: drop its engine before it is started or put where

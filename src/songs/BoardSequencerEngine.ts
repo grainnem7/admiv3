@@ -669,6 +669,12 @@ export class BoardSequencerEngine {
     if (this.band !== 'off') this.buildBandVoices();
     // One sampled voice per melody/chord/bass channel → its own gain + FX sends.
     for (const ch of this.cfg.channels) this.buildVoice(ch);
+    // Everything the piece will need later, loaded now, before the first beat: a voice loaded
+    // mid-piece (a scene's new loop instrument, the band coming in) decoded its samples while
+    // the beats were being scheduled, and the sound fell behind at each new scene.
+    for (const ch of this.preloadColours) this.buildVoice(ch);
+    if (this.preloadBand && !this.bandVoices) this.buildBandVoices();
+    if (!this.drumKit && this.preloadColours.some((c) => c.role === 'drums')) await this.buildDrumKit();
     // The first beats must sound. The samples load in the background and a voice says
     // nothing until they arrive, while the lights, the pops and "Now:" (and the session
     // log) report every note — so the opening seconds of a piece were silent on screen
@@ -1723,6 +1729,18 @@ export class BoardSequencerEngine {
     if (this.internalSound === on) return;
     this.internalSound = on;
     this.applyMixGain(MUTE_GLIDE_SEC);
+  }
+
+  private preloadColours: ColourChannel[] = [];
+  private preloadBand = false;
+
+  /**
+   * Before init: the loops' colours and the band a piece will bring in later, so their
+   * sounds load before the first beat rather than as each scene arrives.
+   */
+  preload(loopColours: readonly ColourChannel[], band: boolean): void {
+    this.preloadColours = [...loopColours];
+    this.preloadBand = band;
   }
 
   /** Resolves once every channel's voice (and the band's) can sound, or after `maxMs`. */
@@ -3128,8 +3146,9 @@ export class BoardSequencerEngine {
     }
     const jobs = this.bandJobs;
     // One bass at a time: the player's or a loop's bass counter, while it is down.
-    // A bass loop lifted an octave or more (the demo's trombone) is a tenor line, not the bass.
-    const bassTaken = !jobs.asBefore && cells.some((c) => this.roleFor(c.colour) === 'bass' && (c.octave ?? 0) <= 0);
+    // A bass loop lifted an octave or more, or playing over the bass (the demo's trombone), is
+    // a line of its own: the band's bass keeps the roots under it.
+    const bassTaken = !jobs.asBefore && cells.some((c) => this.roleFor(c.colour) === 'bass' && (c.octave ?? 0) <= 0 && !c.overBass);
     const playing = this.band !== 'off' && !this.thinning && this.bandFromLap !== null && lap >= this.bandFromLap;
     this.bandPlaying = playing;
     this.bandPartsNow = playing ? bandParts(this.band, roles, counters, jobs, bassTaken) : [];

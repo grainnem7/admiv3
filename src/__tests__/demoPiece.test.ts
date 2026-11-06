@@ -162,16 +162,14 @@ describe('the demo piece', () => {
     }
   });
 
-  it('the trombone sings in its tenor register (A3 to E4), soft, never as the bass; the band’s bass is under it', () => {
+  it('the trombone plays a soft horn line of long notes over the band’s bass, which plays under it in every scene it is in', () => {
     const trombone = DEMO_LOOPS.filter((l) => l.name.startsWith('Trombone')).flatMap((l) => l.cells);
     for (const c of trombone) {
-      for (const key of [A_MAJOR, B_MAJOR]) {
-        const midi = degreeMidi(7 - c.row, key.rootMidi, key.semitones) - 24 + 12 * (c.octave ?? 0);
-        expect(midi).toBeGreaterThanOrEqual(57);
-        expect(midi).toBeLessThanOrEqual(64);
-      }
+      expect(c.overBass).toBe(true);
       expect(c.velocity ?? 1).toBeLessThanOrEqual(0.6);
     }
+    const main = DEMO_LOOPS.find((l) => l.name === 'Trombone')?.cells.filter((c) => !c.conditional) ?? [];
+    expect(main.length).toBeLessThanOrEqual(4);
     for (const s of demoScenes()) {
       if (s.loops.some((l) => DEMO_LOOPS[l].name === 'Trombone')) expect(s.settings.bandJobs.bass, s.name).toBe(true);
     }

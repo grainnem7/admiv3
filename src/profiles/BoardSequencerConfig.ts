@@ -80,8 +80,13 @@ export interface StoredLoopCell extends StoredBoardCell {
    * groove, its tunes one note each). Absent: as today's colour of that sound plays.
    */
   plays?: 'note' | 'tune';
-  /** An octave or two away from its row's note (the demo's trombone, up in its tenor register). */
+  /** An octave or two away from its row's note. */
   octave?: number;
+  /**
+   * A bass loop that plays a line over the band's bass rather than being the bass (the
+   * demo's trombone): the band's bass keeps playing the roots under it.
+   */
+  overBass?: true;
 }
 
 const LOOP_JOBS = new Set(['melody', 'bass', 'chord', 'drums']);
@@ -830,6 +835,7 @@ function sanitizeLoopSlots(v: unknown): (StoredLoopCell[] | null)[] {
         cell.sound = typeof o.sound === 'string' ? o.sound : '';
         if (o.plays === 'note' || o.plays === 'tune') cell.plays = o.plays;
         if (isNum(o.octave) && Number.isInteger(o.octave) && o.octave !== 0 && Math.abs(o.octave) <= 2) cell.octave = o.octave;
+        if (o.overBass === true) cell.overBass = true;
       }
       return [cell];
     });

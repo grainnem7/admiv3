@@ -22,6 +22,17 @@ async function fakeMidi(page: Page): Promise<void> {
     };
     const access = { inputs: new Map(), outputs: new Map([[output.id, output]]), onstatechange: null, sysexEnabled: false };
     Object.defineProperty(navigator, 'requestMIDIAccess', { value: async () => access, configurable: true });
+    // Every moment the screen says the sound is falling behind.
+    const behind: number[] = [];
+    (window as unknown as { __behind: number[] }).__behind = behind;
+    window.addEventListener('DOMContentLoaded', () => {
+      let was = false;
+      new MutationObserver(() => {
+        const now = (document.body.textContent ?? '').includes('falling behind');
+        if (now && !was) behind.push(performance.now());
+        was = now;
+      }).observe(document.body, { subtree: true, childList: true, characterData: true });
+    });
   });
 }
 
@@ -41,6 +52,7 @@ test('midi: the whole demo piece', async ({ page }) => {
   await page.getByRole('button', { name: '▶ Start the piece' }).click();
   await page.waitForTimeout(430_000);
   const log = await page.evaluate(() => (window as unknown as { __midiLog: number[][] }).__midiLog);
-  writeFileSync(`${DIR}/demo.json`, JSON.stringify({ t0, log }));
-  console.log(`MIDI demo: ${log.length} messages`);
+  const behind = await page.evaluate(() => (window as unknown as { __behind: number[] }).__behind);
+  writeFileSync(`${DIR}/demo.json`, JSON.stringify({ t0, log, behind }));
+  console.log(`MIDI demo: ${log.length} messages; falling behind shown at: ${behind.map((t) => ((t - t0) / 1000).toFixed(0) + ' s').join(', ') || 'never'}`);
 });

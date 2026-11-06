@@ -70,10 +70,11 @@ export interface ActiveCell extends CellRef {
   /** Box detail: how late (+) or early (−) it plays, as a fraction of a step. */
   timingBeats?: number;
   /**
-   * A loop's note an octave or two away from its row's (the demo's trombone sings an octave
-   * above the bass's register). Never set by the board.
+   * A loop's note an octave or two away from its row's. Never set by the board.
    */
   octave?: number;
+  /** A loop's bass line over the band's bass, not the bass itself (never set by the board). */
+  overBass?: true;
 }
 
 export interface BoardStepResult {
