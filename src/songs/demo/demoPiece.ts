@@ -41,6 +41,11 @@ import { loopColourId, type LoopJob } from '../performance/loopSounds';
 export const DEMO_PLAYER_ID = 'demo';
 export const DEMO_PLAYER_NAME = 'Demo piece';
 export const DEMO_PIECE_ID = 'demo-piece';
+/**
+ * The demo's music, by revision: a demo player made from an older one has its music written
+ * afresh when opened, so a laptop that has pulled a newer ADMI always plays the newest demo.
+ */
+export const DEMO_REVISION = 7;
 
 const ROWS = 8;
 const COLS = 8;
@@ -112,14 +117,14 @@ const GUITAR_ANSWER: Written[] = [[4, S1], [7, S1]];
 /** The driving guitar: a strum on every beat. */
 const GUITAR_DRIVE: Written[] = Array.from({ length: 8 }, (_, c) => [c, S1] as const);
 /**
- * The trombone: a phrase that breathes, not notes of one length. One long fifth (E in A) and
- * a rest on the first pass; on the second the long note again, then a short sixth falling
- * back to the fifth as a pickup into the next. Both sit in every chord the pads hold, the
- * band's bass under them (the owner, 2026-11-06: notes all one length sounded naff).
+ * The trombone as a brass pad, not a tune (the owner, 2026-11-06: its melody sounded cheesy
+ * whatever the notes; a pad-like trombone instead): an open fifth (A and E in A) held under
+ * the pads for half a pass, then a breath; on the second pass it is held through. Both notes
+ * sit in every chord the pads hold, the band's bass under them.
  */
-const TROMBONE_LINE: Written[] = [[0, S5]];
-/** ...the second pass's pickup: F#, E (in A). */
-const TROMBONE_ANSWER: Written[] = [[5, S6], [6, S5]];
+const TROMBONE_LINE: Written[] = [[0, S1], [0, S5]];
+/** ...the second pass held through: the fifth sounded again halfway. */
+const TROMBONE_ANSWER: Written[] = [[4, S1], [4, S5]];
 /** The trombone's pedal: a soft low note held under the shimmer. */
 const TROMBONE_PEDAL: Written[] = [[0, S1]];
 /** The harp: a flowing pentatonic figure, one note a beat, rising and turning. */

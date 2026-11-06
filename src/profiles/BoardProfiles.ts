@@ -11,7 +11,7 @@ import {
 } from './BoardSequencerConfig';
 import { applyGridChange } from '../tracking/boardGrid';
 import { canSave } from '../storage/tabSaving';
-import { DEMO_PLAYER_ID, DEMO_PLAYER_NAME, demoMusic } from '../songs/demo/demoPiece';
+import { DEMO_PLAYER_ID, DEMO_PLAYER_NAME, DEMO_REVISION, demoMusic } from '../songs/demo/demoPiece';
 
 export const RIG_KEY = 'admi-board-rig';
 export const PLAYERS_KEY = 'admi-board-players';
@@ -36,6 +36,8 @@ export interface BoardPlayerProfile {
   channelSettings: Record<string, ChannelPlayerSettings>;
   /** The demo piece's player only: the player whose colours, cap and iPad it took. */
   madeFrom?: string;
+  /** The demo piece's player only: which revision of the demo's music it holds. */
+  demoRev?: number;
 }
 
 function readJson(key: string): unknown {
@@ -127,6 +129,7 @@ function sanitizePlayer(v: unknown): BoardPlayerProfile | null {
       ? (o.channelSettings as Record<string, ChannelPlayerSettings>)
       : {},
     ...(typeof o.madeFrom === 'string' && o.madeFrom ? { madeFrom: o.madeFrom } : {}),
+    ...(typeof o.demoRev === 'number' && Number.isInteger(o.demoRev) ? { demoRev: o.demoRev } : {}),
   };
 }
 
@@ -170,9 +173,22 @@ export function getActiveBoardPlayer(): BoardPlayerProfile | null {
   return players.find((p) => p.id === id) ?? players[0];
 }
 
+/**
+ * The demo player chosen, holding an older revision of the demo's music: written afresh (its
+ * colours, cap and iPad kept from the player it was made from). True when it was.
+ */
+export function refreshStaleDemo(): boolean {
+  const active = getActiveBoardPlayer();
+  if (!active || active.id !== DEMO_PLAYER_ID || active.demoRev === DEMO_REVISION) return false;
+  openDemoPlayer();
+  return true;
+}
+
 export function loadActiveBoardConfig(): BoardSequencerStored | null {
   try {
     migrateLegacy();
+    // A demo from an older ADMI plays the newest demo (the owner pulled and still heard the old one).
+    refreshStaleDemo();
     const rig = loadRig();
     if (!rig) return null;
     const player = getActiveBoardPlayer() ?? { id: 'p1', name: 'Player 1', settings: {}, channelSettings: {} };
@@ -260,6 +276,7 @@ export function openDemoPlayer(): BoardPlayerProfile {
     settings,
     channelSettings: { ...(from?.channelSettings ?? existing?.channelSettings ?? {}) },
     ...(madeFrom ? { madeFrom } : {}),
+    demoRev: DEMO_REVISION,
   };
   savePlayers(existing ? players.map((p) => (p.id === DEMO_PLAYER_ID ? player : p)) : [...players, player]);
   setActiveId(player.id);

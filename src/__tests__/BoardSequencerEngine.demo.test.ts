@@ -71,22 +71,22 @@ describe('the demo through the engine', () => {
     expect(chordAt(8)).toEqual(new Set([2, 6, 9]));
   });
 
-  it('the trombone breathes: a long E3 then a rest; on the second pass a pickup; a loop note with an octave plays an octave up', () => {
+  it('the trombone is a brass pad: an open fifth (A2 and E3) held half a pass, then held through on the second; a loop note with an octave plays an octave up', () => {
     const { e, p } = engineWith(['Trombone'], { variationEnabled: true });
     const fired = play(e, p, 0, 16);
-    const bass = (b: number) => (fired.get(b) ?? []).filter((n) => n.role === 'bass');
-    expect(bass(0)[0]?.midi).toBe(52);
-    expect(bass(0)[0]?.durSec).toBeGreaterThanOrEqual(4);
-    for (const b of [1, 2, 3, 4, 5, 6, 7]) expect(bass(b)).toHaveLength(0);
-    expect(bass(13).map((n) => n.midi)).toEqual([54]);
-    expect(bass(14).map((n) => n.midi)).toEqual([52]);
-    expect(bass(13)[0]?.durSec).toBeLessThan(1.5);
+    const bass = (b: number) => (fired.get(b) ?? []).filter((n) => n.role === 'bass').map((n) => n.midi).sort();
+    expect(bass(0)).toEqual([45, 52]);
+    expect(bass(4)).toEqual([]);
+    expect(bass(8)).toEqual([45, 52]);
+    expect(bass(12)).toEqual([45, 52]);
+    const first = (fired.get(0) ?? []).find((n) => n.role === 'bass');
+    expect(first?.durSec).toBeGreaterThanOrEqual(4);
     const lifted = new BoardSequencerEngine(cfg());
     const lp = lifted as unknown as Priv;
     const cells = loopChannelsFor(loop('Trombone').map((c) => ({ ...c, octave: 1 })), []);
     lp.voiceByChannel = new Map(cells.channels.map((c: ColourChannel) => [c.id, fakeVoiceEntry()]));
     lifted.setLaunchedLoops([0], [cells.cells], cells.channels);
-    expect((play(lifted, lp, 0, 1).get(0) ?? []).find((n) => n.role === 'bass')?.midi).toBe(64);
+    expect((play(lifted, lp, 0, 1).get(0) ?? []).filter((n) => n.role === 'bass').map((n) => n.midi).sort()).toEqual([57, 64]);
   });
 
   it('the guitar strums: down on the beat (low string first), up between (high first, softer)', () => {

@@ -253,4 +253,28 @@ describe('the demo piece’s player', () => {
     expect(again?.handedness).toBe('left');
     expect(listBoardPlayers().filter((p) => p.name === 'Demo piece')).toHaveLength(1);
   });
+
+  it('a demo from an older ADMI is written afresh when loaded: the newest demo plays, the player’s settings kept', async () => {
+    const { openDemoPlayer } = await import('../profiles/BoardProfiles');
+    const { DEMO_REVISION, demoMusic } = await import('../songs/demo/demoPiece');
+    saveActiveBoardConfig({ ...withColours(), handedness: 'left' });
+    openDemoPlayer();
+    // As an older ADMI left it: other loops, an older revision.
+    const players = listBoardPlayers().map((p) => (p.id === 'demo' ? { ...p, demoRev: DEMO_REVISION - 1, settings: { ...p.settings, loopSlots: [] } } : p));
+    localStorage.setItem(PLAYERS_KEY, JSON.stringify(players));
+    const cfg = loadActiveBoardConfig();
+    expect(cfg?.loopSlots).toEqual(demoMusic().loopSlots);
+    expect(cfg?.handedness).toBe('left');
+    expect(listBoardPlayers().find((p) => p.id === 'demo')?.demoRev).toBe(DEMO_REVISION);
+  });
+
+  it('a demo of this revision is left as it is when loaded', async () => {
+    const { openDemoPlayer } = await import('../profiles/BoardProfiles');
+    saveActiveBoardConfig(withColours());
+    openDemoPlayer();
+    const cfg = loadActiveBoardConfig();
+    if (!cfg) throw new Error('no config');
+    saveActiveBoardConfig({ ...cfg, bpm: 101 });
+    expect(loadActiveBoardConfig()?.bpm).toBe(101);
+  });
 });
