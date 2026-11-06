@@ -1517,7 +1517,8 @@ export class BoardSequencerEngine {
       || channels.join(',') !== this.midiChannels.join(',');
     if (opts.enabled && !this.midi) this.midi = new BoardMidiSender(this.ctx);
     if (routeChanged && was.enabled) this.midi?.releaseAll(this.midiChannels);
-    this.midiOpts = opts;
+    // Every melody and chord note carries its swell (sound design pass).
+    this.midiOpts = { shape: true, ...opts };
     this.midiPortKey = portKey;
     this.midiChannels = channels;
     if (routeChanged && opts.enabled) {

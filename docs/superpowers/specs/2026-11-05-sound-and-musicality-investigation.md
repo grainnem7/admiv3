@@ -307,3 +307,18 @@ field (Melody, Bass and Drums centre, Chords 15 left, Band chords 20 right, Extr
 rack's Volume macro, so a sustained string or horn note grows and falls as a player's
 would. Magenta's variation model supplying a loop's development cycles in place of the
 rule based lift and turn. The listening test (S5).
+
+## Shape and liveliness (6 Nov)
+
+- **Shape: each held note swells.** A sampled string or horn held at one level is the
+  surest sign of a machine. Every melody and chord note now sends a swell on CC 2 just
+  before it starts: a held note (0.6 s or more) starts at 72, reaches 100 a fifth in, full
+  by two fifths, and eases to 108 near its end; a short note starts at 118. The bass, the
+  band and the extra notes keep their own level. The template maps CC 2 to a third Utility
+  named Shape (−6 to 0 dB) on Melody and Chords; it rests at full, so unmapped nothing
+  changes. A chord tune sends its notes one by one, so the sender sends each swell point
+  once per channel (194 messages to 55 on one board). Map in Ableton lists Shape with Loud,
+  Bright and Space.
+- **Liveliness.** Alive now sets Extra notes to Some (0.5) and Wild to Lots (0.8); at A
+  few, a busy board gave 3 extra notes in 15 s. Extra notes still only go where the
+  melody leaves a gap, which is right: a tune of running eighths leaves almost none.

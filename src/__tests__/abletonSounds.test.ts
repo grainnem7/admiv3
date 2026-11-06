@@ -228,7 +228,10 @@ describe('the plan', () => {
     }
     const t = abletonMappingTargets(plan);
     expect(t.filter((x) => x.channel === 10).map((x) => x.cc)).toEqual([30, 25, 26]);
-    expect(t.filter((x) => x.channel === 1).map((x) => x.cc)).toEqual([30, 24, 25, 26]);
+    // A melody channel also has Shape (CC 2), each note's swell, resting at full.
+    expect(t.filter((x) => x.channel === 1).map((x) => x.cc)).toEqual([30, 24, 25, 26, 2]);
+    expect(plan.controls.get(controlKey(1, 2))?.value).toBe(127);
+    expect(plan.controls.get(controlKey(10, 2))).toBeUndefined();
   });
   it('only what changed is sent, unless full', () => {
     const plan = abletonPlan(base([colour('a', 'melody')]));

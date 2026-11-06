@@ -209,7 +209,7 @@ const HELP: HelpEntry[] = [
       + 'for "Switch to Ableton". Panic stops any stuck note. Play test note checks Ableton is listening. '
       + 'Chrome and Edge only. Full setup: docs/ableton-setup-guide.html. With Instrument Racks in the '
       + 'template, a card\u2019s sound, the World and Sounds change switch Ableton\u2019s sound too (CC 30), and Loud, '
-      + 'Bright and Space move its macros (CC 24 to 26). "A fader per loop" puts each loop on its own track '
+      + 'Bright and Space move its macros (CC 24 to 26), and each held melody or chord note swells on CC 2 (Shape). "A fader per loop" puts each loop on its own track '
       + '(channels 4 to 9) so it fades smoothly. "AI: Extra notes off" under the board means nothing generative '
       + 'is playing: turn them up on the Sound tab.',
   },

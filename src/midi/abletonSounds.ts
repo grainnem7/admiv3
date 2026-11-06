@@ -31,6 +31,8 @@ export const CC_LOUD = 24;
 export const CC_BRIGHT = 25;
 export const CC_SPACE = 26;
 export const CC_ECHO = 27;
+/** Shape: each note's swell (sent with the notes; see boardMidi swellEvents), resting at full. */
+export const CC_SHAPE = 2;
 export const CC_ENERGY = 21;
 export const CC_SPACE_ALL = 22;
 export const CC_GROOVE = 23;
@@ -300,6 +302,8 @@ export function abletonPlan(input: AbletonPlanInput): AbletonPlan {
     set(channel, CC_LOUD, stepCc(LOUD, ch.volume ?? 1));
     set(channel, CC_BRIGHT, stepCc(BRIGHT, ch.tone ?? 1));
     set(channel, CC_SPACE, stepCc(SPACE_SEND, ch.reverbSend ?? world?.reverbSend ?? 0.18));
+    // Shape rests at full between notes; melody and chords only (the bass keeps its own level).
+    if (ch.role === 'melody' || ch.role === 'chord') set(channel, CC_SHAPE, 127);
   }
   // One per colour: a job's track with no colour on it today still gets the World's sound and
   // the usual Loud, Bright and Space, so it is ready (and listed for mapping) when a colour
@@ -379,7 +383,7 @@ export function abletonMappingTargets(plan: AbletonPlan, names: ReadonlyMap<numb
   const out: MappingTarget[] = [];
   const chainChannels = [...plan.chains.keys()].sort((a, b) => a - b);
   for (const ch of chainChannels) out.push({ channel: ch, cc: CHAIN_CC, value: value(ch, CHAIN_CC), what: `${nameOf(ch)} (ch ${ch}): Rack Chain selector` });
-  const macro: [number, string][] = [[CC_LOUD, 'Loud (a Utility Gain)'], [CC_BRIGHT, 'Bright (a filter)'], [CC_SPACE, 'Space (Send A)']];
+  const macro: [number, string][] = [[CC_LOUD, 'Loud (a Utility Gain)'], [CC_BRIGHT, 'Bright (a filter)'], [CC_SPACE, 'Space (Send A)'], [CC_SHAPE, 'Shape (a Utility named Shape, its Gain, −6 to 0 dB)']];
   const counters: [number, string][] = [[CC_BRIGHT, 'Bright (a filter), for the Tone counter'], [CC_SPACE, 'Space (Send A), for the Reverb counter']];
   for (const ch of chainChannels) {
     const list = value(ch, CC_LOUD) !== undefined ? macro : counters;

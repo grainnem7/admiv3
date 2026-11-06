@@ -23,8 +23,8 @@ export interface LivelinessPatch {
 
 export const LIVELINESS_LEVELS: { id: Liveliness; label: string; words: string; patch: LivelinessPatch }[] = [
   { id: 'asSaved', label: 'As saved', words: 'Only your counters and loops, exactly as kept, every pass.', patch: { loopVary: 0, fillAmount: 0, evolveAmount: 0, band: 'gentle' } },
-  { id: 'alive', label: 'Alive', words: 'Loops breathe and vary a little, a few extra notes, the sounds change slowly, the band in full.', patch: { loopVary: 0.35, fillAmount: 0.25, evolveAmount: 0.35, band: 'full' } },
-  { id: 'wild', label: 'Wild', words: 'Loops vary a lot, plenty of extra notes, the sounds keep changing, the band in full.', patch: { loopVary: 0.7, fillAmount: 0.5, evolveAmount: 0.7, band: 'full' } },
+  { id: 'alive', label: 'Alive', words: 'Loops breathe, develop and vary, extra notes around yours, the sounds change slowly, the band in full.', patch: { loopVary: 0.35, fillAmount: 0.5, evolveAmount: 0.35, band: 'full' } },
+  { id: 'wild', label: 'Wild', words: 'Loops develop and vary a lot, lots of extra notes, the sounds keep changing, the band in full.', patch: { loopVary: 0.7, fillAmount: 0.8, evolveAmount: 0.7, band: 'full' } },
 ];
 
 /** The config changes a level makes. */

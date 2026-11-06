@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
+import { SHAPE_CC, SHAPE_REST } from '../midi/boardMidi';
 import {
   channelFor, channelsInUse, COLOUR_JOB_CHANNELS, mappingTargets, clampLeadMs, colourChannelMap, configToSoundFrom, effectiveSound,
   gainToCc, MAX_MIDI_LEAD_MS, midiEventsFor, panicEvents, releaseEvents, RELEASE_REPEAT_MS, sendAtMs, sendsFor,
@@ -237,6 +238,38 @@ describe('releasing notes', () => {
       expect(at).toBeGreaterThanOrEqual(now + 60 - 1);
       expect(at).toBeLessThanOrEqual(now + 60 + 5);
     });
+  });
+});
+
+describe('shape: each held note swells (sound design pass)', () => {
+  const at = (t: number) => 1000 + t * 1000;
+  it('a held melody note starts a little under, peaks by two fifths of its length, eases at the end; on CC 2 before its note on', () => {
+    const ev = midiEventsFor({ role: 'melody', origin: 'placed', audioTime: 0, durSec: 1.2, midi: 69, velocity: 0.7 }, { enabled: true, sends: 'all', shape: true }, at);
+    const shape = ev.filter((e) => status(e.data) === 0xb0 && e.data[1] === SHAPE_CC);
+    expect(shape.map((e) => e.data[2])).toEqual([72, 100, SHAPE_REST, 108]);
+    const on = ev.find((e) => status(e.data) === NOTE_ON)!;
+    expect(shape[0].atMs).toBeLessThan(on.atMs);
+    // Measured from just before the note on, so within a millisecond of two fifths in.
+    expect(Math.abs(shape[2].atMs - (on.atMs + 0.4 * 1200))).toBeLessThan(2);
+  });
+  it('a short note starts near full; chords swell once for all their notes; bass, band, extra notes and drums never', () => {
+    const opts = { enabled: true, sends: 'all' as const, shape: true };
+    const short = midiEventsFor({ role: 'melody', origin: 'placed', audioTime: 0, durSec: 0.3, midi: 69, velocity: 0.7 }, opts, at);
+    expect(short.filter((e) => e.data[1] === SHAPE_CC && status(e.data) === 0xb0).map((e) => e.data[2])).toEqual([118]);
+    const chord = midiEventsFor({ role: 'chord', origin: 'placed', audioTime: 0, durSec: 1.3, midis: [57, 60, 64], velocity: 0.7 }, opts, at);
+    expect(chord.filter((e) => e.data[1] === SHAPE_CC && status(e.data) === 0xb0)).toHaveLength(4);
+    const others: MidiNoteLike[] = [
+      { role: 'bass', origin: 'placed', midi: 40, audioTime: 0, durSec: 1.5, velocity: 0.7 },
+      { role: 'chord', origin: 'band', midis: [57, 60], audioTime: 0, durSec: 1.5, velocity: 0.7 },
+      { role: 'melody', origin: 'fill', midi: 76, audioTime: 0, durSec: 1.5, velocity: 0.7 },
+    ];
+    for (const n of others) {
+      const e = midiEventsFor(n, opts, at);
+      expect(e.some((x) => status(x.data) === 0xb0 && x.data[1] === SHAPE_CC)).toBe(false);
+    }
+    // Off unless asked for: the plain events as before.
+    const plain = midiEventsFor({ role: 'melody', origin: 'placed', audioTime: 0, durSec: 1.2, midi: 69, velocity: 0.7 }, { enabled: true, sends: 'all' }, at);
+    expect(plain).toHaveLength(2);
   });
 });
 

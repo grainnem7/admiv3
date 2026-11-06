@@ -49,6 +49,8 @@ export interface BoardMidiOptions {
   leadMs?: number;
   /** Each loop's melody, bass and chords on its own channel (4 to 9), for a fader per loop. */
   loopChannels?: boolean;
+  /** Shape: each melody and chord note sends its swell as CC 2 (see swellEvents). */
+  shape?: boolean;
 }
 
 /** The MIDI channel for each part (1 based, as musicians count them). */
@@ -132,6 +134,31 @@ const CC_ALL_NOTES_OFF = 123;
 const DRUM_OFF_MS = 60;
 /** The shortest a note off waits, so a very short note still registers. */
 const MIN_NOTE_MS = 30;
+/**
+ * Shape (sound design pass): a player never holds a note at one level. Each melody or chord
+ * note sends a swell on CC 2, which the template maps to a Utility named Shape (−6 to 0 dB)
+ * after the instrument: a held note starts a little under, grows to full by about two
+ * fifths of its length and eases back at the end; a short note simply starts near full.
+ * CC 2 rests at full, so without the mapping nothing changes.
+ */
+export const SHAPE_CC = 2;
+/** A note at least this long swells. */
+export const SWELL_MIN_SEC = 0.6;
+export const SHAPE_REST = 127;
+
+/** The swell for one note on a channel: where it starts, its peak, and where it eases to. */
+export function swellEvents(channel: number, onMs: number, offMs: number): MidiEvent[] {
+  const ch = (channel - 1) & 0x0f;
+  const len = offMs - onMs;
+  if (len < SWELL_MIN_SEC * 1000) return [{ data: [CONTROL_CHANGE | ch, SHAPE_CC, 118], atMs: onMs }];
+  return [
+    { data: [CONTROL_CHANGE | ch, SHAPE_CC, 72], atMs: onMs },
+    { data: [CONTROL_CHANGE | ch, SHAPE_CC, 100], atMs: onMs + 0.2 * len },
+    { data: [CONTROL_CHANGE | ch, SHAPE_CC, SHAPE_REST], atMs: onMs + 0.4 * len },
+    { data: [CONTROL_CHANGE | ch, SHAPE_CC, 108], atMs: onMs + 0.85 * len },
+  ];
+}
+
 /** A pitched extra note's least MIDI velocity, as a fraction of 127. */
 export const FILL_MIDI_FLOOR = 0.38;
 /**
@@ -354,6 +381,11 @@ export function midiEventsFor(
   }
   const pitches = note.midis ?? (note.midi !== undefined ? [note.midi] : []);
   const offMs = onMs + Math.max(MIN_NOTE_MS, note.durSec * 1000);
+  // The swell goes first, so the note starts at its shape (the player's and the loops'
+  // melody and chords; the band, the extra notes and the bass keep their own level).
+  const swells = opts.shape === true && (note.role === 'melody' || note.role === 'chord')
+    && note.origin !== 'band' && note.origin !== 'fill' && pitches.length > 0;
+  if (swells) out.push(...swellEvents(channel, onMs - 1, offMs));
   for (const p of pitches) {
     const n = Math.max(0, Math.min(127, Math.round(p)));
     out.push({ data: [NOTE_ON | ch, n, vel], atMs: onMs });
@@ -452,6 +484,8 @@ export class BoardMidiSender {
   private readonly pendingOffs = new Map<string, { ev: MidiEvent; leadMs?: number }>();
   /** The note ons recently sent for each channel and pitch (a few), so a note sent later but timed earlier never runs into one. */
   private readonly recentOns = new Map<string, number[]>();
+  /** Swell points already sent: a chord tune sends each of its notes apart, and one swell is enough. */
+  private readonly sentShape = new Set<string>();
   private offTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(private readonly ctx: AudibleClockSource) {}
@@ -496,8 +530,16 @@ export class BoardMidiSender {
   send(note: MidiNoteLike, muted: boolean, opts: BoardMidiOptions): void {
     if (!opts.enabled || muted) return;
     const now = performance.now();
-    const events = midiEventsFor(note, opts, (t) => this.toMs(t, now));
-    if (events.length === 0) return;
+    const all = midiEventsFor(note, opts, (t) => this.toMs(t, now));
+    if (all.length === 0) return;
+    const events = all.filter((ev) => {
+      if ((ev.data[0] & 0xf0) !== CONTROL_CHANGE || ev.data[1] !== SHAPE_CC) return true;
+      const key = `${ev.data[0] & 0x0f}|${Math.round(ev.atMs)}|${ev.data[2]}`;
+      if (this.sentShape.has(key)) return false;
+      if (this.sentShape.size > 512) this.sentShape.clear();
+      this.sentShape.add(key);
+      return true;
+    });
     trackHeld(this.held, events, now);
     const keyOf = (ev: MidiEvent): string => `${(ev.data[0] & 0x0f) + 1}:${ev.data[1]}`;
     const isOff = (ev: MidiEvent): boolean => (ev.data[0] & 0xf0) === NOTE_OFF;
