@@ -290,7 +290,7 @@ const HELP: HelpEntry[] = [
     title: 'The performance clock and the ending',
     body: 'Make a piece, step 3. Set the length (7:00), and the countdown shows above the '
       + 'board and big on the iPad, with cues at 1 minute, 30 and 10 seconds. Choose the '
-      + 'ending in advance — Final chord, Fade out, Slow down, Thin out or Stop — how many '
+      + 'ending in advance — Big finish, Final chord, Fade out, Slow down, Thin out or Stop — how many '
       + 'passes it takes, and whether it ends by itself at the time or when End piece is pressed. '
       + '↘ End piece (laptop) or End piece (iPad, two taps) applies it; Cancel the ending brings the '
       + 'music back.',

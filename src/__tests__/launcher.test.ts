@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { BIG_RIT } from '../songs/performance/clock';
 import { shapedVelocity } from '../songs/dynamics';
 import { fakeVoiceEntry } from './helpers/fakeVoiceEntry';
 import {
@@ -400,6 +401,53 @@ describe('engine — the musical endings', () => {
     e.drainFiredNotes();
     p.fireStep(9, 9, 1, null);
     expect(e.drainFiredNotes()).toEqual([]);
+  });
+
+  it('big finish: everything builds and plays harder, the drums roll in, the speed broadens, then one huge chord on every track and nothing after', () => {
+    const { e, p } = endEngine();
+    const finished = vi.fn();
+    e.finish(8, finished, 'big');                  // two passes of build (beats 0 to 7), the hit on 8, ringing to 12
+    const vels: number[] = [];
+    for (let b = 0; b < 8; b++) {
+      p.fireStep(b, b, 1, null);
+      for (const f of e.drainFiredNotes()) if (f.origin === 'placed' && f.velocity !== undefined) vels.push(f.velocity);
+    }
+    // Nothing thins: the player's notes carry on through the build, and grow.
+    expect(vels.length).toBeGreaterThan(4);
+    expect(vels[vels.length - 1]).toBeGreaterThan(vels[0]);
+    // The speed broadens over the last pass before the hit.
+    const cfg = (p as unknown as { cfg: { bpm: number } }).cfg;
+    expect(cfg.bpm).toBeLessThan(60);
+    expect(cfg.bpm).toBeGreaterThan(60 * (1 - BIG_RIT) - 0.5);
+    p.fireStep(8, 8, 1, null);                     // the hit
+    const hit = e.drainFiredNotes();
+    // The band's chord with the high root, both basses, the parts' own tracks, crash and kick.
+    expect(hit.some((f) => f.colour === 'band:final' && f.role === 'chord' && (f.midis?.length ?? 0) >= 4)).toBe(true);
+    expect(hit.some((f) => f.colour === 'band:final' && f.role === 'bass')).toBe(true);
+    expect(hit.some((f) => f.colour === 'ending:chord')).toBe(true);
+    expect(hit.some((f) => f.colour === 'ending:melody')).toBe(true);
+    expect(hit.some((f) => f.colour === 'ending:bass')).toBe(true);
+    expect(hit.filter((f) => f.velocity === 1).length).toBeGreaterThanOrEqual(5);
+    expect(hit.some((f) => f.origin === 'placed')).toBe(false);
+    for (let b = 9; b < 12; b++) p.fireStep(b, b, 1, null);
+    expect(e.drainFiredNotes()).toEqual([]);       // the chord rings alone
+    expect(finished).not.toHaveBeenCalled();
+    p.fireStep(12, 12, 1, null);
+    vi.runAllTimers();
+    expect(finished).toHaveBeenCalledTimes(1);
+  });
+
+  it('big finish cancelled: the speed and the Energy come back as they were', () => {
+    const { e, p } = endEngine();
+    e.finish(8, vi.fn(), 'big');
+    for (let b = 0; b < 7; b++) p.fireStep(b, b, 1, null);
+    const cfg = (p as unknown as { cfg: { bpm: number } }).cfg;
+    expect(cfg.bpm).toBeLessThan(60);
+    e.cancelFinish();
+    expect(cfg.bpm).toBe(60);
+    e.drainFiredNotes();
+    p.fireStep(8, 8, 1, null);
+    expect(e.drainFiredNotes().some((f) => f.colour === 'ending:melody')).toBe(false);
   });
 
   it('final chord: one due after the end-time backstop has begun stays at 0, and is not played (R2-T3-01)', () => {

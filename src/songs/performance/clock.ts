@@ -21,10 +21,15 @@ export type EndingMode = 'auto' | 'cue';
  *  - thin:  the band and the fill leave first, so the player's own notes end the piece,
  *           with a fade over the last pass;
  *  - chord: the texture thins over the passes, then a held tonic chord and a crash ring
- *           out for one more pass.
+ *           out for one more pass;
+ *  - big:   nothing thins: everything builds over the passes, the drums roll in on the
+ *           last, the speed broadens into the downbeat, and one huge tonic chord across
+ *           every register, with crash and kick, rings out for one more pass.
  */
-export type EndingStyle = 'fade' | 'stop' | 'slow' | 'thin' | 'chord';
-export const ENDING_STYLES: EndingStyle[] = ['fade', 'stop', 'slow', 'thin', 'chord'];
+export type EndingStyle = 'fade' | 'stop' | 'slow' | 'thin' | 'chord' | 'big';
+export const ENDING_STYLES: EndingStyle[] = ['fade', 'stop', 'slow', 'thin', 'chord', 'big'];
+/** How far the big finish broadens into its last chord: the speed at the end of the last pass, as a fraction. */
+export const BIG_RIT = 0.22;
 
 export interface PerformanceSettings {
   /** The piece's length in seconds. */
@@ -56,7 +61,7 @@ export const MIN_PIECE_SEC = 30;
 /** How long an ending style takes, in passes: the chord rings for one more. */
 export function endingPasses(settings: Pick<PerformanceSettings, 'style' | 'fadePasses'>): number {
   if (settings.style === 'stop') return 0;
-  return settings.fadePasses + (settings.style === 'chord' ? 1 : 0);
+  return settings.fadePasses + (settings.style === 'chord' || settings.style === 'big' ? 1 : 0);
 }
 
 /** What an ending style is called, with its length. */
@@ -68,6 +73,7 @@ export function describeEnding(settings: Pick<PerformanceSettings, 'style' | 'fa
     case 'slow': return `slow down over ${passes}`;
     case 'thin': return `thin out over ${passes}`;
     case 'chord': return `thin over ${passes}, then a final chord`;
+    case 'big': return `build over ${passes}, then a big final chord`;
     default: return `fade over ${passes}`;
   }
 }
@@ -127,8 +133,11 @@ const SLOW_STRETCH = 1.3;
  * rings out (the final chord for half a pass more).
  */
 export function endingDurationSec(settings: Pick<PerformanceSettings, 'style' | 'fadePasses'>, passSec: number): number {
-  const run = endingPasses(settings) * passSec * (settings.style === 'slow' ? SLOW_STRETCH : 1);
-  const ring = settings.style === 'chord' ? 0.5 * passSec + 1.2 : 0.8;
+  // The big finish's last pass broadens: a pass slowing linearly to BIG_RIT under speed
+  // takes -ln(1 - BIG_RIT) / BIG_RIT of its time, about 13% more.
+  const broaden = settings.style === 'big' ? passSec * (-Math.log(1 - BIG_RIT) / BIG_RIT - 1) : 0;
+  const run = endingPasses(settings) * passSec * (settings.style === 'slow' ? SLOW_STRETCH : 1) + broaden;
+  const ring = settings.style === 'chord' || settings.style === 'big' ? 0.5 * passSec + 1.2 : 0.8;
   return passSec + run + ring;
 }
 

@@ -56,7 +56,7 @@ import {
 } from '../midi/abletonSounds';
 import type { NamedVoice } from '../audio/evolve/evolve';
 import { GainTrack } from './gainTrack';
-import type { EndingStyle } from './performance/clock';
+import { BIG_RIT, type EndingStyle } from './performance/clock';
 import { bassNote, chordOnDegree, degreeOfNote, leftHand, voiceNear } from './harmony/harmony';
 import {
   LATE_TOLERANCE_SEC, nextValveStep, TimeKeeper, type KeepingTimeLimits, type KeepingTimeReport, type ValveStep,
@@ -1022,6 +1022,11 @@ export class BoardSequencerEngine {
 
   /** 0..1, 0.5 = as set. Louder, busier drums above; softer, sparser below. */
   private energy = 0.5;
+  /** How far the big finish has built (0 to 1): Energy rises towards full with it. */
+  private buildK = 0;
+  private builtEnergy(): number {
+    return this.energy + (1 - this.energy) * this.buildK;
+  }
   setEnergy(e: number): void {
     this.energy = Math.max(0, Math.min(1, e));
     this.syncAbleton();
@@ -1036,11 +1041,12 @@ export class BoardSequencerEngine {
   }
   /** How hard notes play at this Energy: 0.7 at the bottom, 1 at the middle, 1.3 at the top. */
   private energyGain(): number {
-    return 0.7 + 0.6 * this.energy;
+    return 0.7 + 0.6 * this.builtEnergy();
   }
   /** Drum busyness added by Energy: one groove sparser low down, one busier near the top. */
   private energyBusy(): number {
-    return this.energy < 0.3 ? -1 : this.energy > 0.7 ? 1 : 0;
+    const e = this.builtEnergy();
+    return e < 0.3 ? -1 : e > 0.7 ? 1 : 0;
   }
 
   /** How roomy the whole instrument is, when no control counter owns the reverb or echo. */
@@ -1862,7 +1868,8 @@ export class BoardSequencerEngine {
     const cycle = Math.max(1, this.cfg.cols * Math.max(1, this.cfg.numPages));
     const n = style === 'stop' ? 0 : Math.max(cycle, Math.round(beats));
     // The chord rings for one more pass after the texture has thinned.
-    this.finishing = { beats: style === 'chord' ? n + cycle : n, style, startBeat: null };
+    this.finishing = { beats: style === 'chord' || style === 'big' ? n + cycle : n, style, startBeat: null };
+    this.buildK = 0;
     this.onFinished = onFinished;
     this.ended = false;
   }
@@ -2010,11 +2017,51 @@ export class BoardSequencerEngine {
     this.finishing = null;
     this.onFinished = null;
     this.thinning = false;
-    if (f?.style === 'slow' && f.startBpm !== undefined) this.applyBpm(f.startBpm);
+    this.buildK = 0;
+    if (f?.style === 'big') this.leadIn = null;
+    if ((f?.style === 'slow' || f?.style === 'big') && f.startBpm !== undefined) this.applyBpm(f.startBpm);
     const t = Tone.immediate();
     const end = this.endAuto();
     end.cancel(t);
     end.target(1, t, MUTE_GLIDE_SEC);
+  }
+
+  /**
+   * The big finish's hit: the key note's chord across every register at full force, on the
+   * band's tracks and the parts' own (chords in the left hand, the melody instrument on the
+   * high root, both basses on the low root and its octave), with crash and kick.
+   */
+  private playBigFinish(time: number, durSec: number): void {
+    if (!this.bandVoices) this.buildBandVoices();
+    const semis = this.cfg.scaleSemitones;
+    const style = worldOf(this.cfg.soundWorld ?? 'none')?.id ?? 'warm';
+    const chord = chordOnDegree(0, this.cfg.scaleRootMidi, semis, style);
+    const oct = this.cfg.octaveShift * 12;
+    const left = leftHand(chord.pcs.slice(0, 3)).map((n) => n + oct);
+    const highRoot = 72 + chord.rootPc + oct;
+    const padChord = [...left, highRoot];
+    const root = bassNote(chord, 36) + oct;
+    this.bandVoices?.gain.gain.setTargetAtTime(1, time, 0.01);
+    this.bandVoices?.top?.gain.cancelScheduledValues(time);
+    this.bandVoices?.top?.gain.setTargetAtTime(1, time, 0.01);
+    if (this.internalSound) {
+      for (const m of padChord) this.bandVoices?.pad.play(m, 1, durSec, time);
+      this.bandVoices?.bass.play(root, 1, durSec, time);
+      this.bandVoices?.bass.play(root + 12, 0.8, durSec, time);
+      this.drumKit?.play('crash', 1, time);
+      this.drumKit?.play('kick', 1, time);
+    }
+    const band = { row: -1, col: -1, colour: 'band:final', audioTime: time, durSec, source: 'live', origin: 'band', velocity: 1 } as const;
+    this.recordFired({ ...band, role: 'chord', midis: padChord });
+    this.recordFired({ ...band, role: 'bass', midi: root });
+    if (this.drumKit) {
+      this.recordFired({ ...band, role: 'drums', drum: 'crash' });
+      this.recordFired({ ...band, role: 'drums', drum: 'kick' });
+    }
+    // The parts' own tracks join in (MIDI sends 'ending:' notes to the parts' channels).
+    this.recordFired({ ...band, colour: 'ending:chord', role: 'chord', midis: left });
+    this.recordFired({ ...band, colour: 'ending:melody', role: 'melody', midis: [highRoot, highRoot + 12] });
+    this.recordFired({ ...band, colour: 'ending:bass', role: 'bass', midis: [root, root + 12] });
   }
 
   /** The final chord: the key note's chord on the band's pad and bass, and a crash. */
@@ -2663,6 +2710,14 @@ export class BoardSequencerEngine {
           end.cancel(t0);
           end.set(1, t0);
           end.linear(0.35, t0 + (f.beats - cycle) * secPerBeat);
+        } else if (f.style === 'big') {
+          // Nothing thins and nothing fades: everything builds, and the drums roll in
+          // over the last beats into the hit.
+          f.chordAt = beat + f.beats - cycle;
+          f.startBpm = this.cfg.bpm;
+          end.cancel(t0);
+          end.set(1, t0);
+          this.leadIn = { kind: 'drumFill', landBeat: f.chordAt };
         }
       }
       if (f.startBeat !== null) {
@@ -2676,7 +2731,8 @@ export class BoardSequencerEngine {
           // really finished sounding — the final chord rings half a pass past the end —
           // or stopping would cut the last notes off.
           const cycle = Math.max(1, this.cfg.cols * Math.max(1, this.cfg.numPages));
-          const ringSec = f.style === 'chord' ? 0.5 * cycle * secPerBeat + 1.2 : 0.8;
+          this.buildK = 0;
+          const ringSec = f.style === 'chord' || f.style === 'big' ? 0.5 * cycle * secPerBeat + 1.2 : 0.8;
           const waitMs = Math.max(0, (cellTime - Tone.now() + ringSec) * 1000);
           setTimeout(() => done?.(), waitMs);
           return;
@@ -2685,6 +2741,26 @@ export class BoardSequencerEngine {
           // A ritardando: down to a little over half speed by the end.
           const k = Math.min(1, (beat - f.startBeat) / Math.max(1, f.beats));
           this.applyBpm(f.startBpm * (1 - 0.45 * k));
+        }
+        if (f.style === 'big' && f.chordAt !== undefined) {
+          if (beat < f.chordAt) {
+            // The build: Energy rises to full over the ending's passes.
+            this.buildK = Math.min(1, (beat - f.startBeat + 1) / Math.max(1, f.chordAt - f.startBeat));
+            // The last pass broadens into the downbeat.
+            const lastPass = f.chordAt - cycle;
+            if (beat >= lastPass && f.startBpm !== undefined) {
+              const k = (beat - lastPass + 1) / cycle;
+              this.applyBpm(f.startBpm * (1 - BIG_RIT * k));
+            }
+          } else {
+            if (beat === f.chordAt && !this.backstop) {
+              const end = this.endAuto();
+              end.cancel(cellTime);
+              end.set(1, cellTime);
+              this.playBigFinish(cellTime, cycle * secPerBeat * 1.6);
+            }
+            return; // only the chord rings now
+          }
         }
         if (f.style === 'chord' && f.chordAt !== undefined) {
           if (beat === f.chordAt && !this.backstop) {
@@ -3088,7 +3164,7 @@ export class BoardSequencerEngine {
   private fireLeadIn(beat: number, cellTime: number, secPerBeat: number): void {
     const li = this.leadIn;
     if (!li) return;
-    if (beat > li.landBeat || this.finishing || this.thinning) {
+    if (beat > li.landBeat || (this.finishing && this.finishing.style !== 'big') || this.thinning) {
       this.leadIn = null;
       return;
     }

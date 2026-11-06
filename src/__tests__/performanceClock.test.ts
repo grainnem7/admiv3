@@ -180,3 +180,17 @@ describe('Count in (producer flow, item 8)', () => {
     expect(sanitizePerformance({ countIn: 'yes' }).countIn).toBe(false);
   });
 });
+
+describe('the big finish, timed', () => {
+  it('takes its passes and one more for the hit, broadens its last pass, and rings like the final chord', async () => {
+    const { endingPasses, endingDurationSec, describeEnding, BIG_RIT } = await import('../songs/performance/clock');
+    expect(endingPasses({ style: 'big', fadePasses: 2 })).toBe(3);
+    expect(describeEnding({ style: 'big', fadePasses: 2 })).toBe('build over 2 passes, then a big final chord');
+    const pass = 10;
+    const chord = endingDurationSec({ style: 'chord', fadePasses: 2 }, pass);
+    const big = endingDurationSec({ style: 'big', fadePasses: 2 }, pass);
+    // The same passes and ring as the final chord, plus the broadening of the last pass.
+    expect(big - chord).toBeCloseTo(pass * (-Math.log(1 - BIG_RIT) / BIG_RIT - 1), 6);
+    expect(big - chord).toBeGreaterThan(0);
+  });
+});

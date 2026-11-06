@@ -241,6 +241,16 @@ describe('releasing notes', () => {
   });
 });
 
+describe('the big finish on every track', () => {
+  it("the hit's own notes go to the parts' tracks; the band's to the band's", () => {
+    expect(channelFor({ role: 'melody', origin: 'band', colour: 'ending:melody' })).toBe(1);
+    expect(channelFor({ role: 'chord', origin: 'band', colour: 'ending:chord' })).toBe(3);
+    expect(channelFor({ role: 'bass', origin: 'band', colour: 'ending:bass' })).toBe(2);
+    expect(channelFor({ role: 'chord', origin: 'band', colour: 'band:final' })).toBe(11);
+    expect(channelFor({ role: 'bass', origin: 'band', colour: 'band:final' })).toBe(12);
+  });
+});
+
 describe('shape: each held note swells (sound design pass)', () => {
   const at = (t: number) => 1000 + t * 1000;
   it('a held melody note starts a little under, peaks by two fifths of its length, eases at the end; on CC 2 before its note on', () => {

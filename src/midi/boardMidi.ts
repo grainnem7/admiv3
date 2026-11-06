@@ -250,6 +250,8 @@ export function channelFor(
   const role = note.role;
   if (role !== 'melody' && role !== 'bass' && role !== 'chord' && role !== 'drums') return null;
   if (role === 'drums') return ROLE_CHANNEL.drums;
+  // The big finish's hit sounds on the parts' own tracks too, so every instrument is in it.
+  if (note.origin === 'band' && note.colour?.startsWith('ending:')) return ROLE_CHANNEL[role];
   if (note.origin === 'band') return role === 'bass' ? BAND_BASS_CHANNEL : BAND_PAD_CHANNEL;
   if (note.origin === 'fill') return EXTRA_NOTES_CHANNEL;
   // A loop's melody, bass and chords on the loop's own channel, for its own fader.

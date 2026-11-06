@@ -162,6 +162,7 @@ const note = { fontSize: 14, color: 'var(--bs-fg2)', margin: 0 } as const;
 const card = { padding: '10px 0 4px', borderTop: '1px solid var(--bs-border)', display: 'flex', flexDirection: 'column', gap: 6 } as const;
 
 const ENDINGS: { value: EndingStyle; label: string; what: string }[] = [
+  { value: 'big', label: 'Big finish', what: 'Nothing thins: everything builds and plays harder, the drums roll in, the band slows into one huge final chord across every instrument, and it rings out.' },
   { value: 'chord', label: 'Final chord', what: 'The texture thins, then a held chord and a crash ring out. A clear end the audience hears.' },
   { value: 'fade', label: 'Fade out', what: 'Everything fades together.' },
   { value: 'slow', label: 'Slow down', what: 'The speed eases to about half, then stops on the one.' },
