@@ -27,8 +27,8 @@ import type { KitDrum } from '../../audio/instruments/RoundRobinDrumKit';
 export type BandLevel = 'off' | 'gentle' | 'full';
 /** The pad's level when it layers in unison under a chord colour (sound design pass). */
 export const PAD_LAYER_GAIN = 0.62;
-/** The wide pads' upper layer: from A3 to A4, over the chords' left hand and under the melody. */
-export const WIDE_PAD_RANGE: [number, number] = [57, 69];
+/** The wide pads' upper layer: from C4 to C5, over the chords' left hand and around the bottom of the melody. */
+export const WIDE_PAD_RANGE: [number, number] = [60, 72];
 /** The band's parts; 'counter' only with jobs, 'leadIn' only into a scene. */
 export type BandPart = 'pad' | 'bass' | 'groove' | 'counter' | 'leadIn';
 export const BAND_PARTS: BandPart[] = ['pad', 'bass', 'groove'];
@@ -199,7 +199,10 @@ export function bandEventsAtStep(input: BandInput): BandEvent[] {
     for (const midi of voiced) out.push({ part: 'pad', offset: 0, dur: span - 0.05, accent: padAccent, midi, voicing: voiced });
     if (layered && input.widePads) {
       // Between the chords' left hand and the melody, moving by the smallest steps.
-      const upper = openVoicing(voiceLead({ pcs: triadPcs(h) }, input.previousUpper ?? null, WIDE_PAD_RANGE[0], WIDE_PAD_RANGE[1]));
+      // Opened (no two notes a tone apart) then folded back into its range, so it never
+      // wanders into the melody's register or down into the bass, chord after chord.
+      const [lo, hi] = WIDE_PAD_RANGE;
+      const upper = [...new Set(intoRange(openVoicing(voiceLead({ pcs: triadPcs(h) }, input.previousUpper ?? null, lo, hi)), lo, hi))];
       const accent = full ? 0.9 : 0.75;
       for (const midi of upper) out.push({ part: 'pad', offset: 0, dur: span - 0.05, accent, midi, voicing: upper, upper: true });
     }

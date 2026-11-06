@@ -198,13 +198,16 @@ export function voiceLead(chord: Pick<Chord, 'pcs'>, previous: readonly number[]
     // Each previous note walks to its nearest new note; big leaps cost more.
     return previous.reduce((sum, p) => sum + Math.min(...v.map((n) => Math.abs(n - p))), 0);
   };
-  let best = candidates[0];
+  let best: number[] | null = null;
   let bestCost = Infinity;
   for (const v of candidates) {
     const k = cost(v);
     if (k < bestCost) { bestCost = k; best = v; }
   }
-  return best;
+  // No voicing near the last one fits the register (the last one had wandered out of it):
+  // start again in the middle of the register. Returning the nearest anyway fed the next
+  // chord a lower start each time, and a pad ran away down to the bottom of MIDI.
+  return best ?? voiceNear(chord, Math.round((lo + hi) / 2));
 }
 
 /** The root in the bass register. */
