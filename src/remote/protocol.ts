@@ -1,3 +1,4 @@
+import { LAUNCH_SLOTS } from '../songs/performance/launcher';
 /**
  * The iPad remote: what the iPad and the laptop say to each other, and the maths that
  * turns an imprecise finger into a steady value.
@@ -124,7 +125,7 @@ export function sanitizeRemoteTouch(v: unknown): RemoteTouch {
     secondTapMinMs: (SECOND_TAP_MIN_MS as readonly number[]).includes(o.secondTapMinMs as number) ? (o.secondTapMinMs as number) : d.secondTapMinMs,
     playExtras: Array.isArray(o.playExtras) ? REMOTE_PLAY_EXTRAS.filter((x) => (o.playExtras as unknown[]).includes(x)) : [],
     playLoops: Array.isArray(o.playLoops)
-      ? [...new Set((o.playLoops as unknown[]).filter((x): x is number => typeof x === 'number' && Number.isInteger(x) && x >= 0 && x < 8))].sort((a, b) => a - b)
+      ? [...new Set((o.playLoops as unknown[]).filter((x): x is number => typeof x === 'number' && Number.isInteger(x) && x >= 0 && x < LAUNCH_SLOTS))].sort((a, b) => a - b)
       : [],
     showNext: o.showNext !== false,
   };

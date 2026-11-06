@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState, type CSSProperties } from 'react';
+import { RAIL_COLUMN } from '../../../../songs/performance/launcher';
 import { Button } from '../ui/Button';
 import { CAPTION_STYLE } from '../ui/text';
 import { LoopThumb, type PieceLoop } from './PieceSteps';
@@ -34,7 +35,8 @@ export interface LoopRailProps {
 
 const THUMB = 36;
 /**
- * The rail's height as a column: the caption (20), the eight places with their gaps
+ * The rail's height as a column (past eight places it adds a second column, never more
+ * height): the caption (20), eight places with their gaps
  * (8 targets + 7 × 4), the two gaps of 6, and the … row (4 + a target). The row holding the
  * board and the rail is never shorter than this, so nothing under the board can cover the
  * rail's last places; and it fits a 768 px screen (U4).
@@ -149,7 +151,11 @@ export function LoopRail(p: LoopRailProps): JSX.Element {
       <div
         role="group"
         aria-label="Loops: press a kept loop to play or stop it, the dashed place to keep the board as the next loop"
-        style={{ display: 'flex', flexDirection: column ? 'column' : 'row', gap: 4, flexWrap: column ? 'nowrap' : 'wrap' }}
+        // Up to sixteen loops: past eight the places run on in a second column of eight, so the
+        // rail is never taller than it was, and every loop stays in sight.
+        style={column && shown.length > RAIL_COLUMN
+          ? { display: 'grid', gridTemplateRows: `repeat(${RAIL_COLUMN}, auto)`, gridAutoFlow: 'column', gap: 4, alignContent: 'start' }
+          : { display: 'flex', flexDirection: column ? 'column' : 'row', gap: 4, flexWrap: column ? 'nowrap' : 'wrap' }}
         onKeyDown={(e) => {
           if (e.key === (column ? 'ArrowDown' : 'ArrowRight')) { e.preventDefault(); move(1); }
           else if (e.key === (column ? 'ArrowUp' : 'ArrowLeft')) { e.preventDefault(); move(-1); }
@@ -180,7 +186,8 @@ export function LoopRail(p: LoopRailProps): JSX.Element {
               // A row: the picture, then the name. Eight of them fit beside the board at 768 px tall.
               style={{
                 display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8, justifyContent: empty ? 'center' : 'flex-start',
-                width: 124, minHeight: 'var(--bs-target)', padding: '2px 6px', boxSizing: 'border-box', textAlign: 'left',
+                // Room for the picture, a name like "Loop 12" and ▶ (at 124 only "Loop 1" fitted).
+                width: 140, minHeight: 'var(--bs-target)', padding: '2px 6px', boxSizing: 'border-box', textAlign: 'left',
                 borderRadius: 'var(--bs-radius-md)',
                 // Kept: a step up from the page. Playing: an edge in the text colour. The dashed place: a hairline.
                 border: `1px ${empty || offSoon ? 'dashed' : 'solid'} ${on ? 'var(--bs-fg)' : offSoon ? 'var(--bs-border-control)' : empty ? 'var(--bs-border-control)' : 'transparent'}`,

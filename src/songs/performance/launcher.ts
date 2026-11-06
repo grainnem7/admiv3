@@ -19,7 +19,9 @@ import { sanitizeSceneEnergy, type SceneEnergy } from './energy';
 import { sanitizeIdeas, sanitizeKeptIdeas, type KeptIdea } from './ideas';
 
 /** How many loops the iPad and the scenes can launch. */
-export const LAUNCH_SLOTS = 8;
+export const LAUNCH_SLOTS = 16;
+/** The rail shows its places in columns of this many, so it is never taller than eight. */
+export const RAIL_COLUMN = 8;
 
 export type LoopSlotState = 'empty' | 'stopped' | 'playing' | 'starting' | 'stopping';
 

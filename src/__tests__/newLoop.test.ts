@@ -95,8 +95,10 @@ describe('the loop Keep fills (T2-01, T4-04)', () => {
   it('none when every loop is taken', async () => {
     const { slotForKeep } = await import('../songs/performance/newLoop');
     const cells = [{ row: 1, col: 1, colour: 'red' }];
-    expect(slotForKeep(Array.from({ length: 8 }, () => cells), [])).toBeNull();
-    expect(slotForKeep([...Array.from({ length: 7 }, () => cells), null], [{ loops: [7] }])).toBeNull();
+    expect(slotForKeep(Array.from({ length: 16 }, () => cells), [])).toBeNull();
+    expect(slotForKeep([...Array.from({ length: 15 }, () => cells), null], [{ loops: [15] }])).toBeNull();
+    // Eight kept is no longer full: the ninth place is free.
+    expect(slotForKeep(Array.from({ length: 8 }, () => cells), [])).toBe(8);
   });
 });
 

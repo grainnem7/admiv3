@@ -860,10 +860,13 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
         );
       })()}
 
-      {tab === 'loops' && loopsPage && (
+      {tab === 'loops' && loopsPage && ((): JSX.Element => {
+        const loopPads = (state?.loops ?? []).some((l, i) => i >= 8 && l.state !== 'empty') ? 16 : 8;
+        return (
         <div data-loops-page style={{ flex: '1 1 0', display: 'flex', flexDirection: 'column', gap: GAP, minHeight: 0, opacity: live ? 1 : 0.4 }}>
-          <div style={{ flex: '3 1 0', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gridTemplateRows: 'repeat(2, 1fr)', gap: GAP, minHeight: 0 }}>
-            {Array.from({ length: 8 }, (_, i) => {
+          {/* Eight pads, or sixteen once a loop past the eighth is kept (four rows of four). */}
+          <div style={{ flex: '3 1 0', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gridTemplateRows: `repeat(${loopPads / 4}, 1fr)`, gap: GAP, minHeight: 0 }}>
+            {Array.from({ length: loopPads }, (_, i) => {
               const l = state?.loops?.[i] ?? { name: '', state: 'empty' as RemoteLoopState };
               const on = l.state === 'playing' || l.state === 'starting';
               const label = l.name || `Loop ${i + 1}`;
@@ -967,7 +970,8 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
             </button>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {simple && simplePage}
 

@@ -43,13 +43,14 @@ describe('scenes', () => {
 
   it('stored scenes are made safe', () => {
     const scenes = sanitizeScenes([
-      { id: 'a', name: 'Intro', loops: [0, 0, 9, -1, 2.5, 3], settings: { bpm: 5000, fillAmount: 2, soundWorld: 'disco' } },
+      { id: 'a', name: 'Intro', loops: [0, 0, 9, 16, -1, 2.5, 3], settings: { bpm: 5000, fillAmount: 2, soundWorld: 'disco' } },
       'junk',
       { id: 'a', name: 'duplicate id' },
       { name: '', loops: 'no' },
     ], settings);
     expect(scenes).toHaveLength(2);
-    expect(scenes[0]).toEqual({ id: 'a', name: 'Intro', loops: [0, 3], settings: { ...settings, bpm: 400, fillAmount: 1, chords: AS_BEFORE_CHORDS } });
+    // Sixteen loops: 9 is a loop, 16 is past the last.
+    expect(scenes[0]).toEqual({ id: 'a', name: 'Intro', loops: [0, 3, 9], settings: { ...settings, bpm: 400, fillAmount: 1, chords: AS_BEFORE_CHORDS } });
     expect(scenes[1].name).toBe('Scene 2');
     expect(sanitizeScenes('nope', settings)).toEqual([]);
   });

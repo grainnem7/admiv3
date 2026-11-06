@@ -363,8 +363,8 @@ describe('the clock on the iPad, and the End and Capture pads', () => {
 describe('the player touch settings', () => {
   it('are made safe: unknown pads dropped, loops in range, the second-tap window one of the choices', () => {
     expect(sanitizeRemoteTouch(null)).toEqual(DEFAULT_REMOTE_TOUCH);
-    expect(sanitizeRemoteTouch({ actOn: 'lift', confirmSec: 10, secondTapMinMs: 800, playExtras: ['endPiece', 'explode'], playLoops: [3, 3, 9, -1, 1], showNext: false }))
-      .toEqual({ actOn: 'lift', confirmSec: 10, secondTapMinMs: 800, playExtras: ['endPiece'], playLoops: [1, 3], showNext: false });
+    expect(sanitizeRemoteTouch({ actOn: 'lift', confirmSec: 10, secondTapMinMs: 800, playExtras: ['endPiece', 'explode'], playLoops: [3, 3, 9, 16, -1, 1], showNext: false }))
+      .toEqual({ actOn: 'lift', confirmSec: 10, secondTapMinMs: 800, playExtras: ['endPiece'], playLoops: [1, 3, 9], showNext: false });
     expect(sanitizeRemoteTouch({ confirmSec: 4 }).confirmSec).toBe(DEFAULT_REMOTE_TOUCH.confirmSec);
   });
 

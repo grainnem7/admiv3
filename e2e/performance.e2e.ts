@@ -1163,10 +1163,11 @@ test('New loop silences the notes still ringing at once, as Stop does; after the
 });
 
 test('with every loop full, New loop is off and says why; clearing one lets a new loop in (R2-T1-05, R2-T4-04)', async ({ page }) => {
-  // On the Board, where Keep as loop is beside ▶ Play.
+  test.setTimeout(240_000);
+  // On the Board, where Keep as loop is beside ▶ Play. Sixteen loops: past eight, a second column.
   await openLaptopBoard(page);
   await pickColour(page, 'Red');
-  for (let i = 1; i <= 8; i++) {
+  for (let i = 1; i <= 16; i++) {
     await place(page, [[3, 1]]); // Keep as loop clears the board each time
     await keepAsLoop(page);
     await expect(loopPlace(page, i - 1)).toHaveAttribute('aria-label', new RegExp(`^Loop ${i}: 1 note, `));
@@ -1174,25 +1175,28 @@ test('with every loop full, New loop is off and says why; clearing one lets a ne
   // No loop can be kept: the rail has no dashed place, and Keep as loop is off and says why,
   // with counters down.
   await place(page, [[3, 1]]);
-  await expect(page.locator('[data-loop-rail] [data-loop-place]')).toHaveCount(8);
+  await expect(page.locator('[data-loop-rail] [data-loop-place]')).toHaveCount(16);
+  // All sixteen in sight, in two columns, and the page still fits the screen.
+  await expect(loopPlace(page, 15)).toBeInViewport();
+  expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThanOrEqual(900);
   await expect(page.locator('[data-loop-rail]').getByText('+ Keep as loop')).toHaveCount(0);
   const keep = page.getByRole('button', { name: /^Keep as loop: keep the counters/ });
   await expect(keep).toBeDisabled();
   await expect(keep).toHaveAccessibleDescription('Every loop is full: clear one first.');
   // New loop, in a loop's menu, is off too, its reason on it.
-  const menu = await loopMenu(page, 7);
+  const menu = await loopMenu(page, 15);
   await expect(menu.getByRole('button', { name: 'New loop: from silence' })).toBeDisabled();
   await expect(menu.getByRole('button', { name: 'New loop: from silence' })).toHaveAttribute('title', 'Every loop is full: clear one first.');
   // Clear one: now there is a place for it, and the dashed place is back.
-  await menu.getByRole('button', { name: 'Clear loop 8' }).click();
-  await page.getByRole('dialog', { name: 'Clear Loop 8?' }).getByRole('button', { name: 'Clear it' }).click();
-  await expect(loopPlace(page, 7)).toHaveText('+ Keep as loop');
+  await menu.getByRole('button', { name: 'Clear loop 16' }).click();
+  await page.getByRole('dialog', { name: 'Clear Loop 16?' }).getByRole('button', { name: 'Clear it' }).click();
+  await expect(loopPlace(page, 15)).toHaveText('+ Keep as loop');
   await expect(keep).toBeEnabled();
-  const again = await loopMenu(page, 6);
+  const again = await loopMenu(page, 14);
   const newLoop = again.getByRole('button', { name: 'New loop: from silence' });
   await expect(newLoop).toBeEnabled();
   await newLoop.click();
-  await expect(page.getByRole('heading', { name: 'New loop 8 · silent' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'New loop 16 · silent' })).toBeVisible();
   // Counters are down: New loop asks first, and keeping them takes the place just freed (U1).
   await page.getByRole('button', { name: "Keep what's on the board" }).click();
   await expect(page.getByRole('textbox', { name: 'Name of the new loop' })).toBeVisible();
