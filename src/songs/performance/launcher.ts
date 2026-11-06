@@ -17,6 +17,7 @@ import { sanitizeChords, type ChordSetting } from '../harmony/currentChord';
 import { sanitizeBandJobs, sanitizeLeadIn, type BandJobs, type LeadIn } from '../band/bandJobs';
 import { sanitizeSceneEnergy, type SceneEnergy } from './energy';
 import { sanitizeIdeas, sanitizeKeptIdeas, type KeptIdea } from './ideas';
+import { sanitizeSongSection, type SongSectionSpec } from '../song/songSection';
 
 /** How many loops the iPad and the scenes can launch. */
 export const LAUNCH_SLOTS = 16;
@@ -139,6 +140,11 @@ export interface Scene {
    * so they follow it. Absent = the key stays as it is, as every scene saved before.
    */
   key?: SceneKey;
+  /**
+   * A section of a recorded song that plays in this scene, the record leading the beat
+   * (spec 2026-11-06): Elvis's voice for a verse. It starts on the pass the scene lands on.
+   */
+  song?: SongSectionSpec;
 }
 
 /** A scene's key: the key note (the melody's bottom row) and the scale. */
@@ -305,6 +311,7 @@ export function sanitizeScenes(v: unknown, defaults: SceneSettings): Scene[] {
     const aiIdeas = sanitizeKeptIdeas(o.aiIdeas);
     const wayIn = sanitizeWayIn(o.wayIn);
     const key = sanitizeSceneKey(o.key);
+    const song = sanitizeSongSection(o.song);
     out.push({
       id, name: cleanName(o.name) || `Scene ${out.length + 1}`, loops, settings: sanitizeSceneSettings(o.settings, defaults),
       ...(isNum(o.at) && o.at >= 0 ? { at: Math.round(o.at) } : {}),
@@ -316,6 +323,7 @@ export function sanitizeScenes(v: unknown, defaults: SceneSettings): Scene[] {
       ...(aiIdeas.length > 0 ? { aiIdeas } : {}),
       ...(wayIn ? { wayIn } : {}),
       ...(key ? { key } : {}),
+      ...(song ? { song } : {}),
     });
   }
   return out;

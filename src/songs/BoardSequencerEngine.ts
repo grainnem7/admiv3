@@ -18,6 +18,10 @@ import { breathGain, breathPhase, breathRest } from './breath';
 import { developCells } from './development';
 import { contourByInterval, legatoLength } from './phrasing';
 import * as Tone from 'tone';
+import { SongStems, type StemsPlayer } from '../audio/songStems';
+import {
+  sectionBeats, songBeatLength, songBeatTime, songChordAt, songTempoAt, type SongMap, type SongSectionSpec, type StemName,
+} from './song/songSection';
 import { strumFor, strumOffsets, STRUM_UP_GAIN } from './strum';
 import { BoardSequencerVoice } from './voices/BoardSequencerVoice';
 import { voicingForCells, degreeMidi, chordDegreeMidi, drumForRow, DEFAULT_DRUM_ROWS, loopLen, lapIndex, strictlyAfter, firesThisLap, firesThisLapPaged, sweepAt, type PingPongPages, type Sweep } from './boardSequencerScale';
@@ -315,6 +319,8 @@ const DELAY_TIME_SEC = 0.25;
 const DELAY_FEEDBACK = 0.32;
 /** How long Play waits for the instruments' samples before starting without them. */
 const START_READY_MAX_MS = 4000;
+/** How long the record takes to fade out when its section ends. */
+const SECTION_FADE_SEC = 0.4;
 const TICK_INTERVAL_MS = 25;
 /** How long Play waits for the board's first reading before starting anyway. */
 const BOARD_WAIT_MAX_SEC = 0.5;
@@ -673,6 +679,18 @@ export class BoardSequencerEngine {
     // mid-piece (a scene's new loop instrument, the band coming in) decoded its samples while
     // the beats were being scheduled, and the sound fell behind at each new scene.
     for (const ch of this.preloadColours) this.buildVoice(ch);
+    // A piece with song sections: its stems, loaded now, after the board's mix (so they sound
+    // with Ableton as the sound, and Mute, the ending's fade and the world's level apply).
+    if (this.songPrep && !this.stems) {
+      const bus = ctx.createGain();
+      bus.gain.value = this.muted ? 0 : 1;
+      bus.connect(endGain);
+      this.stemsBus = bus;
+      const stems = new SongStems(ctx, bus);
+      await stems.load(this.songPrep.urls);
+      this.stems = stems;
+      this.songMap = this.songPrep.map;
+    }
     if (this.preloadBand && !this.bandVoices) this.buildBandVoices();
     if (!this.drumKit && this.preloadColours.some((c) => c.role === 'drums')) await this.buildDrumKit();
     // The first beats must sound. The samples load in the background and a voice says
@@ -1734,6 +1752,141 @@ export class BoardSequencerEngine {
   private preloadColours: ColourChannel[] = [];
   private preloadBand = false;
 
+  /** A piece with song sections: the song to load before the first beat (spec 2026-11-06). */
+  private songPrep: { map: SongMap; urls: Partial<Record<StemName, string>> } | null = null;
+  private songMap: SongMap | null = null;
+  private stems: StemsPlayer | null = null;
+  private stemsBus: GainNode | null = null;
+  /** A section cued, waiting for the next pass boundary. */
+  private sectionPending: SongSectionSpec | null = null;
+  /**
+   * The section playing: the record leads. Its beats run from `first` to `end` in the song;
+   * song beat k is board beat `boardStart + (k - first)`, sounding at `atStart` plus its
+   * distance from the section's first beat in the recording. `next` is the next to send.
+   */
+  private section: {
+    spec: SongSectionSpec; first: number; end: number; next: number; boardStart: number; atStart: number; songStart: number;
+  } | null = null;
+  /** Told when a section ends and the board's own clock takes over, at the record's last tempo. */
+  private onSectionEnd: ((bpm: number) => void) | null = null;
+
+  /** Before init: the song a piece's sections play, loaded with everything else before the first beat. */
+  prepareSong(map: SongMap, urls: Partial<Record<StemName, string>>): void {
+    this.songPrep = { map, urls };
+  }
+
+  /** For tests, or a song already loaded: the stems player and the song's map. */
+  setSong(player: StemsPlayer | null, map: SongMap | null): void {
+    this.stems?.dispose();
+    this.stems = player;
+    this.songMap = map;
+  }
+
+  setOnSectionEnd(cb: ((bpm: number) => void) | null): void {
+    this.onSectionEnd = cb;
+  }
+
+  /**
+   * A scene's section of the song, from the next pass boundary (null: none waiting). While
+   * one plays, the next cued starts where it ends; one that starts at that very beat carries
+   * the same playback on (only the stems' levels move).
+   */
+  cueSongSection(spec: SongSectionSpec | null): void {
+    this.sectionPending = spec && this.songMap && this.stems?.ready() ? { ...spec, levels: { ...spec.levels } } : null;
+  }
+
+  /** The section playing now, if any. */
+  getSongSection(): SongSectionSpec | null {
+    return this.section?.spec ?? null;
+  }
+
+  /** The audio time song beat k of the playing section sounds at. */
+  private sectionTime(k: number): number {
+    const s = this.section;
+    if (!s || !this.songMap) return 0;
+    return s.atStart + songBeatTime(this.songMap, k) - s.songStart;
+  }
+
+  /** Start the cued section at board beat `beat` (a pass boundary), sounding at `at`. */
+  private beginSection(beat: number, at: number): boolean {
+    const spec = this.sectionPending;
+    const map = this.songMap;
+    this.sectionPending = null;
+    if (!spec || !map || !this.stems) return false;
+    const sb = sectionBeats(map, spec.fromBar, spec.toBar);
+    if (!sb) return false;
+    const songStart = songBeatTime(map, sb.first);
+    this.stems.start(at, songStart, spec.levels);
+    this.section = { spec, first: sb.first, end: sb.end, next: sb.first, boardStart: beat, atStart: at, songStart };
+    return true;
+  }
+
+  /** The record leads: send each of its beats as the board's next, until its section ends. */
+  private scheduleSection(): void {
+    const s = this.section;
+    const map = this.songMap;
+    if (!s || !map) return;
+    const now = Tone.now();
+    const horizon = now + LOOKAHEAD_SEC;
+    let late = 0;
+    let lag = 0;
+    while (s.next < s.end && this.sectionTime(s.next) <= horizon) {
+      const k = s.next;
+      const at = this.sectionTime(k);
+      if (at < now - LATE_TOLERANCE_SEC) { late++; lag = Math.max(lag, now - at); }
+      const beat = s.boardStart + (k - s.first);
+      const chord = songChordAt(map, songBeatTime(map, k));
+      this.fireStep(beat, Math.max(now, at), songBeatLength(map, k), chord ? { notes: chord.notes } : null);
+      this.lastInternalBeat = beat;
+      s.next = k + 1;
+    }
+    if (late > 0) this.noteLate(lag, late, 0);
+    if (s.next >= s.end) this.endSection();
+  }
+
+  /**
+   * The section's last beat has been sent. A section cued to start right where it ends
+   * carries the same playback on; otherwise the record fades out at its end and the board's
+   * own clock takes over at the record's last tempo, the beat count carrying on.
+   */
+  private endSection(): void {
+    const s = this.section;
+    const map = this.songMap;
+    if (!s || !map) return;
+    const at = this.sectionTime(s.end);
+    const beat = s.boardStart + (s.end - s.first);
+    const next = this.sectionPending;
+    const nb = next && next.songId === s.spec.songId ? sectionBeats(map, next.fromBar, next.toBar) : null;
+    if (next && nb && nb.first === s.end) {
+      this.sectionPending = null;
+      this.stems?.setLevels(next.levels, at, 0.3);
+      this.section = { spec: { ...next, levels: { ...next.levels } }, first: nb.first, end: nb.end, next: nb.first, boardStart: beat, atStart: at, songStart: songBeatTime(map, nb.first) };
+      return;
+    }
+    this.stems?.stop(at, SECTION_FADE_SEC);
+    const bpm = Math.max(20, Math.min(400, songTempoAt(map, s.end)));
+    this.section = null;
+    this.cfg.bpm = bpm;
+    this.startSec = at - beat * (60 / bpm);
+    this.lastInternalBeat = beat - 1;
+    this.onSectionEnd?.(bpm);
+  }
+
+  /** Leave a playing section at once (Stop, everything stops): its sound gone, nothing waiting. */
+  private dropSection(fadeSec: number): void {
+    const t = Tone.immediate();
+    if (this.section && this.songMap) {
+      this.stems?.stop(t, fadeSec);
+      // The clock carries on from the last beat sent, at the record's speed there.
+      const bpm = Math.max(20, Math.min(400, songTempoAt(this.songMap, this.section.next)));
+      const spb = 60 / bpm;
+      this.cfg.bpm = bpm;
+      this.startSec = Tone.now() + spb - (this.lastInternalBeat + 1) * spb;
+    }
+    this.section = null;
+    this.sectionPending = null;
+  }
+
   /**
    * Before init: the loops' colours and the band a piece will bring in later, so their
    * sounds load before the first beat rather than as each scene arrives.
@@ -1962,6 +2115,8 @@ export class BoardSequencerEngine {
    */
   silenceNow(): void {
     const t = Tone.immediate();
+    // A song section stops too: the record is part of "everything".
+    this.dropSection(0.03);
     for (const e of this.voiceByChannel.values()) {
       e.voice.cut();
       e.pending?.voice.cut();
@@ -2321,6 +2476,8 @@ export class BoardSequencerEngine {
 
   private applyBpm(bpm: number): void {
     if (this.syncSource && this.syncSource.beats.length > 0) return;
+    // While a song section plays the record sets the speed; it is taken up again after.
+    if (this.section) return;
     const clamped = Math.max(20, Math.min(400, bpm));
     if (Math.abs(clamped - this.cfg.bpm) < 0.05) return;
     const now = Tone.now();
@@ -2331,6 +2488,7 @@ export class BoardSequencerEngine {
 
   /** The tempo actually in effect: the song's (from beat spacing) when synced, else cfg.bpm. */
   getBpm(): number {
+    if (this.section && this.songMap) return songTempoAt(this.songMap, Math.max(this.section.first + 1, this.section.next));
     const beats = this.syncSource?.beats;
     if (beats && beats.length > 1) {
       const i = Math.min(Math.max(this.lastBeatIndex, 0), beats.length - 2);
@@ -2347,6 +2505,14 @@ export class BoardSequencerEngine {
 
   /** The beat being heard now (synced: the last fired song beat). */
   private visualBeat(): number {
+    const sec = this.section;
+    if (sec && this.songMap) {
+      // The record leads: the beat whose time in the section has come.
+      const heard = this.audibleNow();
+      let k = sec.first;
+      while (k + 1 < sec.next && this.sectionTime(k + 1) <= heard) k++;
+      return sec.boardStart + (k - sec.first);
+    }
     return this.syncSource && this.syncSource.beats.length > 0
       ? this.lastBeatIndex
       : Math.floor((this.audibleNow() - this.startSec) / (60 / this.cfg.bpm));
@@ -2403,6 +2569,8 @@ export class BoardSequencerEngine {
   private applyMixGain(glideSec = 0.02): void {
     const level = this.muted || !this.internalSound ? 0 : this.cfg.volume;
     if (this.mix) this.mix.gain.setTargetAtTime(level, Tone.immediate(), glideSec);
+    // The song's stems: heard whoever makes the instruments' sound, silent with Mute.
+    this.stemsBus?.gain.setTargetAtTime(this.muted ? 0 : 1, Tone.immediate(), glideSec);
   }
 
   /** Live per-channel mixer (no-op if that channel has no voice). */
@@ -2590,7 +2758,11 @@ export class BoardSequencerEngine {
   }
 
   private scheduleTick(): void {
-    if (this.syncSource && this.syncSource.beats.length > 0) {
+    if (this.section) {
+      this.scheduleSection();
+      // The section's last beat sent: the board's own clock carries on in the same tick.
+      if (!this.section) this.scheduleInternal();
+    } else if (this.syncSource && this.syncSource.beats.length > 0) {
       this.scheduleSynced(this.syncSource);
     } else {
       this.scheduleInternal();
@@ -2629,8 +2801,17 @@ export class BoardSequencerEngine {
     // is on time). A few sums per pass, nothing per note.
     const dueAt = this.startSec + owed * secPerBeat + (owed % 2 === 1 ? this.cfg.swing * secPerBeat * 0.5 : 0);
     let late = 0;
+    const cycle = Math.max(1, this.cfg.cols * Math.max(1, this.cfg.numPages));
     for (let beatIdx = first; beatIdx <= target; beatIdx++) {
       let stepTime = this.startSec + beatIdx * secPerBeat;
+      // A cued song section starts on the pass boundary: from here the record leads.
+      if (this.sectionPending && ((beatIdx % cycle) + cycle) % cycle === 0
+        && this.beginSection(beatIdx, Math.max(now, stepTime))) {
+        this.lastInternalBeat = beatIdx - 1;
+        if (now - dueAt > LATE_TOLERANCE_SEC) this.noteLate(now - dueAt, late, first - owed);
+        this.scheduleSection();
+        return;
+      }
       if (beatIdx % 2 === 1) stepTime += this.cfg.swing * secPerBeat * 0.5; // groove off-beats
       if (stepTime < now - LATE_TOLERANCE_SEC) late++;
       // A stall can leave a beat's time already behind us; Tone would clamp it anyway, but
@@ -3740,6 +3921,7 @@ export class BoardSequencerEngine {
   stop(): void {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+    this.dropSection(0.1);
     // A scene's sound still waiting for its pass is the sound now: never left behind.
     if (this.passPending) {
       const p = this.passPending;
@@ -3776,6 +3958,10 @@ export class BoardSequencerEngine {
     });
     this.voiceByChannel.clear();
     this.channelById.clear();
+    this.stems?.dispose();
+    this.stems = null;
+    this.stemsBus?.disconnect();
+    this.stemsBus = null;
     this.limiter?.dispose();
     this.limiter = null;
     this.classicOut?.disconnect();
