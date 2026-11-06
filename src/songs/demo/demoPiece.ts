@@ -1,23 +1,29 @@
 /**
- * The demo piece: a ready-made piece, written note by note, that plays the same every time.
+ * The demo piece: a ready-made piece of seven minutes, written note by note, that plays the
+ * same every time.
  *
- * On the usual 8 by 8 board at 90 BPM a pass is two bars of 4/4 (8 beats, about 5.3 s).
+ * On the usual 8 by 8 board at 87 BPM a pass is two bars of 4/4 (8 beats, about 5.5 s).
  * The chords are I V vi IV, two beats each (in A major: A, E, F sharp minor, D): the guitar
  * plays them, the trombone carries the bass, the harp and the clarinet take turns with the
  * tune. Every note is a step of the scale, so when a scene changes the key the same loops
- * sing in the new mode:
- *  - A major: the drums alone, then the trombone, the guitar and the harp, one by one;
- *  - A mixolydian: the clarinet takes the tune and the V chord softens to E minor;
- *  - A minor: the breakdown, only the guitar and the harp (the IV chord, D major, opens
- *    onto A minor);
- *  - A major: the drums and the trombone come back in with a fill, from D minor to A major
- *    (the minor iv into I, the warmest way home);
- *  - B major: up a tone for the last section, everything playing, into the Big finish (from
- *    D major straight onto B major).
+ * sing in the new mode.
  *
- * Every change lands on the downbeat of a pass that is a multiple of four, so the drums' fill
- * (the last bar of every fourth pass) or a lead-in fill announces it. The written lines move
- * by step where they can, and every note on a strong beat is a note of its chord.
+ * The tunes are four bars long: each loop plays plain on one pass and decorated on the next
+ * (its Variation counters: a passing note, a second harp note, an extra strum), so a phrase
+ * is stated and then answered, and never just repeats.
+ *
+ * The plan, in twelve scenes: the drums alone; the trombone; the guitar; the harp (A major);
+ * a shimmer over a drone, the harp in the pentatonic scale; the clarinet in A mixolydian,
+ * then answering higher over the driving guitar; a breakdown in A minor, guitar and harp;
+ * a lament, the clarinet in A minor over soft drums; back home to A major with a walking
+ * trombone; up a tone to B major with the harp over everything; and the clarinet soaring
+ * over the full band into the Big finish.
+ *
+ * Every change lands on the downbeat of a pass that is a multiple of four, so the drums'
+ * fill (the last bar of every fourth pass) or a lead-in fill announces it, and every note on
+ * a strong beat is a note of its chord. The joins between keys are the classic ones: D major
+ * opening onto the A drone and onto A minor, D minor into A major (the minor iv to I), and
+ * the trombone's E under D major falling to B (IV to I of the new key).
  *
  * The same every time: the drums play the warm world's grooves, every other note is
  * written here, and the extra notes and the band's pads come from the rules with fixed
@@ -42,7 +48,8 @@ export const DEMO_PIECE_ID = 'demo-piece';
 
 const ROWS = 8;
 const COLS = 8;
-export const DEMO_BPM = 90;
+/** 87, not 90: the Big finish then starts exactly at the end of the last scene's eighth pass, and ends by 7:00. */
+export const DEMO_BPM = 87;
 /** The piece's own ideas: every choice the rules make comes from these, so it plays the same. */
 export const DEMO_IDEAS = 20261106;
 
@@ -51,6 +58,7 @@ const MAJOR = [0, 2, 4, 5, 7, 9, 11];
 export const A_MAJOR: SceneKey = { rootMidi: 69, scaleName: 'Major', semitones: MAJOR };
 export const A_MIXOLYDIAN: SceneKey = { rootMidi: 69, scaleName: 'Mixolydian', semitones: [0, 2, 4, 5, 7, 9, 10] };
 export const A_MINOR: SceneKey = { rootMidi: 69, scaleName: 'Minor', semitones: [0, 2, 3, 5, 7, 8, 10] };
+export const A_PENTATONIC: SceneKey = { rootMidi: 69, scaleName: 'Major pentatonic', semitones: [0, 2, 4, 7, 9] };
 export const B_MAJOR: SceneKey = { rootMidi: 71, scaleName: 'Major', semitones: MAJOR };
 
 /** Steps of the scale from the bottom row (in A major: A B C# D E F# G# A). */
@@ -59,9 +67,19 @@ const I = 0, II = 1, III = 2, IV = 3, V = 4, VI = 5, VII = 6, VIII = 7;
 /** A written note: its step in the pass (0 to 7) and its step of the scale (0 to 7). */
 type Written = readonly [col: number, degree: number];
 
-function notes(job: LoopJob, sound: string, line: readonly Written[], velocity: number): StoredLoopCell[] {
+/**
+ * A loop: its notes on every pass, and its decorations on every other pass (the Variation
+ * counters), a little softer, so the second pass answers the first.
+ */
+function notes(job: LoopJob, sound: string, line: readonly Written[], velocity: number, decorations: readonly Written[] = []): StoredLoopCell[] {
   const colour = loopColourId(job, sound);
-  return line.map(([col, degree]) => ({ row: ROWS - 1 - degree, col, colour, job, sound, plays: 'note', velocity }));
+  const cell = (col: number, degree: number, v: number, conditional: boolean): StoredLoopCell => ({
+    row: ROWS - 1 - degree, col, colour, job, sound, plays: 'note', velocity: v, ...(conditional ? { conditional: true } : {}),
+  });
+  return [
+    ...line.map(([col, degree]) => cell(col, degree, velocity, false)),
+    ...decorations.map(([col, degree]) => cell(col, degree, Math.round(velocity * 0.88 * 100) / 100, true)),
+  ];
 }
 
 /**
@@ -76,31 +94,50 @@ function groove(level: 0 | 1 | 2 | 3, velocity: number): StoredLoopCell[] {
 
 /** The chords, I V vi IV, two beats each: a strum on 1, 3 and 4 of each bar, each held to the next. */
 const GUITAR_LINE: Written[] = [[0, I], [2, V], [3, V], [4, VI], [6, IV], [7, IV]];
-/** The last section's guitar: a strum on every beat. */
+/** ...and on the answering pass, a strum on the second beat of each bar too. */
+const GUITAR_ANSWER: Written[] = [[1, I], [5, VI]];
+/** The driving guitar: a strum on every beat. */
 const GUITAR_DRIVE: Written[] = [[0, I], [1, I], [2, V], [3, V], [4, VI], [5, VI], [6, IV], [7, IV]];
 /** The trombone: from the low root up to the V, through vi and IV (F#, E, D by step), the V leading home. */
 const TROMBONE_LINE: Written[] = [[0, I], [2, V], [4, VI], [5, V], [6, IV], [7, V]];
+/** ...answered with passing notes up to the E and down to the B. */
+const TROMBONE_ANSWER: Written[] = [[1, III], [3, II]];
+/** The trombone walking: a note on every beat. */
+const TROMBONE_WALK: Written[] = [[0, I], [1, III], [2, V], [3, II], [4, VI], [5, III], [6, IV], [7, V]];
+/** The trombone's pedal: the low A held under the shimmer. */
+const TROMBONE_PEDAL: Written[] = [[0, I]];
 /** The harp: broken chords on every beat, up through the A chord, the high A, and down to D. */
 const HARP_LINE: Written[] = [[0, I], [1, III], [2, V], [3, II], [4, III], [5, VIII], [6, VI], [7, IV]];
+/** ...answered with a second note on each strong beat, a fifth, a third, a fourth and a third above. */
+const HARP_ANSWER: Written[] = [[0, V], [2, VII], [4, VI], [6, VIII]];
 /** The clarinet: long notes, up a third to the V chord's third, and gently down by step. */
 const CLARINET_LINE: Written[] = [[0, V], [2, VII], [4, VI], [5, V], [6, IV]];
-/** The clarinet's answer: it climbs (C#, E, the mode's G) to the high A, and comes down to E. */
+/** ...answered with the steps between filled in. */
+const CLARINET_FILLED: Written[] = [[1, VI], [3, V], [7, VI]];
+/** The clarinet's answer: it climbs (C#, E, then the third of the V chord) to the high A, and comes down to E. */
 const CLARINET_ANSWER: Written[] = [[0, III], [1, V], [2, VII], [4, VIII], [6, VI], [7, V]];
-/** The clarinet in the last section: an octave above its start, singing from the top A. */
+/** ...answered with passing notes into the high A and out of it. */
+const CLARINET_ANSWER_PASSING: Written[] = [[3, VI], [5, VII]];
+/** The clarinet in the last scene: an octave above its start, singing from the top. */
 const CLARINET_SOARS: Written[] = [[0, VIII], [2, VII], [3, V], [4, VI], [5, VIII], [6, VI]];
+/** ...answered with the leading note pulling up to the top again. */
+const CLARINET_SOARS_ANSWER: Written[] = [[1, VI], [7, VII]];
 
 /** The loops, by slot, with their names. */
 export const DEMO_LOOPS: readonly { name: string; cells: StoredLoopCell[] }[] = [
   { name: 'Drums', cells: groove(1, 0.75) },
-  { name: 'Trombone', cells: notes('bass', 'trombone', TROMBONE_LINE, 0.76) },
-  { name: 'Guitar', cells: notes('chord', 'guitarAcoustic', GUITAR_LINE, 0.6) },
-  { name: 'Harp', cells: notes('melody', 'harp', HARP_LINE, 0.64) },
-  { name: 'Clarinet', cells: notes('melody', 'clarinet', CLARINET_LINE, 0.74) },
+  { name: 'Trombone', cells: notes('bass', 'trombone', TROMBONE_LINE, 0.76, TROMBONE_ANSWER) },
+  { name: 'Guitar', cells: notes('chord', 'guitarAcoustic', GUITAR_LINE, 0.6, GUITAR_ANSWER) },
+  { name: 'Harp', cells: notes('melody', 'harp', HARP_LINE, 0.64, HARP_ANSWER) },
+  { name: 'Clarinet', cells: notes('melody', 'clarinet', CLARINET_LINE, 0.74, CLARINET_FILLED) },
   { name: 'Drums busier', cells: groove(2, 0.8) },
   { name: 'Big drums', cells: groove(3, 0.9) },
   { name: 'Guitar drive', cells: notes('chord', 'guitarAcoustic', GUITAR_DRIVE, 0.66) },
-  { name: 'Clarinet soars', cells: notes('melody', 'clarinet', CLARINET_SOARS, 0.84) },
-  { name: 'Clarinet answer', cells: notes('melody', 'clarinet', CLARINET_ANSWER, 0.78) },
+  { name: 'Clarinet soars', cells: notes('melody', 'clarinet', CLARINET_SOARS, 0.84, CLARINET_SOARS_ANSWER) },
+  { name: 'Clarinet answer', cells: notes('melody', 'clarinet', CLARINET_ANSWER, 0.78, CLARINET_ANSWER_PASSING) },
+  { name: 'Trombone pedal', cells: notes('bass', 'trombone', TROMBONE_PEDAL, 0.6) },
+  { name: 'Trombone walk', cells: notes('bass', 'trombone', TROMBONE_WALK, 0.74) },
+  { name: 'Drums soft', cells: groove(0, 0.6) },
 ];
 
 const SLOT = new Map(DEMO_LOOPS.map((l, i) => [l.name, i]));
@@ -133,7 +170,7 @@ interface SceneSpec {
   leadIn?: Scene['leadIn'];
 }
 
-/** The plan, in passes (a pass is about 5.3 s). */
+/** The plan, in passes (a pass is about 5.5 s): twelve scenes, seven minutes. */
 export const DEMO_SCENES: readonly SceneSpec[] = [
   // The groove alone, its fill on the fourth pass calling the trombone in.
   { name: 'Drums', pass: 0, loops: slots('Drums'), key: A_MAJOR, settings: { sceneEnergy: 2 }, wayIn: { kind: 'cut' } },
@@ -143,47 +180,57 @@ export const DEMO_SCENES: readonly SceneSpec[] = [
   { name: 'Guitar', pass: 8, loops: slots('Drums busier', 'Trombone', 'Guitar'), key: A_MAJOR, settings: { sceneEnergy: 3 }, wayIn: { kind: 'fade', passes: 1 } },
   // The harp drifts in over a pass, a few extra notes around it.
   {
-    name: 'Harp', pass: 12, loops: slots('Drums busier', 'Trombone', 'Guitar', 'Harp'), key: A_MAJOR,
+    name: 'Harp', pass: 16, loops: slots('Drums busier', 'Trombone', 'Guitar', 'Harp'), key: A_MAJOR,
     settings: { sceneEnergy: 3, fillAmount: 0.1 }, wayIn: { kind: 'fade', passes: 1 },
   },
-  // Halfway through the harp, the band's pads bloom underneath.
+  // A shimmer: everything falls away but the harp, now in the pentatonic scale, over the
+  // trombone's low A and the band's open fifth (the D chord that ended the pass opens onto it).
   {
-    name: 'Harp and pads', pass: 16, loops: slots('Drums busier', 'Trombone', 'Guitar', 'Harp'), key: A_MAJOR,
-    settings: { sceneEnergy: 3, fillAmount: 0.1, band: 'gentle' }, wayIn: { kind: 'cut' },
+    name: 'Shimmer', pass: 24, loops: slots('Harp', 'Trombone pedal'), key: A_PENTATONIC,
+    settings: { sceneEnergy: 1, band: 'gentle' }, wayIn: { kind: 'cut' },
   },
-  // The clarinet takes the tune on the one, and the mode turns mixolydian: the G natural
-  // softens the V chord to E minor.
+  // A fill brings the drums back, and the clarinet takes the tune in A mixolydian: the G
+  // natural softens the V chord to E minor.
   {
-    name: 'Clarinet', pass: 20, loops: slots('Drums busier', 'Trombone', 'Guitar', 'Clarinet'), key: A_MIXOLYDIAN,
-    settings: { sceneEnergy: 3, fillAmount: 0.12, band: 'gentle' }, wayIn: { kind: 'cut' },
+    name: 'Clarinet', pass: 28, loops: slots('Drums busier', 'Trombone', 'Guitar', 'Clarinet'), key: A_MIXOLYDIAN,
+    settings: { sceneEnergy: 3, fillAmount: 0.12, band: 'gentle' }, wayIn: { kind: 'cut' }, leadIn: 'drumFill',
   },
-  // It answers higher, up to the top A, and the guitar strums every beat: the build before
-  // the breakdown.
+  // It answers higher, up to the top A, over the guitar strumming every beat: the build
+  // before the breakdown.
   {
-    name: 'Clarinet answers', pass: 24, loops: slots('Drums busier', 'Trombone', 'Guitar drive', 'Clarinet answer'), key: A_MIXOLYDIAN,
+    name: 'Clarinet answers', pass: 36, loops: slots('Drums busier', 'Trombone', 'Guitar drive', 'Clarinet answer'), key: A_MIXOLYDIAN,
     settings: { sceneEnergy: 4, fillAmount: 0.15, band: 'gentle' }, wayIn: { kind: 'cut' },
   },
   // The breakdown: after the fill everything drops away but the guitar and the harp, in A
   // minor (the D major chord that ended the pass opens onto A minor).
-  { name: 'Breakdown', pass: 28, loops: slots('Guitar', 'Harp'), key: A_MINOR, settings: { sceneEnergy: 1 }, wayIn: { kind: 'cut' } },
-  // A fill leads the drums and the trombone back in, home to A major from D minor (the minor
-  // iv into I).
+  { name: 'Breakdown', pass: 40, loops: slots('Guitar', 'Harp'), key: A_MINOR, settings: { sceneEnergy: 1 }, wayIn: { kind: 'cut' } },
+  // A lament: the clarinet's tune in A minor (E, G, F, E, D), the trombone under it and the
+  // softest groove.
   {
-    name: 'Back in', pass: 32, loops: slots('Drums', 'Trombone', 'Guitar', 'Harp'), key: A_MAJOR,
+    name: 'Lament', pass: 44, loops: slots('Drums soft', 'Trombone', 'Guitar', 'Clarinet'), key: A_MINOR,
+    settings: { sceneEnergy: 2 }, wayIn: { kind: 'cut' },
+  },
+  // A fill, and home to A major from D minor (the minor iv into I): the harp again, the
+  // trombone walking.
+  {
+    name: 'Home', pass: 48, loops: slots('Drums', 'Trombone walk', 'Guitar', 'Harp'), key: A_MAJOR,
     settings: { sceneEnergy: 3, fillAmount: 0.1 }, wayIn: { kind: 'cut' }, leadIn: 'drumFill',
   },
-  // Up a tone to B major after a fill, everything playing: the D major chord, with the
-  // trombone's E under it, opens straight onto B major (E to B, the IV into I of the new key).
+  // Up a tone to B major after a fill (the trombone's E under D major falls to B: IV to I of
+  // the new key), the biggest drums, the guitar driving, the harp ringing over the top.
   {
-    name: 'Everything', pass: 36, loops: slots('Big drums', 'Trombone', 'Guitar drive', 'Clarinet soars'), key: B_MAJOR,
-    settings: { sceneEnergy: 5, fillAmount: 0.2, band: 'gentle' }, wayIn: { kind: 'cut' }, leadIn: 'drumFill',
+    name: 'Up to B major', pass: 56, loops: slots('Big drums', 'Trombone', 'Guitar drive', 'Harp'), key: B_MAJOR,
+    settings: { sceneEnergy: 4, fillAmount: 0.2, band: 'gentle' }, wayIn: { kind: 'cut' }, leadIn: 'drumFill',
   },
-  // The last four passes before the Big finish: the band opens up and more extra notes.
+  // The clarinet soars over the full band, the trombone walking, into the Big finish.
   {
-    name: 'Everything, fuller', pass: 40, loops: slots('Big drums', 'Trombone', 'Guitar drive', 'Clarinet soars'), key: B_MAJOR,
+    name: 'Clarinet soars', pass: 64, loops: slots('Big drums', 'Trombone walk', 'Guitar drive', 'Clarinet soars'), key: B_MAJOR,
     settings: { sceneEnergy: 5, fillAmount: 0.3, band: 'full' }, wayIn: { kind: 'cut' },
   },
 ];
+
+/** The pass the Big finish begins on: right after the last scene's eighth pass. */
+export const DEMO_END_PASS = 72;
 
 /** Each scene's own ideas: fixed, so each plays the same every time. */
 const sceneIdeas = (i: number): number => 7001 + i * 101;
@@ -211,12 +258,12 @@ export function demoScenes(): Scene[] {
 }
 
 /**
- * 4:18, ending by itself with the Big finish: the ending is asked for during the last
- * section's eighth pass, builds over two passes from pass 44, broadens, and the last chord
- * rings out by the end.
+ * 7:00, the longest a piece can be, ending by itself with the Big finish: the ending is
+ * asked for during the last scene's eighth pass, builds over two passes from pass 72,
+ * broadens, and the last chord rings out by 7:00.
  */
 export const DEMO_PERFORMANCE: PerformanceSettings = {
-  lengthSec: 258, ending: 'auto', style: 'big', fadePasses: 2, startOn: 'play', countIn: false,
+  lengthSec: 420, ending: 'auto', style: 'big', fadePasses: 2, startOn: 'play', countIn: false,
 };
 
 /** The demo as one of the player's pieces. */
@@ -246,7 +293,8 @@ export function demoMusic(): Partial<BoardSequencerStored> {
     bpm: DEMO_BPM,
     swing: 0,
     humanize: 0,
-    variationEnabled: false,
+    // The decorations play on every other pass: the tunes are four bars, stated and answered.
+    variationEnabled: true,
     noteLengthBeats: 0.9,
     studioMix: true,
     energy: 0.5,

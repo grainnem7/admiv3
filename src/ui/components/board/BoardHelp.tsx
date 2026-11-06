@@ -128,19 +128,20 @@ const HELP: HelpEntry[] = [
   },
   {
     title: 'The demo piece',
-    body: 'Player button → ▶ Open the demo piece: a ready-made piece of about four minutes, as a '
+    body: 'Player button → ▶ Open the demo piece: a ready-made piece of seven minutes, as a '
       + 'player of its own called Demo piece. The drums start alone; the trombone, the guitar and the '
-      + 'harp come in one by one; the clarinet takes over the tune; everything but the guitar and the '
-      + 'harp drops away for a breakdown; the drums and the trombone come back with a fill; and it '
-      + 'ends with everything playing, into the Big finish. It begins in A major, moves to A '
-      + 'mixolydian for the clarinet and A minor for the breakdown, and goes up a tone to B major '
-      + 'for the end. It plays the same every time: the extra notes and the band come from the rules '
-      + 'with fixed ideas. It uses the colours, the cap and the iPad of the player chosen before it, '
-      + 'so the hat and the iPad work as in your own pieces, and your counters still play on top. '
-      + 'Press ▶ Start the piece in Show to hear it. Opening it again writes the music afresh, so a '
-      + 'change made in it is put back. With Ableton, each part\u2019s track plays the loop\u2019s own '
-      + 'instrument (the trombone, the harp) while none of your counters for that part is on the '
-      + 'board; put one down and your own sound comes back.',
+      + 'harp come in one by one; a shimmer over a drone, the harp in the pentatonic scale; the '
+      + 'clarinet takes the tune in A mixolydian, then answers higher over the driving guitar; a '
+      + 'breakdown in A minor with only the guitar and the harp; a lament, the clarinet in A minor; '
+      + 'home to A major with the trombone walking; up a tone to B major with the harp over '
+      + 'everything; and the clarinet soaring over the full band into the Big finish. Each tune is '
+      + 'stated on one pass and decorated on the next. It plays the same every time: the extra notes '
+      + 'and the band come from the rules with fixed ideas. It uses the colours, the cap and the iPad '
+      + 'of the player chosen before it, so the hat and the iPad work as in your own pieces, and your '
+      + 'counters still play on top. Press ▶ Start the piece in Show to hear it. Opening it again '
+      + 'writes the music afresh, so a change made in it is put back. With Ableton, each part\u2019s '
+      + 'track plays the loop\u2019s own instrument (the trombone, the harp) while none of your '
+      + 'counters for that part is on the board; put one down and your own sound comes back.',
   },
   {
     title: 'Hints',

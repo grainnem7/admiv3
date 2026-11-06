@@ -42,8 +42,8 @@ interface Priv {
 const pc = (m: number): number => ((m % 12) + 12) % 12;
 const loop = (name: string) => DEMO_LOOPS.find((l) => l.name === name)?.cells ?? [];
 
-function engineWith(names: string[]) {
-  const e = new BoardSequencerEngine(cfg());
+function engineWith(names: string[], over: Partial<BoardEngineConfig> = {}) {
+  const e = new BoardSequencerEngine(cfg(over));
   const p = e as unknown as Priv;
   const { channels } = loopChannelsFor(names.flatMap(loop), []);
   p.voiceByChannel = new Map(channels.map((c: ColourChannel) => [c.id, fakeVoiceEntry()]));
@@ -113,5 +113,16 @@ describe('the demo through the engine', () => {
     expect(p.cfg.scaleRootMidi).toBe(62);
     expect(p.cfg.scaleSemitones).toEqual(A_MAJOR.semitones);
     p.timer = null;
+  });
+
+  it('a tune’s decorations play on every other pass, and on the plain pass a long note rings on to the next note that plays', () => {
+    const { e, p } = engineWith(['Clarinet'], { variationEnabled: true });
+    const fired = play(e, p, 0, 16);
+    const at = (b: number) => (fired.get(b) ?? []).filter((n) => n.role === 'melody' && n.midi !== undefined);
+    // Pass one, plain: E (2 beats), nothing on beat 2; pass two decorated: E, then F# on beat 2.
+    expect(at(1)).toHaveLength(0);
+    expect(at(9)).toHaveLength(1);
+    expect(at(0)[0].durSec).toBeGreaterThanOrEqual(2);
+    expect(at(8)[0].durSec).toBeLessThan(1.5);
   });
 });

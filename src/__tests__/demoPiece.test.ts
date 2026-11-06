@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  A_MAJOR, B_MAJOR, DEMO_LOOPS, DEMO_PASS_SEC, DEMO_PERFORMANCE, DEMO_PIECE_ID, DEMO_SCENES, demoDueAt, demoMusic, demoScenes,
+  A_MAJOR, B_MAJOR, DEMO_END_PASS, DEMO_LOOPS, DEMO_PASS_SEC, DEMO_PERFORMANCE, DEMO_PIECE_ID, DEMO_SCENES, demoDueAt, demoMusic, demoScenes,
 } from '../songs/demo/demoPiece';
 import { DEFAULT_BOARD_SEQUENCER_CONFIG, sanitizeBoardSequencerConfig } from '../profiles/BoardSequencerConfig';
 import { counterChord } from '../songs/harmony/currentChord';
@@ -47,13 +47,18 @@ describe('the demo piece', () => {
     expect([...order].sort((a, b) => a - b)).toEqual(order);
   });
 
-  it('is mostly major, with a mixolydian stretch and a minor breakdown, and ends a tone up in B major', () => {
+  it('lasts seven minutes, the longest a piece can be', () => {
+    expect(DEMO_PERFORMANCE.lengthSec).toBe(7 * 60);
+  });
+
+  it('is mostly major, with a pentatonic shimmer, a mixolydian stretch and a minor breakdown, and ends a tone up in B major', () => {
     const scenes = demoScenes();
     const sec = (i: number): number => (i + 1 < scenes.length ? scenes[i + 1].at ?? 0 : DEMO_PERFORMANCE.lengthSec) - (scenes[i].at ?? 0);
     const by = (name: string): number => scenes.reduce((s, x, i) => s + (x.key?.scaleName === name ? sec(i) : 0), 0);
     expect(by('Major')).toBeGreaterThan(by('Mixolydian') + by('Minor'));
     expect(by('Mixolydian')).toBeGreaterThan(0);
     expect(by('Minor')).toBeGreaterThan(0);
+    expect(by('Major pentatonic')).toBeGreaterThan(0);
     expect(scenes[scenes.length - 1].key).toEqual(B_MAJOR);
   });
 
@@ -112,15 +117,35 @@ describe('the demo piece', () => {
     expect(new Set(leftHand(triadPcs(v)).map(pc))).toEqual(new Set([4, 8, 11]));
   });
 
-  it('ends with the Big finish, by itself, finished within its length, starting right after the last section’s eighth pass', () => {
+  it('ends with the Big finish, by itself, finished within its length, starting right after the last scene’s eighth pass', () => {
     expect(DEMO_PERFORMANCE.style).toBe('big');
     expect(DEMO_PERFORMANCE.ending).toBe('auto');
     const lead = endingDurationSec(DEMO_PERFORMANCE, DEMO_PASS_SEC);
     const asked = DEMO_PERFORMANCE.lengthSec - lead;
-    const last = DEMO_SCENES[DEMO_SCENES.length - 1].pass;
-    // Asked for during pass last + 3, so it begins on the pass after: the last section plays four whole passes.
-    expect(asked).toBeGreaterThan((last + 3) * DEMO_PASS_SEC);
-    expect(asked).toBeLessThanOrEqual((last + 4) * DEMO_PASS_SEC);
+    // Asked for during the pass before, so it begins on that pass: a multiple of four, after a fill.
+    expect(DEMO_END_PASS % 4).toBe(0);
+    expect(DEMO_END_PASS - DEMO_SCENES[DEMO_SCENES.length - 1].pass).toBe(8);
+    expect(asked).toBeGreaterThan((DEMO_END_PASS - 1) * DEMO_PASS_SEC);
+    expect(asked).toBeLessThanOrEqual(DEMO_END_PASS * DEMO_PASS_SEC);
+  });
+
+  it('keeps changing: no scene runs longer than eight passes, and no two scenes in a row play the same loops in the same key', () => {
+    const scenes = demoScenes();
+    for (const [i, s] of DEMO_SCENES.entries()) {
+      const next = i + 1 < DEMO_SCENES.length ? DEMO_SCENES[i + 1].pass : DEMO_END_PASS;
+      expect(next - s.pass, s.name).toBeLessThanOrEqual(8);
+      if (i > 0) expect(JSON.stringify([scenes[i].loops, scenes[i].key]), s.name).not.toBe(JSON.stringify([scenes[i - 1].loops, scenes[i - 1].key]));
+    }
+  });
+
+  it('the tunes are four bars: each pitched loop of more than one note is decorated on every other pass, or plays every beat', () => {
+    for (const l of DEMO_LOOPS) {
+      if (l.cells[0].job === 'drums' || l.cells.length <= 1) continue;
+      const decorated = l.cells.some((c) => c.conditional);
+      const everyBeat = new Set(l.cells.map((c) => c.col)).size === 8;
+      expect(decorated || everyBeat, l.name).toBe(true);
+    }
+    expect(demoMusic().variationEnabled).toBe(true);
   });
 
   it('plays the same each time: the rules’ extra notes with fixed ideas, every scene its own', () => {

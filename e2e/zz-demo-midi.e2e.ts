@@ -26,7 +26,7 @@ async function fakeMidi(page: Page): Promise<void> {
 }
 
 test('midi: the whole demo piece', async ({ page }) => {
-  test.setTimeout(420_000);
+  test.setTimeout(600_000);
   await fakeMidi(page);
   await openLaptopBoard(page);
   await page.getByRole('tab', { name: 'Connections' }).click();
@@ -39,7 +39,7 @@ test('midi: the whole demo piece', async ({ page }) => {
   await page.evaluate(() => { (window as unknown as { __midiLog: number[][] }).__midiLog.length = 0; });
   const t0 = await page.evaluate(() => performance.now());
   await page.getByRole('button', { name: '▶ Start the piece' }).click();
-  await page.waitForTimeout(268_000);
+  await page.waitForTimeout(430_000);
   const log = await page.evaluate(() => (window as unknown as { __midiLog: number[][] }).__midiLog);
   writeFileSync(`${DIR}/demo.json`, JSON.stringify({ t0, log }));
   console.log(`MIDI demo: ${log.length} messages`);

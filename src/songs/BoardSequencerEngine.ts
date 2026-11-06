@@ -2957,7 +2957,12 @@ export class BoardSequencerEngine {
       const drumHits = new Set<string>();
       // Where each colour plays, for letting a note ring up to the next one.
       const colsByColour = new Map<ColourId, number[]>();
+      // A Variation counter that is silent this pass is not "the next note": the note before
+      // it rings on to the next one that plays, instead of stopping where nothing comes.
+      const silentThisPass = this.cfg.variationEnabled !== false
+        && !firesThisLapPaged(true, beat, this.cfg.cols, this.cfg.numPages, this.cfg.pingPong ?? false);
       for (const c of noteCells) {
+        if (silentThisPass && c.conditional) continue;
         const list = colsByColour.get(c.colour);
         if (list) list.push(c.col);
         else colsByColour.set(c.colour, [c.col]);
