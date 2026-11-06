@@ -22,6 +22,7 @@ import { SongStems, type StemsPlayer } from '../audio/songStems';
 import {
   sectionBeats, songBeatLength, songBeatTime, songChordAt, songTempoAt, type SongMap, type SongSectionSpec, type StemName,
 } from './song/songSection';
+import { startTicker, type Ticker } from './ticker';
 import { strumFor, strumOffsets, STRUM_UP_GAIN } from './strum';
 import { BoardSequencerVoice } from './voices/BoardSequencerVoice';
 import { voicingForCells, degreeMidi, chordDegreeMidi, drumForRow, DEFAULT_DRUM_ROWS, loopLen, lapIndex, strictlyAfter, firesThisLap, firesThisLapPaged, sweepAt, type PingPongPages, type Sweep } from './boardSequencerScale';
@@ -430,7 +431,7 @@ export class BoardSequencerEngine {
   private boardArrived = false;
   /** While waiting for the board: the latest the first beat may start (null = not waiting). */
   private boardWaitUntil: number | null = null;
-  private timer: ReturnType<typeof setInterval> | null = null;
+  private timer: Ticker | null = null;
   private muted = false;
   private syncSource: BoardSyncSource | null = null;
   private lastBeatIndex = -1;
@@ -2753,8 +2754,10 @@ export class BoardSequencerEngine {
     this.loopFades.clear();
     this.sendExpressionNow();
     this.syncAbleton(true);
-    if (this.timer) clearInterval(this.timer);
-    this.timer = setInterval(() => this.scheduleTick(), TICK_INTERVAL_MS);
+    this.timer?.stop();
+    // From a worker where there is one: a hidden page (Ableton's window over the browser)
+    // slows the page's own timers to about once a second, and the beats went out late.
+    this.timer = startTicker(() => this.scheduleTick(), TICK_INTERVAL_MS);
   }
 
   private scheduleTick(): void {
@@ -2768,6 +2771,7 @@ export class BoardSequencerEngine {
       this.scheduleInternal();
     }
     this.tickExpression();
+    this.midi?.flushDue();
   }
 
   /** Standalone clock: advance one step per beat at the configured BPM. */
@@ -3252,6 +3256,8 @@ export class BoardSequencerEngine {
     const out: ChordCounter[] = [];
     for (const c of cells) {
       if (c.col >= loop || this.roleFor(c.colour) !== 'chord') continue;
+      // A loop that strums the chord sounding never names one (the demo: the pads lead).
+      if (c.follows) continue;
       if (!this.voiceByChannel.has(c.colour)) continue;
       out.push({ row: c.row, col: c.col, live: !c.layer });
     }
@@ -3919,7 +3925,7 @@ export class BoardSequencerEngine {
   }
 
   stop(): void {
-    if (this.timer) clearInterval(this.timer);
+    if (this.timer && typeof this.timer.stop === 'function') this.timer.stop();
     this.timer = null;
     this.dropSection(0.1);
     // A scene's sound still waiting for its pass is the sound now: never left behind.

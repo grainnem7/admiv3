@@ -87,6 +87,11 @@ export interface StoredLoopCell extends StoredBoardCell {
    * demo's trombone): the band's bass keeps playing the roots under it.
    */
   overBass?: true;
+  /**
+   * A chord loop that strums whatever chord is sounding (the scene's chords, the pads'),
+   * never naming one by its row (the demo piece: the pads lead the harmony).
+   */
+  follows?: true;
 }
 
 const LOOP_JOBS = new Set(['melody', 'bass', 'chord', 'drums']);
@@ -836,6 +841,7 @@ function sanitizeLoopSlots(v: unknown): (StoredLoopCell[] | null)[] {
         if (o.plays === 'note' || o.plays === 'tune') cell.plays = o.plays;
         if (isNum(o.octave) && Number.isInteger(o.octave) && o.octave !== 0 && Math.abs(o.octave) <= 2) cell.octave = o.octave;
         if (o.overBass === true) cell.overBass = true;
+        if (o.follows === true) cell.follows = true;
       }
       return [cell];
     });

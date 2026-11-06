@@ -233,7 +233,7 @@ describe('the demo piece’s player', () => {
     expect(cfg?.channels.find((c) => c.id === 'c1')).toMatchObject({ role: 'melody', instrument: 'harp' });
     expect(cfg?.loopSlots).toEqual(demoMusic().loopSlots);
     expect(cfg?.pieceId).toBe(DEMO_PIECE_ID);
-    expect(cfg?.scaleName).toBe('Major');
+    expect(cfg?.scaleName).toBe('Major pentatonic');
     // Tim's own player is untouched.
     expect(listBoardPlayers().find((p) => p.id === timId)?.settings.loopSlots).toEqual(tim.loopSlots);
   });

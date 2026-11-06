@@ -75,6 +75,8 @@ export interface ActiveCell extends CellRef {
   octave?: number;
   /** A loop's bass line over the band's bass, not the bass itself (never set by the board). */
   overBass?: true;
+  /** A loop's chord that strums the chord sounding, never naming one (never set by the board). */
+  follows?: true;
 }
 
 export interface BoardStepResult {

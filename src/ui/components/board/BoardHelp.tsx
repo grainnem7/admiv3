@@ -129,20 +129,20 @@ const HELP: HelpEntry[] = [
   {
     title: 'The demo piece',
     body: 'Player button → ▶ Open the demo piece: a ready-made piece of seven minutes, as a '
-      + 'player of its own called Demo piece. The drums start alone; the trombone comes in with '
-      + 'the band\u2019s pads and bass, singing a soft horn line; then the guitar and the harp; the '
-      + 'clarinet takes the tune in A mixolydian, then answers higher over the driving guitar; a '
-      + 'shimmer over a drone, the harp in the pentatonic scale; a breakdown in A minor; a lament, '
-      + 'the clarinet in A minor; home to A major; up a tone to B major with the harp over '
-      + 'everything; and the clarinet soaring over the full band into the Big finish. Each tune is '
-      + 'stated on one pass and decorated on the next, the guitar strums, and two layers of pads '
-      + 'hold it all together. It plays the same every time: the extra notes and the band come from '
-      + 'the rules with fixed ideas. It uses the colours, the cap and the iPad of the player chosen '
-      + 'before it, so the hat and the iPad work as in your own pieces, and your counters still play '
-      + 'on top. Press ▶ Start the piece in Show to hear it. Opening it again writes the music '
-      + 'afresh, so a change made in it is put back. With Ableton, each part\u2019s track plays the '
-      + 'loop\u2019s own instrument (the trombone, the harp) while none of your counters for that '
-      + 'part is on the board; put one down and your own sound comes back.',
+      + 'player of its own called Demo piece. The pads lead: slow, open chords held by two layers of '
+      + 'pads and the band\u2019s bass, the drums with them alone for the opening. Then the trombone\u2019s '
+      + 'long soft notes; the guitar, strumming the pads\u2019 chords; the harp; a shimmer over a drone; '
+      + 'the clarinet, then rising over the driving guitar; a breakdown in A minor; a lament, the '
+      + 'clarinet in A minor; home to A major; up a tone to B major with the harp; and the clarinet '
+      + 'soaring over the full band into the Big finish. Every tune is in the five note (pentatonic) '
+      + 'scale, quiet, inside the pads; each is stated on one pass and decorated on the next. It plays '
+      + 'the same every time: the extra notes and the band come from the rules with fixed ideas. It '
+      + 'uses the colours, the cap and the iPad of the player chosen before it, so the hat and the iPad '
+      + 'work as in your own pieces, and your counters still play on top. Press ▶ Start the piece in '
+      + 'Show to hear it. Opening it again writes the music afresh, so a change made in it is put back. '
+      + 'With Ableton, each part\u2019s track plays the loop\u2019s own instrument (the trombone, the '
+      + 'harp) while none of your counters for that part is on the board; the pads are on the Band '
+      + 'chords track.',
   },
   {
     title: 'Hints',

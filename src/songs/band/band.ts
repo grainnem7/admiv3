@@ -194,12 +194,13 @@ export function bandEventsAtStep(input: BandInput): BandEvent[] {
     // Folded into its range the voicing can close up again (a ninth back beside its root), so it is opened once more (S2).
     const voiced = layered ?? (withJobs ? openVoicing(intoRange(led, lo, hi)) : led);
     // A layer sits under what it layers: about 4 dB down when it doubles the chords in unison.
-    const padAccent = (full ? 0.7 : 0.55) * (layered ? PAD_LAYER_GAIN : 1);
+    // Wide pads (the demo) lead: the bed is louder, and its unison layer is not dipped.
+    const padAccent = input.widePads ? (full ? 0.9 : 0.75) : (full ? 0.7 : 0.55) * (layered ? PAD_LAYER_GAIN : 1);
     for (const midi of voiced) out.push({ part: 'pad', offset: 0, dur: span - 0.05, accent: padAccent, midi, voicing: voiced });
     if (layered && input.widePads) {
       // Between the chords' left hand and the melody, moving by the smallest steps.
       const upper = openVoicing(voiceLead({ pcs: triadPcs(h) }, input.previousUpper ?? null, WIDE_PAD_RANGE[0], WIDE_PAD_RANGE[1]));
-      const accent = full ? 0.7 : 0.55;
+      const accent = full ? 0.9 : 0.75;
       for (const midi of upper) out.push({ part: 'pad', offset: 0, dur: span - 0.05, accent, midi, voicing: upper, upper: true });
     }
   }

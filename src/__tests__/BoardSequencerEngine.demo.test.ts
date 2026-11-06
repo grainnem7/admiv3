@@ -63,26 +63,24 @@ function play(e: BoardSequencerEngine, p: Priv, from: number, to: number): Map<n
 }
 
 describe('the demo through the engine', () => {
-  it('the guitar loop plays I V vi IV in A major, the V chord with its root (E G# B, never G# B D)', () => {
-    const { e, p } = engineWith(['Guitar']);
-    const fired = play(e, p, 0, 8);
+  it('the guitar strums the chord the pads hold (A, then D over two passes of I and IV), never naming one', () => {
+    const { e, p } = engineWith(['Guitar'], { chords: { sequence: 'calm', bars: 2 } });
+    const fired = play(e, p, 0, 16);
     const chordAt = (beat: number): Set<number> => new Set((fired.get(beat) ?? []).flatMap((n) => n.midis ?? []).map(pc));
     expect(chordAt(0)).toEqual(new Set([9, 1, 4]));
-    expect(chordAt(2)).toEqual(new Set([4, 8, 11]));
-    expect(chordAt(4)).toEqual(new Set([6, 9, 1]));
-    expect(chordAt(6)).toEqual(new Set([2, 6, 9]));
+    expect(chordAt(8)).toEqual(new Set([2, 6, 9]));
   });
 
-  it('the trombone plays where it always did (its first note C#3), a loop note with an octave an octave up', () => {
+  it('the trombone’s first note is A2 (the key note, long and soft); a loop note with an octave plays an octave up', () => {
     const { e, p } = engineWith(['Trombone']);
     const first = (play(e, p, 0, 1).get(0) ?? []).find((n) => n.role === 'bass');
-    expect(first?.midi).toBe(49);
+    expect(first?.midi).toBe(45);
     const lifted = new BoardSequencerEngine(cfg());
     const lp = lifted as unknown as Priv;
     const cells = loopChannelsFor(loop('Trombone').map((c) => ({ ...c, octave: 1 })), []);
     lp.voiceByChannel = new Map(cells.channels.map((c: ColourChannel) => [c.id, fakeVoiceEntry()]));
     lifted.setLaunchedLoops([0], [cells.cells], cells.channels);
-    expect((play(lifted, lp, 0, 1).get(0) ?? []).find((n) => n.role === 'bass')?.midi).toBe(61);
+    expect((play(lifted, lp, 0, 1).get(0) ?? []).find((n) => n.role === 'bass')?.midi).toBe(57);
   });
 
   it('the guitar strums: down on the beat (low string first), up between (high first, softer)', () => {
@@ -110,12 +108,12 @@ describe('the demo through the engine', () => {
     // The screen catching up with the same key changes nothing yet.
     e.setScale(A_MINOR.rootMidi, [...A_MINOR.semitones]);
     const harp = (m: Map<number, FiredNote[]>, b: number): number | undefined => (m.get(b) ?? []).find((n) => n.role === 'melody' && n.midi !== undefined)?.midi;
-    const rest = play(e, p, 3, 10);
-    // Beat 4 of the A major pass: C sharp (the harp's third step); beat 1 of the next pass in A
-    // minor, then its C natural on beat 2.
+    const rest = play(e, p, 3, 14);
+    // Beat 5 of the A major pass: C sharp (the harp's third step in A major pentatonic); in the
+    // next pass, A minor pentatonic: its third step is D.
     expect(harp(rest, 4)).toBe(73);
     expect(harp(rest, 8)).toBe(69);
-    expect(harp(rest, 9)).toBe(72);
+    expect(harp(rest, 12)).toBe(74);
     p.timer = null;
   });
 
@@ -135,11 +133,11 @@ describe('the demo through the engine', () => {
     const { e, p } = engineWith(['Clarinet'], { variationEnabled: true });
     const fired = play(e, p, 0, 16);
     const at = (b: number) => (fired.get(b) ?? []).filter((n) => n.role === 'melody' && n.midi !== undefined);
-    // Pass one, plain: E (2 beats), nothing on beat 2; pass two decorated: E, then F# on beat 2.
-    expect(at(1)).toHaveLength(0);
-    expect(at(9)).toHaveLength(1);
-    expect(at(0)[0].durSec).toBeGreaterThanOrEqual(2);
-    expect(at(8)[0].durSec).toBeLessThan(1.5);
+    // The decoration on beat 7 plays on the second pass only; on the first, beat 5's note rings to beat 8.
+    expect(at(6)).toHaveLength(0);
+    expect(at(14)).toHaveLength(1);
+    expect(at(4)[0].durSec).toBeGreaterThanOrEqual(3);
+    expect(at(12)[0].durSec).toBeLessThan(2.5);
   });
 });
 

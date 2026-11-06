@@ -3,8 +3,7 @@ import {
   A_MAJOR, B_MAJOR, DEMO_BPM, DEMO_END_PASS, DEMO_LOOPS, DEMO_PASS_SEC, DEMO_PERFORMANCE, DEMO_PIECE_ID, DEMO_SCENES, demoDueAt, demoMusic, demoScenes,
 } from '../songs/demo/demoPiece';
 import { DEFAULT_BOARD_SEQUENCER_CONFIG, sanitizeBoardSequencerConfig } from '../profiles/BoardSequencerConfig';
-import { counterChord } from '../songs/harmony/currentChord';
-import { leftHand, triadPcs } from '../songs/harmony/harmony';
+import { clashes, sequenceAt } from '../songs/harmony/currentChord';
 import { degreeMidi } from '../songs/boardSequencerScale';
 import { endingDurationSec } from '../songs/performance/clock';
 import { openingScene, sceneAt } from '../songs/performance/piece';
@@ -15,7 +14,18 @@ import { openingScene, sceneAt } from '../songs/performance/piece';
  * a big dramatic ending; the same every time.
  */
 
-const pc = (m: number): number => ((m % 12) + 12) % 12;
+
+/**
+ * A note rubs against a chord when it is a semitone from one of its notes (the clash nudge's
+ * rule), except the colours of this music high above the chord: its major seventh (Dmaj7's
+ * C sharp) and its ninth (Dm9's E). Low down, in the bass, they still rub; the fourth over a
+ * major third always does.
+ */
+function rubs(midi: number, h: { root: number; tones: number[] }): boolean {
+  if (!clashes(midi, h.tones)) return false;
+  const above = (((midi - h.root) % 12) + 12) % 12;
+  return !((above === 11 || above === 2) && midi >= 66);
+}
 
 describe('the demo piece', () => {
   it('is the same every time it is made', () => {
@@ -51,15 +61,12 @@ describe('the demo piece', () => {
     expect(DEMO_PERFORMANCE.lengthSec).toBe(7 * 60);
   });
 
-  it('is mostly major, with a pentatonic shimmer, a mixolydian stretch and a minor breakdown, and ends a tone up in B major', () => {
+  it('moves from A major to A minor and up to B major, all in the pentatonic scale', () => {
     const scenes = demoScenes();
-    const sec = (i: number): number => (i + 1 < scenes.length ? scenes[i + 1].at ?? 0 : DEMO_PERFORMANCE.lengthSec) - (scenes[i].at ?? 0);
-    const by = (name: string): number => scenes.reduce((s, x, i) => s + (x.key?.scaleName === name ? sec(i) : 0), 0);
-    expect(by('Major')).toBeGreaterThan(by('Mixolydian') + by('Minor'));
-    expect(by('Mixolydian')).toBeGreaterThan(0);
-    expect(by('Minor')).toBeGreaterThan(0);
-    expect(by('Major pentatonic')).toBeGreaterThan(0);
+    expect(scenes[0].key).toEqual(A_MAJOR);
+    expect(scenes.some((x) => x.key?.scaleName === 'Minor pentatonic')).toBe(true);
     expect(scenes[scenes.length - 1].key).toEqual(B_MAJOR);
+    for (const x of scenes) expect(x.key?.semitones.length).toBe(5);
   });
 
   it('every change lands on a pass after a fill: a multiple of four passes, due a second before', () => {
@@ -93,28 +100,29 @@ describe('the demo piece', () => {
     }
   });
 
-  it('every written note on a strong beat is a note of its chord, in every scene and key', () => {
-    for (const s of demoScenes()) {
-      const key = s.key ?? A_MAJOR;
-      const loops = s.loops.map((i) => DEMO_LOOPS[i]);
-      let chord: number[] = [];
-      for (let col = 0; col < 8; col++) {
-        const cells = loops.flatMap((l) => l.cells.filter((c) => c.col === col));
-        const guitar = cells.find((c) => c.job === 'chord');
-        if (guitar) chord = triadPcs(counterChord(guitar.row, 8, key.rootMidi, key.semitones, 'warm'));
-        if (col % 2 !== 0 || chord.length === 0) continue;
-        for (const c of cells) {
-          if (c.job !== 'melody' && c.job !== 'bass') continue;
-          const midi = degreeMidi(7 - c.row, key.rootMidi, key.semitones) + 12 * (c.octave ?? 0);
-          expect(chord, `${s.name}, beat ${col + 1}: ${c.sound}`).toContain(pc(midi));
+  it('no written note on a strong beat rubs against the chord the pads hold, in any scene, on any pass of its chords', () => {
+    for (const sc of demoScenes()) {
+      const key = sc.key ?? A_MAJOR;
+      const cells = sc.loops.flatMap((i) => DEMO_LOOPS[i].cells).filter((c) => c.job === 'melody' || c.job === 'bass');
+      // Every chord of the scene's sequence: one pass after another, enough to go round it.
+      for (let pass = 0; pass < 8; pass++) {
+        for (let col = 0; col < 8; col += 2) {
+          const h = sequenceAt({
+            setting: sc.settings.chords, style: 'warm', rootMidi: key.rootMidi, semitones: key.semitones,
+            beatsIn: pass * 8 + col, step: col, loop: 8, bandOn: true,
+          }).harmony;
+          if (!h) continue;
+          for (const c of cells.filter((x) => x.col === col)) {
+            const midi = degreeMidi(7 - c.row, key.rootMidi, key.semitones) - (c.job === 'bass' ? 24 : 0);
+            expect(rubs(midi, h), `${sc.name}, pass ${pass + 1}, beat ${col + 1}: ${c.sound} ${midi} over ${h.symbol}`).toBe(false);
+          }
         }
       }
     }
   });
 
-  it('the guitar’s V chord keeps its root (E, G sharp, B in A major), not the diminished chord a seventh left without one', () => {
-    const v = counterChord(7 - 4, 8, A_MAJOR.rootMidi, A_MAJOR.semitones, 'warm');
-    expect(new Set(leftHand(triadPcs(v)).map(pc))).toEqual(new Set([4, 8, 11]));
+  it('the guitar strums the chord the pads hold: it never names one', () => {
+    for (const l of DEMO_LOOPS.filter((x) => x.cells[0].job === 'chord')) for (const c of l.cells) expect(c.follows, l.name).toBe(true);
   });
 
   it('ends with the Big finish, by itself, finished within its length, starting right after the last scene’s eighth pass', () => {
@@ -175,16 +183,24 @@ describe('the demo piece', () => {
     }
   });
 
-  it('is full within a minute: pads and bass arrive with the trombone, a new part every four passes until the harp', () => {
+  it('opens with the pads: eight passes of drums and pads before the trombone; the pads are wide and lead', () => {
     const scenes = demoScenes();
-    expect(scenes[1].settings.band).not.toBe('off');
-    expect(DEMO_SCENES[1].pass).toBe(4);
-    expect(DEMO_SCENES[2].pass).toBe(8);
-    expect(DEMO_SCENES[3].pass).toBe(12);
+    expect(scenes[0].loops.map((l) => DEMO_LOOPS[l].name)).toEqual(['Drums']);
+    expect(scenes[0].settings.band).toBe('full');
+    expect(scenes[0].settings.bandJobs.pads).toBe(true);
+    expect(DEMO_SCENES[1].pass).toBe(8);
+    expect(DEMO_SCENES[1].name).toBe('Trombone');
     const music = demoMusic();
     expect(music.widePads).toBe(true);
     expect(music.bandWithLoops).toBe(true);
     expect(music.space ?? 0).toBeGreaterThan(0.6);
+  });
+
+  it('the instruments are quiet, inside the pads: no loop note louder than 0.6', () => {
+    for (const l of DEMO_LOOPS) {
+      if (l.cells[0].job === 'drums') continue;
+      for (const c of l.cells) expect(c.velocity ?? 1, l.name).toBeLessThanOrEqual(0.6);
+    }
   });
 
   it('every part but the drums sits a touch behind the beat, the same every time, never by more than 30 ms', () => {

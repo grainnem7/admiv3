@@ -511,6 +511,15 @@ export class BoardMidiSender {
     if (this.pendingOffs.size === 0 && this.offTimer !== null) { clearInterval(this.offTimer); this.offTimer = null; }
   }
 
+  /**
+   * The note offs now due, sent: called on the engine's every tick too, which keeps its pace
+   * when the page is hidden (Ableton over the browser) while this sender's own timer slows
+   * to about once a second, and notes rang on.
+   */
+  flushDue(): void {
+    if (this.pendingOffs.size > 0) this.flushOffs(performance.now());
+  }
+
   /** On a release: every waiting note off goes out now, at its own time, so no note queued ahead is left without one. */
   private sendPendingOffs(channels?: readonly number[]): void {
     const now = performance.now();
