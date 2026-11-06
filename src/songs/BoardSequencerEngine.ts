@@ -1629,6 +1629,11 @@ export class BoardSequencerEngine {
     };
   }
 
+  /** The page is closing: Ableton told to stop every note at once (see BoardMidiSender.closeNow). */
+  closeMidi(): void {
+    this.midi?.closeNow();
+  }
+
   /** Panic: every note off and all sound off, on all 16 channels. The piece carries on. */
   panicMidi(): void {
     this.midi?.panic();

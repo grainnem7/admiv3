@@ -479,6 +479,8 @@ export function testSequenceEvents(atMs: number, channels: readonly number[] = T
 /** Sends the board's notes to the chosen MIDI output, while it is connected. */
 /** CC 30: the Rack chain (see abletonSounds CHAIN_CC; kept here so this file needs nothing from there). */
 const CHAIN_SELECT_CC = 30;
+/** After a page closes, the panic is sent again this long after, for notes already queued. */
+export const CLOSE_REPEAT_MS: readonly number[] = [150, 400];
 /** How long before its beat an instrument switch goes out. */
 export const SWITCH_EARLY_MS = 15;
 
@@ -681,6 +683,24 @@ export class BoardMidiSender {
   /** Panic: the release on all 16 channels. */
   panic(): void {
     this.releaseWith(panicEvents);
+  }
+
+  /**
+   * The page is closing: every note off and all sound off on all 16 channels, now and again
+   * twice shortly after (timestamped, so they go out after any note already queued), with
+   * the queue cleared first where the browser allows. A page closed mid-piece left every
+   * note whose off was still waiting sounding in Ableton, frozen, with nothing to stop it.
+   */
+  closeNow(): void {
+    const out = MIDIManager.getConnectedSelectedOutput() as unknown as { clear?: () => void } | null;
+    try { out?.clear?.(); } catch { /* not every browser can */ }
+    const now = performance.now();
+    const held = [...this.held.values()];
+    this.held.clear();
+    this.pendingOffs.clear();
+    if (this.offTimer !== null) { clearInterval(this.offTimer); this.offTimer = null; }
+    this.emit(panicEvents(held, now), now);
+    for (const later of CLOSE_REPEAT_MS) this.emit(panicEvents(held, now + later), now);
   }
 
   /** Kept for the callers that only want silence on the board's channels. */

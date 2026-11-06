@@ -503,7 +503,6 @@ export default function BoardSequencerScreen() {
     window.addEventListener('pagehide', flushSave);
     return () => { window.removeEventListener('pagehide', flushSave); flushSave(); };
   }, [flushSave]);
-
   // True while the chosen camera couldn't be found and the default is standing in.
   const fellBackRef = useRef(false);
   // Bumped by "Try again" to reopen the saved camera without changing the choice
@@ -1241,6 +1240,17 @@ export default function BoardSequencerScreen() {
     sessionLogRef.current.action(logActorRef.current, 'MIDI panic');
     announce('Panic sent: every note off.');
   }, [announce, engineRef]);
+  // The page closing (the browser or its tab shut mid-piece): Ableton stops every note at
+  // once. Otherwise the notes still waiting for their offs sounded on, frozen, with no ADMI
+  // left to stop them. Only on closing: a page merely hidden (Ableton over it) plays on.
+  useEffect(() => {
+    const silence = (): void => {
+      if (engineRef.current) engineRef.current.closeMidi();
+      else if (configRef.current.midiEnabled) new BoardMidiSender({ currentTime: 0 }).closeNow();
+    };
+    window.addEventListener('pagehide', silence);
+    return () => window.removeEventListener('pagehide', silence);
+  }, [engineRef, configRef]);
   /**
    * What a colour chip under the board says it sounds like: ADMI's sound, or in Ableton
    * mode the MIDI channel and Ableton's chain ("MIDI ch 1 · Harp"); in Both, both.
