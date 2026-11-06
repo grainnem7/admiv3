@@ -72,6 +72,27 @@ describe('channels', () => {
     expect(channelFor({ role: 'volume' })).toBeNull();
   });
 
+  it('your counters on their own track (Tim\u2019s glow): the player\u2019s melody, chord and bass all on it; loops, band and Extra notes keep theirs', () => {
+    const opts = { playerTrack: 14 };
+    expect(channelFor({ role: 'melody', origin: 'placed', source: 'live', colour: 'red' }, opts)).toBe(14);
+    expect(channelFor({ role: 'chord', origin: 'phrase', source: 'live', colour: 'blue' }, opts)).toBe(14);
+    expect(channelFor({ role: 'bass', origin: 'placed', source: 'live', colour: 'green' }, opts)).toBe(14);
+    // A loop's notes (even one kept from the player's counters), the band's, the extra notes': their own tracks.
+    expect(channelFor({ role: 'melody', origin: 'placed', source: 'loop', loopSlot: 0, colour: 'loop:melody:clarinet' }, opts)).toBe(1);
+    expect(channelFor({ role: 'bass', origin: 'placed', source: 'loop', loopSlot: 2, colour: 'loop:bass:trombone' }, opts)).toBe(2);
+    expect(channelFor({ role: 'chord', origin: 'band', colour: 'band:pad' }, opts)).toBe(11);
+    expect(channelFor({ role: 'bass', origin: 'band', colour: 'band:bass' }, opts)).toBe(12);
+    expect(channelFor({ role: 'melody', origin: 'fill', source: 'live' }, opts)).toBe(13);
+    // A drum counter keeps the kit: a drum's note on a pad would be a stray low note.
+    expect(channelFor({ role: 'drums', origin: 'placed', source: 'live' }, opts)).toBe(10);
+    // Off: as before. One per colour keeps each colour's own channel.
+    expect(channelFor({ role: 'melody', origin: 'placed', source: 'live', colour: 'red' }, { playerTrack: null })).toBe(1);
+    expect(channelFor({ role: 'melody', origin: 'placed', source: 'live', colour: 'red' }, { channelMode: 'colour', colourChannels: new Map([['red', 15]]), playerTrack: 14 })).toBe(15);
+    // It is a channel in use (fades, all notes off), and is listed for mapping its fade.
+    expect(channelsInUse(undefined, false, 14)).toContain(14);
+    expect(mappingTargets(undefined, false, 14).find((t) => t.channel === 14)?.what).toBe('Your counters (ch 14): Utility Gain');
+  });
+
   it('one per colour uses each colour\u2019s stored channel; band, fill and drums as before', () => {
     const map = new Map([['red', 5], ['blue', 14]]);
     const opts = { channelMode: 'colour' as const, colourChannels: map };

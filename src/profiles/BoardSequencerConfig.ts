@@ -72,6 +72,11 @@ export interface StoredBoardCell {
  */
 export interface StoredLoopCell extends StoredBoardCell {
   conditional?: boolean;
+  /**
+   * The passes of every four it plays on (0 to 3, counted from the start), so a loop grows
+   * over four passes: sparse, fuller, its peak (the demo's theme). Absent: every pass.
+   */
+  passes?: number[];
   job?: 'melody' | 'bass' | 'chord' | 'drums';
   /** The colour's instrument (melodic jobs) or kit piece (drums); '' = the default. */
   sound?: string;
@@ -94,6 +99,11 @@ export interface StoredLoopCell extends StoredBoardCell {
   follows?: true;
   /** Held this many beats, whatever comes next (the demo's trombone holds a whole pass). */
   holdBeats?: number;
+  /**
+   * A chord loop's own roll: seconds between strings, 0.03 to 0.2, positive low to high,
+   * negative high to low (the demo's fingerpicked guitar). Absent: the instrument's own strum.
+   */
+  roll?: number;
 }
 
 const LOOP_JOBS = new Set(['melody', 'bass', 'chord', 'drums']);
@@ -167,6 +177,11 @@ export interface BoardSequencerStored {
   fillKept: FillNote[] | null;
   /** Where fill ideas come from: Magenta's pre-trained models, or the simple rules. */
   fillEngine: 'magenta' | 'rules';
+  /**
+   * Magenta develops: a new idea every four passes of a scene, each kept like the scene's
+   * one idea (the demo piece), so the AI's part moves on through a long scene.
+   */
+  aiEvolves: boolean;
   /** Evolve: how far each colour's sound wanders as it plays (0 = never changes). */
   evolveAmount: number;
   /** Evolve: a bigger change (a new scene) every this many loops. */
@@ -320,6 +335,12 @@ export interface BoardSequencerStored {
   midiLeadMs: number;
   /** Each loop's melody, bass and chords on its own channel (4 to 9), for a fader per loop in Ableton. */
   midiLoopChannels: boolean;
+  /**
+   * One per part: every note of the player's own counters on this MIDI channel, whatever its
+   * job (Tim's glow, the demo's 14), so they float on top and never take a loop's track.
+   * Null: each counter on its part's track, as before.
+   */
+  playerTrack: number | null;
   /** Physical squares per side of the board (8 × 8 chess/draughts, 10 × 10 draughts). */
   boardSquares: BoardSquares;
   /** Calm theme mode for the redesigned screens. */
@@ -623,6 +644,7 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   fillSeed: 1,
   fillKept: null,
   fillEngine: 'magenta',
+  aiEvolves: false,
   // New players hear the sound move a little; existing ones are left as they were.
   evolveAmount: 0.4,
   evolveSceneLoops: 8,
@@ -675,6 +697,7 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   midiChannelMode: 'part',
   midiLeadMs: 0,
   midiLoopChannels: false,
+  playerTrack: null,
   cameraDeviceId: '',
   cameraLabel: '',
   boardSquares: 8,
@@ -828,6 +851,13 @@ function withBoxDetail<T extends StoredBoardCell>(cell: T, o: Record<string, unk
   return cell;
 }
 
+/** A loop note's passes of every four, sorted, each once; every pass (or none) is no list at all. */
+function sanitizePasses(v: unknown): number[] | undefined {
+  if (!Array.isArray(v)) return undefined;
+  const passes = [...new Set(v.filter((p): p is number => Number.isInteger(p) && p >= 0 && p <= 3))].sort((a, b) => a - b);
+  return passes.length > 0 && passes.length < 4 ? passes : undefined;
+}
+
 function sanitizeLoopSlots(v: unknown): (StoredLoopCell[] | null)[] {
   if (!Array.isArray(v)) return [];
   return v.map((slot) => {
@@ -837,6 +867,8 @@ function sanitizeLoopSlots(v: unknown): (StoredLoopCell[] | null)[] {
       if (!isNum(o.row) || !isNum(o.col) || typeof o.colour !== 'string' || !o.colour) return [];
       const cell = withBoxDetail<StoredLoopCell>({ row: o.row, col: o.col, colour: o.colour }, o);
       if (o.conditional === true) cell.conditional = true;
+      const passes = sanitizePasses(o.passes);
+      if (passes) cell.passes = passes;
       if (typeof o.job === 'string' && LOOP_JOBS.has(o.job)) {
         cell.job = o.job as StoredLoopCell['job'];
         cell.sound = typeof o.sound === 'string' ? o.sound : '';
@@ -845,6 +877,7 @@ function sanitizeLoopSlots(v: unknown): (StoredLoopCell[] | null)[] {
         if (o.overBass === true) cell.overBass = true;
         if (o.follows === true) cell.follows = true;
         if (isNum(o.holdBeats) && o.holdBeats > 0 && o.holdBeats <= 16) cell.holdBeats = o.holdBeats;
+        if (isNum(o.roll) && o.roll !== 0) cell.roll = Math.sign(o.roll) * Math.min(0.2, Math.max(0.03, Math.abs(o.roll)));
       }
       return [cell];
     });
@@ -1019,6 +1052,7 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     fillSeed: Math.round(num(o.fillSeed, 1)),
     fillKept: sanitizeFillNotes(o.fillKept),
     fillEngine: o.fillEngine === 'rules' ? 'rules' : 'magenta',
+    aiEvolves: o.aiEvolves === true,
     evolveAmount: Math.max(0, Math.min(1, num(o.evolveAmount, 0))),
     evolveSceneLoops: [4, 8, 16].includes(num(o.evolveSceneLoops, 8)) ? num(o.evolveSceneLoops, 8) : 8,
     evolveSeed: Math.round(num(o.evolveSeed, 1)),
@@ -1085,6 +1119,9 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     midiChannelMode: o.midiChannelMode === 'colour' ? 'colour' : 'part',
     midiLeadMs: clampLeadMs(o.midiLeadMs),
     midiLoopChannels: o.midiLoopChannels === true,
+    // A channel 1 to 15 of its own, never the drums' 10; anything else is off.
+    playerTrack: Number.isInteger(o.playerTrack) && (o.playerTrack as number) >= 1 && (o.playerTrack as number) <= 15 && o.playerTrack !== 10
+      ? o.playerTrack as number : null,
     boardSquares,
     themeMode: o.themeMode === 'light' ? 'light' : 'dark',
     samplesPerAxis,

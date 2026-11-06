@@ -49,6 +49,11 @@ describe('a kept loop plays through its own loop colours', () => {
     expect(out.channels[0]).toMatchObject({ instrument: 'violin', swatch: '#9a9a9a' });
   });
 
+  it('a note’s passes of every four reach the engine, like its Variation flag', () => {
+    const out = loopChannelsFor([{ row: 2, col: 1, colour: 'green', job: 'melody', sound: 'violin', passes: [2, 3], conditional: true }], []);
+    expect(out.cells[0]).toMatchObject({ passes: [2, 3], conditional: true });
+  });
+
   it('an old loop (no job recorded) passes through untouched', () => {
     const old: StoredLoopCell[] = [{ row: 1, col: 1, colour: 'green' }];
     const out = loopChannelsFor(old, [green]);

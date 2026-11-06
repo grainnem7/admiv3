@@ -131,6 +131,8 @@ describe('Magenta’s ideas, kept per scene', () => {
 
   it('the same board’s idea is replaced; a few at most, the newest kept', () => {
     let list: KeptIdea[] = [];
+    // Enough for an eight-pass scene's two ideas and a few New ideas on the iPad (Rising Light v2).
+    expect(MAX_KEPT_IDEAS).toBe(8);
     for (let i = 0; i < MAX_KEPT_IDEAS + 3; i++) list = keepIdea(list, idea(`k${i}`));
     expect(list).toHaveLength(MAX_KEPT_IDEAS);
     expect(list[list.length - 1].key).toBe(`k${MAX_KEPT_IDEAS + 2}`);

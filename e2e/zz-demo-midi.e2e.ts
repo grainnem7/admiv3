@@ -1,14 +1,18 @@
 import { test, expect, type Page } from '@playwright/test';
 import { writeFileSync } from 'node:fs';
-import { openLaptopBoard } from './app';
+import { openLaptopBoard, pickColour, place } from './app';
 
 /**
  * A probe, not a check: the whole demo piece played to a fake MIDI port called ADMIOutput
  * with Ableton as the sound, every message logged with its time, for scratch analysis.
  * Run on its own: MIDI_DIR=... npx playwright test e2e/zz-demo-midi.e2e.ts
+ * PROBE_COUNTERS=1 puts two of the player's counters on the board first (they play on Tim's
+ * glow, channel 14); PROBE_SEC=90 listens for 90 seconds instead of the whole piece.
  */
 
 const DIR = process.env.MIDI_DIR ?? '/tmp/midi';
+const COUNTERS = process.env.PROBE_COUNTERS === '1';
+const LISTEN_MS = Number(process.env.PROBE_SEC ?? 430) * 1000;
 
 async function fakeMidi(page: Page): Promise<void> {
   await page.addInitScript(() => {
@@ -36,8 +40,11 @@ async function fakeMidi(page: Page): Promise<void> {
   });
 }
 
-test('midi: the whole demo piece', async ({ page }) => {
+test('midi: the whole demo piece', async ({ page, context }) => {
   test.setTimeout(600_000);
+  // Whether Magenta was asked at all: its model files are fetched only when it is.
+  let magentaRequests = 0;
+  context.on('request', (r) => { if (r.url().includes('magentadata')) magentaRequests += 1; });
   await fakeMidi(page);
   await openLaptopBoard(page);
   await page.getByRole('tab', { name: 'Connections' }).click();
@@ -46,13 +53,17 @@ test('midi: the whole demo piece', async ({ page }) => {
   await page.getByRole('button', { name: /^Player: Test/ }).click();
   await page.getByRole('region', { name: 'Who\'s playing?' }).getByRole('button', { name: '▶ Open the demo piece' }).click();
   await expect(page.getByRole('button', { name: /^Player: Demo piece/ })).toBeVisible();
+  if (COUNTERS) {
+    await pickColour(page, 'Red');
+    await place(page, [[3, 1], [5, 4]]);
+  }
   await page.getByRole('button', { name: /^Show: the board, the clock/ }).click();
   await page.evaluate(() => { (window as unknown as { __midiLog: number[][] }).__midiLog.length = 0; });
   const t0 = await page.evaluate(() => performance.now());
   await page.getByRole('button', { name: '▶ Start the piece' }).click();
-  await page.waitForTimeout(430_000);
+  await page.waitForTimeout(LISTEN_MS);
   const log = await page.evaluate(() => (window as unknown as { __midiLog: number[][] }).__midiLog);
   const behind = await page.evaluate(() => (window as unknown as { __behind: number[] }).__behind);
   writeFileSync(`${DIR}/demo.json`, JSON.stringify({ t0, log, behind }));
-  console.log(`MIDI demo: ${log.length} messages; falling behind shown at: ${behind.map((t) => ((t - t0) / 1000).toFixed(0) + ' s').join(', ') || 'never'}`);
+  console.log(`MIDI demo: ${log.length} messages; falling behind shown at: ${behind.map((t) => ((t - t0) / 1000).toFixed(0) + ' s').join(', ') || 'never'}; Magenta files fetched: ${magentaRequests}`);
 });

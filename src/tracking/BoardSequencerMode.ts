@@ -79,6 +79,10 @@ export interface ActiveCell extends CellRef {
   follows?: true;
   /** A loop's note held this many beats, whatever comes next (never set by the board). */
   holdBeats?: number;
+  /** A loop's note on these passes of every four only, 0 to 3 (never set by the board). */
+  passes?: number[];
+  /** A chord loop's own roll, seconds between strings, + low first (never set by the board). */
+  roll?: number;
 }
 
 export interface BoardStepResult {

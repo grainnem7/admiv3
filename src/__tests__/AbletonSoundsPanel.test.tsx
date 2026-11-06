@@ -38,6 +38,15 @@ describe('the Template checklist', () => {
     expect(flute.slice(3)).toEqual(['Real', 'Placeholder', 'Placeholder', 'Placeholder']);
   });
 
+  it('with your counters on their own track, names the extra track to build; without, says nothing of it', () => {
+    act(() => root.render(
+      <AbletonSoundsPanel config={{ ...DEFAULT_BOARD_SEQUENCER_CONFIG, midiEnabled: true, playerTrack: 14 }} getLive={() => null} onSend={vi.fn()} connected />,
+    ));
+    expect(host.textContent).toContain('Your counters play on their own track: MIDI channel 14. Build one more track for them (the demo calls it “Tim’s glow”): MIDI From the port ADMIOutput, channel 14, Monitor In, with one soft pad and no rack.');
+    render();
+    expect(host.textContent).not.toContain('Your counters play on their own track');
+  });
+
   it('starts with how to change from the 16-sound racks', () => {
     render();
     expect(host.textContent).toContain(

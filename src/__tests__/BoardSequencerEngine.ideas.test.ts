@@ -216,6 +216,48 @@ describe('Magenta’s ideas, kept per scene', () => {
     expect(e.getFillStatus()).toBe('ai');
   });
 
+  it('Magenta develops (Rising Light v2, D6): each four passes of a scene has its own idea, both kept; replayed, neither is asked for again', async () => {
+    magenta.status = 'ready';
+    const second: FillNote[] = aiNotes.map((n) => ({ ...n, midi: (n.midi ?? 0) + 5 }));
+    /** Eight passes of one scene, Magenta answering at once. */
+    const eight = async (evolves: boolean, kept: KeptIdea[] | null) => {
+      const made: KeptIdea[] = [];
+      const { e, p } = engine({ fillEngine: 'magenta' });
+      e.setAiEvolves(evolves);
+      if (kept) e.setKeptIdeas({}, new Map([['scene', kept]]));
+      e.setOnIdeaKept((_owner, idea) => made.push(idea));
+      e.setIdeas({ seed: 7, owner: 'scene' });
+      e.setFill(0.5, 1, null);
+      e.setActiveCells(BOARD);
+      const fill: string[] = [];
+      for (let b = 0; b < 8 * COLS; b++) {
+        p.fireStep(b, b, 1, null);
+        for (const n of e.drainFiredNotes()) if (n.origin === 'fill') fill.push(`${Math.floor(b / (4 * COLS))}:${n.midi}`);
+        await flush();
+      }
+      return { made, fill };
+    };
+    magenta.fill.mockResolvedValueOnce(aiNotes).mockResolvedValueOnce(second);
+    const first = await eight(true, null);
+    expect(magenta.fill).toHaveBeenCalledTimes(2);
+    expect(first.made).toHaveLength(2);
+    expect(first.made[0].key).not.toBe(first.made[1].key);
+    // Passes 5 to 8 play the second idea, not the first.
+    expect(first.fill.filter((f) => f.startsWith('1:'))).toContain('1:79');
+    // Replayed with both kept: Magenta is never asked, and each four passes play their own
+    // idea from their first beat (the run that made them began on the rules until it answered).
+    magenta.fill.mockClear();
+    const again = await eight(true, first.made);
+    expect(magenta.fill).not.toHaveBeenCalled();
+    expect(new Set(again.fill)).toEqual(new Set(['0:74', '0:76', '1:79', '1:81']));
+    // Without it, one idea for the whole scene, as before.
+    magenta.fill.mockClear();
+    magenta.fill.mockResolvedValue(aiNotes);
+    const plain = await eight(false, null);
+    expect(magenta.fill).toHaveBeenCalledTimes(1);
+    expect(plain.made).toHaveLength(1);
+  });
+
   it('an idea kept while only loops play replays for any player’s colours (Rising Light, C5); with his counters down, only for his', async () => {
     magenta.status = 'ready';
     magenta.fill.mockResolvedValue(aiNotes);
@@ -262,8 +304,8 @@ describe('Magenta’s ideas, kept per scene', () => {
   it('the demo’s frozen ideas play from the first run, whoever plays, and Magenta is never asked (Rising Light, C6)', async () => {
     magenta.status = 'ready';
     magenta.fill.mockResolvedValue(aiNotes);
-    const piano = DEMO_LOOPS.find((l) => l.name === 'Piano theme')!.cells;
-    /** The Pulse scene's piano, with a player's colours set but none of his counters down. */
+    const piano = DEMO_LOOPS.find((l) => l.name === 'Winds theme')!.cells;
+    /** A scene's winds, with a player's colours set but none of his counters down. */
     const scene = async (colours: ColourChannel[], scenes: ReturnType<typeof demoScenes> | null) => {
       const made: KeptIdea[] = [];
       const { e, p } = engine({ fillEngine: 'magenta', channels: colours });

@@ -41,12 +41,15 @@ export const ABLETON_TRACKS_NOTE = 'Extra notes play on channel 13 and the band 
  * ADMI can't see Ableton's tracks (MIDI only goes one way), so this is always "check":
  * the test note plays on every channel in turn, and a silent one is a missing track.
  */
-export function abletonTracksItem(soundFrom: SoundFrom): ReadyItem | null {
+export function abletonTracksItem(soundFrom: SoundFrom, playerTrack: number | null = null): ReadyItem | null {
   if (soundFrom === 'admi') return null;
+  const own = playerTrack !== null ? ` Your counters play on channel ${playerTrack}: it needs a track too.` : '';
   return {
-    label: 'Ableton has tracks for the band (11, 12) and Extra notes (13)?',
+    label: playerTrack !== null
+      ? `Ableton has tracks for the band (11, 12), Extra notes (13) and your counters (${playerTrack})?`
+      : 'Ableton has tracks for the band (11, 12) and Extra notes (13)?',
     state: 'warn',
-    fix: `${ABLETON_TRACKS_NOTE} Play test note on the Connections tab plays each channel in turn: a gap is a missing track.`,
+    fix: `${ABLETON_TRACKS_NOTE}${own} Play test note on the Connections tab plays each channel in turn: a gap is a missing track.`,
     place: 'connections',
   };
 }

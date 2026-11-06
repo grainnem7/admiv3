@@ -252,6 +252,21 @@ describe('the plan', () => {
     const list = counterControls([1, 2], { tone: 1, delay: 0.5 });
     expect(list.map((c) => `${c.channel}:${c.cc}:${c.value}`)).toEqual(['1:25:127', '2:25:127', '1:27:64', '2:27:64']);
   });
+  it('your counters on their own track: no chain choice there, only Space at the World’s reverb; the part tracks play the loops’ sounds', () => {
+    const plan = abletonPlan(base([colour('a', 'melody', { instrument: 'harp', volume: 0.4 })], {
+      playerTrack: 14, loopSounds: [{ colour: 'loop:melody:clarinet', role: 'melody', instrument: 'clarinet' }], coloursOnBoard: new Set(['a']),
+    }));
+    expect(plan.controls.get(controlKey(14, CHAIN_CC))).toBeUndefined();
+    expect(plan.chains.has(14)).toBe(false);
+    expect(plan.controls.get(controlKey(14, 26))?.value).toBeGreaterThan(0);
+    // The player's harp counter is on the board, but it plays on 14: the Melody track keeps the clarinet loop's sound.
+    expect(plan.chains.get(1)).toBe(chainFor({ role: 'melody', instrument: 'clarinet' }, 'warm'));
+    // And its loudness is the loop's (full), not the card's Soft.
+    expect(plan.controls.get(controlKey(1, 24))?.value).toBe(127);
+    const t = abletonMappingTargets(plan);
+    expect(t.find((x) => x.channel === 14)?.what).toBe('Your counters (ch 14): Space (Send A), for the Reverb counter');
+  });
+
   it('mapping targets: chain selectors, then macros, then channel 16, each left where ADMI wants it', () => {
     const t = abletonMappingTargets(abletonPlan(base([colour('a', 'melody', { instrument: 'harp' })])));
     expect(t[0]).toMatchObject({ channel: 1, cc: 30, value: 22 });
@@ -284,6 +299,9 @@ describe('what the player sees', () => {
     expect(abletonTracksItem('admi')).toBeNull();
     expect(abletonTracksItem('ableton')?.state).toBe('warn');
     expect(abletonTracksItem('both')?.fix).toContain('channel 13');
+    // With his counters on their own track, that track is asked about too.
+    expect(abletonTracksItem('ableton', 14)?.label).toBe('Ableton has tracks for the band (11, 12), Extra notes (13) and your counters (14)?');
+    expect(abletonTracksItem('ableton', 14)?.fix).toContain('Your counters play on channel 14');
   });
   it('the test note visits 1, 2, 3, 10, 11, 12, 13 in turn', () => {
     const ev = testSequenceEvents(1000);
@@ -379,6 +397,61 @@ describe('engine: sound choices reach Ableton', () => {
     e.start();
     expect(ccs(30).length).toBeGreaterThanOrEqual(5);
     e.stop();
+  });
+
+  it('your counters on their own track: a placed counter’s note goes out on 14, a loop’s on its part’s track', () => {
+    const { e, p } = engine([colour('m', 'melody'), colour('b', 'bass')]);
+    e.setMidiOut({ enabled: true, sends: 'all', playerTrack: 14 }, 'p1');
+    port.send.mockClear();
+    e.setActiveCells([{ row: 3, col: 0, colour: 'm' }]);
+    e.setActiveLoops([[{ row: 5, col: 0, colour: 'b' }]]);
+    p.fireStep(0, 0, 1, null);
+    const ons = sent().filter((x) => (x.d[0] & 0xf0) === 0x90 && x.d[2] > 0).map((x) => (x.d[0] & 0x0f) + 1);
+    expect(ons).toContain(14);
+    expect(ons).toContain(2);
+    // Stop tells channel 14 to let go too.
+    port.send.mockClear();
+    e.stop();
+    expect(ccs(123, 14).length).toBeGreaterThan(0);
+  });
+
+  it('with your counters on their own track the loops play whole: no notes dropped for room, no melody moved an octave up or made to wait its turn', () => {
+    const loopNotes = (playerTrack: number | null) => {
+      const { e, p } = engine([colour('m', 'melody'), colour('b', 'bass'), colour('w', 'melody')]);
+      e.setMidiOut({ enabled: true, sends: 'all', playerTrack }, 'p1');
+      e.setActiveCells([{ row: 3, col: 0, colour: 'm' }]);
+      // Four bass notes and a melody note on one step: more than the room the player's step leaves.
+      e.setActiveLoops([[0, 1, 2, 4].map((row) => ({ row, col: 0, colour: 'b', holdBeats: 4 })), [{ row: 5, col: 0, colour: 'w' }]]);
+      p.fireStep(0, 0, 1, null);
+      const fired = e.drainFiredNotes();
+      players.push(fired.filter((n) => n.source === 'live').length);
+      return fired.filter((n) => n.source === 'loop');
+    };
+    const players: number[] = [];
+    const shared = loopNotes(null);
+    const own = loopNotes(14);
+    // And the player's own note sounds too: it never waits its turn behind a loop's melody.
+    expect(players[1]).toBe(1);
+    expect(shared.length).toBeLessThan(5);
+    expect(own.filter((n) => n.role === 'bass')).toHaveLength(4);
+    // The loop's melody where it was written, not an octave over the player's.
+    const written = own.find((n) => n.role === 'melody')?.midi;
+    expect(written).toBeDefined();
+    expect(shared.find((n) => n.role === 'melody')?.midi ?? (written ?? 0) + 12).toBe((written ?? 0) + 12);
+  });
+
+  it('with your counters on their own track a loop’s note on the same note as yours still plays (another instrument, another track)', () => {
+    const { e, p } = engine([colour('m', 'melody'), colour('b', 'bass')]);
+    e.setMidiOut({ enabled: true, sends: 'all', playerTrack: 14 }, 'p1');
+    // The player's counter two rows up sounds the same note as the loop's bass an octave and two octaves up (the demo's brass third).
+    e.setActiveCells([{ row: 5, col: 0, colour: 'm' }]);
+    e.setActiveLoops([[{ row: 5, col: 0, colour: 'b', octave: 2, holdBeats: 4 }]]);
+    p.fireStep(0, 0, 1, null);
+    const fired = e.drainFiredNotes();
+    const mine = fired.find((n) => n.source === 'live')?.midi;
+    const loop = fired.find((n) => n.source === 'loop')?.midi;
+    expect(mine).toBeDefined();
+    expect(loop).toBe(mine);
   });
 
   it('a Tone counter owns Bright (CC 25) while it is on the board', () => {

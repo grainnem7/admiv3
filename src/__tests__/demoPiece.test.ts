@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-  DEMO_BPM, DEMO_END_PASS, DEMO_LOOPS, DEMO_PASS_SEC, DEMO_PERFORMANCE, DEMO_PIECE_ID, DEMO_SCENES, F_SHARP_MAJOR, F_SHARP_MINOR,
-  demoColourVoices, demoDueAt, demoMusic, demoScenes,
+  A_MAJOR, B_MAJOR, DEMO_BPM, DEMO_END_PASS, DEMO_LOOPS, DEMO_PASS_SEC, DEMO_PERFORMANCE, DEMO_PIECE_ID, DEMO_PLAYER_TRACK, DEMO_SCENES,
+  F_SHARP_MINOR, demoColourVoices, demoDueAt, demoMusic, demoScenes,
 } from '../songs/demo/demoPiece';
 import { DEFAULT_BOARD_SEQUENCER_CONFIG, sanitizeBoardSequencerConfig, type StoredLoopCell } from '../profiles/BoardSequencerConfig';
 import { clashes, sequenceAt } from '../songs/harmony/currentChord';
@@ -11,8 +11,10 @@ import { openingScene, sceneAt } from '../songs/performance/piece';
 import type { SceneKey } from '../songs/performance/launcher';
 
 /**
- * The demo piece, "Rising Light" (docs/superpowers/specs/2026-11-06-demo-composition-design.md):
- * ambient first, in one pentatonic key, never boring, the same every time.
+ * The demo piece, "Rising Light" version 2 (docs/superpowers/specs/2026-11-06-demo-composition-v2-design.md,
+ * built on version 1's): light first, the band gathering in the owner's order, loops and
+ * Magenta that develop, Tim's glow, a big ending; ambient, in one set of five notes, the
+ * same every time.
  */
 
 /**
@@ -34,13 +36,16 @@ const loopNamed = (name: string) => DEMO_LOOPS.find((l) => l.name === name);
 const loopNames = (s: { loops: number[] }): string[] => s.loops.map((l) => DEMO_LOOPS[l].name);
 const NOTE = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const name = (m: number): string => NOTE[((m % 12) + 12) % 12];
+/** The cells that sound on one pass of every four (0 to 3). */
+const onPass = (cells: StoredLoopCell[], pass: number) => cells.filter((c) => !c.passes || c.passes.includes(pass));
+const by = (n: string) => demoScenes().find((s) => s.name === n);
 
-describe('Rising Light: the piece', () => {
+describe('Rising Light v2: the piece', () => {
   it('is the same every time it is made', () => {
     expect(demoMusic()).toEqual(demoMusic());
   });
 
-  it('survives being saved: the loops keep what they play, the scenes their keys and band jobs (the pedal too)', () => {
+  it('survives being saved: the loops keep what they play (their passes and rolls too), the scenes their keys and band jobs', () => {
     const saved = sanitizeBoardSequencerConfig(JSON.parse(JSON.stringify({ ...DEFAULT_BOARD_SEQUENCER_CONFIG, ...demoMusic() })));
     expect(saved).not.toBeNull();
     const music = demoMusic();
@@ -49,61 +54,73 @@ describe('Rising Light: the piece', () => {
     expect(saved?.pieces.find((p) => p.id === DEMO_PIECE_ID)?.scenes).toEqual(music.scenes);
     expect(saved?.performance).toEqual(DEMO_PERFORMANCE);
     expect(saved?.fillEngine).toBe('magenta');
+    expect(saved?.aiEvolves).toBe(true);
+    expect(saved?.playerTrack).toBe(DEMO_PLAYER_TRACK);
+    expect(saved?.midiChannelMode).toBe('part');
     expect(saved?.surpriseMe).toBe(false);
     expect(saved?.noteLengthBeats).toBe(2);
     expect(saved?.scenes.some((s) => s.settings.bandJobs.pedal)).toBe(true);
   });
 
-  it('is in F sharp minor pentatonic at 87 BPM, the chords from its parent scale; the afterglow in F sharp major pentatonic', () => {
+  it('three centres, one set of five notes: A major pentatonic, F sharp minor pentatonic, then B major pentatonic, at 87 BPM', () => {
+    expect(A_MAJOR).toEqual({ rootMidi: 69, scaleName: 'Major pentatonic', semitones: [0, 2, 4, 7, 9] });
+    expect(F_SHARP_MINOR).toEqual({ rootMidi: 66, scaleName: 'Minor pentatonic', semitones: [0, 3, 5, 7, 10] });
+    expect(B_MAJOR).toEqual({ rootMidi: 71, scaleName: 'Major pentatonic', semitones: [0, 2, 4, 7, 9] });
     const music = demoMusic();
-    expect(music.scaleRootMidi).toBe(66);
-    expect(music.scaleName).toBe('Minor pentatonic');
+    expect(music.scaleRootMidi).toBe(69);
+    expect(music.scaleName).toBe('Major pentatonic');
     expect(music.bpm).toBe(87);
-    const scenes = demoScenes();
-    expect(scenes[0].key).toEqual(F_SHARP_MINOR);
-    expect(scenes.find((s) => s.name === 'Afterglow')?.key).toEqual(F_SHARP_MAJOR);
-    expect(scenes.find((s) => s.name === 'Afterglow')?.settings.chords.sequence).toBe('float');
+    expect(demoScenes().map((s) => s.key?.rootMidi)).toEqual([69, 69, 69, 69, 69, 69, 69, 66, 66, 66, 66, 66, 69, 69, 71, 71]);
   });
 
-  it('the form: ten scenes at the composition’s passes, Dawn to Afterglow', () => {
+  it('the form: sixteen scenes, four passes each, eight for the last two', () => {
     expect(DEMO_SCENES.map((s) => [s.name, s.pass])).toEqual([
-      ['Dawn', 0], ['Theme', 8], ['Pulse', 16], ['Heartbeat', 24], ['Build', 32], ['Hush', 36],
-      ['Ascent', 40], ['Lift', 48], ['Summit', 56], ['Afterglow', 64],
+      ['Drums', 0], ['Brass', 4], ['Brass bloom', 8], ['Guitar', 12], ['Guitar picking', 16], ['Winds', 20],
+      ['Winds answer', 24], ['Shadow', 28], ['Heartbeat', 32], ['Hush', 36], ['Rebuild', 40], ['Climb', 44],
+      ['Light breaks', 48], ['Gathering', 52], ['Summit', 56], ['Final ascent', 64],
     ]);
+    const lengths = DEMO_SCENES.map((s, i) => (DEMO_SCENES[i + 1]?.pass ?? DEMO_END_PASS) - s.pass);
+    expect(lengths).toEqual([4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 8, 8]);
+    expect(demoScenes()).toHaveLength(16);
+  });
+
+  it('the ways in and the lead ins, as composed', () => {
     const scenes = demoScenes();
-    const by = (n: string) => scenes.find((s) => s.name === n);
-    expect(by('Theme')?.wayIn).toEqual({ kind: 'fade', passes: 1 });
-    expect(by('Heartbeat')?.leadIn).toBe('rising');
-    expect(by('Ascent')?.leadIn).toBe('drumFill');
-    expect(by('Summit')?.leadIn).toBe('drumFill');
-    expect(scenes.map((s) => s.settings.sceneEnergy)).toEqual([1, 2, 2, 3, 4, 1, 3, 4, 5, 2]);
-    // The Hush: only the pads and the piano.
-    expect(loopNames(by('Hush')!)).toEqual(['Piano theme']);
+    expect(scenes.filter((s) => s.wayIn?.kind === 'fade').map((s) => s.name)).toEqual(['Brass', 'Guitar', 'Winds']);
+    expect(scenes.filter((s) => s.leadIn).map((s) => [s.name, s.leadIn])).toEqual([
+      ['Heartbeat', 'rising'], ['Rebuild', 'drumFill'], ['Light breaks', 'drumFill'], ['Summit', 'drumFill'],
+    ]);
+    expect(scenes.map((s) => s.settings.sceneEnergy)).toEqual([2, 2, 2, 3, 3, 3, 3, 3, 4, 1, 3, 4, 4, 5, 5, 5]);
+  });
+
+  it('the chords: Glow, Lift and Float in the light, Tide and Rise in the shadow, Lift in B at the summit; moving in the climb', () => {
+    const chords = demoScenes().map((s) => `${s.settings.chords.sequence}/${s.settings.chords.bars}`);
+    expect(chords).toEqual([
+      'glow/4', 'glow/4', 'glow/4', 'glow/4', 'lift/4', 'lift/4', 'float/4', 'tide/4', 'tide/4', 'tide/4',
+      'rise/4', 'rise/2', 'glow/2', 'lift/2', 'lift/4', 'lift/2',
+    ]);
+  });
+
+  it('the band: none in the opening; pads and the sub from the brass on; a held pedal until the Heartbeat; roots after', () => {
+    const scenes = demoScenes();
+    expect(scenes[0].settings.band).toBe('off');
+    for (const s of scenes.slice(1)) expect(s.settings.bandJobs.pads, s.name).toBe(true);
+    expect(scenes.map((s) => s.settings.bandJobs.pedal === true)).toEqual([
+      false, true, true, true, true, true, true, true, false, false, false, false, false, false, false, false,
+    ]);
+    for (const s of scenes.slice(8)) if (s.name !== 'Hush') expect(s.settings.bandJobs.bass, s.name).toBe(true);
     expect(by('Hush')?.settings.bandJobs).toEqual({ asBefore: false, pads: true, bass: false, drums: false, counter: false });
   });
 
-  it('the chords: a drone at dawn, Tide for the night, Rise for the climb (twice as fast in Build and at the summit), Float in the major', () => {
-    const chords = demoScenes().map((s) => `${s.settings.chords.sequence}/${s.settings.chords.bars}`);
-    expect(chords).toEqual(['still/4', 'tide/4', 'tide/4', 'tide/4', 'rise/2', 'tide/4', 'rise/4', 'rise/4', 'rise/2', 'float/4']);
-  });
-
-  it('the sub holds a pedal F# under Tide in the early scenes, and follows the roots from Heartbeat on', () => {
-    const scenes = demoScenes();
-    const pedal = scenes.map((s) => s.settings.bandJobs.pedal === true);
-    expect(pedal).toEqual([false, true, true, false, false, false, false, false, false, false]);
-    const heartbeat = scenes.findIndex((s) => s.name === 'Heartbeat');
-    for (const s of scenes.slice(heartbeat)) if (s.name !== 'Hush') expect(s.settings.bandJobs.bass, s.name).toBe(true);
-  });
-
-  it('lasts seven minutes and ends with the final chord, by itself, starting right after the last scene’s eighth pass', () => {
+  it('lasts seven minutes and ends with the Big finish, by itself, starting right after the last scene’s eighth pass', () => {
     expect(DEMO_PERFORMANCE.lengthSec).toBe(7 * 60);
-    expect(DEMO_PERFORMANCE.style).toBe('chord');
+    expect(DEMO_PERFORMANCE.style).toBe('big');
+    expect(DEMO_PERFORMANCE.fadePasses).toBe(2);
     expect(DEMO_PERFORMANCE.ending).toBe('auto');
     const lead = endingDurationSec(DEMO_PERFORMANCE, DEMO_PASS_SEC);
     const asked = DEMO_PERFORMANCE.lengthSec - lead;
     // Asked for during the pass before, so it begins on that pass: a multiple of four.
-    expect(DEMO_END_PASS % 4).toBe(0);
-    expect(DEMO_END_PASS - DEMO_SCENES[DEMO_SCENES.length - 1].pass).toBe(8);
+    expect(DEMO_END_PASS).toBe(72);
     expect(asked).toBeGreaterThan((DEMO_END_PASS - 1) * DEMO_PASS_SEC);
     expect(asked).toBeLessThanOrEqual(DEMO_END_PASS * DEMO_PASS_SEC);
   });
@@ -126,62 +143,124 @@ describe('Rising Light: the piece', () => {
     for (const [i, s] of DEMO_SCENES.entries()) expect(sceneAt(scenes, s.pass * DEMO_PASS_SEC + 0.5)).toBe(i);
   });
 
-  it('plays the same each time: Magenta’s extra notes with fixed ideas, every scene its own', () => {
+  it('plays the same each time: Magenta’s extra notes with fixed ideas, every scene its own, a new idea every four passes', () => {
     expect(demoMusic().fillEngine).toBe('magenta');
+    expect(demoMusic().aiEvolves).toBe(true);
     const ideas = demoScenes().map((s) => s.ideas);
     expect(ideas.every((x) => typeof x === 'number' && x > 0)).toBe(true);
     expect(new Set(ideas).size).toBe(ideas.length);
   });
+
+  it('Magenta: none in the opening, first answering the winds, more as it builds, the busiest from the Gathering', () => {
+    const fill = demoScenes().map((s) => s.settings.fillAmount);
+    expect(fill.slice(0, 6).every((f) => f === 0)).toBe(true);
+    expect(by('Winds answer')!.settings.fillAmount).toBeGreaterThan(0);
+    const busiest = Math.max(...fill);
+    expect(by('Gathering')!.settings.fillAmount).toBe(busiest);
+    expect(by('Climb')!.settings.fillAmount).toBeGreaterThan(by('Rebuild')!.settings.fillAmount);
+  });
 });
 
-describe('Rising Light: the theme', () => {
-  const question = (cells: StoredLoopCell[]) => cells.filter((c) => !c.conditional);
-  const answer = (cells: StoredLoopCell[]) => cells.filter((c) => c.conditional);
+describe('Rising Light v2: the band in the owner’s order', () => {
+  /** The voices each scene's loops bring: drums, then each instrument by its sound. */
+  const voices = (s: { loops: number[] }): Set<string> =>
+    new Set(s.loops.flatMap((l) => DEMO_LOOPS[l].cells).map((c) => (c.job === 'drums' ? 'drums' : c.sound ?? '')));
 
-  it('asks on every pass: C#, B, A, then up to E, in F sharp minor', () => {
-    const piano = loopNamed('Piano theme')!.cells;
-    expect(question(piano).map((c) => [c.col, name(pitchOf(c, F_SHARP_MINOR))])).toEqual([[0, 'C#'], [3, 'B'], [4, 'A'], [6, 'E']]);
-    expect(question(piano).map((c) => pitchOf(c, F_SHARP_MINOR))).toEqual([73, 71, 69, 76]);
-    expect(question(piano).map((c) => c.holdBeats)).toEqual([3, 1, 2, 2]);
-  });
-
-  it('answers on every other pass: B and the F# above', () => {
-    const piano = loopNamed('Piano theme')!.cells;
-    expect(answer(piano).map((c) => [c.col, pitchOf(c, F_SHARP_MINOR)])).toEqual([[5, 71], [7, 78]]);
-    expect(demoMusic().variationEnabled).toBe(true);
-  });
-
-  it('in F sharp major the same steps sing C#, A#, G#, D#: the theme’s shape, in light', () => {
-    const piano = loopNamed('Piano theme')!.cells;
-    expect(question(piano).map((c) => name(pitchOf(c, F_SHARP_MAJOR)))).toEqual(['C#', 'A#', 'G#', 'D#']);
-  });
-
-  it('the theme’s journey: bells at dawn, the piano, the singing lead, an octave up at the summit, the piano in the major', () => {
-    const melodyOf = (n: string): string[] => [...new Set(loopNames(demoScenes().find((s) => s.name === n)!)
-      .map((l) => loopNamed(l)!.cells[0]).filter((c) => c.job === 'melody').map((c) => `${c.sound}${c.octave ? `+${c.octave}` : ''}`))];
-    expect(melodyOf('Dawn')).toEqual(['synth:bell+1']);
-    expect(melodyOf('Theme')).toEqual(['piano']);
-    expect(melodyOf('Hush')).toEqual(['piano']);
-    expect(melodyOf('Ascent')).toEqual(['synth:keys']);
-    expect(melodyOf('Summit')).toEqual(['synth:keys+1']);
-    expect(melodyOf('Afterglow')).toEqual(['piano']);
-    // The bells breathe C# and A, each held a bar.
-    expect(loopNamed('Bells')!.cells.map((c) => [name(pitchOf(c, F_SHARP_MINOR)), c.holdBeats])).toEqual([['C#', 4], ['A', 4]]);
-  });
-
-  it('the Theme scene states the question only; the piano answers itself from the Pulse', () => {
+  it('drums alone first (no band, no other loop), then brass, then the guitar, then the winds', () => {
     const scenes = demoScenes();
-    expect(loopNames(scenes[1])).toEqual(['Piano question']);
-    expect(loopNamed('Piano question')!.cells.some((c) => c.conditional)).toBe(false);
-    expect(loopNames(scenes[2])).toContain('Piano theme');
+    expect([...voices(scenes[0])]).toEqual(['drums']);
+    const firstIn = (v: string) => scenes.findIndex((s) => voices(s).has(v));
+    expect(firstIn('trombone')).toBe(1);
+    expect(firstIn('guitarAcoustic')).toBe(3);
+    expect(firstIn('clarinet')).toBe(5);
+    // Each arrives without the next one yet.
+    expect(voices(scenes[1]).has('guitarAcoustic') || voices(scenes[1]).has('clarinet')).toBe(false);
+    expect(voices(scenes[3]).has('clarinet')).toBe(false);
+  });
+
+  it('the brass: open fifths held a whole pass, swelling, its third added on the later passes; on the bass track over the band’s sub', () => {
+    const fifths = loopNamed('Brass fifths')!.cells;
+    expect(fifths.map((c) => name(pitchOf(c, A_MAJOR)))).toEqual(['A', 'E']);
+    const pad = loopNamed('Brass pad')!.cells;
+    for (const c of [...fifths, ...pad]) {
+      expect(c).toMatchObject({ job: 'bass', sound: 'trombone', overBass: true, holdBeats: 8, col: 0 });
+      expect(c.velocity).toBeCloseTo(0.4, 2);
+    }
+    expect(onPass(pad, 0).map((c) => pitchOf(c, A_MAJOR))).toEqual([57, 64]);
+    expect(onPass(pad, 2).map((c) => pitchOf(c, A_MAJOR))).toEqual([57, 64, 73]);
+    expect(pad.find((c) => c.passes)?.passes).toEqual([2, 3]);
+    // In the shadow, the same steps put the brass on F#.
+    expect(name(pitchOf(pad[0], F_SHARP_MINOR))).toBe('F#');
+  });
+
+  it('the guitar: every chord rolled slowly, string by string (90 ms), never a strum; fuller from the second pass', () => {
+    const roll = loopNamed('Guitar roll')!.cells;
+    for (const c of roll) expect(c).toMatchObject({ job: 'chord', sound: 'guitarAcoustic', follows: true, roll: 0.09 });
+    expect(onPass(roll, 0).map((c) => c.col)).toEqual([0]);
+    for (const pass of [1, 2, 3]) expect(onPass(roll, pass).map((c) => c.col)).toEqual([0, 4]);
+  });
+
+  it('the guitar picking: every beat, rolled up on the strong beats and down between, the first loudest, never two alike in a row', () => {
+    const pick = loopNamed('Guitar picking')!.cells;
+    expect(onPass(pick, 1).map((c) => c.col)).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
+    for (const c of pick) expect(c.roll).toBe(c.col % 2 === 0 ? 0.09 : -0.07);
+    const vel = pick.map((c) => c.velocity ?? 0);
+    expect(vel[0]).toBe(0.5);
+    for (const v of vel.slice(1)) {
+      expect(v).toBeGreaterThanOrEqual(0.36);
+      expect(v).toBeLessThanOrEqual(0.44);
+    }
+    for (let i = 1; i < vel.length; i++) expect(vel[i]).not.toBe(vel[i - 1]);
   });
 });
 
-describe('Rising Light: ambient first', () => {
-  it('no written note on a strong beat rubs against the chord the pads hold, in any scene, on any pass of its chords', () => {
+describe('Rising Light v2: the theme grows over four passes', () => {
+  const winds = () => loopNamed('Winds theme')!.cells;
+
+  it('the 1st pass asks: C#, B, A, then up to E, in A major pentatonic', () => {
+    expect(onPass(winds(), 0).map((c) => [c.col, name(pitchOf(c, A_MAJOR))])).toEqual([[0, 'C#'], [3, 'B'], [4, 'A'], [6, 'E']]);
+    expect(onPass(winds(), 0).map((c) => pitchOf(c, A_MAJOR))).toEqual([73, 71, 69, 76]);
+  });
+
+  it('the 2nd answers (B, then F# above), the 3rd adds an E, the 4th the high A ringing over the turn', () => {
+    const at = (pass: number) => onPass(winds(), pass).map((c) => `${c.col}:${name(pitchOf(c, A_MAJOR))}`).sort();
+    expect(at(1)).toEqual(['0:C#', '3:B', '4:A', '5:B', '6:E', '7:F#']);
+    expect(at(2)).toEqual(['0:C#', '2:E', '3:B', '4:A', '5:B', '6:E', '7:F#']);
+    expect(at(3)).toEqual(['0:C#', '1:A', '2:E', '3:B', '4:A', '5:B', '6:E', '7:F#']);
+    const high = winds().find((c) => c.passes?.length === 1 && c.passes[0] === 3)!;
+    expect(pitchOf(high, A_MAJOR)).toBe(81);
+    // It rings to the end of the pass and over into the next.
+    expect((high.col + (high.holdBeats ?? 0))).toBeGreaterThanOrEqual(8);
+  });
+
+  it('the same steps sing B, A, F#, C# in the shadow (a third lower), and D#, C#, B, F# in B major (a tone higher)', () => {
+    expect(onPass(winds(), 0).map((c) => name(pitchOf(c, F_SHARP_MINOR)))).toEqual(['B', 'A', 'F#', 'C#']);
+    expect(onPass(winds(), 0).map((c) => name(pitchOf(c, B_MAJOR)))).toEqual(['D#', 'C#', 'B', 'F#']);
+  });
+
+  it('the winds high: the same theme an octave up; the bells as in version 1, for the Rebuild', () => {
+    const high = loopNamed('Winds high')!.cells;
+    expect(high.map((c) => pitchOf(c, A_MAJOR))).toEqual(winds().map((c) => pitchOf(c, A_MAJOR) + 12));
+    expect(loopNamed('Bells')!.cells.map((c) => [name(pitchOf(c, F_SHARP_MINOR)), c.holdBeats])).toEqual([['C#', 4], ['A', 4]]);
+    expect(loopNames(by('Rebuild')!)).toContain('Bells');
+  });
+
+  it('the theme’s journey: the winds from the Winds, alone with the pads in the Hush, the winds high in the climb and at the summit', () => {
+    const melodyOf = (n: string): string[] => [...new Set(loopNames(by(n)!)
+      .map((l) => loopNamed(l)!.cells[0]).filter((c) => c.job === 'melody').map((c) => `${c.sound}${c.octave ? `+${c.octave}` : ''}`))];
+    expect(melodyOf('Winds')).toEqual(['clarinet']);
+    expect(melodyOf('Shadow')).toEqual(['clarinet']);
+    expect(loopNames(by('Hush')!)).toEqual(['Winds theme']);
+    expect(melodyOf('Rebuild')).toEqual(['synth:bell+1']);
+    expect(melodyOf('Climb')).toEqual(['clarinet+1']);
+    expect(melodyOf('Summit')).toEqual(['clarinet+1']);
+  });
+});
+
+describe('Rising Light v2: ambient first', () => {
+  it('no written note on a strong beat rubs against the chord the pads hold, in any scene, on any pass of four, in all three keys', () => {
     for (const sc of demoScenes()) {
-      const key = sc.key ?? F_SHARP_MINOR;
-      // Notes half a beat late are between the beats, never on a strong one.
+      const key = sc.key ?? A_MAJOR;
       const cells = sc.loops.flatMap((i) => DEMO_LOOPS[i].cells)
         .filter((c) => (c.job === 'melody' || c.job === 'bass') && (c.timingBeats ?? 0) < 0.25);
       for (let pass = 0; pass < 8; pass++) {
@@ -191,7 +270,7 @@ describe('Rising Light: ambient first', () => {
             beatsIn: pass * 8 + col, step: col, loop: 8, bandOn: true,
           }).harmony;
           if (!h) continue;
-          for (const c of cells.filter((x) => x.col === col)) {
+          for (const c of onPass(cells, pass % 4).filter((x) => x.col === col)) {
             const midi = pitchOf(c, key);
             expect(rubs(midi, h), `${sc.name}, pass ${pass + 1}, beat ${col + 1}: ${c.sound} ${midi} over ${h.symbol}`).toBe(false);
           }
@@ -200,7 +279,7 @@ describe('Rising Light: ambient first', () => {
     }
   });
 
-  it('every scene is in a pentatonic key, and every written note is in it', () => {
+  it('every scene is in a pentatonic key', () => {
     for (const s of demoScenes()) {
       expect(s.key?.semitones.length, s.name).toBe(5);
       expect(s.key?.scaleName ?? '', s.name).toMatch(/pentatonic/);
@@ -230,42 +309,33 @@ describe('Rising Light: ambient first', () => {
     }
   });
 
-  it('the heartbeat: a soft kick on 1 and on the and of 2, a rim on 3 of each bar, a shaker breath on every and', () => {
-    const at = (piece: string) => loopNamed('Percussion heartbeat')!.cells.filter((c) => c.sound === piece)
+  it('the opening heartbeat grows: the kicks alone, the shaker from the 2nd pass, the rim from the 3rd', () => {
+    const at = (pass: number, piece: string) => onPass(loopNamed('Percussion heartbeat')!.cells, pass).filter((c) => c.sound === piece)
       .map((c) => c.col + (c.timingBeats ?? 0)).sort((a, b) => a - b);
-    expect(at('kick')).toEqual([0, 1.5, 4, 5.5]);
-    expect(at('rim')).toEqual([2, 6]);
-    expect(at('hat')).toEqual([0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5]);
+    expect(at(0, 'kick')).toEqual([0, 1.5, 4, 5.5]);
+    expect(at(0, 'hat')).toEqual([]);
+    expect(at(0, 'rim')).toEqual([]);
+    expect(at(1, 'hat')).toEqual([0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5]);
+    expect(at(1, 'rim')).toEqual([]);
+    expect(at(2, 'rim')).toEqual([2, 6]);
   });
 
-  it('the summit adds a cymbal swell every other pass, the build toms every other pass', () => {
-    expect(loopNamed('Percussion summit')!.cells.filter((c) => c.sound === 'crash').every((c) => c.conditional && c.col === 0)).toBe(true);
+  it('the summit swells a cymbal on the first beat every other pass; the build rolls its toms every other pass', () => {
+    const crash = loopNamed('Percussion summit')!.cells.filter((c) => c.sound === 'crash');
+    expect(crash.every((c) => c.col === 0 && c.passes?.join() === '0,2')).toBe(true);
     const toms = loopNamed('Percussion build')!.cells.filter((c) => c.sound === 'tom');
     expect(toms).toHaveLength(2);
-    expect(toms.every((c) => c.conditional && c.col === 7)).toBe(true);
+    expect(toms.every((c) => c.col === 7 && c.passes?.join() === '1,3')).toBe(true);
   });
 
-  it('the pulse: soft eighth notes on F# an octave over the bass, two counters a step, the second half a beat late', () => {
-    const cells = loopNamed('Pulse')!.cells;
-    expect(cells).toHaveLength(16);
-    const ordered = [...cells].sort((a, b) => a.col + (a.timingBeats ?? 0) - (b.col + (b.timingBeats ?? 0)));
-    expect(ordered.map((c) => name(pitchOf(c, F_SHARP_MINOR)))).toEqual([
-      'F#', 'C#', 'A', 'E', 'F#', 'C#', 'A', 'B', 'F#', 'C#', 'A', 'E', 'F#', 'C#', 'A', 'B',
-    ]);
-    for (const c of cells) {
-      expect(c.octave).toBe(1);
-      expect(c.overBass).toBe(true);
-      expect(c.sound).toBe('synth:pluck');
-      expect(pitchOf(c, F_SHARP_MINOR)).toBeGreaterThanOrEqual(54);
-      expect(pitchOf(c, F_SHARP_MINOR)).toBeLessThanOrEqual(71);
+  it('every loop of more than one note grows over its four passes or is held', () => {
+    for (const l of DEMO_LOOPS.filter((x) => x.cells.length > 1)) {
+      expect(l.cells.some((c) => c.passes) || l.cells.every((c) => (c.holdBeats ?? 0) >= 4), l.name).toBe(true);
     }
-    // Rows differ within a step.
-    for (let col = 0; col < 8; col++) expect(new Set(cells.filter((c) => c.col === col).map((c) => c.row)).size).toBe(2);
   });
 
   it('the chord parts play the chord the pads hold: they never name one', () => {
     for (const l of DEMO_LOOPS.filter((x) => x.cells[0].job === 'chord')) for (const c of l.cells) expect(c.follows, l.name).toBe(true);
-    expect(loopNamed('Swells')!.cells.map((c) => [c.col, c.holdBeats])).toEqual([[0, 8]]);
   });
 
   it('the pads lead: wide, joining the loops, in a large shared room', () => {
@@ -273,7 +343,6 @@ describe('Rising Light: ambient first', () => {
     expect(music.widePads).toBe(true);
     expect(music.bandWithLoops).toBe(true);
     expect(music.space ?? 0).toBeGreaterThan(0.6);
-    for (const s of demoScenes()) expect(s.settings.bandJobs.pads, s.name).toBe(true);
   });
 
   it('every melodic part sits a touch behind the beat, never by more than 30 ms (between-the-beats notes aside)', () => {
@@ -284,49 +353,52 @@ describe('Rising Light: ambient first', () => {
   });
 });
 
-describe('Rising Light: Tim’s counters', () => {
+describe('Rising Light v2: Tim’s glow', () => {
   it('a counter placed anywhere on the board, in any scene, is a note of that scene’s pentatonic scale', () => {
     for (const sc of demoScenes()) {
-      const key = sc.key ?? F_SHARP_MINOR;
+      const key = sc.key ?? A_MAJOR;
       const scale = new Set(key.semitones.map((st) => (key.rootMidi + st) % 12));
       for (let row = 0; row < 8; row++) {
-        for (const shift of [0, -24]) {
-          const midi = degreeMidi(7 - row, key.rootMidi, key.semitones) + shift;
-          expect(scale.has(((midi % 12) + 12) % 12), `${sc.name}, row ${row}`).toBe(true);
-        }
+        const midi = degreeMidi(7 - row, key.rootMidi, key.semitones);
+        expect(scale.has(((midi % 12) + 12) % 12), `${sc.name}, row ${row}`).toBe(true);
       }
     }
     // Played as written: never nudged out of the scale.
     expect(demoMusic().clashNudge).toBe(false);
   });
 
-  it('his colours become ambient voices in the demo, one note each', () => {
+  it('his counters all play on his own track, 14, one per part; long notes', () => {
+    expect(DEMO_PLAYER_TRACK).toBe(14);
+    expect(demoMusic().playerTrack).toBe(14);
+    expect(demoMusic().midiChannelMode).toBe('part');
+    expect(demoMusic().noteLengthBeats).toBe(2);
+  });
+
+  it('his colours all become the soft pad in the demo, one note each; a bass or drums colour a melody pad, in the glow’s register', () => {
     const voices = demoColourVoices({
       a: { role: 'melody', instrument: 'harp', plays: 'tune' as const }, b: { role: 'melody' }, c: { role: 'chord', instrument: 'guitarAcoustic' },
       d: { role: 'bass', instrument: 'tuba' }, e: { role: 'drums' }, f: { role: 'tempo' },
     });
-    expect(voices.a).toEqual({ role: 'melody', instrument: 'synth:keys', plays: 'note', reverbSend: 0.5 });
-    expect(voices.b.instrument).toBe('synth:bell');
-    expect(voices.c.instrument).toBe('synth:pad');
-    expect(voices.d.instrument).toBe('synth:sub');
-    expect(voices.e).toEqual({ role: 'drums', plays: 'note', reverbSend: 0.5 });
+    const pad = { instrument: 'synth:pad', plays: 'note', reverbSend: 0.5 };
+    expect(voices.a).toEqual({ role: 'melody', ...pad });
+    expect(voices.b).toEqual({ role: 'melody', ...pad });
+    expect(voices.c).toEqual({ role: 'chord', ...pad });
+    expect(voices.d).toEqual({ role: 'melody', ...pad });
+    expect(voices.e).toEqual({ role: 'melody', ...pad });
     expect(voices.f).toEqual({ role: 'tempo' });
   });
 });
 
-describe('Rising Light: never boring, and one sound per Ableton track', () => {
-  it('no pop sequence: every scene’s chords are a drone, Tide, Rise or Float', () => {
-    for (const sc of demoScenes()) expect(['still', 'tide', 'rise', 'float'], sc.name).toContain(sc.settings.chords.sequence);
+describe('Rising Light v2: never boring, and one sound per Ableton track', () => {
+  it('no pop sequence: every scene’s chords are Still, Glow, Lift, Float, Tide or Rise', () => {
+    for (const sc of demoScenes()) expect(['still', 'glow', 'lift', 'float', 'tide', 'rise'], sc.name).toContain(sc.settings.chords.sequence);
   });
 
-  it('every scene differs from the one before in its loops, its chords or its key; none longer than eight passes', () => {
+  it('every scene differs from the one before in its loops, its chords or its key', () => {
     const scenes = demoScenes();
-    for (const [i, s] of DEMO_SCENES.entries()) {
-      const next = i + 1 < DEMO_SCENES.length ? DEMO_SCENES[i + 1].pass : DEMO_END_PASS;
-      expect(next - s.pass, s.name).toBeLessThanOrEqual(8);
-      if (i === 0) continue;
+    for (let i = 1; i < scenes.length; i++) {
       const sig = (k: number) => JSON.stringify([scenes[k].loops, scenes[k].settings.chords, scenes[k].key]);
-      expect(sig(i), s.name).not.toBe(sig(i - 1));
+      expect(sig(i), scenes[i].name).not.toBe(sig(i - 1));
     }
   });
 
@@ -339,9 +411,9 @@ describe('Rising Light: never boring, and one sound per Ableton track', () => {
     }
   });
 
-  it('no more than sixteen loops; the trombone, clarinet, harp and guitar are retired from the demo', () => {
+  it('no more than sixteen loops; the piano, the lead, the pulse and the swells are retired from the demo', () => {
     expect(DEMO_LOOPS.length).toBeLessThanOrEqual(16);
     const sounds = new Set(DEMO_LOOPS.flatMap((l) => l.cells.map((c) => c.sound)));
-    for (const old of ['trombone', 'clarinet', 'harp', 'guitarAcoustic']) expect(sounds.has(old), old).toBe(false);
+    for (const old of ['piano', 'synth:keys', 'synth:pluck', 'synth:pad', 'synth:supersaw']) expect(sounds.has(old), old).toBe(false);
   });
 });

@@ -55,6 +55,13 @@ describe('scenes', () => {
     expect(sanitizeScenes('nope', settings)).toEqual([]);
   });
 
+  it('a piece keeps sixteen scenes (the demo has sixteen); a seventeenth is dropped', () => {
+    const many = Array.from({ length: 17 }, (_, i) => ({ id: `s${i}`, name: `S${i}`, loops: [], settings }));
+    const kept = sanitizeScenes(many, settings);
+    expect(kept).toHaveLength(16);
+    expect(kept[15].id).toBe('s15');
+  });
+
   // Harmony spec stage 1: a scene chooses its chord sequence and how long each chord lasts.
   it('a scene keeps its chords; one saved before chords existed loads "As before"; nonsense is "As before"', () => {
     const scene = (chords: unknown) => sanitizeScenes([{ id: 'c', name: 'C', loops: [], settings: { ...settings, chords } }], settings)[0].settings.chords;

@@ -15,7 +15,7 @@ const BPM = 87;
 const PASS_SEC = (8 * 60) / BPM;
 const TRACK = {
   1: 'Melody', 2: 'Bass', 3: 'Chords', 4: 'Loop 1', 5: 'Loop 2', 6: 'Loop 3', 7: 'Loop 4', 8: 'Loop 5', 9: 'Loop 6',
-  10: 'Drums', 11: 'Band chords', 12: 'Band bass', 13: 'Extra notes', 14: 'Melody 2', 15: 'Melody 3', 16: 'Whole',
+  10: 'Drums', 11: 'Band chords', 12: 'Band bass', 13: 'Extra notes', 14: "Tim's glow", 15: 'Melody 3', 16: 'Whole',
 };
 const NOTE = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const nameOf = (n) => `${NOTE[n % 12]}${Math.floor(n / 12) - 1}`;

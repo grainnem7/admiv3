@@ -119,6 +119,30 @@ describe('studio mix in the engine', () => {
     expect(e.drainFiredNotes()[0].durSec).toBeCloseTo(3 + LEGATO_OVERLAP_SEC, 6);
   });
 
+  it('a loop note written for passes 3 and 4 of every four sounds on those passes only', () => {
+    const { e, p } = engine();
+    e.setActiveLoops([[{ row: 0, col: 0, colour: 'm', passes: [2, 3] }]]);
+    const heard: number[] = [];
+    for (let lap = 0; lap < 8; lap++) {
+      p.fireStep(lap * 8, lap * 8, 1, null);
+      if (e.drainFiredNotes().length > 0) heard.push(lap);
+    }
+    expect(heard).toEqual([2, 3, 6, 7]);
+  });
+
+  it('a note before one that is silent this pass rings on past it, as for Variation', () => {
+    const { e, p, play } = engine();
+    e.setActiveCells([{ row: 0, col: 1, colour: 'm' }, { row: 1, col: 4, colour: 'm', passes: [2, 3] }]);
+    // Passes 1 and 2 (laps 0 and 1): nothing comes at step 4, so the note rings as long as a lone note.
+    p.fireStep(1, 0, 1, null);
+    expect(lastDur(play)).toBeCloseTo(4 + LEGATO_OVERLAP_SEC, 6);
+    p.fireStep(9, 0, 1, null);
+    expect(lastDur(play)).toBeCloseTo(4 + LEGATO_OVERLAP_SEC, 6);
+    // Pass 3: the later note plays, so the first rings up to it.
+    p.fireStep(17, 0, 1, null);
+    expect(lastDur(play)).toBeCloseTo(3 + LEGATO_OVERLAP_SEC, 6);
+  });
+
   it('the original mix keeps Note length exactly', () => {
     const { e, p, play } = engine({ studioMix: false });
     e.setActiveCells([{ row: 0, col: 1, colour: 'm' }, { row: 1, col: 4, colour: 'm' }]);

@@ -15,7 +15,7 @@
 import { sanitizeFillNotes, type FillNote } from '../generative/rulesFill';
 
 /** How many of Magenta's ideas a scene keeps (the newest): bounded, as it is saved with the piece. */
-export const MAX_KEPT_IDEAS = 6;
+export const MAX_KEPT_IDEAS = 8;
 /** How many notes one kept idea may hold: more than any fill makes, less than a runaway. */
 export const MAX_IDEA_NOTES = 128;
 

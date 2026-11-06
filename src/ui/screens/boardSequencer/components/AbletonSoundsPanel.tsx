@@ -26,6 +26,7 @@ export function planFromConfig(config: BoardSequencerStored): ReturnType<typeof 
     space: config.space,
     swing: config.swing,
     loopChannels: config.midiLoopChannels,
+    playerTrack: config.playerTrack,
   });
 }
 
@@ -130,6 +131,11 @@ export function AbletonSoundsPanel({ config, getLive, onSend, connected }: {
         </div>
         <span style={NOTE}>Placeholder: an empty chain, or Operator with its default sound. Timbo never sends a track to a chain it does not hold. In One per colour mode the melody colours use tracks 1, 14 and 15: build three Melody tracks first. A fader per loop needs the Loop 1 to 6 tracks first.</span>
         <span style={NOTE}>Macros on every chain: 1 Volume (CC 24), 2 Brightness (CC 25), 3 Space (CC 26). Echo is CC 27.</span>
+        {config.midiChannelMode === 'part' && config.playerTrack !== null && (
+          <span style={NOTE}>
+            {`Your counters play on their own track: MIDI channel ${config.playerTrack}. Build one more track for them (the demo calls it “Tim’s glow”): MIDI From the port ADMIOutput, channel ${config.playerTrack}, Monitor In, with one soft pad and no rack.`}
+          </span>
+        )}
       </Disclosure>
     </div>
   );

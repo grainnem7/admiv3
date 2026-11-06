@@ -25,7 +25,7 @@ import {
 import { startTicker, type Ticker } from './ticker';
 import { strumFor, strumOffsets, STRUM_UP_GAIN } from './strum';
 import { BoardSequencerVoice } from './voices/BoardSequencerVoice';
-import { voicingForCells, degreeMidi, chordDegreeMidi, drumForRow, DEFAULT_DRUM_ROWS, loopLen, lapIndex, strictlyAfter, firesThisLap, firesThisLapPaged, sweepAt, type PingPongPages, type Sweep } from './boardSequencerScale';
+import { voicingForCells, degreeMidi, chordDegreeMidi, drumForRow, DEFAULT_DRUM_ROWS, loopLen, lapIndex, strictlyAfter, firesThisLap, firesThisLapPaged, playsThisPass, sweepAt, type PingPongPages, type Sweep } from './boardSequencerScale';
 import type { ActiveCell } from '../tracking/BoardSequencerMode';
 import type { ColourChannel, ColourId, ColourRole } from '../tracking/boardColours';
 import { DEFAULT_NOTE_VARY } from '../tracking/boardColours';
@@ -54,7 +54,7 @@ import {
   type ChordCounter, type ChordSetting, type CurrentChord,
 } from './harmony/currentChord';
 import {
-  BoardMidiSender, channelsInUse, EXPRESSION_STEP_SEC, gainToCc, loopChannel, loopSlotOf, LOOP_CHANNELS, type BoardMidiOptions,
+  BoardMidiSender, channelsInUse, EXPRESSION_STEP_SEC, gainToCc, loopChannel, loopSlotOf, LOOP_CHANNELS, testChannels, type BoardMidiOptions,
 } from '../midi/boardMidi';
 import {
   abletonPlan, changedControls, type LoopSound, controlKey, counterControls, CC_BRIGHT, CC_SPACE,
@@ -996,6 +996,18 @@ export class BoardSequencerEngine {
     this.fillKey = ''; // rebuild from the new source on the next beat
   }
 
+  /**
+   * Magenta develops (Rising Light version 2): a new idea every four passes of a scene, each
+   * kept and replayed like the scene's one idea, so the AI's part moves on through the scene.
+   */
+  setAiEvolves(on: boolean): void {
+    if (this.aiEvolves === on) return;
+    this.aiEvolves = on;
+    this.fillKey = '';
+  }
+
+  private aiEvolves = false;
+
   /** Where fill ideas come from now: the simple rules once the safety valve has paused Magenta. */
   private fillEngineNow(): 'magenta' | 'rules' {
     return this.valveTaken.includes('magenta') ? 'rules' : (this.cfg.fillEngine ?? 'magenta');
@@ -1073,7 +1085,17 @@ export class BoardSequencerEngine {
    */
   private admit(source: FiredNote['source'], midis: readonly number[], group?: string): boolean {
     if (source !== 'loop') { admitPlayerNote(this.stepTally, midis); return true; }
+    // On their own track the player's notes take nothing from the loops, not even a unison.
+    if (this.ownTrack()) return true;
     return admitLoopNote(this.stepTally, midis, this.stepLoopCap, group);
+  }
+
+  /**
+   * Whether the player's counters have their own track (Tim's glow): their notes then float
+   * above the band and never stop anything, so the loops play whole, where they were written.
+   */
+  private ownTrack(): boolean {
+    return (this.midiOpts.playerTrack ?? null) !== null && this.midiOpts.channelMode !== 'colour';
   }
   /** How hard notes play at this Energy: 0.7 at the bottom, 1 at the middle, 1.3 at the top. */
   private energyGain(): number {
@@ -1554,7 +1576,7 @@ export class BoardSequencerEngine {
    */
   setMidiOut(opts: BoardMidiOptions, portKey = ''): void {
     const was = this.midiOpts;
-    const channels = channelsInUse(opts.colourChannels, opts.loopChannels);
+    const channels = channelsInUse(opts.colourChannels, opts.loopChannels, opts.channelMode === 'colour' ? null : opts.playerTrack ?? null);
     const routeChanged = was.enabled !== opts.enabled || this.midiPortKey !== portKey
       || (was.channelMode ?? 'part') !== (opts.channelMode ?? 'part')
       || !!was.loopChannels !== !!opts.loopChannels
@@ -1599,6 +1621,7 @@ export class BoardSequencerEngine {
       loopChannels: this.midiOpts.loopChannels,
       loopSounds: this.loopSounds(),
       coloursOnBoard: new Set(this.coloursOnBoard()),
+      playerTrack: this.midiOpts.playerTrack,
     });
     this.abletonLast = plan;
     const owned = new Set<number>([
@@ -1653,7 +1676,7 @@ export class BoardSequencerEngine {
       this.lastTickTime = tt;
       this.tick.triggerAttackRelease('C2', 0.05, tt);
     }
-    if (this.midiOpts.enabled) this.midi?.testNote(t, this.midiOpts.leadMs);
+    if (this.midiOpts.enabled) this.midi?.testNote(t, this.midiOpts.leadMs, testChannels(this.midiOpts.channelMode === 'colour' ? null : this.midiOpts.playerTrack ?? null));
     return true;
   }
 
@@ -3125,15 +3148,17 @@ export class BoardSequencerEngine {
     // The cap makes room for the player: with the player's counters on the board the loops
     // keep to it; with the board empty the loops play whole, so a loop that is on is heard.
     const playerOn = tagged.some((t) => t.source !== 'loop');
-    this.stepLoopCap = playerOn ? loopNoteCap(this.energy, worldOf(this.cfg.soundWorld ?? 'none')?.density ?? 0) : Number.POSITIVE_INFINITY;
-    this.stepLaneUp = tagged.some((t) => t.source !== 'loop' && this.roleFor(t.cell.colour) === 'melody');
+    const ownTrack = this.ownTrack();
+    this.stepLoopCap = playerOn && !ownTrack ? loopNoteCap(this.energy, worldOf(this.cfg.soundWorld ?? 'none')?.density ?? 0) : Number.POSITIVE_INFINITY;
+    this.stepLaneUp = !ownTrack && tagged.some((t) => t.source !== 'loop' && this.roleFor(t.cell.colour) === 'melody');
     const loopPhrases = tuneTagged.length > 0 ? this.firePhrases(beat, cellTime, secPerBeat, chord, tuneTagged) : null;
     let noteTagged = tuneTagged.length === 0 ? tagged : tagged.filter((t) => !this.playsTune(t.cell.colour));
     // Layered one-note melodies take turns too: the one leading this pass plays its note,
-    // another melody's note on the same step rests, and answers softer where it's alone.
+    // another melody's note on the same step rests, and answers softer where it's alone. On
+    // their own track the player's counters take no turns: theirs and the loops' all play.
     {
-      const isMelody = (c: LayeredCell): boolean => this.roleFor(c.colour) === 'melody';
       const layerOf = (c: LayeredCell): string => c.layer ?? LIVE_LAYER;
+      const isMelody = (c: LayeredCell): boolean => this.roleFor(c.colour) === 'melody' && !(ownTrack && layerOf(c) === LIVE_LAYER);
       const cycle = Math.max(1, this.cfg.cols * Math.max(1, this.cfg.numPages));
       const leader = melodyLeader(noteTagged.filter((t) => isMelody(t.cell)).map((t) => layerOf(t.cell)), lapIndex(beat, cycle));
       if (leader !== null) {
@@ -3179,6 +3204,7 @@ export class BoardSequencerEngine {
         && !firesThisLapPaged(true, beat, this.cfg.cols, this.cfg.numPages, this.cfg.pingPong ?? false);
       for (const c of noteCells) {
         if (silentThisPass && c.conditional) continue;
+        if (!playsThisPass(c.passes, beat, this.cfg.cols, this.cfg.numPages, this.cfg.pingPong ?? false)) continue;
         const list = colsByColour.get(c.colour);
         if (list) list.push(c.col);
         else colsByColour.set(c.colour, [c.col]);
@@ -3506,6 +3532,8 @@ export class BoardSequencerEngine {
         cells.map((c) => `${c.row},${c.col},${c.colour}`).sort(), this.fillAmount, this.fillSeedNow(), this.evolveScene,
         this.cfg.phrases, colours.map((ch) => `${ch.id}:${this.playsTune(ch.id) ? 't' : 'n'}`).join(), this.cfg.soundWorld, this.cfg.scaleRootMidi, this.cfg.scaleSemitones,
         this.cfg.rows, this.cfg.cols, chord?.notes ?? null,
+        // Developing: which four passes of the scene this is, so each four has its own idea.
+        ...(this.aiEvolves ? [Math.floor(this.ideaLap(beat) / 4)] : []),
       ]);
       const useAi = this.fillEngineNow() === 'magenta';
       const fullKey = `${key}|${useAi ? 'ai' : 'rules'}`;
@@ -3652,6 +3680,7 @@ export class BoardSequencerEngine {
         const varies = ev.owner.conditional && this.cfg.variationEnabled !== false;
         if (!firesThisLapPaged(varies, beat, this.cfg.cols, this.cfg.numPages, this.cfg.pingPong ?? false)) continue;
         const tag = tagOf(ev);
+        if (!playsThisPass(tag?.cell.passes, beat, this.cfg.cols, this.cfg.numPages, this.cfg.pingPong ?? false)) continue;
         // A phrase has its own accents; its counter only adds its own slight loudness (S2).
         const base = (tag?.cell.velocity ?? this.cfg.velocity) * this.energyGain()
           * humanFactor(ev.owner.row, ev.owner.col, `${ev.layer ?? ''}|${ev.colour}`);
@@ -3746,6 +3775,8 @@ export class BoardSequencerEngine {
       // on dropping notes on alternate laps had nothing on screen explaining why.
       const varies = (cell.conditional ?? false) && this.cfg.variationEnabled !== false;
       if (!firesThisLapPaged(varies, beat, this.cfg.cols, this.cfg.numPages, this.cfg.pingPong ?? false)) return;
+      // A loop note written for some passes of every four (a phrase that grows over four passes).
+      if (!playsThisPass(cell.passes, beat, this.cfg.cols, this.cfg.numPages, this.cfg.pingPong ?? false)) return;
       // Humanize: occasionally skip a step + vary velocity, so loops breathe.
       const looseName = `${(cell as LayeredCell).layer ?? ''}|${cell.colour}`;
       if (h > 0 && this.looseChance(beat, cell.row, cell.col, `rest|${looseName}`) < h * 0.5) return;
@@ -3839,9 +3870,10 @@ export class BoardSequencerEngine {
         // instrument a stab every bar was the "stabby" the owner heard (S2). Note length
         // stays the floor, so a chosen short length still plays short.
         const chordDur = ringSec(loopLen(this.rawLoop('melodic'), this.cfg.cols)) * evo.length;
-        // A guitar strums (down on the beat, up between) and a harp rolls its chord.
-        const strum = strumFor(ch.instrument, cell.col);
-        const chordVel = strum < 0 ? vel * STRUM_UP_GAIN : vel;
+        // A guitar strums (down on the beat, up between) and a harp rolls its chord; a loop's
+        // chord may roll its own way (the demo's fingerpicked guitar), at its written loudness.
+        const strum = cell.roll ?? strumFor(ch.instrument, cell.col);
+        const chordVel = strum < 0 && cell.roll === undefined ? vel * STRUM_UP_GAIN : vel;
         const offsets = strumOffsets(midis, strum);
         if (this.internalSound) midis.forEach((n, i) => voice.play(n, chordVel, chordDur - offsets[i], stepTime + offsets[i]));
         this.recordFired({

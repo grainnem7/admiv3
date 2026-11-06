@@ -172,6 +172,7 @@ export function applyEngineSettings(
   engine.setPhrases(cfg.phrases);
   engine.setFill(cfg.fillAmount, cfg.fillSeed, cfg.fillKept);
   engine.setFillEngine(cfg.fillEngine);
+  engine.setAiEvolves(cfg.aiEvolves);
   engine.setBand(cfg.band);
   engine.setChords(cfg.chords);
   engine.setClashNudge(cfg.clashNudge);
@@ -186,6 +187,7 @@ export function applyEngineSettings(
     colourChannels: cfg.midiChannelMode === 'colour' ? withLoopColours(colourChannelMap(cfg.channels), cfg) : undefined,
     leadMs: cfg.midiLeadMs,
     loopChannels: cfg.midiLoopChannels,
+    playerTrack: cfg.playerTrack,
   // Any Sound from switch (Ableton and Both included) counts as a new route, so the
   // receiving end is cleared and nothing is left hanging.
   }, `${cfg.midiDeviceId}|${route.internal ? 'with-admi' : 'alone'}`);

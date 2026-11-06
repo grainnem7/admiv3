@@ -243,7 +243,7 @@ describe('relay', () => {
       values: { tempo: 0.5, dynamics: 0.5, fill: 0, evolve: 0 }, labels: { tempo: '100 BPM', dynamics: '50%', fill: 'Off', evolve: 'Off' },
       kept: false, muted: false, playing: true,
       loops: Array.from({ length: 8 }, () => ({ name, state: 'stopped' })),
-      scenes: Array.from({ length: 12 }, () => ({ name, current: false })),
+      scenes: Array.from({ length: 16 }, () => ({ name, current: false })),
     };
     const text = JSON.stringify({ type: 'state', state });
     expect(text.length).toBeGreaterThan(1000);

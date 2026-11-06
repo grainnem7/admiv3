@@ -22,8 +22,8 @@ import type { SoundWorldId } from '../../audio/worlds/soundWorlds';
 import { degreeMidi } from '../boardSequencerScale';
 import { chordOnDegree, degreeOfNote, harmonyFromChord, parentScale, symbolFor, type Chord, type Harmony } from './harmony';
 
-export type ChordSequenceId = 'asBefore' | 'world' | 'calm' | 'rising' | 'dreamy' | 'tense' | 'home' | 'still' | 'lift' | 'float' | 'shade' | 'tide' | 'rise';
-export const CHORD_SEQUENCE_IDS: ChordSequenceId[] = ['asBefore', 'world', 'calm', 'rising', 'dreamy', 'tense', 'home', 'still', 'lift', 'float', 'shade', 'tide', 'rise'];
+export type ChordSequenceId = 'asBefore' | 'world' | 'calm' | 'rising' | 'dreamy' | 'tense' | 'home' | 'still' | 'lift' | 'float' | 'shade' | 'tide' | 'rise' | 'glow';
+export const CHORD_SEQUENCE_IDS: ChordSequenceId[] = ['asBefore', 'world', 'calm', 'rising', 'dreamy', 'tense', 'home', 'still', 'lift', 'float', 'shade', 'tide', 'rise', 'glow'];
 export type ChordBars = 1 | 2 | 4;
 export const CHORD_BARS: ChordBars[] = [1, 2, 4];
 export const BEATS_PER_BAR = 4;
@@ -62,6 +62,7 @@ export const CHORD_SEQUENCE_WORDS: Record<ChordSequenceId, { label: string; what
   shade: { label: 'Shade', what: 'Two minor chords, wistful: vi and ii, each with a ninth.' },
   tide: { label: 'Tide', what: 'The night: home, VI, the minor iv, home, each with its colour.' },
   rise: { label: 'Rise', what: 'The climb: VI, VII, up to home.' },
+  glow: { label: 'Glow', what: 'Warm light: home with a ninth, then IV with its seventh, over a held key note.' },
 };
 
 type Kind = 'plain' | 'sus2' | 'sus4' | 'minor' | 'drone' | 'add9' | 'seventh' | 'ninth';
@@ -84,6 +85,8 @@ const NAMED: Record<Exclude<ChordSequenceId, 'asBefore' | 'world'>, SeqChord[]> 
   // plagal pull home (i VI iv i), and the Aeolian climb (VI VII i).
   tide: [sc(0, 'add9'), sc(5, 'seventh'), sc(3, 'ninth'), sc(0, 'add9')],
   rise: [sc(5, 'seventh'), sc(6, 'sus4'), sc(0, 'add9'), sc(0, 'add9')],
+  // Rising Light version 2: the plagal shimmer of ambient music, I then IV over the I.
+  glow: [sc(0, 'add9'), sc(3, 'seventh')],
 };
 
 /**

@@ -22,7 +22,7 @@ import type { ColourChannel } from '../tracking/boardColours';
 import { soundsFor } from '../ui/screens/boardSequencer/soundCatalogue';
 import {
   BAND_BASS_CHANNEL, BAND_PAD_CHANNEL, channelFor, COLOUR_JOB_CHANNELS, EXTRA_NOTES_CHANNEL, gainToCc, hasColourChannel,
-  LOOP_CHANNELS, ROLE_CHANNEL, VOLUME_CHANNEL, type MappingTarget, type MidiChannelMode, type MidiEvent,
+  LOOP_CHANNELS, PLAYER_TRACK_NAME, ROLE_CHANNEL, VOLUME_CHANNEL, type MappingTarget, type MidiChannelMode, type MidiEvent,
 } from './boardMidi';
 
 /** The controller that picks a Rack chain. */
@@ -260,6 +260,11 @@ export interface AbletonPlanInput {
   loopSounds?: readonly LoopSound[];
   /** The player's colours with a counter on the board now. */
   coloursOnBoard?: ReadonlySet<string>;
+  /**
+   * One per part: the player's counters all play on this channel (Tim's glow), one
+   * instrument with no rack. The part tracks then play only the loops' sounds.
+   */
+  playerTrack?: number | null;
 }
 
 /** A playing loop's instrument for one job, under its loop colour. */
@@ -276,6 +281,8 @@ export interface AbletonPlan {
   shares: Map<string, { channel: number; withId: string }>;
   /** The chain on each channel, for the screen. */
   chains: Map<number, number>;
+  /** The player's own track, when their counters have one (no chain there, only Space). */
+  playerTrack?: number;
 }
 
 export const controlKey = (channel: number, cc: number): string => `${channel}:${cc}`;
@@ -298,8 +305,10 @@ export function abletonPlan(input: AbletonPlanInput): AbletonPlan {
   };
   const world = worldOf(input.world);
   const opts = { channelMode: input.channelMode, colourChannels: input.colourChannels };
+  const playerTrack = input.channelMode === 'part' && isPlayerTrack(input.playerTrack) ? input.playerTrack : null;
   const owner = new Map<number, string>();
-  for (const ch of input.channels) {
+  // With their own track, the player's colours choose nothing on the part tracks.
+  for (const ch of playerTrack === null ? input.channels : []) {
     if (!hasColourChannel(ch.role)) continue;
     const channel = channelFor({ role: ch.role, origin: 'placed', colour: ch.id }, opts);
     if (channel === null) continue;
@@ -330,7 +339,7 @@ export function abletonPlan(input: AbletonPlanInput): AbletonPlan {
       if (channel !== null) latest.set(channel, l);
     }
     for (const [channel, l] of latest) {
-      const playerThere = input.channels.some((c) => hasColourChannel(c.role) && input.coloursOnBoard?.has(c.id)
+      const playerThere = playerTrack === null && input.channels.some((c) => hasColourChannel(c.role) && input.coloursOnBoard?.has(c.id)
         && channelFor({ role: c.role, origin: 'placed', colour: c.id }, opts) === channel);
       if (playerThere) continue;
       const chain = chainFor({ role: l.role, instrument: l.instrument || undefined }, input.world);
@@ -370,10 +379,17 @@ export function abletonPlan(input: AbletonPlanInput): AbletonPlan {
     set(channel, CC_BRIGHT, 127);
     set(channel, CC_SPACE, stepCc(SPACE_SEND, world?.reverbSend ?? 0.18));
   }
+  // The player's own track: one instrument, no rack to choose in; its Space at the World's reverb.
+  if (playerTrack !== null) set(playerTrack, CC_SPACE, stepCc(SPACE_SEND, world?.reverbSend ?? 0.18));
   set(VOLUME_CHANNEL, CC_ENERGY, stepCc(ENERGY, input.energy));
   set(VOLUME_CHANNEL, CC_SPACE_ALL, stepCc(SPACE_ALL, input.space));
   set(VOLUME_CHANNEL, CC_GROOVE, grooveCc(input.swing));
-  return { controls, shares, chains };
+  return { controls, shares, chains, ...(playerTrack !== null ? { playerTrack } : {}) };
+}
+
+/** A channel the player's counters can have to themselves: 1 to 15, never the drums' 10. */
+function isPlayerTrack(v: unknown): v is number {
+  return typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= 15 && v !== ROLE_CHANNEL.drums;
 }
 
 /** The control counters (Tone, Reverb, Delay) as CC 25, 26, 27 on every sounding channel. */
@@ -431,6 +447,10 @@ export function abletonMappingTargets(plan: AbletonPlan, names: ReadonlyMap<numb
       if (value(ch, cc) === undefined) continue;
       out.push({ channel: ch, cc, value: value(ch, cc), what: `${nameOf(ch)} (ch ${ch}): ${what}` });
     }
+  }
+  if (plan.playerTrack !== undefined) {
+    const ch = plan.playerTrack;
+    out.push({ channel: ch, cc: CC_SPACE, value: value(ch, CC_SPACE), what: `${PLAYER_TRACK_NAME} (ch ${ch}): Space (Send A), for the Reverb counter` });
   }
   out.push({ channel: VOLUME_CHANNEL, cc: CC_SPACE_ALL, value: value(VOLUME_CHANNEL, CC_SPACE_ALL), what: 'Space (ch 16): Return A level' });
   out.push({ channel: VOLUME_CHANNEL, cc: CC_ENERGY, value: value(VOLUME_CHANNEL, CC_ENERGY), what: 'Energy (ch 16): optional macro' });

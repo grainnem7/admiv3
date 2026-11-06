@@ -234,7 +234,8 @@ describe('Rising Light’s chords: Tide and Rise (demo composition, 2026-11-06)'
   /** F sharp minor pentatonic: the chords come from its parent, F sharp natural minor. */
   const F_SHARP = 66;
   const MINOR_PENT = [0, 3, 5, 7, 10];
-  const chordsOf = (sequence: ChordSetting['sequence'], semitones: number[] = MINOR_PENT, rootMidi = F_SHARP) =>
+  const MAJOR_PENT_V2 = [0, 2, 4, 7, 9];
+  const chordsOf =(sequence: ChordSetting['sequence'], semitones: number[] = MINOR_PENT, rootMidi = F_SHARP) =>
     [0, 1, 2, 3].map((i) => sequenceAt({
       setting: { sequence, bars: 1 }, style: 'warm', rootMidi, semitones, beatsIn: i * 4, step: 0, loop: 8, bandOn: true,
     }).harmony);
@@ -267,6 +268,20 @@ describe('Rising Light’s chords: Tide and Rise (demo composition, 2026-11-06)'
     const chromatic = Array.from({ length: 12 }, (_, i) => i);
     const plain = sequenceChord({ degree: 0, kind: 'plain' }, 60, chromatic, 'warm');
     expect(sequenceChord({ degree: 0, kind: 'seventh' }, 60, chromatic, 'warm')).toEqual(plain);
+  });
+
+  it('Glow (version 2): in A major pentatonic, A add9 then D maj7, never a pop progression', () => {
+    const glow = chordsOf('glow', MAJOR_PENT_V2, 69);
+    expect(glow.map((h) => h?.symbol)).toEqual(['Aadd9', 'Dmaj7', 'Aadd9', 'Dmaj7']);
+    // A C# E B; D F# A C#.
+    expect(pcsOf(glow[0])).toEqual([1, 4, 9, 11]);
+    expect(pcsOf(glow[1])).toEqual([1, 2, 6, 9]);
+    expect(CHORD_SEQUENCE_WORDS.glow.label).toBe('Glow');
+  });
+
+  it('Lift works in any key: in B major pentatonic, B sus2 then C sharp minor add9', () => {
+    expect(chordsOf('lift', MAJOR_PENT_V2, 71).slice(0, 2).map((h) => h?.symbol)).toEqual(['Bsus2', 'C#madd9']);
+    expect(chordsOf('lift', MAJOR_PENT_V2, 69).slice(0, 2).map((h) => h?.symbol)).toEqual(['Asus2', 'Bmadd9']);
   });
 
   it('Tide and Rise have plain words for the player', () => {

@@ -370,3 +370,16 @@ export function firesThisLapPaged(
   if (numPages > 1) return true;
   return firesThisLap(conditional, beat, cols, pingPong);
 }
+
+/**
+ * Whether a loop note written for some passes of every four (`passes`, 0 to 3) sounds on the
+ * pass containing `beat`. Passes count from the start, as Variation's laps do, so a scene
+ * that begins on a multiple of four passes begins on pass 0. No list: every pass.
+ */
+export function playsThisPass(
+  passes: readonly number[] | undefined, beat: number, cols: number, numPages: number, pingPong = false,
+): boolean {
+  if (!passes || passes.length === 0) return true;
+  const lap = lapIndex(beat, Math.max(1, cols * Math.max(1, numPages) * (pingPong ? 2 : 1)));
+  return passes.includes(((lap % 4) + 4) % 4);
+}

@@ -225,7 +225,7 @@ export function withWayIn(scenes: readonly Scene[], loopFadePasses: number): Sce
   return scenes.map((s) => (s.wayIn ? s : { ...s, wayIn: wayInFromFade(loopFadePasses) }));
 }
 
-export const MAX_SCENES = 12;
+export const MAX_SCENES = 16;
 const MAX_NAME = 24;
 
 /** The player's iPad strips a scene can set. */

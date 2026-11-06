@@ -15,17 +15,17 @@ vi.mock('../songs/generative/magentaFill', () => ({
 
 import { BoardSequencerEngine, type BoardEngineConfig, type FiredNote } from '../songs/BoardSequencerEngine';
 import type { ColourChannel } from '../tracking/boardColours';
-import { DEMO_LOOPS, F_SHARP_MAJOR, F_SHARP_MINOR } from '../songs/demo/demoPiece';
+import { A_MAJOR, DEMO_LOOPS, F_SHARP_MINOR } from '../songs/demo/demoPiece';
 import { loopChannelsFor } from '../songs/performance/loopSounds';
 
 /**
- * The demo piece through the engine: its loops play as written, the guitar's V chord keeps
- * its root, and a scene's key lands on the pass with its loops.
+ * The demo piece (Rising Light version 2) through the engine: its loops play as written and
+ * grow over four passes, and a scene's key lands on the pass with its loops.
  */
 
 const ROWS = 8;
 const cfg = (over: Partial<BoardEngineConfig> = {}): BoardEngineConfig => ({
-  bpm: 60, rows: ROWS, cols: 8, scaleRootMidi: F_SHARP_MINOR.rootMidi, scaleSemitones: [...F_SHARP_MINOR.semitones], swing: 0, humanize: 0,
+  bpm: 60, rows: ROWS, cols: 8, scaleRootMidi: A_MAJOR.rootMidi, scaleSemitones: [...A_MAJOR.semitones], swing: 0, humanize: 0,
   noteLengthBeats: 0.5, velocity: 0.7, tickEnabled: false, octaveShift: 0, volume: 0.6, channels: [],
   faderAxis: 'row', loopStepsRed: 0, loopStepsBlack: 0, loopStepsBlue: 0, numPages: 1,
   soundWorld: 'warm', phrases: true, fillEngine: 'rules', chords: { sequence: 'still', bars: 2 }, clashNudge: false, ...over,
@@ -63,81 +63,81 @@ function play(e: BoardSequencerEngine, p: Priv, from: number, to: number): Map<n
 }
 
 describe('the demo through the engine', () => {
-  it('the pulse sends sixteen notes a pass, eighth notes apart, an octave over the bass', () => {
-    const { e, p } = engineWith(['Pulse']);
-    const notes = [...play(e, p, 0, 8).values()].flat().filter((n) => n.role === 'bass' && n.midi !== undefined);
-    expect(notes).toHaveLength(16);
-    const times = notes.map((n) => n.audioTime).sort((x, y) => x - y);
-    for (let i = 1; i < times.length; i++) expect(times[i] - times[i - 1]).toBeCloseTo(0.5, 5);
-    // F#3 on every strong beat (1 and 3 of each bar), short notes (a pluck), never into the next.
-    expect(notes.filter((n) => Math.abs(n.audioTime % 2) < 1e-6).map((n) => n.midi)).toEqual([54, 54, 54, 54]);
-    for (const n of notes) expect(n.durSec).toBeLessThan(0.5);
+  it('the winds’ theme grows over four passes: asks, answers, an E, then the high A ringing over the turn', () => {
+    const { e, p } = engineWith(['Winds theme']);
+    // As the demo sets it: the loops breathe in loudness but never drop a note.
+    e.setLoopVary(0.2);
+    const fired = play(e, p, 0, 32);
+    const pass = (k: number): string[] => [...fired.entries()].filter(([b]) => Math.floor(b / 8) === k)
+      .flatMap(([b, ns]) => ns.filter((n) => n.role === 'melody').map((n) => `${b % 8}:${n.midi}`));
+    expect(pass(0)).toEqual(['0:73', '3:71', '4:69', '6:76']);
+    expect(pass(1)).toEqual(['0:73', '3:71', '4:69', '5:71', '6:76', '7:78']);
+    expect(pass(2)).toEqual(['0:73', '2:76', '3:71', '4:69', '5:71', '6:76', '7:78']);
+    expect(pass(3)).toEqual(['0:73', '1:81', '2:76', '3:71', '4:69', '5:71', '6:76', '7:78']);
+    // The high A rings to the turn and over it.
+    const high = (fired.get(25) ?? []).find((n) => n.midi === 81);
+    expect(high?.durSec).toBeGreaterThanOrEqual(7);
   });
 
-  it('the swells hold the chord the pads hold for a whole pass, and sound again at the top of the next', () => {
-    const { e, p } = engineWith(['Swells'], { chords: { sequence: 'tide', bars: 2 } });
-    const fired = play(e, p, 0, 9);
-    const at = (b: number) => (fired.get(b) ?? []).filter((n) => n.role === 'chord');
-    expect(at(0)).toHaveLength(1);
-    expect(at(0)[0].durSec).toBeCloseTo(8, 5);
-    // F#m(add9): F# A C# G#.
-    expect(new Set((at(0)[0].midis ?? []).map(pc))).toEqual(new Set([6, 9, 1, 8]));
-    expect(at(8)).toHaveLength(1);
+  it('the brass holds open fifths a whole pass, the third high above on the 3rd and 4th passes', () => {
+    const { e, p } = engineWith(['Brass pad']);
+    const fired = play(e, p, 0, 32);
+    const at = (b: number) => (fired.get(b) ?? []).filter((n) => n.role === 'bass').map((n) => n.midi).sort();
+    expect(at(0)).toEqual([57, 64]);
+    expect(at(8)).toEqual([57, 64]);
+    expect(at(16)).toEqual([57, 64, 73]);
+    expect(at(24)).toEqual([57, 64, 73]);
+    for (const n of fired.get(0) ?? []) expect(n.durSec).toBeCloseTo(8, 5);
   });
 
-  it('the pulse chords play whatever chord the pads hold: F#m(add9), then D major (its seventh left to the pads), over Tide', () => {
-    const { e, p } = engineWith(['Pulse chords'], { chords: { sequence: 'tide', bars: 2 } });
+  it('the guitar rolls the chord the pads hold, string by string, 90 ms apart: once on the 1st pass, twice after', () => {
+    const { e, p } = engineWith(['Guitar roll'], { chords: { sequence: 'glow', bars: 2 } });
     const fired = play(e, p, 0, 16);
-    const chordAt = (beat: number): Set<number> => new Set((fired.get(beat) ?? []).flatMap((n) => n.midis ?? []).map(pc));
-    expect(chordAt(0)).toEqual(new Set([6, 9, 1, 8]));
-    // In a left-hand voicing the seventh, a semitone from the root, gives way.
-    expect(chordAt(8)).toEqual(new Set([2, 6, 9]));
+    const chordsIn = (from: number) => [...fired.entries()].filter(([b]) => b >= from && b < from + 8)
+      .flatMap(([, ns]) => ns.filter((n) => n.role === 'chord'));
+    expect(chordsIn(0)).toHaveLength(1);
+    expect(chordsIn(8)).toHaveLength(2);
+    expect(chordsIn(0)[0].strumSec).toBe(0.09);
+    // A add9 under it: the guitar's chord is A's.
+    expect(new Set((chordsIn(0)[0].midis ?? []).map(pc)).has(9)).toBe(true);
   });
 
-  it('the theme asks, then answers on the second pass; its long notes ring as written', () => {
-    const { e, p } = engineWith(['Piano theme'], { variationEnabled: true });
-    const fired = play(e, p, 0, 16);
-    const at = (b: number) => (fired.get(b) ?? []).filter((n) => n.role === 'melody' && n.midi !== undefined);
-    expect(at(0).map((n) => n.midi)).toEqual([73]);
-    expect(at(0)[0].durSec).toBeGreaterThanOrEqual(3);
-    expect(at(5)).toHaveLength(0);
-    expect(at(13).map((n) => n.midi)).toEqual([71]);
-    expect(at(15).map((n) => n.midi)).toEqual([78]);
-  });
-
-  it('the percussion plays one kit piece per counter: the heartbeat’s kick, rim and shaker, half a beat late where written', () => {
+  it('the percussion plays one kit piece per counter: the heartbeat’s kicks, then the shaker, then the rim', () => {
     const { e, p } = engineWith(['Percussion heartbeat']);
-    const fired = [...play(e, p, 0, 8).values()].flat().filter((n) => n.drum);
-    const times = (d: string) => fired.filter((n) => n.drum === d).map((n) => n.audioTime).sort((x, y) => x - y);
-    expect(times('kick')).toEqual([0, 1.5, 4, 5.5]);
-    expect(times('rim')).toEqual([2, 6]);
-    expect(times('hat')).toEqual([0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5]);
+    const fired = [...play(e, p, 0, 24).values()].flat().filter((n) => n.drum);
+    const times = (d: string, from: number) => fired.filter((n) => n.drum === d && n.audioTime >= from && n.audioTime < from + 8)
+      .map((n) => n.audioTime - from).sort((x, y) => x - y);
+    expect(times('kick', 0)).toEqual([0, 1.5, 4, 5.5]);
+    expect(times('hat', 0)).toEqual([]);
+    expect(times('hat', 8)).toEqual([0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5]);
+    expect(times('rim', 8)).toEqual([]);
+    expect(times('rim', 16)).toEqual([2, 6]);
   });
 
-  it('a scene’s key lands on the pass: F sharp minor to the end of the pass, F sharp major from its first beat', () => {
-    const { e, p } = engineWith(['Piano question']);
+  it('a scene’s key lands on the pass: A major to the end of the pass, F sharp minor from its first beat (the theme a third lower)', () => {
+    const { e, p } = engineWith(['Winds theme']);
     p.timer = 1;
     play(e, p, 0, 3);
-    e.landOnNextPass({ key: { rootMidi: F_SHARP_MAJOR.rootMidi, semitones: F_SHARP_MAJOR.semitones } });
+    e.landOnNextPass({ key: { rootMidi: F_SHARP_MINOR.rootMidi, semitones: F_SHARP_MINOR.semitones } });
     // The screen catching up with the same key changes nothing yet.
-    e.setScale(F_SHARP_MAJOR.rootMidi, [...F_SHARP_MAJOR.semitones]);
+    e.setScale(F_SHARP_MINOR.rootMidi, [...F_SHARP_MINOR.semitones]);
     const tune = (m: Map<number, FiredNote[]>, b: number): number | undefined => (m.get(b) ?? []).find((n) => n.role === 'melody' && n.midi !== undefined)?.midi;
     const rest = play(e, p, 3, 14);
-    // Beat 5 of the minor pass: A (the theme's third note); in the next pass, in the major: G#.
+    // Beat 5 of the A major pass: A (the theme's third note); in the next pass, in F sharp minor: F#.
     expect(tune(rest, 4)).toBe(69);
-    expect(tune(rest, 12)).toBe(68);
+    expect(tune(rest, 12)).toBe(66);
     p.timer = null;
   });
 
   it('the player picking another key while a scene’s waits: theirs wins at once', () => {
-    const { e, p } = engineWith(['Piano question']);
+    const { e, p } = engineWith(['Winds theme']);
     p.timer = 1;
     play(e, p, 0, 2);
-    e.landOnNextPass({ key: { rootMidi: F_SHARP_MAJOR.rootMidi, semitones: F_SHARP_MAJOR.semitones } });
-    e.setScale(62, [...F_SHARP_MINOR.semitones]);
+    e.landOnNextPass({ key: { rootMidi: F_SHARP_MINOR.rootMidi, semitones: F_SHARP_MINOR.semitones } });
+    e.setScale(62, [...A_MAJOR.semitones]);
     play(e, p, 2, 10);
     expect(p.cfg.scaleRootMidi).toBe(62);
-    expect(p.cfg.scaleSemitones).toEqual(F_SHARP_MINOR.semitones);
+    expect(p.cfg.scaleSemitones).toEqual(A_MAJOR.semitones);
     p.timer = null;
   });
 });
@@ -145,7 +145,7 @@ describe('the demo through the engine', () => {
 describe('the band with the loops', () => {
   it('off (as before): loops alone never bring the band in; on (the demo): the pads join the loops on the next pass', () => {
     for (const withLoops of [false, true]) {
-      const { e, p } = engineWith(['Pulse chords'], { bandWithLoops: withLoops, band: 'gentle', bandJobs: { asBefore: false, pads: true, bass: false, drums: false, counter: false } });
+      const { e, p } = engineWith(['Guitar roll'], { bandWithLoops: withLoops, band: 'gentle', bandJobs: { asBefore: false, pads: true, bass: false, drums: false, counter: false } });
       const bp = p as unknown as { bandVoices: unknown };
       const g = () => ({ gain: { value: 1, setTargetAtTime: vi.fn() }, connect: vi.fn(), disconnect: vi.fn() });
       bp.bandVoices = { pad: { play: vi.fn(), dispose: vi.fn() }, bass: { play: vi.fn(), dispose: vi.fn() }, gain: g(), rev: g() };
@@ -153,8 +153,8 @@ describe('the band with the loops', () => {
       const fired = [...play(e, p, 0, 24).values()].flat();
       expect(fired.some((n) => n.origin === 'band'), String(withLoops)).toBe(withLoops);
       if (withLoops) {
-        // A bass loop over the bass (the pulse) is not the bass: the band's bass plays under it.
-        const t = engineWith(['Pulse', 'Pulse chords'], { bandWithLoops: true, band: 'gentle', bandJobs: { asBefore: false, pads: true, bass: true, drums: false, counter: false } });
+        // A bass loop over the bass (the brass) is not the bass: the band's bass plays under it.
+        const t = engineWith(['Brass pad', 'Guitar roll'], { bandWithLoops: true, band: 'gentle', bandJobs: { asBefore: false, pads: true, bass: true, drums: false, counter: false } });
         (t.p as unknown as { bandVoices: unknown }).bandVoices = bp.bandVoices;
         t.e.setBand('gentle');
         const notes = [...play(t.e, t.p, 0, 24).values()].flat();
@@ -166,7 +166,7 @@ describe('the band with the loops', () => {
 
 describe('the final chord ending with the band joining the loops (the demo)', () => {
   it('while the texture thins, the pads that lead stay to the final chord; the band’s bass leaves', () => {
-    const { e, p } = engineWith(['Pulse chords'], {
+    const { e, p } = engineWith(['Guitar roll'], {
       bandWithLoops: true, band: 'full', widePads: true, chords: { sequence: 'tide', bars: 2 },
       bandJobs: { asBefore: false, pads: true, bass: true, drums: false, counter: false },
     });
@@ -186,7 +186,7 @@ describe('the final chord ending with the band joining the loops (the demo)', ()
 describe('wide pads', () => {
   it('under a chord loop: one layer in unison with its chords, a second above them, under the melody', () => {
     for (const wide of [false, true]) {
-      const { e, p } = engineWith(['Pulse chords'], { bandWithLoops: true, widePads: wide, band: 'full', bandJobs: { asBefore: false, pads: true, bass: false, drums: false, counter: false } });
+      const { e, p } = engineWith(['Guitar roll'], { bandWithLoops: true, widePads: wide, band: 'full', bandJobs: { asBefore: false, pads: true, bass: false, drums: false, counter: false } });
       const g = () => ({ gain: { value: 1, setTargetAtTime: vi.fn() }, connect: vi.fn(), disconnect: vi.fn() });
       (p as unknown as { bandVoices: unknown }).bandVoices = { pad: { play: vi.fn(), dispose: vi.fn() }, bass: { play: vi.fn(), dispose: vi.fn() }, gain: g(), rev: g() };
       e.setBand('full');

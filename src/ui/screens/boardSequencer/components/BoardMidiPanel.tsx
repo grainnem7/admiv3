@@ -14,7 +14,7 @@ import { Button } from '../ui/Button';
 import { AbletonMappingHelper } from './AbletonMappingHelper';
 import { AbletonSoundsPanel, type AbletonLiveState } from './AbletonSoundsPanel';
 import { ABLETON_TRACKS_NOTE } from '../abletonReady';
-import { TEST_CHANNELS, TEST_GAP_MS } from '../../../../midi/boardMidi';
+import { PLAYER_TRACK_NAME, testChannels, TEST_GAP_MS } from '../../../../midi/boardMidi';
 
 const TEST_CHANNEL_NAMES: Record<number, string> = {
   1: 'Melody', 2: 'Bass', 3: 'Chords', 10: 'Drums', 11: 'Band chords', 12: 'Band bass', 13: 'Extra notes',
@@ -60,6 +60,9 @@ export function BoardMidiPanel({
 }: BoardMidiPanelProps): JSX.Element {
   const soundFrom = configToSoundFrom(config);
   const midiOn = soundFrom !== 'admi';
+  // The player's counters on their own track (one per part only), and the test note's channels with it.
+  const ownTrack = config.midiChannelMode === 'part' ? config.playerTrack : null;
+  const testList = testChannels(ownTrack);
   const [flash, setFlash] = useState<'sent' | 'notPlaying' | null>(null);
   // The test note visits each channel in turn; this follows it, so a silent track is named.
   const [testAt, setTestAt] = useState<number | null>(null);
@@ -70,10 +73,10 @@ export function BoardMidiPanel({
       return () => window.clearTimeout(id);
     }
     setTestAt(0);
-    const ids = TEST_CHANNELS.map((_, i) => window.setTimeout(() => setTestAt(i), 50 + i * TEST_GAP_MS));
-    ids.push(window.setTimeout(() => { setTestAt(null); setFlash(null); }, 50 + TEST_CHANNELS.length * TEST_GAP_MS));
+    const ids = testList.map((_, i) => window.setTimeout(() => setTestAt(i), 50 + i * TEST_GAP_MS));
+    ids.push(window.setTimeout(() => { setTestAt(null); setFlash(null); }, 50 + testList.length * TEST_GAP_MS));
     return () => ids.forEach((id) => window.clearTimeout(id));
-  }, [flash]);
+  }, [flash, testList.length]);
   const [panicFlash, setPanicFlash] = useState(false);
   useEffect(() => {
     if (!panicFlash) return;
@@ -175,6 +178,12 @@ export function BoardMidiPanel({
             onChange={(v) => onChange({ midiChannelMode: v })}
             options={[{ value: 'part', label: 'One per part' }, { value: 'colour', label: 'One per colour' }]}
           />
+          {ownTrack !== null && (
+            <span role="status" style={NOTE}>
+              <strong>{`Your counters play on their own track: MIDI channel ${ownTrack}.`}</strong>
+              {` Every colour, whatever its job, so your notes float on top and the loops keep the Melody, Bass and Chords tracks. Ableton needs a track for it: MIDI From the port ADMIOutput, channel ${ownTrack}, Monitor In, with one soft pad.`}
+            </span>
+          )}
           {config.midiChannelMode === 'colour' && (
             <span style={NOTE}>
               Each colour gets a track for its job: melody colours 1, 14 and 15 in turn, bass 2, chords 3. New colours
@@ -197,8 +206,9 @@ export function BoardMidiPanel({
                   <td>{colourChannels.get(c.id) ?? ''}</td>
                 </tr>
               ))}
-              {(config.midiChannelMode === 'part' ? PART_ROWS : PART_ROWS.slice(3)).map((r) => (
-                <tr key={r.what}><td>{r.what}</td><td>{r.channel}</td></tr>
+              {ownTrack !== null && <tr><td>{`${PLAYER_TRACK_NAME} (every colour)`}</td><td>{ownTrack}</td></tr>}
+              {(config.midiChannelMode === 'part' ? PART_ROWS : PART_ROWS.slice(3)).map((r, i) => (
+                <tr key={r.what}><td>{ownTrack !== null && i < 3 ? `${r.what} loops` : r.what}</td><td>{r.channel}</td></tr>
               ))}
               {config.midiLoopChannels && LOOP_CHANNELS.map((ch, i) => (
                 <tr key={`loop-${ch}`}>
@@ -259,7 +269,7 @@ export function BoardMidiPanel({
               }}
             >
               {flash === 'sent' && testAt !== null
-                ? `♪ ch ${TEST_CHANNELS[testAt]}: ${TEST_CHANNEL_NAMES[TEST_CHANNELS[testAt]] ?? ''}`
+                ? `♪ ch ${testList[testAt]}: ${testList[testAt] === ownTrack ? PLAYER_TRACK_NAME : TEST_CHANNEL_NAMES[testList[testAt]] ?? ''}`
                 : flash === 'notPlaying' ? 'Not sent: unmute first.' : ''}
             </span>
           </div>

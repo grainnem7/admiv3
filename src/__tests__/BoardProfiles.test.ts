@@ -230,16 +230,17 @@ describe('the demo piece’s player', () => {
     expect(cfg?.handedness).toBe('left');
     expect(cfg?.remoteStrips).toEqual(['tempo']);
     expect(cfg?.cap).toEqual(tim.cap);
-    // His colours keep their jobs; in the demo each plays an ambient voice (C9).
-    expect(cfg?.channels.find((c) => c.id === 'c1')).toMatchObject({ role: 'melody', instrument: 'synth:keys' });
+    // In the demo each of his colours plays the soft pad, on his own track (Tim's glow).
+    expect(cfg?.channels.find((c) => c.id === 'c1')).toMatchObject({ role: 'melody', instrument: 'synth:pad' });
+    expect(cfg?.playerTrack).toBe(14);
     expect(cfg?.loopSlots).toEqual(demoMusic().loopSlots);
     expect(cfg?.pieceId).toBe(DEMO_PIECE_ID);
-    expect(cfg?.scaleName).toBe('Minor pentatonic');
+    expect(cfg?.scaleName).toBe('Major pentatonic');
     // Tim's own player is untouched.
     expect(listBoardPlayers().find((p) => p.id === timId)?.settings.loopSlots).toEqual(tim.loopSlots);
   });
 
-  it('Tim’s counters become ambient voices: soft lead and bells for melody, a soft pad, the sub, his kit pieces kept; one note each, a big reverb; his own player untouched', async () => {
+  it('Tim’s counters all become the soft pad, on his own track: one note each, a big reverb; his own player untouched', async () => {
     const { openDemoPlayer } = await import('../profiles/BoardProfiles');
     const band = (id: string, hue: number) => ({ id, hue, hueTolerance: 20, minSaturation: 40, minValue: 30, minArea: 0 });
     const tim: BoardSequencerStored = {
@@ -257,11 +258,13 @@ describe('the demo piece’s player', () => {
     openDemoPlayer();
     const cfg = loadActiveBoardConfig();
     const ch = (id: string) => cfg?.channels.find((c) => c.id === id);
-    expect(ch('c1')).toMatchObject({ role: 'melody', instrument: 'synth:keys', plays: 'note', reverbSend: 0.5 });
-    expect(ch('c3')).toMatchObject({ role: 'melody', instrument: 'synth:bell', plays: 'note', reverbSend: 0.5 });
-    expect(ch('c4')).toMatchObject({ role: 'chord', instrument: 'synth:pad', plays: 'note', reverbSend: 0.5 });
-    expect(ch('c5')).toMatchObject({ role: 'bass', instrument: 'synth:sub', plays: 'note', reverbSend: 0.5 });
-    expect(ch('c2')).toMatchObject({ role: 'drums', drum: 'snare' });
+    const pad = { instrument: 'synth:pad', plays: 'note', reverbSend: 0.5 };
+    expect(ch('c1')).toMatchObject({ role: 'melody', ...pad });
+    expect(ch('c3')).toMatchObject({ role: 'melody', ...pad });
+    expect(ch('c4')).toMatchObject({ role: 'chord', ...pad });
+    expect(ch('c5')).toMatchObject({ role: 'melody', ...pad });
+    expect(ch('c2')).toMatchObject({ role: 'melody', ...pad });
+    expect(cfg?.playerTrack).toBe(14);
     expect(cfg?.noteLengthBeats).toBe(2);
     // His own player keeps his sounds.
     const own = listBoardPlayers().find((p) => p.id === timId)?.channelSettings;

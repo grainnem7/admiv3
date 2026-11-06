@@ -52,6 +52,11 @@ export interface BoardMidiOptions {
   loopChannels?: boolean;
   /** Shape: each melody and chord note sends its swell as CC 2 (see swellEvents). */
   shape?: boolean;
+  /**
+   * One per part: every note of the player's own counters (not a loop's, the band's or the
+   * extra notes') on this channel, whatever its job (Tim's glow, the demo's channel 14).
+   */
+  playerTrack?: number | null;
 }
 
 /** The MIDI channel for each part (1 based, as musicians count them). */
@@ -115,6 +120,7 @@ export interface MidiEvent {
 export type MidiNoteLike = Pick<FiredNote, 'role' | 'origin' | 'audioTime' | 'durSec' | 'velocity' | 'midi' | 'midis' | 'drum' | 'strumSec'> & {
   colour?: string;
   loopSlot?: number;
+  source?: FiredNote['source'];
 };
 
 /** A note sent whose Note Off is still to come. */
@@ -245,8 +251,8 @@ export function hasColourChannel(role: string): boolean {
  * or the colour's own in per colour mode.
  */
 export function channelFor(
-  note: { role: string; origin?: FiredNote['origin']; colour?: string; loopSlot?: number },
-  opts: Pick<BoardMidiOptions, 'channelMode' | 'colourChannels' | 'loopChannels'> = {},
+  note: { role: string; origin?: FiredNote['origin']; colour?: string; loopSlot?: number; source?: FiredNote['source'] },
+  opts: Pick<BoardMidiOptions, 'channelMode' | 'colourChannels' | 'loopChannels' | 'playerTrack'> = {},
 ): number | null {
   const role = note.role;
   if (role !== 'melody' && role !== 'bass' && role !== 'chord' && role !== 'drums') return null;
@@ -255,6 +261,8 @@ export function channelFor(
   if (note.origin === 'band' && note.colour?.startsWith('ending:')) return ROLE_CHANNEL[role];
   if (note.origin === 'band') return role === 'bass' ? BAND_BASS_CHANNEL : BAND_PAD_CHANNEL;
   if (note.origin === 'fill') return EXTRA_NOTES_CHANNEL;
+  // The player's own counters on their own track (one per part), whatever their job.
+  if (isChannel(opts.playerTrack) && opts.channelMode !== 'colour' && isPlayersOwn(note)) return opts.playerTrack;
   // A loop's melody, bass and chords on the loop's own channel, for its own fader.
   if (opts.loopChannels && note.loopSlot !== undefined) return loopChannel(note.loopSlot);
   if (opts.channelMode === 'colour' && note.colour !== undefined) {
@@ -262,6 +270,12 @@ export function channelFor(
     if (isChannel(own)) return own;
   }
   return ROLE_CHANNEL[role];
+}
+
+/** A note of the player's own counter, live on the board: not a loop's, a page's, the band's or a fill's. */
+function isPlayersOwn(note: { origin?: FiredNote['origin']; colour?: string; loopSlot?: number; source?: FiredNote['source'] }): boolean {
+  return (note.origin === 'placed' || note.origin === 'phrase') && note.source === 'live'
+    && note.loopSlot === undefined && !(note.colour?.startsWith('loop:') ?? false);
 }
 
 /**
@@ -290,13 +304,14 @@ export function sharedColourChannels(channels: readonly ColourChannel[]): Map<nu
 }
 
 /** Every channel the board may be sounding on: the parts, the band, the Extra notes, the colours' and the loops'. */
-export function channelsInUse(colourChannels?: ReadonlyMap<string, number>, loopChannels = false): number[] {
+export function channelsInUse(colourChannels?: ReadonlyMap<string, number>, loopChannels = false, playerTrack: number | null = null): number[] {
   const set = new Set<number>([
     ROLE_CHANNEL.melody, ROLE_CHANNEL.bass, ROLE_CHANNEL.chord, ROLE_CHANNEL.drums,
     BAND_PAD_CHANNEL, BAND_BASS_CHANNEL, EXTRA_NOTES_CHANNEL,
   ]);
   for (const ch of colourChannels?.values() ?? []) if (isChannel(ch)) set.add(ch);
   if (loopChannels) for (const ch of LOOP_CHANNELS) set.add(ch);
+  if (isChannel(playerTrack)) set.add(playerTrack);
   return [...set].sort((a, b) => a - b);
 }
 
@@ -309,6 +324,9 @@ export interface MappingTarget {
   /** What it is for, in the words of the template's track names. */
   what: string;
 }
+
+/** The player's own track, as the screen names it. */
+export const PLAYER_TRACK_NAME = 'Your counters';
 
 const PART_NAMES: Record<number, string> = {
   [ROLE_CHANNEL.melody]: 'Melody',
@@ -327,7 +345,7 @@ const PART_NAMES: Record<number, string> = {
  * in use, one at a time (Ableton learns from the last message it hears, so they can't
  * all arrive at once), then Volume (CC 7) on channel 16 for the Master.
  */
-export function mappingTargets(colourChannels?: ReadonlyMap<string, number>, loopChannels = false): MappingTarget[] {
+export function mappingTargets(colourChannels?: ReadonlyMap<string, number>, loopChannels = false, playerTrack: number | null = null): MappingTarget[] {
   const loopName = (channel: number): string | null => {
     const i = loopChannels ? LOOP_CHANNELS.indexOf(channel) : -1;
     return i < 0 ? null : i === LOOP_CHANNELS.length - 1 ? `Loop ${i + 1} and after` : `Loop ${i + 1}`;
@@ -335,8 +353,9 @@ export function mappingTargets(colourChannels?: ReadonlyMap<string, number>, loo
   // One per colour: every colour track, so tracks 14 and 15 are mapped once even if fewer
   // melody colours exist today (fresh colours next session may need them).
   const allColourTracks = colourChannels ? new Map(Object.values(COLOUR_JOB_CHANNELS).flat().map((ch) => [`track${ch}`, ch])) : undefined;
-  const out: MappingTarget[] = channelsInUse(allColourTracks ?? colourChannels, loopChannels).map((channel) => ({
-    channel, cc: 11, what: `${loopName(channel) ?? PART_NAMES[channel] ?? 'Colour'} (ch ${channel}): Utility Gain`,
+  const own = colourChannels ? null : playerTrack;
+  const out: MappingTarget[] = channelsInUse(allColourTracks ?? colourChannels, loopChannels, own).map((channel) => ({
+    channel, cc: 11, what: `${channel === own ? PLAYER_TRACK_NAME : loopName(channel) ?? PART_NAMES[channel] ?? 'Colour'} (ch ${channel}): Utility Gain`,
   }));
   out.push({ channel: VOLUME_CHANNEL, cc: 7, what: `Volume (ch ${VOLUME_CHANNEL}): Main track volume` });
   return out;
@@ -470,6 +489,11 @@ export const TEST_CHANNELS: readonly number[] = [
 ];
 /** Time between the test notes on each channel. */
 export const TEST_GAP_MS = 600;
+
+/** The channels the test note visits: the usual ones, then the player's own track when it has one. */
+export function testChannels(playerTrack: number | null = null): number[] {
+  return isChannel(playerTrack) && !TEST_CHANNELS.includes(playerTrack) ? [...TEST_CHANNELS, playerTrack] : [...TEST_CHANNELS];
+}
 
 /** One test note on each channel in turn, TEST_GAP_MS apart, the first at `atMs`. */
 export function testSequenceEvents(atMs: number, channels: readonly number[] = TEST_CHANNELS, gapMs = TEST_GAP_MS): MidiEvent[] {

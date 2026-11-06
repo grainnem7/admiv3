@@ -150,6 +150,41 @@ describe('BoardSequencerConfig', () => {
     expect(back?.loopSlots[0]).toEqual([{ row: 1, col: 2, colour: 'red', job: 'melody', sound: 'violin' }, { row: 2, col: 2, colour: 'red' }]);
   });
 
+  it('a loop note’s passes of every four survive a save and load, made safe', () => {
+    const at = (passes: unknown) => ({ row: 1, col: 2, colour: 'red', passes: passes as number[] });
+    saveBoardSequencerConfig({
+      ...DEFAULT_BOARD_SEQUENCER_CONFIG,
+      loopSlots: [[at([3, 2]), at([2, 2, 9, -1, 1.5]), at([0, 1, 2, 3]), at([]), at('2')]],
+    });
+    const back = loadBoardSequencerConfig();
+    // Sorted and without repeats; a pass that is not 0 to 3 is dropped; every pass (or none) is the same as no list.
+    expect(back?.loopSlots[0]?.map((c) => c.passes)).toEqual([[2, 3], [2], undefined, undefined, undefined]);
+  });
+
+  it('Magenta developing (a new idea every four passes) is saved; off unless set', () => {
+    expect(DEFAULT_BOARD_SEQUENCER_CONFIG.aiEvolves).toBe(false);
+    saveBoardSequencerConfig({ ...DEFAULT_BOARD_SEQUENCER_CONFIG, aiEvolves: true });
+    expect(loadBoardSequencerConfig()?.aiEvolves).toBe(true);
+    saveBoardSequencerConfig({ ...DEFAULT_BOARD_SEQUENCER_CONFIG, aiEvolves: 'yes' as never });
+    expect(loadBoardSequencerConfig()?.aiEvolves).toBe(false);
+  });
+
+  it('your counters’ own track is saved, and made safe: a channel 1 to 15 but never the drums’ 10; otherwise off', () => {
+    const track = (playerTrack: unknown) => {
+      saveBoardSequencerConfig({ ...DEFAULT_BOARD_SEQUENCER_CONFIG, playerTrack: playerTrack as number });
+      return loadBoardSequencerConfig()?.playerTrack;
+    };
+    expect(DEFAULT_BOARD_SEQUENCER_CONFIG.playerTrack).toBeNull();
+    expect(track(14)).toBe(14);
+    expect([track(10), track(16), track(0), track(2.5), track('14')]).toEqual([null, null, null, null, null]);
+  });
+
+  it('a chord loop note’s own roll survives a save and load, between 0.03 and 0.2 seconds either way', () => {
+    const at = (roll: unknown) => ({ row: 1, col: 2, colour: 'g', job: 'chord' as const, sound: 'guitarAcoustic', roll: roll as number });
+    saveBoardSequencerConfig({ ...DEFAULT_BOARD_SEQUENCER_CONFIG, loopSlots: [[at(0.09), at(-0.07), at(0.5), at(0.001), at('x')]] });
+    expect(loadBoardSequencerConfig()?.loopSlots[0]?.map((c) => c.roll)).toEqual([0.09, -0.07, 0.2, 0.03, undefined]);
+  });
+
   it('defaults loop bank off / empty when absent', () => {
     localStorage.setItem('admi-board-sequencer', JSON.stringify({ bpm: 90, channels: [] }));
     const back = loadBoardSequencerConfig();

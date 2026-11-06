@@ -23,7 +23,7 @@ export function AbletonMappingHelper({ config, connected }: {
 }): JSX.Element {
   const [group, setGroup] = useState<MapGroup>('fades');
   const targets = useMemo(() => (group === 'fades'
-    ? mappingTargets(config.midiChannelMode === 'colour' ? colourChannelMap(config.channels) : undefined, config.midiLoopChannels)
+    ? mappingTargets(config.midiChannelMode === 'colour' ? colourChannelMap(config.channels) : undefined, config.midiLoopChannels, config.playerTrack)
     : abletonMappingTargets(planFromConfig(config))), [group, config]);
   const [index, setIndex] = useState(0);
   const [sent, setSent] = useState<string | null>(null);

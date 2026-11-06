@@ -156,7 +156,7 @@ import {
 import { colourUses, type ColourUses } from './boardSequencer/colourRemoval';
 import { aiOffLine } from './boardSequencer/aiStatus';
 import { bandLine } from './boardSequencer/bandLine';
-import { BoardMidiSender, channelFor, colourChannelMap, configToSoundFrom, effectiveSound } from '../../midi/boardMidi';
+import { BoardMidiSender, channelFor, colourChannelMap, configToSoundFrom, effectiveSound, PLAYER_TRACK_NAME } from '../../midi/boardMidi';
 import { ABLETON_CHAINS, chainOnChannel, previewEvents } from '../../midi/abletonSounds';
 import { MIDIManager } from '../../midi/MIDIManager';
 import { previewChainCc, previewNotesFor, previewRoute, SoundAuditioner } from '../../audio/soundPreview';
@@ -1258,11 +1258,16 @@ export default function BoardSequencerScreen() {
   const chipSound = (c: ColourChannel): string => {
     const own = soundNameFor(c, config.soundWorld);
     if (soundFrom === 'admi') return own;
-    const ch = channelFor({ role: c.role, origin: 'placed', colour: c.id }, {
+    const ch = channelFor({ role: c.role, origin: 'placed', colour: c.id, source: 'live' }, {
       channelMode: config.midiChannelMode,
       colourChannels: config.midiChannelMode === 'colour' ? colourChannelMap(config.channels) : undefined,
+      playerTrack: config.playerTrack,
     });
     if (ch === null) return own;
+    if (config.midiChannelMode === 'part' && ch === config.playerTrack) {
+      const mine = `MIDI ch ${ch} · ${PLAYER_TRACK_NAME}`;
+      return soundFrom === 'both' && own ? `${own} · ${mine}` : mine;
+    }
     const chain = chainOnChannel(c, ch, config.soundWorld, { channelMode: config.midiChannelMode, loopChannels: config.midiLoopChannels });
     const ableton = `MIDI ch ${ch}${chain !== null ? ` · ${ABLETON_CHAINS[chain].name}` : ''}`;
     return soundFrom === 'both' && own ? `${own} · ${ableton}` : ableton;
@@ -1364,9 +1369,10 @@ export default function BoardSequencerScreen() {
     const key = { rootMidi: cfg.scaleRootMidi, semitones: cfg.scaleSemitones };
     if (previewRoute(cfg, midiPortRef.current) === 'ableton') {
       const out = MIDIManager.getConnectedSelectedOutput();
-      const channel = channelFor({ role: c.role, origin: 'placed', colour: c.id }, {
+      const channel = channelFor({ role: c.role, origin: 'placed', colour: c.id, source: 'live' }, {
         channelMode: cfg.midiChannelMode,
         colourChannels: cfg.midiChannelMode === 'colour' ? colourChannelMap(cfg.channels) : undefined,
+        playerTrack: cfg.playerTrack,
       });
       if (!out) { showHearNote(c.id, 'No MIDI port to Ableton: check the Connections tab.', 5000); return; }
       if (channel === null) return;
@@ -3467,8 +3473,8 @@ export default function BoardSequencerScreen() {
   });
   const saveScene = (name: string): void => {
     const c = configRef.current;
-    // Storage keeps twelve; a thirteenth would play now and vanish on the next reload.
-    if (c.scenes.length >= MAX_SCENES) { announce('Twelve scenes is the most. Delete one first.'); return; }
+    // Storage keeps sixteen; a seventeenth would play now and vanish on the next reload.
+    if (c.scenes.length >= MAX_SCENES) { announce('Sixteen scenes is the most. Delete one first.'); return; }
     const made = sceneFromNow(name || freeSceneName(c.scenes), wantedRef.current, sceneSettingsNow(c));
     // Its time: always after the last scene, by the same gap as before (K2); a scene for the
     // middle is made with Duplicate. No room: refused, said.
@@ -5136,7 +5142,7 @@ export default function BoardSequencerScreen() {
       soundFrom, deviceId: c.midiDeviceId, connected: midiPort.connected, portName: midiPort.chosenName, holdOnAdmi: midiHold,
     });
     if (ableton) items.push(ableton);
-    const tracks = abletonTracksItem(soundFrom);
+    const tracks = abletonTracksItem(soundFrom, c.midiChannelMode === 'part' ? c.playerTrack : null);
     if (tracks) items.push(tracks);
     items.push(disk.state === 'saved'
       ? { label: 'Saved on this laptop', state: 'ok' }
@@ -5225,7 +5231,7 @@ export default function BoardSequencerScreen() {
   // The scene selected in the storyboard (K2): the panel shows its editor.
   const [selectedScene, setSelectedScene] = useState<string | null>(null);
   const keepSceneReason = pieceOnNow ? 'Stop the piece to change it.'
-    : config.scenes.length >= MAX_SCENES ? 'Twelve scenes is the most. Delete one first.'
+    : config.scenes.length >= MAX_SCENES ? 'Sixteen scenes is the most. Delete one first.'
       : nextSceneTime(config.scenes, config.performance.lengthSec, null) === null ? 'No room before the end: shorten a scene first.'
         : wantedSlots.length === 0 && !running ? 'Play a loop first.' : null;
   const keepSceneButton = (
