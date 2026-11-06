@@ -2579,7 +2579,7 @@ export default function BoardSequencerScreen() {
       tickEnabled: cfg.tickEnabled, studioMix: cfg.studioMix,
       soundWorld: cfg.soundWorld, phrases: cfg.phrases, fillEngine: cfg.fillEngine, band: cfg.band,
       chords: cfg.chords, clashNudge: cfg.clashNudge, bandJobs: cfg.bandJobs, keepOnTop: cfg.keepOnTop, keepOnTopDb: cfg.keepOnTopDb,
-      sceneEnergy: cfg.sceneEnergy,
+      sceneEnergy: cfg.sceneEnergy, bandWithLoops: cfg.bandWithLoops,
       channels: cfg.channels, faderAxis: cfg.faderAxis, variationEnabled: cfg.variationEnabled,
       loopStepsRed: cfg.loopStepsRed, loopStepsBlack: cfg.loopStepsBlack,
       loopStepsBlue: cfg.loopStepsBlue, numPages: cfg.numPages,

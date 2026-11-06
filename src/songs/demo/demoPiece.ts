@@ -313,6 +313,8 @@ export function demoMusic(): Partial<BoardSequencerStored> {
     // strong beat stays the chord's.
     loopVary: 0.2,
     band: 'off',
+    // The band's pads join the loops (there may be no counter on the board in the demo).
+    bandWithLoops: true,
     chords: { ...BASE.chords },
     // The written notes are played as written: nothing moves them onto the chord.
     clashNudge: false,

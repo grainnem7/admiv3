@@ -184,6 +184,8 @@ export interface BoardSequencerStored {
   bandJobs: BandJobs;
   /** Keep the player on top: the band, loops and extra notes dip while his notes sound. */
   keepOnTop: boolean;
+  /** The band joins the loops too, not only the player's counters (on for the demo piece). */
+  bandWithLoops: boolean;
   /** How far they dip, in dB. */
   keepOnTopDb: number;
   /**
@@ -615,6 +617,7 @@ export const DEFAULT_BOARD_SEQUENCER_CONFIG: BoardSequencerStored = {
   clashNudge: true,
   bandJobs: { ...DEFAULT_JOBS },
   keepOnTop: true,
+  bandWithLoops: false,
   keepOnTopDb: KEEP_ON_TOP_DEFAULT_DB,
   sceneEnergy: 0,
   pieceIdeas: 0,
@@ -1005,6 +1008,7 @@ function sanitize(input: unknown): BoardSequencerStored | null {
     bandJobs: sanitizeBandJobs(o.bandJobs),
     // On by default (owner), for every player: a dip of a few dB, and a switch to turn it off.
     keepOnTop: o.keepOnTop !== false,
+    bandWithLoops: o.bandWithLoops === true,
     keepOnTopDb: sanitizeKeepOnTopDb(o.keepOnTopDb),
     sceneEnergy: sanitizeSceneEnergy(o.sceneEnergy),
     pieceIdeas: sanitizeIdeas(o.pieceIdeas),

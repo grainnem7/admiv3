@@ -178,6 +178,8 @@ export interface BoardEngineConfig {
   fillEngine?: 'magenta' | 'rules';
   /** The band: pad, bass and groove that join once the first counter is down. */
   band?: BandLevel;
+  /** The band joins the loops too, not only the player's counters (the demo piece: no counter needed). */
+  bandWithLoops?: boolean;
   /** The chord sequence every pitched part plays to (absent = "As before"). */
   chords?: ChordSetting;
   /** One-note melody and bass: a note rubbing against the chord on a strong beat moves to it. */
@@ -2999,7 +3001,8 @@ export class BoardSequencerEngine {
     // The band answers the PLAYER: it comes in after their first counter (and, as before,
     // hands them a part when they take it). Loops don't bring it in — with loops covering
     // every part the band fell silent for a whole section, and a loop alone brought it in
-    // before the player had touched the board — but with jobs it fits around them too.
+    // before the player had touched the board — but with jobs it fits around them too. With
+    // "the band with the loops" (the demo piece) a playing loop brings it in as well.
     this.fireBand(beat, cellTime, secPerBeat, chord, playCells, playCells.filter((c) => !c.layer));
     this.fireLeadIn(beat, cellTime, secPerBeat);
     this.fireFill(beat, cellTime, secPerBeat, chord, playCells);
@@ -3109,7 +3112,9 @@ export class BoardSequencerEngine {
       const r = this.roleFor(c.colour);
       if (r === 'melody' || r === 'chord' || r === 'bass' || r === 'drums') { roles.add(r); counters++; }
     }
-    if (roles.size > 0) {
+    // With the band joining the loops, a playing loop counts as someone playing (the demo).
+    const loopsPlaying = this.cfg.bandWithLoops === true && cells.some((c) => isLoopLayer(c.layer));
+    if (roles.size > 0 || loopsPlaying) {
       this.bandLastCounterLap = lap;
       if (this.bandFromLap === null) this.bandFromLap = lap + 1; // in on the NEXT pass
     } else if (this.bandFromLap !== null && lap > this.bandLastCounterLap) {

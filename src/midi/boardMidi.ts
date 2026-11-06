@@ -476,6 +476,8 @@ export function testSequenceEvents(atMs: number, channels: readonly number[] = T
 /** Sends the board's notes to the chosen MIDI output, while it is connected. */
 /** CC 30: the Rack chain (see abletonSounds CHAIN_CC; kept here so this file needs nothing from there). */
 const CHAIN_SELECT_CC = 30;
+/** How long before its beat an instrument switch goes out. */
+export const SWITCH_EARLY_MS = 15;
 
 export class BoardMidiSender {
   private readonly held = new Map<string, HeldNote>();
@@ -618,7 +620,9 @@ export class BoardMidiSender {
   sendControlsAt(list: readonly { channel: number; cc: number; value: number }[], audioTime: number): void {
     if (list.length === 0) return;
     const now = performance.now();
-    const at = Math.max(now, this.toMs(audioTime, now));
+    // A little before the beat: the first note of the loop coming in can be sent a few ms
+    // early (measured: 7 ms), and it must reach the new instrument.
+    const at = Math.max(now, this.toMs(audioTime, now) - SWITCH_EARLY_MS);
     const switching = new Set(list.filter((c) => c.cc === CHAIN_SELECT_CC).map((c) => c.channel));
     for (const [key, p] of this.pendingOffs) {
       const channel = (p.ev.data[0] & 0x0f) + 1;

@@ -126,3 +126,17 @@ describe('the demo through the engine', () => {
     expect(at(8)[0].durSec).toBeLessThan(1.5);
   });
 });
+
+describe('the band with the loops', () => {
+  it('off (as before): loops alone never bring the band in; on (the demo): the pads join the loops on the next pass', () => {
+    for (const withLoops of [false, true]) {
+      const { e, p } = engineWith(['Guitar'], { bandWithLoops: withLoops, band: 'gentle', bandJobs: { asBefore: false, pads: true, bass: false, drums: false, counter: false } });
+      const bp = p as unknown as { bandVoices: unknown };
+      const g = () => ({ gain: { value: 1, setTargetAtTime: vi.fn() }, connect: vi.fn(), disconnect: vi.fn() });
+      bp.bandVoices = { pad: { play: vi.fn(), dispose: vi.fn() }, bass: { play: vi.fn(), dispose: vi.fn() }, gain: g(), rev: g() };
+      e.setBand('gentle');
+      const fired = [...play(e, p, 0, 24).values()].flat();
+      expect(fired.some((n) => n.origin === 'band'), String(withLoops)).toBe(withLoops);
+    }
+  });
+});

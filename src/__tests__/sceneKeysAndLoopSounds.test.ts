@@ -10,7 +10,7 @@ import {
 } from '../songs/performance/launcher';
 import { loopChannelsFor, loopColourId } from '../songs/performance/loopSounds';
 import { abletonPlan, CHAIN_CC, chainCcValue, chainForKey, controlKey, type AbletonPlanInput } from '../midi/abletonSounds';
-import { BoardMidiSender, ROLE_CHANNEL } from '../midi/boardMidi';
+import { BoardMidiSender, ROLE_CHANNEL, SWITCH_EARLY_MS } from '../midi/boardMidi';
 import { DEFAULT_BOARD_SEQUENCER_CONFIG } from '../profiles/BoardSequencerConfig';
 import type { ColourChannel } from '../tracking/boardColours';
 import { chordOnDegree, chordPcs, harmonyFromChord, triadPcs } from '../songs/harmony/harmony';
@@ -122,7 +122,7 @@ describe('Ableton: a loop’s own instrument on its track', () => {
 describe('a chain switch at a time', () => {
   beforeEach(() => port.send.mockClear());
 
-  it('a note still waiting for its off on that channel ends a moment before the switch; the switch is at the time', () => {
+  it('a note still waiting for its off on that channel ends a moment before the switch; the switch is just before the beat', () => {
     const t0 = performance.now();
     const sender = new BoardMidiSender({ currentTime: 0, getOutputTimestamp: () => ({ contextTime: 0, performanceTime: t0 }) });
     // A harp note from 0.2 s to 2.2 s on the melody track.
@@ -133,8 +133,8 @@ describe('a chain switch at a time', () => {
     const off = calls.find((c) => (c.data[0] & 0xf0) === 0x80 && c.data[1] === 69);
     const cc = calls.find((c) => (c.data[0] & 0xf0) === 0xb0 && c.data[1] === CHAIN_CC);
     expect(off).toBeDefined();
-    expect(cc?.at).toBeCloseTo(t0 + 1000, 0);
-    expect(off?.at).toBeCloseTo(t0 + 999, 0);
+    expect(cc?.at).toBeCloseTo(t0 + 1000 - SWITCH_EARLY_MS, 0);
+    expect(off?.at).toBeCloseTo(t0 + 999 - SWITCH_EARLY_MS, 0);
   });
 
   it('another channel’s notes are left to end at their own time', () => {
