@@ -112,12 +112,14 @@ const GUITAR_ANSWER: Written[] = [[4, S1], [7, S1]];
 /** The driving guitar: a strum on every beat. */
 const GUITAR_DRIVE: Written[] = Array.from({ length: 8 }, (_, c) => [c, S1] as const);
 /**
- * The trombone: two long notes a pass, the key note then the fifth (A, E in A): they sit in
- * every chord the pads hold (as root, fifth, ninth or a suspension), the band's bass under them.
+ * The trombone: a phrase that breathes, not notes of one length. One long fifth (E in A) and
+ * a rest on the first pass; on the second the long note again, then a short sixth falling
+ * back to the fifth as a pickup into the next. Both sit in every chord the pads hold, the
+ * band's bass under them (the owner, 2026-11-06: notes all one length sounded naff).
  */
-const TROMBONE_LINE: Written[] = [[0, S1], [4, S5]];
-/** ...answered with a step down before the pass turns. */
-const TROMBONE_ANSWER: Written[] = [[6, S2]];
+const TROMBONE_LINE: Written[] = [[0, S5]];
+/** ...the second pass's pickup: F#, E (in A). */
+const TROMBONE_ANSWER: Written[] = [[5, S6], [6, S5]];
 /** The trombone's pedal: a soft low note held under the shimmer. */
 const TROMBONE_PEDAL: Written[] = [[0, S1]];
 /** The harp: a flowing pentatonic figure, one note a beat, rising and turning. */
