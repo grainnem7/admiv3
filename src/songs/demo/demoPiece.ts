@@ -45,7 +45,7 @@ export const DEMO_PIECE_ID = 'demo-piece';
  * The demo's music, by revision: a demo player made from an older one has its music written
  * afresh when opened, so a laptop that has pulled a newer ADMI always plays the newest demo.
  */
-export const DEMO_REVISION = 8;
+export const DEMO_REVISION = 9;
 
 const ROWS = 8;
 const COLS = 8;
@@ -158,7 +158,9 @@ export const DEMO_LOOPS: readonly { name: string; cells: StoredLoopCell[] }[] = 
   { name: 'Drums', cells: groove(1, 0.6) },
   { name: 'Trombone', cells: notes('bass', 'trombone', TROMBONE_LINE, 0.38, TROMBONE_ANSWER, HORN) },
   { name: 'Guitar', cells: notes('chord', 'guitarAcoustic', GUITAR_LINE, 0.4, GUITAR_ANSWER, STRUM) },
-  { name: 'Harp', cells: notes('melody', 'harp', HARP_LINE, 0.44, HARP_ANSWER, { layBack: 0.02 }) },
+  // The harp a little above the others (the owner, 2026-11-06: it had ended up too quiet;
+  // its shimmer reverb in Ableton spreads it further back).
+  { name: 'Harp', cells: notes('melody', 'harp', HARP_LINE, 0.58, HARP_ANSWER, { layBack: 0.02 }) },
   { name: 'Clarinet', cells: notes('melody', 'clarinet', CLARINET_LINE, 0.5, CLARINET_FILLED, { layBack: 0.035 }) },
   { name: 'Drums busier', cells: groove(2, 0.66) },
   { name: 'Big drums', cells: groove(3, 0.78) },
