@@ -77,6 +77,8 @@ export interface ActiveCell extends CellRef {
   overBass?: true;
   /** A loop's chord that strums the chord sounding, never naming one (never set by the board). */
   follows?: true;
+  /** A loop's note held this many beats, whatever comes next (never set by the board). */
+  holdBeats?: number;
 }
 
 export interface BoardStepResult {

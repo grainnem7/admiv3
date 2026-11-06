@@ -148,7 +148,8 @@ describe('the demo piece', () => {
 
   it('the tunes are four bars: each pitched loop of more than one note is decorated on every other pass, or plays every beat', () => {
     for (const l of DEMO_LOOPS) {
-      if (l.cells[0].job === 'drums' || l.cells.length <= 1) continue;
+      // Drums play a groove; a held loop is a swell, not a tune.
+      if (l.cells[0].job === 'drums' || l.cells.length <= 1 || l.cells.every((c) => c.holdBeats)) continue;
       const decorated = l.cells.some((c) => c.conditional);
       const everyBeat = new Set(l.cells.map((c) => c.col)).size === 8;
       expect(decorated || everyBeat, l.name).toBe(true);
@@ -227,5 +228,16 @@ describe('the demo piece', () => {
     expect(names('lift')).toEqual(['Asus2', 'Bmadd9']);
     expect(names('float')).toEqual(['Aadd9', 'F#madd9']);
     expect(names('shade')).toEqual(['F#madd9', 'Bmadd9']);
+  });
+
+  it('the trombone enters holding its notes a whole pass at a time, and begins to breathe with the harp', () => {
+    const scenes = demoScenes();
+    const names = (i: number): string[] => scenes[i].loops.map((l) => DEMO_LOOPS[l].name);
+    const held = DEMO_LOOPS.find((l) => l.name === 'Trombone held')?.cells ?? [];
+    expect(held.length).toBeGreaterThan(0);
+    for (const c of held) expect(c.holdBeats).toBe(8);
+    expect(names(1)).toContain('Trombone held');
+    expect(names(2)).toContain('Trombone held');
+    expect(names(3)).toContain('Trombone');
   });
 });

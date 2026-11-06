@@ -3779,6 +3779,8 @@ export class BoardSequencerEngine {
       // Note length stays the floor, so a player who chose long notes keeps them. Not with
       // ping-pong, where "the next note" depends on which way the playhead is going.
       const ringSec = (loop: number): number => {
+        // A loop's note held for a set number of beats (the demo's trombone, a whole pass).
+        if (cell.holdBeats) return cell.holdBeats * secPerBeat;
         if (!this.studioOn() || this.cfg.pingPong) return durSec;
         const cols = colsByColour.get(cell.colour) ?? [];
         const beats = legatoBeats(cell.col, cols, loop, DEFAULT_BOARD_MIX.legatoMaxBeats);

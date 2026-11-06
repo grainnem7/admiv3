@@ -92,6 +92,8 @@ export interface StoredLoopCell extends StoredBoardCell {
    * never naming one by its row (the demo piece: the pads lead the harmony).
    */
   follows?: true;
+  /** Held this many beats, whatever comes next (the demo's trombone holds a whole pass). */
+  holdBeats?: number;
 }
 
 const LOOP_JOBS = new Set(['melody', 'bass', 'chord', 'drums']);
@@ -842,6 +844,7 @@ function sanitizeLoopSlots(v: unknown): (StoredLoopCell[] | null)[] {
         if (isNum(o.octave) && Number.isInteger(o.octave) && o.octave !== 0 && Math.abs(o.octave) <= 2) cell.octave = o.octave;
         if (o.overBass === true) cell.overBass = true;
         if (o.follows === true) cell.follows = true;
+        if (isNum(o.holdBeats) && o.holdBeats > 0 && o.holdBeats <= 16) cell.holdBeats = o.holdBeats;
       }
       return [cell];
     });

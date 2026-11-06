@@ -63,6 +63,15 @@ function play(e: BoardSequencerEngine, p: Priv, from: number, to: number): Map<n
 }
 
 describe('the demo through the engine', () => {
+  it('the held trombone rings a whole pass (8 beats) and sounds again at the top of the next', () => {
+    const { e, p } = engineWith(['Trombone held']);
+    const fired = play(e, p, 0, 9);
+    const at = (b: number) => (fired.get(b) ?? []).filter((n) => n.role === 'bass');
+    expect(at(0).map((n) => n.midi).sort()).toEqual([45, 52]);
+    for (const n of at(0)) expect(n.durSec).toBeCloseTo(8, 5);
+    expect(at(8)).toHaveLength(2);
+  });
+
   it('the guitar strums the chord the pads hold (A, then D over two passes of I and IV), never naming one', () => {
     const { e, p } = engineWith(['Guitar'], { chords: { sequence: 'calm', bars: 2 } });
     const fired = play(e, p, 0, 16);

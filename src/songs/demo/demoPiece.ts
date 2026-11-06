@@ -45,7 +45,7 @@ export const DEMO_PIECE_ID = 'demo-piece';
  * The demo's music, by revision: a demo player made from an older one has its music written
  * afresh when opened, so a laptop that has pulled a newer ADMI always plays the newest demo.
  */
-export const DEMO_REVISION = 7;
+export const DEMO_REVISION = 8;
 
 const ROWS = 8;
 const COLS = 8;
@@ -75,6 +75,8 @@ interface Feel {
   follows?: boolean;
   /** How far behind the beat it sits, in beats (a player is never exactly on the grid). */
   layBack?: number;
+  /** Each note held this many beats, whatever comes next. */
+  hold?: number;
 }
 
 /**
@@ -92,6 +94,7 @@ function notes(
     ...(conditional ? { conditional: true } : {}),
     ...(feel.overBass ? { overBass: true as const } : {}),
     ...(feel.follows ? { follows: true as const } : {}),
+    ...(feel.hold ? { holdBeats: feel.hold } : {}),
     ...(lay > 0 && col > 0 ? { timingBeats: Math.round((col % 2 === 0 ? lay * 0.5 : lay) * 1000) / 1000 } : {}),
   });
   return [
@@ -146,6 +149,8 @@ const CLARINET_SOARS_ANSWER: Written[] = [[1, S9]];
 
 /** The trombone: over the band's bass, a little behind the beat. */
 const HORN: Feel = { overBass: true, layBack: 0.03 };
+/** Held a whole pass, sounded again at the top of the next: one long swell (the owner, 2026-11-06: more atmosphere). */
+const HORN_HELD: Feel = { ...HORN, hold: 8 };
 const STRUM: Feel = { follows: true };
 
 /** The loops, by slot, with their names. Quiet: they sit inside the pads. */
@@ -160,8 +165,9 @@ export const DEMO_LOOPS: readonly { name: string; cells: StoredLoopCell[] }[] = 
   { name: 'Guitar drive', cells: notes('chord', 'guitarAcoustic', GUITAR_DRIVE, 0.44, [], STRUM) },
   { name: 'Clarinet soars', cells: notes('melody', 'clarinet', CLARINET_SOARS, 0.6, CLARINET_SOARS_ANSWER, { layBack: 0.03 }) },
   { name: 'Clarinet answer', cells: notes('melody', 'clarinet', CLARINET_ANSWER, 0.54, CLARINET_ANSWER_PASSING, { layBack: 0.035 }) },
-  { name: 'Trombone pedal', cells: notes('bass', 'trombone', TROMBONE_PEDAL, 0.32, [], HORN) },
+  { name: 'Trombone pedal', cells: notes('bass', 'trombone', TROMBONE_PEDAL, 0.32, [], HORN_HELD) },
   { name: 'Drums soft', cells: groove(0, 0.5) },
+  { name: 'Trombone held', cells: notes('bass', 'trombone', TROMBONE_LINE, 0.36, [], HORN_HELD) },
 ];
 
 const SLOT = new Map(DEMO_LOOPS.map((l, i) => [l.name, i]));
@@ -215,14 +221,15 @@ export const DEMO_SCENES: readonly SceneSpec[] = [
   // The drums and the pads: the pads lifting slowly between A (suspended) and B minor, alone
   // with the groove for eight passes.
   { name: 'Drums and pads', pass: 0, loops: slots('Drums'), key: A_MAJOR, settings: { chords: LIFT }, wayIn: { kind: 'cut' } },
-  // The trombone's long notes over the pads' drone.
-  { name: 'Trombone', pass: 8, loops: slots('Drums', 'Trombone'), key: A_MAJOR, settings: { chords: DRONE }, wayIn: { kind: 'cut' } },
-  // The guitar strums the pads' chords, which float between A and F# minor.
+  // The trombone enters holding its open fifth a whole pass at a time over the pads' drone.
+  { name: 'Trombone', pass: 8, loops: slots('Drums', 'Trombone held'), key: A_MAJOR, settings: { chords: DRONE }, wayIn: { kind: 'cut' } },
+  // The guitar strums the pads' chords, which float between A and F# minor; the trombone still
+  // holds whole passes.
   {
-    name: 'Guitar', pass: 12, loops: slots('Drums busier', 'Trombone', 'Guitar'), key: A_MAJOR,
+    name: 'Guitar', pass: 12, loops: slots('Drums busier', 'Trombone held', 'Guitar'), key: A_MAJOR,
     settings: { chords: FLOAT, sceneEnergy: 3 }, wayIn: { kind: 'fade', passes: 1 },
   },
-  // The harp drifts in over a pass, a few extra notes around it.
+  // The harp drifts in over a pass, a few extra notes around it; the trombone begins to breathe.
   {
     name: 'Harp', pass: 16, loops: slots('Drums busier', 'Trombone', 'Guitar', 'Harp'), key: A_MAJOR,
     settings: { chords: FLOAT, sceneEnergy: 3, fillAmount: 0.08 }, wayIn: { kind: 'fade', passes: 1 },
