@@ -128,21 +128,22 @@ const HELP: HelpEntry[] = [
   },
   {
     title: 'The demo piece',
-    body: 'Player button → ▶ Open the demo piece: a ready-made piece of seven minutes, as a '
-      + 'player of its own called Demo piece. The pads lead: slow, open chords held by two layers of '
-      + 'pads and the band\u2019s bass, the drums with them alone for the opening. Then the trombone\u2019s '
-      + 'long soft notes; the guitar, strumming the pads\u2019 chords; the harp; a shimmer over a drone; '
-      + 'the clarinet, then rising over the driving guitar; a breakdown in A minor; a lament, the '
-      + 'clarinet in A minor; home to A major; up a tone to B major with the harp; and the clarinet '
-      + 'soaring over the full band into the Big finish. Every tune is in the five note (pentatonic) '
-      + 'scale, quiet, inside the pads; each is stated on one pass and decorated on the next. It plays '
-      + 'the same every time: the extra notes and the band come from the rules with fixed ideas. It '
-      + 'uses the colours, the cap and the iPad of the player chosen before it, so the hat and the iPad '
-      + 'work as in your own pieces, and your counters still play on top. Press ▶ Start the piece in '
-      + 'Show to hear it. Opening it again writes the music afresh, so a change made in it is put back. '
-      + 'With Ableton, each part\u2019s track plays the loop\u2019s own instrument (the trombone, the '
-      + 'harp) while none of your counters for that part is on the board; the pads are on the Band '
-      + 'chords track.',
+    body: 'Player button → ▶ Open the demo piece: Rising Light, a ready-made piece of seven minutes, as a '
+      + 'player of its own called Demo piece. It is ambient and keeps changing: one four note theme, born '
+      + 'in the dark, rising to a summit and turning to light. Dawn: the pads rise on a drone and glass '
+      + 'bells breathe the theme’s first notes. Theme: a soft piano plays it. Pulse: a soft pulse begins '
+      + 'underneath. Heartbeat: a soft heartbeat enters. Build: the chords move faster. Hush: only the '
+      + 'pads and the piano. Ascent and Lift: the pulse and heartbeat return and a singing lead takes the '
+      + 'theme. Summit: everything at its fullest, the lead an octave up. Afterglow: the theme in the '
+      + 'major, then a final chord. The pads lead; nothing hits. Everything is in one five note '
+      + '(pentatonic) scale, F sharp minor, F sharp major for the afterglow, so whatever you place sounds '
+      + 'well. In the demo your colours keep their jobs but play gentle sounds (a soft lead and bells, a '
+      + 'soft pad, a deep bass) with long notes in the same big room. It uses the colours, the cap and the '
+      + 'iPad of the player chosen before it. Press ▶ Start the piece in Show to hear it. Opening it again '
+      + 'writes the music afresh, so a change made in it is put back. The AI’s extra notes (Magenta) '
+      + 'can be kept: rehearse the demo once or twice, press New idea in a scene to hear another, and when '
+      + 'the ideas are good, Make a piece → Back up to a file, and ask Claude Code to freeze them. From then '
+      + 'on every performance plays those ideas. In Ableton the pads are on the Band chords track.',
   },
   {
     title: 'Hints',

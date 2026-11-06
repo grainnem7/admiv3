@@ -4,7 +4,7 @@ import {
   sanitizeLeadIn, type BandJobs,
 } from '../songs/band/bandJobs';
 import { bandEventsAtStep, bandParts, type BandInput } from '../songs/band/band';
-import { clashes, isStrongBeat } from '../songs/harmony/currentChord';
+import { clashes, isStrongBeat, sequenceAt } from '../songs/harmony/currentChord';
 
 /** Harmony spec stage 2: a band with jobs. */
 
@@ -181,5 +181,42 @@ describe('lead-in into a scene', () => {
     }
     expect(leadInEvents('rising', 9, 8, C)).toEqual([]);
     expect(leadInEvents('rising', 4, 8, null)).toEqual([]);
+  });
+});
+
+describe('band jobs: a pedal for the bass (Rising Light, 2026-11-06)', () => {
+  const TIDE = [0, 1, 2, 3].map((i) => sequenceAt({
+    setting: { sequence: 'tide', bars: 1 }, style: 'warm', rootMidi: 66, semitones: [0, 3, 5, 7, 10],
+    beatsIn: i * 4, step: 0, loop: 8, bandOn: true,
+  }).harmony!);
+  /** The band's bass on each chord's first beat. */
+  const bassOver = (jobs: BandJobs): number[] => TIDE.map((h) => {
+    const ev = bandEventsAtStep(input({ harmony: h, jobs, keyRootMidi: 66, playerRoles: new Set(), playerCounters: 0 }))
+      .find((e) => e.part === 'bass' && e.offset === 0);
+    return pc(ev?.midi ?? -1);
+  });
+
+  it('with the pedal on, the band’s bass holds the key note whatever the chord: F# under all of Tide', () => {
+    expect(bassOver({ ...ALL, pedal: true })).toEqual([6, 6, 6, 6]);
+  });
+
+  it('with it off, the bass follows the roots: F#, D, B, F#', () => {
+    expect(bassOver(ALL)).toEqual([6, 2, 11, 6]);
+  });
+
+  it('a pedal is held: one long F# a chord, no walk to the fifth or the octave, even with the full band', () => {
+    const over = (step: number, chordChange: boolean) => bandEventsAtStep(input({
+      harmony: TIDE[1], jobs: { ...ALL, pedal: true }, keyRootMidi: 66, playerRoles: new Set(), playerCounters: 0,
+      step, chordChange, chordSpan: chordChange ? 8 : 8 - step, level: 'full',
+    })).filter((e) => e.part === 'bass');
+    expect(over(0, true).map((e) => [pc(e.midi ?? -1), e.dur])).toEqual([[6, 7.95]]);
+    for (let step = 1; step < 8; step++) expect(over(step, false), `step ${step}`).toEqual([]);
+  });
+
+  it('the pedal is saved and made safe like the other jobs', () => {
+    expect(sanitizeBandJobs({ asBefore: false, pads: true, bass: true, pedal: true }).pedal).toBe(true);
+    expect(sanitizeBandJobs({ asBefore: false, pads: true, bass: true, pedal: 'yes' }).pedal).toBeUndefined();
+    expect(sameJobs({ ...ALL, pedal: true }, ALL)).toBe(false);
+    expect(sameJobs({ ...ALL, pedal: false }, ALL)).toBe(true);
   });
 });

@@ -69,7 +69,8 @@ const BASS = list([
   ['Plucked and struck', ['bassElectric']],
   ['Strings', ['contrabass', 'cello']],
   ['Wind and brass', ['tuba', 'trombone', 'bassoon']],
-  ['Synth', ['synth:sub', 'synth:sawBass']],
+  // Synth pluck: Rising Light's pulse, a soft pluck an octave over the bass (2026-11-06).
+  ['Synth', ['synth:sub', 'synth:sawBass', 'synth:pluck']],
 ]);
 
 /** The instruments a colour with this job can play; none for drums, controls, loops or off. */

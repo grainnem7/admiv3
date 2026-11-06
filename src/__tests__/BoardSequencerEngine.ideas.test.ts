@@ -26,6 +26,9 @@ import type { ActiveCell } from '../tracking/BoardSequencerMode';
 import type { BandJobs } from '../songs/band/bandJobs';
 import type { KeptIdea } from '../songs/performance/ideas';
 import type { FillNote } from '../songs/generative/rulesFill';
+import { loopChannelsFor } from '../songs/performance/loopSounds';
+import { DEMO_LOOPS, demoScenes } from '../songs/demo/demoPiece';
+import type { StoredLoopCell } from '../profiles/BoardSequencerConfig';
 
 /**
  * The same AI each rehearsal (harmony spec, stage 3), in the engine: the band, the extra
@@ -211,6 +214,89 @@ describe('Magenta’s ideas, kept per scene', () => {
     expect(magenta.fill).not.toHaveBeenCalled();
     expect(fill.map((n) => n.midi)).toEqual([74, 76]);
     expect(e.getFillStatus()).toBe('ai');
+  });
+
+  it('an idea kept while only loops play replays for any player’s colours (Rising Light, C5); with his counters down, only for his', async () => {
+    magenta.status = 'ready';
+    magenta.fill.mockResolvedValue(aiNotes);
+    const LOOP: StoredLoopCell[] = [
+      { row: rowOf(2), col: 0, colour: 'x', job: 'melody', sound: 'piano', plays: 'note' },
+      { row: rowOf(4), col: 4, colour: 'x', job: 'melody', sound: 'piano', plays: 'note' },
+    ];
+    const timsColours: ColourChannel[] = [{ id: 'tim-red', kind: 'hue', role: 'melody', swatch: '#f00' }];
+    const annsColours: ColourChannel[] = [{ id: 'ann-blue', kind: 'hue', role: 'melody', swatch: '#00f', plays: 'tune' }];
+    /** A run of the scene: the loop playing, the player's colours set, his counter down or not. */
+    const runWith = async (colours: ColourChannel[], board: ActiveCell[], kept: KeptIdea[] | null): Promise<KeptIdea[]> => {
+      const made: KeptIdea[] = [];
+      const { e, p } = engine({ fillEngine: 'magenta', channels: colours });
+      p.channelById = new Map(colours.map((c) => [c.id, c]));
+      p.voiceByChannel = new Map(colours.map((c) => [c.id, fakeVoiceEntry()]));
+      const loop = loopChannelsFor(LOOP, colours);
+      for (const c of loop.channels) p.voiceByChannel.set(c.id, fakeVoiceEntry());
+      e.setLaunchedLoops([0], [loop.cells], loop.channels);
+      if (kept) e.setKeptIdeas({}, new Map([['scene', kept]]));
+      e.setOnIdeaKept((_owner, idea) => made.push(idea));
+      e.setIdeas({ seed: 7, owner: 'scene' });
+      e.setFill(0.5, 1, null);
+      e.setActiveCells(board);
+      for (let b = 0; b < 4; b++) p.fireStep(b, b, 1, null);
+      await flush();
+      return made;
+    };
+    // Kept with Tim's colours, only the loop playing; replayed with Ann's: Magenta not asked.
+    const kept = await runWith(timsColours, [], null);
+    expect(kept).toHaveLength(1);
+    magenta.fill.mockClear();
+    await runWith(annsColours, [], kept);
+    expect(magenta.fill).not.toHaveBeenCalled();
+    // With a counter of the player's own on the board, the idea is his board's alone, as before.
+    magenta.fill.mockClear();
+    const timsBoard = await runWith(timsColours, [{ row: rowOf(1), col: 2, colour: 'tim-red' }], null);
+    expect(timsBoard).toHaveLength(1);
+    magenta.fill.mockClear();
+    // Another player's set of colours (one more, not on the board): his board's idea is not theirs.
+    await runWith([...timsColours, { id: 'ann-green', kind: 'hue', role: 'melody', swatch: '#0f0' }], [{ row: rowOf(1), col: 2, colour: 'tim-red' }], timsBoard);
+    expect(magenta.fill).toHaveBeenCalledTimes(1);
+  });
+
+  it('the demo’s frozen ideas play from the first run, whoever plays, and Magenta is never asked (Rising Light, C6)', async () => {
+    magenta.status = 'ready';
+    magenta.fill.mockResolvedValue(aiNotes);
+    const piano = DEMO_LOOPS.find((l) => l.name === 'Piano theme')!.cells;
+    /** The Pulse scene's piano, with a player's colours set but none of his counters down. */
+    const scene = async (colours: ColourChannel[], scenes: ReturnType<typeof demoScenes> | null) => {
+      const made: KeptIdea[] = [];
+      const { e, p } = engine({ fillEngine: 'magenta', channels: colours });
+      p.channelById = new Map(colours.map((c) => [c.id, c]));
+      const loop = loopChannelsFor(piano, colours);
+      p.voiceByChannel = new Map(loop.channels.map((c) => [c.id, fakeVoiceEntry()]));
+      e.setLaunchedLoops([0], [loop.cells], loop.channels);
+      // As the screen hands them over: each scene's kept ideas, by its id.
+      if (scenes) e.setKeptIdeas(scenes, new Map(scenes.map((sc) => [sc.id, sc.aiIdeas ?? []])));
+      e.setOnIdeaKept((_owner, idea) => made.push(idea));
+      e.setIdeas({ seed: scenes?.[2].ideas ?? 1, owner: 'demo-3' });
+      e.setFill(0.08, 1, null);
+      e.setActiveCells([]);
+      const fill: FiredNote[] = [];
+      for (let b = 0; b < 16; b++) {
+        p.fireStep(b, b, 1, null);
+        fill.push(...e.drainFiredNotes().filter((n) => n.origin === 'fill'));
+      }
+      await flush();
+      return { made, fill, status: e.getFillStatus() };
+    };
+    // The rehearsal: Magenta's idea for the scene, kept, then frozen into the demo.
+    const ideasSeed = demoScenes({})[2].ideas;
+    const rehearsal = await scene([{ id: 'tim-red', kind: 'hue', role: 'melody', swatch: '#f00' }], demoScenes({}));
+    expect(rehearsal.made).toHaveLength(1);
+    expect(ideasSeed).toBeGreaterThan(0);
+    const frozen = demoScenes({ 'demo-3': rehearsal.made });
+    // The show, another player's colours: the frozen idea plays, Magenta is not asked.
+    magenta.fill.mockClear();
+    const show = await scene([{ id: 'ann-blue', kind: 'hue', role: 'chord', swatch: '#00f' }], frozen);
+    expect(magenta.fill).not.toHaveBeenCalled();
+    // The AI's idea is what plays (the rules would say 'rules').
+    expect(show.status).toBe('ai');
   });
 
   it('a kept idea plays even when Magenta can’t load at the show', async () => {

@@ -24,6 +24,8 @@ describe('the sounds each job can choose from', () => {
     expect(keys('melody')).toEqual(expect.arrayContaining(['flute', 'saxophone', 'trumpet', 'xylophone', 'guitarAcoustic', 'guitarElectric']));
     expect(keys('chord')).toEqual(expect.arrayContaining(['guitarAcoustic', 'guitarElectric']));
     expect(keys('bass')).toEqual(expect.arrayContaining(['trombone', 'bassoon']));
+    // Rising Light's pulse: a soft synth pluck an octave over the bass (2026-11-06).
+    expect(keys('bass')).toContain('synth:pluck');
     expect(soundOptionName('guitarAcoustic')).toBe('Acoustic guitar');
   });
 

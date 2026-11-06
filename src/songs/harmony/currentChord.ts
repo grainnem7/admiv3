@@ -22,8 +22,8 @@ import type { SoundWorldId } from '../../audio/worlds/soundWorlds';
 import { degreeMidi } from '../boardSequencerScale';
 import { chordOnDegree, degreeOfNote, harmonyFromChord, parentScale, symbolFor, type Chord, type Harmony } from './harmony';
 
-export type ChordSequenceId = 'asBefore' | 'world' | 'calm' | 'rising' | 'dreamy' | 'tense' | 'home' | 'still' | 'lift' | 'float' | 'shade';
-export const CHORD_SEQUENCE_IDS: ChordSequenceId[] = ['asBefore', 'world', 'calm', 'rising', 'dreamy', 'tense', 'home', 'still', 'lift', 'float', 'shade'];
+export type ChordSequenceId = 'asBefore' | 'world' | 'calm' | 'rising' | 'dreamy' | 'tense' | 'home' | 'still' | 'lift' | 'float' | 'shade' | 'tide' | 'rise';
+export const CHORD_SEQUENCE_IDS: ChordSequenceId[] = ['asBefore', 'world', 'calm', 'rising', 'dreamy', 'tense', 'home', 'still', 'lift', 'float', 'shade', 'tide', 'rise'];
 export type ChordBars = 1 | 2 | 4;
 export const CHORD_BARS: ChordBars[] = [1, 2, 4];
 export const BEATS_PER_BAR = 4;
@@ -60,10 +60,12 @@ export const CHORD_SEQUENCE_WORDS: Record<ChordSequenceId, { label: string; what
   lift: { label: 'Lift', what: 'Two open chords that float, film-like: the key note suspended, then ii with a ninth.' },
   float: { label: 'Float', what: 'Two chords, gently: home with a ninth, then vi with a ninth.' },
   shade: { label: 'Shade', what: 'Two minor chords, wistful: vi and ii, each with a ninth.' },
+  tide: { label: 'Tide', what: 'The night: home, VI, the minor iv, home, each with its colour.' },
+  rise: { label: 'Rise', what: 'The climb: VI, VII, up to home.' },
 };
 
-type Kind = 'plain' | 'sus2' | 'sus4' | 'minor' | 'drone' | 'add9';
-interface SeqChord { degree: number; kind: Kind }
+type Kind = 'plain' | 'sus2' | 'sus4' | 'minor' | 'drone' | 'add9' | 'seventh' | 'ninth';
+export interface SeqChord { degree: number; kind: Kind }
 const sc = (degree: number, kind: Kind = 'plain'): SeqChord => ({ degree, kind });
 
 /** The named sequences, in degrees of the key (0 = the key note). */
@@ -78,6 +80,10 @@ const NAMED: Record<Exclude<ChordSequenceId, 'asBefore' | 'world'>, SeqChord[]> 
   lift: [sc(0, 'sus2'), sc(1, 'add9')],
   float: [sc(0, 'add9'), sc(5, 'add9')],
   shade: [sc(5, 'add9'), sc(1, 'add9')],
+  // Rising Light (demo composition, 2026-11-06), in a minor key: the night, with the minor
+  // plagal pull home (i VI iv i), and the Aeolian climb (VI VII i).
+  tide: [sc(0, 'add9'), sc(5, 'seventh'), sc(3, 'ninth'), sc(0, 'add9')],
+  rise: [sc(5, 'seventh'), sc(6, 'sus4'), sc(0, 'add9'), sc(0, 'add9')],
 };
 
 /**
@@ -115,6 +121,19 @@ export function sequenceChord(spec: SeqChord, rootMidi: number, semitones: reado
   });
   if (spec.kind === 'drone') return make([0, 7], symbolFor(r, [0, 7]));
   if (spec.kind === 'minor') return make([0, 3, 7], symbolFor(r, [0, 3, 7]));
+  if (spec.kind === 'seventh' || spec.kind === 'ninth') {
+    // The triad and the key's own seventh above the root (Dmaj7 on VI in F sharp minor); a
+    // ninth adds the key's note a whole tone above the root (Bm9 on iv). Where the key has no
+    // real seventh (a minor or major one), or no ninth a whole tone up, the plain chord.
+    const third = rel(2);
+    const fifth = rel(4);
+    const seventh = rel(6);
+    if (third !== 3 && third !== 4) return base;
+    if (seventh !== 10 && seventh !== 11) return base;
+    if (spec.kind === 'ninth' && rel(1) !== 2) return base;
+    const ivs = spec.kind === 'ninth' ? [0, third, fifth, seventh, 2] : [0, third, fifth, seventh];
+    return make(ivs, symbolFor(r, spec.kind === 'ninth' ? [0, third, fifth, seventh, 14] : ivs));
+  }
   if (spec.kind === 'add9') {
     // The chord with its ninth, where the key has it a whole tone above the root.
     if (rel(1) !== 2) return base;

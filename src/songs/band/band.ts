@@ -80,6 +80,8 @@ export interface BandInput {
   strong?: boolean;
   /** The counter-melody's last note, so it moves by small steps. */
   previousCounter?: number | null;
+  /** The key note (any octave): the bass holds it with the pedal job on. */
+  keyRootMidi?: number;
   /**
    * A scene's Energy on the band's drums (see performance/energy): grooves busier (+1) or
    * sparser (-1, -2) than its level's usual. 0 or absent = as usual. At -1 or below the
@@ -211,9 +213,13 @@ export function bandEventsAtStep(input: BandInput): BandEvent[] {
   }
 
   if (h && parts.includes('bass')) {
-    const root = bassNote({ rootPc: ((h.root % 12) + 12) % 12 }, 36);
-    if (input.chordChange) out.push({ part: 'bass', offset: 0, dur: full ? Math.min(span, 1.9) : span - 0.05, accent: 0.8, midi: root });
-    if (full) {
+    // With the pedal on, the key note whatever the chord (the chords move above it).
+    const pedal = withJobs && input.jobs?.pedal === true && input.keyRootMidi !== undefined;
+    const rootPc = pedal ? input.keyRootMidi as number : h.root;
+    const root = bassNote({ rootPc: ((rootPc % 12) + 12) % 12 }, 36);
+    // A pedal is held through the chord, never walked: the chords move above a bass that does not.
+    if (input.chordChange) out.push({ part: 'bass', offset: 0, dur: full && !pedal ? Math.min(span, 1.9) : span - 0.05, accent: 0.8, midi: root });
+    if (full && !pedal) {
       // A walk under the chord: the fifth halfway through, the octave leading into the next.
       const into = (input.step % input.loop);
       const changeIn = span; // steps until the next change, counted from this step when chordChange

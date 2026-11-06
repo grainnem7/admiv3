@@ -21,6 +21,11 @@ export interface BandJobs {
   bass: boolean;
   drums: boolean;
   counter: boolean;
+  /**
+   * A pedal (Rising Light, 2026-11-06): the band's bass holds the key note whatever the chord,
+   * so the chords move above a bass that does not. Absent = off.
+   */
+  pedal?: boolean;
 }
 export type BandJob = 'pads' | 'bass' | 'drums' | 'counter';
 export const BAND_JOBS: BandJob[] = ['pads', 'bass', 'drums', 'counter'];
@@ -43,14 +48,18 @@ export const BAND_JOB_WORDS: Record<BandJob, { label: string; what: string }> = 
 };
 
 export function sameJobs(a: BandJobs, b: BandJobs): boolean {
-  return a.asBefore === b.asBefore && a.pads === b.pads && a.bass === b.bass && a.drums === b.drums && a.counter === b.counter;
+  return a.asBefore === b.asBefore && a.pads === b.pads && a.bass === b.bass && a.drums === b.drums && a.counter === b.counter
+    && (a.pedal === true) === (b.pedal === true);
 }
 
 /** Stored jobs made safe: unreadable (or saved before jobs) is "As before"; a job left out is off. */
 export function sanitizeBandJobs(v: unknown): BandJobs {
   const o = (typeof v === 'object' && v !== null ? v : null) as Record<string, unknown> | null;
   if (!o || o.asBefore !== false) return { ...AS_BEFORE_JOBS };
-  return { asBefore: false, pads: o.pads === true, bass: o.bass === true, drums: o.drums === true, counter: o.counter === true };
+  return {
+    asBefore: false, pads: o.pads === true, bass: o.bass === true, drums: o.drums === true, counter: o.counter === true,
+    ...(o.pedal === true ? { pedal: true } : {}),
+  };
 }
 
 /** "pads, bass, drums", "band parts as before": for a scene's one-line summary. */

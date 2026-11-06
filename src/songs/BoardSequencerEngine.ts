@@ -3341,9 +3341,12 @@ export class BoardSequencerEngine {
     // A bass loop lifted an octave or more, or playing over the bass (the demo's trombone), is
     // a line of its own: the band's bass keeps the roots under it.
     const bassTaken = !jobs.asBefore && cells.some((c) => this.roleFor(c.colour) === 'bass' && (c.octave ?? 0) <= 0 && !c.overBass);
-    const playing = this.band !== 'off' && !this.thinning && this.bandFromLap !== null && lap >= this.bandFromLap;
+    // While the ending thins, the band leaves; but where its pads join the loops (the demo),
+    // they are the bed the loops sit in, and they stay to the final chord.
+    const padsStay = this.thinning && this.cfg.bandWithLoops === true && !jobs.asBefore && jobs.pads;
+    const playing = this.band !== 'off' && (!this.thinning || padsStay) && this.bandFromLap !== null && lap >= this.bandFromLap;
     this.bandPlaying = playing;
-    this.bandPartsNow = playing ? bandParts(this.band, roles, counters, jobs, bassTaken) : [];
+    this.bandPartsNow = !playing ? [] : padsStay ? ['pad'] : bandParts(this.band, roles, counters, jobs, bassTaken);
     if (!playing || !this.bandVoices) return;
     const loop = loopLen(this.rawLoop('melodic'), this.cfg.cols);
     const step = ((beat % loop) + loop) % loop;
@@ -3362,9 +3365,10 @@ export class BoardSequencerEngine {
     const events = bandEventsAtStep({
       level: this.band, step, loop, style: worldOf(this.cfg.soundWorld ?? 'none')?.id ?? 'warm',
       harmony, chordChange, chordSpan, playerRoles: roles, playerCounters: counters, previousPad: this.bandPadVoicing, widePads: this.cfg.widePads === true, previousUpper: this.bandUpperVoicing,
-      jobs, bassTaken, drumsHere: this.heardDrums, chordRegister: this.registerOf('chord'),
+      // Thinning with the pads staying: the pads alone.
+      jobs: padsStay ? { asBefore: false, pads: true, bass: false, drums: false, counter: false } : jobs, bassTaken, drumsHere: this.heardDrums, chordRegister: this.registerOf('chord'),
       melodyHere: this.heardMelody, melodyRegister: this.registerOf('melody'), avoidPcs,
-      strong: this.strongBeat(beat), previousCounter: this.bandCounterLast,
+      strong: this.strongBeat(beat), previousCounter: this.bandCounterLast, keyRootMidi: this.cfg.scaleRootMidi,
       busy: energyShape(this.sceneEnergy)?.drumsBusy ?? 0,
       vary: this.bandVary(beat, step),
     });
@@ -3493,9 +3497,14 @@ export class BoardSequencerEngine {
   ): void {
     if (this.fillAmount <= 0 || this.thinning) return;
     if (!this.fillKept) {
+      // With none of the player's counters on the board (only loops), the player's colours are
+      // left out of the key, so an idea kept for a scene replays for any player (the demo's
+      // frozen ideas, whoever plays it); with his counters down, his colours are part of it.
+      const playersOwn = cells.some((c) => !isLoopLayer((c as LayeredCell).layer));
+      const colours = playersOwn ? this.cfg.channels : this.cfg.channels.filter((ch) => cells.some((c) => c.colour === ch.id));
       const key = JSON.stringify([
         cells.map((c) => `${c.row},${c.col},${c.colour}`).sort(), this.fillAmount, this.fillSeedNow(), this.evolveScene,
-        this.cfg.phrases, this.cfg.channels.map((ch) => `${ch.id}:${this.playsTune(ch.id) ? 't' : 'n'}`).join(), this.cfg.soundWorld, this.cfg.scaleRootMidi, this.cfg.scaleSemitones,
+        this.cfg.phrases, colours.map((ch) => `${ch.id}:${this.playsTune(ch.id) ? 't' : 'n'}`).join(), this.cfg.soundWorld, this.cfg.scaleRootMidi, this.cfg.scaleSemitones,
         this.cfg.rows, this.cfg.cols, chord?.notes ?? null,
       ]);
       const useAi = this.fillEngineNow() === 'magenta';

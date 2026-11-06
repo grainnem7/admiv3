@@ -63,9 +63,9 @@ export function PlayerChooser({ players, onPick, onCreate, onEdit, onCancel, onD
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>
               <Button tone="secondary" onClick={onDemo}>▶ Open the demo piece</Button>
               <span style={{ fontSize: 14, color: 'var(--bs-fg2)' }}>
-                A ready-made piece of seven minutes, led by slow, open pads: drums, then trombone, guitar,
-                harp and clarinet, quiet inside them, moving from A major to A minor and up to B major,
-                with a big ending. It plays the same every time, and uses your colours, cap and iPad.
+                Rising Light: a ready-made ambient piece of seven minutes. One theme rises from a dark
+                dawn to a summit and turns to light, over slow pads and a soft heartbeat. It plays the
+                same every time, and uses your colours, cap and iPad, with gentle sounds.
               </span>
             </div>
           )}

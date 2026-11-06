@@ -88,6 +88,13 @@ describe('which slots a track fills', () => {
     }
   });
 
+  it('the Bass track holds Synth pluck for real: Rising Light’s pulse plays there (demo composition, 2026-11-06)', () => {
+    expect(filledChains(2, part).has(27)).toBe(true);
+    const row = abletonChecklist(part).find((r) => r.name === 'Synth pluck');
+    expect(row?.bass).toBe(true);
+    expect(row?.index).toBe(27);
+  });
+
   it('melody does not fill bass-only sounds', () => {
     const melody = filledChains(1, part);
     for (const chain of [18, 22, 31]) expect(melody.has(chain), String(chain)).toBe(false);

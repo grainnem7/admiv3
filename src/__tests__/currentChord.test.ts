@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  AS_BEFORE_CHORDS, CHORD_SEQUENCE_IDS, clashes, counterChord, currentChord, fitToChord, isStrongBeat, sequenceAt,
+  AS_BEFORE_CHORDS, CHORD_SEQUENCE_IDS, CHORD_SEQUENCE_WORDS, clashes, counterChord, currentChord, fitToChord, isStrongBeat, sequenceAt, sequenceChord,
   type ChordCounter, type ChordSetting, type CurrentChordInput, type SequenceInput,
 } from '../songs/harmony/currentChord';
 import { defaultHarmonyAt, bandEventsAtStep } from '../songs/band/band';
@@ -227,5 +227,52 @@ describe('no clash on strong beats (random boards)', () => {
         for (const ev of band) if (ev.midi !== undefined && ev.offset === 0) expect(clashes(ev.midi, h.tones)).toBe(false);
       }
     }
+  });
+});
+
+describe('Rising Light’s chords: Tide and Rise (demo composition, 2026-11-06)', () => {
+  /** F sharp minor pentatonic: the chords come from its parent, F sharp natural minor. */
+  const F_SHARP = 66;
+  const MINOR_PENT = [0, 3, 5, 7, 10];
+  const chordsOf = (sequence: ChordSetting['sequence'], semitones: number[] = MINOR_PENT, rootMidi = F_SHARP) =>
+    [0, 1, 2, 3].map((i) => sequenceAt({
+      setting: { sequence, bars: 1 }, style: 'warm', rootMidi, semitones, beatsIn: i * 4, step: 0, loop: 8, bandOn: true,
+    }).harmony);
+  const pcsOf = (h: { tones: number[] } | null): number[] => [...new Set((h?.tones ?? []).map((t) => t % 12))].sort((a, b) => a - b);
+
+  it('Tide is the night: F#m(add9), Dmaj7, Bm9, F#m(add9)', () => {
+    const tide = chordsOf('tide');
+    expect(tide.map((h) => h?.symbol)).toEqual(['F#madd9', 'Dmaj7', 'Bm9', 'F#madd9']);
+    // F# A C# G#; D F# A C#; B D F# A C#.
+    expect(pcsOf(tide[0])).toEqual([1, 6, 8, 9]);
+    expect(pcsOf(tide[1])).toEqual([1, 2, 6, 9]);
+    expect(pcsOf(tide[2])).toEqual([1, 2, 6, 9, 11]);
+  });
+
+  it('Rise is the climb: Dmaj7, Esus4, F#m(add9), F#m(add9)', () => {
+    const rise = chordsOf('rise');
+    expect(rise.map((h) => h?.symbol)).toEqual(['Dmaj7', 'Esus4', 'F#madd9', 'F#madd9']);
+    // E A B.
+    expect(pcsOf(rise[1])).toEqual([4, 9, 11]);
+  });
+
+  it('a seventh and a ninth come from the key: where the key has no ninth a tone above, the plain chord', () => {
+    // In C major, a ninth on E (iii) would be F, a semitone above: the plain chord instead.
+    const seventh = sequenceChord({ degree: 2, kind: 'ninth' }, 60, MAJOR, 'warm');
+    expect(seventh.symbol).toBe('Em');
+    // The seventh of the key on C is B: Cmaj7; on A it is G: Am7.
+    expect(sequenceChord({ degree: 0, kind: 'seventh' }, 60, MAJOR, 'warm').symbol).toBe('Cmaj7');
+    expect(sequenceChord({ degree: 5, kind: 'seventh' }, 60, MAJOR, 'warm').symbol).toBe('Am7');
+    // With every note of the twelve, no third above is a real seventh: the plain chord.
+    const chromatic = Array.from({ length: 12 }, (_, i) => i);
+    const plain = sequenceChord({ degree: 0, kind: 'plain' }, 60, chromatic, 'warm');
+    expect(sequenceChord({ degree: 0, kind: 'seventh' }, 60, chromatic, 'warm')).toEqual(plain);
+  });
+
+  it('Tide and Rise have plain words for the player', () => {
+    expect(CHORD_SEQUENCE_WORDS.tide.label).toBe('Tide');
+    expect(CHORD_SEQUENCE_WORDS.rise.label).toBe('Rise');
+    expect(CHORD_SEQUENCE_WORDS.tide.what).toMatch(/night/);
+    expect(CHORD_SEQUENCE_WORDS.rise.what).toMatch(/climb/);
   });
 });

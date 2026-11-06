@@ -11,7 +11,7 @@ import {
 } from './BoardSequencerConfig';
 import { applyGridChange } from '../tracking/boardGrid';
 import { canSave } from '../storage/tabSaving';
-import { DEMO_PLAYER_ID, DEMO_PLAYER_NAME, DEMO_REVISION, demoMusic } from '../songs/demo/demoPiece';
+import { DEMO_PLAYER_ID, DEMO_PLAYER_NAME, DEMO_REVISION, demoColourVoices, demoMusic } from '../songs/demo/demoPiece';
 
 export const RIG_KEY = 'admi-board-rig';
 export const PLAYERS_KEY = 'admi-board-players';
@@ -274,7 +274,8 @@ export function openDemoPlayer(): BoardPlayerProfile {
     id: DEMO_PLAYER_ID,
     name: DEMO_PLAYER_NAME,
     settings,
-    channelSettings: { ...(from?.channelSettings ?? existing?.channelSettings ?? {}) },
+    // His colours, as ambient voices for the demo (C9); his own player keeps his sounds.
+    channelSettings: demoColourVoices(from?.channelSettings ?? existing?.channelSettings ?? {}),
     ...(madeFrom ? { madeFrom } : {}),
     demoRev: DEMO_REVISION,
   };
