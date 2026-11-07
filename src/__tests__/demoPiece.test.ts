@@ -43,7 +43,7 @@ const at = (c: StoredLoopCell): number => c.col + (c.timingBeats ?? 0);
 const hits = (loop: string, piece: string, pass = 0): number[] =>
   onPass(loopNamed(loop)!.cells, pass).filter((c) => c.sound === piece).map(at).sort((a, b) => a - b);
 /** The drums' feel of a scene: its main percussion loop. */
-const FEELS = ['Tribal', 'Groove', 'Half time', 'Double time', 'Heartbeat', 'Rebuild'];
+const FEELS = ['Tribal', 'Groove', 'Half time', 'Double time', 'Rebuild'];
 const feelOf = (s: { loops: number[] }): string | undefined => loopNames(s).find((n) => FEELS.includes(n));
 const DREAMY = ['Drums', 'Brass', 'Guitar', 'Breakdown'];
 
@@ -90,7 +90,7 @@ describe('Rising Light v3: the piece', () => {
 
   it('the chords and Energy as composed', () => {
     expect(demoScenes().map((s) => `${s.settings.chords.sequence}/${s.settings.chords.bars}`)).toEqual([
-      'glow/4', 'glow/4', 'glow/4', 'lift/2', 'lift/2', 'tide/4', 'rise/2', 'tide/4', 'rise/4', 'glow/2', 'still/4', 'lift/2', 'lift/2',
+      'glow/4', 'glow/4', 'glow/4', 'lift/2', 'lift/2', 'tide/4', 'rise/2', 'tide/4', 'rise/4', 'glow/2', 'still/4', 'lift/2', 'glow/2',
     ]);
     expect(demoScenes().map((s) => s.settings.sceneEnergy)).toEqual([2, 2, 3, 4, 4, 3, 5, 1, 3, 4, 4, 5, 5]);
   });
@@ -143,13 +143,29 @@ describe('Rising Light v3: direction and drums', () => {
     expect(scenes.findIndex((s) => feelOf(s) === 'Groove')).toBe(3);
   });
 
-  it('the drums’ feel changes at least five times: tribal, groove, half time, double time, heartbeat', () => {
+  it('the drums’ feel changes at least five times: tribal, groove, half time, double time, none at all in the breakdown, the rebuild', () => {
     const feels = demoScenes().map(feelOf);
-    expect(feels).toEqual(['Tribal', 'Tribal', 'Tribal', 'Groove', 'Groove', 'Half time', 'Double time', 'Heartbeat', 'Rebuild', 'Groove', 'Half time', 'Double time', 'Double time']);
+    expect(feels).toEqual(['Tribal', 'Tribal', 'Tribal', 'Groove', 'Groove', 'Half time', 'Double time', undefined, 'Rebuild', 'Groove', 'Half time', 'Double time', 'Double time']);
     let changes = 0;
     for (let i = 1; i < feels.length; i++) if (feels[i] !== feels[i - 1]) changes++;
     expect(changes).toBeGreaterThanOrEqual(5);
-    for (const f of ['Tribal', 'Groove', 'Half time', 'Double time', 'Heartbeat']) expect(feels).toContain(f);
+    for (const f of ['Tribal', 'Groove', 'Half time', 'Double time', 'Rebuild']) expect(feels).toContain(f);
+    // The breakdown (version 4): no drums at all after the drop, the harp alone over the pads.
+    expect(by('Breakdown').loops.some((l) => DEMO_LOOPS[l].cells.some((c) => c.job === 'drums'))).toBe(false);
+  });
+
+  it('version 4: the later two thirds never repeat an earlier scene’s loops; new tunes for the breakdown and the summit', () => {
+    const scenes = demoScenes();
+    const sig = (sc: { loops: number[] }) => [...sc.loops].sort((a, b) => a - b).join(',');
+    for (let i = 5; i < scenes.length; i++) {
+      for (let j = 0; j < i; j++) expect(sig(scenes[i]), `${scenes[i].name} repeats ${scenes[j].name}`).not.toBe(sig(scenes[j]));
+    }
+    expect(loopNames(by('Breakdown'))).toEqual(['Harp song']);
+    for (const s of ['Rebuild', 'Groove II']) expect(loopNames(by(s)), s).toContain('Harp song');
+    for (const s of ['Summit', 'Final ascent']) expect(loopNames(by(s)), s).toContain('Brass call');
+    // The theme comes back high only at the very end, over the brass call.
+    expect(loopNames(by('Summit'))).not.toContain('Winds high');
+    expect(loopNames(by('Final ascent'))).toEqual(expect.arrayContaining(['Winds high', 'Brass call', 'Snare roll fast']));
   });
 
   it('every scene differs from the one before in its loops, its chords or its key', () => {
@@ -206,14 +222,14 @@ describe('Rising Light v3: direction and drums', () => {
     expect(hits('Rebuild', 'snare', 2).length).toBeGreaterThan(0);
   });
 
-  it('the snare roll: eighths, then sixteenths, louder each pass, toms on the last two beats', () => {
-    const passLoud = (loop: string, pass: number) => Math.max(...onPass(loopNamed(loop)!.cells, pass).filter((c) => c.sound === 'snare' && c.passes?.length === 1).map((c) => c.velocity ?? 0));
-    expect(hits('Snare roll', 'snare', 0)).toEqual([4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5]);
-    expect(hits('Snare roll', 'snare', 1)).toHaveLength(16);
+  it('the snare roll: silent for two passes, then eighths into sixteenths, then sixteenths all through, louder', () => {
+    const passLoud = (pass: number) => Math.max(...onPass(loopNamed('Snare roll fast')!.cells, pass).filter((c) => c.sound === 'snare').map((c) => c.velocity ?? 0));
+    expect(hits('Snare roll fast', 'snare', 0)).toEqual([]);
+    expect(hits('Snare roll fast', 'snare', 1)).toEqual([]);
     expect(hits('Snare roll fast', 'snare', 2)).toEqual([0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.25, 4.5, 4.75, 5, 5.25, 5.5, 5.75, 6, 6.25, 6.5, 6.75, 7, 7.25, 7.5, 7.75]);
     expect(hits('Snare roll fast', 'snare', 3)).toHaveLength(32);
-    expect([passLoud('Snare roll', 0), passLoud('Snare roll', 1), passLoud('Snare roll fast', 2), passLoud('Snare roll fast', 3)]).toEqual([0.3, 0.4, 0.5, 0.65]);
-    expect(hits('Snare roll', 'tom', 0)).toEqual([6, 7]);
+    expect([passLoud(2), passLoud(3)]).toEqual([0.5, 0.65]);
+    expect(loopNamed('Snare roll')).toBeUndefined();
   });
 
   it('the percussion is one kit piece per counter, each a note, its squares distinct', () => {
@@ -253,19 +269,31 @@ describe('Rising Light v3: the pitched parts', () => {
     for (const s of ['Guitar', 'Rebuild', 'Tension']) expect(loopNames(by(s)), s).toContain('Guitar roll');
   });
 
-  it('the winds: the theme as in version 2, growing over four passes; an octave up in the drop and at the summit', () => {
+  it('the winds: the theme as in version 2, growing over four passes; an octave up in the drop and the final ascent', () => {
     const winds = loopNamed('Winds theme')!.cells;
     expect(onPass(winds, 0).map((c) => name(pitchOf(c, A_MAJOR)))).toEqual(['C#', 'B', 'A', 'E']);
     expect(onPass(winds, 3).length).toBe(8);
-    for (const s of ['Drop', 'Summit', 'Final ascent']) expect(loopNames(by(s)), s).toContain('Winds high');
-    for (const s of ['Winds hook', 'Breakdown', 'Groove II']) expect(loopNames(by(s)), s).toContain('Winds theme');
+    for (const s of ['Drop', 'Final ascent']) expect(loopNames(by(s)), s).toContain('Winds high');
+    for (const s of ['Winds hook']) expect(loopNames(by(s)), s).toContain('Winds theme');
+  });
+
+  it('the harp song (version 4): rising A, C#, E to F#, growing over four passes; the brass call: A, E, the A above', () => {
+    const harp = loopNamed('Harp song')!.cells;
+    for (const c of harp) expect(c).toMatchObject({ job: 'melody', sound: 'harp' });
+    expect(onPass(harp, 0).map((c) => name(pitchOf(c, A_MAJOR)))).toEqual(['A', 'C#', 'E', 'F#']);
+    expect(onPass(harp, 0).map((c) => name(pitchOf(c, F_SHARP_MINOR)))).toEqual(['F#', 'B', 'C#', 'E']);
+    expect(onPass(harp, 3).length).toBeGreaterThan(onPass(harp, 0).length);
+    const call = loopNamed('Brass call')!.cells;
+    for (const c of call) expect(c).toMatchObject({ job: 'bass', sound: 'trombone', overBass: true, octave: 1 });
+    expect(onPass(call, 0).map((c) => name(pitchOf(c, B_MAJOR)))).toEqual(['B', 'F#', 'B']);
+    expect(onPass(call, 3).length).toBeGreaterThan(onPass(call, 0).length);
   });
 
   it('the bells in threes in the Intrigue: C#, B, A on every third eighth, against the fours', () => {
     const bells = loopNamed('Bells in threes')!.cells;
     expect(bells.map(at)).toEqual([0, 1.5, 3, 4.5, 6, 7.5]);
     expect(bells.map((c) => name(pitchOf(c, F_SHARP_MINOR)))).toEqual(['C#', 'B', 'A', 'C#', 'B', 'A']);
-    expect(loopNames(by('Intrigue'))).toContain('Bells in threes');
+    for (const s of ['Intrigue', 'Tension', 'Summit']) expect(loopNames(by(s)), s).toContain('Bells in threes');
   });
 
   it('no written note on a strong beat rubs against the chord the pads hold, in any scene, on any pass of four, in all four keys', () => {

@@ -27,6 +27,14 @@
  * Ableton, one track per part: each scene has one melody sound, one sound on the Bass track
  * (the brass) and one on the Chords track (the guitar).
  *
+ * Version 4 (owner, 7 Nov 2026: the opening is great, but the later two thirds were boring and
+ * samey): within the sixteen loops, no later scene repeats an earlier one. The breakdown drops
+ * the drums altogether and brings a second tune, the harp song, alone over the pads; it carries
+ * through the rebuild and colours Groove II instead of the winds' theme again. The summit has a
+ * heroic brass call of its own, answered by the bells in threes, and the winds' theme comes back
+ * high only in the final ascent, over the brass call, on new chords. The slow half of the snare
+ * roll and the heartbeat gave up their places for the two new tunes (2026-11-07-demo-composition-v4-design.md).
+ *
  * Pure: the profile code makes the player, this only says what the music is.
  */
 
@@ -47,7 +55,7 @@ export const DEMO_PIECE_ID = 'demo-piece';
  * The demo's music, by revision: a demo player made from an older one has its music written
  * afresh when opened, so a laptop that has pulled a newer ADMI always plays the newest demo.
  */
-export const DEMO_REVISION = 12;
+export const DEMO_REVISION = 13;
 
 const ROWS = 8;
 const COLS = 8;
@@ -132,12 +140,33 @@ const BELLS_IN_THREES: StoredLoopCell[] = [0, 1.5, 3, 4.5, 6, 7.5].map((p, i) =>
   ...(p % 1 > 0 ? { timingBeats: p % 1 } : {}),
 }));
 
+/**
+ * The harp song (version 4), the second tune: where the theme falls, this rises, A, C#, E to a
+ * held F#, and leans back to E from the 2nd pass; a B fills in on the 3rd and 4th, and the high
+ * A rings on the 4th. In F sharp minor (the breakdown) the same steps are F#, B, C#, E: poignant.
+ */
+const SONG: Written[] = [
+  [0, A, 2], [2, CS, 1], [3, E, 1], [4, FS, 3],
+  [7, E, 1, LATER],
+  [1, B, 1, [2, 3]],
+  [5, A2, 2, [3]],
+];
+
 // ---- the brass ----------------------------------------------------------------------------
 
 /** The key note and its fifth, held a whole pass: the opening's pads, and the pedal F# in the Intrigue and the Tension. */
 const BRASS_FIFTHS = notes('bass', 'trombone', [[0, A, 8], [0, E, 8]], 0.4, { octave: 1, overBass: true });
 /** In the grooves, a swell on the first beat of every bar, held through it. */
 const BRASS_SWELLS = notes('bass', 'trombone', [[0, A, 4], [0, E, 4], [4, A, 4], [4, E, 4]], 0.45, { octave: 1, overBass: true });
+/**
+ * The brass call (version 4), the summit's own: the key note, its fifth, the octave held (a
+ * call); from the 2nd pass the answer, F# then E; on the 3rd and 4th a B on beat 5 between them.
+ */
+const BRASS_CALL = notes('bass', 'trombone', [
+  [0, A, 1], [1, E, 1], [2, A2, 3],
+  [5, FS, 1, LATER], [6, E, 2, LATER],
+  [4, B, 1, [2, 3]],
+], 0.5, { octave: 1, overBass: true });
 
 // ---- the guitar: fingerpicked, every chord rolled string by string -------------------------
 
@@ -237,13 +266,6 @@ const DOUBLE_TIME: Hit[] = [
 /** The toms running down over the last two beats of every 4th pass: the groove's fill, the drop's run. */
 const TOM_RUN: Hit[] = sixteenths(6, 8).map((p, i): Hit => [p, 'tom', 0.5 + 0.02 * i, [3]]);
 
-/** The heartbeat (version 1's, soft): a kick on 1 and the and of 2, a rim on 3 of each bar, a shaker breath on every "and". */
-const HEARTBEAT: Hit[] = [
-  [0, 'kick', 0.45], [1.5, 'kick', 0.35], [4, 'kick', 0.42], [5.5, 'kick', 0.33],
-  [2, 'rim', 0.3], [6, 'rim', 0.3],
-  ...[0, 1, 2, 3, 4, 5, 6, 7].map((p): Hit => [p + 0.5, 'hat', 0.2]),
-];
-
 /** The rebuild: the heartbeat's kick and rim; the hats back from the 2nd pass, the snare from the 3rd (the fill on the 4th is the tom run). */
 const REBUILD: Hit[] = [
   [0, 'kick', 0.48], [1.5, 'kick', 0.38], [4, 'kick', 0.45], [5.5, 'kick', 0.36],
@@ -257,11 +279,6 @@ const REBUILD: Hit[] = [
  * through on the 2nd (toms on the last two beats of both); the fast half carries on with
  * sixteenths over the second bar on the 3rd and all through on the 4th.
  */
-const SNARE_ROLL: Hit[] = [
-  ...eighths(4, 8).map((p): Hit => [p, 'snare', 0.3, [0]]),
-  ...eighths().map((p): Hit => [p, 'snare', 0.4, [1]]),
-  [6, 'tom', 0.45], [7, 'tom', 0.5],
-];
 const SNARE_ROLL_FAST: Hit[] = [
   ...[...eighths(0, 4), ...sixteenths(4, 8)].map((p): Hit => [p, 'snare', 0.5, [2]]),
   ...sixteenths().map((p): Hit => [p, 'snare', 0.65, [3]]),
@@ -274,9 +291,7 @@ export const DEMO_LOOPS: readonly { name: string; cells: StoredLoopCell[] }[] = 
   { name: 'Half time', cells: drums(HALF_TIME) },
   { name: 'Double time', cells: drums(DOUBLE_TIME) },
   { name: 'Tom run', cells: drums(TOM_RUN) },
-  { name: 'Heartbeat', cells: drums(HEARTBEAT) },
   { name: 'Rebuild', cells: drums(REBUILD) },
-  { name: 'Snare roll', cells: drums(SNARE_ROLL) },
   { name: 'Snare roll fast', cells: drums(SNARE_ROLL_FAST) },
   { name: 'Brass fifths', cells: BRASS_FIFTHS },
   { name: 'Brass swells', cells: BRASS_SWELLS },
@@ -285,6 +300,8 @@ export const DEMO_LOOPS: readonly { name: string; cells: StoredLoopCell[] }[] = 
   { name: 'Winds theme', cells: notes('melody', 'clarinet', THEME, 0.5, { layBack: 0.03 }) },
   { name: 'Winds high', cells: notes('melody', 'clarinet', THEME, 0.55, { layBack: 0.03, octave: 1 }) },
   { name: 'Bells in threes', cells: BELLS_IN_THREES },
+  { name: 'Harp song', cells: notes('melody', 'harp', SONG, 0.5, { layBack: 0.02 }) },
+  { name: 'Brass call', cells: BRASS_CALL },
 ];
 
 const SLOT = new Map(DEMO_LOOPS.map((l, i) => [l.name, i]));
@@ -355,19 +372,19 @@ export const DEMO_SCENES: readonly SceneSpec[] = [
   { name: 'Intrigue', pass: 24, loops: slots('Half time', 'Snare roll fast', 'Brass fifths', 'Bells in threes'), key: F_SHARP_MINOR, settings: { chords: chords('tide'), sceneEnergy: 3, bandJobs: PEDAL, fillAmount: 0.15 }, wayIn: CUT, leadIn: 'stop' },
   // 2:56 A crash: double time, the bass driving, the winds an octave up, Magenta at its busiest.
   { name: 'Drop', pass: 32, loops: slots(...DOUBLE_BAND), key: F_SHARP_MINOR, settings: { chords: chords('rise', 2), sceneEnergy: 5, bandJobs: DRIVE, fillAmount: 0.4 }, wayIn: CUT },
-  // 3:18 Everything falls away but the pads, a heartbeat, the winds and Tim's glow.
-  { name: 'Breakdown', pass: 36, loops: slots('Heartbeat', 'Winds theme'), key: F_SHARP_MINOR, settings: { chords: chords('tide'), sceneEnergy: 1, bandJobs: PADS_ONLY }, wayIn: CUT },
+  // 3:18 Everything falls away, the drums too: the pads, the harp song alone (the second tune) and Tim's glow.
+  { name: 'Breakdown', pass: 36, loops: slots('Harp song'), key: F_SHARP_MINOR, settings: { chords: chords('tide'), sceneEnergy: 1, bandJobs: PADS_ONLY }, wayIn: CUT },
   // 3:40 Over four passes the kit returns piece by piece: kick, then hats, then snare, then the fill.
-  { name: 'Rebuild', pass: 40, loops: slots('Rebuild', 'Tom run', 'Brass fifths', 'Guitar roll'), key: F_SHARP_MINOR, settings: { chords: chords('rise'), sceneEnergy: 3, bandJobs: ROOTS, fillAmount: 0.15 }, wayIn: CUT, leadIn: 'rising' },
-  // 4:02 A stop, then the light breaks back to A: the full groove, the driving bass, the brass on every bar, the guitar, the winds.
-  { name: 'Groove II', pass: 44, loops: slots(...GROOVE_BAND, 'Winds theme'), key: A_MAJOR, settings: { chords: chords('glow', 2), sceneEnergy: 4, bandJobs: DRIVE, fillAmount: 0.25 }, wayIn: CUT, leadIn: 'stop' },
-  // 4:46 A pedal on F#, the fifth of B: the chords hover, the snare rolls in eighths then sixteenths, louder each pass; it must
-  // land. No extra notes: the rolls fill every sixteenth, and there is no room for the AI's.
-  { name: 'Tension', pass: 52, loops: slots('Half time', 'Snare roll', 'Snare roll fast', 'Brass fifths', 'Guitar roll'), key: F_SHARP_MAJOR, settings: { chords: chords('still'), sceneEnergy: 4, bandJobs: PEDAL }, wayIn: CUT },
-  // 5:08 A stop, then B major: a crash, the full kit, the bass driving, the brass, the winds high, the guitar on every eighth.
-  { name: 'Summit', pass: 56, loops: slots(...DOUBLE_BAND), key: B_MAJOR, settings: { chords: chords('lift', 2), sceneEnergy: 5, bandJobs: DRIVE, fillAmount: 0.35 }, wayIn: CUT, leadIn: 'stop' },
-  // 5:52 More: the snare rolling into every fourth pass, the toms, Magenta busiest.
-  { name: 'Final ascent', pass: 64, loops: slots(...DOUBLE_BAND, 'Snare roll fast'), key: B_MAJOR, settings: { chords: chords('lift', 2), sceneEnergy: 5, bandJobs: DRIVE, fillAmount: 0.4 }, wayIn: CUT },
+  { name: 'Rebuild', pass: 40, loops: slots('Rebuild', 'Tom run', 'Brass fifths', 'Guitar roll', 'Harp song'), key: F_SHARP_MINOR, settings: { chords: chords('rise'), sceneEnergy: 3, bandJobs: ROOTS, fillAmount: 0.15 }, wayIn: CUT, leadIn: 'rising' },
+  // 4:02 A stop, then the light breaks back to A: the full groove, the driving bass, the brass on every bar, the guitar, the harp song bright.
+  { name: 'Groove II', pass: 44, loops: slots(...GROOVE_BAND, 'Harp song'), key: A_MAJOR, settings: { chords: chords('glow', 2), sceneEnergy: 4, bandJobs: DRIVE, fillAmount: 0.25 }, wayIn: CUT, leadIn: 'stop' },
+  // 4:46 A pedal on F#, the fifth of B: the chords hover, the bells in threes come back over it, and in the second half the
+  // snare rolls, louder each pass; it must land. No extra notes: the rolls fill every sixteenth, and there is no room for the AI's.
+  { name: 'Tension', pass: 52, loops: slots('Half time', 'Snare roll fast', 'Brass fifths', 'Guitar roll', 'Bells in threes'), key: F_SHARP_MAJOR, settings: { chords: chords('still'), sceneEnergy: 4, bandJobs: PEDAL }, wayIn: CUT },
+  // 5:08 A stop, then B major: a crash, the full kit, the bass driving, the brass call (the summit's own), the bells answering, the guitar on every eighth.
+  { name: 'Summit', pass: 56, loops: slots('Double time', 'Tom run', 'Brass call', 'Guitar eighths', 'Bells in threes'), key: B_MAJOR, settings: { chords: chords('lift', 2), sceneEnergy: 5, bandJobs: DRIVE, fillAmount: 0.35 }, wayIn: CUT, leadIn: 'stop' },
+  // 5:52 The theme comes home: the winds high over the brass call, new chords, the snare rolling into every fourth pass, Magenta busiest.
+  { name: 'Final ascent', pass: 64, loops: slots('Double time', 'Tom run', 'Brass call', 'Guitar eighths', 'Winds high', 'Snare roll fast'), key: B_MAJOR, settings: { chords: chords('glow', 2), sceneEnergy: 5, bandJobs: DRIVE, fillAmount: 0.4 }, wayIn: CUT },
 ];
 
 /** The pass the Big finish begins on: right after the last scene's eighth pass. */
