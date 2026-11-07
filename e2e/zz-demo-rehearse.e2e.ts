@@ -32,19 +32,23 @@ async function fakeMidi(page: Page): Promise<void> {
   });
 }
 
-interface SceneIdeas { id: string; name: string; ideas: number; fill: number }
+interface SceneIdeas { id: string; name: string; ideas: number; fill: number; at: number }
 
 /** The demo player's scenes as saved: how many ideas each has kept, and its extra notes. */
 async function keptIdeas(page: Page): Promise<SceneIdeas[]> {
   return page.evaluate((key) => {
-    const players = JSON.parse(localStorage.getItem(key) ?? '[]') as { id: string; settings?: { scenes?: { id: string; name: string; aiIdeas?: unknown[]; settings?: { fillAmount?: number } }[] } }[];
+    const players = JSON.parse(localStorage.getItem(key) ?? '[]') as { id: string; settings?: { scenes?: { id: string; name: string; at?: number; aiIdeas?: unknown[]; settings?: { fillAmount?: number } }[] } }[];
     const demo = players.find((p) => p.id === 'demo');
-    return (demo?.settings?.scenes ?? []).map((s) => ({ id: s.id, name: s.name, ideas: s.aiIdeas?.length ?? 0, fill: s.settings?.fillAmount ?? 0 }));
+    return (demo?.settings?.scenes ?? []).map((s) => ({ id: s.id, name: s.name, ideas: s.aiIdeas?.length ?? 0, fill: s.settings?.fillAmount ?? 0, at: s.at ?? 0 }));
   }, PLAYERS_KEY);
 }
 
-/** Four passes to an idea: an eight-pass scene wants two. The last two scenes are eight passes. */
-const wanted = (s: SceneIdeas, i: number, all: SceneIdeas[]): number => (s.fill > 0 ? (i >= all.length - 2 ? 2 : 1) : 0);
+/** The demo's four passes, in seconds (a pass is 8 beats at 87 BPM), and when its Big finish begins (pass 72). */
+const FOUR_PASSES_SEC = (4 * 8 * 60) / 87;
+const ENDING_SEC = 72 * (8 * 60) / 87;
+/** Four passes to an idea: a scene with extra notes wants one for every four passes it lasts. */
+const wanted = (s: SceneIdeas, i: number, all: SceneIdeas[]): number =>
+  (s.fill > 0 ? Math.max(1, Math.round(((all[i + 1]?.at ?? ENDING_SEC) - s.at) / FOUR_PASSES_SEC)) : 0);
 
 test('rehearse: the demo piece with Magenta on, until every four passes has its idea', async ({ page, context }) => {
   test.setTimeout(RUNS * PIECE_MS + 240_000);

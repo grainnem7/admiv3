@@ -220,3 +220,40 @@ describe('band jobs: a pedal for the bass (Rising Light, 2026-11-06)', () => {
     expect(sameJobs({ ...ALL, pedal: false }, ALL)).toBe(true);
   });
 });
+
+describe('band jobs: a driving bass (Rising Light version 3, G2)', () => {
+  const DRIVE: BandJobs = { ...ALL, drive: true };
+  /** The band's bass over one bar of four steps, the chord changing as `chordOn(step)` says. */
+  const bar = (jobs: BandJobs, chordOn: (step: number) => { root: number; tones: number[] } = () => C) =>
+    [0, 1, 2, 3].flatMap((step) => bandEventsAtStep(input({
+      harmony: chordOn(step), jobs, keyRootMidi: 69, playerRoles: new Set(), playerCounters: 0,
+      step, chordChange: step === 0 || chordOn(step) !== chordOn(step - 1), chordSpan: 4 - step, level: 'full',
+    })).filter((e) => e.part === 'bass').map((e) => ({ at: step + e.offset, midi: e.midi ?? -1, accent: e.accent, dur: e.dur })));
+
+  it('eight notes a bar on the chord’s root, the first of the bar accented, each 0.45 beats', () => {
+    const notes = bar(DRIVE);
+    expect(notes.map((n) => n.at)).toEqual([0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5]);
+    expect(new Set(notes.map((n) => pc(n.midi)))).toEqual(new Set([0]));
+    expect(notes.map((n) => n.accent)).toEqual([1, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7]);
+    for (const n of notes) expect(n.dur).toBe(0.45);
+    // In the bass register.
+    for (const n of notes) expect(n.midi).toBeLessThan(55);
+  });
+
+  it('the chord changing, the root follows on the next eighth', () => {
+    const notes = bar(DRIVE, (step) => (step < 2 ? C : G7));
+    expect(notes.map((n) => pc(n.midi))).toEqual([0, 0, 0, 0, 7, 7, 7, 7]);
+  });
+
+  it('with the pedal on too, the bass holds the key note instead', () => {
+    const notes = bar({ ...DRIVE, pedal: true });
+    expect(notes.map((n) => [n.at, pc(n.midi)])).toEqual([[0, 9]]);
+  });
+
+  it('is saved and made safe like the other jobs', () => {
+    expect(sanitizeBandJobs({ asBefore: false, pads: true, bass: true, drive: true }).drive).toBe(true);
+    expect(sanitizeBandJobs({ asBefore: false, pads: true, bass: true, drive: 1 }).drive).toBeUndefined();
+    expect(sameJobs(DRIVE, ALL)).toBe(false);
+    expect(sameJobs({ ...ALL, drive: false }, ALL)).toBe(true);
+  });
+});

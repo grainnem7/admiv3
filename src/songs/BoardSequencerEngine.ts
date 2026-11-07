@@ -45,7 +45,7 @@ import { describeEvolve, evolveState, NEUTRAL, type EvolveState } from '../audio
 import {
   BAND_GAIN, bandEventsAtStep, bandParts, type BandEvent, type BandLevel, type BandPart, type Harmony,
 } from './band/band';
-import { AS_BEFORE_JOBS, leadInEvents, type BandJobs, type LeadIn, type Register } from './band/bandJobs';
+import { AS_BEFORE_JOBS, leadInEvents, STOP_BEATS, type BandJobs, type LeadIn, type Register } from './band/bandJobs';
 import {
   KEEP_ON_TOP_ATTACK_TC, KEEP_ON_TOP_DEFAULT_DB, KEEP_ON_TOP_RELEASE_TC, dipGain, noteDip, pruneWindows, type SoundingWindow,
 } from './band/keepOnTop';
@@ -869,6 +869,14 @@ export class BoardSequencerEngine {
     // Its sounds, ready: the kit and the band's lead (the band itself may be off).
     if (!this.drumKit) void this.buildDrumKit();
     if (!this.bandVoices) this.buildBandVoices();
+  }
+
+  /** Whether `beat` is in a Stop's silence: one of the last STOP_BEATS beats before its scene lands. */
+  private inStop(beat: number): boolean {
+    const li = this.leadIn;
+    if (!li || li.kind !== 'stop' || this.simplify !== 'off') return false;
+    const left = li.landBeat - beat;
+    return left >= 1 && left <= STOP_BEATS;
   }
 
   /** The lead-in waiting, if any: what, and the beat its scene lands on. */
@@ -3140,19 +3148,23 @@ export class BoardSequencerEngine {
     // band hears what they played on this beat (it fits around them) and the loops and
     // extras know whether his notes sound (keep him on top).
     this.beginHearing(beat, cellTime);
+    // A Stop lead in: the last beats before its scene are silent but for the player's own
+    // counters (it is their moment); the loops, the band and the extra notes wait.
+    const stopped = this.inStop(beat);
+    const sounding = stopped ? tagged.filter((t) => t.source !== 'loop') : tagged;
     // Each colour plays a tune (a phrase) or one note per counter — its own choice.
-    const tuneTagged = tagged.filter((t) => this.playsTune(t.cell.colour));
+    const tuneTagged = sounding.filter((t) => this.playsTune(t.cell.colour));
     // Density (S2): a fresh tally for the step, the loops' cap from Energy, and whether the
     // player's melody is on the board, so loops' melodies take the octave above.
     this.stepTally = newStepTally();
     // The cap makes room for the player: with the player's counters on the board the loops
     // keep to it; with the board empty the loops play whole, so a loop that is on is heard.
-    const playerOn = tagged.some((t) => t.source !== 'loop');
+    const playerOn = sounding.some((t) => t.source !== 'loop');
     const ownTrack = this.ownTrack();
     this.stepLoopCap = playerOn && !ownTrack ? loopNoteCap(this.energy, worldOf(this.cfg.soundWorld ?? 'none')?.density ?? 0) : Number.POSITIVE_INFINITY;
-    this.stepLaneUp = !ownTrack && tagged.some((t) => t.source !== 'loop' && this.roleFor(t.cell.colour) === 'melody');
+    this.stepLaneUp = !ownTrack && sounding.some((t) => t.source !== 'loop' && this.roleFor(t.cell.colour) === 'melody');
     const loopPhrases = tuneTagged.length > 0 ? this.firePhrases(beat, cellTime, secPerBeat, chord, tuneTagged) : null;
-    let noteTagged = tuneTagged.length === 0 ? tagged : tagged.filter((t) => !this.playsTune(t.cell.colour));
+    let noteTagged = tuneTagged.length === 0 ? sounding : sounding.filter((t) => !this.playsTune(t.cell.colour));
     // Layered one-note melodies take turns too: the one leading this pass plays its note,
     // another melody's note on the same step rests, and answers softer where it's alone. On
     // their own track the player's counters take no turns: theirs and the loops' all play.
@@ -3243,9 +3255,9 @@ export class BoardSequencerEngine {
     // every part the band fell silent for a whole section, and a loop alone brought it in
     // before the player had touched the board — but with jobs it fits around them too. With
     // "the band with the loops" (the demo piece) a playing loop brings it in as well.
-    this.fireBand(beat, cellTime, secPerBeat, chord, playCells, playCells.filter((c) => !c.layer));
+    if (!stopped) this.fireBand(beat, cellTime, secPerBeat, chord, playCells, playCells.filter((c) => !c.layer));
     this.fireLeadIn(beat, cellTime, secPerBeat);
-    this.fireFill(beat, cellTime, secPerBeat, chord, playCells);
+    if (!stopped) this.fireFill(beat, cellTime, secPerBeat, chord, playCells);
   }
 
   /** The phrase engine's view of the cells, for both playing and fitting a fill around. */

@@ -172,6 +172,9 @@ function fifthAbove(root: number, tones: readonly number[]): number {
   return best;
 }
 
+/** A driving bass's note, in beats: an eighth, a touch short so each note speaks. */
+const DRIVE_NOTE_BEATS = 0.45;
+
 /** The band's notes on one step. */
 export function bandEventsAtStep(input: BandInput): BandEvent[] {
   const withJobs = input.jobs !== undefined && !input.jobs.asBefore;
@@ -217,18 +220,25 @@ export function bandEventsAtStep(input: BandInput): BandEvent[] {
     const pedal = withJobs && input.jobs?.pedal === true && input.keyRootMidi !== undefined;
     const rootPc = pedal ? input.keyRootMidi as number : h.root;
     const root = bassNote({ rootPc: ((rootPc % 12) + 12) % 12 }, 36);
-    // A pedal is held through the chord, never walked: the chords move above a bass that does not.
-    if (input.chordChange) out.push({ part: 'bass', offset: 0, dur: full && !pedal ? Math.min(span, 1.9) : span - 0.05, accent: 0.8, midi: root });
-    if (full && !pedal) {
-      // A walk under the chord: the fifth halfway through, the octave leading into the next.
-      const into = (input.step % input.loop);
-      const changeIn = span; // steps until the next change, counted from this step when chordChange
-      if (!input.chordChange && changeIn === 1) out.push({ part: 'bass', offset: 0.5, dur: 0.45, accent: 0.6, midi: root + 12 });
-      // The chord's own fifth: a diminished chord's is a semitone below a perfect one.
-      else if (!input.chordChange && into % 2 === 0) {
-        // A varied bar may walk to the octave instead: a chord note either way.
-        const octave = (input.vary ?? 0) !== 0 && ((input.vary ?? 0) >>> 5) % 3 === 0;
-        out.push({ part: 'bass', offset: 0, dur: 0.9, accent: 0.65, midi: octave ? root + 12 : fifthAbove(root, h.tones) });
+    if (withJobs && input.jobs?.drive === true && !pedal) {
+      // Driving: the root on every eighth, the first of the bar accented, the chord's root as it changes.
+      for (const offset of [0, 0.5]) {
+        out.push({ part: 'bass', offset, dur: DRIVE_NOTE_BEATS, accent: offset === 0 && input.step % 4 === 0 ? 1 : 0.7, midi: root });
+      }
+    } else {
+      // A pedal is held through the chord, never walked: the chords move above a bass that does not.
+      if (input.chordChange) out.push({ part: 'bass', offset: 0, dur: full && !pedal ? Math.min(span, 1.9) : span - 0.05, accent: 0.8, midi: root });
+      if (full && !pedal) {
+        // A walk under the chord: the fifth halfway through, the octave leading into the next.
+        const into = (input.step % input.loop);
+        const changeIn = span; // steps until the next change, counted from this step when chordChange
+        if (!input.chordChange && changeIn === 1) out.push({ part: 'bass', offset: 0.5, dur: 0.45, accent: 0.6, midi: root + 12 });
+        // The chord's own fifth: a diminished chord's is a semitone below a perfect one.
+        else if (!input.chordChange && into % 2 === 0) {
+          // A varied bar may walk to the octave instead: a chord note either way.
+          const octave = (input.vary ?? 0) !== 0 && ((input.vary ?? 0) >>> 5) % 3 === 0;
+          out.push({ part: 'bass', offset: 0, dur: 0.9, accent: 0.65, midi: octave ? root + 12 : fifthAbove(root, h.tones) });
+        }
       }
     }
   }

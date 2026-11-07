@@ -79,15 +79,13 @@ describe('the demo through the engine', () => {
     expect(high?.durSec).toBeGreaterThanOrEqual(7);
   });
 
-  it('the brass holds open fifths a whole pass, the third high above on the 3rd and 4th passes', () => {
-    const { e, p } = engineWith(['Brass pad']);
-    const fired = play(e, p, 0, 32);
+  it('the brass swells on the first beat of every bar, an open fifth held through it', () => {
+    const { e, p } = engineWith(['Brass swells']);
+    const fired = play(e, p, 0, 8);
     const at = (b: number) => (fired.get(b) ?? []).filter((n) => n.role === 'bass').map((n) => n.midi).sort();
     expect(at(0)).toEqual([57, 64]);
-    expect(at(8)).toEqual([57, 64]);
-    expect(at(16)).toEqual([57, 64, 73]);
-    expect(at(24)).toEqual([57, 64, 73]);
-    for (const n of fired.get(0) ?? []) expect(n.durSec).toBeCloseTo(8, 5);
+    expect(at(4)).toEqual([57, 64]);
+    for (const n of fired.get(0) ?? []) expect(n.durSec).toBeCloseTo(4, 5);
   });
 
   it('the guitar rolls the chord the pads hold, string by string, 90 ms apart: once on the 1st pass, twice after', () => {
@@ -102,16 +100,16 @@ describe('the demo through the engine', () => {
     expect(new Set((chordsIn(0)[0].midis ?? []).map(pc)).has(9)).toBe(true);
   });
 
-  it('the percussion plays one kit piece per counter: the heartbeat’s kicks, then the shaker, then the rim', () => {
-    const { e, p } = engineWith(['Percussion heartbeat']);
-    const fired = [...play(e, p, 0, 24).values()].flat().filter((n) => n.drum);
+  it('the groove plays on a sixteenth grid: its kick pattern, the backbeat, hats on the eighths; ghosts on the 2nd pass', () => {
+    const { e, p } = engineWith(['Groove']);
+    const fired = [...play(e, p, 0, 16).values()].flat().filter((n) => n.drum);
     const times = (d: string, from: number) => fired.filter((n) => n.drum === d && n.audioTime >= from && n.audioTime < from + 8)
       .map((n) => n.audioTime - from).sort((x, y) => x - y);
-    expect(times('kick', 0)).toEqual([0, 1.5, 4, 5.5]);
-    expect(times('hat', 0)).toEqual([]);
-    expect(times('hat', 8)).toEqual([0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5]);
-    expect(times('rim', 8)).toEqual([]);
-    expect(times('rim', 16)).toEqual([2, 6]);
+    expect(times('kick', 0)).toEqual([0, 1.5, 2.75, 4, 5.5, 6.5]);
+    expect(times('snare', 0)).toEqual([1, 3, 5, 7]);
+    expect(times('hat', 0)).toHaveLength(16);
+    expect(times('hat', 8)).toHaveLength(24);
+    expect(times('crash', 0)).toEqual([0]);
   });
 
   it('a scene’s key lands on the pass: A major to the end of the pass, F sharp minor from its first beat (the theme a third lower)', () => {
@@ -154,7 +152,7 @@ describe('the band with the loops', () => {
       expect(fired.some((n) => n.origin === 'band'), String(withLoops)).toBe(withLoops);
       if (withLoops) {
         // A bass loop over the bass (the brass) is not the bass: the band's bass plays under it.
-        const t = engineWith(['Brass pad', 'Guitar roll'], { bandWithLoops: true, band: 'gentle', bandJobs: { asBefore: false, pads: true, bass: true, drums: false, counter: false } });
+        const t = engineWith(['Brass swells', 'Guitar roll'], { bandWithLoops: true, band: 'gentle', bandJobs: { asBefore: false, pads: true, bass: true, drums: false, counter: false } });
         (t.p as unknown as { bandVoices: unknown }).bandVoices = bp.bandVoices;
         t.e.setBand('gentle');
         const notes = [...play(t.e, t.p, 0, 24).values()].flat();

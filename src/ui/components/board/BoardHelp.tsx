@@ -129,21 +129,23 @@ const HELP: HelpEntry[] = [
   {
     title: 'The demo piece',
     body: 'Player button → ▶ Open the demo piece: Rising Light, a ready-made piece of seven minutes, as a '
-      + 'player of its own called Demo piece. It is ambient and keeps building: light first, the band '
-      + 'gathering one voice at a time, a cloud passing, then a long climb to a big finish. Drums: a soft '
-      + 'heartbeat alone. Brass: brass pads swell in. Guitar: a fingerpicked guitar rolls each chord. Winds: '
-      + 'wind pads breathe the four note theme. Shadow: the music drops to F sharp, the theme a third lower. '
-      + 'Heartbeat, then Hush: only the pads and the winds. Rebuild and Climb, then Light breaks: back to A, '
-      + 'everything at once. Gathering, Summit (a tone higher, in B) and Final ascent, then the Big finish: the '
-      + 'band broadens into one huge chord and rings out by 7:00. Every loop grows over four passes, and the '
-      + 'AI’s extra notes (Magenta) have a new idea every four passes. Everything is in one five note '
-      + '(pentatonic) scale, so whatever you place sounds well. In the demo all your colours play one soft pad '
-      + 'with long notes, on their own track in Ableton, “Tim’s glow” (MIDI channel 14), above the band, so '
-      + 'your counters never stop a loop. It uses the colours, the cap and the iPad of the player chosen '
-      + 'before it. Press ▶ Start the piece in Show to hear it. Opening it again writes the music afresh, so a '
-      + 'change made in it is put back. The AI’s ideas are frozen into it, so every performance plays the '
-      + 'same ones. To choose others: rehearse, press New idea in a scene to hear another, Make a piece → Back '
-      + 'up to a file, and ask Claude Code to freeze them. In Ableton the pads are on the Band chords track.',
+      + 'player of its own called Demo piece. It has a goal: dreamy at first, then grooves, intrigue, a drop and a '
+      + 'summit. Drums: soft toms ask a question. Brass, then Guitar: the band gathers. Groove: a fill, a crash, '
+      + 'and the kit locks into a groove with a driving bass. Winds hook: the theme over the groove. Intrigue: a '
+      + 'stop, then the music drops to F sharp, toms and bells in threes against the beat, a snare roll building. '
+      + 'Drop: double time, everything at once. Breakdown: only the pads, a heartbeat and the winds. Rebuild: the '
+      + 'kit returns piece by piece. Groove II: a stop, then back to A. Tension: a held F sharp, the snare rolling '
+      + 'faster and louder. Summit: a stop, then B major, the fullest. Final ascent, then the Big finish: one huge '
+      + 'chord, ringing out by 7:00. The tempo never changes; the drums feel slower or faster. Every loop grows '
+      + 'over four passes, and the AI’s extra notes (Magenta) have a new idea every four passes. Everything is in '
+      + 'a five note (pentatonic) scale, so whatever you place sounds well. In the demo all your colours play one '
+      + 'soft pad with long notes, on their own track in Ableton, “Tim’s glow” (MIDI channel 14), above the band: '
+      + 'your counters never stop a loop, and play even in the stops. It uses the colours, the cap and the iPad of '
+      + 'the player chosen before it. Press ▶ Start the piece in Show to hear it. Opening it again writes the music '
+      + 'afresh, so a change made in it is put back. Each scene sets its own Extra notes, so a choice on the Sound '
+      + 'tab lasts until the next scene. The AI’s ideas are frozen into it, so every performance plays the same '
+      + 'ones; to choose others, rehearse, press New idea in a scene, Make a piece → Back up to a file, and ask '
+      + 'Claude Code to freeze them. In Ableton the pads are on the Band chords track.',
   },
   {
     title: 'Hints',

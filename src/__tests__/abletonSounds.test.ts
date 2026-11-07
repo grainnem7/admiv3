@@ -326,6 +326,7 @@ vi.mock('../audio/instruments/RoundRobinDrumKit', () => ({ RoundRobinDrumKit: vi
 import * as Tone from 'tone';
 import { fakeVoiceEntry } from './helpers/fakeVoiceEntry';
 import { BoardSequencerEngine } from '../songs/BoardSequencerEngine';
+import { loopChannelsFor } from '../songs/performance/loopSounds';
 
 interface Priv {
   channelById: Map<string, ColourChannel>;
@@ -452,6 +453,28 @@ describe('engine: sound choices reach Ableton', () => {
     const loop = fired.find((n) => n.source === 'loop')?.midi;
     expect(mine).toBeDefined();
     expect(loop).toBe(mine);
+  });
+
+  it('a drum loop on a sixteenth grid (Rising Light v3, G3): four hats on one step, a quarter beat apart, and over MIDI too', () => {
+    const { e, p } = engine();
+    e.setMidiOut({ enabled: true, sends: 'all' }, 'p1');
+    const hats = loopChannelsFor([0, 0.25, 0.5, 0.75].map((t, i) => ({
+      row: 7 - i, col: 0, colour: 'x', job: 'drums' as const, sound: 'hat', plays: 'note' as const, velocity: 0.5, ...(t > 0 ? { timingBeats: t } : {}),
+    })), []);
+    (p as unknown as { drumKit: { play: Mock } }).drumKit = { play: vi.fn() };
+    e.setLaunchedLoops([0], [hats.cells], hats.channels);
+    port.send.mockClear();
+    // At the demo's 87 BPM a sixteenth is 172 ms, far over the 15 ms the flam guard merges.
+    const spb = 60 / 87;
+    // The wall clock held still, so a busy machine sending the hits a few ms apart changes nothing.
+    const clock = vi.spyOn(performance, 'now').mockReturnValue(1000);
+    p.fireStep(0, 10, spb, null);
+    clock.mockRestore();
+    const fired = e.drainFiredNotes().filter((n) => n.drum === 'hat').map((n) => n.audioTime).sort((a, b) => a - b);
+    expect(fired.map((t) => Math.round((t - 10) / (spb / 4)))).toEqual([0, 1, 2, 3]);
+    const ons = sent().filter((x) => x.d[0] === 0x99 && x.d[1] === 42 && x.d[2] > 0).map((x) => x.at ?? 0).sort((a, b) => a - b);
+    expect(ons).toHaveLength(4);
+    for (let i = 1; i < 4; i++) expect(ons[i] - ons[i - 1]).toBeCloseTo((spb / 4) * 1000, 3);
   });
 
   it('a Tone counter owns Bright (CC 25) while it is on the board', () => {

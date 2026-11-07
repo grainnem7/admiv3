@@ -26,6 +26,12 @@ export interface BandJobs {
    * so the chords move above a bass that does not. Absent = off.
    */
   pedal?: boolean;
+  /**
+   * A driving bass (Rising Light version 3): the band's bass plays the chord's root on every
+   * eighth, the first of each bar accented, so the grooves feel upbeat. The pedal, if also
+   * on, holds the key note instead. Absent = off.
+   */
+  drive?: boolean;
 }
 export type BandJob = 'pads' | 'bass' | 'drums' | 'counter';
 export const BAND_JOBS: BandJob[] = ['pads', 'bass', 'drums', 'counter'];
@@ -49,7 +55,7 @@ export const BAND_JOB_WORDS: Record<BandJob, { label: string; what: string }> = 
 
 export function sameJobs(a: BandJobs, b: BandJobs): boolean {
   return a.asBefore === b.asBefore && a.pads === b.pads && a.bass === b.bass && a.drums === b.drums && a.counter === b.counter
-    && (a.pedal === true) === (b.pedal === true);
+    && (a.pedal === true) === (b.pedal === true) && (a.drive === true) === (b.drive === true);
 }
 
 /** Stored jobs made safe: unreadable (or saved before jobs) is "As before"; a job left out is off. */
@@ -59,6 +65,7 @@ export function sanitizeBandJobs(v: unknown): BandJobs {
   return {
     asBefore: false, pads: o.pads === true, bass: o.bass === true, drums: o.drums === true, counter: o.counter === true,
     ...(o.pedal === true ? { pedal: true } : {}),
+    ...(o.drive === true ? { drive: true } : {}),
   };
 }
 
@@ -111,13 +118,17 @@ export function notesIn(pcs: readonly number[], lo: number, hi: number): number[
 
 // ---- lead-in ------------------------------------------------------------------------
 
-export type LeadIn = 'none' | 'drumFill' | 'rising';
-export const LEAD_INS: LeadIn[] = ['none', 'drumFill', 'rising'];
+export type LeadIn = 'none' | 'drumFill' | 'rising' | 'stop';
+export const LEAD_INS: LeadIn[] = ['none', 'drumFill', 'rising', 'stop'];
 export const LEAD_IN_WORDS: Record<LeadIn, { label: string; what: string }> = {
   none: { label: 'None', what: 'The scene simply comes in.' },
   drumFill: { label: 'Drum fill', what: 'A drum fill in the last bar before the scene, and a cymbal as it lands.' },
   rising: { label: 'Rising', what: 'Notes that climb and grow through the last pass before the scene.' },
+  stop: { label: 'Stop', what: 'Stop: the last two beats before the scene are silent, then it crashes in.' },
 };
+
+/** How many beats before its scene a Stop is silent. */
+export const STOP_BEATS = 2;
 
 export function sanitizeLeadIn(v: unknown): LeadIn {
   return LEAD_INS.find((l) => l === v) ?? 'none';
@@ -132,11 +143,12 @@ const RISING_MAX_BEATS = 16;
  *  - Drum fill: the last bar, busier and louder towards the scene, and a crash on landing.
  *  - Rising: through the last pass, the chord's notes climbing and growing, two to a beat
  *    in the last bar.
+ *  - Stop: nothing before (the engine keeps the last two beats silent), a crash on landing.
  */
 export function leadInEvents(kind: LeadIn, left: number, cycle: number, harmony: Harmony | null): BandEvent[] {
   // On the last beat before the scene lands, whatever the lead in, the bass steps up to the
   // fifth below the root: an approach the ear hears as an arrival (cadences, S2).
-  const approach: BandEvent[] = kind !== 'none' && left === 1 && harmony
+  const approach: BandEvent[] = kind !== 'none' && kind !== 'stop' && left === 1 && harmony
     ? [{ part: 'leadIn', offset: 0.5, dur: 0.45, accent: 0.75, midi: bassApproach(harmony) }]
     : [];
   return [...approach, ...leadInKindEvents(kind, left, cycle, harmony)];
@@ -151,6 +163,9 @@ export function bassApproach(harmony: Harmony): number {
 }
 
 function leadInKindEvents(kind: LeadIn, left: number, cycle: number, harmony: Harmony | null): BandEvent[] {
+  if (kind === 'stop') {
+    return left === 0 ? [{ part: 'leadIn', offset: 0, dur: 0.25, accent: 0.8, drum: 'crash' }, { part: 'leadIn', offset: 0, dur: 0.25, accent: 0.8, drum: 'kick' }] : [];
+  }
   if (kind === 'drumFill') {
     const hit = (offset: number, drum: 'snare' | 'tom' | 'crash' | 'kick', accent: number): BandEvent =>
       ({ part: 'leadIn', offset, dur: 0.25, accent, drum });

@@ -1,25 +1,28 @@
 /**
- * The demo piece, "Rising Light", version 2: seven minutes that play the same every time.
+ * The demo piece, "Rising Light", version 3: seven minutes that play the same every time.
  *
- * The composition is docs/superpowers/specs/2026-11-06-demo-composition-v2-design.md, built on
- * version 1's (2026-11-06-demo-composition-design.md), whose ambient rules still hold. The
- * owner's notes on version 1: keep the ambient sound; open light, pentatonic and major-ish but
- * atmospheric, never twee; open with drums alone, then brass pads, a realistic guitar, then
- * wind pads; more development and drama (it was samey: the loops and Magenta never
- * developed); Tim's counters must blend; a build to a big, dramatic ending.
+ * The composition is docs/superpowers/specs/2026-11-06-demo-composition-v3-design.md, built on
+ * versions 1 and 2 (2026-11-06-demo-composition-design.md, -v2-design.md). The owner's notes on
+ * version 2: a lot better, but dreamy; it needs upbeat, dramatic and exciting sections with
+ * drums, more intrigue and more direction.
  *
- * One set of five notes, three centres: A major pentatonic (the Light), F sharp minor
- * pentatonic (the Shadow: the same notes, the theme a third lower), B major pentatonic (the
- * Summit, a tone above the Light). Every written note is in the scene's pentatonic scale, so
- * it sits in every chord of its section; whatever Tim places is in the key too.
+ * So the drums change feel without the tempo changing (87 BPM throughout): tribal in the
+ * opening, a groove, half time for the intrigue, double time for the drop and the summit, a
+ * heartbeat in the breakdown. The band's bass drives in eighths in the grooves. Intrigue comes
+ * from pedals under moving chords, bells in threes against the fours, and a dominant pedal (F
+ * sharp, the fifth of B) under the Tension, so the summit lands as a resolution. Surprise
+ * comes from stops (two beats of silence, then a crash), snare rolls into the drop, crashes on
+ * new sections. Every section has a job and points at the next.
  *
- * Development at every level: a loop grows over four passes (notes written for the 1st, 2nd,
- * 3rd or 4th pass of every four), a scene lasts four passes (eight for the last two), and
- * Magenta has a new idea every four passes. Tim's counters all sound on his own track, Tim's
- * glow (MIDI channel 14), one soft pad over everything, so he never interrupts a loop.
+ * One set of five notes (A major pentatonic, the same notes centred on F# for the shadow), F
+ * sharp major pentatonic for the Tension and B major pentatonic for the summit: every written
+ * note sits in every chord of its section, and whatever Tim places is in the key. His counters
+ * sound on his own track, Tim's glow (MIDI channel 14), over everything.
  *
- * On the usual 8 by 8 board at 87 BPM a pass is two bars of 4/4 (8 beats, about 5.5 s).
- * Every change lands on the downbeat of a pass that is a multiple of four.
+ * On the usual 8 by 8 board at 87 BPM a pass is two bars of 4/4 (8 beats, about 5.5 s); a
+ * drum hit's place in the pass is its step and a fraction of a beat (`timingBeats`), so the
+ * kit plays on a sixteenth grid. Every change lands on the downbeat of a pass that is a
+ * multiple of four.
  *
  * Ableton, one track per part: each scene has one melody sound, one sound on the Bass track
  * (the brass) and one on the Chords track (the guitar).
@@ -44,7 +47,7 @@ export const DEMO_PIECE_ID = 'demo-piece';
  * The demo's music, by revision: a demo player made from an older one has its music written
  * afresh when opened, so a laptop that has pulled a newer ADMI always plays the newest demo.
  */
-export const DEMO_REVISION = 11;
+export const DEMO_REVISION = 12;
 
 const ROWS = 8;
 const COLS = 8;
@@ -55,16 +58,18 @@ export const DEMO_IDEAS = 20261106;
 
 const MAJOR_PENT = [0, 2, 4, 7, 9];
 const MINOR_PENT = [0, 3, 5, 7, 10];
-/** The Light: A major pentatonic (A, B, C#, E, F#), the key note A4 on the bottom row. */
+/** The light: A major pentatonic (A, B, C#, E, F#), the key note A4 on the bottom row. */
 export const A_MAJOR: SceneKey = { rootMidi: 69, scaleName: 'Major pentatonic', semitones: MAJOR_PENT };
-/** The Shadow: F sharp minor pentatonic, the same five notes centred on F# (the chords from F sharp natural minor). */
+/** The shadow: F sharp minor pentatonic, the same five notes centred on F# (the chords from F sharp natural minor). */
 export const F_SHARP_MINOR: SceneKey = { rootMidi: 66, scaleName: 'Minor pentatonic', semitones: MINOR_PENT };
-/** The Summit: B major pentatonic (B, C#, D#, F#, G#), a tone above the Light. */
+/** The Tension: F sharp major pentatonic (F#, G#, A#, C#, D#), the fifth of B, so the summit lands as a resolution. */
+export const F_SHARP_MAJOR: SceneKey = { rootMidi: 66, scaleName: 'Major pentatonic', semitones: MAJOR_PENT };
+/** The summit: B major pentatonic (B, C#, D#, F#, G#), a tone above the light. */
 export const B_MAJOR: SceneKey = { rootMidi: 71, scaleName: 'Major pentatonic', semitones: MAJOR_PENT };
 
 /**
  * Steps of the pentatonic scale from the bottom row, written in A major: A4 B4 C#5 E5 F#5 A5
- * B5 C#6. In F sharp minor the same steps are F#4 A4 B4 C#5 E5 F#5; in B major B4 C#5 D#5 F#5 G#5 B5.
+ * B5 C#6. In F sharp minor the same steps are F#4 A4 B4 C#5 E5 F#5.
  */
 const A = 0, B = 1, CS = 2, E = 3, FS = 4, A2 = 5;
 
@@ -104,7 +109,7 @@ function notes(job: LoopJob, sound: string, line: readonly Written[], velocity: 
 /** From the second pass of every four. */
 const LATER = [1, 2, 3] as const;
 
-// ---- the theme: four notes that grow over four passes ------------------------------------
+// ---- the theme: four notes that grow over four passes (version 2's) ---------------------
 
 /**
  * C#, B, A, then up to E (the 1st pass asks); the 2nd answers, B and the F# above; the 3rd
@@ -116,21 +121,23 @@ const THEME: Written[] = [
   [2, E, 1, [2, 3]],
   [1, A2, 7, [3]],
 ];
-/** The bells' fragment (version 1's, for the Rebuild in F sharp minor): the steps of C# and A there, each held a bar. */
-const BELLS_FRAGMENT: Written[] = [[0, 3, 4], [4, 1, 4]];
 
-// ---- the brass: open fifths, held a pass, the third on the later passes -------------------
+/**
+ * The bells in threes (the Intrigue, in F sharp minor): C#, B, A, one on every third eighth,
+ * so the figure comes round against the fours (written as the steps of C#, B and A there).
+ */
+const BELLS_IN_THREES: StoredLoopCell[] = [0, 1.5, 3, 4.5, 6, 7.5].map((p, i) => ({
+  row: ROWS - 1 - [3, 2, 1][i % 3], col: Math.floor(p), colour: loopColourId('melody', 'synth:bell'), job: 'melody' as const,
+  sound: 'synth:bell', plays: 'note' as const, velocity: 0.4, octave: 1, holdBeats: 1.5,
+  ...(p % 1 > 0 ? { timingBeats: p % 1 } : {}),
+}));
 
-/** The key note and its fifth (A and E in the light, F# and C# in the shadow), a whole pass. */
-const FIFTHS: Written[] = [[0, A, 8], [0, E, 8]];
+// ---- the brass ----------------------------------------------------------------------------
 
-/** The brass: a bass loop over the band's sub, an octave up from the bass; the third two octaves up, high and open. */
-function brass(withThird: boolean): StoredLoopCell[] {
-  const fifths = notes('bass', 'trombone', FIFTHS, 0.4, { octave: 1, overBass: true });
-  return withThird
-    ? [...fifths, ...notes('bass', 'trombone', [[0, CS, 8, [2, 3]]], 0.4, { octave: 2, overBass: true })]
-    : fifths;
-}
+/** The key note and its fifth, held a whole pass: the opening's pads, and the pedal F# in the Intrigue and the Tension. */
+const BRASS_FIFTHS = notes('bass', 'trombone', [[0, A, 8], [0, E, 8]], 0.4, { octave: 1, overBass: true });
+/** In the grooves, a swell on the first beat of every bar, held through it. */
+const BRASS_SWELLS = notes('bass', 'trombone', [[0, A, 4], [0, E, 4], [4, A, 4], [4, E, 4]], 0.45, { octave: 1, overBass: true });
 
 // ---- the guitar: fingerpicked, every chord rolled string by string -------------------------
 
@@ -138,94 +145,146 @@ const ROLL_UP = 0.09;
 const ROLL_DOWN = -0.07;
 
 /** A chord the pads hold, rolled: one counter, its own roll and loudness, on its passes. */
-function rolled(col: number, roll: number, velocity: number, passes?: readonly number[]): StoredLoopCell {
+function rolled(row: number, col: number, roll: number, velocity: number, extra: Partial<StoredLoopCell> = {}): StoredLoopCell {
   return {
-    row: ROWS - 1, col, colour: loopColourId('chord', 'guitarAcoustic'), job: 'chord', sound: 'guitarAcoustic', plays: 'note',
-    velocity, follows: true, roll, ...(passes ? { passes: [...passes] } : {}),
+    row, col, colour: loopColourId('chord', 'guitarAcoustic'), job: 'chord', sound: 'guitarAcoustic', plays: 'note',
+    velocity, follows: true, roll, ...extra,
   };
 }
-/** A chord every pass, and one on beat 5 from the second pass. */
-const GUITAR_ROLL: StoredLoopCell[] = [rolled(0, ROLL_UP, 0.45), rolled(4, ROLL_UP, 0.4, LATER)];
-/** The picking: every beat, up on the strong beats and down between; the between-beats from the second pass. */
-const PICK_VELOCITY = [0.5, 0.38, 0.42, 0.36, 0.44, 0.37, 0.41, 0.39];
-const GUITAR_PICKING: StoredLoopCell[] = PICK_VELOCITY.map((v, col) =>
-  rolled(col, col % 2 === 0 ? ROLL_UP : ROLL_DOWN, v, col % 2 === 0 ? undefined : LATER));
+/** The slow roll: a chord every pass, and one on beat 5 from the second pass. */
+const GUITAR_ROLL: StoredLoopCell[] = [rolled(ROWS - 1, 0, ROLL_UP, 0.45), rolled(ROWS - 1, 4, ROLL_UP, 0.4, { passes: [...LATER] })];
+/** In the grooves: picked on every eighth, two counters a step, up on the beat and down between. */
+const EIGHTH_VELOCITY = [0.5, 0.36, 0.42, 0.34, 0.46, 0.37, 0.41, 0.35];
+const GUITAR_EIGHTHS: StoredLoopCell[] = Array.from({ length: COLS }, (_, col) => [
+  rolled(ROWS - 1, col, ROLL_UP, EIGHTH_VELOCITY[col]),
+  rolled(ROWS - 2, col, ROLL_DOWN, Math.round(EIGHTH_VELOCITY[(col + 3) % COLS] * 0.85 * 100) / 100, { timingBeats: 0.5 }),
+]).flat();
 
-// ---- the percussion: soft, a heartbeat ---------------------------------------------------
+// ---- the drums: one kit piece per counter, on a sixteenth grid ----------------------------
 
-type Piece = 'kick' | 'rim' | 'snare' | 'hat' | 'tom' | 'crash';
+type Piece = 'kick' | 'rim' | 'snare' | 'hat' | 'tom' | 'crash' | 'clap';
 /** Each kit piece on its own row, so no two counters share a square (the row picks nothing: the loop names its piece). */
-const PIECE_ROW: Record<Piece, number> = { kick: 7, rim: 6, snare: 5, hat: 4, tom: 3, crash: 2 };
-/** A hit: its step, its piece, half a beat late or not, the passes of four it plays on (null: every pass), how loud. */
-type Hit = readonly [col: number, piece: Piece, offBeat: boolean, passes: readonly number[] | null, velocity: number];
+const PIECE_ROW: Record<Piece, number> = { kick: 7, rim: 6, snare: 5, hat: 4, tom: 3, crash: 2, clap: 1 };
+/** A hit: where in the pass (in beats, 0 to 8), its piece, how loud, and the passes of four it plays on (absent: every pass). */
+type Hit = readonly [at: number, piece: Piece, velocity: number, passes?: readonly number[]];
 
-function percussion(hits: readonly Hit[]): StoredLoopCell[] {
+/** Hits as loop cells: a beat position p is step ⌊p⌋, a fraction of a beat late. */
+function drums(hits: readonly Hit[]): StoredLoopCell[] {
   const used = new Set<string>();
-  return hits.map(([col, piece, offBeat, passes, velocity]) => {
-    // The second of two hits of one piece on one step (a tom roll) takes the next row down.
+  return hits.map(([p, piece, velocity, passes]) => {
+    const col = Math.floor(p);
+    // A second hit on a step that piece's row already holds takes the next free row down.
     let row = PIECE_ROW[piece];
-    while (used.has(`${col}:${row}`)) row = (row + ROWS - 1) % ROWS;
+    for (let tries = 0; used.has(`${col}:${row}`); tries++) {
+      if (tries >= ROWS) throw new Error(`more than ${ROWS} hits on step ${col}`);
+      row = (row + ROWS - 1) % ROWS;
+    }
     used.add(`${col}:${row}`);
+    const late = Math.round((p - col) * 1000) / 1000;
     return {
       row, col, colour: loopColourId('drums', piece), job: 'drums' as const, sound: piece, plays: 'note' as const, velocity,
-      ...(offBeat ? { timingBeats: 0.5 } : {}),
+      ...(late > 0 ? { timingBeats: late } : {}),
       ...(passes ? { passes: [...passes] } : {}),
     };
   });
 }
 
-const SHAKER_SOFT = 0.2;
-const EVERY_OTHER = [1, 3] as const;
-/** A shaker breath on every "and": eight a pass. */
-const shakerAnds = (v: number, passes: readonly number[] | null = null): Hit[] =>
-  Array.from({ length: COLS }, (_, c): Hit => [c, 'hat', true, passes, v]);
-/** The shaker on every eighth. */
-const shakerEighths = (v: number): Hit[] => [
-  ...Array.from({ length: COLS }, (_, c): Hit => [c, 'hat', false, null, Math.round(v * 0.8 * 100) / 100]),
-  ...shakerAnds(v),
+/** Every eighth, or every sixteenth, of the pass (or a stretch of it). */
+const eighths = (from = 0, to = 8): number[] => Array.from({ length: (to - from) * 2 }, (_, i) => from + i / 2);
+const sixteenths = (from = 0, to = 8): number[] => Array.from({ length: (to - from) * 4 }, (_, i) => from + i / 4);
+
+/**
+ * Tribal (the opening): a soft kick on 1 of each bar, low toms answering it (a pattern that
+ * asks a question), a rim click, the shaker on every eighth from the 2nd pass, very soft.
+ */
+const TRIBAL: Hit[] = [
+  [0, 'kick', 0.45], [4, 'kick', 0.42],
+  ...[1.5, 2.75, 3.5, 5.5, 6.75, 7.5].map((p, i): Hit => [p, 'tom', [0.38, 0.32, 0.4, 0.36, 0.3, 0.42][i]]),
+  [3, 'rim', 0.32], [7, 'rim', 0.34],
+  ...eighths().map((p): Hit => [p, 'hat', p % 1 === 0 ? 0.2 : 0.16, LATER]),
 ];
 
 /**
- * The heartbeat: a soft kick on 1 and on the and of 2; it grows over four passes: the shaker
- * breathing on every "and" from the 2nd pass, a rim click on 3 of each bar from the 3rd.
+ * The groove: the kick's pattern, the backbeat, hats on the eighths and ghost sixteenths on
+ * the 2nd and 4th passes, a clap with the snare from the 3rd, a crash to open.
  */
-const HEARTBEAT: Hit[] = [
-  [0, 'kick', false, null, 0.45], [1, 'kick', true, null, 0.35],
-  [4, 'kick', false, null, 0.42], [5, 'kick', true, null, 0.33],
-  [2, 'rim', false, [2, 3], 0.3], [6, 'rim', false, [2, 3], 0.3],
-  ...shakerAnds(SHAKER_SOFT, LATER),
-];
-/** Build: the heartbeat, a kick on 3 of bar 2, a brushed snare for the rim, the shaker on every eighth, toms rolling in every other pass. */
-const BUILD: Hit[] = [
-  [0, 'kick', false, null, 0.48], [1, 'kick', true, null, 0.38],
-  [4, 'kick', false, null, 0.45], [5, 'kick', true, null, 0.36], [6, 'kick', false, null, 0.4],
-  [2, 'snare', false, null, 0.38], [6, 'snare', false, null, 0.4],
-  ...shakerEighths(0.24),
-  [7, 'tom', false, EVERY_OTHER, 0.4], [7, 'tom', true, EVERY_OTHER, 0.46],
-];
-/** Summit: kick on 1, the and of 2, 3 and the and of 4; the brushed snare on 3; the shaker on every eighth; a cymbal swell every other pass. */
-const SUMMIT: Hit[] = [
-  ...[0, 4].flatMap((bar): Hit[] => [
-    [bar, 'kick', false, null, 0.55], [bar + 1, 'kick', true, null, 0.45],
-    [bar + 2, 'kick', false, null, 0.5], [bar + 3, 'kick', true, null, 0.42],
-    [bar + 2, 'snare', false, null, 0.45],
-  ]),
-  ...shakerEighths(0.28),
-  [0, 'crash', false, [0, 2], 0.5],
+const GROOVE: Hit[] = [
+  ...[0, 1.5, 2.75, 4, 5.5, 6.5].map((p): Hit => [p, 'kick', p % 4 === 0 ? 0.6 : 0.5]),
+  ...[1, 3, 5, 7].map((p): Hit => [p, 'snare', 0.55]),
+  ...eighths().map((p): Hit => [p, 'hat', p % 1 === 0 ? 0.48 : 0.4]),
+  ...[0, 1, 2, 3, 4, 5, 6, 7].map((p): Hit => [p + 0.75, 'hat', 0.3, [1, 3]]),
+  ...[1, 3, 5, 7].map((p): Hit => [p, 'clap', 0.45, [2, 3]]),
+  [0, 'crash', 0.6, [0]],
 ];
 
-/** The loops, by slot, with their names. Every melodic note at or under 0.6: the pads lead. */
+/** Half time: the kick on 1 and the and of 2, the snare on 3, toms in threes against the fours (3 + 3 + 2 eighths), hats on the beats. */
+const HALF_TIME: Hit[] = [
+  [0, 'kick', 0.55], [3.5, 'kick', 0.5],
+  [2, 'snare', 0.55], [6, 'snare', 0.58],
+  ...[0, 1.5, 3, 4, 5.5, 7].map((p, i): Hit => [p, 'tom', i % 3 === 0 ? 0.5 : 0.42]),
+  ...[0, 1, 2, 3, 4, 5, 6, 7].map((p): Hit => [p, 'hat', 0.35]),
+];
+
+/** Double time: the busy kick, the snare on every beat with ghosts, hats on every sixteenth (the eighths louder), a crash on the 1st and 3rd passes. */
+const DOUBLE_TIME: Hit[] = [
+  ...[0, 0.75, 2, 2.5, 4, 4.75, 6, 6.5].map((p): Hit => [p, 'kick', p % 2 === 0 ? 0.7 : 0.55]),
+  ...[1, 3, 5, 7].map((p): Hit => [p, 'snare', 0.65]),
+  [2.75, 'snare', 0.35], [6.75, 'snare', 0.35],
+  ...sixteenths().map((p): Hit => [p, 'hat', p % 0.5 === 0 ? 0.5 : 0.32]),
+  [0, 'crash', 0.6, [0, 2]],
+];
+
+/** The toms running down over the last two beats of every 4th pass: the groove's fill, the drop's run. */
+const TOM_RUN: Hit[] = sixteenths(6, 8).map((p, i): Hit => [p, 'tom', 0.5 + 0.02 * i, [3]]);
+
+/** The heartbeat (version 1's, soft): a kick on 1 and the and of 2, a rim on 3 of each bar, a shaker breath on every "and". */
+const HEARTBEAT: Hit[] = [
+  [0, 'kick', 0.45], [1.5, 'kick', 0.35], [4, 'kick', 0.42], [5.5, 'kick', 0.33],
+  [2, 'rim', 0.3], [6, 'rim', 0.3],
+  ...[0, 1, 2, 3, 4, 5, 6, 7].map((p): Hit => [p + 0.5, 'hat', 0.2]),
+];
+
+/** The rebuild: the heartbeat's kick and rim; the hats back from the 2nd pass, the snare from the 3rd (the fill on the 4th is the tom run). */
+const REBUILD: Hit[] = [
+  [0, 'kick', 0.48], [1.5, 'kick', 0.38], [4, 'kick', 0.45], [5.5, 'kick', 0.36],
+  [2, 'rim', 0.32], [6, 'rim', 0.32],
+  ...eighths().map((p): Hit => [p, 'hat', p % 1 === 0 ? 0.38 : 0.3, LATER]),
+  ...[1, 3, 5, 7].map((p): Hit => [p, 'snare', 0.48, [2, 3]]),
+];
+
+/**
+ * The snare roll, louder each pass: eighths over the second bar on the 1st pass, eighths all
+ * through on the 2nd (toms on the last two beats of both); the fast half carries on with
+ * sixteenths over the second bar on the 3rd and all through on the 4th.
+ */
+const SNARE_ROLL: Hit[] = [
+  ...eighths(4, 8).map((p): Hit => [p, 'snare', 0.3, [0]]),
+  ...eighths().map((p): Hit => [p, 'snare', 0.4, [1]]),
+  [6, 'tom', 0.45], [7, 'tom', 0.5],
+];
+const SNARE_ROLL_FAST: Hit[] = [
+  ...[...eighths(0, 4), ...sixteenths(4, 8)].map((p): Hit => [p, 'snare', 0.5, [2]]),
+  ...sixteenths().map((p): Hit => [p, 'snare', 0.65, [3]]),
+];
+
+/** The loops, by slot, with their names. Every tune at or under 0.6; the drums up to 0.7 where they drive. */
 export const DEMO_LOOPS: readonly { name: string; cells: StoredLoopCell[] }[] = [
-  { name: 'Percussion heartbeat', cells: percussion(HEARTBEAT) },
-  { name: 'Brass fifths', cells: brass(false) },
-  { name: 'Brass pad', cells: brass(true) },
+  { name: 'Tribal', cells: drums(TRIBAL) },
+  { name: 'Groove', cells: drums(GROOVE) },
+  { name: 'Half time', cells: drums(HALF_TIME) },
+  { name: 'Double time', cells: drums(DOUBLE_TIME) },
+  { name: 'Tom run', cells: drums(TOM_RUN) },
+  { name: 'Heartbeat', cells: drums(HEARTBEAT) },
+  { name: 'Rebuild', cells: drums(REBUILD) },
+  { name: 'Snare roll', cells: drums(SNARE_ROLL) },
+  { name: 'Snare roll fast', cells: drums(SNARE_ROLL_FAST) },
+  { name: 'Brass fifths', cells: BRASS_FIFTHS },
+  { name: 'Brass swells', cells: BRASS_SWELLS },
   { name: 'Guitar roll', cells: GUITAR_ROLL },
-  { name: 'Guitar picking', cells: GUITAR_PICKING },
+  { name: 'Guitar eighths', cells: GUITAR_EIGHTHS },
   { name: 'Winds theme', cells: notes('melody', 'clarinet', THEME, 0.5, { layBack: 0.03 }) },
   { name: 'Winds high', cells: notes('melody', 'clarinet', THEME, 0.55, { layBack: 0.03, octave: 1 }) },
-  { name: 'Bells', cells: notes('melody', 'synth:bell', BELLS_FRAGMENT, 0.42, { octave: 1 }) },
-  { name: 'Percussion build', cells: percussion(BUILD) },
-  { name: 'Percussion summit', cells: percussion(SUMMIT) },
+  { name: 'Bells in threes', cells: BELLS_IN_THREES },
 ];
 
 const SLOT = new Map(DEMO_LOOPS.map((l, i) => [l.name, i]));
@@ -235,19 +294,19 @@ const slots = (...names: string[]): number[] => names.map((n) => SLOT.get(n) ?? 
 export const DEMO_PASS_SEC = (COLS * 60) / DEMO_BPM;
 
 /** The band: its pads and its bass (the sub), never its drums or its counter-melody. */
-const jobs = (pads: boolean, bass: boolean, pedal = false): BandJobs => ({
-  asBefore: false, pads, bass, drums: false, counter: false, ...(pedal ? { pedal: true } : {}),
+const jobs = (pads: boolean, bass: boolean, how: { pedal?: true; drive?: true } = {}): BandJobs => ({
+  asBefore: false, pads, bass, drums: false, counter: false, ...how,
 });
 const NO_BAND = jobs(false, false);
 const PADS_ONLY = jobs(true, false);
-const PADS_AND_PEDAL = jobs(true, true, true);
-const PADS_AND_ROOTS = jobs(true, true);
+const PEDAL = jobs(true, true, { pedal: true });
+const ROOTS = jobs(true, true);
+const DRIVE = jobs(true, true, { drive: true });
 
 /**
- * The scenes' chords, never a pop progression: Glow (I add9, IV maj7, over a held key note),
- * Lift (I sus2, ii add9), Float (I add9, vi add9: the light clouding over); in the shadow
- * Tide (i, VI, iv, i) and Rise (VI, VII, i); at the summit Lift again, in B. Each chord four
- * bars, two when "moving".
+ * The scenes' chords, never a pop progression: Glow (I add9, IV maj7) and Lift (I sus2, ii
+ * add9) in the light; Tide (i, VI, iv, i) and Rise (VI, VII, i) in the shadow; a drone on F#
+ * for the Tension; Lift again, in B, at the summit. Four bars a chord, two when "moving".
  */
 const chords = (sequence: ChordSetting['sequence'], bars: ChordSetting['bars'] = 4): ChordSetting => ({ sequence, bars });
 
@@ -259,7 +318,7 @@ const BASE: SceneSettings = {
   evolveAmount: 0,
   bpm: DEMO_BPM,
   chords: chords('glow'),
-  bandJobs: PADS_AND_PEDAL,
+  bandJobs: PADS_ONLY,
   sceneEnergy: 2,
 };
 
@@ -276,89 +335,39 @@ interface SceneSpec {
 
 const CUT: NonNullable<Scene['wayIn']> = { kind: 'cut' };
 const FADE: NonNullable<Scene['wayIn']> = { kind: 'fade', passes: 1 };
+/** The grooves' band of loops: the kit, the run, the brass swelling each bar, the guitar on every eighth. */
+const GROOVE_BAND = ['Groove', 'Tom run', 'Brass swells', 'Guitar eighths'];
+const DOUBLE_BAND = ['Double time', 'Tom run', 'Brass swells', 'Guitar eighths', 'Winds high'];
 
-/** The form, in passes (a pass is about 5.5 s): sixteen scenes, then the Big finish, seven minutes. */
+/** The form, in passes (a pass is about 5.5 s): thirteen scenes, then the Big finish, seven minutes. */
 export const DEMO_SCENES: readonly SceneSpec[] = [
-  // 0:00 The heartbeat alone, softly, out of silence: the kicks, then the shaker, then the rim.
-  {
-    name: 'Drums', pass: 0, loops: slots('Percussion heartbeat'), key: A_MAJOR,
-    settings: { band: 'off', bandJobs: NO_BAND, chords: chords('glow'), sceneEnergy: 2 }, wayIn: CUT,
-  },
-  // 0:22 Brass pads swell in on A and E; the band's pads under them, over a held A.
-  {
-    name: 'Brass', pass: 4, loops: slots('Percussion heartbeat', 'Brass fifths'), key: A_MAJOR,
-    settings: { chords: chords('glow'), sceneEnergy: 2, bandJobs: PADS_AND_PEDAL }, wayIn: FADE,
-  },
-  // 0:44 The brass adds the third; the pads open to full.
-  {
-    name: 'Brass bloom', pass: 8, loops: slots('Percussion heartbeat', 'Brass pad'), key: A_MAJOR,
-    settings: { chords: chords('glow'), sceneEnergy: 2, bandJobs: PADS_AND_PEDAL }, wayIn: CUT,
-  },
-  // 1:06 The guitar rolls in, a chord every pass, then two.
-  {
-    name: 'Guitar', pass: 12, loops: slots('Percussion heartbeat', 'Brass pad', 'Guitar roll'), key: A_MAJOR,
-    settings: { chords: chords('glow'), sceneEnergy: 3, bandJobs: PADS_AND_PEDAL }, wayIn: FADE,
-  },
-  // 1:28 The guitar rolls every beat; the chords lift.
-  {
-    name: 'Guitar picking', pass: 16, loops: slots('Percussion heartbeat', 'Brass pad', 'Guitar picking'), key: A_MAJOR,
-    settings: { chords: chords('lift'), sceneEnergy: 3, bandJobs: PADS_AND_PEDAL }, wayIn: CUT,
-  },
-  // 1:50 The wind pads breathe the theme, growing over the four passes.
-  {
-    name: 'Winds', pass: 20, loops: slots('Percussion heartbeat', 'Brass pad', 'Guitar picking', 'Winds theme'), key: A_MAJOR,
-    settings: { chords: chords('lift'), sceneEnergy: 3, bandJobs: PADS_AND_PEDAL }, wayIn: FADE,
-  },
-  // 2:12 Magenta's first ideas answer the winds; the light clouds over.
-  {
-    name: 'Winds answer', pass: 24, loops: slots('Percussion heartbeat', 'Brass pad', 'Guitar picking', 'Winds theme'), key: A_MAJOR,
-    settings: { chords: chords('float'), sceneEnergy: 3, bandJobs: PADS_AND_PEDAL, fillAmount: 0.15 }, wayIn: CUT,
-  },
-  // 2:34 The centre drops to F#: the theme a third lower, the brass on F#, the guitar rolling.
-  {
-    name: 'Shadow', pass: 28, loops: slots('Percussion heartbeat', 'Brass pad', 'Guitar roll', 'Winds theme'), key: F_SHARP_MINOR,
-    settings: { chords: chords('tide'), sceneEnergy: 3, bandJobs: PADS_AND_PEDAL, fillAmount: 0.15 }, wayIn: CUT,
-  },
-  // 2:56 A rising lead in; the percussion builds; the guitar picks every beat; the bass lets go of the pedal.
-  {
-    name: 'Heartbeat', pass: 32, loops: slots('Percussion build', 'Brass pad', 'Guitar picking', 'Winds theme'), key: F_SHARP_MINOR,
-    settings: { chords: chords('tide'), sceneEnergy: 4, bandJobs: PADS_AND_ROOTS, fillAmount: 0.15 }, wayIn: CUT, leadIn: 'rising',
-  },
-  // 3:18 Everything falls away but the pads and the winds (and Tim).
-  {
-    name: 'Hush', pass: 36, loops: slots('Winds theme'), key: F_SHARP_MINOR,
-    settings: { chords: chords('tide'), sceneEnergy: 1, bandJobs: PADS_ONLY }, wayIn: CUT,
-  },
-  // 3:40 A soft roll; the bells and the heartbeat return; the guitar.
-  {
-    name: 'Rebuild', pass: 40, loops: slots('Percussion heartbeat', 'Guitar roll', 'Bells'), key: F_SHARP_MINOR,
-    settings: { chords: chords('rise'), sceneEnergy: 3, bandJobs: PADS_AND_ROOTS, fillAmount: 0.15 }, wayIn: CUT, leadIn: 'drumFill',
-  },
-  // 4:02 The chords move every two bars; the brass, the winds an octave up, Magenta busier.
-  {
-    name: 'Climb', pass: 44, loops: slots('Percussion build', 'Brass pad', 'Guitar roll', 'Winds high'), key: F_SHARP_MINOR,
-    settings: { chords: chords('rise', 2), sceneEnergy: 4, bandJobs: PADS_AND_ROOTS, fillAmount: 0.2 }, wayIn: CUT,
-  },
-  // 4:24 A roll, and the light breaks: back to A, everything at once, the guitar driving.
-  {
-    name: 'Light breaks', pass: 48, loops: slots('Percussion build', 'Brass pad', 'Guitar picking', 'Winds high'), key: A_MAJOR,
-    settings: { chords: chords('glow', 2), sceneEnergy: 4, bandJobs: PADS_AND_ROOTS, fillAmount: 0.2 }, wayIn: CUT, leadIn: 'drumFill',
-  },
-  // 4:46 The summit kit begins, Magenta at its busiest, the pads widest.
-  {
-    name: 'Gathering', pass: 52, loops: slots('Percussion summit', 'Brass pad', 'Guitar picking', 'Winds high'), key: A_MAJOR,
-    settings: { chords: chords('lift', 2), sceneEnergy: 5, bandJobs: PADS_AND_ROOTS, fillAmount: 0.3 }, wayIn: CUT,
-  },
-  // 5:08 A roll, and up a tone to B: the winds high, the brass, the guitar, the full kit.
-  {
-    name: 'Summit', pass: 56, loops: slots('Percussion summit', 'Brass pad', 'Guitar picking', 'Winds high'), key: B_MAJOR,
-    settings: { chords: chords('lift'), sceneEnergy: 5, bandJobs: PADS_AND_ROOTS, fillAmount: 0.3 }, wayIn: CUT, leadIn: 'drumFill',
-  },
-  // 5:52 The same, everything climbing: the chords moving every two bars, the cymbal swells.
-  {
-    name: 'Final ascent', pass: 64, loops: slots('Percussion summit', 'Brass pad', 'Guitar picking', 'Winds high'), key: B_MAJOR,
-    settings: { chords: chords('lift', 2), sceneEnergy: 5, bandJobs: PADS_AND_ROOTS, fillAmount: 0.3 }, wayIn: CUT,
-  },
+  // 0:00 Low toms and a soft kick, a pattern that asks a question; the shaker from the 2nd pass.
+  { name: 'Drums', pass: 0, loops: slots('Tribal'), key: A_MAJOR, settings: { band: 'off', bandJobs: NO_BAND, chords: chords('glow'), sceneEnergy: 2 }, wayIn: CUT },
+  // 0:22 The brass pads swell in over the toms, over a held A.
+  { name: 'Brass', pass: 4, loops: slots('Tribal', 'Brass fifths'), key: A_MAJOR, settings: { chords: chords('glow'), sceneEnergy: 2, bandJobs: PEDAL }, wayIn: FADE },
+  // 0:44 The fingerpicked guitar; the pads open.
+  { name: 'Guitar', pass: 8, loops: slots('Tribal', 'Brass fifths', 'Guitar roll'), key: A_MAJOR, settings: { chords: chords('glow'), sceneEnergy: 3, bandJobs: PEDAL }, wayIn: FADE },
+  // 1:06 A fill, a crash: the kit locks into a groove, the bass drives in eighths, the guitar picks every eighth; the chords lift every two bars.
+  { name: 'Groove', pass: 12, loops: slots(...GROOVE_BAND), key: A_MAJOR, settings: { chords: chords('lift', 2), sceneEnergy: 4, bandJobs: DRIVE }, wayIn: CUT, leadIn: 'drumFill' },
+  // 1:50 The winds play the theme over the groove; Magenta answers.
+  { name: 'Winds hook', pass: 20, loops: slots(...GROOVE_BAND, 'Winds theme'), key: A_MAJOR, settings: { chords: chords('lift', 2), sceneEnergy: 4, bandJobs: DRIVE, fillAmount: 0.25 }, wayIn: CUT },
+  // 2:12 A stop, then the centre drops to F#: toms in threes, the brass on a pedal F# under moving chords, bells in threes; a snare roll builds.
+  { name: 'Intrigue', pass: 24, loops: slots('Half time', 'Snare roll fast', 'Brass fifths', 'Bells in threes'), key: F_SHARP_MINOR, settings: { chords: chords('tide'), sceneEnergy: 3, bandJobs: PEDAL, fillAmount: 0.15 }, wayIn: CUT, leadIn: 'stop' },
+  // 2:56 A crash: double time, the bass driving, the winds an octave up, Magenta at its busiest.
+  { name: 'Drop', pass: 32, loops: slots(...DOUBLE_BAND), key: F_SHARP_MINOR, settings: { chords: chords('rise', 2), sceneEnergy: 5, bandJobs: DRIVE, fillAmount: 0.4 }, wayIn: CUT },
+  // 3:18 Everything falls away but the pads, a heartbeat, the winds and Tim's glow.
+  { name: 'Breakdown', pass: 36, loops: slots('Heartbeat', 'Winds theme'), key: F_SHARP_MINOR, settings: { chords: chords('tide'), sceneEnergy: 1, bandJobs: PADS_ONLY }, wayIn: CUT },
+  // 3:40 Over four passes the kit returns piece by piece: kick, then hats, then snare, then the fill.
+  { name: 'Rebuild', pass: 40, loops: slots('Rebuild', 'Tom run', 'Brass fifths', 'Guitar roll'), key: F_SHARP_MINOR, settings: { chords: chords('rise'), sceneEnergy: 3, bandJobs: ROOTS, fillAmount: 0.15 }, wayIn: CUT, leadIn: 'rising' },
+  // 4:02 A stop, then the light breaks back to A: the full groove, the driving bass, the brass on every bar, the guitar, the winds.
+  { name: 'Groove II', pass: 44, loops: slots(...GROOVE_BAND, 'Winds theme'), key: A_MAJOR, settings: { chords: chords('glow', 2), sceneEnergy: 4, bandJobs: DRIVE, fillAmount: 0.25 }, wayIn: CUT, leadIn: 'stop' },
+  // 4:46 A pedal on F#, the fifth of B: the chords hover, the snare rolls in eighths then sixteenths, louder each pass; it must
+  // land. No extra notes: the rolls fill every sixteenth, and there is no room for the AI's.
+  { name: 'Tension', pass: 52, loops: slots('Half time', 'Snare roll', 'Snare roll fast', 'Brass fifths', 'Guitar roll'), key: F_SHARP_MAJOR, settings: { chords: chords('still'), sceneEnergy: 4, bandJobs: PEDAL }, wayIn: CUT },
+  // 5:08 A stop, then B major: a crash, the full kit, the bass driving, the brass, the winds high, the guitar on every eighth.
+  { name: 'Summit', pass: 56, loops: slots(...DOUBLE_BAND), key: B_MAJOR, settings: { chords: chords('lift', 2), sceneEnergy: 5, bandJobs: DRIVE, fillAmount: 0.35 }, wayIn: CUT, leadIn: 'stop' },
+  // 5:52 More: the snare rolling into every fourth pass, the toms, Magenta busiest.
+  { name: 'Final ascent', pass: 64, loops: slots(...DOUBLE_BAND, 'Snare roll fast'), key: B_MAJOR, settings: { chords: chords('lift', 2), sceneEnergy: 5, bandJobs: DRIVE, fillAmount: 0.4 }, wayIn: CUT },
 ];
 
 /** The pass the Big finish begins on: right after the last scene's eighth pass. */
