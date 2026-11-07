@@ -40,7 +40,7 @@ test('a second laptop joins with the same code: every control, the laptop says i
     await expect(page.getByRole('status').filter({ hasText: '✓ iPad connected' })).toBeVisible();
     // Every control, though Tim's iPad has the simple layout.
     await expect(ipad.p.locator('[data-simple-page]')).toBeVisible();
-    await expect(p.getByRole('tab')).toHaveText(['Play', 'Instruments & colours', 'Loops', 'Loops & scenes']);
+    await expect(p.getByRole('tab')).toHaveText(['Play', 'Instruments & colours', 'Sound', 'Loops', 'Loops & scenes']);
     await expect(p.getByRole('slider')).toHaveCount(4);
     // A mouse click on Extra notes' strip, at its top: Extra notes all the way up, on the laptop too.
     const strip = p.getByRole('slider', { name: 'Extra notes' });

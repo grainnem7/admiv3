@@ -7,6 +7,10 @@ import {
 } from '../../remote/protocol';
 import { bestCircleGrid, inkOn, PICTURE_EMOJI } from '../../remote/simplePage';
 import { forPerformer } from '../../remote/performer';
+import {
+  BAND_CHOICES, ENERGY_STEPS, EVOLVE_STEPS, FILL_STEPS, GROOVES, LOOP_VARY_STEPS, LOUD_STEPS, SPACE_STEPS, WORLD_CHOICES,
+  type RemoteGroove, type SoundPatch,
+} from '../../remote/soundRemote';
 import { BUILD_ID, reloadedFor, reloadFor } from '../../remote/buildId';
 import { useRemoteLink } from '../../remote/useRemoteLink';
 import { SIMPLE_WORDS, WORDS } from './boardSequencer/words';
@@ -37,9 +41,9 @@ const PADS: { name: Exclude<RemoteTriggerName, 'stopAll'>; label: (s: RemoteStat
 /** The iPad's pages, in the order of its tabs. */
 const PAGES = ['play', 'onoff', 'loops'] as const;
 /** The second performer's pages: the instruments and colours too, on a page of their own. */
-const PERFORMER_PAGES = ['play', 'sounds', 'onoff', 'loops'] as const;
+const PERFORMER_PAGES = ['play', 'sounds', 'sound', 'onoff', 'loops'] as const;
 type Page = (typeof PERFORMER_PAGES)[number];
-const PAGE_NAMES: Record<Page, string> = { play: 'Play', sounds: 'Instruments & colours', onoff: 'Loops', loops: 'Loops & scenes' };
+const PAGE_NAMES: Record<Page, string> = { play: 'Play', sounds: 'Instruments & colours', sound: 'Sound', onoff: 'Loops', loops: 'Loops & scenes' };
 /** After a finger lifts, trust the laptop's value again once it has caught up. */
 const TRUST_LAPTOP_AFTER_MS = 400;
 /** At most this often per strip while sliding. */
@@ -903,6 +907,61 @@ export default function IPadRemoteScreen({ code, performer = false }: { code: st
       })()}
 
       {(simple || (performer && tab === 'sounds')) && simplePage}
+
+      {/* The Sound tab's live settings (owner, 7 Nov 2026), as the laptop's own tab sets them. */}
+      {performer && tab === 'sound' && (() => {
+        const snd = state?.sound;
+        if (!snd) return <div style={{ flex: '1 1 0', display: 'grid', placeItems: 'center', fontSize: 22, opacity: 0.8 }}>Waiting for the laptop…</div>;
+        const nearestIndex = (steps: readonly { value: number }[], v: number): number => steps.reduce((b, x, i) => (Math.abs(x.value - v) < Math.abs(steps[b].value - v) ? i : b), 0);
+        const sendSound = (key: string, patch: SoundPatch): void => { padTap(`sound-${key}`, { type: 'sound', patch }); };
+        const row = <T,>(name: string, choices: readonly { value: T; label: string }[], isOn: (v: T, i: number) => boolean, pick: (v: T) => void): JSX.Element => (
+          <div role="group" aria-label={name} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <span style={{ fontSize: 16, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--bs-fg2)' }}>{name}</span>
+            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${choices.length}, 1fr)`, gap: 8 }}>
+              {choices.map((ch, i) => {
+                const on = isOn(ch.value, i);
+                return (
+                  <button
+                    key={`${name}-${ch.label}`}
+                    type="button"
+                    aria-pressed={on}
+                    aria-disabled={!live || undefined}
+                    {...padProps(`sound-${name}-${i}`, () => pick(ch.value))}
+                    style={{
+                      minHeight: 52, borderRadius: 14, fontSize: 18, fontWeight: 700, touchAction: 'none',
+                      color: on ? 'var(--bs-pick-fg)' : 'var(--bs-fg)', background: on ? 'var(--bs-pick)' : 'var(--bs-raised)',
+                      border: `3px solid ${on ? 'var(--bs-pick)' : 'var(--bs-border-control)'}`,
+                    }}
+                  >
+                    {ch.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        );
+        return (
+          <div data-sound-page style={{ flex: '1 1 0', minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 14, paddingRight: 4, opacity: live ? 1 : 0.4 }}>
+            {row('World', WORLD_CHOICES, (v) => v === snd.world, (v) => sendSound('world', { world: v }))}
+            {row('Energy', ENERGY_STEPS, (_v, i) => i === nearestIndex(ENERGY_STEPS, snd.energy), (v) => sendSound('energy', { energy: v }))}
+            {row('Space', SPACE_STEPS, (_v, i) => i === nearestIndex(SPACE_STEPS, snd.space), (v) => sendSound('space', { space: v }))}
+            {row('Groove', (Object.keys(GROOVES) as RemoteGroove[]).map((g) => ({ value: g, label: GROOVES[g].label })), (v) => v === snd.groove, (v) => sendSound('groove', { groove: v }))}
+            {row('Band', BAND_CHOICES, (v) => v === snd.band, (v) => sendSound('band', { band: v }))}
+            {row(WORDS.extraNotes, FILL_STEPS, (_v, i) => i === nearestIndex(FILL_STEPS, snd.fill), (v) => sendSound('fill', { fill: v }))}
+            {row(WORDS.soundsChange, EVOLVE_STEPS, (_v, i) => i === nearestIndex(EVOLVE_STEPS, snd.evolve), (v) => sendSound('evolve', { evolve: v }))}
+            {row('Loops vary', LOOP_VARY_STEPS, (_v, i) => i === nearestIndex(LOOP_VARY_STEPS, snd.loopVary), (v) => sendSound('loopVary', { loopVary: v }))}
+            {row('Keep my notes on top', [{ value: false, label: 'Off' }, { value: true, label: 'On' }], (v) => v === snd.keepOnTop, (v) => sendSound('keepOnTop', { keepOnTop: v }))}
+            {(state?.colours ?? []).map((c) => (
+              <div key={`vol-${c.id}`} style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                <span aria-hidden="true" style={{ width: 22, height: 22, borderRadius: 11, background: c.swatch, flex: 'none' }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  {row(`${c.name}: loudness`, LOUD_STEPS, (_v, i) => i === nearestIndex(LOUD_STEPS, snd.volumes[c.id] ?? 1), (v) => { padTap(`vol-${c.id}`, { type: 'colourVolume', id: c.id, value: v }); })}
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
 
       {!simple && (tab === 'play' || !loopsPage) && (<>
       {/* The second performer can start the piece from here (owner, 7 Nov 2026): the main laptop may

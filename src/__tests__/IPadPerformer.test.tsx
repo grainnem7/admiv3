@@ -85,9 +85,9 @@ const button = (start: string): HTMLElement => {
 };
 
 describe('the second performer’s page', () => {
-  it('says whose it is, and has every page: Play, Instruments & colours, Loops, Loops & scenes', () => {
+  it('says whose it is, and has every page: Play, Instruments & colours, Sound, Loops, Loops & scenes', () => {
     expect(el.textContent).toContain('Second performer · code 4821');
-    expect(tabs()).toEqual(['Play', 'Instruments & colours', 'Loops', 'Loops & scenes']);
+    expect(tabs()).toEqual(['Play', 'Instruments & colours', 'Sound', 'Loops', 'Loops & scenes']);
     expect(el.textContent).toContain('Now: Arrival');
     expect(el.textContent).toContain('Next: Storm in 0:20');
     expect(el.textContent).toContain('4:12');
@@ -135,6 +135,21 @@ describe('the second performer’s page', () => {
     now += 1000;
     await act(async () => { pointer('pointerdown', button('Hat held')); });
     expect(sent).toContainEqual({ type: 'hatHold', on: false });
+  });
+
+  it('the Sound page: the laptop’s Sound tab settings, each press sent as wanted; each colour’s loudness', async () => {
+    const sound = { world: 'warm', energy: 0.5, space: 0.75, groove: 'straight', band: 'full', fill: 0, evolve: 0, loopVary: 0, keepOnTop: false, volumes: { c1: 1 } };
+    await act(async () => { onMsg?.({ type: 'state', state: { ...TIM, sound } }); });
+    await act(async () => { pointer('pointerdown', tab('Sound')); });
+    expect(button('Warm').getAttribute('aria-pressed')).toBe('true');
+    await act(async () => { pointer('pointerdown', button('Ambient')); });
+    expect(sent).toContainEqual({ type: 'sound', patch: { world: 'ambient' } });
+    now += 1000;
+    await act(async () => { pointer('pointerdown', button('Lots')); });
+    expect(sent).toContainEqual({ type: 'sound', patch: { fill: 0.8 } });
+    const soft = [...el.querySelectorAll('[role="group"][aria-label="Red: loudness"] button')].find((b) => b.textContent === 'Soft')!;
+    await act(async () => { pointer('pointerdown', soft); });
+    expect(sent).toContainEqual({ type: 'colourVolume', id: 'c1', value: 0.4 });
   });
 
   it('its heartbeat says it is the second performer, so the laptop can tell it from the iPad', () => {

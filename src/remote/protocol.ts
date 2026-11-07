@@ -1,4 +1,5 @@
 import { LAUNCH_SLOTS } from '../songs/performance/launcher';
+import { sanitizeRemoteSound, sanitizeSoundPatch, type RemoteSound, type SoundPatch } from './soundRemote';
 /**
  * The iPad remote: what the iPad and the laptop say to each other, and the maths that
  * turns an imprecise finger into a steady value.
@@ -243,6 +244,8 @@ export interface RemoteState {
   silentColours?: string[];
   /** With a hat in use: whether it is held where it is (Cap tab, Lock; or the second laptop). Missing = no hat. */
   hatHeld?: boolean;
+  /** The Sound tab's live settings, for the second performer's page (soundRemote.ts). */
+  sound?: RemoteSound;
 }
 
 export type RemoteMessage =
@@ -278,6 +281,10 @@ export type RemoteMessage =
   | { type: 'startPiece' }
   /** The second performer's page: hold the hat where it is (while Tim moves counters), or let it move again. */
   | { type: 'hatHold'; on: boolean }
+  /** The second performer's page: a Sound tab setting, as wanted (soundRemote.ts). */
+  | { type: 'sound'; patch: SoundPatch }
+  /** The second performer's page: one colour's loudness. */
+  | { type: 'colourVolume'; id: string; value: number }
   /** From the relay: how many of each side are in this room. */
   | { type: 'peers'; hosts: number; remotes: number };
 
@@ -358,6 +365,10 @@ export function parseRemoteMessage(raw: unknown): RemoteMessage | null {
   if (o.type === 'armed' && o.name === 'endPiece' && typeof o.on === 'boolean') return { type: 'armed', name: 'endPiece', on: o.on };
   if (o.type === 'startPiece') return { type: 'startPiece' };
   if (o.type === 'hatHold' && typeof o.on === 'boolean') return { type: 'hatHold', on: o.on };
+  if (o.type === 'sound') { const patch = sanitizeSoundPatch(o.patch); return patch ? { type: 'sound', patch } : null; }
+  if (o.type === 'colourVolume' && typeof o.id === 'string' && o.id.length <= 64 && typeof o.value === 'number' && Number.isFinite(o.value) && o.value >= 0 && o.value <= 1) {
+    return { type: 'colourVolume', id: o.id, value: o.value };
+  }
   if (o.type === 'hello') {
     // The second performer's page says so (performer.ts); Tim's iPad says nothing more.
     return { type: 'hello', build: isBuildId(o.build) ? o.build : null, ask: isAsk(o.ask) ? o.ask : null, ...(o.who === 'performer' ? { who: 'performer' as const } : {}) };
@@ -402,6 +413,7 @@ export function parseRemoteMessage(raw: unknown): RemoteMessage | null {
         ...(Array.isArray(s.colours) ? { colours: sanitizeColours(s.colours) } : {}),
         ...(Array.isArray(s.silentColours) ? { silentColours: s.silentColours.filter((x): x is string => typeof x === 'string').slice(0, 16) } : {}),
         ...(typeof s.hatHeld === 'boolean' ? { hatHeld: s.hatHeld } : {}),
+        ...(sanitizeRemoteSound(s.sound) ? { sound: sanitizeRemoteSound(s.sound) } : {}),
         ...(typeof s.melody === 'object' && s.melody !== null && !Array.isArray(s.melody) ? {
           melody: { sound: MELODY_SOUNDS.includes((s.melody as Record<string, unknown>).sound as MelodySound) ? (s.melody as Record<string, unknown>).sound as MelodySound : null },
         } : {}),

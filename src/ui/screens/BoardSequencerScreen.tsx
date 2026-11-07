@@ -192,6 +192,7 @@ import {
   SIMPLE_ROWS, type Feel, type RemoteControlName, type RemoteMessage, type RemoteState, type RemoteTriggerName,
 } from '../../remote/protocol';
 import { performerLink } from '../../remote/performer';
+import { configPatchOf, remoteSoundOf } from '../../remote/soundRemote';
 import {
   clearBoardSilent, colourBack, colourIdsForSound, melodyChoice, melodyColour, readBoardSilent, readDrumsSilent, readFeel, readSilentColours, remoteColours,
   silencedColourIds, writeBoardSilent, writeDrumsSilent, writeFeel, writeSilentColours,
@@ -1127,24 +1128,25 @@ export default function BoardSequencerScreen() {
       beat: running ? beatOn : false,
       // With a hat in use: held or not (the second laptop can hold it while counters are moved).
       ...(config.cap.enabled ? { hatHeld: config.cap.locked } : {}),
+      // The Sound tab's live settings, for the second laptop (soundRemote.ts).
+      sound: remoteSoundOf(config),
       build: BUILD_ID,
       ask: helloAsk,
       // Reloaded mid-piece: the iPad waits for Carry on, and nothing from it is taken (B19).
       ...(resumeFrom !== null && !running ? { carryOnWaiting: true } : {}),
       // The board's light or dark (A11); Show is always dark.
       theme: view === 'bigBoard' ? 'dark' : config.themeMode,
-      // The Simple page (spec 2026-11-04): only when the player has it.
-      ...(isSimpleLayout(config) ? {
-        layout: 'simple' as const,
-        ...(simpleMelody ? { melody: simpleMelody } : {}),
-        feel,
-        drumsSilent,
-        boardSilent,
-        rows: config.remoteSimpleRows,
-        // The Counters row (K4): the colours as the laptop names them, and which are silent.
-        colours: remoteColours(config.channels, colourWords, describeChannel),
-        silentColours,
-      } : {}),
+      // The Simple page (spec 2026-11-04): the layout only when the player has it; what is on it
+      // always, as the second laptop's Instruments & colours and Sound pages need it too.
+      ...(isSimpleLayout(config) ? { layout: 'simple' as const } : {}),
+      ...(simpleMelody ? { melody: simpleMelody } : {}),
+      feel,
+      drumsSilent,
+      boardSilent,
+      rows: config.remoteSimpleRows,
+      // The Counters row (K4): the colours as the laptop names them, and which are silent.
+      colours: remoteColours(config.channels, colourWords, describeChannel),
+      silentColours,
     };
     remoteStateRef.current = state;
     remoteLink.send({ type: 'state', state });
@@ -1152,7 +1154,8 @@ export default function BoardSequencerScreen() {
     config.fillKept, config.evolveHoldLap, muted, running, starting, pieceStarting, config.remoteReach, reachLearning,
     config.loopSlots, config.loopNames, config.scenes, config.currentScene, wantedSlots, appliedSlots,
     config.remoteStrips, config.remotePads, config.remoteLoopsPage, config.remoteLocked, config.remoteStripMode, config.loopFadePasses, clock,
-    config.remoteTouch, beatOn, helloAsk, resumeFrom, view, config.themeMode, config.remoteLayoutKind, simpleMelody, boardSilent, drumsSilent, feel, config.remoteSimpleRows, silentColours, config.channels, config.soundWorld, config.cap.enabled, config.cap.locked]);
+    config.remoteTouch, beatOn, helloAsk, resumeFrom, view, config.themeMode, config.remoteLayoutKind, simpleMelody, boardSilent, drumsSilent, feel, config.remoteSimpleRows, silentColours, config.channels, config.soundWorld, config.cap.enabled, config.cap.locked,
+    config.energy, config.space, config.swing, config.humanize, config.band, config.fillAmount, config.evolveAmount, config.loopVary, config.keepOnTop]);
   /** Drawn faded on the board: colours waiting for their time in the piece, and those the Board button silenced. */
   const fadedColours = useMemo((): ReadonlySet<string> | undefined => {
     const waiting = running ? waitingNow : [];
@@ -4291,6 +4294,20 @@ export default function BoardSequencerScreen() {
     // iPad says so and refuses its touches; this is for one that is behind.
     if (!runningRef.current && resumeFrom !== null && msg.type !== 'hello' && msg.type !== 'reach') {
       setRemoteNote({ text: 'iPad: not taken (waiting for Carry on)', at: performance.now() });
+      return;
+    }
+    if (msg.type === 'sound') {
+      // From the second performer's page: as the Sound tab here would set it.
+      const patch = configPatchOf(msg.patch) as Partial<BoardSequencerStored>;
+      update(patch);
+      if (patch.swing !== undefined) engineRef.current?.setSwing(patch.swing);
+      if (patch.humanize !== undefined) engineRef.current?.setHumanize(patch.humanize);
+      setRemoteNote({ text: 'Second laptop: sound changed', at: performance.now() });
+      return;
+    }
+    if (msg.type === 'colourVolume') {
+      if (!c.channels.some((ch) => ch.id === msg.id)) return;
+      setChannelMix(msg.id, 'volume', msg.value);
       return;
     }
     if (msg.type === 'hatHold') {
