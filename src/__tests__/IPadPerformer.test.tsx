@@ -126,6 +126,17 @@ describe('the second performer’s page', () => {
     expect(sent.filter((m) => (m as { type: string }).type === 'startPiece')).toHaveLength(1);
   });
 
+  it('Hold the hat, and let it go: only with a hat in use; it says which', async () => {
+    expect(() => button('Hold the hat')).toThrow();
+    await act(async () => { onMsg?.({ type: 'state', state: { ...TIM, hatHeld: false } }); });
+    await act(async () => { pointer('pointerdown', button('Hold the hat')); });
+    expect(sent).toContainEqual({ type: 'hatHold', on: true });
+    await act(async () => { onMsg?.({ type: 'state', state: { ...TIM, hatHeld: true } }); });
+    now += 1000;
+    await act(async () => { pointer('pointerdown', button('Hat held')); });
+    expect(sent).toContainEqual({ type: 'hatHold', on: false });
+  });
+
   it('its heartbeat says it is the second performer, so the laptop can tell it from the iPad', () => {
     expect(heartbeat?.()).toMatchObject({ type: 'hello', ask: null, who: 'performer' });
   });

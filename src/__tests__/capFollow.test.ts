@@ -3,7 +3,7 @@ import {
   CONFIRM_FRAMES, DRIFT_HUE, driftColour, followCap, growMask, initialFollow, LOST_FRAMES, mergePieces, seenColour, type FollowState,
 } from '../tracking/cap/capFollow';
 import {
-  capColourAt, capMask, capPatches, DEFAULT_CAP_SETTINGS, hatTempoBounds, initialCapState, stepCap, type CapColour, type CapPatch, type FaceBox, type Frame,
+  CAP_HANDS_HOLD_MAX_MS, capColourAt, capMask, capPatches, capPauseReason, DEFAULT_CAP_SETTINGS, hatTempoBounds, initialCapState, stepCap, type CapColour, type CapPatch, type FaceBox, type Frame,
 } from '../tracking/cap/capTracker';
 import type { ControlRange, FaderRole } from '../profiles/BoardSequencerConfig';
 
@@ -202,5 +202,20 @@ describe('the face reinforces the following', () => {
   it('with the face seen but no red on the head, the far patch still has to hold its place (the face stands in meanwhile)', () => {
     const st = followCap([hatAt(0.5)], initialFollow(), face).state;
     expect(followCap([patch(0.1, 0.9, 0.08, 2)], st, face).sighting).toBeNull();
+  });
+});
+
+describe('hands on the board hold the hat for a moment only (owner, 7 Nov 2026: the hat was seen but never shaped the music)', () => {
+  const s = { ...DEFAULT_CAP_SETTINGS, pauseOnBoard: true };
+  it('a hand coming onto the board holds the hat; still there after a few seconds, the hat shapes the music again, however the board flickers under it', () => {
+    expect(capPauseReason({ handSinceMs: 10_000, lastChangeMs: 10_000 }, 10_200, s)).toBe('hands');
+    // The hand stays, the counters under it flicker: the hold ends all the same.
+    expect(capPauseReason({ handSinceMs: 10_000, lastChangeMs: 10_000 + CAP_HANDS_HOLD_MAX_MS }, 10_000 + CAP_HANDS_HOLD_MAX_MS + 50, s)).toBeNull();
+    expect(CAP_HANDS_HOLD_MAX_MS).toBeLessThanOrEqual(3000);
+    // A counter put down with no hand seen (the laptop board): the short hold, as before.
+    expect(capPauseReason({ handSinceMs: null, lastChangeMs: 10_000 }, 10_100, s)).toBe('board');
+    expect(capPauseReason({ handSinceMs: null, lastChangeMs: 10_000 }, 10_000 + s.resumeAfterMs + 1, s)).toBeNull();
+    // Switched off: never held.
+    expect(capPauseReason({ handSinceMs: 10_000, lastChangeMs: 10_000 }, 10_100, { ...s, pauseOnBoard: false })).toBeNull();
   });
 });

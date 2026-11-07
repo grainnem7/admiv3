@@ -1125,6 +1125,8 @@ export default function BoardSequencerScreen() {
         return { now: nn.now?.name ?? null, next: nn.next?.scene.name ?? null, nextIn: nn.next ? formatClock(nn.next.inSec) : null };
       })(),
       beat: running ? beatOn : false,
+      // With a hat in use: held or not (the second laptop can hold it while counters are moved).
+      ...(config.cap.enabled ? { hatHeld: config.cap.locked } : {}),
       build: BUILD_ID,
       ask: helloAsk,
       // Reloaded mid-piece: the iPad waits for Carry on, and nothing from it is taken (B19).
@@ -1150,7 +1152,7 @@ export default function BoardSequencerScreen() {
     config.fillKept, config.evolveHoldLap, muted, running, starting, pieceStarting, config.remoteReach, reachLearning,
     config.loopSlots, config.loopNames, config.scenes, config.currentScene, wantedSlots, appliedSlots,
     config.remoteStrips, config.remotePads, config.remoteLoopsPage, config.remoteLocked, config.remoteStripMode, config.loopFadePasses, clock,
-    config.remoteTouch, beatOn, helloAsk, resumeFrom, view, config.themeMode, config.remoteLayoutKind, simpleMelody, boardSilent, drumsSilent, feel, config.remoteSimpleRows, silentColours, config.channels, config.soundWorld]);
+    config.remoteTouch, beatOn, helloAsk, resumeFrom, view, config.themeMode, config.remoteLayoutKind, simpleMelody, boardSilent, drumsSilent, feel, config.remoteSimpleRows, silentColours, config.channels, config.soundWorld, config.cap.enabled, config.cap.locked]);
   /** Drawn faded on the board: colours waiting for their time in the piece, and those the Board button silenced. */
   const fadedColours = useMemo((): ReadonlySet<string> | undefined => {
     const waiting = running ? waitingNow : [];
@@ -4289,6 +4291,12 @@ export default function BoardSequencerScreen() {
     // iPad says so and refuses its touches; this is for one that is behind.
     if (!runningRef.current && resumeFrom !== null && msg.type !== 'hello' && msg.type !== 'reach') {
       setRemoteNote({ text: 'iPad: not taken (waiting for Carry on)', at: performance.now() });
+      return;
+    }
+    if (msg.type === 'hatHold') {
+      // From the second performer's page: the hat held where it is, or let go (Cap tab, Lock).
+      update({ cap: { ...configRef.current.cap, locked: msg.on } });
+      setRemoteNote({ text: msg.on ? 'Second laptop: hat held' : 'Second laptop: hat moving again', at: performance.now() });
       return;
     }
     if (msg.type === 'startPiece') {

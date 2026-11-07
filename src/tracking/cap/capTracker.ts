@@ -441,11 +441,17 @@ export interface BoardActivity {
 }
 
 export type CapPauseReason = 'hands' | 'board';
+/** The longest a hand on the board holds the hat still, from when it came onto the board. */
+export const CAP_HANDS_HOLD_MAX_MS = 2500;
 
 /** Whether the cap should hold still now, and why. */
 export function capPauseReason(a: BoardActivity, nowMs: number, s: CapSettings): CapPauseReason | null {
   if (!s.pauseOnBoard) return null;
   const hand = a.handSinceMs !== null;
+  // A hand on the board for longer than this: the hat shapes the music again. The arm and the
+  // counters under it flicker in the board camera, and kept the hold going for as long as a
+  // hand was there: the hat was seen but never moved the music (owner, 7 Nov 2026).
+  if (a.handSinceMs !== null && nowMs - a.handSinceMs >= CAP_HANDS_HOLD_MAX_MS) return null;
   if (a.handSinceMs !== null && nowMs - a.handSinceMs < s.restMs) return 'hands';
   if (a.lastChangeMs !== null && nowMs - a.lastChangeMs < s.resumeAfterMs) return hand ? 'hands' : 'board';
   return null;

@@ -241,6 +241,8 @@ export interface RemoteState {
   colours?: RemoteColour[];
   /** The colours whose counters are silenced from the iPad, by id. */
   silentColours?: string[];
+  /** With a hat in use: whether it is held where it is (Cap tab, Lock; or the second laptop). Missing = no hat. */
+  hatHeld?: boolean;
 }
 
 export type RemoteMessage =
@@ -274,6 +276,8 @@ export type RemoteMessage =
   | { type: 'armed'; name: 'endPiece'; on: boolean }
   /** The second performer's page (performer.ts): ▶ Start the piece, as the laptop's own button. */
   | { type: 'startPiece' }
+  /** The second performer's page: hold the hat where it is (while Tim moves counters), or let it move again. */
+  | { type: 'hatHold'; on: boolean }
   /** From the relay: how many of each side are in this room. */
   | { type: 'peers'; hosts: number; remotes: number };
 
@@ -353,6 +357,7 @@ export function parseRemoteMessage(raw: unknown): RemoteMessage | null {
   if (o.type === 'melodySound' && MELODY_SOUNDS.includes(o.sound as MelodySound)) return { type: 'melodySound', sound: o.sound as MelodySound };
   if (o.type === 'armed' && o.name === 'endPiece' && typeof o.on === 'boolean') return { type: 'armed', name: 'endPiece', on: o.on };
   if (o.type === 'startPiece') return { type: 'startPiece' };
+  if (o.type === 'hatHold' && typeof o.on === 'boolean') return { type: 'hatHold', on: o.on };
   if (o.type === 'hello') {
     // The second performer's page says so (performer.ts); Tim's iPad says nothing more.
     return { type: 'hello', build: isBuildId(o.build) ? o.build : null, ask: isAsk(o.ask) ? o.ask : null, ...(o.who === 'performer' ? { who: 'performer' as const } : {}) };
@@ -396,6 +401,7 @@ export function parseRemoteMessage(raw: unknown): RemoteMessage | null {
         ...(Array.isArray(s.rows) ? { rows: sanitizeSimpleRows(s.rows) } : {}),
         ...(Array.isArray(s.colours) ? { colours: sanitizeColours(s.colours) } : {}),
         ...(Array.isArray(s.silentColours) ? { silentColours: s.silentColours.filter((x): x is string => typeof x === 'string').slice(0, 16) } : {}),
+        ...(typeof s.hatHeld === 'boolean' ? { hatHeld: s.hatHeld } : {}),
         ...(typeof s.melody === 'object' && s.melody !== null && !Array.isArray(s.melody) ? {
           melody: { sound: MELODY_SOUNDS.includes((s.melody as Record<string, unknown>).sound as MelodySound) ? (s.melody as Record<string, unknown>).sound as MelodySound : null },
         } : {}),

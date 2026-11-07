@@ -47,6 +47,15 @@ describe('the second performer', () => {
     expect(parseRemoteMessage({ type: 'trigger', name: 'startPiece' })).toBeNull();
   });
 
+  it('the hat held from the second laptop (owner, 7 Nov 2026): a message of its own; the laptop says whether it is held', () => {
+    expect(parseRemoteMessage({ type: 'hatHold', on: true })).toEqual({ type: 'hatHold', on: true });
+    expect(parseRemoteMessage({ type: 'hatHold', on: 'yes' })).toBeNull();
+    const m = parseRemoteMessage({ type: 'state', state: { ...tim, hatHeld: true } });
+    expect(m?.type === 'state' && m.state.hatHeld).toBe(true);
+    const none = parseRemoteMessage({ type: 'state', state: { ...tim } });
+    expect(none?.type === 'state' && 'hatHeld' in none.state).toBe(false);
+  });
+
   it('its heartbeat says who it is; the iPad’s says nothing more', () => {
     expect(parseRemoteMessage({ type: 'hello', build: null, ask: null, who: 'performer' })).toEqual({ type: 'hello', build: null, ask: null, who: 'performer' });
     expect(parseRemoteMessage({ type: 'hello', build: null, ask: null, who: 'someone' })).toEqual({ type: 'hello', build: null, ask: null });

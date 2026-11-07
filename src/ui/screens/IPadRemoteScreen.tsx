@@ -920,6 +920,22 @@ export default function IPadRemoteScreen({ code, performer = false }: { code: st
           ▶ Start the piece
         </button>
       )}
+      {/* Hold the hat where it is while Tim moves counters, and let it go (owner, 7 Nov 2026). */}
+      {performer && state?.hatHeld !== undefined && (
+        <button
+          type="button"
+          aria-pressed={state.hatHeld}
+          aria-disabled={!live || undefined}
+          {...padProps('hatHold', () => { padTap('hatHold', { type: 'hatHold', on: !state.hatHeld }); })}
+          style={{
+            minHeight: 64, borderRadius: 20, touchAction: 'none', fontSize: 24, fontWeight: 800, color: 'var(--bs-fg)', opacity: live ? 1 : 0.4,
+            background: state.hatHeld ? 'var(--bs-warn-tint)' : 'var(--bs-raised)',
+            border: `4px solid ${state.hatHeld ? 'var(--bs-warn)' : 'var(--bs-border-control)'}`,
+          }}
+        >
+          {state.hatHeld ? '🔒 Hat held: tap to let it move again' : '🎩 Hold the hat (while counters are moved)'}
+        </button>
+      )}
 
       {shownStrips.length > 0 && (
       <div style={{ flex: '1 1 0', display: 'grid', gridTemplateColumns: `repeat(${shownStrips.length}, 1fr)`, gap: GAP, minHeight: 0, opacity: live ? 1 : 0.4 }}>
