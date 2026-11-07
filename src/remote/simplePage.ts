@@ -151,3 +151,19 @@ export function readFeel(store: TabStore | null): Feel {
 export function writeFeel(store: TabStore | null, feel: Feel): void {
   try { store?.setItem(FEEL_KEY, feel); } catch { /* storage blocked: kept for this page only */ }
 }
+
+/**
+ * The grid of `n` round pads that gives each the biggest circle in a `w` × `h` box, with
+ * `gap` between: how many columns (from `minCols` to `maxCols`), and the circle's size. With
+ * the page to themselves, four colours are a 2 × 2 of big pads rather than a thin row of four.
+ */
+export function bestCircleGrid(w: number, h: number, n: number, gap: number, minCols = 1, maxCols = 4): { cols: number; size: number } {
+  const count = Math.max(1, n);
+  let best = { cols: Math.max(1, Math.min(minCols, maxCols)), size: 0 };
+  for (let cols = Math.max(1, minCols); cols <= Math.max(minCols, Math.min(maxCols, count)); cols++) {
+    const rows = Math.ceil(count / cols);
+    const size = Math.floor(Math.min((w - gap * (cols - 1)) / cols, (h - gap * (rows - 1)) / rows));
+    if (size > best.size) best = { cols, size: Math.max(0, size) };
+  }
+  return best;
+}

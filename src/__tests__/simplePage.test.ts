@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  colourPicture, inkOn,
+  bestCircleGrid, colourPicture, inkOn,
   clearBoardSilent, colourBack, melodyChoice, melodyColour, PICTURE_EMOJI, readBoardSilent, readDrumsSilent, readFeel, readSilentColours, remoteColours, silencedColourIds, writeBoardSilent, writeSilentColours,
   writeDrumsSilent, writeFeel,
 } from '../remote/simplePage';
@@ -146,5 +146,16 @@ describe('the Counters row (K4): one colour at a time', () => {
     writeBoardSilent(tab, true);
     clearBoardSilent(tab);
     expect(readBoardSilent(tab)).toBe(false);
+  });
+});
+
+describe('the colour pads: the biggest circles their space allows', () => {
+  it('a wide, low row: four in a row; the whole page: two by two; never more than four across', () => {
+    expect(bestCircleGrid(774, 200, 4, 18, 2)).toEqual({ cols: 4, size: 180 });
+    expect(bestCircleGrid(774, 900, 4, 18, 2).cols).toBe(2);
+    expect(bestCircleGrid(774, 900, 4, 18, 2).size).toBeGreaterThan(350);
+    expect(bestCircleGrid(2000, 100, 8, 18, 2).cols).toBe(4);
+    expect(bestCircleGrid(774, 900, 1, 18, 2).cols).toBe(2);
+    expect(bestCircleGrid(0, 0, 4, 18, 2).size).toBe(0);
   });
 });

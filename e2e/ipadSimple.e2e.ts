@@ -1,13 +1,13 @@
 import { test, expect, type Browser, type Page, type TestInfo } from '@playwright/test';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { headerButton, keepAsLoop, openLaptopBoard, pageErrors, pickColour, place, sessionLog, soundTab } from './app';
+import { headerButton, keepAsLoop, openLaptopBoard, pageErrors, pickColour, place, sessionLog } from './app';
 
 /**
- * The Simple iPad page, for playing live only (spec 2026-11-04, "Live only: Drums, Calm/Busy,
- * Melody", and the Counters row of spec 2026-11-05 K4 in place of the Board pad), in a touch
- * browser of its own at an upright iPad's size. Loops are made on the laptop (here with its
- * loop rail); the iPad switches drums, how much plays, and each colour's counters.
+ * The Simple iPad page, for playing live only, in a touch browser of its own at an upright
+ * iPad's size: the instruments (what the melody plays) and the colours (one pad per colour,
+ * spec 2026-11-05 K4), and nothing else (owner, 7 Nov 2026: no Drums, no Calm / Busy). Loops
+ * are made on the laptop (here with its loop rail).
  */
 
 const touch = { pointerType: 'touch', pointerId: 1, width: 30, height: 30 };
@@ -29,7 +29,6 @@ async function ipadFor(page: Page, browser: Browser, testInfo: TestInfo, size = 
   return { ipad, close: () => ctx.close() };
 }
 
-const rail = (page: Page) => page.locator('[data-loop-rail]');
 const grid = (page: Page) => page.getByRole('grid', { name: /Laptop board/ });
 
 /** The board playing, with what is on it now kept as Loop 1 on the laptop (the board then clear). */
@@ -52,147 +51,38 @@ async function sessionLogFile(page: Page): Promise<LogFile> {
   return JSON.parse(readFileSync(await download.path(), 'utf-8')) as LogFile;
 }
 
-test('Drums silent: no drums anywhere (the board, a playing loop, the band) and everything else plays on; the laptop says so and brings them back; checked in the session log', async ({ page, browser }, testInfo) => {
-  test.setTimeout(180_000);
+test('only the instruments and the colours, big enough for a finger; an instrument changes the melody\u2019s sound on the laptop', async ({ page, browser }, testInfo) => {
+  test.setTimeout(120_000);
   await openLaptopBoard(page);
-  // A loop of drums and melody, then drums and melody on the board as well.
+  // Melody and drums on the board, and a loop, playing.
   await pickColour(page, 'Red');
   await place(page, [[5, 2], [6, 6]]);
   await loopFrom(page, 'Green', [1, 3, 5, 7]);
-  await pickColour(page, 'Green');
-  await place(page, [[2, 2], [2, 6]]);
-  await pickColour(page, 'Red');
-  await place(page, [[4, 4], [4, 8]]);
   await ipadOn(page);
   const { ipad, close } = await ipadFor(page, browser, testInfo);
   try {
     await expect(ipad.getByRole('status').first()).toHaveText('Connected · playing');
-    // What is on it, and nothing else: no Board pad, a pad for each of the four colours.
-    for (const name of ['Drums: Playing', 'Calm', 'Busy']) await expect(ipad.getByRole('button', { name, exact: true })).toBeVisible();
+    // What is on it, and nothing else: the four instruments and a pad for each of the four colours.
     await expect(ipad.getByRole('radiogroup', { name: 'Melody plays' })).toBeVisible();
     const counters = ipad.getByRole('group', { name: 'Counters' });
     for (const colour of ['Red', 'Blue', 'Yellow', 'Green']) await expect(counters.getByRole('button', { name: new RegExp(`^${colour}, .*: Playing$`) })).toBeVisible();
-    await expect(ipad.getByRole('button', { name: /^Board:/ })).toHaveCount(0);
-    await expect(ipad.getByRole('button')).toHaveCount(7);
+    await expect(ipad.getByRole('button')).toHaveCount(4);
     await expect(ipad.getByRole('radio')).toHaveCount(4);
-    for (const gone of [/Keep/, /Nothing kept/, /New idea/, /End the piece/, /Stop the loops/, /^Mute/, /Capture/, /Next scene/, /^Loop/]) {
+    for (const gone of [/^Drums/, /^Calm$/, /^Busy$/, /^Board:/, /Keep/, /Nothing kept/, /New idea/, /End the piece/, /Stop the loops/, /^Mute/, /Capture/, /Next scene/, /^Loop/]) {
       await expect(ipad.getByRole('button', { name: gone })).toHaveCount(0);
     }
-    for (const b of await ipad.getByRole('button').all()) {
+    for (const b of [...await ipad.getByRole('button').all(), ...await ipad.getByRole('radio').all()]) {
       const box = (await b.boundingBox())!;
-      expect(Math.min(box.width, box.height)).toBeGreaterThan(60);
+      expect(Math.min(box.width, box.height)).toBeGreaterThan(100);
     }
     const smallest = await ipad.evaluate(() => Math.min(...[...document.querySelectorAll('[data-simple-page] *')]
       .filter((e) => e.textContent?.trim() && e.children.length === 0).map((e) => parseFloat(getComputedStyle(e).fontSize))));
-    expect(smallest).toBeGreaterThanOrEqual(14);
-    await pause(page, 4000); // drums playing
-
-    // Drums silent: lit no more, said on the laptop, the drum counters faded.
-    await ipad.getByRole('button', { name: 'Drums: Playing', exact: true }).dispatchEvent('pointerdown', touch);
-    await expect(ipad.getByRole('button', { name: 'Drums: Silent', exact: true })).toHaveAttribute('data-lit', 'false');
-    await expect(page.getByRole('status').filter({ hasText: 'Drums silenced on the iPad' })).toBeVisible();
-    await expect(grid(page).getByRole('button', { name: /Green.*silenced on the iPad/ })).toHaveCount(2);
-    await expect(grid(page).getByRole('button', { name: /Red.*silenced on the iPad/ })).toHaveCount(0);
-    await pause(page, 6000);
-    // Back, from the laptop.
-    await page.getByRole('button', { name: 'Bring the drums back' }).click();
-    await expect(ipad.getByRole('button', { name: 'Drums: Playing', exact: true })).toHaveAttribute('data-lit', 'true');
-    await expect(page.getByText('Drums silenced on the iPad')).toHaveCount(0);
-    await pause(page, 5000);
-
-    const log = await sessionLogFile(page);
-    const at = (a: string): number => log.events.find((e) => e.kind === 'action' && e.action === a)?.t ?? NaN;
-    const off = at('drums silenced');
-    const back = at('drums back');
-    expect([off, back].every(Number.isFinite)).toBe(true);
-    const between = (from: number, to: number) => log.notes.filter((n) => n.t > from && n.t < to);
-    const drums = (ns: LogFile['notes']) => ns.filter((n) => n.role === 'drums');
-    // Before: drums from the board and from the loop.
-    expect(drums(between(0, off)).some((n) => n.source === 'loop')).toBe(true);
-    expect(drums(between(0, off)).some((n) => n.source !== 'loop' && n.origin !== 'band')).toBe(true);
-    // Silent (a moment after the press): no drum at all, not from the board, a loop or the band.
-    expect(drums(between(off + 0.5, back))).toEqual([]);
-    // Everything else plays on: the melody, from the board and from the loop.
-    expect(between(off + 0.5, back).some((n) => n.role === 'melody' && n.source === 'loop')).toBe(true);
-    expect(between(off + 0.5, back).some((n) => n.role === 'melody' && n.source !== 'loop')).toBe(true);
-    // Back: drums again.
-    expect(drums(between(back + 0.5, Infinity)).length).toBeGreaterThan(0);
-    expect(pageErrors(page)).toEqual([]);
-  } finally {
-    await close();
-  }
-});
-
-test('Drums silent lasts through Stop and a reload of the laptop, and Show says so with its own button', async ({ page, browser }, testInfo) => {
-  test.setTimeout(150_000);
-  await openLaptopBoard(page);
-  await loopFrom(page, 'Green', [1, 5]);
-  await ipadOn(page);
-  const { ipad, close } = await ipadFor(page, browser, testInfo);
-  try {
-    await ipad.getByRole('button', { name: 'Drums: Playing', exact: true }).dispatchEvent('pointerdown', touch);
-    await expect(page.getByRole('status').filter({ hasText: 'Drums silenced on the iPad' })).toBeVisible();
-    await page.locator('#bs-play-stop').click();
-    await page.reload();
-    await page.getByRole('button', { name: /Play my board/ }).click();
-    await expect(page.getByRole('status').filter({ hasText: 'Drums silenced on the iPad' })).toBeVisible({ timeout: 20_000 });
-    await expect(ipad.getByRole('button', { name: 'Drums: Silent', exact: true })).toBeVisible({ timeout: 20_000 });
-    await page.getByRole('button', { name: /^Show: the board, the clock/ }).click();
-    const row = page.getByRole('region', { name: 'Show', exact: true }).getByRole('group', { name: 'Show status' });
-    await expect(row).toContainText('Drums silenced on the iPad');
-    await row.getByRole('button', { name: 'Bring the drums back' }).click();
-    await expect(row).not.toContainText('Drums silenced');
-    await expect(ipad.getByRole('button', { name: 'Drums: Playing', exact: true })).toBeVisible();
-    expect(pageErrors(page)).toEqual([]);
-  } finally {
-    await close();
-  }
-});
-
-test('Calm plays the loops on their main beats only; Busy adds Extra notes; the laptop says so and goes back to normal; checked in the session log', async ({ page, browser }, testInfo) => {
-  test.setTimeout(180_000);
-  await openLaptopBoard(page);
-  // Extra notes from the simple rules (Magenta is never loaded in the tests); none to start with.
-  await soundTab(page);
-  await page.getByRole('button', { name: /^Advanced: key, scale/ }).click();
-  await page.getByRole('radiogroup', { name: 'Extra notes come from' }).getByRole('radio', { name: 'Simple rules' }).click();
-  await page.getByRole('button', { name: 'Board', exact: true }).click();
-  await loopFrom(page, 'Green', [1, 2, 3, 4, 5, 6, 7, 8]);
-  await ipadOn(page);
-  const { ipad, close } = await ipadFor(page, browser, testInfo);
-  try {
-    await expect(ipad.getByRole('status').first()).toHaveText('Connected · playing');
-    // The kept loop comes in on the next pass: the normal window starts once it plays.
-    await expect(rail(page).getByRole('button', { name: /^Loop 1: 8 notes, playing/ })).toBeVisible({ timeout: 20_000 });
-    await pause(page, 4000); // normal
-    await ipad.getByRole('button', { name: 'Busy', exact: true }).dispatchEvent('pointerdown', touch);
-    await expect(ipad.getByRole('button', { name: 'Busy', exact: true })).toHaveAttribute('data-lit', 'true');
-    await expect(page.getByRole('status').filter({ hasText: 'Busy (from the iPad): Extra notes round everything' })).toBeVisible();
-    await pause(page, 6000);
-    await ipad.getByRole('button', { name: 'Calm', exact: true }).dispatchEvent('pointerdown', touch);
-    await expect(ipad.getByRole('button', { name: 'Calm', exact: true })).toHaveAttribute('data-lit', 'true');
-    await expect(ipad.getByRole('button', { name: 'Busy', exact: true })).toHaveAttribute('data-lit', 'false');
-    await expect(page.getByRole('status').filter({ hasText: 'Calm (from the iPad): the loops play only their main beats, and no Extra notes' })).toBeVisible();
-    await pause(page, 6000);
-    await page.getByRole('button', { name: 'Back to normal' }).click();
-    await expect(ipad.getByRole('button', { name: 'Calm', exact: true })).toHaveAttribute('data-lit', 'false');
-
-    const log = await sessionLogFile(page);
-    const at = (a: string): number => log.events.find((e) => e.kind === 'action' && e.action === a)?.t ?? NaN;
-    const busy = at('busy');
-    const calm = at('calm');
-    const normal = at('normal');
-    expect([busy, calm, normal].every(Number.isFinite)).toBe(true);
-    const between = (from: number, to: number) => log.notes.filter((n) => n.t > from + 1 && n.t < to);
-    const loopNotes = (from: number, to: number) => between(from, to).filter((n) => n.source === 'loop');
-    const strong = (col: number) => col % 4 === 0 || col % 4 === 2;
-    expect(loopNotes(0, busy).some((n) => !strong(n.col))).toBe(true);
-    expect(between(0, busy).filter((n) => n.origin === 'fill')).toEqual([]);
-    expect(between(busy, calm).filter((n) => n.origin === 'fill').length).toBeGreaterThan(0);
-    const calmLoop = loopNotes(calm, normal);
-    expect(calmLoop.length).toBeGreaterThan(0);
-    expect(calmLoop.filter((n) => !strong(n.col))).toEqual([]);
-    expect(between(calm, normal).filter((n) => n.origin === 'fill')).toEqual([]);
+    expect(smallest).toBeGreaterThanOrEqual(16);
+    // Nothing cut off: the page fits the iPad, upright, with no scrolling.
+    expect(await ipad.evaluate(() => document.documentElement.scrollHeight <= window.innerHeight + 1)).toBe(true);
+    // An instrument: the melody's sound on the laptop changes with it.
+    await ipad.getByRole('radio', { name: 'Flute' }).dispatchEvent('pointerdown', touch);
+    await expect(ipad.getByRole('radio', { name: 'Flute' })).toHaveAttribute('aria-checked', 'true');
     expect(pageErrors(page)).toEqual([]);
   } finally {
     await close();
@@ -220,14 +110,13 @@ test('the rows the simple layout shows are chosen on the laptop; the Counters ro
     await expect(said).toHaveCount(0);
 
     const rows = page.getByRole('group', { name: 'What the simple layout shows' });
-    for (const r of ['Drums', 'Calm / Busy', 'Melody instrument', 'Counters, one per colour']) await expect(rows.getByRole('checkbox', { name: r, exact: true })).toBeChecked();
-    await expect(rows.getByRole('checkbox', { name: 'Board', exact: true })).toHaveCount(0);
-    for (const r of ['Calm / Busy', 'Melody instrument']) await rows.getByRole('checkbox', { name: r, exact: true }).uncheck();
+    for (const r of ['Melody instrument', 'Counters, one per colour']) await expect(rows.getByRole('checkbox', { name: r, exact: true })).toBeChecked();
+    for (const r of ['Board', 'Drums', 'Calm / Busy']) await expect(rows.getByRole('checkbox', { name: r, exact: true })).toHaveCount(0);
+    const before = (await counters.getByRole('button', { name: /^Green, / }).boundingBox())!.height;
+    await rows.getByRole('checkbox', { name: 'Melody instrument', exact: true }).uncheck();
     await expect(ipad.getByRole('radiogroup', { name: 'Melody plays' })).toHaveCount(0);
-    await expect(ipad.getByRole('button', { name: 'Calm', exact: true })).toHaveCount(0);
-    // Bigger with fewer rows (the full layout's band is about 130 px), though never a third of the page (owner, 5 Nov).
-    const tall = (await ipad.getByRole('button', { name: /^Drums:/ }).boundingBox())!.height;
-    expect(tall).toBeGreaterThan(180);
+    // The colours alone: bigger.
+    await expect.poll(async () => (await counters.getByRole('button', { name: /^Green, / }).boundingBox())!.height).toBeGreaterThan(before);
     await expect(page.getByText('✓ The iPad has the simple layout.')).toBeVisible();
     expect(pageErrors(page)).toEqual([]);
   } finally {
@@ -235,7 +124,7 @@ test('the rows the simple layout shows are chosen on the laptop; the Counters ro
   }
 });
 
-test("a colour's pad silences that colour's counters, said on the laptop, brought back from Show; a drum colour's pad brings Drums back", async ({ page, browser }, testInfo) => {
+test("a colour's pad silences that colour's counters, said on the laptop, brought back from Show", async ({ page, browser }, testInfo) => {
   test.setTimeout(180_000);
   await openLaptopBoard(page);
   // Red melody and Green drums on the board, playing.
@@ -282,19 +171,6 @@ test("a colour's pad silences that colour's counters, said on the laptop, brough
     // Back: Red again, at the end of the take.
     expect(melody(end - 3, Infinity).length).toBeGreaterThan(0);
 
-    // Drums off, then the drum colour's pad: it says Drums are off, and a press brings the
-    // drums back with it, everywhere.
-    await ipad.getByRole('button', { name: 'Drums: Playing', exact: true }).dispatchEvent('pointerdown', touch);
-    await expect(page.getByRole('status').filter({ hasText: 'Drums silenced on the iPad' })).toBeVisible();
-    const green = counters.getByRole('button', { name: /^Green, / });
-    await expect(green).toContainText('Drums are off');
-    await expect(green).toHaveAttribute('aria-pressed', 'false');
-    await green.dispatchEvent('pointerdown', touch);
-    await expect(ipad.getByRole('button', { name: 'Drums: Playing', exact: true })).toBeVisible();
-    await expect(green).toHaveAttribute('aria-pressed', 'true');
-    await expect(green).not.toContainText('Drums are off');
-    await expect(page.getByText('Drums silenced on the iPad')).toHaveCount(0);
-    await expect(page.locator('[data-colours-silent]')).toHaveCount(0);
     expect(pageErrors(page)).toEqual([]);
   } finally {
     await close();
@@ -310,15 +186,14 @@ test('pictures of the Simple page, dark and light, upright and on its side', asy
   await openLaptopBoard(page);
   await loopFrom(page, 'Green', [1, 3, 5, 7]);
   await ipadOn(page);
-  // Drums silent and Busy lit, Trumpet chosen.
+  // Trumpet chosen, Green silenced.
   {
     const { ipad, close } = await ipadFor(page, browser, testInfo);
     try {
-      await ipad.getByRole('button', { name: 'Drums: Playing', exact: true }).dispatchEvent('pointerdown', touch);
-      await ipad.getByRole('button', { name: 'Busy', exact: true }).dispatchEvent('pointerdown', touch);
       await ipad.getByRole('radio', { name: 'Trumpet' }).dispatchEvent('pointerdown', touch);
-      await expect(ipad.getByRole('button', { name: 'Busy', exact: true })).toHaveAttribute('data-lit', 'true');
-      await expect(ipad.getByRole('button', { name: 'Drums: Silent', exact: true })).toBeVisible();
+      await ipad.getByRole('group', { name: 'Counters' }).getByRole('button', { name: /^Green, .*: Playing$/ }).dispatchEvent('pointerdown', touch);
+      await expect(ipad.getByRole('radio', { name: 'Trumpet' })).toHaveAttribute('aria-checked', 'true');
+      await expect(ipad.getByRole('button', { name: /^Green, .*: Silent$/ })).toBeVisible();
     } finally {
       await close();
     }
@@ -328,7 +203,7 @@ test('pictures of the Simple page, dark and light, upright and on its side', asy
     for (const size of [{ width: 810, height: 1080 }, { width: 1080, height: 810 }]) {
       const { ipad, close } = await ipadFor(page, browser, testInfo, size);
       try {
-        await expect(ipad.getByRole('button', { name: 'Drums: Silent', exact: true })).toBeVisible({ timeout: 15_000 });
+        await expect(ipad.getByRole('button', { name: /^Green, .*: Silent$/ })).toBeVisible({ timeout: 15_000 });
         await expect(ipad.getByRole('radio', { name: 'Trumpet' })).toHaveAttribute('aria-checked', 'true');
         await ipad.waitForTimeout(700);
         await ipad.screenshot({ path: join(dir!, `ipad-simple-${mode}-${size.width}x${size.height}.png`) });
@@ -337,18 +212,15 @@ test('pictures of the Simple page, dark and light, upright and on its side', asy
       }
     }
   }
-  // Only Drums and the Counters, upright and dark, the drums playing again.
+  // Only the Counters, upright and dark.
   await (await headerButton(page, 'Switch to dark mode')).click();
-  await page.getByRole('button', { name: 'Bring the drums back' }).click();
   await page.getByRole('tab', { name: 'Connections' }).click();
-  const rows = page.getByRole('group', { name: 'What the simple layout shows' });
-  for (const r of ['Calm / Busy', 'Melody instrument']) await rows.getByRole('checkbox', { name: r, exact: true }).uncheck();
+  await page.getByRole('group', { name: 'What the simple layout shows' }).getByRole('checkbox', { name: 'Melody instrument', exact: true }).uncheck();
   const { ipad, close } = await ipadFor(page, browser, testInfo);
   try {
-    await expect(ipad.getByRole('button', { name: 'Drums: Playing', exact: true })).toBeVisible({ timeout: 15_000 });
+    await expect(ipad.getByRole('group', { name: 'Counters' })).toBeVisible({ timeout: 15_000 });
     await ipad.waitForTimeout(700);
-    await expect(ipad.getByRole('group', { name: 'Counters' })).toBeVisible();
-    await ipad.screenshot({ path: join(dir!, 'ipad-simple-dark-810x1080-drums-and-counters.png') });
+    await ipad.screenshot({ path: join(dir!, 'ipad-simple-dark-810x1080-counters.png') });
   } finally {
     await close();
   }

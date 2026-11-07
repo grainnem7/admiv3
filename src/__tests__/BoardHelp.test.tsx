@@ -61,13 +61,11 @@ describe('Help says how things work now', () => {
     expect(entry('iPad controls')).toContain('Mute needs two');
     const simple = entry('The iPad for a player without fine control');
     expect(simple).toContain('"Use the simple layout"');
-    expect(simple).toContain('one page for playing live: Drums, Calm / Busy, what the melody plays (Piano, Flute, Trumpet, Sax) and the Board');
+    expect(simple).toContain('one page for playing live: the instruments (what the melody plays: Piano, Flute, Trumpet, Sax) and the colours');
+    expect(simple).toContain('no Drums or Calm / Busy buttons, no loops');
     expect(simple).toContain('Loops are made and switched on the laptop, not the iPad');
-    expect(simple).toContain('Drums silent means no drums anywhere: the drum counters on the board (they stay there), the drums in every loop and the band’s drums');
-    expect(simple).toContain('Calm plays the loops on their main beats only, with no Extra notes; Busy adds Extra notes round everything');
+    expect(simple).toContain('tap it and its counters go silent');
     expect(simple).toContain('"What the simple layout shows"');
-    expect(simple).toContain('"Drums silenced on the iPad"');
-    expect(simple).toContain('"Board counters silenced on the iPad"');
     expect(simple).not.toMatch(/Keep what|Nothing kept|New idea|Taken out|IN or OUT|ON or OFF/);
     expect(simple).toContain('Speed is set by the hat alone');
     expect(simple).not.toContain('safe show layout');

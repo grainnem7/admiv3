@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
 import {
   ABLETON_CHAINS, abletonMappingTargets, abletonPlan, CHAIN_CC, chainCcValue, chainFor, chainForVoice, chainRange,
-  abletonChecklist, changedControls, chainOnChannel, controlKey, counterControls, filledChains, grooveCc, type AbletonPlanInput,
+  abletonChecklist, changedControls, chainOnChannel, controlKey, counterControls, filledChains, GLOW_ZONES, glowChainCc, grooveCc, type AbletonPlanInput,
 } from '../midi/abletonSounds';
+import type { MelodySound } from '../remote/protocol';
 import { allEvolveVoices, evolveVoicesFor } from '../audio/evolve/evolve';
 import { soundsFor } from '../ui/screens/boardSequencer/soundCatalogue';
 import { SOUND_WORLDS } from '../audio/worlds/soundWorlds';
@@ -252,19 +253,43 @@ describe('the plan', () => {
     const list = counterControls([1, 2], { tone: 1, delay: 0.5 });
     expect(list.map((c) => `${c.channel}:${c.cc}:${c.value}`)).toEqual(['1:25:127', '2:25:127', '1:27:64', '2:27:64']);
   });
-  it('your counters on their own track: no chain choice there, only Space at the World’s reverb; the part tracks play the loops’ sounds', () => {
+  it('your counters on their own track: Space at the World’s reverb, and its chain the iPad’s instrument (the glow for anything else); the part tracks play the loops’ sounds', () => {
     const plan = abletonPlan(base([colour('a', 'melody', { instrument: 'harp', volume: 0.4 })], {
       playerTrack: 14, loopSounds: [{ colour: 'loop:melody:clarinet', role: 'melody', instrument: 'clarinet' }], coloursOnBoard: new Set(['a']),
     }));
-    expect(plan.controls.get(controlKey(14, CHAIN_CC))).toBeUndefined();
+    // A harp is none of the iPad's four: the glow itself.
+    expect(plan.controls.get(controlKey(14, CHAIN_CC))?.value).toBe(glowChainCc(null));
     expect(plan.chains.has(14)).toBe(false);
     expect(plan.controls.get(controlKey(14, 26))?.value).toBeGreaterThan(0);
     // The player's harp counter is on the board, but it plays on 14: the Melody track keeps the clarinet loop's sound.
     expect(plan.chains.get(1)).toBe(chainFor({ role: 'melody', instrument: 'clarinet' }, 'warm'));
     // And its loudness is the loop's (full), not the card's Soft.
     expect(plan.controls.get(controlKey(1, 24))?.value).toBe(127);
-    const t = abletonMappingTargets(plan);
-    expect(t.find((x) => x.channel === 14)?.what).toBe('Your counters (ch 14): Space (Send A), for the Reverb counter');
+    const t = abletonMappingTargets(plan).filter((x) => x.channel === 14);
+    expect(t.map((x) => x.what)).toEqual([
+      'Your counters (ch 14): Rack Chain selector (five chains: Glow, Piano, Flute, Trumpet, Sax), for the iPad’s instruments',
+      'Your counters (ch 14): Space (Send A), for the Reverb counter',
+    ]);
+  });
+
+  it('the iPad’s instruments on your own track: each its own zone of the chain selector, the glow below them', () => {
+    const on14 = (instrument: string | undefined) => abletonPlan(base([colour('a', 'melody', { instrument }), colour('b', 'melody', { instrument: 'flute' })], { playerTrack: 14 }))
+      .controls.get(controlKey(14, CHAIN_CC))?.value;
+    expect(on14('synth:pad')).toBe(glowChainCc(null));
+    expect(on14(undefined)).toBe(glowChainCc(null));
+    // The first melody colour is the one the iPad changes (the second's flute is not it).
+    expect(on14('piano')).toBe(glowChainCc('piano'));
+    expect(on14('saxophone')).toBe(glowChainCc('saxophone'));
+    const values = [null, 'piano', 'flute', 'trumpet', 'saxophone'].map((sound) => glowChainCc(sound as MelodySound | null));
+    for (let i = 0; i < GLOW_ZONES.length; i++) {
+      expect(values[i]).toBeGreaterThanOrEqual(GLOW_ZONES[i].lo);
+      expect(values[i]).toBeLessThanOrEqual(GLOW_ZONES[i].hi);
+      if (i > 0) expect(GLOW_ZONES[i].lo).toBe(GLOW_ZONES[i - 1].hi + 1);
+    }
+    expect(GLOW_ZONES[0].lo).toBe(0);
+    expect(GLOW_ZONES.at(-1)?.hi).toBe(127);
+    // Without their own track, nothing is sent on 14.
+    expect(abletonPlan(base([colour('a', 'melody', { instrument: 'piano' })])).controls.get(controlKey(14, CHAIN_CC))).toBeUndefined();
   });
 
   it('mapping targets: chain selectors, then macros, then channel 16, each left where ADMI wants it', () => {

@@ -735,7 +735,7 @@ test('"Use the simple layout": a new player has it; a box ticked gives the full 
   await expect(page.getByRole('checkbox', { name: 'Mute', exact: true })).toBeChecked();
   // ...and one button for the show.
   await page.getByRole('button', { name: 'Use the simple layout' }).click();
-  await expect(page.getByRole('status').filter({ hasText: 'Done: the iPad now shows the simple layout: New idea, the parts, what the melody plays and the loops.' })).toBeVisible();
+  await expect(page.getByRole('status').filter({ hasText: 'Done: the iPad now shows the simple layout: the instruments and the colours.' })).toBeVisible();
   // The full layout's boxes are kept as they were, for whoever wants them again.
   await expect(page.getByRole('checkbox', { name: 'Mute', exact: true })).toBeChecked();
   await expect(page.getByRole('checkbox', { name: '🔒 Speed' })).toBeChecked();

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  abletonChecklist, abletonPlan, CHAIN_CC, chainLabel, chainRange, controlKey,
+  abletonChecklist, abletonPlan, CHAIN_CC, chainLabel, chainRange, controlKey, GLOW_ZONES,
 } from '../../../../midi/abletonSounds';
 import { colourChannelMap } from '../../../../midi/boardMidi';
 import { noticeMs } from '../../../../profiles/pressAgain';
@@ -133,7 +133,7 @@ export function AbletonSoundsPanel({ config, getLive, onSend, connected }: {
         <span style={NOTE}>Macros on every chain: 1 Volume (CC 24), 2 Brightness (CC 25), 3 Space (CC 26). Echo is CC 27.</span>
         {config.midiChannelMode === 'part' && config.playerTrack !== null && (
           <span style={NOTE}>
-            {`Your counters play on their own track: MIDI channel ${config.playerTrack}. Build one more track for them (the demo calls it “Tim’s glow”): MIDI From the port ADMIOutput, channel ${config.playerTrack}, Monitor In, with one soft pad and no rack.`}
+            {`Your counters play on their own track: MIDI channel ${config.playerTrack}. Build one more track for them (the demo calls it “Tim’s glow”): MIDI From the port ADMIOutput, channel ${config.playerTrack}, Monitor In. For the iPad’s instruments to be heard there, make it an Instrument Rack of five chains, in this order: the soft glow pad, Piano, Flute, Trumpet, Sax (pad-like, to blend), with its Chain selector mapped to CC 30 on that channel and each chain one zone of five (${GLOW_ZONES.map((z) => `${z.name} ${z.lo}–${z.hi}`).join(', ')}). One soft pad with no rack works too: then the iPad’s instruments are not heard there.`}
           </span>
         )}
       </Disclosure>

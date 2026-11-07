@@ -42,7 +42,9 @@ describe('the Template checklist', () => {
     act(() => root.render(
       <AbletonSoundsPanel config={{ ...DEFAULT_BOARD_SEQUENCER_CONFIG, midiEnabled: true, playerTrack: 14 }} getLive={() => null} onSend={vi.fn()} connected />,
     ));
-    expect(host.textContent).toContain('Your counters play on their own track: MIDI channel 14. Build one more track for them (the demo calls it “Tim’s glow”): MIDI From the port ADMIOutput, channel 14, Monitor In, with one soft pad and no rack.');
+    expect(host.textContent).toContain('Your counters play on their own track: MIDI channel 14. Build one more track for them (the demo calls it “Tim’s glow”): MIDI From the port ADMIOutput, channel 14, Monitor In.');
+    expect(host.textContent).toContain('an Instrument Rack of five chains, in this order: the soft glow pad, Piano, Flute, Trumpet, Sax');
+    expect(host.textContent).toContain('Glow 0–24, Piano 25–50, Flute 51–76, Trumpet 77–101, Sax 102–127');
     render();
     expect(host.textContent).not.toContain('Your counters play on their own track');
   });

@@ -88,7 +88,7 @@ export const SIMPLE_WORDS = {
   feelBusy: 'Busy (from the iPad): Extra notes round everything',
   backToNormal: 'Back to normal',
   /** The rows the facilitator can show or hide, in page order. */
-  rows: { drums: 'Drums', feel: 'Calm / Busy', melody: 'Melody instrument', counters: 'Counters, one per colour' },
+  rows: { melody: 'Melody instrument', counters: 'Counters, one per colour' },
   rowsCaption: 'What the simple layout shows',
   noRows: 'Nothing is chosen for this page. Choose what it shows on the laptop.',
   /** The row of melody sounds. */

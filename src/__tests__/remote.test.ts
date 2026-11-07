@@ -132,15 +132,17 @@ describe('the Simple page: its messages and its fields, every one checked (spec 
     expect('melody' in stateOf({})).toBe(false);
   });
 
-  it('the rows: known rows only, once each, in page order; a choice saved with an earlier page shows Drums and Calm / Busy', () => {
-    expect(SIMPLE_ROWS).toEqual(['drums', 'feel', 'melody', 'counters']);
-    expect(stateOf({ rows: ['board', 'drums', 'drums', 'strips', 3] }).rows).toEqual(['drums', 'counters']);
+  it('the rows: the instruments and the colours only (owner, 7 Nov 2026), once each, in page order; Drums and Calm / Busy are gone', () => {
+    expect(SIMPLE_ROWS).toEqual(['melody', 'counters']);
+    expect(stateOf({ rows: ['board', 'drums', 'drums', 'strips', 3] }).rows).toEqual(['counters']);
     expect(stateOf({ rows: [] }).rows).toEqual([]);
     expect(sanitizeSimpleRows(undefined)).toEqual(SIMPLE_ROWS);
-    // Earlier pages' rows: their Melody and Board ticks are kept; Drums and Calm / Busy are shown.
+    // Earlier pages' rows: their Melody and Board ticks are kept.
     expect(sanitizeSimpleRows(['keep', 'feel', 'instruments', 'melody', 'board'])).toEqual(SIMPLE_ROWS);
-    expect(sanitizeSimpleRows(['instruments'])).toEqual(['drums', 'feel']);
-    expect(sanitizeSimpleRows(['newIdea', 'board'])).toEqual(['drums', 'feel', 'counters']);
+    // A choice of only rows that are gone shows both, never an empty page.
+    expect(sanitizeSimpleRows(['instruments'])).toEqual(SIMPLE_ROWS);
+    expect(sanitizeSimpleRows(['drums', 'feel'])).toEqual(SIMPLE_ROWS);
+    expect(sanitizeSimpleRows(['newIdea', 'board'])).toEqual(['counters']);
     // A choice made with today's rows is kept as it is.
     expect(sanitizeSimpleRows(['melody'])).toEqual(['melody']);
   });
@@ -591,6 +593,6 @@ describe('the Counters row (K4): one pad per colour, each silencing its own coun
 
   it("a saved row 'board' reads as 'counters'", () => {
     expect(sanitizeSimpleRows(['board'])).toEqual(['counters']);
-    expect(sanitizeSimpleRows(['counters', 'drums'])).toEqual(['drums', 'counters']);
+    expect(sanitizeSimpleRows(['counters', 'drums'])).toEqual(['counters']);
   });
 });

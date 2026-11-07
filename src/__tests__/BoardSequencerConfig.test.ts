@@ -640,15 +640,16 @@ describe("the Simple iPad page (spec 2026-11-04)", () => {
   });
 
   it('the rows of the Simple page: all for a new player and for one saved before; otherwise as stored, made safe', () => {
-    const all = ['drums', 'feel', 'melody', 'counters'];
+    const all = ['melody', 'counters'];
     expect(DEFAULT_BOARD_SEQUENCER_CONFIG.remoteSimpleRows).toEqual(all);
     expect(loadWith({ bpm: 96 }).remoteSimpleRows).toEqual(all);
     // A choice saved with the 4 Nov page's Board row reads as the Counters row (K4).
-    expect(loadWith({ remoteSimpleRows: ['board', 'drums', 'bogus', 'board'] }).remoteSimpleRows).toEqual(['drums', 'counters']);
+    expect(loadWith({ remoteSimpleRows: ['board', 'drums', 'bogus', 'board'] }).remoteSimpleRows).toEqual(['counters']);
     expect(loadWith({ remoteSimpleRows: [] }).remoteSimpleRows).toEqual([]);
     expect(loadWith({ remoteSimpleRows: 'drums' }).remoteSimpleRows).toEqual(all);
-    // Saved with an earlier page's rows: Drums and Calm / Busy shown, Melody and Board as they were.
-    expect(loadWith({ remoteSimpleRows: ['newIdea', 'parts', 'melody'] }).remoteSimpleRows).toEqual(['drums', 'feel', 'melody']);
+    // Saved with an earlier page's rows: Melody and Board as they were (Drums and Calm / Busy are gone, 7 Nov 2026).
+    expect(loadWith({ remoteSimpleRows: ['newIdea', 'parts', 'melody'] }).remoteSimpleRows).toEqual(['melody']);
+    expect(loadWith({ remoteSimpleRows: ['drums', 'feel'] }).remoteSimpleRows).toEqual(all);
   });
 
   it('anything stored but "simple" is the full layout', () => {

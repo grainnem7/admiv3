@@ -19,6 +19,7 @@ import type { LayeredVoiceSpec, SoundWorldChoice } from '../audio/worlds/soundWo
 import { synthLayerOf, worldOf } from '../audio/worlds/soundWorlds';
 import { BRIGHT, ENERGY, LOUD, SPACE_ALL, SPACE_SEND, stepCc } from '../audio/soundSteps';
 import type { ColourChannel } from '../tracking/boardColours';
+import { MELODY_SOUNDS, type MelodySound } from '../remote/protocol';
 import { soundsFor } from '../ui/screens/boardSequencer/soundCatalogue';
 import {
   BAND_BASS_CHANNEL, BAND_PAD_CHANNEL, channelFor, COLOUR_JOB_CHANNELS, EXTRA_NOTES_CHANNEL, gainToCc, hasColourChannel,
@@ -261,8 +262,9 @@ export interface AbletonPlanInput {
   /** The player's colours with a counter on the board now. */
   coloursOnBoard?: ReadonlySet<string>;
   /**
-   * One per part: the player's counters all play on this channel (Tim's glow), one
-   * instrument with no rack. The part tracks then play only the loops' sounds.
+   * One per part: the player's counters all play on this channel (Tim's glow): one soft
+   * instrument, or a rack whose chain is the iPad's instrument (GLOW_ZONES). The part tracks
+   * then play only the loops' sounds.
    */
   playerTrack?: number | null;
 }
@@ -379,12 +381,41 @@ export function abletonPlan(input: AbletonPlanInput): AbletonPlan {
     set(channel, CC_BRIGHT, 127);
     set(channel, CC_SPACE, stepCc(SPACE_SEND, world?.reverbSend ?? 0.18));
   }
-  // The player's own track: one instrument, no rack to choose in; its Space at the World's reverb.
-  if (playerTrack !== null) set(playerTrack, CC_SPACE, stepCc(SPACE_SEND, world?.reverbSend ?? 0.18));
+  // The player's own track: its Space at the World's reverb, and the iPad's instrument (the
+  // glow for anything else) on its Chain selector, for a track built as a rack (GLOW_ZONES).
+  if (playerTrack !== null) {
+    set(playerTrack, CHAIN_CC, glowChainCc(ipadSound(input.channels)));
+    set(playerTrack, CC_SPACE, stepCc(SPACE_SEND, world?.reverbSend ?? 0.18));
+  }
   set(VOLUME_CHANNEL, CC_ENERGY, stepCc(ENERGY, input.energy));
   set(VOLUME_CHANNEL, CC_SPACE_ALL, stepCc(SPACE_ALL, input.space));
   set(VOLUME_CHANNEL, CC_GROOVE, grooveCc(input.swing));
   return { controls, shares, chains, ...(playerTrack !== null ? { playerTrack } : {}) };
+}
+
+/**
+ * The player's own track (Tim's glow) as a Rack of five chains, so the iPad's instruments are
+ * heard there too: the glow itself, then Piano, Flute, Trumpet and Sax, each a zone of the
+ * Chain selector (CC 30 on that channel). A track with one instrument and no rack ignores it.
+ */
+export const GLOW_ZONES: readonly { name: string; sound: MelodySound | null; lo: number; hi: number }[] = [
+  { name: 'Glow', sound: null, lo: 0, hi: 24 },
+  { name: 'Piano', sound: 'piano', lo: 25, hi: 50 },
+  { name: 'Flute', sound: 'flute', lo: 51, hi: 76 },
+  { name: 'Trumpet', sound: 'trumpet', lo: 77, hi: 101 },
+  { name: 'Sax', sound: 'saxophone', lo: 102, hi: 127 },
+];
+
+/** The Chain selector value for one of the iPad's sounds on the player's own track (the middle of its zone); null is the glow. */
+export function glowChainCc(sound: MelodySound | null): number {
+  const z = GLOW_ZONES.find((g) => g.sound === sound) ?? GLOW_ZONES[0];
+  return z.lo + Math.floor((z.hi - z.lo + 1) / 2);
+}
+
+/** What the iPad's sound buttons have chosen: the first melody colour's instrument, when it is one of the four. */
+function ipadSound(channels: readonly Pick<ColourChannel, 'role' | 'instrument'>[]): MelodySound | null {
+  const key = channels.find((c) => c.role === 'melody')?.instrument;
+  return key !== undefined && (MELODY_SOUNDS as readonly string[]).includes(key) ? (key as MelodySound) : null;
 }
 
 /** A channel the player's counters can have to themselves: 1 to 15, never the drums' 10. */
@@ -450,6 +481,10 @@ export function abletonMappingTargets(plan: AbletonPlan, names: ReadonlyMap<numb
   }
   if (plan.playerTrack !== undefined) {
     const ch = plan.playerTrack;
+    out.push({
+      channel: ch, cc: CHAIN_CC, value: value(ch, CHAIN_CC),
+      what: `${PLAYER_TRACK_NAME} (ch ${ch}): Rack Chain selector (five chains: ${GLOW_ZONES.map((z) => z.name).join(', ')}), for the iPad’s instruments`,
+    });
     out.push({ channel: ch, cc: CC_SPACE, value: value(ch, CC_SPACE), what: `${PLAYER_TRACK_NAME} (ch ${ch}): Space (Send A), for the Reverb counter` });
   }
   out.push({ channel: VOLUME_CHANNEL, cc: CC_SPACE_ALL, value: value(VOLUME_CHANNEL, CC_SPACE_ALL), what: 'Space (ch 16): Return A level' });

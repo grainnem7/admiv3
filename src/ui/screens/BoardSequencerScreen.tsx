@@ -4450,7 +4450,7 @@ export default function BoardSequencerScreen() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
             <span style={{ fontWeight: 600, fontSize: 14 }}>For the show</span>
             <Note>
-              The simple layout: one page with New idea, the parts (in or out), what the melody plays and the kept loops.
+              The simple layout: one page with the instruments (what the melody plays) and the colours (one pad each, tap to silence or bring back).
               No strips, and no Stop, End piece or Mute: Speed is set by the hat.
             </Note>
             <div>
@@ -4479,7 +4479,7 @@ export default function BoardSequencerScreen() {
             <span role="status" style={{ fontSize: 14, fontWeight: 600, color: 'var(--bs-ok)' }}>
               {!isSimpleLayout(config) ? ''
                 : safeLayoutSet
-                  ? 'Done: the iPad now shows the simple layout: New idea, the parts, what the melody plays and the loops.'
+                  ? 'Done: the iPad now shows the simple layout: the instruments and the colours.'
                   : '✓ The iPad has the simple layout.'}
             </span>
           </div>

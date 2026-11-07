@@ -41,22 +41,23 @@ export type RemotePicture = 'drums' | 'bass' | 'chords' | MelodySound | 'melody'
 
 export interface RemoteLoop { name: string; state: RemoteLoopState }
 
-/** The rows of the Simple page, in page order; the facilitator chooses which are shown. */
-export type SimpleRow = 'drums' | 'feel' | 'melody' | 'counters';
-export const SIMPLE_ROWS: SimpleRow[] = ['drums', 'feel', 'melody', 'counters'];
-/** Rows of the earlier Simple pages that are gone. Any of them in a saved choice shows Drums, and Calm / Busy. */
-const OLD_ROWS = ['newIdea', 'parts', 'loops', 'keep', 'instruments'];
+/**
+ * The rows of the Simple page, in page order; the facilitator chooses which are shown. The
+ * instruments and the colours only (owner, 7 Nov 2026: "the only buttons we will use are the
+ * instruments and the colours"); the Drums and Calm / Busy rows are gone.
+ */
+export type SimpleRow = 'melody' | 'counters';
+export const SIMPLE_ROWS: SimpleRow[] = ['melody', 'counters'];
 /**
  * Stored or sent rows made safe: known rows only, once each, in page order. Not a list = all.
- * A choice saved with an earlier page (it names New idea, Parts, Loops, Keep or Instruments)
- * keeps its Melody and Board ticks and shows Drums and Calm / Busy, which are new to it (my
- * call: the one big button of every earlier page becomes the one big button now). The Board
- * row of 4 Nov is the Counters row now (K4): one pad per colour.
+ * The Board row of 4 Nov is the Counters row now (K4): one pad per colour. A choice that
+ * named only rows that are gone (Drums, Calm / Busy, or an earlier page's) shows both rows,
+ * never an empty page; an empty choice stays empty (the facilitator chose nothing).
  */
 export function sanitizeSimpleRows(v: unknown): SimpleRow[] {
   if (!Array.isArray(v)) return [...SIMPLE_ROWS];
-  const old = v.some((r) => typeof r === 'string' && OLD_ROWS.includes(r));
-  return SIMPLE_ROWS.filter((r) => v.includes(r) || (r === 'counters' && v.includes('board')) || (old && (r === 'drums' || r === 'feel')));
+  const rows = SIMPLE_ROWS.filter((r) => v.includes(r) || (r === 'counters' && v.includes('board')));
+  return rows.length === 0 && v.length > 0 ? [...SIMPLE_ROWS] : rows;
 }
 
 /** A colour on the player's board, as the Counters row draws its pad (K4). */
