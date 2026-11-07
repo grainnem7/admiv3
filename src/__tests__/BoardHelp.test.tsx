@@ -61,7 +61,8 @@ describe('Help says how things work now', () => {
     const perform = entry('Perform: this screen for the audience');
     expect(perform).toContain('nothing to read, no clock, no buttons');
     expect(perform).toContain('Press Space to start the piece');
-    expect(perform).toContain('glowing lights');
+    expect(perform).toContain('small nebula of soft glows');
+    expect(perform).toContain('Leave Perform');
     expect(perform).toContain('▶ Start the piece too');
   });
 
