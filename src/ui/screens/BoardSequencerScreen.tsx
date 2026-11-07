@@ -2701,7 +2701,10 @@ export default function BoardSequencerScreen() {
       const slots = loopsToPlay(newLoopRef.current, wantedRef.current, cfg).filter((s) => (cfg.loopSlots[s] ?? null) !== null);
       const played = slots.map((s) => loopChannelsFor(cfg.loopSlots[s] ?? [], cfg.channels));
       const loopColours = [...new Map(played.flatMap((l) => l.channels).map((c) => [c.id, c])).values()];
-      engine.setLaunchedLoops(slots, played.map((l) => l.cells), loopColours);
+      // The clock already runs, so these land as a launch: the opening scene's own way in, as
+      // any scene (it faded up over a pass from silence with the player's fade).
+      const way = opening ? waySteps(opening.wayIn ?? NEW_SCENE_WAY, cfg.cols * Math.max(1, cfg.numPages)) : undefined;
+      engine.setLaunchedLoops(slots, played.map((l) => l.cells), loopColours, way);
     }
     // Stop may have been pressed while the samples were loading; the engine that is no
     // longer wanted is disposed rather than left playing with nothing able to stop it.
@@ -3909,7 +3912,8 @@ export default function BoardSequencerScreen() {
     update({ ...settings, ...(openingKey ? keyFields(openingKey) : {}), currentScene: openingIndex });
     setSceneSpeed(settings.bpm, 0);
     wantedRef.current = new Set((opening?.loops ?? []).filter((sl) => (c.loopSlots[sl] ?? null) !== null));
-    pushLaunch();
+    // Its own way in, as any scene: without it the opening faded up over a pass from silence.
+    pushLaunch(undefined, undefined, opening ? waySteps(opening.wayIn ?? NEW_SCENE_WAY, c.cols * Math.max(1, c.numPages)) : undefined);
     clockStartRef.current = performance.now();
     pieceStartedAtRef.current = clockStartRef.current;
     setPieceEnded(false);
