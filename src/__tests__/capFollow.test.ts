@@ -3,7 +3,7 @@ import {
   CONFIRM_FRAMES, DRIFT_HUE, driftColour, followCap, growMask, initialFollow, LOST_FRAMES, mergePieces, seenColour, type FollowState,
 } from '../tracking/cap/capFollow';
 import {
-  capColourAt, capMask, capPatches, DEFAULT_CAP_SETTINGS, hatTempoBounds, initialCapState, stepCap, type CapColour, type CapPatch, type Frame,
+  capColourAt, capMask, capPatches, DEFAULT_CAP_SETTINGS, hatTempoBounds, initialCapState, stepCap, type CapColour, type CapPatch, type FaceBox, type Frame,
 } from '../tracking/cap/capTracker';
 import type { ControlRange, FaderRole } from '../profiles/BoardSequencerConfig';
 
@@ -171,5 +171,36 @@ describe('a move far across the picture reaches the music', () => {
     expect(tempo).toBe(90);
     for (let i = 0; i < 80; i++) frame(0.95);
     expect(tempo).toBeGreaterThan(200);
+  });
+});
+
+describe('the face reinforces the following', () => {
+  // The player's face, in the middle of the picture; the hat sits just above it.
+  const face: FaceBox = { x: 0.44, y: 0.4, w: 0.12, h: 0.16 };
+  const hatAt = (x: number) => patch(x, 0.36, 0.06, 1);
+
+  it('a bigger red thing next to the hat (a red jumper below the face) is never taken while the hat is on the head', () => {
+    const jumper = patch(0.5, 0.52, 0.16, 2);
+    const { seen } = run([[hatAt(0.5)], ...Array.from({ length: 10 }, () => [hatAt(0.5), jumper])], initialFollow());
+    // Without the face, the jumper is near enough and bigger: it takes over.
+    expect(seen.at(-1)?.y).toBeGreaterThan(0.45);
+    let st = initialFollow();
+    for (let i = 0; i < 10; i++) st = followCap([hatAt(0.5), jumper], st, face).state;
+    const r = followCap([hatAt(0.5), jumper], st, face);
+    expect(r.sighting?.y).toBeCloseTo(0.36, 2);
+  });
+
+  it('the hat on the head is taken at once wherever it is: a quick turn of the head waits for nothing', () => {
+    let st = followCap([patch(0.15, 0.36, 0.06)], initialFollow()).state;
+    const moved: FaceBox = { x: 0.74, y: 0.4, w: 0.12, h: 0.16 };
+    const r = followCap([patch(0.8, 0.36, 0.06)], st, moved);
+    st = r.state;
+    expect(r.sighting?.x).toBeCloseTo(0.8, 2);
+    expect(st.candidate).toBeNull();
+  });
+
+  it('with the face seen but no red on the head, the far patch still has to hold its place (the face stands in meanwhile)', () => {
+    const st = followCap([hatAt(0.5)], initialFollow(), face).state;
+    expect(followCap([patch(0.1, 0.9, 0.08, 2)], st, face).sighting).toBeNull();
   });
 });

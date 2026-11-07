@@ -358,7 +358,10 @@ export function useCapTracker(opts: {
         // it), joined across seams and shadows, then followed frame to frame (capFollow).
         mask = cache.model && s.learntHat ? hatMask(frame, cache.model, s.learntHat.sure) : capMask(frame, liveColour);
         ({ patches } = capPatches(growMask(mask, FRAME_W, FRAME_H), FRAME_W, FRAME_H));
-        const followed = followCap(patches, follow);
+        // The player's face, seen within the last moment (it is looked for every few frames):
+        // red on the head is the hat at once, and red off it never wins over it.
+        const faceNow = s.faceAssist && lastFace && now - lastFace.at < FACE_STALE_MS ? lastFace.box : null;
+        const followed = followCap(patches, follow, faceNow);
         follow = followed.state;
         cap = followed.sighting;
         // Clicked colour: the band drifts towards the hat as seen now, a little at a time.

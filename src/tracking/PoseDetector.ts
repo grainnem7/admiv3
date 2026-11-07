@@ -7,6 +7,7 @@ import {
   FilesetResolver,
   type PoseLandmarkerResult,
 } from '@mediapipe/tasks-vision';
+import { withMediapipe } from './mediapipeFiles';
 import { TRACKING } from '../utils/constants';
 import type { PoseLandmarks } from '../state/types';
 
@@ -46,21 +47,18 @@ export class PoseDetector {
    * Initialize the pose detection model
    */
   async initialize(): Promise<void> {
-    const vision = await FilesetResolver.forVisionTasks(
-      'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm'
-    );
-
-    this.poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
+    // The engine from the installed package and the model kept on the laptop (mediapipeFiles.ts):
+    // no internet needed at a show, and never an engine of another version.
+    this.poseLandmarker = await withMediapipe('pose_landmarker_lite.task', async (wasmPath, modelPath) => PoseLandmarker.createFromOptions(await FilesetResolver.forVisionTasks(wasmPath), {
       baseOptions: {
-        modelAssetPath:
-          'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task',
+        modelAssetPath: modelPath,
         delegate: this.config.useGpu ? 'GPU' : 'CPU',
       },
       runningMode: 'VIDEO',
       numPoses: this.config.numPoses,
       minPoseDetectionConfidence: this.config.minDetectionConfidence,
       minTrackingConfidence: this.config.minTrackingConfidence,
-    });
+    }));
   }
 
   /**

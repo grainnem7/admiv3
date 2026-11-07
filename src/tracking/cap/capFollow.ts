@@ -10,6 +10,9 @@
  *   walking past in red, a light) only takes over once it has been seen in the same place for
  *   several frames running, or once the hat has been lost for a while (it really moved, or the
  *   camera did). Until then nothing changes: the values hold.
+ * - **Reinforced by the face.** With the player's face seen (Check it is on the head), red on
+ *   the head is the hat, taken at once wherever it is (a quick turn of the head waits for
+ *   nothing), and red off the head is never chosen over it, however big or near.
  * - **The colour follows the light.** Stage light drifts during a show. In clicked colour
  *   mode the colour band moves slowly towards the hat as it is seen now, never far from the
  *   colour that was clicked.
@@ -18,7 +21,7 @@
  */
 
 import { rgbToHsv } from '../ColorTracker';
-import type { CapColour, CapPatch, CapSighting, Frame } from './capTracker';
+import { onTheHead, type CapColour, type CapPatch, type CapSighting, type FaceBox, type Frame } from './capTracker';
 
 /** Patches whose boxes come within this of the followed patch's box are the same hat. */
 export const MERGE_GAP = 0.05;
@@ -67,8 +70,9 @@ function best(patches: readonly CapPatch[], near: { x: number; y: number } | nul
 }
 
 /**
- * This frame's hat among its patches. The hat is followed where it was if any patch is near
- * it; a far patch must be confirmed; with nothing to follow yet, the biggest is the hat.
+ * This frame's hat among its patches. With the player's face (seen within the last moment),
+ * red on the head is the hat at once. Otherwise the hat is followed where it was if any patch
+ * is near it; a far patch must be confirmed; with nothing to follow yet, the biggest is the hat.
  */
 export interface Followed {
   sighting: CapSighting | null;
@@ -77,10 +81,18 @@ export interface Followed {
   state: FollowState;
 }
 
-export function followCap(patches: readonly CapPatch[], st: FollowState): Followed {
+export function followCap(patches: readonly CapPatch[], st: FollowState, face: FaceBox | null = null): Followed {
   const lost = (): Followed => ({ sighting: null, patch: null, state: { ...st, lostFrames: st.lostFrames + 1 } });
   if (patches.length === 0) return lost();
   const last = st.lostFrames >= LOST_FRAMES ? null : st.last;
+  // The face says where the hat must be: red on the head is the hat, now.
+  const onHead = face ? patches.filter((p) => onTheHead(p, face)) : [];
+  if (onHead.length > 0) {
+    const p = best(onHead, last);
+    if (!p) return lost();
+    const s = mergePieces(p, onHead);
+    return { sighting: s, patch: p, state: { last: { x: s.x, y: s.y }, candidate: null, lostFrames: 0 } };
+  }
   if (!last) {
     const p = best(patches, null);
     if (!p) return lost();

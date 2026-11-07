@@ -5,6 +5,7 @@ import type { Server } from 'node:http'
 import { attachRemoteRelay, lanAddresses } from './src/remote/relay'
 import { REMOTE_INFO_PATH } from './src/remote/protocol'
 import { createDiskStore, diskStoreHandler, STORE_PATH } from './src/storage/diskStore'
+import { mediapipeHandler } from './src/tracking/mediapipeServe'
 
 /**
  * The iPad remote's link (see src/remote/relay.ts), on the same local server as the app,
@@ -37,6 +38,23 @@ function admiRemote(): Plugin {
 }
 
 /**
+ * MediaPipe's files (face, hands, pose) from this server, so a show needs no internet
+ * (src/tracking/mediapipeFiles.ts): the engine from the installed package, each model kept in
+ * .mediapipe-models once downloaded (the first time it is used with the internet on).
+ */
+function mediapipeLocal(): Plugin {
+  const handler = mediapipeHandler(
+    resolve(__dirname, 'node_modules/@mediapipe/tasks-vision/wasm'),
+    resolve(__dirname, '.mediapipe-models'),
+  )
+  return {
+    name: 'admi-mediapipe',
+    configureServer(server) { server.middlewares.use('/mediapipe', handler) },
+    configurePreviewServer(server) { server.middlewares.use('/mediapipe', handler) },
+  }
+}
+
+/**
  * This build's id: the laptop and the iPad compare theirs, so an iPad page left open from
  * before an update is found (src/remote/buildId.ts). Made when the app is built; the
  * development server makes one each time it starts.
@@ -44,7 +62,7 @@ function admiRemote(): Plugin {
 const BUILD_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
 
 export default defineConfig({
-  plugins: [react(), admiRemote()],
+  plugins: [react(), admiRemote(), mediapipeLocal()],
   define: { __ADMI_BUILD_ID__: JSON.stringify(BUILD_ID) },
   // The Magenta worker loads its models piece by piece, which needs module workers.
   worker: { format: 'es' },
@@ -76,6 +94,6 @@ export default defineConfig({
     open: true,
     // Folders the dev server must not watch: the Python analysis environment alone is about
     // 16,000 files, and watching it slowed every request (and the browser tests) to seconds.
-    watch: { ignored: ['**/.venv/**', '**/__pycache__/**', '**/.pytest_cache/**', '**/.superpowers/**', '**/test-results/**'] },
+    watch: { ignored: ['**/.mediapipe-models/**', '**/.venv/**', '**/__pycache__/**', '**/.pytest_cache/**', '**/.superpowers/**', '**/test-results/**'] },
   },
 })

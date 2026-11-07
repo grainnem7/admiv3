@@ -8,6 +8,7 @@ import {
   FilesetResolver,
   type HandLandmarkerResult,
 } from '@mediapipe/tasks-vision';
+import { withMediapipe } from './mediapipeFiles';
 import { TRACKING } from '../utils/constants';
 import type { HandLandmarks } from '../state/types';
 
@@ -53,21 +54,18 @@ export class HandDetector {
    * Initialize the hand detection model
    */
   async initialize(): Promise<void> {
-    const vision = await FilesetResolver.forVisionTasks(
-      'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm'
-    );
-
-    this.handLandmarker = await HandLandmarker.createFromOptions(vision, {
+    // The engine from the installed package and the model kept on the laptop (mediapipeFiles.ts):
+    // no internet needed at a show, and never an engine of another version.
+    this.handLandmarker = await withMediapipe('hand_landmarker.task', async (wasmPath, modelPath) => HandLandmarker.createFromOptions(await FilesetResolver.forVisionTasks(wasmPath), {
       baseOptions: {
-        modelAssetPath:
-          'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
+        modelAssetPath: modelPath,
         delegate: this.config.useGpu ? 'GPU' : 'CPU',
       },
       runningMode: 'VIDEO',
       numHands: this.config.numHands,
       minHandDetectionConfidence: this.config.minDetectionConfidence,
       minTrackingConfidence: this.config.minTrackingConfidence,
-    });
+    }));
   }
 
   /**

@@ -8,6 +8,7 @@ import {
   FilesetResolver,
   type FaceLandmarkerResult,
 } from '@mediapipe/tasks-vision';
+import { withMediapipe } from './mediapipeFiles';
 import { TRACKING } from '../utils/constants';
 import type { FaceLandmarks, FaceBlendshape } from '../state/types';
 
@@ -60,14 +61,11 @@ export class FaceDetector {
    * Initialize the face detection model
    */
   async initialize(): Promise<void> {
-    const vision = await FilesetResolver.forVisionTasks(
-      'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm'
-    );
-
-    this.faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+    // The engine from the installed package and the model kept on the laptop (mediapipeFiles.ts):
+    // no internet needed at a show, and never an engine of another version.
+    this.faceLandmarker = await withMediapipe('face_landmarker.task', async (wasmPath, modelPath) => FaceLandmarker.createFromOptions(await FilesetResolver.forVisionTasks(wasmPath), {
       baseOptions: {
-        modelAssetPath:
-          'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',
+        modelAssetPath: modelPath,
         delegate: this.config.useGpu ? 'GPU' : 'CPU',
       },
       runningMode: 'VIDEO',
@@ -76,7 +74,7 @@ export class FaceDetector {
       minTrackingConfidence: this.config.minTrackingConfidence,
       outputFaceBlendshapes: this.config.outputBlendshapes,
       outputFacialTransformationMatrixes: this.config.outputTransformMatrix,
-    });
+    }));
   }
 
   /**

@@ -62,6 +62,9 @@ describe('Help says how things work now', () => {
     expect(hat).toContain('click the hat in the camera picture');
     expect(hat).toContain('Click it again whenever the light changes');
     expect(hat).toContain('Learn the hat');
+    expect(hat).toContain('The face reinforces the hat');
+    expect(hat).toContain('red on the player’s head is the hat at once');
+    expect(hat).toContain('no internet needed');
     expect(hat).toContain('takes over only once it has stayed');
     expect(hat).toContain('How far the hat moves the speed');
     expect(hat).toContain('15 % either side');
