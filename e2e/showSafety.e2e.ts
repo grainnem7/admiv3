@@ -242,3 +242,31 @@ test('in Show the audience screen can’t be closed while the piece plays, and k
   await expect(picture).toHaveAttribute('data-awake', 'yes');
   expect(pageErrors(page)).toEqual([]);
 });
+
+test('Show’s ready check, before the piece: all of the check over the board without moving it, and a fix goes straight there (owner, 7 Nov 2026)', async ({ page }) => {
+  await openLaptopBoard(page);
+  // iPad controls on and no iPad: one thing to look at, fixed on the Connections tab.
+  await page.getByRole('tab', { name: 'Connections' }).click();
+  await page.getByRole('switch', { name: 'iPad controls' }).click();
+  await page.getByRole('tab', { name: 'Sound' }).click();
+  await page.getByRole('button', { name: /^Show: the board, the clock/ }).click();
+  const show = page.getByRole('region', { name: 'Show', exact: true });
+  const button = show.getByRole('button', { name: /^Ready check: \d+ to look at$/ });
+  await expect(button).toBeVisible();
+  const board = show.getByRole('img', { name: /board/ }).first();
+  const before = await board.boundingBox();
+  await button.click();
+  const panel = show.getByRole('region', { name: 'Ready check' });
+  await expect(panel).toBeVisible();
+  await expect(panel).toContainText('Counter colours have jobs');
+  await expect(panel).toContainText('iPad not connected');
+  expect(await board.boundingBox()).toEqual(before);
+  await panel.getByRole('button', { name: 'Close' }).click();
+  await expect(panel).toHaveCount(0);
+  await button.click();
+  // The fix goes straight to where it is made, out of Show.
+  await panel.getByRole('button', { name: /^Go to the Connections tab: iPad not connected/ }).click();
+  await expect(show).toHaveCount(0);
+  await expect(page.getByRole('tab', { name: 'Connections' })).toHaveAttribute('aria-selected', 'true');
+  expect(pageErrors(page)).toEqual([]);
+});

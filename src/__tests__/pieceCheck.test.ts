@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { aloneLine, ipadCheckItems, keepingTimeCheckItems, pieceCheckItems, updatedFromNowLine, type IpadCheckInput, type PieceCheckInput } from '../ui/screens/boardSequencer/pieceCheck';
+import { aloneLine, faceCheckItem, hatSpeedItem, ipadCheckItems, readySummary, secondLaptopItem, keepingTimeCheckItems, pieceCheckItems, updatedFromNowLine, type IpadCheckInput, type PieceCheckInput } from '../ui/screens/boardSequencer/pieceCheck';
 import type { KeepingTimeReport } from '../songs/keepingTime';
 import { DEFAULT_PERFORMANCE } from '../songs/performance/clock';
 import type { Scene, SceneSettings } from '../songs/performance/launcher';
@@ -275,5 +275,35 @@ describe('the check — keeping time (spec 2026-10-28)', () => {
 
   it('a stall or two that stayed under the threshold is still fine', () => {
     expect(keepingTimeCheckItems({ report: { ...fine, lateBeats: 1, lostSec: 0.2 }, running: false, valve: [] })[0].state).toBe('ok');
+  });
+});
+
+describe('the ready check, for the show (owner, 7 Nov 2026: the gig set up smoother)', () => {
+  it('the face check: working, still loading, could not load, or off', () => {
+    expect(faceCheckItem({ faceAssist: true, face: 'on', follow: 'hat' })).toEqual({ label: 'Face check on: it backs up the hat', state: 'ok' });
+    expect(faceCheckItem({ faceAssist: true, face: 'loading', follow: 'hat' })).toMatchObject({ label: 'Face check still loading', state: 'warn', place: 'cap' });
+    expect(faceCheckItem({ faceAssist: true, face: 'unavailable', follow: 'hat' })).toMatchObject({ label: 'Face check could not load: the hat works alone', state: 'warn', place: 'cap' });
+    expect(faceCheckItem({ faceAssist: true, face: 'unavailable', follow: 'hat' })?.fix).toContain('internet');
+    expect(faceCheckItem({ faceAssist: false, face: 'off', follow: 'hat' })).toMatchObject({ label: 'Face check is off: nothing backs up the hat', state: 'note', place: 'cap' });
+    // Following the head, the face is the whole thing: said by the hat's own line.
+    expect(faceCheckItem({ faceAssist: true, face: 'on', follow: 'head' })).toBeNull();
+  });
+
+  it('how far the hat moves the speed: only when the hat is on Speed', () => {
+    expect(hatSpeedItem('tempo', 'volume', 0.15)).toEqual({ label: 'The hat moves Speed 15 % either side of the scene’s', state: 'ok' });
+    expect(hatSpeedItem('volume', 'tempo', 0.1)?.label).toBe('The hat moves Speed 10 % either side of the scene’s');
+    expect(hatSpeedItem('tempo', 'off', 1)).toMatchObject({ label: 'The hat moves Speed all the way to Slowest and Fastest', state: 'note', place: 'cap' });
+    expect(hatSpeedItem('volume', 'fill', 0.15)).toBeNull();
+  });
+
+  it('the second laptop: said when it is there, nothing when it is not (it is optional)', () => {
+    expect(secondLaptopItem(true)).toEqual({ label: 'Second laptop connected', state: 'ok' });
+    expect(secondLaptopItem(false)).toBeNull();
+  });
+
+  it('the Show button’s words: all good, or how many to look at (notes are not counted)', () => {
+    expect(readySummary([{ label: 'a', state: 'ok' }, { label: 'b', state: 'note' }])).toBe('Ready check: all good ✓');
+    expect(readySummary([{ label: 'a', state: 'warn' }, { label: 'b', state: 'problem' }, { label: 'c', state: 'ok' }])).toBe('Ready check: 2 to look at');
+    expect(readySummary([{ label: 'a', state: 'warn' }])).toBe('Ready check: 1 to look at');
   });
 });

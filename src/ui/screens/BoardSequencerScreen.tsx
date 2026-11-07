@@ -83,7 +83,7 @@ import { ShowStatusRow } from './boardSequencer/play/ShowStatusRow';
 import {
   escLeavesShow, showStatusItems, simplifiedLine, stopGuarded, type ShowHatState, type ShowStatusAction, type ShowStatusInput,
 } from './boardSequencer/play/showStatus';
-import { PLACE_WORDS, type CheckPlace, type ReadyItem } from './boardSequencer/play/ReadyCheck';
+import { PLACE_WORDS, ReadyList, type CheckPlace, type ReadyItem } from './boardSequencer/play/ReadyCheck';
 import { PlayPanel, type PlayTab } from './boardSequencer/play/PlayPanel';
 import { forgetSoundsBefore } from './boardSequencer/play/ColourTable';
 import { SIMPLE_WORDS, WORDS } from './boardSequencer/words';
@@ -149,7 +149,10 @@ import { BoardMidiPanel } from './boardSequencer/components/BoardMidiPanel';
 import { planFromConfig } from './boardSequencer/components/AbletonSoundsPanel';
 import { useBoardMidiPort } from './boardSequencer/useBoardMidiPort';
 import { abletonReadyItem, abletonTracksItem } from './boardSequencer/abletonReady';
-import { aloneLine, backupItem, boardItem, ipadCheckItems, keepingTimeCheckItems, listNames, pieceCheckItems, playerWords, updatedFromNowLine } from './boardSequencer/pieceCheck';
+import {
+  aloneLine, backupItem, boardItem, faceCheckItem, hatSpeedItem, ipadCheckItems, keepingTimeCheckItems, listNames, pieceCheckItems, playerWords, readySummary,
+  secondLaptopItem, updatedFromNowLine,
+} from './boardSequencer/pieceCheck';
 import {
   keepingTimeIndicator, keepingTimeNews, KEEPING_TIME_RANGE, TIME_SEEN_NONE, type KeepingTimeReport, type TimeSeen, type ValveStep,
 } from '../../songs/keepingTime';
@@ -652,6 +655,8 @@ export default function BoardSequencerScreen() {
   // Guided Set up vs Play, resolved once from the config alone: routing never moves the
   // player on its own. A board that is set up opens on Play (a reload mid-piece too, where
   // "Carry on" is); the Welcome screen can ask for Set up instead.
+  /** Show's ready check, open over the board (stopped only). */
+  const [showReady, setShowReady] = useState(false);
   const [view, setView] = useState<BoardScreenView>(() => {
     const v = openingView(
       storedRef.current,
@@ -5104,6 +5109,8 @@ export default function BoardSequencerScreen() {
   ], []);
   /** Where a Ready-check fix is made, as the press that goes there. */
   const goToPlace = (place: CheckPlace) => (): void => {
+    // From Show's ready check: out of Show first, to the place.
+    if (view === 'bigBoard') { setShowReady(false); setView('play'); }
     const tab = (t: PlayTab): void => { setWorkspace('play'); setPlayTab(t); };
     switch (place) {
       case 'scenes': setWorkspace('piece'); setPieceStep('scenes'); return;
@@ -5153,6 +5160,10 @@ export default function BoardSequencerScreen() {
       }
       // Which job each move does, so the owner can see it before the piece (B8).
       items.push({ label: hatJobsLine(c.cap.xRole, c.cap.yRole), state: 'ok' });
+      const speed = hatSpeedItem(c.cap.xRole, c.cap.yRole, c.cap.tempoSpan);
+      if (speed) items.push(speed);
+      const faceLine = faceCheckItem({ faceAssist: c.cap.faceAssist, face: cap.view.face, follow: c.cap.follow });
+      if (faceLine) items.push(faceLine);
     }
     if (!laptop) {
       const det = detectionSetup(c);
@@ -5187,6 +5198,8 @@ export default function BoardSequencerScreen() {
         announce('Done: the iPad now shows the simple layout.');
       },
     }));
+    const second = secondLaptopItem(remoteEnabled && performerOn);
+    if (second) items.push(second);
     if (c.fillEngine === 'magenta' && typeof navigator !== 'undefined' && navigator.onLine === false) {
       items.push({ label: 'Offline: the AI’s extra notes use simple rules', state: 'warn', fix: 'Fine for the piece; connect once beforehand to load Magenta.' });
     }
@@ -6783,6 +6796,9 @@ export default function BoardSequencerScreen() {
     </div>
   );
 
+  // Show's ready check, worked out only in Show while stopped (it reads the whole setup).
+  const showReadyItems = view === 'bigBoard' && !running ? readyItems() : null;
+
   // Big board is an OVERLAY, not a different tree: replacing the tree would unmount the
   // one <video> and stop the camera dead in the middle of a performance.
   const bigBoardOverlay = view === 'bigBoard' ? (
@@ -6819,12 +6835,34 @@ export default function BoardSequencerScreen() {
           <span style={{ fontSize: 16 }}>
             {`${formatClock(config.performance.lengthSec)} · ${config.scenes.length === 0 ? 'no scenes' : `${config.scenes.length} ${config.scenes.length === 1 ? 'scene' : 'scenes'}`} · ${describeEnding(config.performance)}`}
           </span>
+          {/* Everything checked before the gig, from here (owner, 7 Nov 2026): the same check as
+              Make a piece's, over the board, each fix one press away. */}
+          <Button tone="secondary" aria-expanded={showReady} onClick={() => setShowReady((o) => !o)} style={{ marginLeft: 'auto' }}>
+            {showReadyItems ? readySummary(showReadyItems) : 'Ready check'}
+          </Button>
         </div>
       )}
       {/* Camera, hat, iPad, Ableton, and the notices: one line that never moves the board (B1, B14). */}
       <ShowStatusRow items={showStatusItems(showStatus)} action={showStatusAction} />
       <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
         {boardView}
+        {/* Over the board, not above it: opening it never moves the board (B1). */}
+        {showReady && !running && showReadyItems && (
+          <div
+            role="region" aria-label="Ready check"
+            style={{
+              position: 'absolute', top: 8, right: 8, zIndex: 2, width: 'min(560px, calc(100% - 16px))', maxHeight: 'calc(100% - 16px)', overflowY: 'auto',
+              display: 'flex', flexDirection: 'column', gap: 8, padding: 14, borderRadius: 'var(--bs-radius-md)',
+              background: 'var(--bs-elev)', border: '2px solid var(--bs-border-control)', boxShadow: 'var(--bs-shadow)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontWeight: 700, fontSize: 20 }}>Ready check</span>
+              <Button tone="quiet" onClick={() => setShowReady(false)} style={{ marginLeft: 'auto' }}>Close</Button>
+            </div>
+            <ReadyList items={showReadyItems} />
+          </div>
+        )}
         {/* Over the board's edge, not above it: it comes and goes without moving the board. */}
         {audienceNoticeView && (
           <div style={{ position: 'absolute', left: 0, right: 0, bottom: 8, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>

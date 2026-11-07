@@ -264,3 +264,39 @@ export function backupItem(backedUp: boolean): ReadyItem {
     ? { label: 'Backed up to a file this session', state: 'ok' }
     : { label: 'Not backed up to a file yet', state: 'note', fix: 'Press Back up to a file below, and keep the file off the laptop.' };
 }
+
+// ---- the hat, the face and the second laptop, for the show (owner, 7 Nov 2026) ------------
+
+/** Whether the face check that backs up the hat is working (Cap tab → Check it is on the head). */
+export function faceCheckItem(p: { faceAssist: boolean; face: 'off' | 'loading' | 'on' | 'unavailable'; follow: 'hat' | 'head' }): ReadyItem | null {
+  // Following the head, the face is the whole thing, and the hat's own line says so.
+  if (p.follow === 'head') return null;
+  if (!p.faceAssist) {
+    return { label: 'Face check is off: nothing backs up the hat', state: 'note', place: 'cap', fix: 'Cap tab → More hat settings: Check it is on the head. With it on, red off the head never takes over, and the face carries on when the hat is hidden.' };
+  }
+  if (p.face === 'on') return { label: 'Face check on: it backs up the hat', state: 'ok' };
+  if (p.face === 'unavailable') {
+    return { label: 'Face check could not load: the hat works alone', state: 'warn', place: 'cap', fix: 'Connect this laptop to the internet once, then switch the cap off and on in the Cap tab: Timbo keeps its own copy after that.' };
+  }
+  return { label: 'Face check still loading', state: 'warn', place: 'cap', fix: 'Wait a few seconds with the camera on. If it stays like this, the laptop needs the internet once.' };
+}
+
+/** How far a whole turn of the head moves the speed, when the hat is on Speed. */
+export function hatSpeedItem(xRole: string, yRole: string, span: number): ReadyItem | null {
+  if (xRole !== 'tempo' && yRole !== 'tempo') return null;
+  if (span >= 1) {
+    return { label: 'The hat moves Speed all the way to Slowest and Fastest', state: 'note', place: 'cap', fix: 'For a performed piece, 15 % either side keeps it musical: Cap tab, How far the hat moves the speed.' };
+  }
+  return { label: `The hat moves Speed ${Math.round(span * 100)} % either side of the scene’s`, state: 'ok' };
+}
+
+/** The second performer's laptop: said when it is connected; it is optional, so nothing otherwise. */
+export function secondLaptopItem(connected: boolean): ReadyItem | null {
+  return connected ? { label: 'Second laptop connected', state: 'ok' } : null;
+}
+
+/** The Show button's words: all good, or how many things to look at (problems and warnings). */
+export function readySummary(items: readonly ReadyItem[]): string {
+  const n = items.filter((i) => i.state === 'problem' || i.state === 'warn').length;
+  return n === 0 ? 'Ready check: all good ✓' : `Ready check: ${n} to look at`;
+}

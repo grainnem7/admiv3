@@ -330,6 +330,15 @@ const HELP: HelpEntry[] = [
       + 'while the piece plays: stop it first.',
   },
   {
+    title: 'Before the gig: the Ready check',
+    body: 'In Show, before the piece starts, the button beside \u25B6 Start the piece says "Ready check: all good \u2713" or '
+      + 'how many things to look at. Press it: the whole check opens over the board (the board does not move), the same '
+      + 'check as at the end of Make a piece: the camera and board, the hat (what it follows, how far it moves the speed, '
+      + 'whether the face check is working), the counter colours, the piece, keeping time, the iPad, a second laptop when one '
+      + 'is connected, Ableton and the backups. Each thing to look at has a button that goes straight to where it is fixed, '
+      + 'out of Show. Once the piece is playing the check is put away.',
+  },
+  {
     title: 'The hat',
     body: 'Cap tab → Control with the red cap. Moving the head side to side and up and down moves two controls '
       + '(Speed and Volume unless chosen otherwise). To set the hat\u2019s colour, click the hat in the camera picture: '

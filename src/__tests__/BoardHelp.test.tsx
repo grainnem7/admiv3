@@ -57,6 +57,12 @@ describe('Help says how things work now', () => {
     expect(entry('Simplify, and keeping time')).toContain('Simplified: Tim and Bed');
   });
 
+  it('before the gig: the Ready check from Show, each fix one press away', () => {
+    const ready = entry('Before the gig: the Ready check');
+    expect(ready).toContain('"Ready check: all good ✓"');
+    expect(ready).toContain('goes straight to where it is fixed');
+  });
+
   it('the hat: click it to set its colour, one hat followed, not taken by a flash of red, the light followed, and how far it moves the speed', () => {
     const hat = entry('The hat');
     expect(hat).toContain('click the hat in the camera picture');
