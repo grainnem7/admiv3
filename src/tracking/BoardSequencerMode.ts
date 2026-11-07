@@ -65,6 +65,8 @@ export interface ActiveCell extends CellRef {
   colour: PieceColour;
   /** True only when shoved off-centre → plays every other pass. Absent = every pass. */
   conditional?: boolean;
+  /** Where it sits in its square (−1…1 each way, up and to the right), when off the middle: for the audience view. */
+  box?: { up: number; side: number };
   /** Box detail: this counter's own velocity, when where-it-sits is switched on. */
   velocity?: number;
   /** Box detail: how late (+) or early (−) it plays, as a fraction of a step. */
@@ -450,6 +452,7 @@ export class BoardSequencerMode {
         const [row, col] = k.split(',').map(Number);
         const cell: ActiveCell = { row, col, colour: st.colour };
         if (st.conditional) cell.conditional = true;
+        if (st.settledPosition.up !== 0 || st.settledPosition.side !== 0) cell.box = { up: st.settledPosition.up, side: st.settledPosition.side };
         if (this.boxDetail.enabled) {
           cell.velocity = velocityFor(
             this.boxDetail.baseVelocity, st.settledPosition.up, this.boxDetail.loudness,

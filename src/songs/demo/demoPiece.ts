@@ -55,7 +55,7 @@ export const DEMO_PIECE_ID = 'demo-piece';
  * The demo's music, by revision: a demo player made from an older one has its music written
  * afresh when opened, so a laptop that has pulled a newer ADMI always plays the newest demo.
  */
-export const DEMO_REVISION = 13;
+export const DEMO_REVISION = 14;
 
 const ROWS = 8;
 const COLS = 8;
@@ -494,6 +494,11 @@ export function demoMusic(): Partial<BoardSequencerStored> {
     humanize: 0,
     // Tim's own counters, nudged off-centre, still play every other pass.
     variationEnabled: true,
+    // Where a counter sits in its square, at full strength (owner, 7 Nov 2026: the slightest
+    // move of a counter should have a big effect): higher is louder, right is later.
+    boxDetailEnabled: true,
+    boxLoudnessAmount: 1,
+    boxTimingAmount: 0.5,
     // Long notes, so every note (Tim's included) rings into the pads.
     noteLengthBeats: 2,
     studioMix: true,

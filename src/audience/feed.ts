@@ -162,14 +162,17 @@ export interface AudienceSetup {
 
 /** What the board looks like now, for the audience: no grid, no words but the scene. */
 export function audienceState(
-  cfg: AudienceSetup, cells: readonly { row: number; col: number; colour: string }[], playing: boolean, bpm: number,
+  cfg: AudienceSetup, cells: readonly { row: number; col: number; colour: string; box?: { up: number; side: number } }[], playing: boolean, bpm: number,
   hat: AudienceHat,
 ): Omit<AudienceState, 'kind'> {
   const swatch = new Map(cfg.channels.map((c) => [c.id, c.swatch]));
   return {
     rows: cfg.rows,
     cols: cfg.cols,
-    counters: cells.map((c) => ({ row: c.row, col: c.col, colour: swatch.get(c.colour) ?? '#cccccc' })),
+    counters: cells.map((c) => ({
+      row: c.row, col: c.col, colour: swatch.get(c.colour) ?? '#cccccc',
+      ...(c.box ? { up: Math.round(c.box.up * 100) / 100, side: Math.round(c.box.side * 100) / 100 } : {}),
+    })),
     playing,
     scene: playing && cfg.currentScene !== null ? cfg.scenes[cfg.currentScene]?.name ?? null : null,
     world: cfg.soundWorld,

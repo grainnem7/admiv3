@@ -117,6 +117,8 @@ export default function AudienceScreen(): JSX.Element {
     let blooms: Bloom[] = [];
     /** Each note's rings, spreading for a few seconds after its bloom has gone. */
     let rains: Bloom[] = [];
+    /** Where each counter sat in its square last time: a nudge (or a new counter) sends a burst. */
+    const lastBox = new Map<string, { up: number; side: number }>();
     /** When each square last bloomed: a counter may not re-bloom too soon (flash limit, A6). */
     const lastBloom = new Map<string, number>();
     let bandLevel = 0;
@@ -145,6 +147,22 @@ export default function AudienceScreen(): JSX.Element {
             if (!m.playing) heard = false;
             state = m;
             lastMsgAt = now;
+            // The slightest move of a counter shows big (owner, 7 Nov 2026): a nudge in its
+            // square, or a counter just put down, sends rings and sparks out from it.
+            if (m.playing) {
+              const seenNow = new Set<string>();
+              for (const c of m.counters) {
+                const key = `${c.row},${c.col}`;
+                seenNow.add(key);
+                const box = { up: c.up ?? 0, side: c.side ?? 0 };
+                const was = lastBox.get(key);
+                if (!was || Math.abs(was.up - box.up) > 0.08 || Math.abs(was.side - box.side) > 0.08) {
+                  if (was || lastBox.size > 0) rains.push({ row: c.row, col: c.col, colour: c.colour, at: now });
+                }
+                lastBox.set(key, box);
+              }
+              for (const k of [...lastBox.keys()]) if (!seenNow.has(k)) lastBox.delete(k);
+            }
             break;
           case 'notes':
             lastMsgAt = now;
@@ -315,10 +333,14 @@ export default function AudienceScreen(): JSX.Element {
         // budget (flash limit, A6): the same factor for each.
         const live = [...latest.values()].map((b) => ({ colour: shade(b.colour), shape: bloomAt((now - b.at) / 1000, reduced) }));
         const scale = bloomGlowScale(live.map((l) => ({ glow: l.shape?.glow ?? 0, colour: l.colour })), bloomShare(cell, W, H));
+        // Where each counter sits in its square, shown bigger than it is: a nudge moves its light
+        // well off the middle (owner, 7 Nov 2026: the slightest move shows big).
+        const boxes = new Map(state.counters.map((c) => [`${c.row},${c.col}`, { up: c.up ?? 0, side: c.side ?? 0 }]));
         // Each light a little off its square's middle, wandering slowly (glow.ts): never a grid.
         const at = (row: number, col: number): [number, number] => {
           const d = drift(row, col, t, reduced);
-          return [x0 + (col + 0.5 + d.dx) * cell, y0 + (row + 0.5 + d.dy) * cell];
+          const b = boxes.get(`${row},${col}`);
+          return [x0 + (col + 0.5 + d.dx + (b?.side ?? 0) * 0.45) * cell, y0 + (row + 0.5 + d.dy - (b?.up ?? 0) * 0.45) * cell];
         };
         const blob = (cx: number, cy: number, rgb: Rgb, radius: number, alpha: number): void => {
           if (alpha <= 0.003 || radius < 1) return;
@@ -356,7 +378,8 @@ export default function AudienceScreen(): JSX.Element {
           const raw = b ? bloomAt((now - b.at) / 1000, reduced) : null;
           const glowNow = raw ? raw.glow * scale : 0;
           if (raw) visible.add(key);
-          const rr = r * (raw?.scale ?? 1);
+          // Higher in its square (louder): a bigger light; lower, smaller.
+          const rr = r * (raw?.scale ?? 1) * (1 + 0.45 * (c.up ?? 0));
           const lit = base * breath(c.row, c.col, t, reduced);
           // Three glows orbiting each other slowly, each light its own way round.
           const seed = (c.row * 7 + c.col * 13) % 10;

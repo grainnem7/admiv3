@@ -339,7 +339,7 @@ const HELP: HelpEntry[] = [
       + 'audience view is the counters as lights in their places: each a small nebula of soft glows, wandering a little '
       + 'and breathing, in softer shades of their colours within each scene\u2019s own palette, which changes as the piece '
       + 'moves on. A note makes its light swell, sends rings out across the dark like rain on water and lets a few sparks '
-      + 'drift up. A slow wash of colour moves behind them, and the hat is a glowing wisp of light with a tail. The '
+      + 'drift up. A counter nudged in its square moves its light well off the middle (higher is bigger) and sends a burst of rings and sparks, so the smallest move shows. A slow wash of colour moves behind them, and the hat is a glowing wisp of light with a tail. The '
       + 'audience screen on a projector of its own (More \u2192 Open the audience screen) shows the same.',
   },
   {

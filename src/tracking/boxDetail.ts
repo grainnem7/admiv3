@@ -28,12 +28,16 @@ export interface BoxContext {
 
 export const CENTRED: BoxPosition = { up: 0, side: 0 };
 
-/** Map a raw −1…1 offset through the dead zone, so the middle is reachable. */
+/**
+ * Map a raw −1…1 offset through the dead zone, so the middle is reachable; past it, steeply
+ * (a square root), so even a slight nudge off the middle is heard (owner, 7 Nov 2026: "even
+ * the slightest tweaks of the counters should have a big effect").
+ */
 function throughDeadZone(v: number): number {
   const sign = Math.sign(v);
   const mag = Math.abs(v);
   if (mag <= BOX_DEAD_ZONE) return 0;
-  return sign * Math.min(1, (mag - BOX_DEAD_ZONE) / (1 - BOX_DEAD_ZONE));
+  return sign * Math.sqrt(Math.min(1, (mag - BOX_DEAD_ZONE) / (1 - BOX_DEAD_ZONE)));
 }
 
 /**

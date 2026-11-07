@@ -19,7 +19,8 @@ export const AUDIENCE_CHANNEL = 'admi-audience';
 export const AUDIENCE_PATH = '/audience.html';
 
 /** A counter on Tim's board, in its colour (a CSS colour). */
-export interface AudienceCounter { row: number; col: number; colour: string }
+/** A counter: its square and colour, and where it sits in the square (−1…1, up and right), when off the middle. */
+export interface AudienceCounter { row: number; col: number; colour: string; up?: number; side?: number }
 
 /**
  * Where the hat is, for Tim's light.
@@ -93,7 +94,11 @@ export function readLaptopMessage(v: unknown): LaptopMessage | null {
       if (v.scene !== null && typeof v.scene !== 'string') return null;
       if (typeof v.world !== 'string' || !WORLDS.includes(v.world)) return null;
       const counters = v.counters.filter((c): c is AudienceCounter => readCell<AudienceCounter>(c))
-        .map((c) => ({ row: c.row, col: c.col, colour: c.colour }));
+        .map((c) => {
+          const unit = (x: unknown): x is number => typeof x === 'number' && Number.isFinite(x) && x >= -1 && x <= 1;
+          const u = (c as { up?: unknown }).up; const sd = (c as { side?: unknown }).side;
+          return { row: c.row, col: c.col, colour: c.colour, ...(unit(u) ? { up: u } : {}), ...(unit(sd) ? { side: sd } : {}) };
+        });
       return {
         kind: 'state', rows: v.rows, cols: v.cols, counters, playing: v.playing, scene: v.scene,
         world: v.world as SoundWorldChoice, bpm: v.bpm, hat,

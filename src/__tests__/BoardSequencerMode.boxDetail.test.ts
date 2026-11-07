@@ -47,7 +47,8 @@ describe('box detail', () => {
   it('is off by default: no velocity or timing on a settled cell', () => {
     const m = new BoardSequencerMode(cfg);
     const out = run(m, cell([{ id: 'red', up: 1, side: 1 }]), 700);
-    expect(out.activeCells[0]).toEqual({ row: 0, col: 0, colour: 'red' });
+    // Where it sits is still said (for the audience view), but it plays as placed.
+    expect(out.activeCells[0]).toEqual({ row: 0, col: 0, colour: 'red', box: { up: 1, side: 1 } });
   });
 
   it('higher in the box plays louder, lower softer, centred unchanged', () => {
