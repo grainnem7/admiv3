@@ -251,6 +251,8 @@ export function createBoardPlayer(name: string, handedness: 'left' | 'right'): B
  * player's own Cap tab is kept.
  */
 export const DEMO_HAT_SPAN = 0.15;
+/** The quietest the hat can make the demo (owner, 7 Nov 2026: never let the music disappear). A higher one chosen is kept. */
+export const DEMO_VOLUME_FLOOR = 0.6;
 
 /**
  * The demo piece, ready to play, as its own player ("Demo piece"), opened. Its music is
@@ -276,7 +278,12 @@ export function openDemoPlayer(): BoardPlayerProfile {
     { rows: 8, cols: 8 },
   );
   const sane = sanitizeBoardSequencerConfig(merged) ?? merged;
-  const clean = sane.cap.tempoSpan < 1 ? sane : { ...sane, cap: { ...sane.cap, tempoSpan: DEMO_HAT_SPAN } };
+  const spanned = sane.cap.tempoSpan < 1 ? sane : { ...sane, cap: { ...sane.cap, tempoSpan: DEMO_HAT_SPAN } };
+  const vol = spanned.controlRanges.volume;
+  const clean = vol.min >= DEMO_VOLUME_FLOOR ? spanned : {
+    ...spanned,
+    controlRanges: { ...spanned.controlRanges, volume: { min: DEMO_VOLUME_FLOOR, max: Math.max(vol.max, DEMO_VOLUME_FLOOR) } },
+  };
   const { settings } = splitBoardConfig(clean);
   const madeFrom = from?.id ?? existing?.madeFrom;
   const player: BoardPlayerProfile = {

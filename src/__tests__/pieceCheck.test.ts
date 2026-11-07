@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { aloneLine, faceCheckItem, hatSpeedItem, ipadCheckItems, readySummary, secondLaptopItem, keepingTimeCheckItems, pieceCheckItems, updatedFromNowLine, type IpadCheckInput, type PieceCheckInput } from '../ui/screens/boardSequencer/pieceCheck';
+import { aloneLine, faceCheckItem, hatSpeedItem, hatVolumeItem, ipadCheckItems, readySummary, secondLaptopItem, keepingTimeCheckItems, pieceCheckItems, updatedFromNowLine, type IpadCheckInput, type PieceCheckInput } from '../ui/screens/boardSequencer/pieceCheck';
 import type { KeepingTimeReport } from '../songs/keepingTime';
 import { DEFAULT_PERFORMANCE } from '../songs/performance/clock';
 import type { Scene, SceneSettings } from '../songs/performance/launcher';
@@ -305,5 +305,13 @@ describe('the ready check, for the show (owner, 7 Nov 2026: the gig set up smoot
     expect(readySummary([{ label: 'a', state: 'ok' }, { label: 'b', state: 'note' }])).toBe('Ready check: all good ✓');
     expect(readySummary([{ label: 'a', state: 'warn' }, { label: 'b', state: 'problem' }, { label: 'c', state: 'ok' }])).toBe('Ready check: 2 to look at');
     expect(readySummary([{ label: 'a', state: 'warn' }])).toBe('Ready check: 1 to look at');
+  });
+});
+
+describe('the quietest the hat can make the music (owner, 7 Nov 2026)', () => {
+  it('said when the hat is on Volume: fine from 50 %, a thing to look at below', () => {
+    expect(hatVolumeItem('tempo', 'volume', { min: 0.6, max: 1 })).toEqual({ label: 'The hat keeps the volume between 60 % and 100 %', state: 'ok' });
+    expect(hatVolumeItem('volume', 'off', { min: 0.2, max: 1 })).toMatchObject({ label: 'The hat can make the music as quiet as 20 %', state: 'warn', place: 'cap' });
+    expect(hatVolumeItem('tempo', 'fill', { min: 0.2, max: 1 })).toBeNull();
   });
 });

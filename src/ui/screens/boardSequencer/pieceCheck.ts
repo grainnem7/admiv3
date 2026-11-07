@@ -290,6 +290,16 @@ export function hatSpeedItem(xRole: string, yRole: string, span: number): ReadyI
   return { label: `The hat moves Speed ${Math.round(span * 100)} % either side of the scene’s`, state: 'ok' };
 }
 
+/** The quietest and loudest the hat can make the music, when the hat is on Volume. */
+export function hatVolumeItem(xRole: string, yRole: string, range: { min: number; max: number }): ReadyItem | null {
+  if (xRole !== 'volume' && yRole !== 'volume') return null;
+  const lo = Math.round(range.min * 100);
+  if (lo < 50) {
+    return { label: `The hat can make the music as quiet as ${lo} %`, state: 'warn', place: 'cap', fix: 'Cap tab, What the hat’s moves do: raise Quietest to about 60 %, so a bowed head never makes the music disappear.' };
+  }
+  return { label: `The hat keeps the volume between ${lo} % and ${Math.round(range.max * 100)} %`, state: 'ok' };
+}
+
 /** The second performer's laptop: said when it is connected; it is optional, so nothing otherwise. */
 export function secondLaptopItem(connected: boolean): ReadyItem | null {
   return connected ? { label: 'Second laptop connected', state: 'ok' } : null;

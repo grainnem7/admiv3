@@ -334,12 +334,13 @@ const HELP: HelpEntry[] = [
     body: 'Perform, at the top beside Show, turns this laptop\u2019s whole screen into the audience view: nothing to '
       + 'read, no clock, no buttons. Use it when this screen is what the audience sees (a projector showing the laptop). '
       + 'Press Space to start the piece (a second Space does nothing, so nothing stops by accident); the iPad and the '
-      + 'second laptop play as usual, and the second laptop has \u25B6 Start the piece too. Esc comes back (if the screen '
-      + 'is full screen, the first Esc ends that, the second comes back); the piece plays on. The audience view is the '
-      + 'counters as glowing lights in their colours and places, each wandering a little and breathing; a note makes '
-      + 'its light swell and sends rings out across the dark like rain on water. A soft light behind them follows the '
-      + 'hat, and a soft red ring shows where the hat is. The audience screen on a projector of its own (More \u2192 Open '
-      + 'the audience screen) shows the same.',
+      + 'second laptop play as usual, and the second laptop has \u25B6 Start the piece too. Esc comes back to the page you '
+      + 'were on, and so does \u2715 Leave Perform, which shows for a moment when the mouse moves; the piece plays on. The '
+      + 'audience view is the counters as lights in their places: each a small nebula of soft glows, wandering a little '
+      + 'and breathing, in softer shades of their colours within each scene\u2019s own palette, which changes as the piece '
+      + 'moves on. A note makes its light swell, sends rings out across the dark like rain on water and lets a few sparks '
+      + 'drift up. A slow wash of colour moves behind them, and the hat is a glowing wisp of light with a tail. The '
+      + 'audience screen on a projector of its own (More \u2192 Open the audience screen) shows the same.',
   },
   {
     title: 'Before the gig: the Ready check',

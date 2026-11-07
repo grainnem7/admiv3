@@ -295,17 +295,24 @@ test('Perform: this screen shows only the audience view, nothing to read; Space 
   await page.keyboard.press(' ');
   await page.waitForTimeout(1500);
   await expect(aud.locator('#root > div')).toHaveAttribute('data-awake', 'yes');
-  // Esc comes back to the laptop's own screen; the piece plays on. (The browser's own Esc ends
-  // full screen first, as in Show; here the test ends it.)
+  // Esc comes back to the laptop's own screen; the piece plays on. The browser's own Esc ends
+  // full screen (here the test ends it), and with it Perform.
   await page.evaluate(async () => {
     if (document.fullscreenElement) await document.exitFullscreen().catch(() => {});
-    document.dispatchEvent(new Event('fullscreenchange'));
   });
-  await page.waitForTimeout(1500);
-  await expect(perform).toBeFocused();
-  await page.keyboard.press('Escape');
   await expect(perform).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Show', exact: true })).toHaveCount(0);
+  await expect(page.locator('#bs-play-stop')).toHaveText('■ Stop');
+  // Again, and out with the mouse: moving it shows Leave Perform for a moment.
+  await page.getByRole('button', { name: /^Perform: this screen shows only the audience view/ }).click();
+  await expect(perform).toBeVisible();
+  await expect(perform.getByRole('button', { name: '✕ Leave Perform' })).toHaveCount(0);
+  await page.mouse.move(400, 300);
+  await page.mouse.move(420, 320);
+  await expect(perform.getByRole('button', { name: '✕ Leave Perform' })).toBeVisible();
+  await expect(perform).toBeFocused();
+  await perform.getByRole('button', { name: '✕ Leave Perform' }).click();
+  await expect(perform).toHaveCount(0);
   await expect(page.locator('#bs-play-stop')).toHaveText('■ Stop');
   expect(pageErrors(page)).toEqual([]);
 });

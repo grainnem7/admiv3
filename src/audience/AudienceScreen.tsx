@@ -16,21 +16,20 @@
 import { useEffect, useRef } from 'react';
 import {
   bandBump, BLOOM_SEC, bloomAt, bloomColour, bloomGlowScale, bloomShare, boardLayout, canRebloom, COUNTER_RADIUS,
-  counterNeedsRing, DIM_PRESENCE, glideTint, INITIAL_LIGHT, isAwake, lightGlow, pulseHz, pulseLevel,
+  DIM_PRESENCE, glideTint, INITIAL_LIGHT, isAwake, lightGlow, pulseHz, pulseLevel,
   stepLight, stepPresence, stepPulse, worldTint, type LightState, type Rgb,
 } from './light';
 import {
-  CORE_ALPHA, CORE_REACH, DOT_RADIUS, INITIAL_MARKER, MARKER_RGB, markerHatMode, markerMode, markerSize, RING_WIDTH, stepMarker,
+  INITIAL_MARKER, markerHatMode, markerMode, markerSize, stepMarker,
   trailSegments, type MarkerState,
 } from './hatMarker';
 import { breath, drift, RAIN, rainRings } from './glow';
+import { glideHue, refine, rgbOf, sceneHue, sparksOf } from './palette';
 import { AUDIENCE_CHANNEL, readLaptopMessage, type AudienceHat, type AudienceMessage, type AudienceState } from './protocol';
 
 /** The laptop says how things are at least once a second: quiet longer than this, it has gone. */
 const CONNECTED_MS = 2500;
 const BACKGROUND = '#05060a';
-/** The thin ring round a counter too dark to see. */
-const RING: Rgb = [230, 232, 242];
 /**
  * The screen must never slow the music: it draws about 30 times a second (the light moves
  * slowly; more frames buy nothing), at the screen's own pixel size, and the big soft light on
@@ -64,6 +63,35 @@ function colourReader(): (css: string) => Rgb {
     known.set(css, rgb);
     return rgb;
   };
+}
+
+/**
+ * A soft round glow in one colour, drawn once and kept (drawing gradients for every light on
+ * every frame cost too much): bright in the middle, gone at the edge.
+ */
+const sprites = new Map<string, HTMLCanvasElement>();
+function glowSprite(rgb: Rgb, radius: number): HTMLCanvasElement {
+  const size = Math.max(8, Math.min(512, Math.round(radius / 8) * 8));
+  const q = (v: number): number => Math.round(v / 8) * 8;
+  const key = `${q(rgb[0])},${q(rgb[1])},${q(rgb[2])},${size}`;
+  const hit = sprites.get(key);
+  if (hit) return hit;
+  if (sprites.size > 400) sprites.clear();
+  const c = document.createElement('canvas');
+  c.width = size * 2; c.height = size * 2;
+  const g = c.getContext('2d');
+  if (g) {
+    const grad = g.createRadialGradient(size, size, 0, size, size, size);
+    const [r, gg, b] = [q(rgb[0]), q(rgb[1]), q(rgb[2])];
+    grad.addColorStop(0, `rgba(${r},${gg},${b},1)`);
+    grad.addColorStop(0.3, `rgba(${r},${gg},${b},0.55)`);
+    grad.addColorStop(0.65, `rgba(${r},${gg},${b},0.16)`);
+    grad.addColorStop(1, `rgba(${r},${gg},${b},0)`);
+    g.fillStyle = grad;
+    g.fillRect(0, 0, size * 2, size * 2);
+  }
+  sprites.set(key, c);
+  return c;
 }
 
 const rgba = (c: Rgb, a: number): string =>
@@ -100,6 +128,7 @@ export default function AudienceScreen(): JSX.Element {
     let tint: Rgb = worldTint('none');
     let phase = 0;
     let presence = DIM_PRESENCE;
+    let hue = sceneHue(null);
 
     const motion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
     let reduced = motion?.matches === true;
@@ -214,7 +243,12 @@ export default function AudienceScreen(): JSX.Element {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.globalAlpha = 1;
 
-      // Tim's light, behind everything: faint before the piece, full while it plays.
+      // The scene's own hue, gliding to the next scene's (palette.ts).
+      hue = glideHue(hue, sceneHue(playing ? state?.scene ?? null : null), dt);
+      const shade = (css: string): Rgb => refine(colourOf(css), hue);
+
+      // Behind everything, on the soft layer: a slow deep wash in the scene's hue, and Tim's
+      // light following the hat: faint before the piece, full while it plays.
       const g = lightGlow(light, tint);
       const depth = awake ? (reduced ? 0.1 : 0.22) : 0.12;
       const a = g.alpha * (0.3 + 0.7 * wake) * (1 - depth + depth * pulseLevel(phase));
@@ -225,7 +259,19 @@ export default function AudienceScreen(): JSX.Element {
         lctx.globalCompositeOperation = 'copy';
         lctx.fillStyle = BACKGROUND;
         lctx.fillRect(0, 0, lw, lh);
-        lctx.globalCompositeOperation = 'source-over';
+        lctx.globalCompositeOperation = 'lighter';
+        const washA = 0.18 * (0.35 + 0.65 * wake);
+        const drifted = reduced ? 0 : t;
+        for (const [k, dh] of [[0, 0], [1, 38]] as const) {
+          const wx = (0.3 + 0.4 * k + 0.12 * Math.sin(drifted * 0.05 + k * 2.1)) * lw;
+          const wy = (0.35 + 0.3 * k + 0.1 * Math.cos(drifted * 0.04 + k)) * lh;
+          const wr = Math.max(lw, lh) * 0.75;
+          const wash = lctx.createRadialGradient(wx, wy, 0, wx, wy, wr);
+          wash.addColorStop(0, rgba(rgbOf((hue + dh) % 360, 0.55, 0.32), washA));
+          wash.addColorStop(1, rgba(rgbOf((hue + dh) % 360, 0.55, 0.32), 0));
+          lctx.fillStyle = wash;
+          lctx.fillRect(0, 0, lw, lh);
+        }
         const lx = light.x * lw;
         const ly = light.y * lh;
         const R = g.radius * Math.min(lw, lh);
@@ -247,17 +293,19 @@ export default function AudienceScreen(): JSX.Element {
       // The band: a soft light along the bottom edge, lifting with its beat.
       const bandOn = playing && now - bandLastNote < 3000;
       if (bandOn) {
-        const bandTint: Rgb = [(tint[0] + 150) / 2, (tint[1] + 170) / 2, (tint[2] + 255) / 2];
+        const bandTint = rgbOf((hue + 20) % 360, 0.4, 0.6);
         const bh = H * 0.08;
         const strip = ctx.createLinearGradient(0, H, 0, H - bh);
-        strip.addColorStop(0, rgba(bandTint, wake * (0.12 + 0.4 * bandLevel)));
+        strip.addColorStop(0, rgba(bandTint, wake * (0.1 + 0.32 * bandLevel)));
         strip.addColorStop(1, rgba(bandTint, 0));
         ctx.fillStyle = strip;
         ctx.fillRect(0, H - bh, W, bh);
       }
 
-      // The board: Tim's counters, and every note blooming at its square.
+      // The board as lights: every counter a small nebula, glows orbiting each other and
+      // adding up where they meet; a note swells it, sends rings out and lets sparks go.
       const visible = new Set<string>();
+      ctx.globalCompositeOperation = 'lighter';
       if (state) {
         const { x0, y0, cell } = boardLayout(W, H, state.rows, state.cols);
         const r = cell * COUNTER_RADIUS;
@@ -265,26 +313,35 @@ export default function AudienceScreen(): JSX.Element {
         for (const b of blooms) latest.set(`${b.row},${b.col}`, b);
         // However many bloom together, what they add to a third of the screen stays under the
         // budget (flash limit, A6): the same factor for each.
-        const live = [...latest.values()].map((b) => ({ colour: colourOf(b.colour), shape: bloomAt((now - b.at) / 1000, reduced) }));
+        const live = [...latest.values()].map((b) => ({ colour: shade(b.colour), shape: bloomAt((now - b.at) / 1000, reduced) }));
         const scale = bloomGlowScale(live.map((l) => ({ glow: l.shape?.glow ?? 0, colour: l.colour })), bloomShare(cell, W, H));
         // Each light a little off its square's middle, wandering slowly (glow.ts): never a grid.
         const at = (row: number, col: number): [number, number] => {
           const d = drift(row, col, t, reduced);
           return [x0 + (col + 0.5 + d.dx) * cell, y0 + (row + 0.5 + d.dy) * cell];
         };
-        // The rain first, under the lights: each note's rings spreading out across the dark.
+        const blob = (cx: number, cy: number, rgb: Rgb, radius: number, alpha: number): void => {
+          if (alpha <= 0.003 || radius < 1) return;
+          const sp = glowSprite(rgb, radius);
+          ctx.globalAlpha = Math.min(1, alpha);
+          ctx.drawImage(sp, cx - radius, cy - radius, radius * 2, radius * 2);
+          ctx.globalAlpha = 1;
+        };
+        // The rain and the sparks first, under the lights.
         for (const b of rains) {
           if (b.row < 0 || b.row >= state.rows || b.col < 0 || b.col >= state.cols) continue;
-          const rings = rainRings((now - b.at) / 1000, reduced);
-          if (rings.length === 0) continue;
-          const rgb = colourOf(b.colour);
+          const age = (now - b.at) / 1000;
+          const rgb = shade(b.colour);
           const [cx, cy] = at(b.row, b.col);
-          for (const ring of rings) {
+          for (const ring of rainRings(age, reduced)) {
             ctx.beginPath();
             ctx.arc(cx, cy, ring.r * cell, 0, Math.PI * 2);
-            ctx.strokeStyle = rgba(rgb, ring.alpha * (0.4 + 0.6 * wake));
-            ctx.lineWidth = Math.max(1, cell * 0.025);
+            ctx.strokeStyle = rgba(rgb, ring.alpha * 0.8 * (0.4 + 0.6 * wake));
+            ctx.lineWidth = Math.max(1, cell * 0.02);
             ctx.stroke();
+          }
+          for (const sp of sparksOf(b.row, b.col, age, reduced)) {
+            blob(cx + sp.dx * cell, cy + sp.dy * cell, bloomColour(rgb, 0.6), sp.size * cell * 2.2, sp.alpha * (0.4 + 0.6 * wake));
           }
         }
         const base = 0.35 + 0.65 * wake;
@@ -293,35 +350,23 @@ export default function AudienceScreen(): JSX.Element {
           if (c.row < 0 || c.row >= state.rows || c.col < 0 || c.col >= state.cols) continue;
           const key = `${c.row},${c.col}`;
           onBoard.add(key);
-          const rgb = colourOf(c.colour);
+          const rgb = shade(c.colour);
           const [cx, cy] = at(c.row, c.col);
           const b = latest.get(key);
           const raw = b ? bloomAt((now - b.at) / 1000, reduced) : null;
-          const shape = raw ? { ...raw, glow: raw.glow * scale } : null;
+          const glowNow = raw ? raw.glow * scale : 0;
           if (raw) visible.add(key);
           const rr = r * (raw?.scale ?? 1);
           const lit = base * breath(c.row, c.col, t, reduced);
-          // The light's own glow, soft at the edge: a light, not a counter on a board.
-          const glowR = rr * (1.9 + (shape ? shape.glow : 0));
-          const soft = ctx.createRadialGradient(cx, cy, rr * 0.2, cx, cy, glowR);
-          soft.addColorStop(0, rgba(shape ? bloomColour(rgb, shape.glow) : rgb, Math.min(1, 0.55 * lit + (shape ? 0.45 * shape.glow : 0))));
-          soft.addColorStop(0.45, rgba(rgb, 0.22 * lit + (shape ? 0.25 * shape.glow : 0)));
-          soft.addColorStop(1, rgba(rgb, 0));
-          ctx.fillStyle = soft;
-          ctx.beginPath();
-          ctx.arc(cx, cy, glowR, 0, Math.PI * 2);
-          ctx.fill();
-          // Its heart: brighter as it blooms, in its own colour, never washed to white.
-          ctx.beginPath();
-          ctx.arc(cx, cy, rr * 0.55, 0, Math.PI * 2);
-          ctx.fillStyle = rgba(shape ? bloomColour(rgb, shape.glow) : rgb, Math.min(1, lit + (shape ? 0.4 * shape.glow : 0)));
-          ctx.fill();
-          // A light too dark to see against the screen gets a thin light ring.
-          if (counterNeedsRing(rgb)) {
-            ctx.strokeStyle = rgba(RING, 0.5 + 0.5 * wake);
-            ctx.lineWidth = Math.max(1.5, cell * 0.03);
-            ctx.stroke();
+          // Three glows orbiting each other slowly, each light its own way round.
+          const seed = (c.row * 7 + c.col * 13) % 10;
+          for (let k = 0; k < 3; k++) {
+            const ang = (reduced ? 0 : t * (0.35 + 0.08 * k)) + seed + k * 2.09;
+            const off = rr * 0.38;
+            blob(cx + Math.cos(ang) * off, cy + Math.sin(ang) * off, rgb, rr * (1.45 + 0.7 * glowNow), 0.3 * lit + 0.22 * glowNow);
           }
+          // Its heart: soft, brighter as it blooms, in its own colour, never washed to white.
+          blob(cx, cy, raw ? bloomColour(rgb, raw.glow) : rgb, rr * 0.8, 0.55 * lit + 0.4 * glowNow);
         }
         // Notes where Tim has no counter (a loop, an extra note): a brief light that fades.
         for (const [key, b] of latest) {
@@ -329,63 +374,38 @@ export default function AudienceScreen(): JSX.Element {
           const raw = bloomAt((now - b.at) / 1000, reduced);
           if (!raw) continue;
           visible.add(key);
-          const glow = raw.glow * scale;
-          const rgb = bloomColour(colourOf(b.colour), raw.glow);
           const [cx, cy] = at(b.row, b.col);
-          const rr = r * 0.85 * raw.scale;
-          const halo3 = ctx.createRadialGradient(cx, cy, 0, cx, cy, rr * 1.8);
-          halo3.addColorStop(0, rgba(rgb, 0.85 * glow));
-          halo3.addColorStop(0.5, rgba(rgb, 0.5 * glow));
-          halo3.addColorStop(1, rgba(rgb, 0));
-          ctx.fillStyle = halo3;
-          ctx.beginPath();
-          ctx.arc(cx, cy, rr * 1.8, 0, Math.PI * 2);
-          ctx.fill();
+          blob(cx, cy, bloomColour(shade(b.colour), raw.glow), r * 1.5 * raw.scale, 0.75 * raw.glow * scale);
         }
       }
 
-      // The hat's marker, over the counters but hollow, so they show through it: a short
-      // fading trail of where it has just been, a soft red middle with a small solid dot (a
-      // pointer, not a bloom's ripple), and a crisp ring with a thin dark edge (so it reads
-      // over a red counter too). Dashed and dim while held.
+      // The hat as a wisp of light (not a target): a soft glowing head with a long tapering
+      // tail of where it has just been; dimmer while held.
       if (marker.alpha > 0.005) {
-        const S = Math.min(W, H);
         const R = markerSize(W, H);
-        const a = marker.alpha * (0.6 + 0.4 * wake);
+        const a = marker.alpha * (0.6 + 0.4 * wake) * (markerFrom !== 'follow' ? 0.6 : 1);
         const mx = marker.x * W;
         const my = marker.y * H;
-        // Butt ends: round ones overlap at every joint and bead the line.
+        const warm = rgbOf((hue + 180) % 360, 0.35, 0.82);
+        ctx.lineCap = 'round';
         for (const seg of trailSegments(marker.trail, t, a)) {
           ctx.beginPath();
           ctx.moveTo(seg.x0 * W, seg.y0 * H);
           ctx.lineTo(seg.x1 * W, seg.y1 * H);
-          ctx.strokeStyle = rgba(MARKER_RGB, seg.alpha);
-          ctx.lineWidth = Math.max(1, seg.width * R);
+          ctx.strokeStyle = rgba(warm, seg.alpha * 0.55);
+          ctx.lineWidth = Math.max(1, seg.width * R * 1.6);
           ctx.stroke();
         }
-        const core = ctx.createRadialGradient(mx, my, 0, mx, my, R * CORE_REACH);
-        core.addColorStop(0, rgba(MARKER_RGB, CORE_ALPHA * a));
-        core.addColorStop(1, rgba(MARKER_RGB, 0));
-        ctx.fillStyle = core;
-        ctx.beginPath();
-        ctx.arc(mx, my, R * CORE_REACH, 0, Math.PI * 2);
-        ctx.fill();
-        const held = markerFrom !== 'follow';
-        ctx.setLineDash(held ? [R * 0.32, R * 0.22] : []);
-        ctx.beginPath();
-        ctx.arc(mx, my, R, 0, Math.PI * 2);
-        ctx.strokeStyle = rgba([5, 6, 10], 0.35 * a);
-        ctx.lineWidth = R * RING_WIDTH + Math.max(2, S * 0.003);
-        ctx.stroke();
-        ctx.strokeStyle = rgba(MARKER_RGB, 0.8 * a);
-        ctx.lineWidth = R * RING_WIDTH;
-        ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.beginPath();
-        ctx.arc(mx, my, R * DOT_RADIUS, 0, Math.PI * 2);
-        ctx.fillStyle = rgba(MARKER_RGB, a);
-        ctx.fill();
+        ctx.lineCap = 'butt';
+        const head = glowSprite(warm, R * 1.6);
+        ctx.globalAlpha = Math.min(1, 0.8 * a);
+        ctx.drawImage(head, mx - R * 1.6, my - R * 1.6, R * 3.2, R * 3.2);
+        const core = glowSprite([255, 246, 232], R * 0.45);
+        ctx.globalAlpha = Math.min(1, a);
+        ctx.drawImage(core, mx - R * 0.45, my - R * 0.45, R * 0.9, R * 0.9);
+        ctx.globalAlpha = 1;
       }
+      ctx.globalCompositeOperation = 'source-over';
 
       mark('presence', presence.toFixed(2));
       mark('awake', awake ? 'yes' : 'no');

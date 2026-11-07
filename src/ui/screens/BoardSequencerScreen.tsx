@@ -150,7 +150,7 @@ import { planFromConfig } from './boardSequencer/components/AbletonSoundsPanel';
 import { useBoardMidiPort } from './boardSequencer/useBoardMidiPort';
 import { abletonReadyItem, abletonTracksItem } from './boardSequencer/abletonReady';
 import {
-  aloneLine, backupItem, boardItem, faceCheckItem, hatSpeedItem, ipadCheckItems, keepingTimeCheckItems, listNames, pieceCheckItems, playerWords, readySummary,
+  aloneLine, backupItem, boardItem, faceCheckItem, hatSpeedItem, hatVolumeItem, ipadCheckItems, keepingTimeCheckItems, listNames, pieceCheckItems, playerWords, readySummary,
   secondLaptopItem, updatedFromNowLine,
 } from './boardSequencer/pieceCheck';
 import {
@@ -361,6 +361,8 @@ const REMOTE_NOTE_MS = noticeMs(2500);
 const HELLO_WAIT_MS = 4000;
 /** The second performer's page is gone after this long without its hello (it says one every second). */
 const PERFORMER_GONE_MS = 3500;
+/** Perform's Leave button stays this long after the mouse last moved. */
+const PERFORM_EXIT_MS = 3000;
 /** How long "New sounds" / "Band joins" stays on the board (at least 5 s, A7). */
 const BOARD_NOTICE_MS = noticeMs(2500);
 
@@ -664,6 +666,9 @@ export default function BoardSequencerScreen() {
    */
   const [performing, setPerforming] = useState(false);
   const performRef = useRef<HTMLDivElement | null>(null);
+  /** Perform's way out, shown for a moment whenever the mouse moves (owner, 7 Nov 2026). */
+  const [performExitShown, setPerformExitShown] = useState(false);
+  const performExitTimerRef = useRef<number | null>(null);
   const [view, setView] = useState<BoardScreenView>(() => {
     const v = openingView(
       storedRef.current,
@@ -1691,9 +1696,25 @@ export default function BoardSequencerScreen() {
   }, [view]);
   // Perform lives in Show: leaving Show ends it, and while it is on the keys go to it alone.
   useEffect(() => {
-    if (view !== 'bigBoard') { setPerforming(false); return; }
+    if (view !== 'bigBoard') { setPerforming(false); setPerformExitShown(false); return; }
     if (performing) performRef.current?.focus();
   }, [view, performing]);
+  // Esc always comes back from Perform (owner, 7 Nov 2026): the browser's own Esc ends full
+  // screen, and with it Perform, back to the page it came from. (Show itself stays, B5.)
+  useEffect(() => {
+    if (!performing) return undefined;
+    let wasFull = document.fullscreenElement !== null;
+    const onChange = (): void => {
+      const full = document.fullscreenElement !== null;
+      if (wasFull && !full) setView('play');
+      wasFull = full;
+    };
+    document.addEventListener('fullscreenchange', onChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', onChange);
+      if (performExitTimerRef.current !== null) window.clearTimeout(performExitTimerRef.current);
+    };
+  }, [performing]);
   // Show: ▶ Start the piece gives way to the Now / Next strip, and focus goes with it, never
   // to the page (T4-09) and never onto ■ Stop, where a repeated Enter stopped the piece it
   // had just started (B3). Back onto Start when it stops (the second press of Stop, the end
@@ -5188,6 +5209,8 @@ export default function BoardSequencerScreen() {
       items.push({ label: hatJobsLine(c.cap.xRole, c.cap.yRole), state: 'ok' });
       const speed = hatSpeedItem(c.cap.xRole, c.cap.yRole, c.cap.tempoSpan);
       if (speed) items.push(speed);
+      const loud = hatVolumeItem(c.cap.xRole, c.cap.yRole, c.controlRanges.volume);
+      if (loud) items.push(loud);
       const faceLine = faceCheckItem({ faceAssist: c.cap.faceAssist, face: cap.view.face, follow: c.cap.follow });
       if (faceLine) items.push(faceLine);
     }
@@ -6872,7 +6895,12 @@ export default function BoardSequencerScreen() {
             performRef.current?.focus();
             if (!document.fullscreenElement) void bigBoardRef.current?.requestFullscreen?.().catch(() => {});
           }}
-          style={{ position: 'absolute', inset: 0, zIndex: 40, background: '#05060a', cursor: 'none', outline: 'none' }}
+          onPointerMove={() => {
+            setPerformExitShown(true);
+            if (performExitTimerRef.current !== null) window.clearTimeout(performExitTimerRef.current);
+            performExitTimerRef.current = window.setTimeout(() => setPerformExitShown(false), PERFORM_EXIT_MS);
+          }}
+          style={{ position: 'absolute', inset: 0, zIndex: 40, background: '#05060a', cursor: performExitShown ? 'default' : 'none', outline: 'none' }}
         >
           <iframe
             src="/audience.html"
@@ -6881,6 +6909,21 @@ export default function BoardSequencerScreen() {
             aria-hidden="true"
             style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 0, pointerEvents: 'none' }}
           />
+          {performExitShown && (
+            <button
+              type="button"
+              tabIndex={-1}
+              // Focus stays on Perform, so Space still starts the piece.
+              onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+              onClick={() => setView('play')}
+              style={{
+                position: 'absolute', top: 16, right: 16, padding: '10px 18px', borderRadius: 999, fontSize: 16, fontWeight: 700,
+                color: '#e6e8f2', background: 'rgba(20, 22, 30, 0.75)', border: '1px solid rgba(230, 232, 242, 0.35)', cursor: 'pointer',
+              }}
+            >
+              ✕ Leave Perform
+            </button>
+          )}
         </div>
       )}
       {running ? bigNowNextStrip : (

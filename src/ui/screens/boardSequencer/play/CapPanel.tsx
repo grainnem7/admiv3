@@ -391,6 +391,45 @@ function LearnHat(p: CapPanelProps & { showHat: boolean; onShowHat(on: boolean):
 }
 
 /**
+ * Quietest and Loudest, for the hat on Volume (owner, 7 Nov 2026: the hat must never make the
+ * music disappear): the hat moves the volume between them, so a bowed head is never silence.
+ * The same setting as the Volume counter's range (Sound → Advanced), in percent.
+ */
+function VolumeRange({ range, onChange }: { range: ControlRange; onChange(r: ControlRange): void }): JSX.Element {
+  const pct = (v: number): number => Math.round(v * 100);
+  const hold = (v: number): number => Math.max(0, Math.min(100, Math.round(v)));
+  const box = (key: 'min' | 'max', label: string): JSX.Element => (
+    <label style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 14, flex: 1 }}>
+      {label}
+      <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        <input
+          type="number" step={5} min={0} max={100} value={pct(range[key])}
+          onChange={(e) => onChange({ ...range, [key]: (Number(e.target.value) || 0) / 100 })}
+          onBlur={() => {
+            // Held to 0–100, and Quietest never above Loudest.
+            const lo = hold(pct(range.min)); const hi = hold(pct(range.max));
+            const next = { min: Math.min(lo, hi) / 100, max: Math.max(lo, hi) / 100 };
+            if (next.min !== range.min || next.max !== range.max) onChange(next);
+          }}
+          style={{ width: 80, minHeight: 'var(--bs-target)' }}
+        />
+        %
+      </span>
+    </label>
+  );
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <p style={NOTE}>The hat moves the volume between these: the quietest it can make the music, and the loudest.</p>
+      <div style={{ display: 'flex', gap: 8 }}>
+        {box('min', 'Quietest')}
+        {box('max', 'Loudest')}
+      </div>
+      <p style={NOTE}>For a performance about 60 % or more as the quietest keeps the music from fading away. The same setting as Sound → Advanced → the Volume counter&rsquo;s lowest and highest.</p>
+    </div>
+  );
+}
+
+/**
  * Slowest and Fastest, for the hat on Speed: it moves the speed around the scene's, up to
  * one and down to the other. The same setting as the Speed counter's range (Sound →
  * Advanced). Typed digit by digit ("1", "12", "120"), so held to its limits only when the
@@ -516,6 +555,9 @@ export function CapPanel(p: CapPanelProps): JSX.Element {
                   Fastest lets a whole head turn reach them.
                 </span>
               </>
+            )}
+            {(s.xRole === 'volume' || s.yRole === 'volume') && (
+              <VolumeRange range={p.ranges.volume} onChange={(range) => p.onRange('volume', range)} />
             )}
             {s.yRole !== 'off' && (
               <p style={NOTE}>Tip: nodding along to the music moves up and down too. If that changes {CAP_ROLE_LABELS[s.yRole].toLowerCase()} too much, choose steps (More hat settings → How it responds) or set up and down to Nothing.</p>

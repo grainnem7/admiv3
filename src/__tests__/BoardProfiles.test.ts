@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   RIG_KEY, PLAYERS_KEY, ACTIVE_PLAYER_KEY, LEGACY_KEY,
   loadActiveBoardConfig, saveActiveBoardConfig, listBoardPlayers, getActiveBoardPlayer,
-  createBoardPlayer, updateBoardPlayer, setActiveBoardPlayer, splitBoardConfig, resolveBoardConfig, allReferencedChannelIds, DEMO_HAT_SPAN,
+  createBoardPlayer, updateBoardPlayer, setActiveBoardPlayer, splitBoardConfig, resolveBoardConfig, allReferencedChannelIds, DEMO_HAT_SPAN, DEMO_VOLUME_FLOOR,
 } from '../profiles/BoardProfiles';
 import { DEFAULT_BOARD_SEQUENCER_CONFIG, isSafeShowLayout, type BoardSequencerStored } from '../profiles/BoardSequencerConfig';
 import { suggestReadSettings } from '../tracking/boardGrid';
@@ -247,6 +247,18 @@ describe('the demo piece’s player', () => {
     openDemoPlayer();
     expect(loadActiveBoardConfig()?.cap.tempoSpan).toBe(0.25);
     expect(DEMO_HAT_SPAN).toBe(0.15);
+  });
+
+  it('the hat never makes the demo too quiet: the volume at 60 % or more, unless his own is higher', async () => {
+    const { openDemoPlayer } = await import('../profiles/BoardProfiles');
+    saveActiveBoardConfig({ ...withColours(), controlRanges: { ...DEFAULT_BOARD_SEQUENCER_CONFIG.controlRanges, volume: { min: 0.2, max: 1 } } });
+    openDemoPlayer();
+    expect(loadActiveBoardConfig()?.controlRanges.volume).toEqual({ min: DEMO_VOLUME_FLOOR, max: 1 });
+    expect(DEMO_VOLUME_FLOOR).toBe(0.6);
+    localStorage.clear();
+    saveActiveBoardConfig({ ...withColours(), controlRanges: { ...DEFAULT_BOARD_SEQUENCER_CONFIG.controlRanges, volume: { min: 0.75, max: 0.95 } } });
+    openDemoPlayer();
+    expect(loadActiveBoardConfig()?.controlRanges.volume).toEqual({ min: 0.75, max: 0.95 });
   });
 
   it('Tim’s counters all become the soft pad, on his own track: one note each, a big reverb; his own player untouched', async () => {
