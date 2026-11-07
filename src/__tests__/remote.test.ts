@@ -66,6 +66,8 @@ describe('messages', () => {
 
   it('the iPad may only send controls and taps; the laptop only state', () => {
     expect(allowedFrom('remote', 'control')).toBe(true);
+    // The second laptop's own messages pass too (they were dropped: its Start and Sound did nothing).
+    for (const t of ['startPiece', 'hatHold', 'sound', 'colourVolume']) expect(allowedFrom('remote', t), t).toBe(true);
     expect(allowedFrom('remote', 'state')).toBe(false);
     expect(allowedFrom('host', 'state')).toBe(true);
     expect(allowedFrom('host', 'trigger')).toBe(false);

@@ -37,6 +37,8 @@ export function allowedFrom(role: Role, type: string): boolean {
   return role === 'remote'
     ? type === 'control' || type === 'trigger' || type === 'reach' || type === 'loop' || type === 'scene' || type === 'hello'
       || type === 'armed' || type === 'drumsSound' || type === 'feel' || type === 'melodySound' || type === 'boardSound' || type === 'colourSound'
+      // The second performer's page (performer.ts): Start the piece, Hold the hat, the Sound tab, a colour's loudness.
+      || type === 'startPiece' || type === 'hatHold' || type === 'sound' || type === 'colourVolume'
     : type === 'state';
 }
 
