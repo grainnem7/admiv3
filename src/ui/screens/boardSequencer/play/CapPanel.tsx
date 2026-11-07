@@ -10,7 +10,7 @@ import { Note } from '../ui/explain';
 import { LabeledSlider } from '../ui/LabeledSlider';
 import { Disclosure } from '../ui/Disclosure';
 import {
-  CAP_RESUME_MAX_MS, CAP_RESUME_MIN_MS, CAP_REST_MAX_MS, CAP_REST_MIN_MS, CAP_REWIND_MAX_MS,
+  CAP_RESUME_MAX_MS, CAP_RESUME_MIN_MS, CAP_TEMPO_SPANS, CAP_REST_MAX_MS, CAP_REST_MIN_MS, CAP_REWIND_MAX_MS,
   type CapColour, type CapRole, type CapSettings,
 } from '../../../../tracking/cap/capTracker';
 import { HAT_SURE_MAX, HAT_SURE_MIN } from '../../../../tracking/cap/hatColour';
@@ -502,7 +502,20 @@ export function CapPanel(p: CapPanelProps): JSX.Element {
               </label>
             ))}
             {(s.xRole === 'tempo' || s.yRole === 'tempo') && (
-              <SpeedRange range={p.ranges.tempo} onChange={(range) => p.onRange('tempo', range)} />
+              <>
+                <SpeedRange range={p.ranges.tempo} onChange={(range) => p.onRange('tempo', range)} />
+                <span style={NOTE}>How far the hat moves the speed, either side of the scene&rsquo;s own</span>
+                <SegmentedControl<number>
+                  label="How far the hat moves the speed"
+                  value={CAP_TEMPO_SPANS.includes(s.tempoSpan) ? s.tempoSpan : 1}
+                  onChange={(tempoSpan) => onChange({ tempoSpan })}
+                  options={CAP_TEMPO_SPANS.map((v) => ({ value: v, label: v >= 1 ? 'To Slowest and Fastest' : `${Math.round(v * 100)} % each way` }))}
+                />
+                <span style={NOTE}>
+                  For a performed piece, 15 % keeps the music in shape and the scenes on their fills; To Slowest and
+                  Fastest lets a whole head turn reach them.
+                </span>
+              </>
             )}
             {s.yRole !== 'off' && (
               <p style={NOTE}>Tip: nodding along to the music moves up and down too. If that changes {CAP_ROLE_LABELS[s.yRole].toLowerCase()} too much, choose steps (More hat settings → How it responds) or set up and down to Nothing.</p>
@@ -521,6 +534,12 @@ export function CapPanel(p: CapPanelProps): JSX.Element {
 
           <div style={CARD}>
             <Preview {...p} showHat={showHat} lookAlike={lookAlike} />
+            {/* The quickest way to teach it the hat, said where the eye already is. */}
+            {!p.mouse && !s.learntHat && !head && (
+              <span style={{ fontSize: 16, fontWeight: 600 }}>
+                👆 Click the hat in the picture to set its colour. Click again any time the light changes.
+              </span>
+            )}
             <span role="status" aria-live="polite" style={{ fontSize: 14, fontWeight: 600, color: statusColour }}>{status}</span>
             {!p.mouse && <span style={NOTE}>{s.learntHat ? 'Looking for the learnt hat.' : 'Looking for the cap’s colour.'}</span>}
             {/* How well it is seeing the hat, so a bad camera, light or hat shows as a number, not a feeling. */}

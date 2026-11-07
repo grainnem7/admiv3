@@ -178,8 +178,9 @@ export function lookAlikes(patches: readonly CapPatch[], followed: CapSighting |
 export function capColourAt(f: Frame, x: number, y: number): CapColour | null {
   const px = Math.round(x * f.width); const py = Math.round(y * f.height);
   const hs: number[] = []; const ss: number[] = []; const vs: number[] = [];
-  for (let dy = -2; dy <= 2; dy++) {
-    for (let dx = -2; dx <= 2; dx++) {
+  // A 7 x 7 patch (a 5 x 5 one on a small picture could land on a seam or a logo).
+  for (let dy = -3; dy <= 3; dy++) {
+    for (let dx = -3; dx <= 3; dx++) {
       const xx = px + dx; const yy = py + dy;
       if (xx < 0 || yy < 0 || xx >= f.width || yy >= f.height) continue;
       const i = (yy * f.width + xx) * 4;
@@ -194,7 +195,14 @@ export function capColourAt(f: Frame, x: number, y: number): CapColour | null {
   const hue = ((Math.atan2(rad.reduce((s, r) => s + Math.sin(r), 0), rad.reduce((s, r) => s + Math.cos(r), 0)) * 180) / Math.PI + 360) % 360;
   const s = med(ss); const v = med(vs);
   if (s < 25) return null; // not a colour — grey, white or black can't be tracked like this
-  return { hue, hueTolerance: 18, minSaturation: Math.max(30, Math.round(s * 0.6)), minValue: Math.max(15, Math.round(v * 0.4)) };
+  // The band as wide as the clicked patch's own spread of hue (its folds and shadows), within
+  // reason: a cap in even light gets a tight band, one in mixed light a wider one.
+  const spread = Math.sqrt(hs.reduce((sum, d) => {
+    const off = ((d - hue + 540) % 360) - 180;
+    return sum + off * off;
+  }, 0) / hs.length);
+  const hueTolerance = Math.round(Math.max(14, Math.min(30, 10 + 2.5 * spread)));
+  return { hue, hueTolerance, minSaturation: Math.max(30, Math.round(s * 0.6)), minValue: Math.max(15, Math.round(v * 0.4)) };
 }
 
 // ---- reinforced by the face -------------------------------------------------------------
@@ -303,6 +311,13 @@ export interface CapSettings {
   /** What moving the cap left–right and up–down controls. */
   xRole: CapRole;
   yRole: CapRole;
+  /**
+   * On Speed: how far the hat moves the speed either side of the scene's own, as a share
+   * (0.15 = 15 % slower to 15 % faster); 1 = all the way to Slowest and Fastest, as before
+   * (a whole head turn reaches 60 or 240 BPM: in a performed piece a narrower reach keeps the
+   * scenes on their fills and the music in shape).
+   */
+  tempoSpan: number;
   /** 0 = smooth; otherwise this many clear steps. */
   steps: 0 | 3 | 5;
   response: CapResponse;
@@ -360,6 +375,7 @@ export const DEFAULT_CAP_SETTINGS: CapSettings = {
   headReachY: null,
   xRole: 'tempo',
   yRole: 'volume',
+  tempoSpan: 1,
   steps: 0,
   // Quick to answer by default: Steadily, a 1 s quiet and a 3 s rest made a move to speed up
   // take ages to be heard (owner, 4 Nov 2026). Each can still be slowed on the Cap tab.
@@ -379,6 +395,26 @@ export const DEFAULT_CAP_SETTINGS: CapSettings = {
 
 /** The current generation of the quick defaults (see CapSettings.responseRev). */
 export const CAP_RESPONSE_REV = 2;
+
+/** The hat's span on Speed (see CapSettings.tempoSpan); 1 = the whole range. */
+export const CAP_TEMPO_SPAN_MIN = 0.05;
+export const CAP_TEMPO_SPAN_MAX = 1;
+/** The spans offered on the Cap tab. */
+export const CAP_TEMPO_SPANS: readonly number[] = [0.1, 0.15, 0.25, 1];
+
+/**
+ * The slowest and fastest the hat can take the speed to around `centre`: the span either side,
+ * never past the player's Slowest and Fastest.
+ */
+export function hatTempoBounds(centre: number, slowest: number, fastest: number, span: number): { lo: number; hi: number } {
+  const lo = Math.min(slowest, fastest);
+  const hi = Math.max(slowest, fastest);
+  const c = Math.max(lo, Math.min(hi, centre));
+  // The whole range unless a narrower span is set (a span missing from older saved settings is the whole range).
+  if (!(span < 1)) return { lo, hi };
+  const k = Math.max(CAP_TEMPO_SPAN_MIN, Math.min(CAP_TEMPO_SPAN_MAX, span));
+  return { lo: Math.max(lo, c * (1 - k)), hi: Math.min(hi, c * (1 + k)) };
+}
 
 export const CAP_RESUME_MIN_MS = 300;
 export const CAP_RESUME_MAX_MS = 4000;
@@ -631,7 +667,11 @@ export function stepCap(
   const put = (role: CapRole, p: number | null): void => {
     if (role === 'off' || p === null) return;
     const r = ranges[role];
-    if (role === 'tempo' && tempoCentre !== undefined) { values.tempo = hatTempo(tempoCentre, p, r.min, r.max); return; }
+    if (role === 'tempo' && tempoCentre !== undefined) {
+      const b = hatTempoBounds(tempoCentre, r.min, r.max, s.tempoSpan);
+      values.tempo = hatTempo(tempoCentre, p, b.lo, b.hi);
+      return;
+    }
     const v = r.min + p * (r.max - r.min);
     values[role] = role === 'tempo' ? Math.round(v) : v;
   };
@@ -642,7 +682,9 @@ export function stepCap(
       x, y,
       last: sighting ? { x: sighting.x, y: sighting.y } : st.last,
       lostMs: sighting ? 0 : st.lostMs + dtMs,
-      prev: rawX !== null && rawY !== null ? { x: rawX, y: rawY } : null,
+      // Kept through a short gap (a blink, or a move far across the picture being confirmed,
+      // capFollow), so the head is still seen to have moved when it is seen again.
+      prev: rawX !== null && rawY !== null ? { x: rawX, y: rawY } : st.lostMs + dtMs < CAP_REFOUND_MS ? st.prev : null,
       vx, vy,
       t, history, paused, settling, stillMs,
     },
@@ -764,6 +806,7 @@ export function sanitizeCapSettings(v: unknown): CapSettings {
     headReachY: range(o.headReachY),
     xRole: ROLES.includes(o.xRole as CapRole) ? (o.xRole as CapRole) : d.xRole,
     yRole: ROLES.includes(o.yRole as CapRole) ? (o.yRole as CapRole) : d.yRole,
+    tempoSpan: num(o.tempoSpan, CAP_TEMPO_SPAN_MIN, CAP_TEMPO_SPAN_MAX, d.tempoSpan),
     steps: o.steps === 3 || o.steps === 5 ? o.steps : 0,
     ...responseSettings(o, d),
     mirror: o.mirror !== false,

@@ -9,12 +9,14 @@
  */
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 'react';
 import {
-  capColourAt, capMask, capPatches, capPauseReason, faceBoxFromLandmarks, findLearntHat, handOverAxis, fitSideArc, fuseWithFace,
-  hatPosition, initialCapState, lookAlikes, MIN_REACH, pickCap, pickPlayerFace, rangesInForce, stepCap, widenReach,
+  capColourAt, capMask, capPatches, capPauseReason, faceBoxFromLandmarks, handOverAxis, fitSideArc, fuseWithFace,
+  hatPosition, hatTempoBounds, initialCapState, lookAlikes, MIN_REACH, pickPlayerFace, rangesInForce, stepCap, widenReach,
   type BoardActivity, type CapColour, type CapOffset, type CapPatch, type CapSettings, type CapSighting, type FaceBox, type Frame,
   type SideArc,
 } from '../../../tracking/cap/capTracker';
-import { HAT_SURE_DEFAULT, loadLearntHat, storeLearntHat, type HatModel, type StoredLearntHat } from '../../../tracking/cap/hatColour';
+import { HAT_SURE_DEFAULT, hatMask, loadLearntHat, storeLearntHat, type HatModel, type StoredLearntHat } from '../../../tracking/cap/hatColour';
+import { driftColour, followCap, growMask, initialFollow, seenColour } from '../../../tracking/cap/capFollow';
+import { startTicker } from '../../../songs/ticker';
 import {
   hatLearner, roomLearner, type HatBox, type HatLearner, type HatOutcome, type LearntRoom, type RoomLearner,
 } from '../../../tracking/cap/learnHat';
@@ -176,7 +178,11 @@ export function useCapTracker(opts: {
   /** Where on its axis (0..1) the cap would be for this value of a control. */
   const positionFor = (role: FaderRole, v: number): number => {
     const r = rangesRef.current[role];
-    if (role === 'tempo' && tempoCentreRef) return hatPosition(tempoCentreRef.current(), v, r.min, r.max);
+    if (role === 'tempo' && tempoCentreRef) {
+      const c = tempoCentreRef.current();
+      const b = hatTempoBounds(c, r.min, r.max, settingsRef.current.tempoSpan);
+      return hatPosition(c, v, b.lo, b.hi);
+    }
     return r.max > r.min ? (v - r.min) / (r.max - r.min) : 0;
   };
   const positionForRef = useRef(positionFor);
@@ -267,6 +273,11 @@ export function useCapTracker(opts: {
     // The last 10 s of pictures: what each position came from, for "how well it sees the hat".
     let seenSamples: SeenSample[] = [];
     let frameNo = 0;
+    // Following the hat frame to frame (capFollow), and the clicked colour as the light has
+    // moved it (clicked colour mode only; it starts again whenever a new colour is clicked).
+    let follow = initialFollow();
+    let liveColour = settingsRef.current.colour;
+    let clickedColour = settingsRef.current.colour;
     let lastTick = performance.now();
     let lastUi = 0;
 
@@ -312,7 +323,9 @@ export function useCapTracker(opts: {
       f.initialize().then(() => { if (!stopped) faceStatus = 'on'; }).catch(() => { faceStatus = 'unavailable'; face = null; });
     };
 
-    const timer = window.setInterval(() => {
+    // From a worker: the page's own timers slow to about once a second when it is hidden
+    // (Ableton's window over the browser in a show), and the hat all but stopped.
+    const timer = startTicker(() => {
       const now = performance.now();
       const dt = Math.min(250, now - lastTick);
       lastTick = now;
@@ -340,13 +353,18 @@ export function useCapTracker(opts: {
         ctx.restore();
         const img = ctx.getImageData(0, 0, FRAME_W, FRAME_H);
         frame = { data: img.data, width: FRAME_W, height: FRAME_H };
-        if (cache.model && s.learntHat) {
-          ({ sighting: cap, mask, patches } = findLearntHat(frame, cache.model, s.learntHat.sure, state.last));
-        } else {
-          // The clicked colour, as findCap does it, keeping the mask and patches for the preview.
-          mask = capMask(frame, s.colour);
-          ({ patches } = capPatches(mask, FRAME_W, FRAME_H));
-          cap = pickCap(patches, state.last);
+        if (s.colour !== clickedColour) { clickedColour = s.colour; liveColour = s.colour; }
+        // The hat's pixels (by the learnt hat, or the clicked colour as the light has moved
+        // it), joined across seams and shadows, then followed frame to frame (capFollow).
+        mask = cache.model && s.learntHat ? hatMask(frame, cache.model, s.learntHat.sure) : capMask(frame, liveColour);
+        ({ patches } = capPatches(growMask(mask, FRAME_W, FRAME_H), FRAME_W, FRAME_H));
+        const followed = followCap(patches, follow);
+        follow = followed.state;
+        cap = followed.sighting;
+        // Clicked colour: the band drifts towards the hat as seen now, a little at a time.
+        if (!(cache.model && s.learntHat) && followed.patch && frameNo % 8 === 0) {
+          const seen = seenColour(frame, mask, followed.patch);
+          if (seen) liveColour = driftColour(clickedColour, liveColour, seen);
         }
         const followingHead = s.follow === 'head';
         if (s.faceAssist || followingHead) {
@@ -503,7 +521,7 @@ export function useCapTracker(opts: {
 
     return () => {
       stopped = true;
-      window.clearInterval(timer);
+      timer.stop();
       // A step of Learn the hat stops with the camera: what it saw so far is not enough.
       hatRef.current = null;
       stream?.getTracks().forEach((t) => t.stop());

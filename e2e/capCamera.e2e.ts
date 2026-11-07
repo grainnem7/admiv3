@@ -191,10 +191,17 @@ test('the cap holds still while a counter is put down, then carries on', async (
   await page.getByRole('switch', { name: 'Picture like a mirror' }).click();
   const hud = page.getByRole('status', { name: 'Red cap' });
   await expect(hud).toContainText('a red thing followed', { timeout: 15_000 });
-  // A click on the laptop board is a counter put down: the cap holds still…
+  // A click on the laptop board is a counter put down: the cap holds still… (for a moment
+  // only, 0.3 s on a laptop board: watched as the words change, as polling can miss it.)
   await pickColour(page, 'Red');
+  const sawPause = hud.evaluate((el) => new Promise<boolean>((resolve) => {
+    const seen = (): boolean => (el.textContent ?? '').includes('paused: a counter moved');
+    const obs = new MutationObserver(() => { if (seen()) { obs.disconnect(); resolve(true); } });
+    obs.observe(el, { subtree: true, childList: true, characterData: true });
+    setTimeout(() => { obs.disconnect(); resolve(seen()); }, 5_000);
+  }));
   await place(page, [[3, 1]]);
-  await expect(hud).toContainText('paused: a counter moved');
+  expect(await sawPause).toBe(true);
   // …and once the board has been quiet for a second, it follows the player again.
   await expect(hud).toContainText('a red thing followed', { timeout: 5_000 });
   expect(pageErrors(page)).toEqual([]);
