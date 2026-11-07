@@ -129,7 +129,8 @@ test('a reload of the laptop page keeps the audience screen, and it picks up aga
   await expect(picture(aud)).toHaveAttribute('data-connected', 'yes');
   await expect(picture(aud)).toHaveAttribute('data-awake', 'yes', { timeout: 20_000 });
   await expect.poll(async () => (await bloomsSeen(aud, 3000)).some((s) => s.endsWith(',0')), { timeout: 20_000 }).toBe(true);
-  await expect.poll(async () => (await aud.locator('body').innerText()).trim()).toBe('Arrival');
+  // Nothing to read after the reload either (owner, 7 Nov 2026: no words on the audience screen).
+  expect((await aud.locator('body').innerText()).trim()).toBe('');
   expect(pageErrors(page)).toEqual([]);
 });
 
@@ -213,7 +214,7 @@ test("the hat's marker: it follows the hat, holds dimmed when the hat is lost, a
   await expect(picture(page)).toHaveAttribute('data-light', 'lost');
   await keepUntil({ mode: 'free', x: null, y: null, warmth: null }, 'data-hat-marker', 'off');
   // Still nothing to read on the projector.
-  expect((await page.locator('body').innerText()).trim()).toBe('Arrival');
+  expect((await page.locator('body').innerText()).trim()).toBe('');
   expect(pageErrors(page)).toEqual([]);
 });
 
