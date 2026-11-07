@@ -330,6 +330,19 @@ const HELP: HelpEntry[] = [
       + 'while the piece plays: stop it first.',
   },
   {
+    title: 'Playing along from a second laptop',
+    body: 'A second performer can play alongside the player from another laptop, with the iPad still in the '
+      + 'player\u2019s hands. Connections tab → iPad controls on, then under "A second laptop, to play along" '
+      + 'press Copy link and open that link in the browser of the other laptop (same Wi-Fi; Timbo started with '
+      + 'npm run show). It is the iPad\u2019s page with every control, whatever the iPad is set to show: Play '
+      + '(the four strips, New idea, New sound, Keep, Mute, Next scene and End piece), Instruments & colours (what '
+      + 'the melody plays, and a pad per colour to silence it or bring it back), Loops, and Loops & scenes. It '
+      + 'works with a mouse or a touch screen and acts on the click; End piece, Stop the loops and Mute still need '
+      + 'two clicks. A strip locked for the player stays locked here too. The laptop says "✓ Second laptop '
+      + 'connected" while it is there. Anyone with the link can end the piece: keep it to people you trust, and '
+      + 'press New code after the show.',
+  },
+  {
     title: 'The iPad for a player without fine control',
     body: 'Connections tab → iPad controls. "Use the simple layout" gives the iPad one page for playing '
       + 'live: the instruments (what the melody plays: Piano, Flute, Trumpet, Sax) and the colours (one '

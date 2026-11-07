@@ -6,6 +6,7 @@ import {
   type SimpleRow, type TwoTapPad,
 } from '../../remote/protocol';
 import { bestCircleGrid, inkOn, PICTURE_EMOJI } from '../../remote/simplePage';
+import { forPerformer } from '../../remote/performer';
 import { BUILD_ID, reloadedFor, reloadFor } from '../../remote/buildId';
 import { useRemoteLink } from '../../remote/useRemoteLink';
 import { SIMPLE_WORDS, WORDS } from './boardSequencer/words';
@@ -35,6 +36,10 @@ const PADS: { name: Exclude<RemoteTriggerName, 'stopAll'>; label: (s: RemoteStat
 
 /** The iPad's pages, in the order of its tabs. */
 const PAGES = ['play', 'onoff', 'loops'] as const;
+/** The second performer's pages: the instruments and colours too, on a page of their own. */
+const PERFORMER_PAGES = ['play', 'sounds', 'onoff', 'loops'] as const;
+type Page = (typeof PERFORMER_PAGES)[number];
+const PAGE_NAMES: Record<Page, string> = { play: 'Play', sounds: 'Instruments & colours', onoff: 'Loops', loops: 'Loops & scenes' };
 /** After a finger lifts, trust the laptop's value again once it has caught up. */
 const TRUST_LAPTOP_AFTER_MS = 400;
 /** At most this often per strip while sliding. */
@@ -99,7 +104,11 @@ function stripWords(name: RemoteControlName, v: number, touching: boolean, state
   return null;
 }
 
-export default function IPadRemoteScreen({ code }: { code: string }): JSX.Element {
+/**
+ * `performer`: the second performer's page on another laptop (remote/performer.ts): everything,
+ * whatever Tim's iPad is set to, with the instruments and colours on a page of their own.
+ */
+export default function IPadRemoteScreen({ code, performer = false }: { code: string; performer?: boolean }): JSX.Element {
   const [state, setState] = useState<RemoteState | null>(null);
   // What each strip shows: the finger's value while touching, otherwise the laptop's.
   const [local, setLocal] = useState<Partial<Record<RemoteControlName, number>>>({});
@@ -112,7 +121,8 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
   const [flash, setFlash] = useState<RemoteTriggerName | null>(null);
   // Three pages: the strips and pads; just the saved loops, on and off; and the loops and
   // scenes prepared for the performance.
-  const [tab, setTab] = useState<(typeof PAGES)[number]>('play');
+  const [tab, setTab] = useState<Page>('play');
+  const pages: readonly Page[] = performer ? PERFORMER_PAGES : PAGES;
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const lastPad = useRef(new Map<string, number>());
   // Shown for a moment whenever a touch reaches the page at all: with it, "nothing
@@ -283,10 +293,12 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
   };
 
   const onMessage = useCallback((msg: RemoteMessage) => {
-    if (msg.type === 'state') setState(msg.state);
-  }, []);
+    if (msg.type === 'state') setState(performer ? forPerformer(msg.state) : msg.state);
+  }, [performer]);
+  /** The second performer's page says so in every hello, so the laptop can tell it from the iPad. */
+  const who = performer ? { who: 'performer' as const } : {};
   // Said every second: the laptop knows this page is reaching it (a hello that answers no question).
-  const heartbeat = useCallback((): RemoteMessage => ({ type: 'hello', build: BUILD_ID, ask: null }), []);
+  const heartbeat = useCallback((): RemoteMessage => ({ type: 'hello', build: BUILD_ID, ask: null, ...(performer ? { who: 'performer' as const } : {}) }), [performer]);
   const link = useRemoteLink('remote', code, true, onMessage, heartbeat);
   // Connected means the laptop's words are getting through, not only that a socket is open:
   // a stalled Wi-Fi link kept both open while every touch was lost (B2).
@@ -303,8 +315,8 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
     if (!connected) { answered.current = null; return; }
     if (ask === undefined || answered.current === ask) return;
     answered.current = ask;
-    link.send({ type: 'hello', build: BUILD_ID, ask });
-  }, [connected, ask, link.send]);
+    link.send({ type: 'hello', build: BUILD_ID, ask, ...who });
+  }, [connected, ask, link.send]); // eslint-disable-line react-hooks/exhaustive-deps
   // A laptop of another build: reload to get it, at most once for that build. Nothing is
   // shown on the iPad; the laptop says so if the page is still out of date.
   const laptopBuild = state?.build;
@@ -660,7 +672,7 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
             {clock.phase === 'ending' ? `ending ${clock.text}` : clock.phase === 'over' ? `over ${clock.text}` : `⏱ ${clock.text}`}
           </span>
         )}
-        <span style={{ marginLeft: clock && clock.phase !== 'idle' ? 12 : 'auto', opacity: 0.6, fontSize: 16 }}>{`Code ${code}`}</span>
+        <span style={{ marginLeft: clock && clock.phase !== 'idle' ? 12 : 'auto', opacity: 0.6, fontSize: 16 }}>{performer ? `Second performer · code ${code}` : `Code ${code}`}</span>
       </div>
       {refusal && (
         <div
@@ -689,20 +701,20 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
 
       {loopsPage && (
       <div
-        role="tablist" aria-label="Page" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: GAP }}
+        role="tablist" aria-label="Page" style={{ display: 'grid', gridTemplateColumns: `repeat(${pages.length}, 1fr)`, gap: GAP }}
         // One Tab stop: the page you are on. The arrow keys, Home and End move between the pages.
         onKeyDown={(e) => {
-          const at = PAGES.indexOf(tab);
-          const to = e.key === 'ArrowRight' ? (at + 1) % PAGES.length
-            : e.key === 'ArrowLeft' ? (at + PAGES.length - 1) % PAGES.length
-              : e.key === 'Home' ? 0 : e.key === 'End' ? PAGES.length - 1 : -1;
+          const at = pages.indexOf(tab);
+          const to = e.key === 'ArrowRight' ? (at + 1) % pages.length
+            : e.key === 'ArrowLeft' ? (at + pages.length - 1) % pages.length
+              : e.key === 'Home' ? 0 : e.key === 'End' ? pages.length - 1 : -1;
           if (to < 0) return;
           e.preventDefault();
-          setTab(PAGES[to]);
+          setTab(pages[to]);
           tabRefs.current[to]?.focus();
         }}
       >
-        {PAGES.map((p, i) => (
+        {pages.map((p, i) => (
           <button
             key={p}
             ref={(b) => { tabRefs.current[i] = b; }}
@@ -716,7 +728,7 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
               border: `3px solid ${tab === p ? 'var(--bs-fg)' : 'var(--bs-border-control)'}`, background: tab === p ? 'var(--bs-hi)' : 'var(--bs-raised)', touchAction: 'none',
             }}
           >
-            {p === 'play' ? 'Play' : p === 'onoff' ? 'Loops' : 'Loops & scenes'}
+            {PAGE_NAMES[p]}
           </button>
         ))}
       </div>
@@ -888,7 +900,7 @@ export default function IPadRemoteScreen({ code }: { code: string }): JSX.Elemen
         );
       })()}
 
-      {simple && simplePage}
+      {(simple || (performer && tab === 'sounds')) && simplePage}
 
       {!simple && (tab === 'play' || !loopsPage) && (<>
 

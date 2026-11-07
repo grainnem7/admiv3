@@ -259,7 +259,7 @@ export type RemoteMessage =
    * `ask` null it answers nothing: the iPad sends it every second as its heartbeat, so the
    * laptop knows it is reaching (see linkReach).
    */
-  | { type: 'hello'; build: string | null; ask: number | null }
+  | { type: 'hello'; build: string | null; ask: number | null; who?: 'performer' }
   /** The Simple page: no drums anywhere, or the drums back. The state wanted, not a toggle. */
   | { type: 'drumsSound'; silent: boolean }
   /** The Simple page: Calm, Normal or Busy. The state wanted, not a toggle. */
@@ -350,7 +350,10 @@ export function parseRemoteMessage(raw: unknown): RemoteMessage | null {
   if (o.type === 'colourSound' && typeof o.id === 'string' && o.id.length > 0 && o.id.length < 64 && typeof o.silent === 'boolean') return { type: 'colourSound', id: o.id, silent: o.silent };
   if (o.type === 'melodySound' && MELODY_SOUNDS.includes(o.sound as MelodySound)) return { type: 'melodySound', sound: o.sound as MelodySound };
   if (o.type === 'armed' && o.name === 'endPiece' && typeof o.on === 'boolean') return { type: 'armed', name: 'endPiece', on: o.on };
-  if (o.type === 'hello') return { type: 'hello', build: isBuildId(o.build) ? o.build : null, ask: isAsk(o.ask) ? o.ask : null };
+  if (o.type === 'hello') {
+    // The second performer's page says so (performer.ts); Tim's iPad says nothing more.
+    return { type: 'hello', build: isBuildId(o.build) ? o.build : null, ask: isAsk(o.ask) ? o.ask : null, ...(o.who === 'performer' ? { who: 'performer' as const } : {}) };
+  }
   if (o.type === 'state' && typeof o.state === 'object' && o.state !== null) {
     const s = o.state as Record<string, unknown>;
     const values = s.values as Record<string, unknown> | undefined;

@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import App from './ui/App';
 import IPadRemoteScreen from './ui/screens/IPadRemoteScreen';
 import { isRemoteCode } from './remote/protocol';
+import { isPerformerPage } from './remote/performer';
 import { restoreFromDisk } from './storage/diskSync';
 import { claimSaving } from './storage/tabSaving';
 import { useAppStore } from './state/store';
@@ -10,13 +11,15 @@ import { readPieceRunning } from './songs/performance/pieceRunning';
 // Design system CSS is imported in App.tsx via './design-system/index'
 
 // The iPad remote is its own small page (`/?remote=1234`), not a screen inside the app:
-// the iPad needs none of the camera, tracking or sound, only the strips and pads.
+// the iPad needs none of the camera, tracking or sound, only the strips and pads. With
+// `&performer=1` it is the second performer's page, on another laptop (remote/performer.ts).
 const remoteCode = new URLSearchParams(window.location.search).get('remote');
+const performer = isPerformerPage(window.location.search);
 
 const render = (): void => {
   ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>
-      {isRemoteCode(remoteCode) ? <IPadRemoteScreen code={remoteCode} /> : <App />}
+      {isRemoteCode(remoteCode) ? <IPadRemoteScreen code={remoteCode} performer={performer} /> : <App />}
     </React.StrictMode>
   );
 };

@@ -188,6 +188,7 @@ import {
   SECOND_TAP_MIN_MS, tempoFromValue, valueFromTempo, valueFromVelocity,
   SIMPLE_ROWS, type Feel, type RemoteControlName, type RemoteMessage, type RemoteState, type RemoteTriggerName,
 } from '../../remote/protocol';
+import { performerLink } from '../../remote/performer';
 import {
   clearBoardSilent, colourBack, melodyChoice, melodyColour, readBoardSilent, readDrumsSilent, readFeel, readSilentColours, remoteColours,
   silencedColourIds, writeBoardSilent, writeDrumsSilent, writeFeel, writeSilentColours,
@@ -355,6 +356,8 @@ const REMOTE_NOTE_MS = noticeMs(2500);
  * old to know about builds (from before they were compared), so it is out of date.
  */
 const HELLO_WAIT_MS = 4000;
+/** The second performer's page is gone after this long without its hello (it says one every second). */
+const PERFORMER_GONE_MS = 3500;
 /** How long "New sounds" / "Band joins" stays on the board (at least 5 s, A7). */
 const BOARD_NOTICE_MS = noticeMs(2500);
 
@@ -1015,6 +1018,17 @@ export default function BoardSequencerScreen() {
     remoteStateRef.current ? { type: 'state', state: remoteStateRef.current } : null
   ), []);
   const remoteLink = useRemoteLink('host', remoteCode, remoteEnabled, (msg) => remoteMsgRef.current(msg), remoteHeartbeat);
+  // The second performer's page on another laptop (remote/performer.ts): heard in its hello,
+  // every second; gone after a few seconds of silence. The rest of the pages are the iPad.
+  const [performerOn, setPerformerOn] = useState(false);
+  const performerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const performerHeard = (): void => {
+    setPerformerOn(true);
+    if (performerTimerRef.current) clearTimeout(performerTimerRef.current);
+    performerTimerRef.current = setTimeout(() => setPerformerOn(false), PERFORMER_GONE_MS);
+  };
+  useEffect(() => () => { if (performerTimerRef.current) clearTimeout(performerTimerRef.current); }, []);
+  const ipadsOn = Math.max(0, remoteLink.others - (performerOn ? 1 : 0));
   /** The iPad's End piece is waiting for its second tap (B20). */
   const [ipadEndArmed, setIpadEndArmed] = useState(false);
   // Is each iPad page this build? Whenever the number of iPad pages changes, the laptop
@@ -4236,6 +4250,7 @@ export default function BoardSequencerScreen() {
       return;
     }
     if (msg.type === 'hello') {
+      if (msg.who === 'performer') performerHeard();
       // An answer to an older question is from before the last page came or went.
       if (msg.ask !== helloAskRef.current) return;
       helloAnswersRef.current = [...helloAnswersRef.current, msg.build];
@@ -4358,8 +4373,8 @@ export default function BoardSequencerScreen() {
       />
       {remoteEnabled && (
         <>
-          <span role="status" style={{ fontSize: 14, fontWeight: 600, color: remoteLink.others > 0 ? (remoteLink.reaching ? 'var(--bs-ok)' : 'var(--bs-warn)') : 'var(--bs-fg2)' }}>
-            {remoteLink.others > 0 ? (remoteLink.reaching ? '✓ iPad connected' : '! iPad not reaching')
+          <span role="status" style={{ fontSize: 14, fontWeight: 600, color: ipadsOn > 0 ? (remoteLink.reaching ? 'var(--bs-ok)' : 'var(--bs-warn)') : 'var(--bs-fg2)' }}>
+            {ipadsOn > 0 ? (remoteLink.reaching ? '✓ iPad connected' : '! iPad not reaching')
               : remoteLink.status === 'open' ? 'Waiting for the iPad…'
                 : remoteLink.status === 'lost' ? 'Link lost — reconnecting…' : 'Starting…'}
           </span>
@@ -4386,6 +4401,43 @@ export default function BoardSequencerScreen() {
               </div>
             );
           })}
+          {/* A second performer on another laptop (owner, 7 Nov 2026): the same code, every control. */}
+          {(
+            <div role="group" aria-label="A second laptop, to play along" style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6, paddingTop: 8, borderTop: '1px solid var(--bs-border)' }}>
+              <span style={{ fontWeight: 600, fontSize: 14 }}>A second laptop, to play along</span>
+              <span role="status" style={{ fontSize: 14, fontWeight: 600, color: performerOn ? 'var(--bs-ok)' : 'var(--bs-fg2)' }}>
+                {performerOn ? '✓ Second laptop connected' : 'No second laptop yet'}
+              </span>
+              <Note>
+                On the other laptop (same Wi-Fi), open this link in its browser. It has every control: the strips and pads,
+                the loops and scenes, Next scene and End piece, and the instruments and colours, whatever the iPad shows.
+                The iPad keeps working alongside it. Keep it to people you trust: it can end the piece.
+              </Note>
+              {remoteInfo && !remoteInfo.lan && !performerOn && (
+                <span style={{ fontSize: 14, color: 'var(--bs-warn)' }}>
+                  The second laptop can&apos;t reach this one yet: start Timbo with <code>npm run show</code> for the local network.
+                </span>
+              )}
+              {remoteInfo?.lan && remoteInfo.addresses.map((ip) => {
+                const link = performerLink(`${window.location.protocol}//${ip}:${remoteInfo.port ?? window.location.port}/?remote=${remoteCode}`);
+                return (
+                  <div key={`performer-${ip}`} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <code style={{ fontSize: 16, fontWeight: 700, userSelect: 'all', overflowWrap: 'anywhere' }}>{link}</code>
+                    <Button
+                      tone="quiet"
+                      onClick={() => {
+                        void navigator.clipboard?.writeText(link)
+                          .then(() => announce('Link copied: paste it into the browser on the second laptop.'))
+                          .catch(() => announce('Could not copy: select the link and copy it.'));
+                      }}
+                    >
+                      Copy link
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
           <Button
             tone="quiet"
             onClick={() => {
@@ -5127,7 +5179,7 @@ export default function BoardSequencerScreen() {
       ? { report: timeNow.report, running: true, valve: timeNow.valve }
       : { report: lastRunTime?.report ?? null, running: false, valve: lastRunTime?.valve ?? [] }));
     items.push(...ipadCheckItems({
-      enabled: remoteEnabled, connected: remoteLink.others > 0, simpleLayout: isSimpleLayout(c), pageOutOfDate: ipadOutOfDate,
+      enabled: remoteEnabled, connected: ipadsOn > 0, simpleLayout: isSimpleLayout(c), pageOutOfDate: ipadOutOfDate,
       playerName: activePlayer?.name ?? null,
       onUseSimpleLayout: () => {
         applySimpleLayout();

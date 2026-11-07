@@ -57,6 +57,14 @@ describe('Help says how things work now', () => {
     expect(entry('Simplify, and keeping time')).toContain('Simplified: Tim and Bed');
   });
 
+  it('a second laptop, to play along: where its link is, what it has, and that it can end the piece', () => {
+    const second = entry('Playing along from a second laptop');
+    expect(second).toContain('under "A second laptop, to play along" press Copy link');
+    expect(second).toContain('Instruments & colours');
+    expect(second).toContain('"✓ Second laptop connected"');
+    expect(second).toContain('Anyone with the link can end the piece');
+  });
+
   it('the iPad: Mute needs two taps; the simple layout and what is on it', () => {
     expect(entry('iPad controls')).toContain('Mute needs two');
     const simple = entry('The iPad for a player without fine control');
