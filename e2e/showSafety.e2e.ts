@@ -275,7 +275,7 @@ test('Perform: this screen shows only the audience view, nothing to read; Space 
   await openLaptopBoard(page);
   await pickColour(page, 'Red');
   await place(page, [[3, 1], [5, 3]]);
-  await page.getByRole('button', { name: /^Perform: this screen shows only the audience view/ }).click();
+  await page.getByRole('button', { name: /^Perform: starts the piece/ }).click();
   const perform = page.locator('[data-perform]');
   await expect(perform).toBeVisible();
   await expect(perform).toBeFocused();
@@ -288,8 +288,7 @@ test('Perform: this screen shows only the audience view, nothing to read; Space 
   const vp = page.viewportSize()!;
   expect(box.width).toBeGreaterThanOrEqual(vp.width - 1);
   expect(box.height).toBeGreaterThanOrEqual(vp.height - 1);
-  // Space starts the piece: the board wakes on the audience view.
-  await page.keyboard.press(' ');
+  // Perform started the piece: the board wakes on the audience view.
   await expect(aud.locator('#root > div')).toHaveAttribute('data-awake', 'yes', { timeout: 20_000 });
   // A second Space while it plays does nothing (no hidden Stop or Next scene).
   await page.keyboard.press(' ');
@@ -304,7 +303,7 @@ test('Perform: this screen shows only the audience view, nothing to read; Space 
   await expect(page.getByRole('region', { name: 'Show', exact: true })).toHaveCount(0);
   await expect(page.locator('#bs-play-stop')).toHaveText('■ Stop');
   // Again, and out with the mouse: moving it shows Leave Perform for a moment.
-  await page.getByRole('button', { name: /^Perform: this screen shows only the audience view/ }).click();
+  await page.getByRole('button', { name: /^Perform: starts the piece/ }).click();
   await expect(perform).toBeVisible();
   await expect(perform.getByRole('button', { name: '✕ Leave Perform' })).toHaveCount(0);
   await page.mouse.move(400, 300);

@@ -333,7 +333,8 @@ const HELP: HelpEntry[] = [
     title: 'Perform: this screen for the audience',
     body: 'Perform, at the top beside Show, turns this laptop\u2019s whole screen into the audience view: nothing to '
       + 'read, no clock, no buttons. Use it when this screen is what the audience sees (a projector showing the laptop). '
-      + 'Press Space to start the piece (a second Space does nothing, so nothing stops by accident); the iPad and the '
+      + 'Perform starts the piece too (unless it is already playing); Space starts it if it has stopped (a second Space does '
+      + 'nothing, so nothing stops by accident); the iPad and the '
       + 'second laptop play as usual, and the second laptop has \u25B6 Start the piece too. Esc comes back to the page you '
       + 'were on, and so does \u2715 Leave Perform, which shows for a moment when the mouse moves; the piece plays on. The '
       + 'audience view is the counters as lights in their places: each a small nebula of soft glows, wandering a little '

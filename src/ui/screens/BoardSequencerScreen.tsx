@@ -7177,8 +7177,14 @@ export default function BoardSequencerScreen() {
               </Button>
               <Button
                 tone="quiet"
-                onClick={() => { setPerforming(true); setView('bigBoard'); }}
-                aria-label="Perform: this screen shows only the audience view, full screen. Space starts the piece, Esc comes back."
+                onClick={() => {
+                  setPerforming(true);
+                  setView('bigBoard');
+                  // Perform starts the piece too (owner, 7 Nov 2026), unless it is already playing.
+                  const on = clockStartRef.current !== null || endingRef.current || pieceStartingRef.current;
+                  if (!on && !startTooSoon(performance.now() - stoppedAtRef.current, performance.now() - pieceEndedAtRef.current)) startThePieceRef.current();
+                }}
+                aria-label="Perform: starts the piece, and this screen shows only the audience view, full screen. Esc comes back."
                 style={VIEW_WORD}
               >
                 Perform
