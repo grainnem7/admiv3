@@ -270,3 +270,42 @@ test('Show’s ready check, before the piece: all of the check over the board wi
   await expect(page.getByRole('tab', { name: 'Connections' })).toHaveAttribute('aria-selected', 'true');
   expect(pageErrors(page)).toEqual([]);
 });
+
+test('Perform: this screen shows only the audience view, nothing to read; Space starts the piece and Esc comes back (owner, 7 Nov 2026)', async ({ page }) => {
+  await openLaptopBoard(page);
+  await pickColour(page, 'Red');
+  await place(page, [[3, 1], [5, 3]]);
+  await page.getByRole('button', { name: /^Perform: this screen shows only the audience view/ }).click();
+  const perform = page.locator('[data-perform]');
+  await expect(perform).toBeVisible();
+  await expect(perform).toBeFocused();
+  // The audience's picture, the counters in it, and no words: no clock, no scene name.
+  const aud = page.frameLocator('[data-perform] iframe');
+  await expect(aud.locator('#root > div')).toHaveAttribute('data-counters', '2', { timeout: 20_000 });
+  expect((await aud.locator('body').innerText()).trim()).toBe('');
+  // It covers the whole screen: Show's clock and buttons are under it.
+  const box = (await perform.boundingBox())!;
+  const vp = page.viewportSize()!;
+  expect(box.width).toBeGreaterThanOrEqual(vp.width - 1);
+  expect(box.height).toBeGreaterThanOrEqual(vp.height - 1);
+  // Space starts the piece: the board wakes on the audience view.
+  await page.keyboard.press(' ');
+  await expect(aud.locator('#root > div')).toHaveAttribute('data-awake', 'yes', { timeout: 20_000 });
+  // A second Space while it plays does nothing (no hidden Stop or Next scene).
+  await page.keyboard.press(' ');
+  await page.waitForTimeout(1500);
+  await expect(aud.locator('#root > div')).toHaveAttribute('data-awake', 'yes');
+  // Esc comes back to the laptop's own screen; the piece plays on. (The browser's own Esc ends
+  // full screen first, as in Show; here the test ends it.)
+  await page.evaluate(async () => {
+    if (document.fullscreenElement) await document.exitFullscreen().catch(() => {});
+    document.dispatchEvent(new Event('fullscreenchange'));
+  });
+  await page.waitForTimeout(1500);
+  await expect(perform).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(perform).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Show', exact: true })).toHaveCount(0);
+  await expect(page.locator('#bs-play-stop')).toHaveText('■ Stop');
+  expect(pageErrors(page)).toEqual([]);
+});

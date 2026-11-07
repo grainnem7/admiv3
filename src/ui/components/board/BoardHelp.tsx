@@ -330,6 +330,18 @@ const HELP: HelpEntry[] = [
       + 'while the piece plays: stop it first.',
   },
   {
+    title: 'Perform: this screen for the audience',
+    body: 'Perform, at the top beside Show, turns this laptop\u2019s whole screen into the audience view: nothing to '
+      + 'read, no clock, no buttons. Use it when this screen is what the audience sees (a projector showing the laptop). '
+      + 'Press Space to start the piece (a second Space does nothing, so nothing stops by accident); the iPad and the '
+      + 'second laptop play as usual, and the second laptop has \u25B6 Start the piece too. Esc comes back (if the screen '
+      + 'is full screen, the first Esc ends that, the second comes back); the piece plays on. The audience view is the '
+      + 'counters as glowing lights in their colours and places, each wandering a little and breathing; a note makes '
+      + 'its light swell and sends rings out across the dark like rain on water. A soft light behind them follows the '
+      + 'hat, and a soft red ring shows where the hat is. The audience screen on a projector of its own (More \u2192 Open '
+      + 'the audience screen) shows the same.',
+  },
+  {
     title: 'Before the gig: the Ready check',
     body: 'In Show, before the piece starts, the button beside \u25B6 Start the piece says "Ready check: all good \u2713" or '
       + 'how many things to look at. Press it: the whole check opens over the board (the board does not move), the same '

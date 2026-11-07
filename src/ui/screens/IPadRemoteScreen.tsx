@@ -283,6 +283,8 @@ export default function IPadRemoteScreen({ code, performer = false }: { code: st
   // and while the laptop is starting the piece (its sound still loading, the clock not yet
   // running), shown only by the pad itself, never with a warning on the player's iPad.
   const captureOff = (clock !== null && clock.phase !== 'idle') || state?.pieceStarting === true;
+  /** The piece is on (or starting): the second performer's ▶ Start the piece is put away. */
+  const pieceOn = captureOff;
   const captureTap = (): void => {
     if (!captureOff) padTap('capture', { type: 'trigger', name: 'capture' });
   };
@@ -903,6 +905,21 @@ export default function IPadRemoteScreen({ code, performer = false }: { code: st
       {(simple || (performer && tab === 'sounds')) && simplePage}
 
       {!simple && (tab === 'play' || !loopsPage) && (<>
+      {/* The second performer can start the piece from here (owner, 7 Nov 2026): the main laptop may
+          be showing only the audience view. Only while the piece is not on. */}
+      {performer && !pieceOn && (
+        <button
+          type="button"
+          aria-disabled={!live || undefined}
+          {...padProps('startPiece', () => { padTap('startPiece', { type: 'startPiece' }); })}
+          style={{
+            minHeight: 72, borderRadius: 20, touchAction: 'none', fontSize: 28, fontWeight: 800,
+            color: 'var(--bs-pick-fg)', background: 'var(--bs-pick)', border: '4px solid var(--bs-pick)', opacity: live ? 1 : 0.4,
+          }}
+        >
+          ▶ Start the piece
+        </button>
+      )}
 
       {shownStrips.length > 0 && (
       <div style={{ flex: '1 1 0', display: 'grid', gridTemplateColumns: `repeat(${shownStrips.length}, 1fr)`, gap: GAP, minHeight: 0, opacity: live ? 1 : 0.4 }}>

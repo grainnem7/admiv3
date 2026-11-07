@@ -115,6 +115,17 @@ describe('the second performer’s page', () => {
     expect(sent).toContainEqual({ type: 'colourSound', id: 'c1', silent: true });
   });
 
+  it('▶ Start the piece on Play while the piece is not running, from here too (owner, 7 Nov 2026); gone once it runs', async () => {
+    expect(() => button('Start the piece')).toThrow();
+    await act(async () => { onMsg?.({ type: 'state', state: { ...TIM, playing: false, clock: { text: '7:00', phase: 'idle' } } }); });
+    await act(async () => { pointer('pointerdown', button('Start the piece')); });
+    expect(sent).toContainEqual({ type: 'startPiece' });
+    // A bounce of the same press sends nothing more.
+    now += 200;
+    await act(async () => { pointer('pointerdown', button('Start the piece')); });
+    expect(sent.filter((m) => (m as { type: string }).type === 'startPiece')).toHaveLength(1);
+  });
+
   it('its heartbeat says it is the second performer, so the laptop can tell it from the iPad', () => {
     expect(heartbeat?.()).toMatchObject({ type: 'hello', ask: null, who: 'performer' });
   });

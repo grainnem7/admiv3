@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   BLOOM_LIGHT_BUDGET, BLOOM_SEC, bloomAt, bloomColour, bloomShare, boardLayout, canRebloom, contrastRatio, COUNTER_RADIUS,
-  counterNeedsRing, DIM_PRESENCE, INITIAL_LIGHT, REBLOOM_MIN_GAP_SEC, SCENE_NAME, bloomGlowScale, stepLight, type Rgb,
+  counterNeedsRing, DIM_PRESENCE, INITIAL_LIGHT, REBLOOM_MIN_GAP_SEC, bloomGlowScale, stepLight, type Rgb,
 } from '../audience/light';
 import { INITIAL_MARKER, markerShare, stepMarker } from '../audience/hatMarker';
 
@@ -12,12 +12,6 @@ const lum = (c: Rgb): number => 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722
 describe('A5: the audience screen, a little easier to see', () => {
   it('the dim board before the piece is at about 0.4', () => {
     expect(DIM_PRESENCE).toBeCloseTo(0.4, 5);
-  });
-
-  it('the scene name sits 5% in from the edge, at about 0.8 opacity, about 2.2% of the width', () => {
-    expect(SCENE_NAME.inset).toBeCloseTo(0.05, 5);
-    expect(SCENE_NAME.opacity).toBeCloseTo(0.8, 5);
-    expect(SCENE_NAME.widthShare).toBeCloseTo(0.022, 5);
   });
 
   it('counters are 0.42 of a square', () => {

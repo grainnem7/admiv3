@@ -194,14 +194,6 @@ export const BLOOM_SEC = 1.2;
 /** A counter is this share of its square, as a radius (audit A5: 0.34 was small from the back). */
 export const COUNTER_RADIUS = 0.42;
 
-/** Where the scene's name sits (audit A5), as shares of the screen's width and of its own opacity. */
-export const SCENE_NAME = {
-  /** In from the right and bottom edges. */
-  inset: 0.05,
-  opacity: 0.8,
-  /** The letters' size, of the screen's width. */
-  widthShare: 0.022,
-} as const;
 
 /**
  * A counter that blooms again too soon is left out (audit A6): about 3 times a second at

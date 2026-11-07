@@ -657,6 +657,13 @@ export default function BoardSequencerScreen() {
   // "Carry on" is); the Welcome screen can ask for Set up instead.
   /** Show's ready check, open over the board (stopped only). */
   const [showReady, setShowReady] = useState(false);
+  /**
+   * Perform (owner, 7 Nov 2026): Show, with this screen showing only the audience view over it:
+   * no clock, no words. Space starts the piece, Esc comes back; the other performers play from
+   * the iPad and the second laptop.
+   */
+  const [performing, setPerforming] = useState(false);
+  const performRef = useRef<HTMLDivElement | null>(null);
   const [view, setView] = useState<BoardScreenView>(() => {
     const v = openingView(
       storedRef.current,
@@ -1682,6 +1689,11 @@ export default function BoardSequencerScreen() {
       bigBoardButtonRef.current?.focus();
     };
   }, [view]);
+  // Perform lives in Show: leaving Show ends it, and while it is on the keys go to it alone.
+  useEffect(() => {
+    if (view !== 'bigBoard') { setPerforming(false); return; }
+    if (performing) performRef.current?.focus();
+  }, [view, performing]);
   // Show: ▶ Start the piece gives way to the Now / Next strip, and focus goes with it, never
   // to the page (T4-09) and never onto ■ Stop, where a repeated Enter stopped the piece it
   // had just started (B3). Back onto Start when it stops (the second press of Stop, the end
@@ -4254,6 +4266,16 @@ export default function BoardSequencerScreen() {
       setRemoteNote({ text: 'iPad: not taken (waiting for Carry on)', at: performance.now() });
       return;
     }
+    if (msg.type === 'startPiece') {
+      // From the second performer's page: as ▶ Start the piece here, only while the piece is not on.
+      if (clockStartRef.current !== null || endingRef.current || pieceStartingRef.current) {
+        setRemoteNote({ text: 'Second laptop: the piece is already playing', at: performance.now() });
+        return;
+      }
+      startThePieceRef.current();
+      setRemoteNote({ text: 'Second laptop: ▶ Start the piece', at: performance.now() });
+      return;
+    }
     if (msg.type === 'hello') {
       if (msg.who === 'performer') performerHeard();
       // An answer to an older question is from before the last page came or went.
@@ -6822,6 +6844,41 @@ export default function BoardSequencerScreen() {
         if (e.key === 'Escape' && escLeavesShow(document.fullscreenElement !== null, fullscreenEndedAtRef.current, performance.now())) setView('play');
       }}
     >
+      {performing && (
+        // Over everything in Show, the audience's picture alone (an audience screen of its own,
+        // src/audience): nothing to read, nothing to press by mistake. Keys stop here.
+        <div
+          ref={performRef}
+          tabIndex={-1}
+          role="region"
+          aria-label="Perform: the audience view. Space starts the piece, Esc comes back."
+          data-perform=""
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key === ' ') {
+              e.preventDefault();
+              if (e.repeat) return;
+              const on = clockStartRef.current !== null || endingRef.current || pieceStartingRef.current;
+              if (!on && !startTooSoon(performance.now() - stoppedAtRef.current, performance.now() - pieceEndedAtRef.current)) startThePieceRef.current();
+            } else if (e.key === 'Escape' && escLeavesShow(document.fullscreenElement !== null, fullscreenEndedAtRef.current, performance.now())) {
+              setView('play');
+            }
+          }}
+          onPointerDown={() => {
+            performRef.current?.focus();
+            if (!document.fullscreenElement) void bigBoardRef.current?.requestFullscreen?.().catch(() => {});
+          }}
+          style={{ position: 'absolute', inset: 0, zIndex: 40, background: '#05060a', cursor: 'none', outline: 'none' }}
+        >
+          <iframe
+            src="/audience.html"
+            title="The audience view"
+            tabIndex={-1}
+            aria-hidden="true"
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 0, pointerEvents: 'none' }}
+          />
+        </div>
+      )}
       {running ? bigNowNextStrip : (
         <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap', padding: '10px 4px', borderBottom: '1px solid var(--bs-border)' }}>
           <Button
@@ -7045,6 +7102,14 @@ export default function BoardSequencerScreen() {
               </div>
               <Button ref={bigBoardButtonRef} tone="quiet" onClick={() => setView('bigBoard')} aria-label="Show: the board, the clock and Now / Next, full screen, for the performance" style={VIEW_WORD}>
                 Show
+              </Button>
+              <Button
+                tone="quiet"
+                onClick={() => { setPerforming(true); setView('bigBoard'); }}
+                aria-label="Perform: this screen shows only the audience view, full screen. Space starts the piece, Esc comes back."
+                style={VIEW_WORD}
+              >
+                Perform
               </Button>
               {/* The less-used ones: in a More menu below about 1400 px, so the header stays
                   one row and never wraps (A3). */}

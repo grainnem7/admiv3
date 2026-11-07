@@ -57,6 +57,14 @@ describe('Help says how things work now', () => {
     expect(entry('Simplify, and keeping time')).toContain('Simplified: Tim and Bed');
   });
 
+  it('Perform: the whole screen the audience view, no words, Space starts, Esc comes back', () => {
+    const perform = entry('Perform: this screen for the audience');
+    expect(perform).toContain('nothing to read, no clock, no buttons');
+    expect(perform).toContain('Press Space to start the piece');
+    expect(perform).toContain('glowing lights');
+    expect(perform).toContain('▶ Start the piece too');
+  });
+
   it('before the gig: the Ready check from Show, each fix one press away', () => {
     const ready = entry('Before the gig: the Ready check');
     expect(ready).toContain('"Ready check: all good ✓"');

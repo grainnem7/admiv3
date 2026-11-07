@@ -272,6 +272,8 @@ export type RemoteMessage =
   | { type: 'melodySound'; sound: MelodySound }
   /** The iPad's End piece is waiting for its second tap (on), or no longer is (off). */
   | { type: 'armed'; name: 'endPiece'; on: boolean }
+  /** The second performer's page (performer.ts): ▶ Start the piece, as the laptop's own button. */
+  | { type: 'startPiece' }
   /** From the relay: how many of each side are in this room. */
   | { type: 'peers'; hosts: number; remotes: number };
 
@@ -350,6 +352,7 @@ export function parseRemoteMessage(raw: unknown): RemoteMessage | null {
   if (o.type === 'colourSound' && typeof o.id === 'string' && o.id.length > 0 && o.id.length < 64 && typeof o.silent === 'boolean') return { type: 'colourSound', id: o.id, silent: o.silent };
   if (o.type === 'melodySound' && MELODY_SOUNDS.includes(o.sound as MelodySound)) return { type: 'melodySound', sound: o.sound as MelodySound };
   if (o.type === 'armed' && o.name === 'endPiece' && typeof o.on === 'boolean') return { type: 'armed', name: 'endPiece', on: o.on };
+  if (o.type === 'startPiece') return { type: 'startPiece' };
   if (o.type === 'hello') {
     // The second performer's page says so (performer.ts); Tim's iPad says nothing more.
     return { type: 'hello', build: isBuildId(o.build) ? o.build : null, ask: isAsk(o.ask) ? o.ask : null, ...(o.who === 'performer' ? { who: 'performer' as const } : {}) };

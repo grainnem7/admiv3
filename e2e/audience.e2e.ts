@@ -64,7 +64,7 @@ test('opening the audience screen shows the board and nothing else, and the lapt
   await expect(await headerButton(page, 'Open the audience screen')).toBeVisible();
 });
 
-test('a note that sounds blooms its square, and the scene name follows a scene change', async ({ page }) => {
+test('a note that sounds blooms its square; no words at all, before or after a scene change (owner, 7 Nov 2026)', async ({ page }) => {
   await openLaptopBoard(page);
   await pickColour(page, 'Red');
   await place(page, [[3, 1]]);
@@ -74,11 +74,12 @@ test('a note that sounds blooms its square, and the scene name follows a scene c
   await expect(picture(aud)).toHaveAttribute('data-awake', 'yes', { timeout: 20_000 });
   // The counter on step 1 (column 0) blooms as it sounds.
   await expect.poll(async () => (await bloomsSeen(aud, 3000)).some((s) => s.endsWith(',0')), { timeout: 20_000 }).toBe(true);
-  // The scene's name, and nothing else.
-  await expect.poll(async () => (await aud.locator('body').innerText()).trim()).toBe('Arrival');
+  // Nothing to read: no scene name, no clock, no buttons.
+  expect((await aud.locator('body').innerText()).trim()).toBe('');
   await expect(aud.getByRole('button')).toHaveCount(0);
   await page.getByRole('region', { name: 'Now and next' }).getByRole('button', { name: 'Next scene ▶' }).click();
-  await expect.poll(async () => (await aud.locator('body').innerText()).trim(), { timeout: 20_000 }).toBe('Build');
+  await pause(page, 3000);
+  expect((await aud.locator('body').innerText()).trim()).toBe('');
   expect(pageErrors(page)).toEqual([]);
 });
 

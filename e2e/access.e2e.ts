@@ -171,18 +171,12 @@ test('A4: the squares of the board have an edge (checked in the drawing)', async
   expect(ratio).toBeGreaterThanOrEqual(3);
 });
 
-test('A5: the scene name on the audience screen sits 5% in, at 2.2% of the width, up to 0.8 opacity', async ({ page }) => {
+test('the audience screen has no words at all: no scene name, no clock (owner, 7 Nov 2026)', async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 900 });
   await page.goto('/audience.html');
-  const box = await page.evaluate(() => {
-    const root = document.querySelector('#root > div') as HTMLElement;
-    const name = root.lastElementChild as HTMLElement;
-    const cs = getComputedStyle(name);
-    return { right: parseFloat(cs.right), bottom: parseFloat(cs.bottom), size: parseFloat(cs.fontSize), w: root.clientWidth, h: root.clientHeight };
-  });
-  expect(box.right / box.w).toBeCloseTo(0.05, 2);
-  expect(box.bottom / box.h).toBeCloseTo(0.05, 2);
-  expect(box.size / box.w).toBeCloseTo(0.022, 3);
+  await page.waitForTimeout(500);
+  expect((await page.locator('body').innerText()).trim()).toBe('');
+  expect(await page.locator('#root canvas').count()).toBe(1);
 });
 
 test('U3: Show splits its controls: ■ Stop and Mute on the playing side, the rest on the other', async ({ page }) => {
