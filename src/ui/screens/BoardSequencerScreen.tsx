@@ -142,7 +142,7 @@ import {
 import { layoutFor } from './boardSequencer/layout';
 import { isConvexQuad, squareCentreToImage } from './boardSequencer/cornerEditor';
 import { drawOriented, orientedSize, reorientPoints, type FrameOrientation, type QuarterTurns } from '../../tracking/frameOrientation';
-import { SOUND_WORLDS, SOUND_WORLD_IDS, worldOf } from '../../audio/worlds/soundWorlds';
+import { padded, SOUND_WORLDS, SOUND_WORLD_IDS, worldOf } from '../../audio/worlds/soundWorlds';
 import type { FillSourceStatus } from '../../songs/BoardSequencerEngine';
 import type { BandLevel, BandPart } from '../../songs/band/band';
 import { BoardMidiPanel } from './boardSequencer/components/BoardMidiPanel';
@@ -4403,7 +4403,10 @@ export default function BoardSequencerScreen() {
         setRemoteNote({ text: 'iPad: no melody colour to change', at: performance.now() });
         return;
       }
-      for (const id of ids) setChannelSound(id, { instrument: msg.sound });
+      // With his own track (the demo's Tim's glow), a padded version: slow to start and swelling,
+      // blending with the loops (owner, 7 Nov 2026: plain instruments stuck out).
+      const own = c.midiChannelMode === 'part' && c.playerTrack !== null;
+      for (const id of ids) setChannelSound(id, { instrument: own ? padded(msg.sound) : msg.sound });
       sessionLogRef.current.action(logActorRef.current, `melody plays ${soundOptionName(msg.sound)}`);
       setRemoteNote({ text: `iPad: Melody plays ${soundOptionName(msg.sound)}`, at: performance.now() });
     } else if (msg.type === 'trigger') {

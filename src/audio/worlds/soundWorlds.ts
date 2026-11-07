@@ -18,6 +18,18 @@ const SYNTH_LAYER_IDS: readonly SynthLayerId[] = ['sub', 'pad', 'pluck', 'sawBas
 export const SYNTH_PREFIX = 'synth:';
 
 /** The synth layer of a `synth:<layer>` instrument, or null for a sampled one. */
+/**
+ * A padded instrument ("pad+flute"): mostly the soft, swelling pad, with the instrument's own
+ * colour inside it. Tim's sounds in the demo (owner, 7 Nov 2026: the instruments stuck out; they
+ * must be pad-like, slow to start and swelling, to blend with the loops).
+ */
+export const PADDED_PREFIX = 'pad+';
+export function paddedOf(key: string): string | null {
+  return key.startsWith(PADDED_PREFIX) && key.length > PADDED_PREFIX.length ? key.slice(PADDED_PREFIX.length) : null;
+}
+/** The padded version of a sampled instrument's key. */
+export const padded = (key: string): string => `${PADDED_PREFIX}${key}`;
+
 export function synthLayerOf(key: string): SynthLayerId | null {
   if (!key.startsWith(SYNTH_PREFIX)) return null;
   const id = key.slice(SYNTH_PREFIX.length);
@@ -178,6 +190,8 @@ export function voiceSpecFor(
   choice: SoundWorldChoice,
 ): LayeredVoiceSpec | string {
   if (ch.instrument && ch.instrument.length > 0) {
+    const inner = paddedOf(ch.instrument);
+    if (inner) return { sample: inner as SampleConfigKey, synth: 'pad', sampleLevel: 0.3, synthLevel: 0.9 };
     const synth = synthLayerOf(ch.instrument);
     return synth ? { synth } : ch.instrument;
   }

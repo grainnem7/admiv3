@@ -168,3 +168,13 @@ describe('the iPad’s instrument buttons (owner, 7 Nov 2026: they no longer cha
     expect(colourIdsForSound([{ id: 'b', role: 'bass' as const }], null)).toEqual([]);
   });
 });
+
+describe('Tim’s sounds stay pad-like (owner, 7 Nov 2026: plain instruments stuck out)', () => {
+  it('a padded instrument is mostly the swelling pad with the instrument inside; still its own iPad button; named "Flute pad"', async () => {
+    const { voiceSpecFor, padded } = await import('../audio/worlds/soundWorlds');
+    const { soundOptionName } = await import('../ui/screens/boardSequencer/soundCatalogue');
+    expect(voiceSpecFor({ role: 'melody', instrument: padded('flute') }, 'warm')).toEqual({ sample: 'flute', synth: 'pad', sampleLevel: 0.3, synthLevel: 0.9 });
+    expect(melodyChoice({ instrument: padded('trumpet') })).toBe('trumpet');
+    expect(soundOptionName(padded('flute'))).toBe('Flute pad');
+  });
+});

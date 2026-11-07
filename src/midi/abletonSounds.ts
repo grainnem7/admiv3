@@ -414,7 +414,8 @@ export function glowChainCc(sound: MelodySound | null): number {
 
 /** What the iPad's sound buttons have chosen: the first melody colour's instrument, when it is one of the four. */
 function ipadSound(channels: readonly Pick<ColourChannel, 'role' | 'instrument'>[]): MelodySound | null {
-  const key = channels.find((c) => c.role === 'melody')?.instrument;
+  const raw = channels.find((c) => c.role === 'melody')?.instrument;
+  const key = raw?.startsWith('pad+') ? raw.slice(4) : raw;
   return key !== undefined && (MELODY_SOUNDS as readonly string[]).includes(key) ? (key as MelodySound) : null;
 }
 

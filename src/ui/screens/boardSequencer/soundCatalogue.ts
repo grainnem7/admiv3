@@ -83,6 +83,8 @@ export function soundsFor(role: ColourRole): readonly SoundOption[] {
 
 /** A sound's plain name ("Upright bass"), or the key itself when it isn't one of ours. */
 export function soundOptionName(key: string): string {
+  // A padded instrument (Tim's, in the demo): "Flute pad".
+  if (key.startsWith('pad+') && key.length > 4) return `${NAMES[key.slice(4)] ?? key.slice(4)} pad`;
   return NAMES[key] ?? key;
 }
 

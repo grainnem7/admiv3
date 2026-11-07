@@ -31,7 +31,8 @@ export function colourIdsForSound<C extends Pick<ColourChannel, 'role' | 'id'>>(
 
 /** Which of the four the melody colour plays; null for anything else, the default sound included. */
 export function melodyChoice(ch: Pick<ColourChannel, 'instrument'>): MelodySound | null {
-  const key = ch.instrument;
+  // A padded one ("pad+flute", Tim's in the demo) is still that instrument's button.
+  const key = ch.instrument?.startsWith('pad+') ? ch.instrument.slice(4) : ch.instrument;
   return key !== undefined && (MELODY_SOUNDS as readonly string[]).includes(key) ? (key as MelodySound) : null;
 }
 
