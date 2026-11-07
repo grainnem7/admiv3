@@ -245,6 +245,14 @@ export function createBoardPlayer(name: string, handedness: 'left' | 'right'): B
 }
 
 /**
+ * How far the hat moves the speed in the demo piece: 15 % either side of the scene's own
+ * speed (owner, 7 Nov 2026: the hat must shape the demo, live). A whole turn of the head to
+ * Slowest or Fastest (60 to 240 BPM) tore the ambient piece apart. A span chosen on the
+ * player's own Cap tab is kept.
+ */
+export const DEMO_HAT_SPAN = 0.15;
+
+/**
  * The demo piece, ready to play, as its own player ("Demo piece"), opened. Its music is
  * written afresh every time (src/songs/demo/demoPiece.ts), so it always plays as written,
  * whatever was changed in it since. Everything that is not the music comes from the player
@@ -267,7 +275,8 @@ export function openDemoPlayer(): BoardPlayerProfile {
     { ...DEFAULT_BOARD_SEQUENCER_CONFIG, ...NEW_PLAYER_SOUND, ...own, boardSquares, channels: [], ...demoMusic() },
     { rows: 8, cols: 8 },
   );
-  const clean = sanitizeBoardSequencerConfig(merged) ?? merged;
+  const sane = sanitizeBoardSequencerConfig(merged) ?? merged;
+  const clean = sane.cap.tempoSpan < 1 ? sane : { ...sane, cap: { ...sane.cap, tempoSpan: DEMO_HAT_SPAN } };
   const { settings } = splitBoardConfig(clean);
   const madeFrom = from?.id ?? existing?.madeFrom;
   const player: BoardPlayerProfile = {

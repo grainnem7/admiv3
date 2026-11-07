@@ -330,6 +330,20 @@ const HELP: HelpEntry[] = [
       + 'while the piece plays: stop it first.',
   },
   {
+    title: 'The hat',
+    body: 'Cap tab → Control with the red cap. Moving the head side to side and up and down moves two controls '
+      + '(Speed and Volume unless chosen otherwise). To set the hat\u2019s colour, click the hat in the camera picture: '
+      + 'the colour is taken from a patch of the hat, wider when its colour varies. Click it again whenever the light '
+      + 'changes a lot. Between clicks the colour follows the stage light slowly by itself, never far from what was '
+      + 'clicked. For a room with other red things in it, Learn the hat (the room with the hat off, then the hat on) so '
+      + 'only the hat is followed. One hat is followed, not its pieces: a shadow or a logo across it does not make it jump. '
+      + 'Someone in red walking past does not take it: anything red far from the hat takes over only once it has stayed '
+      + 'in one place for a few frames, or once the hat has been out of sight for about half a second. While the hat is '
+      + 'out of sight the music holds where it was. With the hat on Speed, "How far the hat moves the speed" says how '
+      + 'far a whole head turn goes: 10, 15 or 25 % either side of the scene\u2019s own speed, or all the way to Slowest '
+      + 'and Fastest. For a performed piece 15 % either side keeps it musical; the demo piece starts at 15 %.',
+  },
+  {
     title: 'Playing along from a second laptop',
     body: 'A second performer can play alongside the player from another laptop, with the iPad still in the '
       + 'player\u2019s hands. Connections tab → iPad controls on, then under "A second laptop, to play along" '

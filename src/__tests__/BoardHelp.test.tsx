@@ -57,6 +57,17 @@ describe('Help says how things work now', () => {
     expect(entry('Simplify, and keeping time')).toContain('Simplified: Tim and Bed');
   });
 
+  it('the hat: click it to set its colour, one hat followed, not taken by a flash of red, the light followed, and how far it moves the speed', () => {
+    const hat = entry('The hat');
+    expect(hat).toContain('click the hat in the camera picture');
+    expect(hat).toContain('Click it again whenever the light changes');
+    expect(hat).toContain('Learn the hat');
+    expect(hat).toContain('takes over only once it has stayed');
+    expect(hat).toContain('How far the hat moves the speed');
+    expect(hat).toContain('15 % either side');
+    expect(hat).toContain('the demo piece starts at 15 %');
+  });
+
   it('a second laptop, to play along: where its link is, what it has, and that it can end the piece', () => {
     const second = entry('Playing along from a second laptop');
     expect(second).toContain('under "A second laptop, to play along" press Copy link');

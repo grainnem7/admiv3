@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   RIG_KEY, PLAYERS_KEY, ACTIVE_PLAYER_KEY, LEGACY_KEY,
   loadActiveBoardConfig, saveActiveBoardConfig, listBoardPlayers, getActiveBoardPlayer,
-  createBoardPlayer, updateBoardPlayer, setActiveBoardPlayer, splitBoardConfig, resolveBoardConfig, allReferencedChannelIds,
+  createBoardPlayer, updateBoardPlayer, setActiveBoardPlayer, splitBoardConfig, resolveBoardConfig, allReferencedChannelIds, DEMO_HAT_SPAN,
 } from '../profiles/BoardProfiles';
 import { DEFAULT_BOARD_SEQUENCER_CONFIG, isSafeShowLayout, type BoardSequencerStored } from '../profiles/BoardSequencerConfig';
 import { suggestReadSettings } from '../tracking/boardGrid';
@@ -229,7 +229,8 @@ describe('the demo piece’s player', () => {
     const cfg = loadActiveBoardConfig();
     expect(cfg?.handedness).toBe('left');
     expect(cfg?.remoteStrips).toEqual(['tempo']);
-    expect(cfg?.cap).toEqual(tim.cap);
+    // The hat as his, except Speed: within 15 % of the scene's speed in the demo, not 60 to 240 BPM.
+    expect(cfg?.cap).toEqual({ ...tim.cap, tempoSpan: DEMO_HAT_SPAN });
     // In the demo each of his colours plays the soft pad, on his own track (Tim's glow).
     expect(cfg?.channels.find((c) => c.id === 'c1')).toMatchObject({ role: 'melody', instrument: 'synth:pad' });
     expect(cfg?.playerTrack).toBe(14);
@@ -238,6 +239,14 @@ describe('the demo piece’s player', () => {
     expect(cfg?.scaleName).toBe('Major pentatonic');
     // Tim's own player is untouched.
     expect(listBoardPlayers().find((p) => p.id === timId)?.settings.loopSlots).toEqual(tim.loopSlots);
+  });
+
+  it('the hat on Speed in the demo: 15 % either side of the scene’s speed, unless his own player has a span chosen', async () => {
+    const { openDemoPlayer } = await import('../profiles/BoardProfiles');
+    saveActiveBoardConfig({ ...withColours(), cap: { ...DEFAULT_BOARD_SEQUENCER_CONFIG.cap, enabled: true, tempoSpan: 0.25 } });
+    openDemoPlayer();
+    expect(loadActiveBoardConfig()?.cap.tempoSpan).toBe(0.25);
+    expect(DEMO_HAT_SPAN).toBe(0.15);
   });
 
   it('Tim’s counters all become the soft pad, on his own track: one note each, a big reverb; his own player untouched', async () => {
