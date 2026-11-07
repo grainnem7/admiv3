@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  bestCircleGrid, colourPicture, inkOn,
+  bestCircleGrid, colourIdsForSound, colourPicture, inkOn,
   clearBoardSilent, colourBack, melodyChoice, melodyColour, PICTURE_EMOJI, readBoardSilent, readDrumsSilent, readFeel, readSilentColours, remoteColours, silencedColourIds, writeBoardSilent, writeSilentColours,
   writeDrumsSilent, writeFeel,
 } from '../remote/simplePage';
@@ -157,5 +157,14 @@ describe('the colour pads: the biggest circles their space allows', () => {
     expect(bestCircleGrid(2000, 100, 8, 18, 2).cols).toBe(4);
     expect(bestCircleGrid(774, 900, 1, 18, 2).cols).toBe(2);
     expect(bestCircleGrid(0, 0, 4, 18, 2).size).toBe(0);
+  });
+});
+
+describe('the iPad’s instrument buttons (owner, 7 Nov 2026: they no longer changed Tim’s instrument)', () => {
+  const chans = [{ id: 'a', role: 'melody' as const }, { id: 'b', role: 'bass' as const }, { id: 'c', role: 'melody' as const }, { id: 'd', role: 'chord' as const }];
+  it('with his own track (the demo), every melody colour of his; otherwise the first melody colour, as before', () => {
+    expect(colourIdsForSound(chans, 14)).toEqual(['a', 'c']);
+    expect(colourIdsForSound(chans, null)).toEqual(['a']);
+    expect(colourIdsForSound([{ id: 'b', role: 'bass' as const }], null)).toEqual([]);
   });
 });

@@ -18,6 +18,17 @@ export function melodyColour<C extends Pick<ColourChannel, 'role'>>(channels: re
   return channels.find((c) => c.role === 'melody') ?? null;
 }
 
+/**
+ * The colours the iPad's instrument buttons change: the melody colour; or, with the player's
+ * counters on their own track (the demo's Tim's glow, one sound for all of them), every colour
+ * of theirs that plays a melody, so whichever counter Tim plays has the instrument he chose.
+ */
+export function colourIdsForSound<C extends Pick<ColourChannel, 'role' | 'id'>>(channels: readonly C[], playerTrack: number | null): string[] {
+  if (playerTrack !== null) return channels.filter((c) => c.role === 'melody').map((c) => c.id);
+  const mel = melodyColour(channels);
+  return mel ? [mel.id] : [];
+}
+
 /** Which of the four the melody colour plays; null for anything else, the default sound included. */
 export function melodyChoice(ch: Pick<ColourChannel, 'instrument'>): MelodySound | null {
   const key = ch.instrument;

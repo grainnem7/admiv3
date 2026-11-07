@@ -193,7 +193,7 @@ import {
 } from '../../remote/protocol';
 import { performerLink } from '../../remote/performer';
 import {
-  clearBoardSilent, colourBack, melodyChoice, melodyColour, readBoardSilent, readDrumsSilent, readFeel, readSilentColours, remoteColours,
+  clearBoardSilent, colourBack, colourIdsForSound, melodyChoice, melodyColour, readBoardSilent, readDrumsSilent, readFeel, readSilentColours, remoteColours,
   silencedColourIds, writeBoardSilent, writeDrumsSilent, writeFeel, writeSilentColours,
 } from '../../remote/simplePage';
 import { BUILD_ID } from '../../remote/buildId';
@@ -4381,12 +4381,12 @@ export default function BoardSequencerScreen() {
       setRemoteNote({ text: `iPad: ${ch ? describeChannel(ch) : 'a colour'} ${msg.silent ? 'silenced' : 'back'}`, at: performance.now() });
     } else if (msg.type === 'melodySound') {
       // As choosing it on the Sound tab: the same call, so Ableton follows too.
-      const mel = melodyColour(c.channels);
-      if (!mel) {
+      const ids = colourIdsForSound(c.channels, c.midiChannelMode === 'part' ? c.playerTrack : null);
+      if (ids.length === 0) {
         setRemoteNote({ text: 'iPad: no melody colour to change', at: performance.now() });
         return;
       }
-      setChannelSound(mel.id, { instrument: msg.sound });
+      for (const id of ids) setChannelSound(id, { instrument: msg.sound });
       sessionLogRef.current.action(logActorRef.current, `melody plays ${soundOptionName(msg.sound)}`);
       setRemoteNote({ text: `iPad: Melody plays ${soundOptionName(msg.sound)}`, at: performance.now() });
     } else if (msg.type === 'trigger') {
